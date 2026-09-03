@@ -117,22 +117,22 @@ const Variables = (function () {
     // Ne jamais lancer la résolution avec un contexte incomplet : un rendu
     // déclenché en parallèle peut sinon transmettre le currentTableId obsolète.
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
-    console.log('[Variables] resolveVariable:', { varTable, varColumn, currentTableId: resolvedTableId, record: record ? Object.keys(record) : null });
+    console.log('[variables] resolveVariable:', { varTable, varColumn, currentTableId: resolvedTableId, record: record ? Object.keys(record) : null });
     try {
       if (!record) return '';
       if (!resolvedTableId) {
-        console.warn('[Variables] table courante absente pour', varTable + '_' + varColumn);
+        console.warn('[variables] table courante absente pour', varTable + '_' + varColumn);
         return '[ERREUR: table courante indisponible]';
       }
       if (varTable === resolvedTableId) {
         const val = record[varColumn];
-        console.log('[Variables] valeur locale:', varTable + '_' + varColumn, val);
+        console.log('[variables] resolveVariable après (locale):', varTable + '_' + varColumn, val);
         return formatValue(val);
       }
       // Colonne d'une autre table : chercher une colonne de référence
       const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
       if (refCols.length === 0) {
-        console.warn('[Variables] aucune référence:', { from: resolvedTableId, to: varTable, record });
+        console.warn('[variables] aucune référence:', { from: resolvedTableId, to: varTable, record });
         return `[ERREUR: aucune référence vers ${varTable} trouvée dans ${resolvedTableId}]`;
       }
       let refCol = refCols[0];
@@ -146,10 +146,10 @@ const Variables = (function () {
       const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
       if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
       const value = formatValue(linkedRow[varColumn]);
-      console.log('[Variables] valeur liée:', varTable + '_' + varColumn, value);
+      console.log('[variables] resolveVariable après (liée):', varTable + '_' + varColumn, value);
       return value;
     } catch (e) {
-      console.error('[Variables] échec résolution:', { varTable, varColumn, currentTableId: resolvedTableId, record }, e);
+      console.error('[variables] échec résolution:', { varTable, varColumn, currentTableId: resolvedTableId, record }, e);
       return `[ERREUR: résolution de ${varTable}_${varColumn} impossible]`;
     }
   }
