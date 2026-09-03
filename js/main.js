@@ -5,6 +5,8 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   let quill = null;
   let currentMode = 'edit'; // 'edit' | 'read'
   let currentTableId = null;
+  let latestRecord = null;
+  let latestRecordTableId = null;
 
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
@@ -150,13 +152,13 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       btnRead.classList.add('active');
       editorContainer.style.display = 'none';
       readerContainer.style.display = 'block';
-      await renderReader();
+      await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
     }
   }
 
   async function renderReader(record, recordTableId) {
     const html = Editor.getHTML();
-    record = record || GristAPI.getCurrentRecord();
+    if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
     if (!record) {
       console.warn('[main] renderReader appelé SANS record courant.');
@@ -211,9 +213,11 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     // qu'une Promise non-attendue ne s'affiche comme '[object Promise]'.
     GristAPI.onRecord(async function (record, tableId) {
       console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
+      latestRecord = record;
+      latestRecordTableId = tableId || GristAPI.getCurrentTableId();
       if (tableId) currentTableId = tableId;
-      updateTableIndicator(tableId);
-      if (currentMode === 'read' && record) await renderReader(record, tableId);
+      updateTableIndicator(latestRecordTableId);
+      if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
     });
 
     // Abonnement aux options du widget (mapping colonnes, settings)
