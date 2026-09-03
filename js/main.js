@@ -5,10 +5,6 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   let quill = null;
   let currentMode = 'edit'; // 'edit' | 'read'
   let currentTableId = null;
-  // Copie locale du dernier record reçu : le bouton lecture/export doit
-  // utiliser le record transmis par onRecord, même si l’état GristAPI est
-  // encore en cours de résolution du tableId.
-  let currentRecord = null;
 
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
@@ -145,11 +141,10 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     }
   }
 
-  async function renderReader(recordArg) {
+  async function renderReader() {
     const html = Editor.getHTML();
-    const record = recordArg || currentRecord || GristAPI.getCurrentRecord();
+    const record = GristAPI.getCurrentRecord();
     let tableId = GristAPI.getCurrentTableId() || currentTableId;
-    console.log('[main] record récupéré avant renderReader:', record ? { keys: Object.keys(record), id: record.id } : null);
     if (!record) {
       console.warn('[main] renderReader appelé SANS record courant.');
       return;
@@ -169,8 +164,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
 
   async function onExportPdf() {
     const html = Editor.getHTML();
-    const record = currentRecord || GristAPI.getCurrentRecord();
-    console.log('[main] record récupéré avant export PDF:', record ? { keys: Object.keys(record), id: record.id } : null);
+    const record = GristAPI.getCurrentRecord();
     if (!record) {
       alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.');
       return;
@@ -203,7 +197,6 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     // qu'une Promise non-attendue ne s'affiche comme '[object Promise]'.
     GristAPI.onRecord(async function (record, tableId) {
       console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
-      currentRecord = record || null;
       if (tableId) currentTableId = tableId;
       updateTableIndicator(tableId);
       if (currentMode === 'read' && record) await renderReader();
