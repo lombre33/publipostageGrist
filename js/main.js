@@ -9,7 +9,20 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
   const templateNameInput = document.getElementById('template-name');
-  const pdfFilenameInput = document.getElementById('pdf-filename');
+  const pdfFilenameInput = document.getElementById('pdf-filename-template')
+    || document.getElementById('pdfFilenameInput')
+    || document.getElementById('pdf-filename');
+
+  // BUG 1 — sécurisation : tous les accès à pdfFilenameInput passent par
+  // cette fonction qui journalise un console.warn('[main] ...') explicite
+  // si l'élément est absent (par exemple si index.html est modifié).
+  function getPdfFilenameTemplate() {
+    if (!pdfFilenameInput) {
+      console.warn('[main] Élément #pdf-filename-template absent. Aucun nom de fichier PDF personnalisé ne sera utilisé.');
+      return '';
+    }
+    return pdfFilenameInput.value.trim();
+  }
   const editorContainer = document.getElementById('editor-container');
   const readerContainer = document.getElementById('reader-container');
   const btnEdit = document.getElementById('btn-mode-edit');
@@ -48,8 +61,10 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
 
   function loadTemplateIntoEditor(tpl) {
     Editor.setHTML(tpl ? tpl.contenu : '');
-    templateNameInput.value = tpl ? tpl.nom : '';
-    pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
+    else console.warn('[main] Champ template-name absent.');
+    if (pdfFilenameInput) pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+    else console.warn('[main] #pdf-filename-template absent : impossible de restaurer le nom de fichier PDF depuis le modèle.');
     Templates.setCurrentId(tpl ? tpl.id : null);
   }
 
@@ -73,13 +88,13 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
 
   async function onSave() {
     const id = Templates.getCurrentId();
-    const nom = templateNameInput.value.trim();
+    const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) {
       setStatus('Nom du modèle requis.', true);
       return;
     }
     const html = Editor.getHTML();
-    const filenameTpl = pdfFilenameInput.value.trim();
+    const filenameTpl = getPdfFilenameTemplate();
     const savedId = await Templates.save(id, { nom, contenu: html, nomFichierPDF: filenameTpl });
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
@@ -90,7 +105,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   async function onSaveAs() {
     const nom = prompt('Nom du nouveau modèle :');
     if (!nom) return;
-    templateNameInput.value = nom;
+    if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     await onSave();
   }
@@ -108,7 +123,9 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     setStatus('Modèle supprimé.');
   }
 
-  function switchMode(mode) {
+  // BUG 2 — switchMode est async pour pouvoir await renderReader() ;
+  // sans await, renderReader() retournait une Promise non attendue.
+  async function switchMode(mode) {
     currentMode = mode;
     if (mode === 'edit') {
       btnEdit.classList.add('active');
@@ -120,14 +137,14 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       btnRead.classList.add('active');
       editorContainer.style.display = 'none';
       readerContainer.style.display = 'block';
-      renderReader();
+      await renderReader();
     }
   }
 
   async function renderReader() {
     const html = Editor.getHTML();
     const record = GristAPI.getCurrentRecord();
-    const tableId = GristAPI.getCurrentTableId();
+    let tableId = GristAPI.getCurrentTableId() || currentTableId;
     if (!record) {
       console.warn('[main] renderReader appelé SANS record courant.');
       return;
@@ -140,7 +157,9 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
         updateTableIndicator(ctx.tableId);
       }
     }
-    ReaderMode.render(html, record, tableId || currentTableId);
+    console.log('[main] renderReader: avant ReaderMode.render', { tableId, record: Object.keys(record) });
+    await ReaderMode.render(html, tableId, record);
+    console.log('[main] renderReader: après ReaderMode.render — affichage mis à jour.');
   }
 
   async function onExportPdf() {
@@ -150,14 +169,12 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.');
       return;
     }
-    const filenameTpl = pdfFilenameInput.value.trim();
-    let resolvedName = filenameTpl;
-    try {
-      resolvedName = ReaderMode.resolveFilename(filenameTpl, record);
-    } catch (e) { /* fallback */ }
+    const filenameTpl = getPdfFilenameTemplate();
     setStatus('Génération du PDF en cours...');
     try {
-      await PdfExport.exportCurrentRecord(ReaderMode.preview(html, record), resolvedName);
+      console.log('[main] onExportPdf: avant PdfExport.exportCurrentRecord', { currentTableId, hasRecord: !!record, filenameTpl });
+      await PdfExport.exportCurrentRecord(html, currentTableId || GristAPI.getCurrentTableId(), record, filenameTpl);
+      console.log('[main] onExportPdf: après PdfExport.exportCurrentRecord — PDF généré.');
       setStatus('PDF généré.');
     } catch (e) {
       console.error(e);
@@ -176,12 +193,13 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     }
     quill = Editor.init();
 
-    // S'abonner au record courant
-    GristAPI.onRecord(function (record, tableId) {
+    // BUG 2 — onRecord callback async pour await renderReader() et éviter
+    // qu'une Promise non-attendue ne s'affiche comme '[object Promise]'.
+    GristAPI.onRecord(async function (record, tableId) {
       console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
       if (tableId) currentTableId = tableId;
       updateTableIndicator(tableId);
-      if (currentMode === 'read' && record) renderReader();
+      if (currentMode === 'read' && record) await renderReader();
     });
 
     // Abonnement aux options du widget (mapping colonnes, settings)
