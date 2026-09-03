@@ -15,10 +15,13 @@
 const GristAPI = (() => {
   let currentTableId = null;
   let allTables = [];       // liste des tables du document: [{tableId, columns:[...]}]
+  let availableTableIds = [];
+  let manualTableId = null;
   let onTableIdChangeCbs = [];
   let onRecordCbs = [];
 
   function notifyTableIdChange(tableId) {
+    if (tableId) manualTableId = null;
     if (tableId && tableId !== currentTableId) {
       currentTableId = tableId;
       onTableIdChangeCbs.forEach(cb => {
@@ -95,6 +98,7 @@ const GristAPI = (() => {
   async function refreshAllTables() {
     try {
       const tableIds = await grist.docApi.listTables();
+      availableTableIds = Array.isArray(tableIds) ? tableIds.slice() : [];
       const tables = [];
       for (const tableId of tableIds) {
         try {
@@ -143,7 +147,7 @@ const GristAPI = (() => {
 
     await refreshAllTables();
 
-    // Tentative immédiate via les API haut niveau.
+    // Tentative immédiate via les API haut niveau (après ready).
     const idFromViewApi = await tryGetTableIdFromViewApi();
     if (idFromViewApi) notifyTableIdChange(idFromViewApi);
 
@@ -156,7 +160,7 @@ const GristAPI = (() => {
       if (mappings && mappings.tableId) {
         notifyTableIdChange(mappings.tableId);
       } else if (!currentTableId) {
-        // Sinon on tente la déduction par forme du record (fallback).
+        // La déduction par forme reste un dernier essai avant le sélecteur manuel.
         const guessed = guessTableIdFromRecordShape(record);
         if (guessed) notifyTableIdChange(guessed);
       }
@@ -185,11 +189,22 @@ const GristAPI = (() => {
   }
 
   function getCurrentTableId() {
-    return currentTableId;
+    return currentTableId || manualTableId;
   }
 
   function getAllTables() {
     return allTables;
+  }
+
+  function getAvailableTableIds() {
+    return availableTableIds.length ? availableTableIds.slice() : allTables.map(t => t.tableId);
+  }
+
+  function setManualTableId(tableId) {
+    if (!tableId || !getAvailableTableIds().includes(tableId)) return false;
+    manualTableId = tableId;
+    notifyTableIdChange(tableId);
+    return true;
   }
 
   async function docApiFetchTable(tableId) {
@@ -206,6 +221,8 @@ const GristAPI = (() => {
     onRecord,
     getCurrentTableId,
     getAllTables,
+    getAvailableTableIds,
+    setManualTableId,
     docApiFetchTable,
     applyUserActions,
   };

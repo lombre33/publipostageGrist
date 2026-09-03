@@ -5,19 +5,43 @@
 (async function () {
   const els = {
     tableIdBadge: document.getElementById('current-table-badge'),
-    modeToggleBtn: document.getElementById('mode-toggle-btn'),
+    modeToggleBtn: document.getElementById('btn-mode-read'),
+    modeEditBtn: document.getElementById('btn-mode-edit'),
     editorContainer: document.getElementById('editor-container'),
     readerContainer: document.getElementById('reader-container'),
     errorBanner: document.getElementById('error-banner'),
+    tableSelectorContainer: document.getElementById('table-selector-container'),
+    tableSelector: document.getElementById('table-selector'),
     templateSelect: document.getElementById('template-select'),
-    newTemplateBtn: document.getElementById('new-template-btn'),
-    saveTemplateBtn: document.getElementById('save-template-btn'),
-    exportPdfBtn: document.getElementById('export-pdf-btn'),
-    fileNamePatternInput: document.getElementById('filename-pattern-input'),
+    newTemplateBtn: document.getElementById('btn-new'),
+    saveTemplateBtn: document.getElementById('btn-save'),
+    exportPdfBtn: document.getElementById('btn-export-pdf'),
+    fileNamePatternInput: document.getElementById('pdf-filename-template'),
   };
 
   let mode = 'edit'; // 'edit' | 'read'
   let currentRecord = null;
+
+  // Tous les écouteurs sont attachés de façon défensive : certains éléments
+  // restent optionnels selon le contexte d'intégration du widget.
+  function on(el, event, handler) {
+    if (el) el.addEventListener(event, handler);
+  }
+
+  function refreshTableSelector() {
+    if (!els.tableSelector || !els.tableSelectorContainer) return;
+    const tables = GristAPI.getAvailableTableIds();
+    els.tableSelector.innerHTML = '<option value="">-- Sélectionner une table --</option>';
+    tables.forEach(tableId => {
+      const option = document.createElement('option');
+      option.value = tableId;
+      option.textContent = tableId;
+      els.tableSelector.appendChild(option);
+    });
+    const detected = GristAPI.getCurrentTableId();
+    els.tableSelector.value = detected || '';
+    els.tableSelectorContainer.style.display = detected ? 'none' : 'block';
+  }
 
   function showDiagnostic(tableId) {
     if (els.tableIdBadge) {
@@ -57,50 +81,50 @@
   function switchMode(newMode) {
     mode = newMode;
     if (mode === 'edit') {
-      els.editorContainer.style.display = 'block';
-      els.readerContainer.style.display = 'none';
-      els.modeToggleBtn.textContent = 'Passer en mode lecture';
+      if (els.editorContainer) els.editorContainer.style.display = 'block';
+      if (els.readerContainer) els.readerContainer.style.display = 'none';
+      if (els.modeEditBtn) els.modeEditBtn.classList.add('active');
+      if (els.modeToggleBtn) els.modeToggleBtn.classList.remove('active');
       showError(null);
     } else {
-      els.editorContainer.style.display = 'none';
-      els.readerContainer.style.display = 'block';
-      els.modeToggleBtn.textContent = 'Passer en mode édition';
+      if (els.editorContainer) els.editorContainer.style.display = 'none';
+      if (els.readerContainer) els.readerContainer.style.display = 'block';
+      if (els.modeToggleBtn) els.modeToggleBtn.classList.add('active');
+      if (els.modeEditBtn) els.modeEditBtn.classList.remove('active');
       refreshReaderMode();
     }
   }
 
-  els.modeToggleBtn.addEventListener('click', () => {
-    switchMode(mode === 'edit' ? 'read' : 'edit');
+  on(els.modeToggleBtn, 'click', () => switchMode('read'));
+  on(els.modeEditBtn, 'click', () => switchMode('edit'));
+  on(els.newTemplateBtn, 'click', () => Templates.newTemplate());
+  on(els.saveTemplateBtn, 'click', () => Templates.saveCurrentTemplate());
+  on(els.templateSelect, 'change', (e) => Templates.loadTemplate(e.target.value));
+  on(els.tableSelector, 'change', (e) => {
+    if (e.target.value) GristAPI.setManualTableId(e.target.value);
   });
-
-  els.newTemplateBtn.addEventListener('click', () => {
-    Templates.newTemplate();
-  });
-
-  els.saveTemplateBtn.addEventListener('click', () => {
-    Templates.saveCurrentTemplate();
-  });
-
-  els.templateSelect.addEventListener('change', (e) => {
-    Templates.loadTemplate(e.target.value);
-  });
-
-  els.exportPdfBtn.addEventListener('click', async () => {
+  on(els.exportPdfBtn, 'click', async () => {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!currentTableId || !currentRecord) {
       showError('Impossible d\'exporter : table ou ligne courante non détectée.');
       return;
     }
-    await PdfExport.exportCurrentRecord(currentRecord, currentTableId, els.fileNamePatternInput.value);
+    await PdfExport.exportCurrentRecord(
+      currentRecord,
+      currentTableId,
+      els.fileNamePatternInput ? els.fileNamePatternInput.value : ''
+    );
   });
 
   // --- Initialisation ---
   await GristAPI.init();
+  refreshTableSelector();
 
   GristAPI.onTableIdChange((tableId) => {
     showDiagnostic(tableId);
     VariablesManager.buildVariableList();
-    Editor.refreshAutocompleteSource();
+    if (typeof Editor.refreshAutocompleteSource === 'function') Editor.refreshAutocompleteSource();
+    refreshTableSelector();
     if (mode === 'read') refreshReaderMode();
   });
 
@@ -108,6 +132,7 @@
     currentRecord = record;
     showDiagnostic(tableId);
     if (mode === 'read') refreshReaderMode();
+    refreshTableSelector();
   });
 
   VariablesManager.buildVariableList();
