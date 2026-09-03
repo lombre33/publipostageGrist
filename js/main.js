@@ -17,7 +17,7 @@
 
   async function refreshTemplateList() {
     const templates = await Templates.loadAll();
-    templateSelect.innerHTML = '<option value="">-- Nouveau modèle --</option>';
+    templateSelect.innerHTML = '-- Nouveau modèle --';
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
@@ -35,7 +35,10 @@
 
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
-    if (!id) { loadTemplateIntoEditor(null); return; }
+    if (!id) {
+      loadTemplateIntoEditor(null);
+      return;
+    }
     const templates = Templates.getCached();
     const tpl = templates.find(t => String(t.id) === String(id));
     loadTemplateIntoEditor(tpl);
@@ -50,7 +53,10 @@
   async function onSave() {
     const id = Templates.getCurrentId();
     const nom = templateNameInput.value.trim();
-    if (!nom) { setStatus('Veuillez indiquer un nom de modèle.', true); return; }
+    if (!nom) {
+      setStatus('Veuillez indiquer un nom de modèle.', true);
+      return;
+    }
     const html = Editor.getHTML();
     const filenameTpl = pdfFilenameInput.value.trim();
     const savedId = await Templates.save(id, nom, html, filenameTpl);
@@ -70,7 +76,10 @@
 
   async function onDelete() {
     const id = Templates.getCurrentId();
-    if (!id) { setStatus('Aucun modèle chargé à supprimer.', true); return; }
+    if (!id) {
+      setStatus('Aucun modèle chargé à supprimer.', true);
+      return;
+    }
     if (!confirm('Supprimer ce modèle ?')) return;
     await Templates.remove(id);
     await refreshTemplateList();
@@ -85,7 +94,6 @@
     const editorContainer = document.getElementById('editor-container');
     const editorToolbar = document.querySelector('.ql-toolbar');
     const readerContainer = document.getElementById('reader-container');
-
     if (mode === 'edit') {
       btnEdit.classList.add('active');
       btnRead.classList.remove('active');
@@ -106,9 +114,12 @@
     const html = Editor.getHTML();
     const context = await GristAPI.detectCurrentContext();
     const record = context ? context.record : GristAPI.getCurrentRecord();
-    if (context) currentTableId = context.tableId;
-    console.log('[main] renderReader: contexte=', context ? context.tableId : null, 'record=', !!record);
-    await ReaderMode.render(html, currentTableId, record);
+    // Utiliser le contexte résolu pour ce rendu, plutôt que la variable partagée
+    // currentTableId qui peut encore appartenir à un callback onRecord précédent.
+    const renderTableId = (context && context.tableId) || currentTableId || GristAPI.getCurrentTableId();
+    if (renderTableId) currentTableId = renderTableId;
+    console.log('[main] renderReader: contexte=', renderTableId, 'record=', record ? Object.keys(record) : null);
+    await ReaderMode.render(html, renderTableId, record);
   }
 
   async function onExportPdf() {
