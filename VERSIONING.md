@@ -3,7 +3,7 @@
 | Version | Date | SHA commit | Description | Statut |
 |---|---|---|---|---|
 | v0.3 | 2026-09-03 | `a28d0d399217b28f5e709e794d89b5eeac0d75fb` | Version stable validée : correction bug pdfFilenameInput null au changement de modèle, chaîne complète fonctionnelle (édition, sauvegarde/chargement modèle, mode lecture, export PDF, variables inter-tables) | stable |
-| v0.4 | À compléter | À compléter | À compléter | en cours |
+| v0.4 | 2026-09-03 | À compléter | Correctif mode lecture : invalidation des rendus asynchrones obsolètes lors d'un changement de ligne sélectionnée | en cours |
 
 ## Structure pour les prochaines versions
 

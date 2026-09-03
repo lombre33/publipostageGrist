@@ -3,8 +3,10 @@ console.log('[reader-mode] module chargé, timestamp:', new Date().toISOString()
 
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
+  let renderGeneration = 0;
 
   async function render(htmlContent, tableId, record) {
+    const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container');
     if (!container) return;
     if (!record) {
@@ -42,6 +44,9 @@ const ReaderMode = (function () {
       r.badge.replaceWith(span);
     }
 
+    // Un ancien rendu peut finir après un changement de ligne (résolutions async).
+    // Seul le rendu le plus récent a le droit de remplacer le DOM.
+    if (renderId !== renderGeneration) return;
     container.innerHTML = '';
     if (hasError) {
       const warn = document.createElement('p');
