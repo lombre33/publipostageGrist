@@ -1,5 +1,5 @@
-// Publipostage Grist — widget custom v1.1.0 — 2026-09-03 (ré-instrumentation [GristAPI])
-console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
+// Publipostage Grist — main v1.1.0 — 2026-09-03 (logs [main] verbeux)
+console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
 
 (function () {
   let quill = null;
@@ -23,10 +23,13 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     }
     return pdfFilenameInput.value.trim();
   }
+
   const editorContainer = document.getElementById('editor-container');
   const readerContainer = document.getElementById('reader-container');
   const btnEdit = document.getElementById('btn-mode-edit');
   const btnRead = document.getElementById('btn-mode-read');
+  const toolbar = document.getElementById('toolbar');
+  let ind = document.getElementById('table-indicator');
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -34,18 +37,15 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   }
 
   function updateTableIndicator(tableId) {
-    let ind = document.getElementById('table-indicator');
     if (!ind) {
       ind = document.createElement('span');
       ind.id = 'table-indicator';
       ind.style.marginLeft = '10px';
       ind.style.fontSize = '0.85em';
       ind.style.opacity = '0.8';
-      const toolbar = document.querySelector('.mode-bar') || statusMsg.parentNode;
-      toolbar && toolbar.appendChild(ind);
+      if (toolbar) toolbar.appendChild(ind);
     }
-    ind.textContent = tableId ? `Table détectée : ${tableId}` : 'Table non détectée';
-    console.log('[main] updateTableIndicator:', tableId);
+    ind.textContent = tableId ? ('Table: ' + tableId) : 'Table: —';
   }
 
   async function refreshTemplateList() {
@@ -97,7 +97,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
 
   async function onSave() {
     const id = Templates.getCurrentId();
-    const nom = templateNameInput ? templateNameInput.value.trim() : '';
+    const nom = templateNameInput.value.trim();
     if (!nom) {
       setStatus('Nom du modèle requis.', true);
       return;
@@ -114,7 +114,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   async function onSaveAs() {
     const nom = prompt('Nom du nouveau modèle :');
     if (!nom) return;
-    if (templateNameInput) templateNameInput.value = nom;
+    templateNameInput.value = nom;
     Templates.setCurrentId(null);
     await onSave();
   }
@@ -150,10 +150,10 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     }
   }
 
-  async function renderReader() {
+  async function renderReader(record, recordTableId) {
     const html = Editor.getHTML();
-    const record = GristAPI.getCurrentRecord();
-    let tableId = GristAPI.getCurrentTableId() || currentTableId;
+    record = record || GristAPI.getCurrentRecord();
+    let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
     if (!record) {
       console.warn('[main] renderReader appelé SANS record courant.');
       return;
@@ -163,6 +163,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) {
         currentTableId = ctx.tableId;
+        tableId = ctx.tableId;
         updateTableIndicator(ctx.tableId);
       }
     }
@@ -208,7 +209,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
       if (tableId) currentTableId = tableId;
       updateTableIndicator(tableId);
-      if (currentMode === 'read' && record) await renderReader();
+      if (currentMode === 'read' && record) await renderReader(record, tableId);
     });
 
     // Abonnement aux options du widget (mapping colonnes, settings)
@@ -243,6 +244,9 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
+
+    updateTableIndicator(GristAPI.getCurrentTableId());
+    await switchMode('edit');
 
     setStatus('Widget prêt.');
     console.log('[main] init terminé. widget prêt.');

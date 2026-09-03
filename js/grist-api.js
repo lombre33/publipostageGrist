@@ -9,6 +9,7 @@ const GristAPI = (function () {
   let _currentOptions = null;
   let _currentTableId = null;
   let _onRecordCallbacks = [];
+  let _recordSubscriptionRegistered = false;
 
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
@@ -21,7 +22,10 @@ const GristAPI = (function () {
     }
 
     // Enregistrer onRecord AVANT tout await pour ne pas rater l'événement initial.
-    try {
+    if (_recordSubscriptionRegistered) {
+      console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
+    } else try {
+      _recordSubscriptionRegistered = true;
       grist.onRecord(async function (record, mappings) {
         console.log('[GristAPI] onRecord reçu: record=', record ? Object.keys(record) : null, 'mappings=', mappings || null);
         _currentRecord = record;
@@ -181,19 +185,18 @@ const GristAPI = (function () {
   async function findReferenceColumns(fromTableId, toTableId) {
     if (!fromTableId || !toTableId) return [];
     try {
-      const tablesMeta = await grist.docApi.listTables();
+      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
       const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const tableRowId = {};
-      for (let i = 0; i < tablesMeta.length; i++) {
-        tableRowId[tablesMeta[i]] = tablesMeta.id ? tablesMeta.id[i] : null;
+      for (let i = 0; i < tablesMeta.id.length; i++) {
+        tableRowId[tablesMeta.tableId[i]] = tablesMeta.id[i];
       }
-      // Note: listTables retourne [{id, columns}], on tente quand même le fallback
       const refCols = [];
       if (colsMeta && colsMeta.parentId) {
         for (let i = 0; i < colsMeta.parentId.length; i++) {
           const parentId = colsMeta.parentId[i];
-          const type = colsMeta.type ? colsMeta.type[i] : '';
-          if (type && type.indexOf('Ref:') === 0 && type.indexOf('->' + toTableId) !== -1) {
+          const target = colsMeta.type ? colsMeta.type[i] : '';
+          if (parentId === tableRowId[fromTableId] && target === 'Ref:' + toTableId) {
             refCols.push(colsMeta.colId[i]);
           }
         }
@@ -217,9 +220,8 @@ const GristAPI = (function () {
   }
 
   async function detectCurrentContext() {
-    console.log('[GristAPI] detectCurrentContext: début.');
     if (!_currentRecord) {
-      console.warn('[GristAPI] detectCurrentContext: record absent.');
+      console.warn('[GristAPI] detectCurrentContext: aucun record courant.');
       return null;
     }
     if (!_currentTableId) {
@@ -229,8 +231,7 @@ const GristAPI = (function () {
       console.warn('[GristAPI] detectCurrentContext: tableId introuvable.');
       return null;
     }
-    console.log('[GristAPI] detectCurrentContext: contexte résolu tableId=', _currentTableId);
-    return { record: _currentRecord, tableId: _currentTableId };
+    return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
   return {
