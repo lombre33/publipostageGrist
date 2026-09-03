@@ -197,4 +197,3 @@ const Variables = (function () {
 
   return { init, resolveVariable, hideAutocomplete };
 })();
-
