@@ -2,23 +2,16 @@
 
 | Version | Date | SHA commit | Description | Statut |
 |---|---|---|---|---|
-| 0.3-rollback | 2026-09-03 | `fac4bd683579a835b4ded6bfcfcc92dac720c7d7` | Rollback propre de `05f57a1b45ac39548f18bb70f1065c8dcfcd5ca5` vers l’état fonctionnel de `d6de3383e35e334b52754283df2454c283708dfa`, avec indicateur « Ligne courante » conservé | Poussé sur `main`, tests statiques effectués |
-| 0.3-dynamic-selection | — | — | Correctif isolé de détection dynamique sans SELECT BY | À implémenter après validation manuelle du rollback |
+| v0.3 | 2026-09-03 | `a28d0d399217b28f5e709e794d89b5eeac0d75fb` | Version stable validée : correction bug pdfFilenameInput null au changement de modèle, chaîne complète fonctionnelle (édition, sauvegarde/chargement modèle, mode lecture, export PDF, variables inter-tables) | stable |
+| v0.4 | 2026-09-03 | À compléter | Correctif mode lecture : invalidation des rendus asynchrones obsolètes lors d'un changement de ligne sélectionnée | en cours |
 
-## Référence stable
+## Structure pour les prochaines versions
 
-- Commit stable v0.3 historique : `a28d0d399217b28f5e709e794d89b5eeac0d75fb`.
-- Commit fonctionnel retenu pour le rollback : `d6de3383e35e334b52754283df2454c283708dfa`.
-- Commit régressif retiré de l’état de travail : `05f57a1b45ac39548f18bb70f1065c8dcfcd5ca5` (polling `getSelectedRows()`).
-
-## État fonctionnel après rollback
-
-L’éditeur, la sauvegarde/suppression de modèles, l’export PDF, la résolution des variables inter-tables, les abonnements `onRecord`/`onRecords` et les boutons de changement de mode sont conservés dans `js/main.js` et `js/grist-api.js`. L’indicateur de diagnostic `Ligne courante` reste actif.
-
-## Correctif dynamique à venir
-
-Ne pas réintroduire le polling de `getSelectedRows()` tel quel : la documentation Custom Widget officielle décrit `onRecord` comme l’événement de changement de curseur et `onRecords` comme l’événement de changement des enregistrements sélectionnés. Le prochain correctif doit être isolé, conditionnel et testé dans Grist avant activation par défaut.
+Pour chaque nouvelle version, ajouter une ligne au tableau avec les colonnes suivantes : **version**, **date**, **SHA commit**, **description** et **statut** (`stable`, `en cours` ou `rollback`).
 
 ## Points de rollback historiques à éviter
 
-- `05f57a1b45ac39548f18bb70f1065c8dcfcd5ca5` : polling autonome ayant provoqué des régressions.
+- `6fa93747985` : état avec le bug `"[object Promise]"` en mode lecture — à éviter.
+- `342221c27c316b3efb668c47a7d765128c162524` : état avant les 4 correctifs groupés.
+
+> Le commit de versionning qui introduit cette documentation est distinct du commit stable v0.3 référencé ci-dessus.
