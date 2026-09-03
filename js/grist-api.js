@@ -26,7 +26,10 @@ const GristAPI = (function () {
       console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
     } else try {
       grist.onRecord(function (record, mappings) {
-        console.log('[GristAPI] onRecord reçu: record=', record ? Object.keys(record) : null, 'mappings=', mappings || null);
+        const receivedAt = new Date();
+        const rowId = record && record.id != null ? record.id : null;
+        console.log('[GristAPI] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), record, mappings: mappings || null });
+        updateRowDebug(rowId, receivedAt);
         _currentRecord = record;
         _currentMappings = mappings || null;
         if (!record) {
@@ -41,8 +44,13 @@ const GristAPI = (function () {
           : null;
         if (mappedTableId) _currentTableId = mappedTableId;
         for (const cb of _onRecordCallbacks) {
-          try { cb(record, _currentTableId, mappings); }
-          catch (e) { console.error('[GristAPI] erreur callback onRecord:', e); }
+          try {
+            Promise.resolve(cb(record, _currentTableId, mappings)).catch(function (e) {
+              console.error('[GristAPI] erreur callback onRecord:', e);
+            });
+          } catch (e) {
+            console.error('[GristAPI] erreur callback onRecord:', e);
+          }
         }
 
         detectTableId(mappings, 'onRecord').then(function (tableId) {
@@ -159,6 +167,18 @@ const GristAPI = (function () {
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
     }
+  }
+
+  function updateRowDebug(rowId, receivedAt) {
+    let debug = document.getElementById('debug-rowid');
+    if (!debug) {
+      debug = document.createElement('div');
+      debug.id = 'debug-rowid';
+      debug.style.cssText = 'font-size:11px;color:#777;margin:4px 0;text-align:right;';
+      (document.getElementById('app') || document.body).appendChild(debug);
+    }
+    debug.textContent = 'Ligne courante: ' + (rowId == null ? '—' : rowId)
+      + ' — reçu à ' + receivedAt.toLocaleTimeString();
   }
 
   function getTables() { return _tables; }

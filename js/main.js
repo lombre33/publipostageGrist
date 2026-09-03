@@ -212,7 +212,9 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     // BUG 2 — onRecord callback async pour await renderReader() et éviter
     // qu'une Promise non-attendue ne s'affiche comme '[object Promise]'.
     GristAPI.onRecord(async function (record, tableId) {
-      console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
+      const receivedAt = new Date();
+      const rowId = record && record.id != null ? record.id : null;
+      console.log('[main] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), tableId, record });
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
       if (tableId) currentTableId = tableId;
