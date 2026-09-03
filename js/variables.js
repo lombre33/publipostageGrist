@@ -140,3 +140,15 @@ const VariablesManager = (() => {
     resolveAllInElement,
   };
 })();
+
+// Compatibilité avec les modules historiques (éditeur et mode lecture).
+const Variables = (() => {
+  let editorQuill = null;
+  function init(quill) { editorQuill = quill; return editorQuill; }
+  async function resolveVariable(tableId, columnId, currentTableId, record) {
+    const variable = typeof tableId === 'object' ? tableId : VariablesManager.getVariableList().find(v => v.tableId === tableId && v.colId === columnId);
+    if (!variable) return `[ERREUR: variable inconnue ${tableId}_${columnId}]`;
+    return VariablesManager.resolveVariable(variable, record, currentTableId);
+  }
+  return { init, resolveVariable };
+})();

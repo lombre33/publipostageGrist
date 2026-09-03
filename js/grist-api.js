@@ -6,7 +6,7 @@
 //
 // Piste explorée (cf. discussion) : au moment de la création du custom widget,
 // celui-ci est posé sur une VUE qui est elle-même rattachée à une table.
-// grist.ready() reçoit, via le protocole bas niveau, des informations sur le
+// Grist.ready() reçoit, via le protocole bas niveau, des informations sur le
 // contexte d'exécution (dont potentiellement le tableId de la vue hôte).
 // On tente donc plusieurs sources, de la plus fiable à la plus "best effort",
 // et on garde la première qui répond, avec un mécanisme de rafraîchissement
@@ -15,13 +15,10 @@
 const GristAPI = (() => {
   let currentTableId = null;
   let allTables = [];       // liste des tables du document: [{tableId, columns:[...]}]
-  let availableTableIds = [];
-  let manualTableId = null;
   let onTableIdChangeCbs = [];
   let onRecordCbs = [];
 
   function notifyTableIdChange(tableId) {
-    if (tableId) manualTableId = null;
     if (tableId && tableId !== currentTableId) {
       currentTableId = tableId;
       onTableIdChangeCbs.forEach(cb => {
@@ -32,7 +29,6 @@ const GristAPI = (() => {
     }
   }
 
-  // --- Piste 1 : grist.viewApi / grist.getTable() (API haut niveau) ---
   async function tryGetTableIdFromViewApi() {
     try {
       if (grist.viewApi && typeof grist.viewApi.getTableId === 'function') {
@@ -43,7 +39,6 @@ const GristAPI = (() => {
     return null;
   }
 
-  // --- Piste 2 : table renvoyée par grist.getTable() (mapping implicite) ---
   async function tryGetTableIdFromGetTable() {
     try {
       if (typeof grist.getTable === 'function') {
@@ -60,16 +55,12 @@ const GristAPI = (() => {
     return null;
   }
 
-  // --- Piste 3 : écoute des messages bruts du protocole plugin (bas niveau) ---
-  // Le message 'message' émis par grist-plugin-api.js contient parfois
-  // directement un champ tableId dans les événements internes (selon version).
   function listenRawMessages() {
     try {
       grist.on('message', (msg) => {
         if (msg && msg.tableId) {
           notifyTableIdChange(msg.tableId);
         }
-        // Certaines versions encapsulent l'info dans msg.data
         if (msg && msg.data && msg.data.tableId) {
           notifyTableIdChange(msg.data.tableId);
         }
@@ -77,10 +68,6 @@ const GristAPI = (() => {
     } catch (e) { /* silencieux */ }
   }
 
-  // --- Piste 4 (fallback ultime) : déduire la table par élimination via les
-  // champs présents dans le record reçu par onRecord, comparés à la liste des
-  // colonnes de chaque table du document. Si une seule table matche tous les
-  // champs du record, on la retient. ---
   function guessTableIdFromRecordShape(record) {
     if (!record || allTables.length === 0) return null;
     const recordFields = Object.keys(record).filter(k => k !== 'id');
@@ -92,23 +79,18 @@ const GristAPI = (() => {
     });
 
     if (candidates.length === 1) return candidates[0].tableId;
-    return null; // ambigu, on ne prend pas de risque
+    return null;
   }
 
   async function refreshAllTables() {
     try {
       const tableIds = await grist.docApi.listTables();
-      availableTableIds = Array.isArray(tableIds) ? tableIds.slice() : [];
       const tables = [];
       for (const tableId of tableIds) {
         try {
           const cols = await grist.docApi.fetchTable('_grist_Tables_column');
-          // fetchTable direct sur les colonnes n'est pas garanti selon la version;
-          // on utilise plutôt une approche par table cible ci-dessous.
         } catch (e) { /* ignore, fallback plus bas */ }
       }
-      // Approche fiable : interroger les métadonnées _grist_Tables et
-      // _grist_Tables_column pour obtenir tableId -> [colId...]
       const metaTables = await grist.docApi.fetchTable('_grist_Tables');
       const metaCols = await grist.docApi.fetchTable('_grist_Tables_column');
 
@@ -127,10 +109,7 @@ const GristAPI = (() => {
         colsByTableRef[tId].push({ colId });
       }
 
-      allTables = Object.keys(colsByTableRef).map(tId => ({
-        tableId: tId,
-        columns: colsByTableRef[tId],
-      }));
+      allTables = Object.keys(colsByTableRef).map(tId => ({ tableId: tId, columns: colsByTableRef[tId] }));
     } catch (e) {
       console.error('Erreur lors du chargement des métadonnées de tables', e);
       allTables = [];
@@ -138,92 +117,39 @@ const GristAPI = (() => {
   }
 
   async function init() {
-    // Accès complet requis pour explorer toutes les tables / métadonnées.
-    grist.ready({
-      requiredAccess: 'full',
-    });
-
+    grist.ready({ requiredAccess: 'full' });
     listenRawMessages();
-
     await refreshAllTables();
-
-    // Tentative immédiate via les API haut niveau (après ready).
     const idFromViewApi = await tryGetTableIdFromViewApi();
     if (idFromViewApi) notifyTableIdChange(idFromViewApi);
-
     const idFromGetTable = await tryGetTableIdFromGetTable();
     if (idFromGetTable) notifyTableIdChange(idFromGetTable);
-
-    // Abonnement aux changements de ligne courante.
     grist.onRecord((record, mappings) => {
-      // Si Grist fournit un mapping avec tableId, on l'utilise en priorité.
-      if (mappings && mappings.tableId) {
-        notifyTableIdChange(mappings.tableId);
-      } else if (!currentTableId) {
-        // La déduction par forme reste un dernier essai avant le sélecteur manuel.
+      if (mappings && mappings.tableId) notifyTableIdChange(mappings.tableId);
+      else if (!currentTableId) {
         const guessed = guessTableIdFromRecordShape(record);
         if (guessed) notifyTableIdChange(guessed);
       }
-      onRecordCbs.forEach(cb => {
-        try { cb(record, currentTableId); } catch (e) { console.error(e); }
-      });
+      onRecordCbs.forEach(cb => { try { cb(record, currentTableId); } catch (e) { console.error(e); } });
     });
-
-    // Certaines versions de l'API exposent onOptions avec des infos de contexte.
     if (typeof grist.onOptions === 'function') {
-      grist.onOptions((options, settings) => {
-        if (settings && settings.tableId) {
-          notifyTableIdChange(settings.tableId);
-        }
-      });
+      grist.onOptions((options, settings) => { if (settings && settings.tableId) notifyTableIdChange(settings.tableId); });
     }
   }
 
-  function onTableIdChange(cb) {
-    onTableIdChangeCbs.push(cb);
-    if (currentTableId) cb(currentTableId);
+  function onTableIdChange(cb) { onTableIdChangeCbs.push(cb); if (currentTableId) cb(currentTableId); }
+  function onRecord(cb) { onRecordCbs.push(cb); }
+  function getCurrentTableId() { return currentTableId; }
+  function getAllTables() { return allTables; }
+  function getAvailableTableIds() { return allTables.map(t => t.tableId); }
+  function setManualTableId(tableId) { notifyTableIdChange(tableId || null); }
+  function getManualTableId() { return currentTableId; }
+  function getAllVariables() {
+    if (typeof VariablesManager === 'undefined') return [];
+    return VariablesManager.getVariableList().map(v => ({ ...v, key: v.key || v.label, column: v.column || v.colId }));
   }
+  async function docApiFetchTable(tableId) { return grist.docApi.fetchTable(tableId); }
+  async function applyUserActions(actions) { return grist.docApi.applyUserActions(actions); }
 
-  function onRecord(cb) {
-    onRecordCbs.push(cb);
-  }
-
-  function getCurrentTableId() {
-    return currentTableId || manualTableId;
-  }
-
-  function getAllTables() {
-    return allTables;
-  }
-
-  function getAvailableTableIds() {
-    return availableTableIds.length ? availableTableIds.slice() : allTables.map(t => t.tableId);
-  }
-
-  function setManualTableId(tableId) {
-    if (!tableId || !getAvailableTableIds().includes(tableId)) return false;
-    manualTableId = tableId;
-    notifyTableIdChange(tableId);
-    return true;
-  }
-
-  async function docApiFetchTable(tableId) {
-    return grist.docApi.fetchTable(tableId);
-  }
-
-  async function applyUserActions(actions) {
-    return grist.docApi.applyUserActions(actions);
-  }
-
-  return {
-    init,
-    onTableIdChange,
-    onRecord,
-    getCurrentTableId,
-    getAllTables,
-    getAvailableTableIds,
-    setManualTableId,
-    docApiFetchTable,
-    applyUserActions,
-  };
+  return { init, onTableIdChange, onRecord, getCurrentTableId, getAllTables, getAvailableTableIds, setManualTableId, getManualTableId, getAllVariables, docApiFetchTable, applyUserActions };
 })();

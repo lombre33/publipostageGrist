@@ -42,9 +42,7 @@ const Templates = (function () {
   }
 
   function getCached() { return templatesCache; }
-
   function getCurrentId() { return currentTemplateId; }
-
   function setCurrentId(id) { currentTemplateId = id; }
 
   async function save(id, nom, contenuHtml, nomFichierPDF) {
@@ -71,5 +69,55 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
+  function getElement(id) { return document.getElementById(id); }
+
+  function populateSelect() {
+    const select = getElement('template-select');
+    if (!select) return;
+    const selected = currentTemplateId == null ? '' : String(currentTemplateId);
+    select.innerHTML = '<option value="">-- Nouveau modèle --</option>';
+    templatesCache.forEach(template => {
+      const option = document.createElement('option');
+      option.value = String(template.id);
+      option.textContent = template.nom || `Modèle ${template.id}`;
+      option.selected = String(template.id) === selected;
+      select.appendChild(option);
+    });
+  }
+
+  async function init() {
+    await loadAll();
+    populateSelect();
+    if (templatesCache.length && currentTemplateId == null) await loadTemplate(templatesCache[0].id);
+    return templatesCache;
+  }
+
+  async function newTemplate() {
+    currentTemplateId = null;
+    const name = getElement('template-name'); const filename = getElement('pdf-filename-template');
+    if (name) name.value = ''; if (filename) filename.value = '';
+    if (typeof Editor !== 'undefined' && Editor.setHTML) Editor.setHTML('');
+    const select = getElement('template-select'); if (select) select.value = '';
+  }
+
+  async function saveCurrentTemplate() {
+    const name = getElement('template-name'); const filename = getElement('pdf-filename-template');
+    const nom = name && name.value.trim() ? name.value.trim() : 'Nouveau modèle';
+    const contenu = typeof Editor !== 'undefined' ? Editor.getHTML() : '';
+    const id = await save(currentTemplateId, nom, contenu, filename ? filename.value : '');
+    currentTemplateId = id; await loadAll(); populateSelect(); return id;
+  }
+
+  async function loadTemplate(id) {
+    if (id === '' || id == null) return newTemplate();
+    const template = templatesCache.find(t => String(t.id) === String(id));
+    if (!template) return null;
+    currentTemplateId = template.id;
+    const name = getElement('template-name'); const filename = getElement('pdf-filename-template');
+    if (name) name.value = template.nom || ''; if (filename) filename.value = template.nomFichierPDF || '';
+    if (typeof Editor !== 'undefined' && Editor.setHTML) Editor.setHTML(template.contenu || '');
+    populateSelect(); return template;
+  }
+
+  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, init, newTemplate, saveCurrentTemplate, loadTemplate, populateSelect, TABLE_NAME };
 })();
