@@ -4,6 +4,7 @@
 |---|---|---|---|---|
 | v0.3 | 2026-09-03 | `a28d0d399217b28f5e709e794d89b5eeac0d75fb` | Version stable validée : correction bug pdfFilenameInput null au changement de modèle, chaîne complète fonctionnelle (édition, sauvegarde/chargement modèle, mode lecture, export PDF, variables inter-tables) | stable |
 | v0.4 | 2026-09-03 | À compléter | Correctif mode lecture : invalidation des rendus asynchrones obsolètes lors d'un changement de ligne sélectionnée | en cours |
+| v0.5 | 2026-09-03 | `2e9c5655755fc26fb8fe51439a40c50fa9e50d44` | Nouvelle tentative isolée de détection automatique sans SELECT BY via polling complémentaire de `grist.fetchSelectedRecord()`, comparaison d’état, garde anti-chevauchement et arrêt explicite ; `onRecord` natif conservé | à tester par l’utilisateur |
 
 ## Structure pour les prochaines versions
 
