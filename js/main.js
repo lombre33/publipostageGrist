@@ -1,143 +1,172 @@
-// main.js
-// Point d'entrée du widget. Orchestre grist-api.js, variables.js, editor.js,
-// reader-mode.js, templates.js et pdf-export.js.
+// Point d'entrée : orchestration de l'ensemble des modules
+(function () {
+  let quill = null;
+  let currentMode = 'edit'; // 'edit' | 'read'
+  let currentTableId = null; // table active dans Grist au moment de la sélection
 
-(async function () {
-  const els = {
-    tableIdBadge: document.getElementById('current-table-badge'),
-    modeToggleBtn: document.getElementById('btn-mode-read'),
-    modeEditBtn: document.getElementById('btn-mode-edit'),
-    editorContainer: document.getElementById('editor-container'),
-    readerContainer: document.getElementById('reader-container'),
-    errorBanner: document.getElementById('error-banner'),
-    tableSelectorContainer: document.getElementById('table-selector-container'),
-    tableSelector: document.getElementById('table-selector'),
-    templateSelect: document.getElementById('template-select'),
-    newTemplateBtn: document.getElementById('btn-new'),
-    saveTemplateBtn: document.getElementById('btn-save'),
-    exportPdfBtn: document.getElementById('btn-export-pdf'),
-    fileNamePatternInput: document.getElementById('pdf-filename-template'),
-  };
+  const statusMsg = document.getElementById('status-msg');
+  const templateSelect = document.getElementById('template-select');
+  const templateNameInput = document.getElementById('template-name');
+  const pdfFilenameInput = document.getElementById('pdf-filename-template');
 
-  let mode = 'edit'; // 'edit' | 'read'
-  let currentRecord = null;
-
-  // Tous les écouteurs sont attachés de façon défensive : certains éléments
-  // restent optionnels selon le contexte d'intégration du widget.
-  function on(el, event, handler) {
-    if (el) el.addEventListener(event, handler);
+  function setStatus(msg, isError) {
+    statusMsg.textContent = msg;
+    statusMsg.className = isError ? 'error-msg' : '';
+    setTimeout(() => { statusMsg.textContent = ''; }, 4000);
   }
 
-  function refreshTableSelector() {
-    if (!els.tableSelector || !els.tableSelectorContainer) return;
-    const tables = GristAPI.getAvailableTableIds();
-    els.tableSelector.innerHTML = '<option value="">-- Sélectionner une table --</option>';
-    tables.forEach(tableId => {
-      const option = document.createElement('option');
-      option.value = tableId;
-      option.textContent = tableId;
-      els.tableSelector.appendChild(option);
+  async function refreshTemplateList() {
+    const templates = await Templates.loadAll();
+    templateSelect.innerHTML = '<option value="">-- Nouveau modèle --</option>';
+    templates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.nom;
+      templateSelect.appendChild(opt);
     });
-    const detected = GristAPI.getCurrentTableId();
-    els.tableSelector.value = detected || '';
-    els.tableSelectorContainer.style.display = detected ? 'none' : 'block';
   }
 
-  function showDiagnostic(tableId) {
-    if (els.tableIdBadge) {
-      els.tableIdBadge.textContent = tableId
-        ? `Table courante détectée : ${tableId}`
-        : 'Table courante : non détectée';
-      els.tableIdBadge.classList.toggle('badge-ok', !!tableId);
-      els.tableIdBadge.classList.toggle('badge-warn', !tableId);
-    }
+  function loadTemplateIntoEditor(tpl) {
+    Editor.setHTML(tpl ? tpl.contenu : '');
+    templateNameInput.value = tpl ? tpl.nom : '';
+    pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+    Templates.setCurrentId(tpl ? tpl.id : null);
   }
 
-  function showError(message) {
-    if (!els.errorBanner) return;
-    if (message) {
-      els.errorBanner.textContent = `⚠ ${message}`;
-      els.errorBanner.style.display = 'block';
-    } else {
-      els.errorBanner.style.display = 'none';
-    }
+  async function onTemplateSelectChange() {
+    const id = templateSelect.value;
+    if (!id) { loadTemplateIntoEditor(null); return; }
+    const templates = Templates.getCached();
+    const tpl = templates.find(t => String(t.id) === String(id));
+    loadTemplateIntoEditor(tpl);
   }
 
-  async function refreshReaderMode() {
-    if (mode !== 'read') return;
-    const currentTableId = GristAPI.getCurrentTableId();
-    if (!currentTableId) {
-      showError('Table courante non détectée. Vérifiez que le widget est bien rattaché à une vue/table dans Grist.');
-      return;
-    }
-    if (!currentRecord) {
-      showError('Aucune ligne sélectionnée dans la table courante.');
-      return;
-    }
-    const ok = await ReaderMode.render(currentRecord, currentTableId);
-    showError(ok ? null : 'Certaines variables n\'ont pas pu être résolues (vérifiez que le modèle correspond bien à cette table / qu\'une référence existe).');
+  async function onNew() {
+    templateSelect.value = '';
+    loadTemplateIntoEditor(null);
+    setStatus('Nouveau modèle prêt.');
   }
 
-  function switchMode(newMode) {
-    mode = newMode;
+  async function onSave() {
+    const id = Templates.getCurrentId();
+    const nom = templateNameInput.value.trim();
+    if (!nom) { setStatus('Veuillez indiquer un nom de modèle.', true); return; }
+    const html = Editor.getHTML();
+    const filenameTpl = pdfFilenameInput.value.trim();
+    const savedId = await Templates.save(id, nom, html, filenameTpl);
+    Templates.setCurrentId(savedId);
+    await refreshTemplateList();
+    templateSelect.value = savedId;
+    setStatus('Modèle enregistré.');
+  }
+
+  async function onSaveAs() {
+    const nom = prompt('Nom du nouveau modèle :', templateNameInput.value || 'Nouveau modèle');
+    if (!nom) return;
+    templateNameInput.value = nom;
+    Templates.setCurrentId(null);
+    await onSave();
+  }
+
+  async function onDelete() {
+    const id = Templates.getCurrentId();
+    if (!id) { setStatus('Aucun modèle chargé à supprimer.', true); return; }
+    if (!confirm('Supprimer ce modèle ?')) return;
+    await Templates.remove(id);
+    await refreshTemplateList();
+    onNew();
+    setStatus('Modèle supprimé.');
+  }
+
+  function switchMode(mode) {
+    currentMode = mode;
+    const btnEdit = document.getElementById('btn-mode-edit');
+    const btnRead = document.getElementById('btn-mode-read');
+    const editorContainer = document.getElementById('editor-container');
+    const editorToolbar = document.querySelector('.ql-toolbar');
+    const readerContainer = document.getElementById('reader-container');
+
     if (mode === 'edit') {
-      if (els.editorContainer) els.editorContainer.style.display = 'block';
-      if (els.readerContainer) els.readerContainer.style.display = 'none';
-      if (els.modeEditBtn) els.modeEditBtn.classList.add('active');
-      if (els.modeToggleBtn) els.modeToggleBtn.classList.remove('active');
-      showError(null);
+      btnEdit.classList.add('active');
+      btnRead.classList.remove('active');
+      editorContainer.style.display = 'block';
+      if (editorToolbar) editorToolbar.style.display = 'block';
+      readerContainer.style.display = 'none';
     } else {
-      if (els.editorContainer) els.editorContainer.style.display = 'none';
-      if (els.readerContainer) els.readerContainer.style.display = 'block';
-      if (els.modeToggleBtn) els.modeToggleBtn.classList.add('active');
-      if (els.modeEditBtn) els.modeEditBtn.classList.remove('active');
-      refreshReaderMode();
+      btnEdit.classList.remove('active');
+      btnRead.classList.add('active');
+      editorContainer.style.display = 'none';
+      if (editorToolbar) editorToolbar.style.display = 'none';
+      readerContainer.style.display = 'block';
+      renderReader();
     }
   }
 
-  on(els.modeToggleBtn, 'click', () => switchMode('read'));
-  on(els.modeEditBtn, 'click', () => switchMode('edit'));
-  on(els.newTemplateBtn, 'click', () => Templates.newTemplate());
-  on(els.saveTemplateBtn, 'click', () => Templates.saveCurrentTemplate());
-  on(els.templateSelect, 'change', (e) => Templates.loadTemplate(e.target.value));
-  on(els.tableSelector, 'change', (e) => {
-    if (e.target.value) GristAPI.setManualTableId(e.target.value);
-  });
-  on(els.exportPdfBtn, 'click', async () => {
-    const currentTableId = GristAPI.getCurrentTableId();
-    if (!currentTableId || !currentRecord) {
-      showError('Impossible d\'exporter : table ou ligne courante non détectée.');
-      return;
+  async function renderReader() {
+    const html = Editor.getHTML();
+    const record = GristAPI.getCurrentRecord();
+    await ReaderMode.render(html, currentTableId, record);
+  }
+
+  async function onExportPdf() {
+    const html = Editor.getHTML();
+    const record = GristAPI.getCurrentRecord();
+    const filenameTpl = pdfFilenameInput.value.trim();
+    setStatus('Génération du PDF en cours...');
+    try {
+      await PdfExport.exportCurrentRecord(html, currentTableId, record, filenameTpl);
+      setStatus('PDF généré.');
+    } catch (e) {
+      console.error(e);
+      setStatus("Erreur lors de l'export PDF : " + e.message, true);
     }
-    await PdfExport.exportCurrentRecord(
-      currentRecord,
-      currentTableId,
-      els.fileNamePatternInput ? els.fileNamePatternInput.value : ''
-    );
-  });
+  }
 
-  // --- Initialisation ---
-  await GristAPI.init();
-  refreshTableSelector();
+  async function detectCurrentTable() {
+    try {
+      const tableId = await grist.getTable ? null : null;
+    } catch (e) {}
+  }
 
-  GristAPI.onTableIdChange((tableId) => {
-    showDiagnostic(tableId);
-    VariablesManager.buildVariableList();
-    if (typeof Editor.refreshAutocompleteSource === 'function') Editor.refreshAutocompleteSource();
-    refreshTableSelector();
-    if (mode === 'read') refreshReaderMode();
-  });
+  async function init() {
+    await GristAPI.init();
+    quill = Editor.init();
 
-  GristAPI.onRecord((record, tableId) => {
-    currentRecord = record;
-    showDiagnostic(tableId);
-    if (mode === 'read') refreshReaderMode();
-    refreshTableSelector();
-  });
+    GristAPI.onRecord(function (record) {
+      if (record && record.__tableId__) {
+        currentTableId = record.__tableId__;
+      }
+      if (currentMode === 'read') renderReader();
+    });
 
-  VariablesManager.buildVariableList();
-  Editor.init(document.getElementById('editor'));
-  await Templates.init();
+    grist.onOptions(async function (options, settings) {
+      if (settings && settings.access === 'full') {
+        try {
+          const tableId = await grist.getSelectedTableId?.();
+          if (tableId) currentTableId = tableId;
+        } catch (e) {}
+      }
+    });
 
-  switchMode('edit');
+    try {
+      if (grist.getTable) {
+        // Fallback : certaines versions de l'API exposent le tableId courant
+      }
+    } catch (e) {}
+
+    await refreshTemplateList();
+
+    document.getElementById('template-select').addEventListener('change', onTemplateSelectChange);
+    document.getElementById('btn-new').addEventListener('click', onNew);
+    document.getElementById('btn-save').addEventListener('click', onSave);
+    document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
+    document.getElementById('btn-delete').addEventListener('click', onDelete);
+    document.getElementById('btn-mode-edit').addEventListener('click', () => switchMode('edit'));
+    document.getElementById('btn-mode-read').addEventListener('click', () => switchMode('read'));
+    document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
+
+    setStatus('Widget prêt.');
+  }
+
+  init();
 })();

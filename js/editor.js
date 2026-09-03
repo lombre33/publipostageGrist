@@ -24,7 +24,11 @@ const Editor = (function () {
       return node;
     }
     static value(node) {
-      return { table: node.getAttribute('data-table'), column: node.getAttribute('data-column'), key: node.getAttribute('data-key') };
+      return {
+        table: node.getAttribute('data-table'),
+        column: node.getAttribute('data-column'),
+        key: node.getAttribute('data-key')
+      };
     }
   }
   VarBadgeBlot.blotName = 'varbadge';
@@ -37,23 +41,44 @@ const Editor = (function () {
       theme: 'snow',
       modules: {
         toolbar: {
-          container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['clean']],
-          handlers: { undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); } }
+          container: [
+            [{ header: [1, 2, 3, 4, 5, 6, false] }],
+            ['bold', 'italic', 'underline'],
+            [{ align: [] }],
+            [{ size: FontSize.whitelist }],
+            [{ font: FontFamily.whitelist }],
+            ['undo', 'redo'],
+            ['clean']
+          ],
+          handlers: {
+            undo: function () { quill.history.undo(); },
+            redo: function () { quill.history.redo(); }
+          }
         },
         history: { delay: 500, maxStack: 100, userOnly: true }
       }
     });
+
+    // Icônes undo/redo (Quill n'en fournit pas par défaut dans la config simple)
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) {
-      const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
-      if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷';
+      const undoBtn = toolbar.querySelector('.ql-undo');
+      const redoBtn = toolbar.querySelector('.ql-redo');
+      if (undoBtn) undoBtn.innerHTML = '↶';
+      if (redoBtn) redoBtn.innerHTML = '↷';
     }
+
     Variables.init(quill);
     return quill;
   }
+
   function getQuill() { return quill; }
+
   function getHTML() { return quill.root.innerHTML; }
-  function setHTML(html) { quill.root.innerHTML = html || ''; }
-  function refreshAutocompleteSource() { return (typeof VariablesManager !== 'undefined') ? VariablesManager.getVariableList() : []; }
-  return { init, getQuill, getHTML, setHTML, refreshAutocompleteSource };
+
+  function setHTML(html) {
+    quill.root.innerHTML = html || '';
+  }
+
+  return { init, getQuill, getHTML, setHTML };
 })();

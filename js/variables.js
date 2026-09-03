@@ -1,154 +1,163 @@
-// variables.js
-// Gestion du catalogue de variables (#Table_Colonne) et résolution des valeurs
-// à partir de la ligne courante + de la table courante détectée par grist-api.js.
+// Module de gestion des variables : autocomplétion, badges, résolution des valeurs
+const Variables = (function () {
+  let activeQuill = null;
+  let acBox = null;
+  let acItems = [];
+  let acSelectedIndex = 0;
+  let acRange = null; // {index, length} du texte '#...' à remplacer
 
-const VariablesManager = (() => {
-  let variableList = []; // [{label: 'Table1_Nom', tableId: 'Table1', colId: 'Nom'}]
+  function init(quillInstance) {
+    activeQuill = quillInstance;
+    acBox = document.getElementById('autocomplete-box');
 
-  function buildVariableList() {
-    const tables = GristAPI.getAllTables();
-    variableList = [];
-    tables.forEach(t => {
-      t.columns.forEach(c => {
-        if (c.colId === 'manualSort' || c.colId.startsWith('gristHelper_')) return;
-        variableList.push({
-          label: `${t.tableId}_${c.colId}`,
-          tableId: t.tableId,
-          colId: c.colId,
-        });
-      });
+    activeQuill.on('text-change', function (delta, oldDelta, source) {
+      if (source !== 'user') return;
+      checkForTrigger();
     });
-    return variableList;
-  }
 
-  function getVariableList() {
-    return variableList;
-  }
-
-  function filterVariables(query) {
-    const q = query.toLowerCase();
-    return variableList.filter(v => v.label.toLowerCase().includes(q));
-  }
-
-  // Recherche, dans les métadonnées de colonnes, une colonne de type Ref/RefList
-  // dans la table courante qui pointe vers la table cible demandée.
-  async function findReferenceColumn(currentTableId, targetTableId) {
-    try {
-      const metaCols = await GristAPI.docApiFetchTable('_grist_Tables_column');
-      const metaTables = await GristAPI.docApiFetchTable('_grist_Tables');
-
-      const tableIdById = {};
-      for (let i = 0; i < metaTables.id.length; i++) {
-        tableIdById[metaTables.id[i]] = metaTables.tableId[i];
+    activeQuill.root.addEventListener('keydown', function (e) {
+      if (acBox.style.display === 'block') {
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
+        else if (e.key === 'Enter') { e.preventDefault(); confirmSelection(); }
+        else if (e.key === 'Escape') { hideAutocomplete(); }
       }
+    });
 
-      const candidates = [];
-      for (let i = 0; i < metaCols.id.length; i++) {
-        const parentTableId = tableIdById[metaCols.parentId[i]];
-        if (parentTableId !== currentTableId) continue;
-        const type = metaCols.type[i] || '';
-        // types du style "Ref:TargetTable" ou "RefList:TargetTable"
-        const match = /^Ref(List)?:(.+)$/.exec(type);
-        if (match && match[2] === targetTableId) {
-          candidates.push(metaCols.colId[i]);
-        }
-      }
-      return candidates; // peut être vide, un seul, ou plusieurs
-    } catch (e) {
-      console.error('Erreur recherche colonne de référence', e);
-      return [];
+    document.addEventListener('click', function (e) {
+      if (acBox && !acBox.contains(e.target)) hideAutocomplete();
+    });
+  }
+
+  function checkForTrigger() {
+    const range = activeQuill.getSelection();
+    if (!range) { hideAutocomplete(); return; }
+    const textBefore = activeQuill.getText(0, range.index);
+    const match = textBefore.match(/#([A-Za-z0-9_]*)$/);
+    if (match) {
+      const query = match[1].toLowerCase();
+      const startIndex = range.index - match[0].length;
+      acRange = { index: startIndex, length: match[0].length };
+      showAutocomplete(query, range);
+    } else {
+      hideAutocomplete();
     }
   }
 
-  // Résout la valeur d'une variable pour un enregistrement donné.
-  // record: ligne courante de la table currentTableId.
-  async function resolveVariable(variable, record, currentTableId) {
-    if (!currentTableId) {
-      return `[ERREUR: table courante non détectée]`;
+  function showAutocomplete(query, range) {
+    const allVars = GristAPI.getAllVariables();
+    acItems = allVars.filter(v => v.key.toLowerCase().includes(query));
+    if (acItems.length === 0) { hideAutocomplete(); return; }
+    acSelectedIndex = 0;
+    renderAutocomplete();
+    positionAutocomplete(range);
+    acBox.style.display = 'block';
+  }
+
+  function renderAutocomplete() {
+    acBox.innerHTML = '';
+    acItems.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'ac-item' + (idx === acSelectedIndex ? ' selected' : '');
+      div.textContent = item.key;
+      div.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        acSelectedIndex = idx;
+        confirmSelection();
+      });
+      acBox.appendChild(div);
+    });
+  }
+
+  function moveSelection(delta) {
+    acSelectedIndex = (acSelectedIndex + delta + acItems.length) % acItems.length;
+    renderAutocomplete();
+  }
+
+  function positionAutocomplete(range) {
+    const bounds = activeQuill.getBounds(range.index);
+    const containerRect = activeQuill.root.getBoundingClientRect();
+    acBox.style.left = (containerRect.left + bounds.left + window.scrollX) + 'px';
+    acBox.style.top = (containerRect.top + bounds.top + bounds.height + window.scrollY + 4) + 'px';
+  }
+
+  function hideAutocomplete() {
+    if (acBox) acBox.style.display = 'none';
+    acRange = null;
+  }
+
+  function confirmSelection() {
+    if (!acRange || acItems.length === 0) return;
+    const item = acItems[acSelectedIndex];
+    insertBadge(item);
+    hideAutocomplete();
+  }
+
+  function insertBadge(item) {
+    activeQuill.deleteText(acRange.index, acRange.length);
+    activeQuill.insertEmbed(acRange.index, 'varbadge', { table: item.table, column: item.column, key: item.key });
+    activeQuill.setSelection(acRange.index + 1, 0);
+  }
+
+  // Résout la valeur d'une variable pour un enregistrement de la table courante
+  // currentTableId: table sur laquelle le widget est actuellement lié
+  // record: enregistrement courant (grist.onRecord)
+  async function resolveVariable(varTable, varColumn, currentTableId, record) {
+    if (!record) return '';
+    if (varTable === currentTableId) {
+      const val = record[varColumn];
+      return formatValue(val);
     }
-
-    if (variable.tableId === currentTableId) {
-      const value = record[variable.colId];
-      return (value === undefined || value === null) ? '' : String(value);
-    }
-
-    // Variable issue d'une autre table : chercher une colonne de référence
-    // dans la table courante qui pointe vers variable.tableId.
-    const refCols = await findReferenceColumn(currentTableId, variable.tableId);
-
+    // Colonne d'une autre table : chercher une colonne de référence
+    const refCols = await GristAPI.findReferenceColumns(currentTableId, varTable);
     if (refCols.length === 0) {
-      return `[ERREUR: aucune référence vers ${variable.tableId} trouvée dans ${currentTableId}]`;
+      return `[ERREUR: aucune référence vers ${varTable} trouvée dans ${currentTableId}]`;
     }
-
-    // On prend la première colonne de référence trouvée (V1 : pas de choix
-    // utilisateur multiple géré dans l'UI ici, cf. editor.js pour le prompt
-    // de sélection au moment de l'insertion de la variable).
-    const refColId = refCols[0];
-    const refValue = record[refColId]; // id de la ligne référencée (ou objet ['R', id])
-    let refRowId = refValue;
-    if (Array.isArray(refValue) && refValue.length === 2 && refValue[0] === 'R') {
-      refRowId = refValue[1];
+    let refCol = refCols[0];
+    if (refCols.length > 1) {
+      refCol = await askUserForRefColumn(refCols, varTable);
+      if (!refCol) return '[Sélection annulée]';
     }
+    const refId = record[refCol];
+    if (!refId) return '';
+    const rowId = Array.isArray(refId) ? refId[1] : refId; // gestion RefList basique
+    const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
+    if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
+    return formatValue(linkedRow[varColumn]);
+  }
 
-    if (!refRowId) {
-      return `[ERREUR: référence vide vers ${variable.tableId}]`;
-    }
+  function formatValue(val) {
+    if (val === null || val === undefined) return '';
+    if (Array.isArray(val)) return val.join(', ');
+    return String(val);
+  }
 
-    try {
-      const targetTable = await GristAPI.docApiFetchTable(variable.tableId);
-      const idx = targetTable.id.indexOf(refRowId);
-      if (idx === -1) {
-        return `[ERREUR: ligne référencée introuvable dans ${variable.tableId}]`;
+  function askUserForRefColumn(refCols, targetTable) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('ref-choice-modal');
+      const text = document.getElementById('ref-choice-text');
+      const select = document.getElementById('ref-choice-select');
+      const btnOk = document.getElementById('ref-choice-confirm');
+      const btnCancel = document.getElementById('ref-choice-cancel');
+      text.textContent = `Plusieurs colonnes de référence vers "${targetTable}" existent. Laquelle utiliser ?`;
+      select.innerHTML = '';
+      refCols.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        select.appendChild(opt);
+      });
+      modal.style.display = 'flex';
+      function cleanup() {
+        modal.style.display = 'none';
+        btnOk.removeEventListener('click', onOk);
+        btnCancel.removeEventListener('click', onCancel);
       }
-      const value = targetTable[variable.colId] ? targetTable[variable.colId][idx] : undefined;
-      return (value === undefined || value === null) ? '' : String(value);
-    } catch (e) {
-      return `[ERREUR: lecture de ${variable.tableId} impossible]`;
-    }
+      function onOk() { const v = select.value; cleanup(); resolve(v); }
+      function onCancel() { cleanup(); resolve(null); }
+      btnOk.addEventListener('click', onOk);
+      btnCancel.addEventListener('click', onCancel);
+    });
   }
 
-  // Résout toutes les variables présentes dans un texte/HTML donné.
-  // Remplace les badges (identifiés par un data-attribute) par leur valeur.
-  async function resolveAllInElement(rootElement, record, currentTableId) {
-    const badges = rootElement.querySelectorAll('[data-varlabel]');
-    let hasError = false;
-
-    for (const badge of badges) {
-      const label = badge.getAttribute('data-varlabel');
-      const variable = variableList.find(v => v.label === label);
-      if (!variable) {
-        badge.textContent = `[ERREUR: variable inconnue ${label}]`;
-        hasError = true;
-        continue;
-      }
-      const resolved = await resolveVariable(variable, record, currentTableId);
-      if (resolved.startsWith('[ERREUR')) hasError = true;
-      badge.textContent = resolved;
-      badge.classList.remove('var-badge');
-      badge.classList.add(hasError ? 'var-error' : 'var-resolved');
-    }
-
-    return !hasError;
-  }
-
-  return {
-    buildVariableList,
-    getVariableList,
-    filterVariables,
-    findReferenceColumn,
-    resolveVariable,
-    resolveAllInElement,
-  };
-})();
-
-// Compatibilité avec les modules historiques (éditeur et mode lecture).
-const Variables = (() => {
-  let editorQuill = null;
-  function init(quill) { editorQuill = quill; return editorQuill; }
-  async function resolveVariable(tableId, columnId, currentTableId, record) {
-    const variable = typeof tableId === 'object' ? tableId : VariablesManager.getVariableList().find(v => v.tableId === tableId && v.colId === columnId);
-    if (!variable) return `[ERREUR: variable inconnue ${tableId}_${columnId}]`;
-    return VariablesManager.resolveVariable(variable, record, currentTableId);
-  }
-  return { init, resolveVariable };
+  return { init, resolveVariable, hideAutocomplete };
 })();
