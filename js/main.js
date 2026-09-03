@@ -104,7 +104,10 @@
 
   async function renderReader() {
     const html = Editor.getHTML();
-    const record = GristAPI.getCurrentRecord();
+    const context = await GristAPI.detectCurrentContext();
+    const record = context ? context.record : GristAPI.getCurrentRecord();
+    if (context) currentTableId = context.tableId;
+    console.log('[main] renderReader: contexte=', context ? context.tableId : null, 'record=', !!record);
     await ReaderMode.render(html, currentTableId, record);
   }
 
@@ -132,20 +135,16 @@
     await GristAPI.init();
     quill = Editor.init();
 
-    GristAPI.onRecord(function (record) {
-      if (record && record.__tableId__) {
-        currentTableId = record.__tableId__;
-      }
+    GristAPI.onRecord(function (record, tableId) {
+      console.log('[main] onRecord: record=', !!record, 'tableId=', tableId);
+      if (tableId) currentTableId = tableId;
       if (currentMode === 'read') renderReader();
     });
 
     grist.onOptions(async function (options, settings) {
-      if (settings && settings.access === 'full') {
-        try {
-          const tableId = await grist.getSelectedTableId?.();
-          if (tableId) currentTableId = tableId;
-        } catch (e) {}
-      }
+      console.log('[main] onOptions reçu, settings=', settings || null);
+      const context = await GristAPI.detectCurrentContext();
+      if (context) currentTableId = context.tableId;
     });
 
     try {
