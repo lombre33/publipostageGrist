@@ -185,18 +185,19 @@ const GristAPI = (function () {
   async function findReferenceColumns(fromTableId, toTableId) {
     if (!fromTableId || !toTableId) return [];
     try {
-      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
+      const tablesMeta = await grist.docApi.listTables();
       const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const tableRowId = {};
-      for (let i = 0; i < tablesMeta.id.length; i++) {
-        tableRowId[tablesMeta.tableId[i]] = tablesMeta.id[i];
+      for (let i = 0; i < tablesMeta.length; i++) {
+        tableRowId[tablesMeta[i]] = tablesMeta.id ? tablesMeta.id[i] : null;
       }
+      // Note: listTables retourne [{id, columns}], on tente quand même le fallback
       const refCols = [];
       if (colsMeta && colsMeta.parentId) {
         for (let i = 0; i < colsMeta.parentId.length; i++) {
           const parentId = colsMeta.parentId[i];
-          const target = colsMeta.type ? colsMeta.type[i] : '';
-          if (parentId === tableRowId[fromTableId] && target === 'Ref:' + toTableId) {
+          const type = colsMeta.type ? colsMeta.type[i] : '';
+          if (type && type.indexOf('Ref:') === 0 && type.indexOf('->' + toTableId) !== -1) {
             refCols.push(colsMeta.colId[i]);
           }
         }
@@ -221,7 +222,7 @@ const GristAPI = (function () {
 
   async function detectCurrentContext() {
     if (!_currentRecord) {
-      console.warn('[GristAPI] detectCurrentContext: aucun record courant.');
+      console.warn('[GristAPI] detectCurrentContext: record absent.');
       return null;
     }
     if (!_currentTableId) {
@@ -231,7 +232,8 @@ const GristAPI = (function () {
       console.warn('[GristAPI] detectCurrentContext: tableId introuvable.');
       return null;
     }
-    return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
+    console.log('[GristAPI] detectCurrentContext: contexte résolu tableId=', _currentTableId);
+    return { record: _currentRecord, tableId: _currentTableId };
   }
 
   return {

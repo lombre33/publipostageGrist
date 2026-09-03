@@ -1,5 +1,5 @@
-// Publipostage Grist — main v1.1.0 — 2026-09-03 (logs [main] verbeux)
-console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
+// Publipostage Grist — widget custom v1.1.0 — 2026-09-03 (ré-instrumentation [GristAPI])
+console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
 
 (function () {
   let quill = null;
@@ -9,14 +9,17 @@ console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
   const templateNameInput = document.getElementById('template-name');
-  const pdfFilenameInput = document.getElementById('pdf-filename-template')
-    || document.getElementById('pdfFilenameInput')
-    || document.getElementById('pdf-filename');
+  function getPdfFilenameInput() {
+    return document.getElementById('pdf-filename-template')
+      || document.getElementById('pdfFilenameInput')
+      || document.getElementById('pdf-filename');
+  }
 
   // BUG 1 — sécurisation : tous les accès à pdfFilenameInput passent par
   // cette fonction qui journalise un console.warn('[main] ...') explicite
   // si l'élément est absent (par exemple si index.html est modifié).
   function getPdfFilenameTemplate() {
+    const pdfFilenameInput = getPdfFilenameInput();
     if (!pdfFilenameInput) {
       console.warn('[main] Élément #pdf-filename-template absent. Aucun nom de fichier PDF personnalisé ne sera utilisé.');
       return '';
@@ -72,6 +75,7 @@ console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1
     Editor.setHTML(tpl ? tpl.contenu : '');
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     else console.warn('[main] Champ template-name absent.');
+    const pdfFilenameInput = getPdfFilenameInput();
     if (pdfFilenameInput) pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
     else console.warn('[main] #pdf-filename-template absent : impossible de restaurer le nom de fichier PDF depuis le modèle.');
     Templates.setCurrentId(tpl ? tpl.id : null);
@@ -97,14 +101,14 @@ console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1
 
   async function onSave() {
     const id = Templates.getCurrentId();
-    const nom = templateNameInput.value.trim();
+    const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) {
       setStatus('Nom du modèle requis.', true);
       return;
     }
     const html = Editor.getHTML();
     const filenameTpl = getPdfFilenameTemplate();
-    const savedId = await Templates.save(id, nom, html, filenameTpl);
+    const savedId = await Templates.save(id, { nom, contenu: html, nomFichierPDF: filenameTpl });
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -114,7 +118,7 @@ console.log('[main] module chargé, timestamp:', new Date().toISOString(), 'v1.1
   async function onSaveAs() {
     const nom = prompt('Nom du nouveau modèle :');
     if (!nom) return;
-    templateNameInput.value = nom;
+    if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     await onSave();
   }
