@@ -25,24 +25,33 @@ const GristAPI = (function () {
     if (_recordSubscriptionRegistered) {
       console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
     } else try {
-      _recordSubscriptionRegistered = true;
-      grist.onRecord(async function (record, mappings) {
+      grist.onRecord(function (record, mappings) {
         console.log('[GristAPI] onRecord reçu: record=', record ? Object.keys(record) : null, 'mappings=', mappings || null);
         _currentRecord = record;
         _currentMappings = mappings || null;
         if (!record) {
           console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
         }
-        try {
-          _currentTableId = await detectTableId(mappings, 'onRecord');
-        } catch (e) {
-          console.warn('[GristAPI] onRecord: échec detectTableId —', e);
-        }
+
+        // Notifier immédiatement à chaque événement de sélection. La détection
+        // du tableId peut nécessiter des appels async et ne doit pas retarder
+        // le rendu du mode lecture ni bloquer les événements suivants.
+        const mappedTableId = mappings && mappings.tableId
+          ? String(mappings.tableId).trim()
+          : null;
+        if (mappedTableId) _currentTableId = mappedTableId;
         for (const cb of _onRecordCallbacks) {
           try { cb(record, _currentTableId, mappings); }
           catch (e) { console.error('[GristAPI] erreur callback onRecord:', e); }
         }
+
+        detectTableId(mappings, 'onRecord').then(function (tableId) {
+          if (tableId) _currentTableId = tableId;
+        }).catch(function (e) {
+          console.warn('[GristAPI] onRecord: échec detectTableId —', e);
+        });
       });
+      _recordSubscriptionRegistered = true;
       console.log('[GristAPI] grist.onRecord enregistré.');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
@@ -185,26 +194,27 @@ const GristAPI = (function () {
   async function findReferenceColumns(fromTableId, toTableId) {
     if (!fromTableId || !toTableId) return [];
     try {
-      const tablesMeta = await grist.docApi.listTables();
-      const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
+      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
       const tableRowId = {};
-      for (let i = 0; i < tablesMeta.length; i++) {
-        tableRowId[tablesMeta[i]] = tablesMeta.id ? tablesMeta.id[i] : null;
+      for (let i = 0; i < tablesMeta.id.length; i++) {
+        tableRowId[tablesMeta.tableId[i]] = tablesMeta.id[i];
       }
-      // Note: listTables retourne [{id, columns}], on tente quand même le fallback
+      const fromRowId = tableRowId[fromTableId];
+      const toRowId = tableRowId[toTableId];
+      if (!fromRowId || !toRowId) return [];
+      const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const refCols = [];
       if (colsMeta && colsMeta.parentId) {
         for (let i = 0; i < colsMeta.parentId.length; i++) {
-          const parentId = colsMeta.parentId[i];
-          const type = colsMeta.type ? colsMeta.type[i] : '';
-          if (type && type.indexOf('Ref:') === 0 && type.indexOf('->' + toTableId) !== -1) {
-            refCols.push(colsMeta.colId[i]);
+          if (colsMeta.parentId[i] === fromRowId && colsMeta.type && String(colsMeta.type[i]).indexOf('Ref:') === 0) {
+            const parentId = colsMeta.type[i].slice(4);
+            if (parentId === toTableId) refCols.push(colsMeta.colId[i]);
           }
         }
       }
       return refCols;
     } catch (e) {
-      console.error('[GristAPI] findReferenceColumns erreur:', e);
+      console.error('[GristAPI] findReferenceColumns error:', e);
       return [];
     }
   }
@@ -222,7 +232,7 @@ const GristAPI = (function () {
 
   async function detectCurrentContext() {
     if (!_currentRecord) {
-      console.warn('[GristAPI] detectCurrentContext: record absent.');
+      console.warn('[GristAPI] detectCurrentContext: pas de record courant.');
       return null;
     }
     if (!_currentTableId) {
@@ -232,8 +242,7 @@ const GristAPI = (function () {
       console.warn('[GristAPI] detectCurrentContext: tableId introuvable.');
       return null;
     }
-    console.log('[GristAPI] detectCurrentContext: contexte résolu tableId=', _currentTableId);
-    return { record: _currentRecord, tableId: _currentTableId };
+    return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
   return {
