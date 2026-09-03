@@ -2,238 +2,88 @@
 console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
 
 const GristAPI = (function () {
-  let _t;
-  let _defaultTable = null;
-  let _schemas = {}; // cache des schémas par table
+  let _tables = [];
+  let _columnsByTable = {};
   let _currentRecord = null;
   let _currentMappings = null;
+  let _currentOptions = null;
   let _currentTableId = null;
-  let _recordCallbacks = [];
+  let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
-  let _pollingInterval = null;
-  let _lastSelectedRowId = null;
 
-  async function init(defaultTable = null) {
-    console.log('[GristAPI] init(): lancement');
-    _defaultTable = defaultTable;
+  async function init() {
+    console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      // 1. Appel de grist.ready()
-      await grist.ready({ requiredAccess: 'full' });
-      console.log('[GristAPI] grist.ready() complété');
-
-      // 2. Charger les schémas
-      await loadAllSchemas();
-      console.log('[GristAPI] loadAllSchemas() complété');
-
-      // 3. S'abonner à grist.onRecord()
-      if (!_recordSubscriptionRegistered) {
-        console.log('[GristAPI] enregistrement de grist.onRecord()...');
-        grist.onRecord((record, mappings) => {
-          console.log('[GristAPI] onRecord natif reçu:', record?.id || 'null', 'à', new Date().toLocaleTimeString());
-          _currentRecord = record;
-          _currentMappings = mappings;
-          if (mappings?.tableId) {
-            _currentTableId = mappings.tableId;
-            console.log('[GristAPI] tableId depuis mappings:', _currentTableId);
-          }
-          notifyCallbacks();
-          detectTableIdAsync();
-        });
-        _recordSubscriptionRegistered = true;
-      }
-
-      // 4. Lancer le polling autonome (fallback si SELECT BY n'est pas configuré)
-      startRowSelectionPolling();
-
-      console.log('[GristAPI] init() terminé avec succès');
-    } catch (err) {
-      console.error('[GristAPI] init() erreur:', err);
-    }
-  }
-
-  /**
-   * Polling autonome : interroge grist.getSelectedRows() toutes les 500ms
-   * pour détecter les changements de sélection sans dépendre de "SELECT BY".
-   */
-  function startRowSelectionPolling() {
-    if (_pollingInterval) {
-      console.log('[GristAPI] polling déjà actif, pas de redémarrage');
-      return;
+      grist.ready({ requiredAccess: 'full' });
+      console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
+    } catch (e) {
+      console.error('[GristAPI] ERREUR lors de grist.ready():', e);
+      throw e;
     }
 
-    console.log('[GristAPI] startRowSelectionPolling() démarrage (interval 500ms)');
-
-    _pollingInterval = setInterval(async () => {
-      try {
-        const selectedRows = await grist.getSelectedRows();
-        if (!selectedRows || selectedRows.length === 0) {
-          // Aucune ligne sélectionnée
-          if (_lastSelectedRowId !== null) {
-            console.log('[GristAPI] polling: aucune ligne sélectionnée');
-            _lastSelectedRowId = null;
-            _currentRecord = null;
-            notifyCallbacks();
-          }
-          return;
-        }
-
-        const currentRowId = selectedRows[0]; // prendre la première ligne sélectionnée
-        if (currentRowId !== _lastSelectedRowId) {
-          console.log('[GristAPI] polling: sélection changée de', _lastSelectedRowId, 'à', currentRowId);
-          _lastSelectedRowId = currentRowId;
-
-          // Récupérer le record complet de cette ligne
+    // Enregistrer onRecord AVANT tout await pour ne pas rater l'événement initial.
+    if (_recordSubscriptionRegistered) {
+      console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
+    } else try {
+      grist.onRecord(function (record, mappings) {
+        const receivedAt = new Date();
+        const rowId = record && record.id != null ? record.id : null;
+        console.log('[GristAPI] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), record, mappings: mappings || null });
+        updateRowDebug(rowId, receivedAt);
+        _currentRecord = record;
+        _currentMappings = mappings || null;
+        if (!record) console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
+        const mappedTableId = mappings && mappings.tableId ? String(mappings.tableId).trim() : null;
+        if (mappedTableId) _currentTableId = mappedTableId;
+        for (const cb of _onRecordCallbacks) {
           try {
-            const record = await grist.getRecord(currentRowId);
-            console.log('[GristAPI] polling: record récupéré:', record?.id || 'null');
-            _currentRecord = record;
-            notifyCallbacks();
-            detectTableIdAsync();
-          } catch (err) {
-            console.error('[GristAPI] polling: erreur lors de grist.getRecord():', err);
-          }
+            Promise.resolve(cb(record, _currentTableId, mappings)).catch(function (e) { console.error('[GristAPI] erreur callback onRecord:', e); });
+          } catch (e) { console.error('[GristAPI] erreur callback onRecord:', e); }
         }
-      } catch (err) {
-        console.warn('[GristAPI] polling: erreur grist.getSelectedRows():', err.message);
-      }
-    }, 500);
+        detectTableId(mappings, 'onRecord').then(function (tableId) { if (tableId) _currentTableId = tableId; }).catch(function (e) { console.warn('[GristAPI] onRecord: échec detectTableId —', e); });
+      });
+      _recordSubscriptionRegistered = true;
+      console.log('[GristAPI] grist.onRecord enregistré.');
+    } catch (e) { console.error('[GristAPI] ERREUR lors de grist.onRecord():', e); }
+
+    try { grist.onOptions(function (options, settings) { _currentOptions = options || {}; console.log('[GristAPI] onOptions reçu: options=', options, 'settings=', settings); }); } catch (e) { console.warn('[GristAPI] grist.onOptions non disponible:', e); }
+    try { await refreshSchema(); } catch (e) { console.error('[GristAPI] refreshSchema a échoué:', e); }
+    console.log('[GristAPI] init terminé.');
   }
 
-  function notifyCallbacks() {
-    console.log('[GristAPI] notifyCallbacks(): appel de', _recordCallbacks.length, 'callback(s)');
-    for (const cb of _recordCallbacks) {
-      try {
-        cb(_currentRecord, _currentMappings);
-      } catch (err) {
-        console.error('[GristAPI] erreur dans callback:', err);
-      }
-    }
-  }
-
-  async function loadAllSchemas() {
+  async function detectTableId(mappings, source) {
+    source = source || 'unknown';
+    if (mappings && typeof mappings.tableId !== 'undefined') { const id = String(mappings.tableId || '').trim(); if (id) return id; }
     try {
-      const tables = await grist.getTable('_grist_Tables');
-      if (!tables || !tables.columns) {
-        console.warn('[GristAPI] loadAllSchemas: aucune table système trouvée');
-        return;
-      }
-
-      const tableIds = tables.columns['tableId'] || [];
-      const tableNames = tables.columns['tableName'] || [];
-
-      for (let i = 0; i < tableIds.length; i++) {
-        const tId = tableIds[i];
-        const tName = tableNames[i] || 'Unknown';
-        try {
-          const table = await grist.getTable(tId);
-          if (table && table.columns) {
-            _schemas[tId] = { name: tName, columns: table.columns };
-            console.log('[GristAPI] schéma chargé:', tName, '(' + tId + '), colonnes:', Object.keys(table.columns).length);
-          }
-        } catch (err) {
-          console.warn('[GristAPI] impossible de charger le schéma de', tName, ':', err.message);
+      if (typeof grist.getTable === 'function') {
+        const t = await grist.getTable();
+        if (t) {
+          if (typeof t.getTableId === 'function') { const id = await t.getTableId(); if (id) return id; }
+          if (t.tableId) return String(t.tableId);
+          for (const k of ['id', 'tableRef', 'name']) if (t[k]) return String(t[k]);
         }
       }
-    } catch (err) {
-      console.error('[GristAPI] loadAllSchemas() erreur globale:', err);
-    }
-  }
-
-  async function detectTableIdAsync() {
-    if (_currentTableId) return; // déjà détecté
-
-    // Niveau 1 : mappings
-    if (_currentMappings?.tableId) {
-      _currentTableId = _currentMappings.tableId;
-      console.log('[GristAPI] detectTableIdAsync: tableId trouvé dans mappings:', _currentTableId);
-      return;
-    }
-
-    // Niveau 2 : grist.getTable() (mais attention, peut être déjà "en cours de chargement")
-    try {
-      const t = await grist.getTable();
-      if (t && t._tableId) {
-        _currentTableId = t._tableId;
-        console.log('[GristAPI] detectTableIdAsync: tableId trouvé via grist.getTable():', _currentTableId);
-        return;
-      }
-    } catch (err) {
-      console.warn('[GristAPI] detectTableIdAsync: grist.getTable() a échoué:', err.message);
-    }
-
-    // Niveau 3 : correspondance avec les schémas chargés
-    if (_currentRecord && Object.keys(_schemas).length > 0) {
-      for (const [tId, schema] of Object.entries(_schemas)) {
-        const columns = schema.columns || {};
-        if (Object.keys(columns).every(col => col in _currentRecord)) {
-          _currentTableId = tId;
-          console.log('[GristAPI] detectTableIdAsync: tableId trouvé par correspondance de schéma:', _currentTableId);
-          return;
-        }
-      }
-    }
-
-    console.warn('[GristAPI] detectTableIdAsync: aucune source de tableId disponible');
-  }
-
-  function getCurrentRecord() {
-    if (!_currentRecord) {
-      console.warn('[GristAPI] getCurrentRecord: aucun record disponible');
-      return null;
-    }
-    return _currentRecord;
-  }
-
-  function getCurrentTableId() {
-    return _currentTableId || null;
-  }
-
-  function onRecord(callback) {
-    console.log('[GristAPI] onRecord: abonné ajouté. total=', _recordCallbacks.length + 1);
-    _recordCallbacks.push(callback);
-    // Rejouer le dernier record connu si disponible
+    } catch (e) { console.warn('[GristAPI] detectTableId: échec grist.getTable —', e); }
     if (_currentRecord) {
-      try {
-        callback(_currentRecord, _currentMappings);
-      } catch (err) {
-        console.error('[GristAPI] erreur dans callback initial:', err);
-      }
+      try { for (const tableId of _tables) { const cols = _columnsByTable[tableId] || []; if (cols.filter(c => Object.prototype.hasOwnProperty.call(_currentRecord, c)).length >= 1) return tableId; } } catch (e) { console.warn('[GristAPI] fallback schéma a échoué —', e); }
     }
+    return null;
   }
 
-  async function getTableName(tableId) {
-    if (tableId in _schemas) {
-      return _schemas[tableId].name || tableId;
-    }
-    console.warn('[GristAPI] getTableName: table', tableId, 'non trouvée en cache');
-    return tableId;
+  async function refreshSchema() {
+    try { const tables = await grist.docApi.listTables(); _tables = tables || []; _columnsByTable = {}; for (const t of _tables) { try { const data = await grist.docApi.fetchTable(t); _columnsByTable[t] = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort'); } catch (e) { _columnsByTable[t] = []; } } } catch (e) { console.error('[GristAPI] refreshSchema: erreur globale —', e); }
   }
 
-  async function getTableColumns(tableId) {
-    if (tableId in _schemas) {
-      return _schemas[tableId].columns || {};
-    }
-    console.warn('[GristAPI] getTableColumns: table', tableId, 'non trouvée en cache');
-    return {};
-  }
-
-  async function getAllTables() {
-    return Object.entries(_schemas).map(([id, schema]) => ({
-      id,
-      name: schema.name,
-      columns: schema.columns || {},
-    }));
-  }
-
-  return {
-    init,
-    getCurrentRecord,
-    getCurrentTableId,
-    onRecord,
-    getTableName,
-    getTableColumns,
-    getAllTables,
-  };
+  function updateRowDebug(rowId, receivedAt) { let debug = document.getElementById('debug-rowid'); if (!debug) { debug = document.createElement('div'); debug.id = 'debug-rowid'; debug.style.cssText = 'font-size:11px;color:#777;margin:4px 0;text-align:right;'; (document.getElementById('app') || document.body).appendChild(debug); } debug.textContent = 'Ligne courante: ' + (rowId == null ? '—' : rowId) + ' — reçu à ' + receivedAt.toLocaleTimeString(); }
+  function getTables() { return _tables; }
+  function getColumns(tableId) { return _columnsByTable[tableId] || []; }
+  function getAllVariables() { const vars = []; for (const t of _tables) for (const c of getColumns(t)) vars.push({ key: t + '.' + c, table: t, column: c }); return vars; }
+  function onRecord(cb) { _onRecordCallbacks.push(cb); if (_currentRecord) { try { cb(_currentRecord, _currentTableId, _currentMappings); } catch (e) { console.error('[GristAPI] onRecord replay callback erreur:', e); } } }
+  function getCurrentRecord() { return _currentRecord; }
+  function getCurrentTableId() { return _currentTableId; }
+  function getCurrentMappings() { return _currentMappings; }
+  async function findReferenceColumns(fromTableId, toTableId) { if (!fromTableId || !toTableId) return []; try { const m = await grist.docApi.fetchTable('_grist_Tables'); const ids = {}; for (let i=0;i<m.id.length;i++) ids[m.tableId[i]]=m.id[i]; const a=ids[fromTableId], b=ids[toTableId]; if (!a || !b) return []; const c=await grist.docApi.fetchTable('_grist_Tables_column'), out=[]; for (let i=0;i<(c.parentId||[]).length;i++) if(c.parentId[i]===a && String(c.type[i]||'').indexOf('Ref:')===0 && c.type[i].slice(4)===toTableId) out.push(c.colId[i]); return out; } catch(e) { return []; } }
+  async function fetchRowById(tableId, rowId) { const data=await grist.docApi.fetchTable(tableId), idx=data.id.indexOf(rowId); if(idx===-1)return null; const row={}; for(const key of Object.keys(data)) row[key]=data[key][idx]; return row; }
+  async function detectCurrentContext() { if (!_currentRecord) return null; if (!_currentTableId) _currentTableId=await detectTableId(_currentMappings,'detectCurrentContext'); if(!_currentTableId)return null; return {tableId:_currentTableId,record:_currentRecord,mappings:_currentMappings}; }
+  return {init,refreshSchema,getTables,getColumns,getAllVariables,onRecord,getCurrentRecord,getCurrentTableId,getCurrentMappings,detectTableId,findReferenceColumns,fetchRowById,detectCurrentContext};
 })();
-
-console.log('[GristAPI] module initialisé et prêt');
