@@ -18,20 +18,9 @@ const GristAPI = (function () {
       if (!record) {
         console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
       }
-      // L'objet record ne contient pas de tableId. Celui-ci vient de viewApi.
-      try {
-        if (grist.viewApi && typeof grist.viewApi.getTableId === 'function') {
-          _currentTableId = await grist.viewApi.getTableId();
-          console.log('[GristAPI] tableId courant détecté via viewApi.getTableId:', _currentTableId);
-        } else if (mappings && mappings.tableId) {
-          _currentTableId = mappings.tableId;
-          console.log('[GristAPI] tableId courant détecté via mappings.tableId:', _currentTableId);
-        } else {
-          console.warn('[GristAPI] onRecord: aucune source de tableId disponible.');
-        }
-      } catch (e) {
-        console.warn('[GristAPI] onRecord: détection du tableId échouée —', e);
-      }
+      // Le record ne contient pas de tableId. Utiliser d'abord l'API de vue
+      // si elle existe, puis grist.getTable(), qui est l'API widget documentée.
+      _currentTableId = await detectTableId(mappings, 'onRecord');
       _onRecordCallbacks.forEach(cb => cb(record, _currentTableId, mappings));
     });
     grist.onOptions(function () {});
@@ -128,22 +117,53 @@ const GristAPI = (function () {
     return row;
   }
 
-  // Détecte le contexte courant sans interpréter le record comme s'il contenait
-  // un tableId : Grist fournit le record et le contexte de vue séparément.
-  async function detectCurrentContext() {
-    console.log('[GristAPI] detectCurrentContext: début. record=', !!_currentRecord, 'tableId=', _currentTableId);
+  // Obtient le tableId sans supposer que record ou mappings le contiennent.
+  // grist.getTable() est le fallback fiable pour un widget lié à une table.
+  async function detectTableId(mappings, source) {
+    console.log('[GristAPI] ' + source + ': tentative obtention du tableId.');
     try {
-      if (!_currentTableId && grist.viewApi && typeof grist.viewApi.getTableId === 'function') {
-        _currentTableId = await grist.viewApi.getTableId();
-        console.log('[GristAPI] detectCurrentContext: tableId via viewApi=', _currentTableId);
+      if (grist.viewApi && typeof grist.viewApi.getTableId === 'function') {
+        console.log('[GristAPI] ' + source + ': tentative viewApi.getTableId().');
+        const tableId = await grist.viewApi.getTableId();
+        if (tableId) {
+          console.log('[GristAPI] ' + source + ': tableId obtenu via viewApi=', tableId);
+          return tableId;
+        }
+        console.warn('[GristAPI] ' + source + ': viewApi.getTableId() a renvoyé une valeur vide.');
+      } else {
+        console.log('[GristAPI] ' + source + ': viewApi.getTableId indisponible.');
       }
     } catch (e) {
-      console.warn('[GristAPI] detectCurrentContext: viewApi.getTableId a échoué —', e);
+      console.warn('[GristAPI] ' + source + ': échec viewApi.getTableId —', e);
     }
-    if (!_currentTableId && _currentMappings && _currentMappings.tableId) {
-      _currentTableId = _currentMappings.tableId;
-      console.log('[GristAPI] detectCurrentContext: tableId via mappings=', _currentTableId);
+    try {
+      if (typeof grist.getTable === 'function') {
+        console.log('[GristAPI] ' + source + ': tentative grist.getTable().');
+        const table = await grist.getTable();
+        const tableId = typeof table === 'string' ? table : table && (table.tableId || table.id || table.name);
+        if (tableId) {
+          console.log('[GristAPI] ' + source + ': tableId obtenu via grist.getTable=', tableId);
+          return tableId;
+        }
+        console.warn('[GristAPI] ' + source + ': grist.getTable() a renvoyé une valeur inexploitable.', table);
+      } else {
+        console.log('[GristAPI] ' + source + ': grist.getTable indisponible.');
+      }
+    } catch (e) {
+      console.warn('[GristAPI] ' + source + ': échec grist.getTable —', e);
     }
+    if (mappings && (mappings.tableId || mappings.table)) {
+      const tableId = mappings.tableId || mappings.table;
+      console.log('[GristAPI] ' + source + ': tableId obtenu via mappings=', tableId);
+      return tableId;
+    }
+    console.warn('[GristAPI] ' + source + ': aucune source de tableId disponible.');
+    return null;
+  }
+
+  async function detectCurrentContext() {
+    console.log('[GristAPI] detectCurrentContext: début. record=', !!_currentRecord, 'tableId=', _currentTableId);
+    if (!_currentTableId) _currentTableId = await detectTableId(_currentMappings, 'detectCurrentContext');
     if (!_currentRecord) {
       console.warn('[GristAPI] detectCurrentContext: record absent, retour null.');
       return null;
