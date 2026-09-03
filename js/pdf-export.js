@@ -5,12 +5,8 @@ const PdfExport = (function () {
       alert("Aucune ligne sélectionnée : impossible d'exporter en PDF.");
       return;
     }
-    // BUG 3 — reader-mode.js expose désormais `preview` et `resolveFilename`
-    // (anciens noms getResolvedHTML / getResolvedFilename qui n'existent plus).
-    console.log('[pdf-export] avant résolution du contenu et du nom de fichier.');
-    const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
-    const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
-    console.log('[pdf-export] après résolution', { filename, htmlLength: (resolvedHtml || '').length });
+    const resolvedHtml = await ReaderMode.getResolvedHTML(htmlContent, currentTableId, record);
+    const filename = await ReaderMode.getResolvedFilename(filenameTemplate, currentTableId, record);
 
     const container = document.createElement('div');
     container.style.padding = '20px';
@@ -27,9 +23,7 @@ const PdfExport = (function () {
     };
 
     try {
-      console.log('[pdf-export] avant génération PDF:', opt.filename);
       await html2pdf().set(opt).from(container).save();
-      console.log('[pdf-export] génération PDF terminée:', opt.filename);
     } finally {
       document.body.removeChild(container);
     }

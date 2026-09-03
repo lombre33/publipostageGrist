@@ -4,7 +4,7 @@ console.log('[reader-mode] module chargé, timestamp:', new Date().toISOString()
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
 
-  async function render(htmlContent, tableId, record) {
+  function render(htmlContent, record, tableId) {
     const container = document.getElementById('reader-container');
     if (!container) return;
     if (!record) {
@@ -19,27 +19,22 @@ const ReaderMode = (function () {
 
     const badges = wrapper.querySelectorAll('.var-badge');
     let hasError = false;
-    // BUG 2 — Promise.all pour paralléliser les résolutions indépendantes,
-    // avec logs avant/après chaque appel.
-    const results = await Promise.all(Array.from(badges).map(async (badge) => {
+    for (const badge of badges) {
       const table = badge.getAttribute('data-table');
       const column = badge.getAttribute('data-column');
       try {
-        console.log('[reader-mode] render: avant resolveVariable', { table, column, tableId });
-        const value = await Variables.resolveVariable(table, column, tableId, record);
-        console.log('[reader-mode] render: après resolveVariable', { table, column, value });
-        return { badge, value, error: null };
+        const value = Variables.resolveVariable(table, column, record, tableId);
+        const span = document.createElement('span');
+        span.textContent = value;
+        span.className = 'resolved-var';
+        badge.replaceWith(span);
       } catch (e) {
-        console.error('[reader-mode] render: échec resolveVariable', { table, column }, e);
-        return { badge, value: '[ERREUR: ' + e.message + ']', error: e };
+        const span = document.createElement('span');
+        span.textContent = '[ERREUR: ' + e.message + ']';
+        span.className = 'resolved-var error-msg';
+        badge.replaceWith(span);
+        hasError = true;
       }
-    }));
-    for (const r of results) {
-      const span = document.createElement('span');
-      span.textContent = r.value;
-      span.className = 'resolved-var' + (r.error ? ' error-msg' : '');
-      if (r.error) hasError = true;
-      r.badge.replaceWith(span);
     }
 
     container.innerHTML = '';
@@ -52,60 +47,37 @@ const ReaderMode = (function () {
     container.appendChild(wrapper);
   }
 
-  async function preview(htmlContent, tableId, record) {
-    console.log('[reader-mode] preview: avant résolution (badges=' + (htmlContent.match(/var-badge/g) || []).length + ')');
+  function preview(htmlContent, record) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = htmlContent;
     const badges = wrapper.querySelectorAll('.var-badge');
-    // BUG 2 — Promise.all sur tous les badges (résolution parallèle).
-    await Promise.all(Array.from(badges).map(async (badge) => {
+    for (const badge of badges) {
       const table = badge.getAttribute('data-table');
       const column = badge.getAttribute('data-column');
       try {
-        console.log('[reader-mode] preview: avant resolveVariable', { table, column, tableId: tableId || lastCurrentTableId });
-        const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record);
-        console.log('[reader-mode] preview: après resolveVariable', { table, column, value });
+        const value = Variables.resolveVariable(table, column, record, lastCurrentTableId);
         const span = document.createElement('span');
         span.textContent = value;
         badge.replaceWith(span);
-      } catch (e) {
-        console.warn('[reader-mode] preview: variable non résolue', { table, column }, e);
-      }
-    }));
-    console.log('[reader-mode] preview: après résolution.');
+      } catch (e) { /* silencieux pour preview */ }
+    }
     return wrapper.innerHTML;
   }
 
-  async function resolveFilename(filenameTemplate, tableId, record) {
-    console.log('[reader-mode] resolveFilename: avant résolution', { template: filenameTemplate, tableId });
-    if (!filenameTemplate) {
-      console.log('[reader-mode] resolveFilename: pas de modèle, retour "publipostage".');
-      return 'publipostage';
-    }
+  function resolveFilename(filenameTemplate, record) {
+    if (!filenameTemplate) return 'publipostage';
     const regex = /#([A-Za-z0-9_]+)/g;
-    const matches = [...filenameTemplate.matchAll(regex)];
-    const allVars = GristAPI.getAllVariables();
-    // BUG 2 — Promise.all : on résout toutes les variables du nom de fichier
-    // en parallèle, puis on les ré-injecte (replaceAll pour gérer les répétitions).
-    const resolved = await Promise.all(matches.map(async (m) => {
-      const key = m[1];
-      const found = allVars.find(v => v.key === key || v.column === key);
-      if (!found) return { key, value: '' };
-      try {
-        console.log('[reader-mode] resolveFilename: avant resolveVariable', { table: found.table, column: found.column, key, tableId });
-        const val = await Variables.resolveVariable(found.table, found.column, tableId, record);
-        console.log('[reader-mode] resolveFilename: après resolveVariable', { key, val });
-        return { key, value: String(val || '').replace(/[\\/:*?"<>|]/g, '_') };
-      } catch (e) {
-        console.warn('[reader-mode] resolveFilename: échec résolution', { key }, e);
-        return { key, value: '' };
-      }
-    }));
     let result = filenameTemplate;
-    for (const { key, value } of resolved) {
-      result = result.replaceAll('#' + key, value);
+    const matches = [...filenameTemplate.matchAll(regex)];
+    for (const m of matches) {
+      const key = m[1];
+      const allVars = GristAPI.getAllVariables();
+      const found = allVars.find(v => v.key === key || v.column === key);
+      if (found) {
+        const val = record[found.column];
+        result = result.replace('#' + key, val != null ? String(val) : '');
+      }
     }
-    console.log('[reader-mode] resolveFilename: après résolution', { result });
     return result;
   }
 
