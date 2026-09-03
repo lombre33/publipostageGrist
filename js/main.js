@@ -8,6 +8,19 @@
   const templateSelect = document.getElementById('template-select');
   const templateNameInput = document.getElementById('template-name');
   const pdfFilenameInput = document.getElementById('pdf-filename-template');
+  let tableIndicator = document.getElementById('table-detection-status');
+  if (!tableIndicator) {
+    tableIndicator = document.createElement('small');
+    tableIndicator.id = 'table-detection-status';
+    tableIndicator.style.cssText = 'display:block;margin-top:3px;color:#666;font-size:0.85em;';
+    statusMsg.parentElement.appendChild(tableIndicator);
+  }
+
+  function updateTableIndicator(tableId) {
+    tableIndicator.textContent = tableId ? `Table détectée : ${tableId}` : 'Table non détectée';
+    tableIndicator.style.color = tableId ? '#557' : '#a55';
+    console.info('[UI] table-detection-status:', tableIndicator.textContent);
+  }
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -17,7 +30,7 @@
 
   async function refreshTemplateList() {
     const templates = await Templates.loadAll();
-    templateSelect.innerHTML = '-- Nouveau modèle --';
+    templateSelect.innerHTML = '<option value="">-- Nouveau modèle --</option>';
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
@@ -35,10 +48,7 @@
 
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
-    if (!id) {
-      loadTemplateIntoEditor(null);
-      return;
-    }
+    if (!id) { loadTemplateIntoEditor(null); return; }
     const templates = Templates.getCached();
     const tpl = templates.find(t => String(t.id) === String(id));
     loadTemplateIntoEditor(tpl);
@@ -53,10 +63,7 @@
   async function onSave() {
     const id = Templates.getCurrentId();
     const nom = templateNameInput.value.trim();
-    if (!nom) {
-      setStatus('Veuillez indiquer un nom de modèle.', true);
-      return;
-    }
+    if (!nom) { setStatus('Veuillez indiquer un nom de modèle.', true); return; }
     const html = Editor.getHTML();
     const filenameTpl = pdfFilenameInput.value.trim();
     const savedId = await Templates.save(id, nom, html, filenameTpl);
@@ -76,10 +83,7 @@
 
   async function onDelete() {
     const id = Templates.getCurrentId();
-    if (!id) {
-      setStatus('Aucun modèle chargé à supprimer.', true);
-      return;
-    }
+    if (!id) { setStatus('Aucun modèle chargé à supprimer.', true); return; }
     if (!confirm('Supprimer ce modèle ?')) return;
     await Templates.remove(id);
     await refreshTemplateList();
@@ -94,6 +98,7 @@
     const editorContainer = document.getElementById('editor-container');
     const editorToolbar = document.querySelector('.ql-toolbar');
     const readerContainer = document.getElementById('reader-container');
+
     if (mode === 'edit') {
       btnEdit.classList.add('active');
       btnRead.classList.remove('active');
@@ -112,14 +117,8 @@
 
   async function renderReader() {
     const html = Editor.getHTML();
-    const context = await GristAPI.detectCurrentContext();
-    const record = context ? context.record : GristAPI.getCurrentRecord();
-    // Utiliser le contexte résolu pour ce rendu, plutôt que la variable partagée
-    // currentTableId qui peut encore appartenir à un callback onRecord précédent.
-    const renderTableId = (context && context.tableId) || currentTableId || GristAPI.getCurrentTableId();
-    if (renderTableId) currentTableId = renderTableId;
-    console.log('[main] renderReader: contexte=', renderTableId, 'record=', record ? Object.keys(record) : null);
-    await ReaderMode.render(html, renderTableId, record);
+    const record = GristAPI.getCurrentRecord();
+    await ReaderMode.render(html, currentTableId, record);
   }
 
   async function onExportPdf() {
@@ -137,32 +136,31 @@
   }
 
   async function detectCurrentTable() {
-    try {
-      const tableId = await grist.getTable ? null : null;
-    } catch (e) {}
+    const context = await GristAPI.detectCurrentContext();
+    currentTableId = context ? context.tableId : null;
+    updateTableIndicator(currentTableId);
+    return currentTableId;
   }
 
   async function init() {
     await GristAPI.init();
     quill = Editor.init();
 
-    GristAPI.onRecord(function (record, tableId) {
-      console.log('[main] onRecord: record=', !!record, 'tableId=', tableId);
-      if (tableId) currentTableId = tableId;
+    GristAPI.onRecord(async function (record) {
+      if (record && record.__tableId__) currentTableId = record.__tableId__;
+      await detectCurrentTable();
       if (currentMode === 'read') renderReader();
     });
 
     grist.onOptions(async function (options, settings) {
-      console.log('[main] onOptions reçu, settings=', settings || null);
-      const context = await GristAPI.detectCurrentContext();
-      if (context) currentTableId = context.tableId;
+      if (settings && settings.access === 'full') {
+        try {
+          await detectCurrentTable();
+        } catch (e) {}
+      }
     });
 
-    try {
-      if (grist.getTable) {
-        // Fallback : certaines versions de l'API exposent le tableId courant
-      }
-    } catch (e) {}
+    await detectCurrentTable();
 
     await refreshTemplateList();
 
@@ -175,8 +173,10 @@
     document.getElementById('btn-mode-read').addEventListener('click', () => switchMode('read'));
     document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
 
+    updateTableIndicator(currentTableId);
     setStatus('Widget prêt.');
   }
 
   init();
 })();
+
