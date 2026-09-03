@@ -9,17 +9,14 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
   const templateNameInput = document.getElementById('template-name');
-  function getPdfFilenameInput() {
-    return document.getElementById('pdf-filename-template')
-      || document.getElementById('pdfFilenameInput')
-      || document.getElementById('pdf-filename');
-  }
+  const pdfFilenameInput = document.getElementById('pdf-filename-template')
+    || document.getElementById('pdfFilenameInput')
+    || document.getElementById('pdf-filename');
 
   // BUG 1 — sécurisation : tous les accès à pdfFilenameInput passent par
   // cette fonction qui journalise un console.warn('[main] ...') explicite
   // si l'élément est absent (par exemple si index.html est modifié).
   function getPdfFilenameTemplate() {
-    const pdfFilenameInput = getPdfFilenameInput();
     if (!pdfFilenameInput) {
       console.warn('[main] Élément #pdf-filename-template absent. Aucun nom de fichier PDF personnalisé ne sera utilisé.');
       return '';
@@ -60,13 +57,21 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
       opt.textContent = t.nom;
       templateSelect.appendChild(opt);
     });
+
+    const defaultTemplate = templates.find(t => String(t.id) === String(templateSelect.value));
+    if (defaultTemplate) {
+      try {
+        loadTemplateIntoEditor(defaultTemplate);
+      } catch (e) {
+        console.warn('[main] Impossible de charger le modèle par défaut dans l’éditeur.', e);
+      }
+    }
   }
 
   function loadTemplateIntoEditor(tpl) {
     Editor.setHTML(tpl ? tpl.contenu : '');
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     else console.warn('[main] Champ template-name absent.');
-    const pdfFilenameInput = getPdfFilenameInput();
     if (pdfFilenameInput) pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
     else console.warn('[main] #pdf-filename-template absent : impossible de restaurer le nom de fichier PDF depuis le modèle.');
     Templates.setCurrentId(tpl ? tpl.id : null);
