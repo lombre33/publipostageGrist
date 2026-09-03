@@ -1,0 +1,19 @@
+body { font-family: Arial, sans-serif; margin:0; padding:0; }
+#app { display:flex; flex-direction:column; height:100vh; }
+#toolbar-top { padding:8px; border-bottom:1px solid #ccc; background:#f7f7f7; }
+.template-bar, .filename-bar, .mode-bar { margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.template-bar label, .filename-bar label { font-weight:bold; margin-right:4px; }
+.filename-bar input { flex:1; min-width:200px; }
+button { cursor:pointer; padding:4px 10px; }
+button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
+#editor-container { flex:1; overflow:auto; background:#fff; }
+#reader-container { flex:1; overflow:auto; padding:20px; background:#fff; }
+.var-badge { background:#e0ecff; border:1px solid #2c7be5; border-radius:4px; padding:1px 6px; color:#12406b; font-weight:bold; user-select:none; }
+#autocomplete-box { position:absolute; z-index:1000; background:#fff; border:1px solid #ccc; box-shadow:0 2px 8px rgba(0,0,0,0.15); max-height:220px; overflow-y:auto; min-width:220px; }
+#autocomplete-box .ac-item { padding:6px 10px; cursor:pointer; }
+#autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#2c7be5; color:#fff; }
+#ref-choice-modal { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.modal-content { background:#fff; padding:20px; border-radius:6px; min-width:320px; }
+.modal-content select { width:100%; margin:10px 0; }
+#status-msg { margin-left:auto; font-size:0.9em; color:#666; }
+.error-msg { color:#c0392b; font-weight:bold; }
