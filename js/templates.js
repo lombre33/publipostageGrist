@@ -50,14 +50,18 @@ const Templates = (function () {
   async function save(id, nom, contenuHtml, nomFichierPDF) {
     await ensureTableExists();
     const now = new Date().toISOString();
+    const columns = { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now };
+    for (const column of ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif']) {
+      if (!(column in columns)) console.warn(`[templates] Colonne attendue absente : ${column}`);
+    }
     if (id) {
       await grist.docApi.applyUserActions([
-        ['UpdateRecord', TABLE_NAME, id, { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now }]
+        ['UpdateRecord', TABLE_NAME, id, columns]
       ]);
       return id;
     } else {
       const result = await grist.docApi.applyUserActions([
-        ['AddRecord', TABLE_NAME, null, { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now }]
+        ['AddRecord', TABLE_NAME, null, columns]
       ]);
       const newId = result.retValues[0];
       currentTemplateId = newId;
@@ -73,3 +77,4 @@ const Templates = (function () {
 
   return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
 })();
+

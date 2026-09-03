@@ -104,7 +104,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1
     }
     const html = Editor.getHTML();
     const filenameTpl = getPdfFilenameTemplate();
-    const savedId = await Templates.save(id, { nom, contenu: html, nomFichierPDF: filenameTpl });
+    const savedId = await Templates.save(id, nom, html, filenameTpl);
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
