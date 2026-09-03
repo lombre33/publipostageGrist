@@ -1,31 +1,36 @@
-// Module mode lecture : affiche le contenu avec variables remplacées par les valeurs de la ligne courante
+// Publipostage Grist — reader mode v1.1.0 — 2026-09-03 (logs de garde)
+console.log('[reader-mode] module chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
+
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
 
-  async function render(htmlContent, currentTableId, record) {
+  function render(htmlContent, record, tableId) {
     const container = document.getElementById('reader-container');
+    if (!container) return;
     if (!record) {
+      console.warn('[reader-mode] render appelé SANS record.');
       container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>';
       return;
     }
+    console.log('[reader-mode] render: tableId=', tableId, 'recordKeys=', Object.keys(record));
+
     const wrapper = document.createElement('div');
     wrapper.innerHTML = htmlContent;
 
-    const badges = wrapper.querySelectorAll('.var-badge, [data-key]');
+    const badges = wrapper.querySelectorAll('.var-badge');
     let hasError = false;
     for (const badge of badges) {
       const table = badge.getAttribute('data-table');
       const column = badge.getAttribute('data-column');
       try {
-        const value = await Variables.resolveVariable(table, column, currentTableId, record);
-        if (typeof value === 'string' && value.startsWith('[ERREUR')) hasError = true;
+        const value = Variables.resolveVariable(table, column, record, tableId);
         const span = document.createElement('span');
         span.textContent = value;
         span.className = 'resolved-var';
         badge.replaceWith(span);
       } catch (e) {
         const span = document.createElement('span');
-        span.textContent = `[ERREUR: ${e.message}]`;
+        span.textContent = '[ERREUR: ' + e.message + ']';
         span.className = 'resolved-var error-msg';
         badge.replaceWith(span);
         hasError = true;
@@ -36,43 +41,45 @@ const ReaderMode = (function () {
     if (hasError) {
       const warn = document.createElement('p');
       warn.className = 'error-msg';
-      warn.textContent = "⚠ Certaines variables n'ont pas pu être résolues (vérifiez que le modèle correspond bien à cette table / qu'une référence existe).";
+      warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.';
       container.appendChild(warn);
     }
     container.appendChild(wrapper);
   }
 
-  async function getResolvedHTML(htmlContent, currentTableId, record) {
+  function preview(htmlContent, record) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = htmlContent;
-    const badges = wrapper.querySelectorAll('.var-badge, [data-key]');
+    const badges = wrapper.querySelectorAll('.var-badge');
     for (const badge of badges) {
       const table = badge.getAttribute('data-table');
       const column = badge.getAttribute('data-column');
-      const value = await Variables.resolveVariable(table, column, currentTableId, record);
-      const span = document.createElement('span');
-      span.textContent = value;
-      badge.replaceWith(span);
+      try {
+        const value = Variables.resolveVariable(table, column, record, lastCurrentTableId);
+        const span = document.createElement('span');
+        span.textContent = value;
+        badge.replaceWith(span);
+      } catch (e) { /* silencieux pour preview */ }
     }
     return wrapper.innerHTML;
   }
 
-  async function getResolvedFilename(filenameTemplate, currentTableId, record) {
-    if (!filenameTemplate) return `publipostage_${new Date().toISOString().slice(0,10)}`;
+  function resolveFilename(filenameTemplate, record) {
+    if (!filenameTemplate) return 'publipostage';
     const regex = /#([A-Za-z0-9_]+)/g;
     let result = filenameTemplate;
     const matches = [...filenameTemplate.matchAll(regex)];
     for (const m of matches) {
       const key = m[1];
       const allVars = GristAPI.getAllVariables();
-      const found = allVars.find(v => v.key === key);
+      const found = allVars.find(v => v.key === key || v.column === key);
       if (found) {
-        const value = await Variables.resolveVariable(found.table, found.column, currentTableId, record);
-        result = result.replace('#' + key, (value || '').toString().replace(/[\\/:*?"<>|]/g, '_'));
+        const val = record[found.column];
+        result = result.replace('#' + key, val != null ? String(val) : '');
       }
     }
     return result;
   }
 
-  return { render, getResolvedHTML, getResolvedFilename };
+  return { render, preview, resolveFilename };
 })();

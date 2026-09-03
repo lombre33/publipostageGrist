@@ -1,36 +1,43 @@
-// Point d'entrée : orchestration de l'ensemble des modules
+// Publipostage Grist — widget custom v1.1.0 — 2026-09-03 (ré-instrumentation [GristAPI])
+console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
+
 (function () {
   let quill = null;
   let currentMode = 'edit'; // 'edit' | 'read'
-  let currentTableId = null; // table active dans Grist au moment de la sélection
+  let currentTableId = null;
 
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
   const templateNameInput = document.getElementById('template-name');
-  const pdfFilenameInput = document.getElementById('pdf-filename-template');
-  let tableIndicator = document.getElementById('table-detection-status');
-  if (!tableIndicator) {
-    tableIndicator = document.createElement('small');
-    tableIndicator.id = 'table-detection-status';
-    tableIndicator.style.cssText = 'display:block;margin-top:3px;color:#666;font-size:0.85em;';
-    statusMsg.parentElement.appendChild(tableIndicator);
-  }
-
-  function updateTableIndicator(tableId) {
-    tableIndicator.textContent = tableId ? `Table détectée : ${tableId}` : 'Table non détectée';
-    tableIndicator.style.color = tableId ? '#557' : '#a55';
-    console.info('[UI] table-detection-status:', tableIndicator.textContent);
-  }
+  const pdfFilenameInput = document.getElementById('pdf-filename');
+  const editorContainer = document.getElementById('editor-container');
+  const readerContainer = document.getElementById('reader-container');
+  const btnEdit = document.getElementById('btn-mode-edit');
+  const btnRead = document.getElementById('btn-mode-read');
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
     statusMsg.className = isError ? 'error-msg' : '';
-    setTimeout(() => { statusMsg.textContent = ''; }, 4000);
+  }
+
+  function updateTableIndicator(tableId) {
+    let ind = document.getElementById('table-indicator');
+    if (!ind) {
+      ind = document.createElement('span');
+      ind.id = 'table-indicator';
+      ind.style.marginLeft = '10px';
+      ind.style.fontSize = '0.85em';
+      ind.style.opacity = '0.8';
+      const toolbar = document.querySelector('.mode-bar') || statusMsg.parentNode;
+      toolbar && toolbar.appendChild(ind);
+    }
+    ind.textContent = tableId ? `Table détectée : ${tableId}` : 'Table non détectée';
+    console.log('[main] updateTableIndicator:', tableId);
   }
 
   async function refreshTemplateList() {
     const templates = await Templates.loadAll();
-    templateSelect.innerHTML = '<option value="">-- Nouveau modèle --</option>';
+    templateSelect.innerHTML = '-- Nouveau modèle --';
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
@@ -48,9 +55,13 @@
 
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
-    if (!id) { loadTemplateIntoEditor(null); return; }
+    if (!id) {
+      loadTemplateIntoEditor(null);
+      return;
+    }
     const templates = Templates.getCached();
     const tpl = templates.find(t => String(t.id) === String(id));
+    if (!tpl) return;
     loadTemplateIntoEditor(tpl);
   }
 
@@ -63,10 +74,13 @@
   async function onSave() {
     const id = Templates.getCurrentId();
     const nom = templateNameInput.value.trim();
-    if (!nom) { setStatus('Veuillez indiquer un nom de modèle.', true); return; }
+    if (!nom) {
+      setStatus('Nom du modèle requis.', true);
+      return;
+    }
     const html = Editor.getHTML();
     const filenameTpl = pdfFilenameInput.value.trim();
-    const savedId = await Templates.save(id, nom, html, filenameTpl);
+    const savedId = await Templates.save(id, { nom, contenu: html, nomFichierPDF: filenameTpl });
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -74,7 +88,7 @@
   }
 
   async function onSaveAs() {
-    const nom = prompt('Nom du nouveau modèle :', templateNameInput.value || 'Nouveau modèle');
+    const nom = prompt('Nom du nouveau modèle :');
     if (!nom) return;
     templateNameInput.value = nom;
     Templates.setCurrentId(null);
@@ -83,7 +97,10 @@
 
   async function onDelete() {
     const id = Templates.getCurrentId();
-    if (!id) { setStatus('Aucun modèle chargé à supprimer.', true); return; }
+    if (!id) {
+      setStatus('Aucun modèle sélectionné.', true);
+      return;
+    }
     if (!confirm('Supprimer ce modèle ?')) return;
     await Templates.remove(id);
     await refreshTemplateList();
@@ -93,23 +110,15 @@
 
   function switchMode(mode) {
     currentMode = mode;
-    const btnEdit = document.getElementById('btn-mode-edit');
-    const btnRead = document.getElementById('btn-mode-read');
-    const editorContainer = document.getElementById('editor-container');
-    const editorToolbar = document.querySelector('.ql-toolbar');
-    const readerContainer = document.getElementById('reader-container');
-
     if (mode === 'edit') {
       btnEdit.classList.add('active');
       btnRead.classList.remove('active');
       editorContainer.style.display = 'block';
-      if (editorToolbar) editorToolbar.style.display = 'block';
       readerContainer.style.display = 'none';
     } else {
       btnEdit.classList.remove('active');
       btnRead.classList.add('active');
       editorContainer.style.display = 'none';
-      if (editorToolbar) editorToolbar.style.display = 'none';
       readerContainer.style.display = 'block';
       renderReader();
     }
@@ -118,65 +127,99 @@
   async function renderReader() {
     const html = Editor.getHTML();
     const record = GristAPI.getCurrentRecord();
-    await ReaderMode.render(html, currentTableId, record);
+    const tableId = GristAPI.getCurrentTableId();
+    if (!record) {
+      console.warn('[main] renderReader appelé SANS record courant.');
+      return;
+    }
+    if (!tableId) {
+      console.warn('[main] renderReader appelé SANS tableId courant, tentative detectCurrentContext…');
+      const ctx = await GristAPI.detectCurrentContext();
+      if (ctx && ctx.tableId) {
+        currentTableId = ctx.tableId;
+        updateTableIndicator(ctx.tableId);
+      }
+    }
+    ReaderMode.render(html, record, tableId || currentTableId);
   }
 
   async function onExportPdf() {
     const html = Editor.getHTML();
     const record = GristAPI.getCurrentRecord();
+    if (!record) {
+      alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.');
+      return;
+    }
     const filenameTpl = pdfFilenameInput.value.trim();
+    let resolvedName = filenameTpl;
+    try {
+      resolvedName = ReaderMode.resolveFilename(filenameTpl, record);
+    } catch (e) { /* fallback */ }
     setStatus('Génération du PDF en cours...');
     try {
-      await PdfExport.exportCurrentRecord(html, currentTableId, record, filenameTpl);
+      await PdfExport.exportCurrentRecord(ReaderMode.preview(html, record), resolvedName);
       setStatus('PDF généré.');
     } catch (e) {
       console.error(e);
-      setStatus("Erreur lors de l'export PDF : " + e.message, true);
+      setStatus('Erreur génération PDF.', true);
     }
   }
 
-  async function detectCurrentTable() {
-    const context = await GristAPI.detectCurrentContext();
-    currentTableId = context ? context.tableId : null;
-    updateTableIndicator(currentTableId);
-    return currentTableId;
-  }
-
   async function init() {
-    await GristAPI.init();
+    console.log('[main] init: démarrage, version v1.1.0');
+    try {
+      await GristAPI.init();
+      console.log('[main] GristAPI.init() terminé.');
+    } catch (e) {
+      console.error('[main] Erreur GristAPI.init():', e);
+      setStatus('Erreur init API Grist.', true);
+    }
     quill = Editor.init();
 
-    GristAPI.onRecord(async function (record) {
-      if (record && record.__tableId__) currentTableId = record.__tableId__;
-      await detectCurrentTable();
-      if (currentMode === 'read') renderReader();
+    // S'abonner au record courant
+    GristAPI.onRecord(function (record, tableId) {
+      console.log('[main] onRecord reçu: record=', !!record, 'tableId=', tableId);
+      if (tableId) currentTableId = tableId;
+      updateTableIndicator(tableId);
+      if (currentMode === 'read' && record) renderReader();
     });
 
-    grist.onOptions(async function (options, settings) {
-      if (settings && settings.access === 'full') {
-        try {
-          await detectCurrentTable();
-        } catch (e) {}
+    // Abonnement aux options du widget (mapping colonnes, settings)
+    try {
+      if (grist.onOptions) {
+        grist.onOptions(function (options, settings) {
+          console.log('[main] onOptions reçu: options=', options, 'settings=', settings);
+        });
       }
-    });
+    } catch (e) {
+      console.warn('[main] onOptions non disponible:', e);
+    }
 
-    await detectCurrentTable();
+    // Abonnement aux records multiples (vue multi-sélection)
+    try {
+      if (grist.onRecords) {
+        grist.onRecords(function (records, mappings) {
+          console.log('[main] onRecords reçu: nb=', records ? records.length : 0);
+        });
+      }
+    } catch (e) {
+      console.warn('[main] onRecords non disponible:', e);
+    }
 
     await refreshTemplateList();
 
-    document.getElementById('template-select').addEventListener('change', onTemplateSelectChange);
+    templateSelect.addEventListener('change', onTemplateSelectChange);
     document.getElementById('btn-new').addEventListener('click', onNew);
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
-    document.getElementById('btn-mode-edit').addEventListener('click', () => switchMode('edit'));
-    document.getElementById('btn-mode-read').addEventListener('click', () => switchMode('read'));
+    btnEdit.addEventListener('click', () => switchMode('edit'));
+    btnRead.addEventListener('click', () => switchMode('read'));
     document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
 
-    updateTableIndicator(currentTableId);
     setStatus('Widget prêt.');
+    console.log('[main] init terminé. widget prêt.');
   }
 
   init();
 })();
-
