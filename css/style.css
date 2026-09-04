@@ -17,3 +17,35 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .modal-content select { width:100%; margin:10px 0; }
 #status-msg { margin-left:auto; font-size:0.9em; color:#666; }
 .error-msg { color:#c0392b; font-weight:bold; }
+
+/* v1.4.0 — Saut de page forcé à l'export PDF.
+   - `.page-break-marker` est inséré comme BlockEmbed Quill (cf. editor.js).
+   - `page-break-after: always` (et son équivalent moderne `break-after: page`)
+     est détecté par html2pdf (option `pagebreak.mode = 'css'`).
+   - `height: 0` + `border-top` en pointillés = ligne horizontale visuelle,
+     `top: -10px` du label le centre sur la ligne. */
+.page-break-marker {
+  position: relative;
+  margin: 14px 0;
+  height: 0;
+  border: 0;
+  border-top: 1px dashed #888;
+  page-break-after: always;
+  break-after: page;
+  text-align: center;
+  user-select: none;
+}
+.page-break-marker .page-break-label {
+  display: inline-block;
+  position: relative;
+  top: -10px;
+  padding: 0 10px;
+  background: #fff;
+  font-size: 0.75em;
+  color: #6c757d;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.ql-toolbar .ql-page-break {
+  white-space: nowrap;
+}

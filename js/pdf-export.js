@@ -1,4 +1,7 @@
 // Module export PDF : génère un PDF A4 portrait à partir du contenu résolu (mode lecture)
+// v1.4.0 : ajout du mécanisme `pagebreak` html2pdf pour transformer chaque
+// `.page-break-marker` (inséré via le nouveau Blot Quill `PageBreakBlot`)
+// en saut de page RÉEL dans le PDF généré.
 const PdfExport = (function () {
   async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate) {
     if (!record) {
@@ -23,7 +26,16 @@ const PdfExport = (function () {
       filename: (filename || 'publipostage') + '.pdf',
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      // v1.4.0 — sauts de page forcés :
+      //   - mode 'css' : html2pdf détecte tout élément portant
+      //     `page-break-after: always` (cf. style.css `.page-break-marker`)
+      //     et coupe la page juste après.
+      //   - mode 'legacy' : filet de sécurité pour les rares cas où le
+      //     rendu html2canvas ignorerait la propriété CSS.
+      //   - avoid '.var-badge' : empêche html2pdf de couper au milieu d'un
+      //     badge de variable (#Table_Colonne), qui est insécable.
+      pagebreak: { mode: ['css', 'legacy'], avoid: '.var-badge' }
     };
 
     try {
