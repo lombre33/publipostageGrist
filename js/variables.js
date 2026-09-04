@@ -9,12 +9,9 @@ const Variables = (function () {
   function init(quillInstance) {
     activeQuill = quillInstance; acBox = document.getElementById('autocomplete-box');
     activeQuill.on('text-change', function (delta, oldDelta, source) { if (source !== 'user') return; checkForTrigger(); });
-    function cellFromEvent(event) { let target = event.target; if (target && target.nodeType !== 1) target = target.parentElement; return target && target.closest ? target.closest('.editable-table td, .editable-table th') : null; }
+    function cellFromEvent(event) { let target = event.target; if (target && target.nodeType !== 1) target = target.parentElement; return target && target.closest ? target.closest('.editable-table td, .editable-table th, .two-columns-column') : null; }
     function handleCellInput(event) { const cell = cellFromEvent(event); if (!cell) return; activeTableCell = cell; checkForCellTrigger(cell); }
-    // Capture documenté pour les cellules contenteditable du blot Quill.
     document.addEventListener('input', handleCellInput, true);
-    // Quill can prevent the native input event from reaching this handler for
-    // a nested contenteditable cell. keyup is still delivered after '#'.
     document.addEventListener('keyup', handleCellInput, true);
     activeQuill.root.addEventListener('input', handleCellInput);
     activeQuill.root.addEventListener('keyup', handleCellInput);
@@ -45,10 +42,6 @@ const Variables = (function () {
     activeQuill.insertEmbed(acRange.index, 'varbadge', { table: item.table, column: item.column, key: item.key });
     activeQuill.setSelection(acRange.index + 1, 0);
   }
-
-  // A table cell is a native contenteditable, not a Quill root.  Therefore
-  // Quill's selection/index APIs cannot be used here: derive the caret offset
-  // from the native Selection Range and keep the trigger's character offsets.
   function nativeCaretOffset(cell) {
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount || !cell.contains(selection.anchorNode)) return null;
