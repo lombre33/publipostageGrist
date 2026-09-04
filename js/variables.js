@@ -13,7 +13,11 @@ const Variables = (function () {
     function handleCellInput(event) { const cell = cellFromEvent(event); if (!cell) return; activeTableCell = cell; checkForCellTrigger(cell); }
     // Capture documenté pour les cellules contenteditable du blot Quill.
     document.addEventListener('input', handleCellInput, true);
+    // Quill can prevent the native input event from reaching this handler for
+    // a nested contenteditable cell. keyup is still delivered after '#'.
+    document.addEventListener('keyup', handleCellInput, true);
     activeQuill.root.addEventListener('input', handleCellInput);
+    activeQuill.root.addEventListener('keyup', handleCellInput);
     activeQuill.root.addEventListener('focusin', function (event) { const cell = event.target && event.target.closest && event.target.closest('.editable-table td, .editable-table th'); activeTableCell = cell || null; if (cell) checkForCellTrigger(cell); });
     document.addEventListener('keydown', function (e) { const cell = cellFromEvent(e); if (cell) activeTableCell = cell; if (acBox.style.display === 'block') { if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); } else if (e.key === 'Enter') { e.preventDefault(); confirmSelection(); } else if (e.key === 'Escape') hideAutocomplete(); } });
     document.addEventListener('click', function (e) { if (acBox && !acBox.contains(e.target)) hideAutocomplete(); });
