@@ -2,7 +2,19 @@
 (function () {
   let quill = null; let currentMode = 'edit'; let currentTableId = null; let latestRecord = null; let latestRecordTableId = null;
   function buildSelectByWarningMessage(tableId) { const tbl = tableId || (GristAPI.getCurrentTableId() || 'NomTable'); return "⚠ Mode lecture non dynamique : aucun lien 'Select By' détecté. Pour que le mode lecture se mette à jour automatiquement à chaque changement de ligne, configurez 'Select By : " + tbl + "' dans le panneau de configuration du widget (à droite dans Grist)."; }
-  function applySelectByWarning() { if (typeof ReaderMode === 'undefined' || !ReaderMode.setSelectByWarning) return; ReaderMode.setSelectByWarning(GristAPI.isSelectByActive() ? null : buildSelectByWarningMessage(currentTableId)); }
+  function applySelectByWarning() {
+    if (typeof ReaderMode === 'undefined' || !ReaderMode.setSelectByWarning) return;
+    // Le bandeau est strictement réservé au mode lecture : les callbacks
+    // Grist continuent d'arriver en mode édition et ne doivent jamais le réafficher.
+    if (currentMode !== 'read') {
+      ReaderMode.setSelectByWarning(null);
+      console.log('[reader-mode] bandeau masqué (mode édition).');
+      return;
+    }
+    const active = GristAPI.isSelectByActive();
+    console.log('[reader-mode] état Select By=', active, 'mode=', currentMode, '=> bandeau=', active ? 'masqué' : 'affiché');
+    ReaderMode.setSelectByWarning(active ? null : buildSelectByWarningMessage(currentTableId));
+  }
   const statusMsg = document.getElementById('status-msg'); const templateSelect = document.getElementById('template-select'); const templateNameInput = document.getElementById('template-name');
   function getPdfFilenameInput() { return document.getElementById('pdf-filename-template') || document.getElementById('pdfFilenameInput') || document.getElementById('pdf-filename'); }
   function getPdfFilenameTemplate() { const input = getPdfFilenameInput(); if (!input) return ''; return input.value.trim(); }
