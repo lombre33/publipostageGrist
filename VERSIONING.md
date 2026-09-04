@@ -2,6 +2,7 @@
 
 | Version | Date | SHA commit | Description | Statut |
 |---|---|---|---|---|
+| v1.1.2 | 2026-09-04 | À compléter | Correctif fiable de la détection du « Select By » : état interne recalculé à chaque `onRecord`, notification `onSelectByChange`, et message sorti du texte rendu vers un bandeau DOM dédié `#reader-warning-banner`. Cause corrigée : lecture d'un mapping encore absent/stale lors du rendu. Les fonctions d'édition, autocomplete, modèles et export PDF restent inchangées. | en cours |
 | v1.1.1 | 2026-09-04 | À compléter | Ajout d’un message d’aide contextuel en mode lecture lorsque aucun lien « Select By » n’est détecté, avec rappel de la table détectée et sans polling | en cours |
 | v0.5-rollback | 2026-09-03 | À compléter | Abandon de la tentative de détection sans « SELECT BY » via polling : régression avec disparition des données lorsque « SELECT BY » est configuré et absence d’affichage sans « SELECT BY ». Le widget nécessite donc actuellement la configuration « SELECT BY » pour fonctionner correctement. | rollback |
 | v0.3 | 2026-09-03 | `a28d0d399217b28f5e709e794d89b5eeac0d75fb` | Version stable validée : correction bug pdfFilenameInput null au changement de modèle, chaîne complète fonctionnelle (édition, sauvegarde/chargement modèle, mode lecture, export PDF, variables inter-tables) | stable |
