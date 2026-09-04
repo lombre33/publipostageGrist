@@ -2,20 +2,10 @@
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
   let renderGeneration = 0;
-  function setSelectByWarning(message) {
-    const banner = document.getElementById('reader-warning-banner');
-    if (!banner) return;
-    if (message) {
-      banner.innerHTML = '';
-      const icon = document.createElement('span'); icon.className = 'warning-icon'; icon.textContent = '⚠';
-      const text = document.createElement('span'); text.className = 'warning-text'; text.textContent = message;
-      banner.appendChild(icon); banner.appendChild(text); banner.style.display = 'flex';
-    } else { banner.style.display = 'none'; banner.innerHTML = ''; }
-  }
   async function render(htmlContent, tableId, record) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
-    if (!record) { setSelectByWarning(null); container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
+    if (!record) { container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent;
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
@@ -39,5 +29,5 @@ const ReaderMode = (function () {
     const resolved = await Promise.all(matches.map(async m => { const key = m[1]; const found = allVars.find(v => v.key === key || v.column === key); if (!found) return { key, value: '' }; try { const val = await Variables.resolveVariable(found.table, found.column, tableId, record); return { key, value: String(val || '').replace(/[\\/:*?"<>|]/g, '_') }; } catch (e) { return { key, value: '' }; } }));
     let result = filenameTemplate; for (const { key, value } of resolved) result = result.replaceAll('#' + key, value); return result;
   }
-  return { render, preview, resolveFilename, setSelectByWarning };
+  return { render, preview, resolveFilename };
 })();
