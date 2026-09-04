@@ -2,7 +2,8 @@
 
 | Version | Date | SHA commit | Description | Statut |
 |---|---|---|---|---|
-| v1.7.3 | 2026-09-04 | f0ec39a03d627ecf091d611efd06e251308df197 | Correctifs : toolbar custom Quill sans superposition après table-layout fixed, et export PDF natif des tableaux borné à la largeur A4 avec grille/colspan synchronisée et retour à la ligne. | stable |
+| v1.8.0 | 2026-09-04 | 134d87df2f0456b98d05502137a93e6813b8a4ff | Ajout d'une fonctionnalité « Zone à 2 colonnes » : nouveau Blot Quill TwoColumnsBlotClass avec deux colonnes éditables, autocomplete # dans les colonnes, rendu vectoriel natif pdfmake en objet columns et suppression du repère lors des exports raster. | stable |
+| v1.7.3 | 2026-09-04 | 99c3c0440b9f1c95b2e7b75c340ed4cdf3c104e5 | Correctif : autocomplétion `#` dans les cellules natives `td/th` des tableaux éditables, avec filtrage en direct et insertion de badge à la position du curseur. | stable |
 | v1.7.2 | 2026-09-04 | 10aca1aabe9d34d4a5a925d1e25534e6af0d2edd | Correctifs réels : boutons Tableau/Saut de page côte à côte malgré le CSS Snow, autocomplétion `#` dans les cellules `td/th` contenteditable, et export du tableau en mode Texte natif (pdfmake). | stable |
 | v1.7.0 | 2026-09-04 | f3aec31 | Texte natif (vectoriel) sélectionné par défaut ; ajout de tableaux éditables 2×2 dans Quill avec barre contextuelle pour lignes/colonnes, résolution des variables dans les cellules et conversion native des tableaux en structures pdfmake. | stable |
 | v1.6.0 | 2026-09-04 | À compléter | Ajout du niveau « Texte natif (vectoriel) » avec pdfmake côté client : conversion du HTML résolu en texte PDF sélectionnable/recherchable, titres, gras/italique/souligné, alignements et sauts de page sans marqueur visuel. Les trois presets html2pdf raster historiques restent inchangés. | en cours |
