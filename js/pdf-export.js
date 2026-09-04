@@ -60,8 +60,18 @@ const PdfExport = (function () {
   }
 
   function tableFrom(node, pageBreakBefore) {
-    const body = Array.from(node.querySelectorAll('tr')).map(row => Array.from(row.children).map(cell => ({ text: inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }), margin: [4, 3, 4, 3] })));
-    const table = { table: { headerRows: 0, widths: Array(body[0] ? body[0].length : 1).fill('*'), body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }]] }, layout: 'lightHorizontalLines', margin: [0, 5, 0, 5] };
+    const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
+    const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
+    const columnCount = Math.max(1, ...rawRows.map(row => Array.from(row.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName)).length));
+    const body = rawRows.map(row => {
+      const cells = Array.from(row.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
+      return Array.from({ length: columnCount }, (_, index) => {
+        const cell = cells[index];
+        const text = cell ? inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }) : [{ text: ' ', fontSize: DEFAULT_FONT_SIZE }];
+        return { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true] };
+      });
+    });
+    const table = { table: { headerRows: 0, widths: Array(columnCount).fill('*'), body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }]] }, layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777', paddingLeft: () => 4, paddingRight: () => 4, paddingTop: () => 3, paddingBottom: () => 3 }, margin: [0, 5, 0, 5] };
     if (pageBreakBefore) table.pageBreak = 'before';
     return table;
   }

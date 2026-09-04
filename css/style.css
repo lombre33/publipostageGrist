@@ -60,3 +60,6 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .table-context-toolbar button { font-size: .8em; padding:3px 6px; }
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
+/* Keep custom page-break and table controls in the same Quill toolbar group. */
+.ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }

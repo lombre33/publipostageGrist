@@ -5,6 +5,7 @@ const Variables = (function () {
   let acItems = [];
   let acSelectedIndex = 0;
   let acRange = null; // {index, length} du texte '#...' à remplacer
+  let activeTableCell = null; // cellule de tableau dans laquelle l'utilisateur tape
 
   function init(quillInstance) {
     activeQuill = quillInstance;
@@ -12,6 +13,21 @@ const Variables = (function () {
     activeQuill.on('text-change', function (delta, oldDelta, source) {
       if (source !== 'user') return;
       checkForTrigger();
+    });
+    // Les cellules du blot Tableau personnalisé (contentEditable=true sur les <td>)
+    // n'émettent pas d'événements Quill : on écoute donc la frappe directement dans
+    // le DOM de l'éditeur et on synchronise acRange sur la cellule courante pour que
+    // le badge inséré arrive dans la bonne cellule (cf. confirmSelection).
+    activeQuill.root.addEventListener('input', function (event) {
+      const cell = event.target && event.target.closest && event.target.closest('.editable-table td, .editable-table th');
+      if (!cell) return;
+      activeTableCell = cell;
+      checkForCellTrigger(cell);
+    });
+    activeQuill.root.addEventListener('focusin', function (event) {
+      const cell = event.target && event.target.closest && event.target.closest('.editable-table td, .editable-table th');
+      activeTableCell = cell || null;
+      if (cell) checkForCellTrigger(cell);
     });
     activeQuill.root.addEventListener('keydown', function (e) {
       if (acBox.style.display === 'block') {
@@ -98,8 +114,28 @@ const Variables = (function () {
   }
 
   function confirmSelection() {
-    if (!acRange || acItems.length === 0) return;
+    if (acItems.length === 0) return;
     const item = acItems[acSelectedIndex];
+    if (activeTableCell && acRange && acRange.tableCell) {
+      // Mode cellule : on modifie directement le contenu HTML du <td>.
+      const cell = activeTableCell;
+      cell.textContent = '';
+      const badge = document.createElement('span');
+      badge.setAttribute('data-table', item.table);
+      badge.setAttribute('data-column', item.column);
+      badge.setAttribute('data-key', item.key);
+      badge.setAttribute('contenteditable', 'false');
+      badge.className = 'var-badge';
+      badge.textContent = '#' + item.key;
+      cell.appendChild(badge);
+      placeCaretAtEnd(cell);
+      // On force la sérialisation via le blot pour qu'un éventuel getHTML() voie le
+      // nouveau contenu sans qu'une frappe Quill soit nécessaire.
+      activeQuill.update(Quill.sources.USER);
+      hideAutocomplete();
+      return;
+    }
+    if (!acRange) return;
     insertBadge(item);
     hideAutocomplete();
   }
@@ -108,6 +144,37 @@ const Variables = (function () {
     activeQuill.deleteText(acRange.index, acRange.length);
     activeQuill.insertEmbed(acRange.index, 'varbadge', { table: item.table, column: item.column, key: item.key });
     activeQuill.setSelection(acRange.index + 1, 0);
+  }
+
+  function checkForCellTrigger(cell) {
+    const text = cell.textContent || '';
+    const match = text.match(/#([A-Za-z0-9_]*)$/);
+    if (!match) { hideAutocomplete(); return; }
+    const query = match[1].toLowerCase();
+    const allVars = GristAPI.getAllVariables();
+    acItems = allVars.filter(v => v.key.toLowerCase().includes(query));
+    if (acItems.length === 0) { hideAutocomplete(); return; }
+    acSelectedIndex = 0;
+    acRange = { tableCell: true };
+    renderAutocomplete();
+    positionAutocompleteForCell(cell);
+    acBox.style.display = 'block';
+  }
+
+  function positionAutocompleteForCell(cell) {
+    const containerRect = activeQuill.root.getBoundingClientRect();
+    const cellRect = cell.getBoundingClientRect();
+    acBox.style.left = (containerRect.left + cellRect.left + window.scrollX) + 'px';
+    acBox.style.top = (containerRect.top + cellRect.bottom + window.scrollY + 4) + 'px';
+  }
+
+  function placeCaretAtEnd(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 
   // Résout la valeur d'une variable pour un enregistrement de la table courante
