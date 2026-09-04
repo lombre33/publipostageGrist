@@ -1,250 +1,29 @@
-/**
- * Main - Gestion du widget de publipostage Grist
- */
+// Publipostage Grist — widget custom v1.1.0 — 2026-09-03 (ré-instrumentation [GristAPI])
+console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
 
-let currentMode = 'edit'; // 'edit' ou 'read'
-let currentRecord = null; // La ligne actuellement sélectionnée
-let currentTableId = null; // La table courante du widget
-
-// Récupérer les éléments DOM
-const editorContainer = document.getElementById('editor-container');
-const readerContainer = document.getElementById('reader-container');
-const modeToggleBtn = document.getElementById('mode-toggle');
-const downloadPdfBtn = document.getElementById('download-pdf');
-const modelSelect = document.getElementById('model-select');
-const saveModelBtn = document.getElementById('save-model');
-const newModelBtn = document.getElementById('new-model');
-const pdfFilenameInput = document.getElementById('pdf-filename');
-const statusDiv = document.getElementById('status');
-const debugDiv = document.getElementById('debug-info');
-
-// Vérifier que tous les éléments existent avant d'en utiliser
-if (!editorContainer || !readerContainer || !modeToggleBtn || !downloadPdfBtn) {
-  console.error('[main] Erreur: éléments DOM critiques manquants');
-  if (statusDiv) statusDiv.innerHTML = '⚠ Erreur: widget non correctement initialisé';
-}
-
-/**
- * Charge un modèle dans l'éditeur
- */
-function loadTemplateIntoEditor(template) {
-  if (!template || !editorContainer) return;
-  
-  try {
-    EditorModule.setContent(template.content || '');
-    if (pdfFilenameInput) {
-      pdfFilenameInput.value = template.pdfFilename || '';
-    }
-  } catch (err) {
-    console.error('[main] Erreur lors du chargement du template:', err);
-  }
-}
-
-/**
- * Événement: changement de sélection de modèle
- */
-function onTemplateSelectChange() {
-  const selectedId = modelSelect?.value;
-  if (!selectedId) return;
-  
-  try {
-    const template = Templates.getTemplate(selectedId);
-    if (template) {
-      loadTemplateIntoEditor(template);
-    }
-  } catch (err) {
-    console.error('[main] Erreur onTemplateSelectChange:', err);
-  }
-}
-
-/**
- * Événement: créer un nouveau modèle
- */
-function onNewModel() {
-  try {
-    const newTemplate = Templates.createNewTemplate();
-    if (newTemplate) {
-      Templates.refreshModelSelect();
-      // Sélectionner le nouveau modèle
-      if (modelSelect) modelSelect.value = newTemplate.id;
-      loadTemplateIntoEditor(newTemplate);
-    }
-  } catch (err) {
-    console.error('[main] Erreur onNewModel:', err);
-  }
-}
-
-/**
- * Événement: enregistrer le modèle courant
- */
-function onSaveModel() {
-  const modelId = modelSelect?.value;
-  if (!modelId) {
-    console.warn('[main] Aucun modèle sélectionné pour la sauvegarde');
-    return;
-  }
-  
-  try {
-    const content = EditorModule.getContent();
-    const pdfFilename = pdfFilenameInput?.value || 'document';
-    
-    const updated = Templates.updateTemplate(modelId, {
-      content: content,
-      pdfFilename: pdfFilename
-    });
-    
-    if (updated) {
-      console.log('[main] Modèle sauvegardé:', modelId);
-      if (statusDiv) statusDiv.innerHTML = '✓ Modèle sauvegardé';
-      setTimeout(() => {
-        if (statusDiv) statusDiv.innerHTML = '';
-      }, 2000);
-    }
-  } catch (err) {
-    console.error('[main] Erreur onSaveModel:', err);
-    if (statusDiv) statusDiv.innerHTML = '⚠ Erreur lors de la sauvegarde';
-  }
-}
-
-/**
- * Événement: basculer mode édition ↔ lecture
- */
-function onToggleMode() {
-  if (currentMode === 'edit') {
-    // Passer en mode lecture
-    if (!currentRecord || !currentTableId) {
-      console.warn('[main] Aucune ligne sélectionnée ou table indisponible');
-      if (statusDiv) statusDiv.innerHTML = '⚠ Aucune ligne sélectionnée dans Grist';
-      return;
-    }
-    
-    try {
-      currentMode = 'read';
-      editorContainer.style.display = 'none';
-      readerContainer.style.display = 'block';
-      if (modeToggleBtn) modeToggleBtn.textContent = 'Mode Édition';
-      
-      // Rendu du mode lecture avec le record courant
-      ReaderMode.render(EditorModule.getContent(), currentRecord, currentTableId);
-    } catch (err) {
-      console.error('[main] Erreur lors du passage en mode lecture:', err);
-      currentMode = 'edit';
-      if (statusDiv) statusDiv.innerHTML = '⚠ Erreur mode lecture';
-    }
-  } else {
-    // Revenir en mode édition
-    currentMode = 'edit';
-    editorContainer.style.display = 'block';
-    readerContainer.style.display = 'none';
-    if (modeToggleBtn) modeToggleBtn.textContent = 'Mode Lecture';
-  }
-}
-
-/**
- * Événement: télécharger le PDF
- */
-function onDownloadPdf() {
-  if (!currentRecord || !currentTableId) {
-    console.warn('[main] Aucune ligne sélectionnée pour PDF');
-    if (statusDiv) statusDiv.innerHTML = '⚠ Sélectionnez une ligne';
-    return;
-  }
-  
-  try {
-    const filename = pdfFilenameInput?.value || 'document';
-    PdfExport.downloadPdf(
-      EditorModule.getContent(),
-      currentRecord,
-      currentTableId,
-      filename
-    );
-  } catch (err) {
-    console.error('[main] Erreur téléchargement PDF:', err);
-    if (statusDiv) statusDiv.innerHTML = '⚠ Erreur PDF';
-  }
-}
-
-/**
- * Callback appelé quand la ligne Grist change (via polling ou onRecord)
- * @param {Object} record - Le nouveau record
- */
-function onRecordChanged(record) {
-  console.log('[main] onRecordChanged: record reçu, id=', record?.id);
-  
-  currentRecord = record;
-  
-  // Mettre à jour l'indicateur de débogage
-  if (debugDiv && record && record.id !== undefined) {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('fr-FR');
-    debugDiv.textContent = `Ligne courante: ${record.id} — reçu à ${timeStr}`;
-  }
-  
-  // Si on est en mode lecture, re-rendre avec le nouveau record
-  if (currentMode === 'read' && currentTableId) {
-    try {
-      console.log('[main] Rendu mode lecture avec nouveau record');
-      ReaderMode.render(EditorModule.getContent(), record, currentTableId);
-    } catch (err) {
-      console.error('[main] Erreur re-rendu mode lecture:', err);
-    }
-  }
-}
-
-/**
- * Initialisation du widget
- */
-async function init() {
-  console.log('[main] Initialisation du widget');
-  
-  if (statusDiv) statusDiv.innerHTML = 'Initialisation...';
-  
-  try {
-    // Initialiser l'API Grist
-    const gristReady = await GristAPI.init();
-    if (!gristReady) {
-      throw new Error('GristAPI non initialisée');
-    }
-    
-    // Récupérer la table courante
-    currentTableId = GristAPI.getCurrentTableId();
-    console.log('[main] Table courante détectée:', currentTableId);
-    
-    // S'abonner aux changements de ligne
-    GristAPI.onRecordChange(onRecordChanged);
-    
-    // Initialiser le module d'édition (Quill)
-    EditorModule.init();
-    
-    // Charger les modèles de templates
-    Templates.loadTemplatesFromGrist(currentTableId);
-    Templates.refreshModelSelect();
-    
-    // Si un modèle existe par défaut, le charger
-    const models = Templates.getAllTemplates();
-    if (models.length > 0) {
-      if (modelSelect) modelSelect.value = models[0].id;
-      loadTemplateIntoEditor(models[0]);
-    }
-    
-    // Attacher les event listeners
-    if (modelSelect) modelSelect.addEventListener('change', onTemplateSelectChange);
-    if (newModelBtn) newModelBtn.addEventListener('click', onNewModel);
-    if (saveModelBtn) saveModelBtn.addEventListener('click', onSaveModel);
-    if (modeToggleBtn) modeToggleBtn.addEventListener('click', onToggleMode);
-    if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', onDownloadPdf);
-    
-    if (statusDiv) statusDiv.innerHTML = `Widget prêt. Table: ${currentTableId || 'détection en cours...'}`;
-    
-  } catch (err) {
-    console.error('[main] Erreur lors de l\'initialisation:', err);
-    if (statusDiv) statusDiv.innerHTML = `⚠ Erreur initialisation: ${err.message}`;
-  }
-}
-
-// Démarrer l'initialisation
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+(function () {
+  let quill = null;
+  let currentMode = 'edit';
+  let currentTableId = null;
+  let latestRecord = null;
+  let latestRecordTableId = null;
+  const statusMsg = document.getElementById('status-msg');
+  const templateSelect = document.getElementById('template-select');
+  const templateNameInput = document.getElementById('template-name');
+  function getPdfFilenameInput() { return document.getElementById('pdf-filename-template') || document.getElementById('pdfFilenameInput') || document.getElementById('pdf-filename'); }
+  function getPdfFilenameTemplate() { const input=getPdfFilenameInput(); return input ? input.value.trim() : ''; }
+  const editorContainer=document.getElementById('editor-container'), readerContainer=document.getElementById('reader-container'), btnEdit=document.getElementById('btn-mode-edit'), btnRead=document.getElementById('btn-mode-read'), toolbar=document.getElementById('toolbar'); let ind=document.getElementById('table-indicator');
+  function setStatus(msg,isError){statusMsg.textContent=msg;statusMsg.className=isError?'error-msg':'';}
+  function updateTableIndicator(tableId){if(!ind){ind=document.createElement('span');ind.id='table-indicator';ind.style.marginLeft='10px';ind.style.fontSize='0.85em';ind.style.opacity='0.8';if(toolbar)toolbar.appendChild(ind);}ind.textContent=tableId?'Table: '+tableId:'Table: —';}
+  async function refreshTemplateList(){const templates=await Templates.loadAll();templateSelect.innerHTML='-- Nouveau modèle --';templates.forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.nom;templateSelect.appendChild(o);});const d=templates.find(t=>String(t.id)===String(templateSelect.value));if(d)try{loadTemplateIntoEditor(d);}catch(e){console.warn(e);}}
+  function loadTemplateIntoEditor(tpl){Editor.setHTML(tpl?tpl.contenu:'');if(templateNameInput)templateNameInput.value=tpl?tpl.nom:'';const p=getPdfFilenameInput();if(p)p.value=tpl?(tpl.nomFichierPDF||''):'';Templates.setCurrentId(tpl?tpl.id:null);}
+  async function onTemplateSelectChange(){const id=templateSelect.value;if(!id){loadTemplateIntoEditor(null);return;}const tpl=Templates.getCached().find(t=>String(t.id)===String(id));if(tpl)loadTemplateIntoEditor(tpl);}
+  async function onNew(){templateSelect.value='';loadTemplateIntoEditor(null);setStatus('Nouveau modèle prêt.');}
+  async function onSave(){const id=Templates.getCurrentId(),nom=templateNameInput?templateNameInput.value.trim():'';if(!nom){setStatus('Nom du modèle requis.',true);return;}const savedId=await Templates.save(id,nom,Editor.getHTML(),getPdfFilenameTemplate());Templates.setCurrentId(savedId);await refreshTemplateList();templateSelect.value=savedId;setStatus('Modèle enregistré.');}
+  async function onSaveAs(){const nom=prompt('Nom du nouveau modèle :');if(!nom)return;if(templateNameInput)templateNameInput.value=nom;Templates.setCurrentId(null);await onSave();}
+  async function onDelete(){const id=Templates.getCurrentId();if(!id){setStatus('Aucun modèle sélectionné.',true);return;}if(!confirm('Supprimer ce modèle ?'))return;await Templates.remove(id);await refreshTemplateList();onNew();setStatus('Modèle supprimé.');}
+  async function switchMode(mode){currentMode=mode;if(mode==='edit'){btnEdit.classList.add('active');btnRead.classList.remove('active');editorContainer.style.display='block';readerContainer.style.display='none';}else{btnEdit.classList.remove('active');btnRead.classList.add('active');editorContainer.style.display='none';readerContainer.style.display='block';await renderReader(latestRecord||GristAPI.getCurrentRecord(),latestRecordTableId||GristAPI.getCurrentTableId());}}
+  async function renderReader(record,recordTableId){const html=Editor.getHTML();if(typeof record==='undefined')record=latestRecord||GristAPI.getCurrentRecord();let tableId=recordTableId||GristAPI.getCurrentTableId()||currentTableId;if(!record)return;if(!tableId){const ctx=await GristAPI.detectCurrentContext();if(ctx&&ctx.tableId){currentTableId=ctx.tableId;tableId=ctx.tableId;updateTableIndicator(ctx.tableId);}}await ReaderMode.render(html,tableId,record);}
+  async function onExportPdf(){const record=GristAPI.getCurrentRecord();if(!record){alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.');return;}setStatus('Génération du PDF en cours...');try{await PdfExport.exportCurrentRecord(Editor.getHTML(),currentTableId||GristAPI.getCurrentTableId(),record,getPdfFilenameTemplate());setStatus('PDF généré.');}catch(e){console.error(e);setStatus('Erreur génération PDF.',true);}}
+  async function init(){try{await GristAPI.init();}catch(e){setStatus('Erreur init API Grist.',true);}quill=Editor.init();GristAPI.onRecord(async function(record,tableId){latestRecord=record;latestRecordTableId=tableId||GristAPI.getCurrentTableId();if(tableId)currentTableId=tableId;updateTableIndicator(latestRecordTableId);if(currentMode==='read'&&record)await renderReader(record,latestRecordTableId);});try{if(grist.onOptions)grist.onOptions(function(options,settings){console.log('[main] onOptions reçu:',options,settings);});}catch(e){}try{if(grist.onRecords)grist.onRecords(function(records){console.log('[main] onRecords reçu: nb=',records?records.length:0);});}catch(e){}await refreshTemplateList();templateSelect.addEventListener('change',onTemplateSelectChange);document.getElementById('btn-new').addEventListener('click',onNew);document.getElementById('btn-save').addEventListener('click',onSave);document.getElementById('btn-save-as').addEventListener('click',onSaveAs);document.getElementById('btn-delete').addEventListener('click',onDelete);btnEdit.addEventListener('click',()=>switchMode('edit'));btnRead.addEventListener('click',()=>switchMode('read'));document.getElementById('btn-export-pdf').addEventListener('click',onExportPdf);updateTableIndicator(GristAPI.getCurrentTableId());await switchMode('edit');setStatus('Widget prêt.');}init();
+})();
