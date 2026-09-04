@@ -5,7 +5,7 @@ const ReaderMode = (function () {
   let lastCurrentTableId = null;
   let renderGeneration = 0;
 
-  async function render(htmlContent, tableId, record) {
+  async function render(htmlContent, tableId, record, showSelectByWarning) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container');
     if (!container) return;
@@ -48,6 +48,12 @@ const ReaderMode = (function () {
     // Seul le rendu le plus récent a le droit de remplacer le DOM.
     if (renderId !== renderGeneration) return;
     container.innerHTML = '';
+    if (showSelectByWarning) {
+      const warning = document.createElement('p');
+      warning.className = 'reader-help-warning';
+      warning.textContent = "⚠ Mode lecture non dynamique : aucun lien 'Select By' détecté. Pour que le mode lecture se mette à jour automatiquement à chaque changement de ligne, configurez 'Select By : " + (tableId || 'NomTable') + "' dans le panneau de configuration du widget (à droite dans Grist).";
+      container.appendChild(warning);
+    }
     if (hasError) {
       const warn = document.createElement('p');
       warn.className = 'error-msg';
@@ -99,7 +105,7 @@ const ReaderMode = (function () {
       try {
         console.log('[reader-mode] resolveFilename: avant resolveVariable', { table: found.table, column: found.column, key, tableId });
         const val = await Variables.resolveVariable(found.table, found.column, tableId, record);
-        console.log('[reader-mode] resolveFilename: après resolveVariable', { key, val });
+        console.log('[reader-mode] resolveFilename: après résolution', { key, val });
         return { key, value: String(val || '').replace(/[\\/:*?"<>|]/g, '_') };
       } catch (e) {
         console.warn('[reader-mode] resolveFilename: échec résolution', { key }, e);
