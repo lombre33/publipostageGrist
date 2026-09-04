@@ -30,7 +30,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 .ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
-.two-columns-zone { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
+.two-columns-zone { position: relative; display: grid; grid-template-columns: minmax(0, var(--layout-left, 50%)) minmax(0, calc(100% - var(--layout-left, 50%))); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
@@ -91,3 +91,7 @@ body.resizing-table-column { cursor: ew-resize; user-select: none; }
 #reader-container .table-col-resize-handle,
 #reader-container .table-context-toolbar,
 #reader-container .page-break-marker { display: none; }
+
+.two-columns-resize-grip, .two-columns-resize-grip:hover, body.resizing-two-columns .two-columns-resize-grip { position: absolute; top: 20px; bottom: 10px; left: calc(var(--layout-left, 50%) + 9px); transform: translateX(-50%); width: 10px; cursor: ew-resize; z-index: 30; box-sizing: border-box; background: rgba(108,117,125,.12); border-left: 2px solid rgba(108,117,125,.35); user-select: none; touch-action: none; }
+body.resizing-two-columns { cursor: ew-resize; user-select: none; }
+#reader-container .two-columns-resize-grip { display: none; }
