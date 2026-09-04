@@ -45,7 +45,48 @@ const PdfExport = (function () {
   }
   function twoColumnsFrom(node, pageBreakBefore) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
-    const columns = colNodes.map(col => htmlToPdfContent(col.innerHTML));
+    // Réapplique explicitement l'alignement (ql-align-center / -right / -justify
+    // ou style inline text-align) à CHAQUE bloc pdfmake issu du contenu de la
+    // colonne. Le flux hors-colonnes le fait déjà via blockFrom() /
+    // alignment() ; on reproduit exactement la même sémantique ici pour que
+    // les zones à 2 colonnes honorent enfin ql-align-justify à l'export PDF
+    // vectoriel (bug : le justify était perdu à l'export PDF dans les
+    // .two-columns-column). L'alignement par défaut (gauche) reste implicite
+    // côté pdfmake, on ne l'écrit donc que si une valeur explicite est lue.
+    const columns = colNodes.map(col => {
+      const blocks = htmlToPdfContent(col.innerHTML);
+      // collect() parcourt le DOM de la colonne en MIRROR exactement les
+      // règles de skip de htmlToPdfContent (page-break-marker / editable-table
+      // / two-columns-zone ne poussent pas de bloc, isBlock() pousse un bloc
+      // et ne récursive pas, les noeuds texte non vides poussent un bloc).
+      // L'ordre des sources collectées correspond donc 1-pour-1 à l'ordre
+      // des blocs pdfmake produits par htmlToPdfContent, ce qui permet
+      // d'aligner les indices sans avoir à dupliquer toute la logique.
+      const alignSources = [];
+      const collect = n => {
+        if (n.nodeType === Node.TEXT_NODE) {
+          if (n.nodeValue && n.nodeValue.trim()) alignSources.push(n);
+          return;
+        }
+        if (n.nodeType !== Node.ELEMENT_NODE) return;
+        if (n.classList.contains('page-break-marker')) return;
+        if (n.classList.contains('editable-table')) return;
+        if (n.classList.contains('two-columns-zone')) return;
+        if (isBlock(n)) { alignSources.push(n); return; }
+        n.childNodes.forEach(collect);
+      };
+      const root = document.createElement('div');
+      root.innerHTML = col.innerHTML || '';
+      Array.from(root.childNodes).forEach(collect);
+      for (let i = 0; i < blocks.length && i < alignSources.length; i += 1) {
+        const src = alignSources[i];
+        const a = alignment(src);
+        if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) {
+          blocks[i].alignment = a;
+        }
+      }
+      return blocks;
+    });
     const block = { columns: columns, columnGap: 16, margin: [0, 6, 0, 6] };
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
