@@ -61,5 +61,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 /* Keep custom page-break and table controls in the same Quill toolbar group. */
-.ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
+.ql-toolbar .ql-formats { display:inline-flex !important; align-items:center; flex-wrap:nowrap; vertical-align:middle; float:none !important; gap:4px; }
+/* Les contrôles custom restent dans le flux du groupe, sans le float:left de Snow. */
+.ql-toolbar .ql-formats > .ql-page-break,
+.ql-toolbar .ql-formats > .ql-insert-table { display:inline-flex !important; align-items:center; flex:0 0 auto; float:none !important; clear:none !important; width:auto !important; margin:0 !important; white-space:nowrap; }
