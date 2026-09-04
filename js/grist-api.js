@@ -1,5 +1,5 @@
-// Publipostage Grist — wrapper API Grist v1.2.0 — 2026-09-04 (détection fiable Select By via onOptions.linking)
-console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.0');
+// Publipostage Grist — wrapper API Grist v1.2.1 — 2026-09-04 (fix bandeau 'Select By non configuré' en mode lecture)
+console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.1');
 
 const GristAPI = (function () {
   let _tables = [];
@@ -10,10 +10,34 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
+  let _onSelectByChangeCallbacks = [];
   // `onOptions` is the authoritative source for widget linking (Select By).
   let _selectByActive = false;
 
+  function updateSelectByState(options, source) {
+    _currentOptions = options || null;
+    const linking = _currentOptions && _currentOptions.linking;
+    _selectByActive = hasActiveLinking(_currentOptions);
+    console.log('[GristAPI] ' + source + ': options.linking brut=', linking, 'selectByActive calculé=', _selectByActive);
+    for (const cb of _onSelectByChangeCallbacks) {
+      try { cb(_selectByActive, _currentOptions); }
+      catch (e) { console.error('[GristAPI] erreur callback onSelectByChange:', e); }
+    }
+  }
+
   async function init() {
+    // Enregistrer onOptions AVANT ready(): Grist peut émettre l'état initial
+    // immédiatement pendant le handshake déclenché par ready().
+    try {
+      grist.onOptions(function (options, settings) {
+        updateSelectByState(options, 'onOptions reçu');
+        console.log('[GristAPI] onOptions settings=', settings);
+      });
+      console.log('[GristAPI] grist.onOptions enregistré AVANT grist.ready().');
+    } catch (e) {
+      console.warn('[GristAPI] grist.onOptions non disponible:', e);
+    }
+
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
       grist.ready({ requiredAccess: 'full' });
@@ -67,25 +91,13 @@ const GristAPI = (function () {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
     }
 
-    try {
-      grist.onOptions(function (options, settings) {
-        _currentOptions = options || null;
-        _selectByActive = hasActiveLinking(_currentOptions);
-        console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings, 'selectByActive=', _selectByActive);
-      });
-      console.log('[GristAPI] grist.onOptions enregistré.');
-    } catch (e) {
-      console.warn('[GristAPI] grist.onOptions non disponible:', e);
-    }
-
     // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà
     // l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
     try {
       if (typeof grist.getOptions === 'function') {
         const seedOptions = await grist.getOptions();
-        _currentOptions = seedOptions || _currentOptions;
-        _selectByActive = hasActiveLinking(_currentOptions);
-        console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions), 'selectByActive=', _selectByActive);
+        updateSelectByState(seedOptions || _currentOptions, 'getOptions (seed)');
+        console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions));
       }
     } catch (e) {
       console.warn('[GristAPI] getOptions indisponible:', e);
@@ -227,6 +239,11 @@ const GristAPI = (function () {
   function getCurrentTableId() { return _currentTableId; }
   function getCurrentMappings() { return _currentMappings; }
   function getCurrentOptions() { return _currentOptions; }
+  function onSelectByChange(cb) {
+    if (typeof cb !== 'function') return;
+    _onSelectByChangeCallbacks.push(cb);
+    console.log('[GristAPI] onSelectByChange: abonné ajouté. total=', _onSelectByChangeCallbacks.length);
+  }
 
   // === Détection fiable du Select By ===
   //
@@ -315,5 +332,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, isSelectByActive, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext };
+  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, onSelectByChange, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, isSelectByActive, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext };
 })();
