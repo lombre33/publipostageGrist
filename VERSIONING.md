@@ -2,6 +2,7 @@
 
 | Version | Date | SHA commit | Description | Statut |
 |---|---|---|---|---|
+| v1.7.1 | 2026-09-04 | d9cb2dec401685b788d90f44d75be1c992b4b522 | Correctifs ciblés sans régression : bouton « ▦ Tableau » aligné à droite de « Saut de page » ; autocomplete `#Table_Colonne` dans les cellules du blot Tableau ; conversion robuste des tableaux HTML vers pdfmake avec texte, dimensions régulières et bordures fines. Les trois modes html2pdf conservent les bordures visibles. | stable |
 | v1.7.0 | 2026-09-04 | f3aec31 | Texte natif (vectoriel) sélectionné par défaut ; ajout de tableaux éditables 2×2 dans Quill avec barre contextuelle pour lignes/colonnes, résolution des variables dans les cellules et conversion native des tableaux en structures pdfmake. | stable |
 | v1.6.0 | 2026-09-04 | à compléter | Ajout du niveau « Texte natif (vectoriel) » avec pdfmake côté client : conversion du HTML résolu en texte PDF sélectionnable/recherchable, titres, gras/italique/souligné, alignements et sauts de page sans marqueur visuel. Les trois presets html2pdf raster historiques restent inchangés. | en cours |
 | v1.5.0 | 2026-09-04 | à compléter | Ajout de trois niveaux de qualité d’export PDF (Standard historique, Haute qualité et Impression HD) via un sélecteur UI ; Standard reste le défaut, Haute qualité utilise html2canvas scale 4 et jsPDF sans compression, Impression HD utilise scale 6, PNG et jsPDF sans compression. | en cours |
