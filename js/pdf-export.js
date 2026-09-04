@@ -59,8 +59,16 @@ const PdfExport = (function () {
     return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName));
   }
 
+  function tableFrom(node, pageBreakBefore) {
+    const body = Array.from(node.querySelectorAll('tr')).map(row => Array.from(row.children).map(cell => ({ text: inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }), margin: [4, 3, 4, 3] })));
+    const table = { table: { headerRows: 0, widths: Array(body[0] ? body[0].length : 1).fill('*'), body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }]] }, layout: 'lightHorizontalLines', margin: [0, 5, 0, 5] };
+    if (pageBreakBefore) table.pageBreak = 'before';
+    return table;
+  }
+
   function blockFrom(node, pageBreakBefore) {
     const tag = node.tagName.toUpperCase();
+    if (tag === 'TABLE') return tableFrom(node, pageBreakBefore);
     if (tag === 'HR') return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) };
     const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE });
     const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] };

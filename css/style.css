@@ -49,3 +49,14 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .ql-toolbar .ql-page-break {
   white-space: nowrap;
 }
+
+
+/* Table editor */
+.editable-table { margin: 10px 0; padding: 2px; border: 1px solid transparent; }
+.editable-table table { width: 100%; border-collapse: collapse; }
+.editable-table td, .editable-table th { border: 1px solid #999; min-width: 70px; min-height: 24px; padding: 6px; vertical-align: top; }
+.table-context-toolbar { display:none; position:sticky; bottom:8px; z-index:10; background:#fff; border:1px solid #ccc; box-shadow:0 2px 8px rgba(0,0,0,.15); padding:4px; gap:4px; flex-wrap:wrap; }
+.table-context-toolbar.visible { display:flex; }
+.table-context-toolbar button { font-size: .8em; padding:3px 6px; }
+#reader-container table { width:100%; border-collapse:collapse; }
+#reader-container td, #reader-container th { border:1px solid #999; padding:6px; }

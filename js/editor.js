@@ -65,6 +65,45 @@ const Editor = (function () {
   PageBreakBlot.className = 'page-break-marker';
   Quill.register(PageBreakBlot);
 
+  // Tableau léger compatible avec Quill 1.3.6. Le tableau est un embed bloc
+  // sérialisé tel quel dans le HTML du modèle ; ses cellules restent éditables
+  // directement dans le DOM et la barre contextuelle manipule sa structure.
+  const TableBlot = Quill.import('blots/block/embed');
+  class EditableTableBlot extends TableBlot {
+    static create(value) {
+      const node = super.create();
+      node.classList.add('editable-table');
+      node.setAttribute('contenteditable', 'false');
+      let table = node.querySelector('table');
+      if (value && value.html) {
+        node.innerHTML = value.html;
+        table = node.querySelector('table');
+      }
+      if (!table) {
+        table = document.createElement('table');
+        node.appendChild(table);
+      }
+      if (!table.querySelector('tbody')) {
+        const tbody = document.createElement('tbody');
+        for (let r = 0; r < 2; r += 1) {
+          const tr = document.createElement('tr');
+          for (let c = 0; c < 2; c += 1) {
+            const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+      }
+      node.querySelectorAll('td,th').forEach(cell => { cell.contentEditable = 'true'; });
+      return node;
+    }
+    static value(node) { return { html: node.innerHTML }; }
+  }
+  EditableTableBlot.blotName = 'editabletable';
+  EditableTableBlot.tagName = 'div';
+  EditableTableBlot.className = 'editable-table';
+  Quill.register(EditableTableBlot);
+
   function init() {
     quill = new Quill('#editor-container', {
       theme: 'snow',
@@ -77,12 +116,18 @@ const Editor = (function () {
             [{ size: FontSize.whitelist }],
             [{ font: FontFamily.whitelist }],
             ['undo', 'redo'],
-            ['page-break'],
+            ['page-break', 'insert-table'],
             ['clean']
           ],
           handlers: {
             undo: function () { quill.history.undo(); },
             redo: function () { quill.history.redo(); },
+            'insert-table': function () {
+              const range = quill.getSelection(true);
+              if (!range) return;
+              quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER);
+              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
+            },
             'page-break': function () {
               // Insère le bloc-embed à la position courante du curseur.
               // On utilise insertEmbed avec sources.USER pour que l'opération
@@ -111,13 +156,36 @@ const Editor = (function () {
       const undoBtn = toolbar.querySelector('.ql-undo');
       const redoBtn = toolbar.querySelector('.ql-redo');
       const pageBreakBtn = toolbar.querySelector('.ql-page-break');
+      const tableBtn = toolbar.querySelector('.ql-insert-table');
       if (undoBtn) undoBtn.innerHTML = '↶';
       if (redoBtn) redoBtn.innerHTML = '↷';
+      if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; }
       if (pageBreakBtn) {
         pageBreakBtn.innerHTML = '⏎ Saut de page';
         pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
       }
     }
+
+    const tableTools = document.createElement('div');
+    tableTools.className = 'table-context-toolbar';
+    tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>';
+    document.getElementById('editor-container').appendChild(tableTools);
+    let activeCell = null;
+    quill.root.addEventListener('click', function (event) {
+      const cell = event.target.closest && event.target.closest('td,th');
+      if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; }
+      activeCell = cell; tableTools.classList.add('visible');
+    });
+    tableTools.addEventListener('click', function (event) {
+      const action = event.target.dataset.action; if (!action || !activeCell) return;
+      const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex;
+      const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; };
+      if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); }
+      if (action === 'remove-row' && table.rows.length > 1) row.remove();
+      if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling));
+      if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
+      quill.update(Quill.sources.USER);
+    });
 
     Variables.init(quill);
     return quill;
