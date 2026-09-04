@@ -18,19 +18,48 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #status-msg { margin-left:auto; font-size:0.9em; color:#666; }
 .error-msg { color:#c0392b; font-weight:bold; }
 
-.page-break-marker { position:relative; margin:14px 0; height:0; border:0; border-top:1px dashed #888; page-break-after:always; break-after:page; text-align:center; user-select:none; }
-.page-break-marker .page-break-label { display:inline-block; position:relative; top:-10px; padding:0 10px; background:#fff; font-size:.75em; color:#6c757d; letter-spacing:.05em; text-transform:uppercase; }
-.ql-toolbar .ql-page-break { white-space:nowrap; }
+/* v1.4.0 — Saut de page forcé à l'export PDF.
+   - `.page-break-marker` est inséré comme BlockEmbed Quill (cf. editor.js).
+   - `page-break-after: always` (et son équivalent moderne `break-after: page`)
+     est détecté par html2pdf (option `pagebreak.mode = 'css'`).
+   - `height: 0` + `border-top` en pointillés = ligne horizontale visuelle,
+     `top: -10px` du label le centre sur la ligne. */
+.page-break-marker {
+  position: relative;
+  margin: 14px 0;
+  height: 0;
+  border: 0;
+  border-top: 1px dashed #888;
+  page-break-after: always;
+  break-after: page;
+  text-align: center;
+  user-select: none;
+}
+.page-break-marker .page-break-label {
+  display: inline-block;
+  position: relative;
+  top: -10px;
+  padding: 0 10px;
+  background: #fff;
+  font-size: 0.75em;
+  color: #6c757d;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.ql-toolbar .ql-page-break {
+  white-space: nowrap;
+}
 
-.editable-table { margin:10px 0; padding:2px; border:1px solid transparent; }
-.editable-table table { width:100%; border-collapse:collapse; }
-.editable-table td, .editable-table th { border:1px solid #999; min-width:70px; min-height:24px; padding:6px; vertical-align:top; }
+
+/* Table editor */
+.editable-table { margin: 10px 0; padding: 2px; border: 1px solid transparent; max-width: 100%; overflow-x: hidden; }
+.editable-table table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
+.editable-table td, .editable-table th { border: 1px solid #999; min-width: 0; min-height: 24px; max-width: 100%; padding: 6px; vertical-align: top; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; word-wrap: break-word; word-break: break-word; }
 .table-context-toolbar { display:none; position:sticky; bottom:8px; z-index:10; background:#fff; border:1px solid #ccc; box-shadow:0 2px 8px rgba(0,0,0,.15); padding:4px; gap:4px; flex-wrap:wrap; }
 .table-context-toolbar.visible { display:flex; }
-.table-context-toolbar button { font-size:.8em; padding:3px 6px; }
+.table-context-toolbar button { font-size: .8em; padding:3px 6px; }
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
-/* Snow impose float:left sur les boutons : neutraliser ce float dans le groupe custom. */
-.ql-toolbar .ql-formats { display:inline-flex !important; align-items:center; flex-wrap:nowrap; vertical-align:middle; float:none !important; }
-.ql-toolbar .ql-formats .ql-page-break, .ql-toolbar .ql-formats .ql-insert-table { display:inline-flex !important; align-items:center; width:auto; float:none !important; clear:none !important; white-space:nowrap; }
-.ql-toolbar .ql-formats:has(.ql-page-break) { display:inline-flex !important; gap:4px; }
+/* Keep custom page-break and table controls in the same Quill toolbar group. */
+.ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
