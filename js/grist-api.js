@@ -1,5 +1,5 @@
-// Publipostage Grist — wrapper API Grist v1.1.0 — 2026-09-03 (logs [GristAPI] verbeux)
-console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.1.0');
+// Publipostage Grist — wrapper API Grist v1.2.0 — 2026-09-04 (détection fiable Select By via onOptions.linking)
+console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.0');
 
 const GristAPI = (function () {
   let _tables = [];
@@ -10,6 +10,8 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
+  // `onOptions` is the authoritative source for widget linking (Select By).
+  let _selectByActive = false;
 
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
@@ -28,7 +30,7 @@ const GristAPI = (function () {
       grist.onRecord(function (record, mappings) {
         const receivedAt = new Date();
         const rowId = record && record.id != null ? record.id : null;
-        console.log('[GristAPI] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), record, mappings: mappings || null });
+        console.log('[GristAPI] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), record, mappings: mappings || null, mappingsJSON: safeJSONStringify(mappings) });
         updateRowDebug(rowId, receivedAt);
         _currentRecord = record;
         _currentMappings = mappings || null;
@@ -67,12 +69,26 @@ const GristAPI = (function () {
 
     try {
       grist.onOptions(function (options, settings) {
-        _currentOptions = options || {};
-        console.log('[GristAPI] onOptions reçu: options=', options, 'settings=', settings);
+        _currentOptions = options || null;
+        _selectByActive = hasActiveLinking(_currentOptions);
+        console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings, 'selectByActive=', _selectByActive);
       });
       console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
       console.warn('[GristAPI] grist.onOptions non disponible:', e);
+    }
+
+    // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà
+    // l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
+    try {
+      if (typeof grist.getOptions === 'function') {
+        const seedOptions = await grist.getOptions();
+        _currentOptions = seedOptions || _currentOptions;
+        _selectByActive = hasActiveLinking(_currentOptions);
+        console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions), 'selectByActive=', _selectByActive);
+      }
+    } catch (e) {
+      console.warn('[GristAPI] getOptions indisponible:', e);
     }
 
     try {
@@ -210,19 +226,45 @@ const GristAPI = (function () {
   function getCurrentRecord() { return _currentRecord; }
   function getCurrentTableId() { return _currentTableId; }
   function getCurrentMappings() { return _currentMappings; }
+  function getCurrentOptions() { return _currentOptions; }
 
-  // Grist fournit mappings.tableId lorsque le widget est relié par « Select By ».
-  // Sans ce mapping, on reçoit au mieux la ligne initiale et aucun changement de
-  // sélection ne peut être propagé au widget. On accepte plusieurs formes
-  // (tableId string/number, tableau `tables`, ou toute clé contenant 'tableId')
-  // car la structure réellement renvoyée par grist.onRecord() une fois le
-  // Select By activé peut varier (notamment via mappings.tables[]).
+  // === Détection fiable du Select By ===
+  //
+  // Source : code source officiel de https://docs.getgrist.com/grist-plugin-api.js
+  // (CustomSectionAPI-ti.ts + grist-plugin-api.ts, bundle webpack inspecté).
+  //
+  //   - Le 2e paramètre de grist.onRecord(record, mappings) est un
+  //     WidgetColumnMap = { [widgetCol]: "gristCol" | ["gristCol"] | null } :
+  //     il porte UNIQUEMENT les correspondances de colonnes choisies par
+  //     l'utilisateur via `grist.ready({columns:[...]})`. Il ne contient PAS
+  //     de clé `tableId` (la détection précédente qui s'appuyait sur
+  //     mappings.tableId était donc incorrecte, d'où le warning permanent).
+  //
+  //   - Le signal officiel de linking « Select By » est envoyé par Grist dans
+  //     le 1er paramètre de grist.onOptions(options, settings), où :
+  //         options = InteractionOptions { accessLevel: string, linking?: LinkingInfo }
+  //         linking = { asTarget: LinkType|null, asSource: boolean }
+  //         LinkType ∈ { "Cursor:Same-Table", "Cursor:Reference",
+  //                      "Filter:Summary-Group", "Filter:Col->Col",
+  //                      "Filter:Row->Col", "Summary",
+  //                      "Show-Referenced-Records", "Error:Invalid" }
+  //
+  //   - asTarget non nul = le widget EST la cible d'un Select By configuré
+  //     par l'utilisateur ; asTarget === null signifie explicitement
+  //     "aucun Select By" (cf. type checker Grist).
+  //   - On utilise donc asTarget !== null comme définition unique et fidèle.
+  function hasActiveLinking(options) {
+    const linking = options && options.linking;
+    return !!(linking && linking.asTarget != null);
+  }
+
+  function safeJSONStringify(value) {
+    try { return JSON.stringify(value); }
+    catch (e) { return '[unserializable: ' + e.message + ']'; }
+  }
+
   function isSelectByActive() {
-    const mappings = _currentMappings;
-    if (!mappings || typeof mappings !== 'object') return false;
-    if (mappings.tableId != null && String(mappings.tableId).trim()) return true;
-    if (Array.isArray(mappings.tables) && mappings.tables.length > 0) return true;
-    return Object.keys(mappings).some(k => k.toLowerCase().indexOf('tableid') !== -1 && mappings[k]);
+    return _selectByActive;
   }
 
   async function findReferenceColumns(fromTableId, toTableId) {
@@ -273,5 +315,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, isSelectByActive, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext };
+  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, isSelectByActive, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext };
 })();
