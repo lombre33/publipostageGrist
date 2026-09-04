@@ -2,17 +2,14 @@
 // + variables #badge (v1.3.0)
 // + saut de page forcé à l'export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
-// + poignées de redimensionnement de colonnes visibles et fonctionnelles (v1.8.1)
 // + paste sans saut de ligne parasite (v1.8.1)
 const Editor = (function () {
   let quill = null;
 
   const FontSize = Quill.import('attributors/style/size');
-  FontSize.whitelist = ['small', false, 'large', 'huge'];
   Quill.register(FontSize, true);
 
   const FontFamily = Quill.import('attributors/style/font');
-  FontFamily.whitelist = ['sans-serif', 'serif', 'monospace'];
   Quill.register(FontFamily, true);
 
   const Embed = Quill.import('blots/embed');
@@ -63,11 +60,8 @@ const Editor = (function () {
       node.classList.add('editable-table');
       node.setAttribute('contenteditable', 'false');
       let table = node.querySelector('table');
-      if (!table) {
-        table = document.createElement('table');
-        table.innerHTML = '<tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody>';
-        node.appendChild(table);
-      }
+      if (value && value.html) { node.innerHTML = value.html; table = node.querySelector('table'); }
+      if (!table) { table = document.createElement('table'); node.appendChild(table); }
       if (!table.querySelector('tbody')) {
         const tbody = document.createElement('tbody');
         for (let r = 0; r < 2; r += 1) {
@@ -113,8 +107,6 @@ const Editor = (function () {
   TwoColumnsBlotClass.className = 'two-columns-zone';
   Quill.register(TwoColumnsBlotClass);
 
-  // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
-  // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
     const firstRow = table.rows[0];
@@ -123,14 +115,10 @@ const Editor = (function () {
     if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
-    Array.from(firstRow.cells).forEach((cell, index) => {
-      if (index === firstRow.cells.length - 1) return;
-      const handle = document.createElement('span');
-      handle.className = 'table-col-resize-handle';
-      handle.setAttribute('aria-label', 'Redimensionner la colonne');
-      handle.setAttribute('contenteditable', 'false');
-      cell.appendChild(handle);
+    Array.from(firstRow.cells).forEach(th => {
+      if (!th.querySelector('.table-col-resize-handle')) {
+        const handle = document.createElement('span'); handle.className = 'table-col-resize-handle'; handle.setAttribute('contenteditable', 'false'); th.appendChild(handle);
+      }
     });
   }
 
@@ -193,182 +181,39 @@ const Editor = (function () {
   }
 
   function init() {
-    quill = new Quill('#editor-container', {
-      theme: 'snow',
-      modules: {
-        toolbar: {
-          container: [
-            [{ header: [1, 2, 3, 4, 5, 6, false] }],
-            ['bold', 'italic', 'underline'],
-            [{ align: [] }],
-            [{ size: FontSize.whitelist }],
-            [{ font: FontFamily.whitelist }],
-            ['undo', 'redo'],
-            ['page-break', 'insert-table', 'insert-two-columns'],
-            ['clean']
-          ],
-          handlers: {
-            undo: function () { quill.history.undo(); },
-            redo: function () { quill.history.redo(); },
-            'insert-table': function () {
-              const range = quill.getSelection(true);
-              if (!range) return;
-              quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER);
-              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
-            },
-            'insert-two-columns': function () {
-              const range = quill.getSelection(true);
-              if (!range) return;
-              quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER);
-              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
-            },
-            'page-break': function () {
-              const range = quill.getSelection(true);
-              if (!range) return;
-              quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
-              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
-            }
-          }
-        },
-        history: { delay: 500, maxStack: 100, userOnly: true }
-      }
-    });
+    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns'], ['clean']], handlers: {
+      undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); },
+      'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); },
+      'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); },
+      'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }
+    } } } });
 
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) {
-      const undoBtn = toolbar.querySelector('.ql-undo');
-      const redoBtn = toolbar.querySelector('.ql-redo');
-      const pageBreakBtn = toolbar.querySelector('.ql-page-break');
-      const tableBtn = toolbar.querySelector('.ql-insert-table');
-      const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns');
-      if (undoBtn) undoBtn.innerHTML = '↶';
-      if (redoBtn) redoBtn.innerHTML = '↷';
-      if (tableBtn) {
-        tableBtn.innerHTML = '▦ Tableau';
-        tableBtn.title = 'Insérer un tableau 2×2';
-      }
-      if (twoColsBtn) {
-        twoColsBtn.innerHTML = '▥ Zone 2 colonnes';
-        twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)';
-      }
-      if (pageBreakBtn) {
-        pageBreakBtn.innerHTML = '⏎ Saut de page';
-        pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
-      }
+      const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns');
+      if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷';
+      if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; }
+      if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; }
+      if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)'; }
     }
 
-    const tableTools = document.createElement('div');
-    tableTools.className = 'table-context-toolbar';
-    tableTools.innerHTML =
-      '<button data-action="add-row-above">+ ligne au-dessus</button>' +
-      '<button data-action="add-row-below">+ ligne en dessous</button>' +
-      '<button data-action="remove-row">− ligne</button>' +
-      '<button data-action="add-col-left">+ colonne à gauche</button>' +
-      '<button data-action="add-col-right">+ colonne à droite</button>' +
-      '<button data-action="remove-col">− colonne</button>';
-    document.getElementById('editor-container').appendChild(tableTools);
-
+    const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar'; tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>'; document.getElementById('editor-container').appendChild(tableTools);
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
-
-    quill.root.addEventListener('click', function (event) {
-      const cell = event.target.closest && event.target.closest('td,th');
-      if (!cell || !cell.closest('.editable-table')) {
-        tableTools.classList.remove('visible');
-        activeCell = null;
-        return;
-      }
-      activeCell = cell;
-      tableTools.classList.add('visible');
-    });
-
+    quill.root.addEventListener('click', function (event) { const cell = event.target.closest && event.target.closest('td,th'); if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; } activeCell = cell; tableTools.classList.add('visible'); });
     quill.root.addEventListener('mousedown', function (event) {
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
-      if (twoColumnsGrip) {
-        const zone = twoColumnsGrip.closest('.two-columns-zone');
-        if (!zone) return;
-        event.preventDefault();
-        event.stopPropagation();
-        resizeTwoColumns(zone, event.clientX);
-        return;
-      }
+      if (twoColumnsGrip) { const zone = twoColumnsGrip.closest('.two-columns-zone'); if (!zone) return; event.preventDefault(); event.stopPropagation(); resizeTwoColumns(zone, event.clientX); return; }
       const handle = event.target.closest && event.target.closest('.table-col-resize-handle');
-      if (!handle) return;
-      const cell = handle.closest('th, td');
-      const table = handle.closest('table');
-      if (!cell || !table) return;
-      event.preventDefault();
-      event.stopPropagation();
-      resizeTableColumn(table, cell.cellIndex, event.clientX);
+      if (!handle) return; const cell = handle.closest('th, td'); const table = handle.closest('table'); if (!cell || !table) return; event.preventDefault(); event.stopPropagation(); resizeTableColumn(table, cell.cellIndex, event.clientX);
     });
-
-    // Paste sans saut de ligne parasite : on lit le `text/plain` brut et on insère
-    // le texte tel quel via `insertText` (qui préserve les \n existants du source
-    // mais n'ajoute rien quand le texte ne contient aucun retour à la ligne).
-    quill.root.addEventListener('paste', function (event) {
-      const target = event.target;
-      const editableContainer = target && target.closest
-        && target.closest('.editable-table td, .editable-table th, .two-columns-column');
-      if (!editableContainer) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const clipboard = event.clipboardData;
-      const text = clipboard ? clipboard.getData('text/plain') : '';
-      if (text) document.execCommand('insertText', false, text);
-      quill.update(Quill.sources.USER);
-    }, true);
-
-    if (toolbar) toolbar.addEventListener('click', function (event) {
-      const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button || !activeCell) return;
-      const value = button.getAttribute('data-value') || 'left';
-      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
-      event.preventDefault();
-      event.stopPropagation();
-    }, true);
-
-    tableTools.addEventListener('click', function (event) {
-      const action = event.target.dataset.action;
-      if (!action || !activeCell) return;
-      const table = activeCell.closest('table');
-      const row = activeCell.parentElement;
-      const col = activeCell.cellIndex;
-      const makeCell = () => {
-        const td = document.createElement('td');
-        td.innerHTML = '&nbsp;';
-        td.contentEditable = 'true';
-        return td;
-      };
-      if (action === 'add-row-above' || action === 'add-row-below') {
-        const tr = document.createElement('tr');
-        for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell());
-        row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling);
-      }
-      if (action === 'remove-row' && table.rows.length > 1) row.remove();
-      if (action === 'add-col-left' || action === 'add-col-right') {
-        Array.from(table.rows).forEach(r => r.insertBefore(
-          makeCell(),
-          action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling
-        ));
-      }
-      if (action === 'remove-col' && row.cells.length > 1) {
-        Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
-      }
-      ensureTableColumns(table);
-      quill.update(Quill.sources.USER);
-    });
-
-    Variables.init(quill);
-    return quill;
+    quill.root.addEventListener('paste', function (event) { const target = event.target; const editableContainer = target && target.closest && target.closest('.editable-table td, .editable-table th, .two-columns-column'); if (!editableContainer) return; event.preventDefault(); event.stopPropagation(); const clipboard = event.clipboardData; const text = clipboard ? clipboard.getData('text/plain') : ''; if (text) document.execCommand('insertText', false, text); quill.update(Quill.sources.USER); }, true);
+    Variables.init(quill); return quill;
   }
 
   function getQuill() { return quill; }
   function getHTML() { return quill.root.innerHTML; }
-  function setHTML(html) {
-    quill.root.innerHTML = html || '';
-    quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-  }
-
+  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
   return { init, getQuill, getHTML, setHTML };
 })();
