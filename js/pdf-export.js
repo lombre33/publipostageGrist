@@ -19,15 +19,22 @@ const PdfExport = (function () {
     container.style.padding = '20px';
     container.style.fontFamily = 'Arial, sans-serif';
     container.innerHTML = resolvedHtml;
-    // v1.4.1 — Masquer le label visuel "— Saut de page —" à l'export PDF :
-    //   le Blot Quill `PageBreakBlot` insère ce span dans le DOM (cf. editor.js)
-    //   pour l'affichage éditeur, mais html2pdf/html2canvas le capture aussi
-    //   et l'imprime dans le PDF. On retire ici uniquement les labels visibles ;
-    //   les `.page-break-marker` (avec `page-break-after: always`) sont conservés
-    //   afin que html2pdf continue à générer un saut de page RÉEL.
-    container.querySelectorAll('.page-break-marker .page-break-label').forEach(function (label) {
-      label.remove();
+
+    // Le marqueur Quill contient un libellé et une bordure destinés à l'éditeur.
+    // Les neutraliser dans le DOM temporaire d'export évite qu'html2canvas ne
+    // les rasterise, tout en conservant l'élément et ses propriétés de saut de
+    // page pour html2pdf.pagebreak (mode CSS).
+    container.querySelectorAll('.page-break-marker').forEach((marker) => {
+      marker.innerHTML = '';
+      marker.style.border = '0';
+      marker.style.background = 'transparent';
+      marker.style.color = 'transparent';
+      marker.style.height = '0';
+      marker.style.margin = '0';
+      marker.style.pageBreakAfter = 'always';
+      marker.style.breakAfter = 'page';
     });
+
     document.body.appendChild(container);
 
     const opt = {
