@@ -1,133 +1,93 @@
-/* Publipostage Grist – styles globaux. */
-
-body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f5f7fa; }
-.filename-bar { display:flex; gap:8px; margin-bottom:14px; align-items:center; }
+body { font-family: Arial, sans-serif; margin:0; padding:0; }
+#app { display:flex; flex-direction:column; height:100vh; }
+#toolbar-top { padding:8px; border-bottom:1px solid #ccc; background:#f7f7f7; }
+.template-bar, .filename-bar, .mode-bar { margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.template-bar label, .filename-bar label { font-weight:bold; margin-right:4px; }
 .filename-bar input { flex:1; min-width:200px; }
 button { cursor:pointer; padding:4px 10px; }
-
-.modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-content { background: #fff; padding: 20px; border-radius: 5px; max-width: 480px; width: 100%; }
+button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
+#editor-container { flex:1; overflow:auto; background:#fff; }
+#reader-container { flex:1; overflow:auto; padding:20px; background:#fff; }
+.var-badge { background:#e0ecff; border:1px solid #2c7be5; border-radius:4px; padding:1px 6px; color:#12406b; font-weight:bold; user-select:none; }
+#autocomplete-box { position:absolute; z-index:1000; background:#fff; border:1px solid #ccc; box-shadow:0 2px 8px rgba(0,0,0,0.15); max-height:220px; overflow-y:auto; min-width:220px; }
+#autocomplete-box .ac-item { padding:6px 10px; cursor:pointer; }
+#autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#2c7be5; color:#fff; }
+#ref-choice-modal { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.modal-content { background:#fff; padding:20px; border-radius:6px; min-width:320px; }
 .modal-content select { width:100%; margin:10px 0; }
-
+#status-msg { margin-left:auto; font-size:0.9em; color:#666; }
 .error-msg { color:#c0392b; font-weight:bold; }
-
-.page-break-marker {
-  position: relative;
-  margin: 14px 0;
-  height: 0;
-  border: 0;
-  border-top: 1px dashed #888;
-  page-break-after: always;
-  break-after: page;
-  text-align: center;
-  user-select: none;
-}
-.page-break-marker .page-break-label {
-  display: inline-block;
-  position: relative;
-  top: -10px;
-  padding: 0 10px;
-  background: #fff;
-  font-size: 0.75em;
-  color: #6c757d;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.ql-toolbar .ql-page-break {
-  white-space: nowrap;
-}
-
+.page-break-marker { position: relative; margin: 14px 0; height: 0; border: 0; border-top: 1px dashed #888; page-break-after: always; break-after: page; text-align: center; user-select: none; }
+.page-break-marker .page-break-label { display: inline-block; position: relative; top: -10px; padding: 0 10px; background: #fff; font-size: 0.75em; color: #6c757d; letter-spacing: 0.05em; text-transform: uppercase; }
+.ql-toolbar .ql-page-break { white-space: nowrap; }
 .editable-table { margin: 10px 0; padding: 2px; border: 1px solid transparent; max-width: 100%; overflow-x: hidden; }
 .editable-table table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
-/* Chaque cellule est en position:relative pour servir d'ancre à la poignée
-   de redimensionnement absolue. Le z-index élevé garantit qu'elle reste
-   au-dessus du contenu et reste cliquable. */
-.editable-table td, .editable-table th { position: relative; border: 1px solid #999; min-width: 0; min-height: 24px; max-width: 100%; padding: 6px; vertical-align: top; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; word-wrap: break-word; word-break: break-word; }
+.editable-table td, .editable-table th { border: 1px solid #999; min-width: 0; min-height: 24px; max-width: 100%; padding: 6px; vertical-align: top; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; word-wrap: break-word; word-break: break-word; }
 .table-context-toolbar { display:none; position:sticky; bottom:8px; z-index:10; background:#fff; border:1px solid #ccc; box-shadow:0 2px 8px rgba(0,0,0,.15); padding:4px; gap:4px; flex-wrap:wrap; }
 .table-context-toolbar.visible { display:flex; }
 .table-context-toolbar button { font-size: .8em; padding:3px 6px; }
 #reader-container table { width:100%; border-collapse:collapse; }
-#reader-container .editable-table { border-color: transparent; padding-top: 0; }
-#reader-container .table-col-resize-handle,
-#reader-container .table-context-toolbar,
-#reader-container .page-break-marker { display: none; }
+#reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
+.ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
-
-.two-columns-zone {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin: 14px 0;
-  padding: 20px 10px 10px;
-  border: 1px dashed #8b98a5;
-  border-radius: 3px;
-  box-sizing: border-box;
-  max-width: 100%;
-}
-.two-columns-column {
-  min-width: 0;
-  min-height: 48px;
-  padding: 6px;
-  border: 1px solid #d7dde3;
-  box-sizing: border-box;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-.two-columns-marker {
-  position: absolute;
-  top: 3px;
-  left: 8px;
-  font-size: .68em;
-  line-height: 1;
-  color: #6c757d;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  user-select: none;
-  pointer-events: none;
-}
-#reader-container .two-columns-zone {
-  border-color: transparent;
-  padding-top: 0;
-}
+.two-columns-zone { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
+.two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
+.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
+#reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-marker { display: none; }
+.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
+.editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
+.editable-table td, .editable-table th { text-align: inherit; }
 
-/* Poignée de redimensionnement de colonne :
-   - trait vertical cliquable collé à la bordure droite de la cellule ;
-   - curseur ew-resize explicite ;
-   - z-index supérieur à celui du contenu de cellule (10) ;
-   - positionnée en absolu relativement à la cellule (position:relative ci-dessus). */
+/* === Slider de redimensionnement de colonnes (v1.8.2) ===
+   Poignee centree verticalement sur la hauteur de la cellule d'en-tete,
+   materialisee par un grip vertical central clairement visible.
+   - Ancre absolue : cellule d'en-tete (tr:first-child > td/th) en position:relative
+   - Recouvre la hauteur totale de la cellule -> cible de drag large et stable
+   - Curseur ew-resize explicite
+   - z-index eleve : reste au-dessus du contenu
+   - Grip central (::after) rend le slider visible et cliquable. */
 .table-col-resize-handle {
   position: absolute;
   top: 0;
   right: -1px;
-  width: 9px;
+  width: 10px;
   height: 100%;
   cursor: ew-resize;
-  z-index: 20;
+  z-index: 30;
   box-sizing: border-box;
-  border-right: 2px solid rgba(44,123,229,.45);
   background: transparent;
   user-select: none;
   touch-action: none;
+  border-right: 2px solid rgba(44,123,229,.45);
+}
+.table-col-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 22px;
+  background: #2c7be5;
+  border-radius: 2px;
+  opacity: .55;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.6);
+  transition: opacity .15s ease, height .15s ease;
 }
 .table-col-resize-handle:hover,
 body.resizing-table-column .table-col-resize-handle {
-  background: rgba(44,123,229,.35);
+  background: rgba(44,123,229,.12);
   border-right-color: #2c7be5;
 }
-body.resizing-table-column { cursor: ew-resize; user-select: none; }
-.editable-table td, .editable-table th { text-align: inherit; }
-
-.ql-toolbar .ql-formats > .ql-page-break,
-.ql-toolbar .ql-formats > .ql-insert-table,
-.ql-toolbar .ql-formats > .ql-insert-two-columns {
-  display: inline-flex !important;
-  align-items: center;
-  flex: 0 0 auto;
-  float: none !important;
-  clear: none !important;
-  width: auto !important;
-  margin: 0 !important;
-  white-space: nowrap;
+.table-col-resize-handle:hover::after,
+body.resizing-table-column .table-col-resize-handle::after {
+  opacity: 1;
+  height: 32px;
 }
+body.resizing-table-column { cursor: ew-resize; user-select: none; }
+
+/* Mode lecteur (rendu PDF / apercu) : on cache la poignee et la table-toolbar. */
+#reader-container .table-col-resize-handle,
+#reader-container .table-context-toolbar,
+#reader-container .page-break-marker { display: none; }
