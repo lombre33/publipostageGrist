@@ -1,6 +1,7 @@
-// Publipostage Grist — wrapper API Grist v1.2.2 — 2026-09-04
-// Détection fiable du « Select By » basée sur onRecord (avec confirmation par onOptions)
-console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.2');
+// Publipostage Grist — wrapper API Grist v1.2.3 — 2026-09-04
+// Détection fiable du « Select By » : linking.asTarget (officiel) + confirmation
+// manuelle persistée via grist.setOption({ selectByConfirmed: true }), sans polling.
+console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.3');
 
 const GristAPI = (function () {
   let _tables = [];
@@ -13,35 +14,42 @@ const GristAPI = (function () {
   let _recordSubscriptionRegistered = false;
   let _onSelectByChangeCallbacks = [];
 
-  // === Détection fiable du Select By (v1.2.2) ===
+  // === Détection fiable du Select By (v1.2.3) ===
   //
-  // Constat empirique : les tentatives précédentes s'appuyant uniquement sur
-  // `grist.onOptions` + `options.linking.asTarget` échouent (commits 6d92213,
-  // 93bf9ce, 3fa12c9). Dans la pratique, Grist envoie systématiquement
-  // `linking = undefined` ou `linking = {}` à ce widget, ce qui force
-  // `hasActiveLinking` à false en permanence, et le bandeau d'avertissement
-  // reste donc collé en mode lecture.
+  // Cause racine confirmée (cf. commit 8c4f7011 / v1.2.2) : la combinaison
+  // `_selectByActiveByRecord || _selectByActiveByOptions` est cassée parce
+  // que `_selectByActiveByRecord` passait à true dès le **premier** record
+  // reçu via grist.onRecord — or Grist peut transmettre un record initial
+  // même en l'absence de Select By configuré par l'utilisateur (widget
+  // placé dans une vue rattachée à la table). Résultat : bandeau
+  // d'avertissement JAMAIS affiché en mode lecture sans Select By.
   //
-  // Nouveau contrat : on s'appuie en priorité sur le comportement RÉEL de
-  // `grist.onRecord`, qui est lui-même la preuve que le widget est ciblé
-  // par un Select By (l'API Grist n'envoie `onRecord` qu'aux widgets liés
-  // comme cible). Le signal `linking.asTarget` est conservé comme
-  // confirmation secondaire, mais combiné en OU : aucun signal seul ne
-  // peut bloquer la détection.
+  // Nouveau contrat (v1.2.3) :
+  //   1. _selectByActiveByOptions  = linking.asTarget != null  (signal officiel)
+  //   2. _userSelectByOverride     = options.selectByConfirmed === true
+  //                                  (repli robuste : confirmation manuelle
+  //                                   de l'utilisateur, persistée via
+  //                                   grist.setOption, ré-émise par Grist
+  //                                   dans onOptions — pas de polling)
+  //   3. _selectByActive = _selectByActiveByOptions || _userSelectByOverride
+  //
+  // On supprime totalement le signal "_selectByActiveByRecord" : le simple
+  // fait qu'onRecord ait été appelé n'est plus une preuve de Select By.
+  // _onRecordCount, _lastRecordRowId et _lastRecordAt sont conservés à
+  // des fins de diagnostic console uniquement.
   let _selectByActive = false;                 // état public (lu par main.js)
-  let _selectByActiveByOptions = false;         // signal n°1 : linking.asTarget
-  let _selectByActiveByRecord = false;          // signal n°2 : onRecord reçu
-  let _onRecordCount = 0;                       // nombre d'appels onRecord
-  let _lastRecordRowId = null;                  // dernier rowId reçu via onRecord
-  let _lastRecordAt = null;                     // horodatage du dernier onRecord
+  let _selectByActiveByOptions = false;         // signal officiel
+  let _userSelectByOverride = false;            // signal de repli (utilisateur)
+  let _onRecordCount = 0;                       // diagnostic
+  let _lastRecordRowId = null;                  // diagnostic
+  let _lastRecordAt = null;                     // diagnostic
 
   function recomputeSelectByActive(source) {
     const previous = _selectByActive;
-    _selectByActive = _selectByActiveByRecord || _selectByActiveByOptions;
+    _selectByActive = _selectByActiveByOptions || _userSelectByOverride;
     console.log('[GristAPI] recomputeSelectByActive(' + source + '):',
-      'byRecord=' + _selectByActiveByRecord,
-      '(count=' + _onRecordCount + ', lastRowId=' + (_lastRecordRowId == null ? '—' : _lastRecordRowId) + ')',
-      'byOptions=' + _selectByActiveByOptions,
+      'byOptions(linking.asTarget)=' + _selectByActiveByOptions,
+      'userOverride=' + _userSelectByOverride,
       '=> selectByActive=' + _selectByActive,
       previous !== _selectByActive ? '(CHANGEMENT)' : '(inchangé)');
     if (previous !== _selectByActive) {
@@ -52,22 +60,34 @@ const GristAPI = (function () {
     }
   }
 
+  // Met à jour les deux signaux (_selectByActiveByOptions + _userSelectByOverride)
+  // à partir d'un objet `options` reçu de Grist (onOptions ou getOptions seed).
+  // Affiche explicitement le contenu brut de `options.linking` pour permettre
+  // à l'utilisateur de vérifier ce que Grist envoie réellement.
   function updateSelectByStateFromOptions(options, source) {
     _currentOptions = options || null;
     const linking = _currentOptions && _currentOptions.linking;
+    const linkingJSON = safeJSONStringify(linking);
+    const userConfirmed = !!( _currentOptions && _currentOptions.selectByConfirmed === true );
     _selectByActiveByOptions = hasActiveLinking(_currentOptions);
-    console.log('[GristAPI] ' + source + ': options.linking brut=',
-      linking, 'selectByActiveByOptions=', _selectByActiveByOptions);
+    _userSelectByOverride = userConfirmed;
+    console.log('[GristAPI] ' + source + ': options.linking brut=', linking,
+      '(JSON:', linkingJSON + ')',
+      '=> selectByActiveByOptions=' + _selectByActiveByOptions);
+    console.log('[GristAPI] ' + source + ': options.selectByConfirmed=',
+      _currentOptions ? _currentOptions.selectByConfirmed : '(options absent)',
+      '=> userSelectByOverride=' + _userSelectByOverride);
     recomputeSelectByActive(source);
   }
 
   async function init() {
-    // Enregistrer onOptions AVANT ready(): Grist peut émettre l'état initial
+    // Enregistrer onOptions AVANT ready() : Grist peut émettre l'état initial
     // immédiatement pendant le handshake déclenché par ready().
     try {
       grist.onOptions(function (options, settings) {
+        console.log('[GristAPI] onOptions reçu: options (brut)=', options,
+          'settings=', settings);
         updateSelectByStateFromOptions(options, 'onOptions reçu');
-        console.log('[GristAPI] onOptions settings=', settings);
       });
       console.log('[GristAPI] grist.onOptions enregistré AVANT grist.ready().');
     } catch (e) {
@@ -99,23 +119,10 @@ const GristAPI = (function () {
             receivedAt: receivedAt.toISOString(),
             record, mappings: mappings || null,
             mappingsJSON: safeJSONStringify(mappings) });
-
-        // === Signal empirique : onRecord reçu = Select By actif ===
-        // D'après le contrat de l'API Grist, onRecord n'est invoqué que sur
-        // les widgets liés comme cible d'un Select By. Un seul appel suffit
-        // donc à prouver que le Select By est actif. On conserve aussi la
-        // trace du rowId pour permettre, plus tard, de détecter les
-        // changements de ligne réels côté UI.
-        if (record) {
-          if (!_selectByActiveByRecord) {
-            _selectByActiveByRecord = true;
-            console.log('[GristAPI] onRecord: premier record reçu => Select By confirmé actif.');
-          }
-          recomputeSelectByActive('onRecord(premier record)');
-        } else {
-          console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null). Select By reste dans son état précédent.');
+        console.log('[GristAPI] onRecord: ce callback n\'est PLUS utilisé pour basculer Select By actif (cause du bug v1.2.2).');
+        if (!record) {
+          console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
         }
-
         updateRowDebug(rowId, receivedAt, previousRowId);
         _currentRecord = record;
         _currentMappings = mappings || null;
@@ -150,12 +157,13 @@ const GristAPI = (function () {
     }
 
     // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà
-    // l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
+    // l'objet options complet (linking + champs custom comme selectByConfirmed).
     try {
       if (typeof grist.getOptions === 'function') {
         const seedOptions = await grist.getOptions();
+        console.log('[GristAPI] getOptions (seed) options brut=', seedOptions,
+          'JSON=', safeJSONStringify(seedOptions));
         updateSelectByStateFromOptions(seedOptions || _currentOptions, 'getOptions (seed)');
-        console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions));
       }
     } catch (e) {
       console.warn('[GristAPI] getOptions indisponible:', e);
@@ -167,7 +175,7 @@ const GristAPI = (function () {
       console.error('[GristAPI] refreshSchema a échoué:', e);
     }
     console.log('[GristAPI] init terminé. État final Select By =', _selectByActive,
-      '(byRecord=' + _selectByActiveByRecord + ', byOptions=' + _selectByActiveByOptions + ').');
+      '(byOptions=' + _selectByActiveByOptions + ', userOverride=' + _userSelectByOverride + ').');
   }
 
   // Récupération robuste du tableId : mappings -> grist.getTable() -> schéma -> vues
@@ -306,7 +314,7 @@ const GristAPI = (function () {
     console.log('[GristAPI] onSelectByChange: abonné ajouté. total=', _onSelectByChangeCallbacks.length);
   }
 
-  // === Détection complémentaire du Select By via onOptions ===
+  // === Détection officielle du Select By via onOptions ===
   //
   // Source : code source officiel de https://docs.getgrist.com/grist-plugin-api.js
   // (CustomSectionAPI-ti.ts + grist-plugin-api.ts, bundle webpack inspecté).
@@ -315,11 +323,13 @@ const GristAPI = (function () {
   //     WidgetColumnMap = { [widgetCol]: "gristCol" | ["gristCol"] | null } :
   //     il porte UNIQUEMENT les correspondances de colonnes choisies par
   //     l'utilisateur via `grist.ready({columns:[...]})`. Il ne contient PAS
-  //     de clé `tableId`.
+  //     de clé `tableId` et n'indique PAS la présence d'un Select By.
   //
   //   - Le signal officiel de linking « Select By » est envoyé par Grist dans
   //     le 1er paramètre de grist.onOptions(options, settings), où :
-  //         options = InteractionOptions { accessLevel: string, linking?: LinkingInfo }
+  //         options = InteractionOptions { accessLevel: string,
+  //                                         linking?: LinkingInfo,
+  //                                         ... + champs custom }
   //         linking = { asTarget: LinkType|null, asSource: boolean }
   //         LinkType ∈ { "Cursor:Same-Table", "Cursor:Reference",
   //                      "Filter:Summary-Group", "Filter:Col->Col",
@@ -330,9 +340,13 @@ const GristAPI = (function () {
   //     par l'utilisateur ; asTarget === null signifie explicitement
   //     "aucun Select By".
   //
-  // NOTE v1.2.2 : ce signal n'est PLUS utilisé seul (il est resté à false
-  // dans toutes les sessions réelles, cf. commits 6d92213/93bf9ce/3fa12c9).
-  // Il sert désormais de confirmation OR avec le signal onRecord.
+  // NOTE v1.2.3 : dans le contexte réel observé pour ce widget, Grist
+  // expose `linking` comme `undefined` ou `{}` (cf. diagnostic logs). C'est
+  // pourquoi un repli robuste `selectByConfirmed` est désormais exposé :
+  // l'utilisateur peut cocher une case (créée dynamiquement par main.js)
+  // qui appelle `grist.setOption({ selectByConfirmed: true })`. Grist
+  // ré-émet cet objet via onOptions, ce qui remet `_selectByActive` à true
+  // sans aucun polling.
   function hasActiveLinking(options) {
     const linking = options && options.linking;
     return !!(linking && linking.asTarget != null);
@@ -347,15 +361,43 @@ const GristAPI = (function () {
     return _selectByActive;
   }
 
+  function getUserSelectByOverride() {
+    return _userSelectByOverride;
+  }
+
+  // Repli robuste : persiste un booléen dans les options du widget via
+  // grist.setOption. Grist ré-émettra l'objet options complet via onOptions,
+  // ce qui recalculera `_selectByActive` automatiquement (pas de polling).
+  async function setUserSelectByOverride(value) {
+    const newValue = !!value;
+    const previous = _userSelectByOverride;
+    _userSelectByOverride = newValue; // maj optimiste pour UX instantanée
+    console.log('[GristAPI] setUserSelectByOverride(', newValue, ') : maj optimiste appliquée (était', previous + ').');
+    try {
+      if (typeof grist.setOption === 'function') {
+        const merged = Object.assign({}, _currentOptions || {}, { selectByConfirmed: newValue });
+        await grist.setOption(merged);
+        console.log('[GristAPI] setUserSelectByOverride: grist.setOption({ selectByConfirmed:', newValue, '}) appelé avec succès.');
+      } else {
+        console.warn('[GristAPI] setUserSelectByOverride: grist.setOption indisponible, la confirmation ne sera PAS persistée.');
+      }
+    } catch (e) {
+      console.error('[GristAPI] setUserSelectByOverride: échec grist.setOption —', e);
+    }
+    recomputeSelectByActive('setUserSelectByOverride');
+  }
+
   // Diagnostics exposés pour le débug (lecture seule)
   function _debugSelectBy() {
     return {
       active: _selectByActive,
-      byRecord: _selectByActiveByRecord,
       byOptions: _selectByActiveByOptions,
+      userOverride: _userSelectByOverride,
       onRecordCount: _onRecordCount,
       lastRowId: _lastRecordRowId,
-      lastRecordAt: _lastRecordAt ? _lastRecordAt.toISOString() : null
+      lastRecordAt: _lastRecordAt ? _lastRecordAt.toISOString() : null,
+      rawOptions: _currentOptions,
+      rawLinking: _currentOptions && _currentOptions.linking
     };
   }
 
@@ -407,5 +449,12 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, onSelectByChange, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, isSelectByActive, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext, _debugSelectBy };
+  return {
+    init, refreshSchema, getTables, getColumns, getAllVariables,
+    onRecord, onSelectByChange,
+    getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions,
+    isSelectByActive, getUserSelectByOverride, setUserSelectByOverride,
+    detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext,
+    _debugSelectBy
+  };
 })();
