@@ -102,3 +102,20 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
   margin: 0 !important;
   white-space: nowrap;
 }
+
+/* Tableau éditable : poignée de largeur et alignement des cellules. */
+.editable-table tr:first-child > th,
+.editable-table tr:first-child > td { position: relative; }
+.table-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.table-col-resize-handle:hover,
+body.resizing-table-column .table-col-resize-handle { background: rgba(44,123,229,.35); }
+body.resizing-table-column { cursor: col-resize; user-select: none; }
+.editable-table td, .editable-table th { text-align: inherit; }
