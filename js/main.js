@@ -105,6 +105,9 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.2
   const btnRead = document.getElementById('btn-mode-read');
   const toolbar = document.getElementById('toolbar');
   let ind = document.getElementById('table-indicator');
+  const statusMsg = document.getElementById('status-msg');
+  const templateSelect = document.getElementById('template-select');
+  const templateNameInput = document.getElementById('template-name');
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -204,12 +207,10 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.2
     if (!confirm('Supprimer ce modèle ?')) return;
     await Templates.remove(id);
     await refreshTemplateList();
-    onNew();
+    loadTemplateIntoEditor(null);
     setStatus('Modèle supprimé.');
   }
 
-  // BUG 2 — switchMode est async pour pouvoir await renderReader() ;
-  // sans await, renderReader() retournait une Promise non attendue.
   async function switchMode(mode) {
     currentMode = mode;
     if (mode === 'edit') {
@@ -217,85 +218,84 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.2
       btnRead.classList.remove('active');
       editorContainer.style.display = 'block';
       readerContainer.style.display = 'none';
-      if (ReaderMode.setSelectByWarning) ReaderMode.setSelectByWarning(null);
-    } else {
-      btnEdit.classList.remove('active');
-      btnRead.classList.add('active');
-      editorContainer.style.display = 'none';
-      readerContainer.style.display = 'block';
+      if (quill) quill.enable(true);
       applySelectByWarning();
-      await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
+      return;
+    }
+
+    btnEdit.classList.remove('active');
+    btnRead.classList.add('active');
+    editorContainer.style.display = 'none';
+    readerContainer.style.display = 'block';
+    if (quill) quill.enable(false);
+    applySelectByWarning();
+    const record = latestRecord || GristAPI.getCurrentRecord();
+    if (record) {
+      await renderReader(record, latestRecordTableId || currentTableId || GristAPI.getCurrentTableId());
+    } else {
+      await ReaderMode.render('', {});
     }
   }
 
-  async function renderReader(record, recordTableId) {
-    const html = Editor.getHTML();
-    if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
-    let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    if (!record) {
-      console.warn('[main] renderReader appelé SANS record courant.');
-      return;
+  async function renderReader(record, tableId) {
+    if (!record) return;
+    try {
+      const nomFichierPDF = getPdfFilenameTemplate();
+      await ReaderMode.render(Editor.getHTML(), record, {
+        resolveVariables: Variables.resolveAll,
+        tableId,
+        nomFichierPDF
+      });
+    } catch (e) {
+      console.error('[main] Erreur rendu lecteur:', e);
+      setStatus('Erreur rendu lecture : ' + e.message, true);
     }
-    if (!tableId) {
-      console.warn('[main] renderReader appelé SANS tableId courant, tentative detectCurrentContext…');
-      const ctx = await GristAPI.detectCurrentContext();
-      if (ctx && ctx.tableId) {
-        currentTableId = ctx.tableId;
-        tableId = ctx.tableId;
-        updateTableIndicator(ctx.tableId);
-      }
-    }
-    console.log('[main] renderReader: avant ReaderMode.render', { tableId, record: Object.keys(record) });
-    await ReaderMode.render(html, tableId, record, !GristAPI.isSelectByActive());
-    console.log('[main] renderReader: après ReaderMode.render — affichage mis à jour.');
   }
 
   async function onExportPdf() {
-    const html = Editor.getHTML();
-    const record = GristAPI.getCurrentRecord();
+    const record = latestRecord || GristAPI.getCurrentRecord();
     if (!record) {
-      alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.');
+      setStatus('Aucune ligne sélectionnée.', true);
       return;
     }
-    const filenameTpl = getPdfFilenameTemplate();
-    setStatus('Génération du PDF en cours...');
     try {
-      console.log('[main] onExportPdf: avant PdfExport.exportCurrentRecord', { currentTableId, hasRecord: !!record, filenameTpl });
-      await PdfExport.exportCurrentRecord(html, currentTableId || GristAPI.getCurrentTableId(), record, filenameTpl);
-      console.log('[main] onExportPdf: après PdfExport.exportCurrentRecord — PDF généré.');
-      setStatus('PDF généré.');
+      const nomFichierPDF = getPdfFilenameTemplate();
+      await PdfExport.export(Editor.getHTML(), record, {
+        resolveVariables: Variables.resolveAll,
+        tableId: latestRecordTableId || currentTableId || GristAPI.getCurrentTableId(),
+        nomFichierPDF
+      });
+      setStatus('PDF exporté.');
     } catch (e) {
-      console.error(e);
-      setStatus('Erreur génération PDF.', true);
+      console.error('[main] Erreur export PDF:', e);
+      setStatus('Erreur export PDF : ' + e.message, true);
     }
   }
 
   async function init() {
-    console.log('[main] init: démarrage, version v1.2.3');
     try {
       await GristAPI.init();
-      console.log('[main] GristAPI.init() terminé.');
     } catch (e) {
-      console.error('[main] Erreur GristAPI.init():', e);
       setStatus('Erreur init API Grist.', true);
     }
+
     quill = Editor.init();
 
-    // Synchroniser la checkbox "Confirmer Select By" depuis l'état Grist
-    // (lecture seule ici ; les changements passent par setUserSelectByOverride).
-    ensureSelectByOverrideCheckbox();
-    syncSelectByOverrideCheckbox();
+    if (typeof GristAPI.onSelectByChange === 'function') {
+      GristAPI.onSelectByChange(() => {
+        applySelectByWarning();
+        if (currentMode === 'read' && (latestRecord || GristAPI.getCurrentRecord())) {
+          renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
+        }
+      });
+    }
 
-    // BUG 2 — onRecord callback async pour await renderReader() et éviter
-    // qu'une Promise non-attendue ne s'affiche comme '[object Promise]'.
     GristAPI.onRecord(async function (record, tableId) {
-      const receivedAt = new Date();
-      const rowId = record && record.id != null ? record.id : null;
-      console.log('[main] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), tableId, record });
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
       if (tableId) currentTableId = tableId;
       updateTableIndicator(latestRecordTableId);
+      applySelectByWarning();
       if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
     });
 
@@ -338,11 +338,7 @@ console.log('[main] script chargé, timestamp:', new Date().toISOString(), 'v1.2
 
     updateTableIndicator(GristAPI.getCurrentTableId());
     applySelectByWarning();
-    await switchMode('edit');
-
-    setStatus('Widget prêt.');
-    console.log('[main] init terminé. widget prêt.');
   }
 
-  init();
+  document.addEventListener('DOMContentLoaded', init);
 })();
