@@ -3,7 +3,16 @@
 // `.page-break-marker` (inséré via le nouveau Blot Quill `PageBreakBlot`)
 // en saut de page RÉEL dans le PDF généré.
 const PdfExport = (function () {
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate) {
+  // Standard conserve exactement le rendu historique ; high et print privilégient
+  // la résolution raster, avec compression jsPDF désactivée.
+  const QUALITY_PRESETS = {
+    standard: { label: 'Standard', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 } },
+    high: { label: 'Haute qualité', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 4 }, jsPDF: { compress: false } },
+    print: { label: 'Impression (HD)', image: { type: 'png' }, html2canvas: { scale: 6 }, jsPDF: { compress: false } }
+  };
+  function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.standard; }
+
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) {
     if (!record) {
       alert("Aucune ligne sélectionnée : impossible d'exporter en PDF.");
       return;
@@ -37,12 +46,13 @@ const PdfExport = (function () {
 
     document.body.appendChild(container);
 
+    const preset = getQualityPreset(quality);
     const opt = {
       margin: 10,
       filename: (filename || 'publipostage') + '.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      image: preset.image,
+      html2canvas: preset.html2canvas,
+      jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: 'portrait' }, preset.jsPDF || {}),
       // v1.4.0 — sauts de page forcés :
       //   - mode 'css' : html2pdf détecte tout élément portant
       //     `page-break-after: always` (cf. style.css `.page-break-marker`)
@@ -55,9 +65,9 @@ const PdfExport = (function () {
     };
 
     try {
-      console.log('[pdf-export] avant génération PDF:', opt.filename);
+      console.log('[pdf-export] avant génération PDF:', opt.filename, 'qualité=', preset.label);
       await html2pdf().set(opt).from(container).save();
-      console.log('[pdf-export] génération PDF terminée:', opt.filename);
+      console.log('[pdf-export] génération PDF terminée:', opt.filename, 'qualité=', preset.label);
     } finally {
       document.body.removeChild(container);
     }
