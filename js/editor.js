@@ -250,6 +250,17 @@ const Editor = (function () {
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
 
+    function positionTableToolbar() {
+      if (!activeCell || !tableTools.classList.contains('visible')) return;
+      const tableRect = activeCell.closest('.editable-table').getBoundingClientRect();
+      const toolbarRect = tableTools.getBoundingClientRect();
+      const top = Math.max(8, tableRect.top - toolbarRect.height - 6);
+      const left = Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8);
+      tableTools.style.position = 'fixed';
+      tableTools.style.top = `${top}px`;
+      tableTools.style.left = `${left}px`;
+    }
+
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
       if (!cell || !cell.closest('.editable-table')) {
@@ -259,7 +270,11 @@ const Editor = (function () {
       }
       activeCell = cell;
       tableTools.classList.add('visible');
+      positionTableToolbar();
     });
+
+    document.getElementById('editor-container').addEventListener('scroll', positionTableToolbar);
+    window.addEventListener('resize', positionTableToolbar);
 
     quill.root.addEventListener('mousedown', function (event) {
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
