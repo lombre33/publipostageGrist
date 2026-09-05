@@ -1,13 +1,9 @@
 // Éditeur Quill (snow theme) – publipostage Grist.
 // + variables #badge (v1.3.0)
-// + saut de page forcé à l'export PDF (v1.4.0)
+// + saut de page forcé à l’export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
 // + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
-// + alignement indépendant par colonne (v1.8.4) — la toolbar .ql-align
-//   cible désormais la colonne où se trouve la sélection, et le walker
-//   d'alignement de pdf-export.js suit l'ordre exact des blocs émis par
-//   htmlToPdfContent (en incluant les embeds .editable-table / .two-columns-zone).
 const Editor = (function () {
   let quill = null;
 
@@ -65,13 +61,16 @@ const Editor = (function () {
       node.classList.add('editable-table');
       node.setAttribute('contenteditable', 'false');
       let table = node.querySelector('table');
-      if (value && value.html) { node.innerHTML = value.html; table = node.querySelector('table'); }
-      if (!table) { table = document.createElement('table'); node.appendChild(table); }
+      if (!table) {
+        table = document.createElement('table');
+        table.innerHTML = '<tbody><tr><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td></tr></tbody>';
+        node.appendChild(table);
+      }
       if (!table.querySelector('tbody')) {
         const tbody = document.createElement('tbody');
         for (let r = 0; r < 2; r += 1) {
           const tr = document.createElement('tr');
-          for (let c = 0; c < 2; c += 1) { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; tr.appendChild(td); }
+          for (let c = 0; c < 2; c += 1) tr.appendChild(document.createElement('td'));
           tbody.appendChild(tr);
         }
         table.appendChild(tbody);
@@ -131,19 +130,24 @@ const Editor = (function () {
     const firstRow = table.rows[0];
     const count = firstRow.cells.length;
     let colgroup = table.querySelector(':scope > colgroup');
-    if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
+    if (!colgroup) {
+      colgroup = document.createElement('colgroup');
+      table.insertBefore(colgroup, table.firstChild);
+    }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
-    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
-    table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
     Array.from(firstRow.cells).forEach((cell, index) => {
-      if (index === firstRow.cells.length - 1) return;
-      const handle = document.createElement('span');
-      handle.className = 'table-col-resize-handle';
-      handle.setAttribute('aria-label', 'Redimensionner la colonne');
-      handle.setAttribute('contenteditable', 'false');
-      cell.appendChild(handle);
+      let handle = cell.querySelector(':scope > .table-col-resize-handle');
+      if (index === firstRow.cells.length - 1) {
+        if (handle) handle.remove();
+        return;
+      }
+      if (!handle) {
+        handle = document.createElement('span');
+        handle.className = 'table-col-resize-handle';
+        handle.setAttribute('contenteditable', 'false');
+        cell.appendChild(handle);
+      }
     });
   }
 
@@ -181,6 +185,21 @@ const Editor = (function () {
     if (!node) return null;
     const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return candidate && candidate.closest ? candidate.closest('.two-columns-column') : null;
+  }
+
+  // Résout la cellule de tableau (.editable-table td/th) qui contient la
+  // sélection courante. Sert de filet de sécurité dans le handler toolbar
+  // .ql-align quand `activeCell` (capturé au clic précédent) est obsolète.
+  function cellFromSelection() {
+    const sel = document.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const node = sel.anchorNode;
+    if (!node) return null;
+    const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    if (!candidate || !candidate.closest) return null;
+    const cell = candidate.closest('td, th');
+    if (!cell) return null;
+    return cell.closest('.editable-table') ? cell : null;
   }
 
   // Renvoie les blocs éditables directs d'une colonne (paragraphes et titres).
@@ -245,24 +264,27 @@ const Editor = (function () {
               quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
               quill.setSelection(range.index + 1, 0, Quill.sources.USER);
             },
-            // CORRECTIF bug 1 : handler natif Quill pour .ql-align neutralisé.
-            // Quill posait le format `align` sur le bloc racine de l'éditeur
-            // (à l'intérieur d'une .two-columns-zone c'est la zone entière,
-            // donc les deux colonnes étaient affectées en même temps).
-            // On délègue à applyColumnAlignment() quand la sélection est dans
-            // une colonne, à activeCell.style.textAlign si cellule de tableau,
-            // sinon on laisse Quill appliquer sur le bloc courant.
             align: function (value) {
-              if (activeCell) {
-                activeCell.style.textAlign = value === 'justify' ? 'justify' : (value || 'left');
+              const cell = activeCell || cellFromSelection();
+              if (cell) {
+                cell.style.textAlign = value === 'justify' ? 'justify' : (value || 'left');
+                activeCell = null;
+                activeTwoColumnsColumn = null;
                 quill.update(Quill.sources.USER);
                 return false;
               }
               const column = activeTwoColumnsColumn || columnFromSelection();
               if (column) {
                 applyColumnAlignment(column, value);
+                activeCell = null;
+                activeTwoColumnsColumn = null;
                 return false; // bloque le handler natif Quill
               }
+              // Texte normal hors tableau / hors colonne : on laisse Quill
+              // appliquer le format sur la sélection courante, sans toucher
+              // aux états internes partagés.
+              activeCell = null;
+              activeTwoColumnsColumn = null;
               const range = quill.getSelection(true);
               if (!range) return false;
               quill.format('align', value || false, Quill.sources.USER);
@@ -274,7 +296,6 @@ const Editor = (function () {
       }
     });
 
-    const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
       const redoBtn = toolbar.querySelector('.ql-redo');
@@ -293,7 +314,7 @@ const Editor = (function () {
       }
       if (pageBreakBtn) {
         pageBreakBtn.innerHTML = '⏎ Saut de page';
-        pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
+        pageBreakBtn.title = 'Insérer un saut de page forcé à l’export PDF';
       }
     }
 
@@ -315,13 +336,19 @@ const Editor = (function () {
 
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
-      if (!cell || !cell.closest('.editable-table')) {
-        tableTools.classList.remove('visible');
-        activeCell = null;
+      const column = event.target.closest && event.target.closest('.two-columns-column');
+      if (cell && cell.closest('.editable-table')) {
+        activeCell = cell;
+        activeTwoColumnsColumn = null;
+        tableTools.classList.add('visible');
         return;
       }
-      activeCell = cell;
-      tableTools.classList.add('visible');
+      activeCell = null;
+      // Mémorise la colonne cliquée (utilisée par handler `align` si l'utilisateur
+      // n'a pas bougé la sélection entre-temps) ; remet à null sinon pour ne
+      // JAMAIS laisser un état colonne persister hors d'une colonne (régression).
+      activeTwoColumnsColumn = column || null;
+      tableTools.classList.remove('visible');
     });
 
     quill.root.addEventListener('mousedown', function (event) {
@@ -381,12 +408,18 @@ const Editor = (function () {
     // cellule de tableau (le handler natif Quill ne traite pas les td/th).
     // Le cas colonne est géré par toolbar.handlers.align (au niveau du
     // bouton, avant Quill) — voir handler `align` ci-dessus.
+    // Utilise cellFromSelection() comme filet si activeCell (capturé au clic
+    // précédent) est obsolète, et réinitialise TOUJOURS les deux flags partagés
+    // après une opération cellule pour ne pas polluer le chemin "texte normal".
     if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
       if (!button) return;
-      if (!activeCell) return;
+      const cell = activeCell || cellFromSelection();
+      if (!cell) return;
       const value = button.getAttribute('data-value') || 'left';
-      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
+      cell.style.textAlign = value === 'justify' ? 'justify' : value;
+      activeCell = null;
+      activeTwoColumnsColumn = null;
       event.preventDefault();
       event.stopPropagation();
     }, true);
