@@ -167,6 +167,31 @@ const Editor = (function () {
     document.body.classList.add('resizing-table-column');
   }
 
+  function installTwoColumnsToolbarIsolation(toolbar) {
+    toolbar.addEventListener('mousedown', function (event) {
+      const button = event.target.closest && event.target.closest('button');
+      if (!button) return;
+      const selection = document.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const column = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer.closest('.two-columns-column')
+        : range.commonAncestorContainer.parentElement.closest('.two-columns-column');
+      if (!column) return;
+      const command = button.classList.contains('ql-bold') ? 'bold'
+        : button.classList.contains('ql-italic') ? 'italic'
+          : button.classList.contains('ql-underline') ? 'underline'
+            : button.classList.contains('ql-strike') ? 'strikeThrough' : null;
+      if (!command) return;
+      event.preventDefault();
+      event.stopPropagation();
+      column.focus();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand(command, false, null);
+    }, true);
+  }
+
   function init() {
     console.log('[Editor][1] Création toolbar...');
     console.log('[Editor][2] Création quill...');
@@ -212,6 +237,7 @@ const Editor = (function () {
     });
 
     const toolbar = document.querySelector('.ql-toolbar');
+    if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
     console.log('[Editor][3] quill.root disponible: ', !!quill.root);
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
