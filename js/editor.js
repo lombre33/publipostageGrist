@@ -226,7 +226,7 @@ const Editor = (function () {
         tableBtn.title = 'Insérer un tableau 2×2';
       }
       if (twoColsBtn) {
-        twoColsBtn.innerHTML = '▥ Zone 2 colonnes';
+        twoColsBtn.innerHTML = '▥ Zone à deux colonnes';
         twoColsBtn.title = 'Insérer une zone à deux colonnes';
       }
       if (pageBreakBtn) {
@@ -317,7 +317,7 @@ const Editor = (function () {
       quill.update(Quill.sources.USER);
     }, true);
 
-    toolbar.addEventListener('click', function (event) {
+    if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest('button');
       if (!button || !activeCell) return;
       event.preventDefault();
