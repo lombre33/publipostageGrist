@@ -3,7 +3,11 @@
 // + saut de page forcé à l'export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
-
+// + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
+// + alignement indépendant par colonne (v1.8.4) — la toolbar .ql-align
+//   cible désormais la colonne où se trouve la sélection, et le walker
+//   d'alignement de pdf-export.js suit l'ordre exact des blocs émis par
+//   htmlToPdfContent (en incluant les embeds .editable-table / .two-columns-zone).
 const Editor = (function () {
   let quill = null;
 
@@ -109,17 +113,19 @@ const Editor = (function () {
   Quill.register(TwoColumnsBlotClass);
 
   function ensureTwoColumnsGrip(zone) {
-    if (!zone) return;
+    if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return;
     let grip = zone.querySelector(':scope > .two-columns-resize-grip');
     if (!grip) {
       grip = document.createElement('div');
       grip.className = 'two-columns-resize-grip';
       grip.setAttribute('contenteditable', 'false');
-      grip.textContent = '⋮';
+      grip.setAttribute('aria-label', 'Redimensionner les colonnes');
       zone.appendChild(grip);
     }
   }
 
+  // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
+  // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
     const firstRow = table.rows[0];
@@ -128,11 +134,14 @@ const Editor = (function () {
     if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    firstRow.cells.forEach((cell, index) => {
-      cell.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
+    // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
+    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
+    table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
+    Array.from(firstRow.cells).forEach((cell, index) => {
       if (index === firstRow.cells.length - 1) return;
       const handle = document.createElement('span');
       handle.className = 'table-col-resize-handle';
+      handle.setAttribute('aria-label', 'Redimensionner la colonne');
       handle.setAttribute('contenteditable', 'false');
       cell.appendChild(handle);
     });
@@ -162,22 +171,34 @@ const Editor = (function () {
     document.body.classList.add('resizing-table-column');
   }
 
+  // Résout la colonne (.two-columns-column) qui contient la sélection courante.
+  // Utilisé par le handler toolbar .ql-align pour ne cibler que la colonne où
+  // se trouve le curseur (jamais les deux ni le conteneur global).
   function columnFromSelection() {
     const sel = document.getSelection();
     if (!sel || !sel.rangeCount) return null;
     const node = sel.anchorNode;
     if (!node) return null;
-    const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-    return el && el.closest ? el.closest('.two-columns-column') : null;
+    const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return candidate && candidate.closest ? candidate.closest('.two-columns-column') : null;
   }
 
+  // Renvoie les blocs éditables directs d'une colonne (paragraphes et titres).
+  // Sert à appliquer l'alignement uniquement à l'intérieur d'une colonne.
   function columnBlocks(column) {
-    return Array.from(column.children).filter(child => child.nodeType === Node.ELEMENT_NODE && !child.classList.contains('two-columns-marker'));
+    const sel = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre';
+    return Array.from(column.querySelectorAll(':scope > ' + sel))
+      .filter(n => !n.classList.contains('two-columns-marker'));
   }
 
+  // Applique un alignement à tous les blocs de la colonne cible, sans toucher
+  // à l'autre colonne ni à la racine du document. Efface les classes
+  // ql-align-* et force un style inline text-align pour rester
+  // indépendant du style hérité du conteneur (corrige la perte du justify).
   function applyColumnAlignment(column, value) {
     const v = value || 'left';
     columnBlocks(column).forEach(block => {
+      block.classList.remove('ql-align-center', 'ql-align-right', 'ql-align-justify');
       block.style.textAlign = v;
     });
     quill.update(Quill.sources.USER);
@@ -244,7 +265,7 @@ const Editor = (function () {
       }
       if (pageBreakBtn) {
         pageBreakBtn.innerHTML = '⏎ Saut de page';
-        pageBreakBtn.title = 'Insérer un saut de page à l’export PDF';
+        pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
       }
     }
 
@@ -260,6 +281,7 @@ const Editor = (function () {
     document.getElementById('editor-container').appendChild(tableTools);
 
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
+    quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
     let activeTwoColumnsColumn = null;
 
@@ -274,19 +296,11 @@ const Editor = (function () {
       tableTools.classList.add('visible');
     });
 
-    quill.root.addEventListener('click', function (event) {
-      const zone = event.target.closest && event.target.closest('.two-columns-zone');
-      const col = event.target.closest && event.target.closest('.two-columns-column');
-      if (col && zone) {
-        activeTwoColumnsColumn = col;
-        zone.classList.add('editing');
-      } else if (!event.target.closest('.two-columns-zone')) {
-        activeTwoColumnsColumn = null;
-        quill.root.querySelectorAll('.two-columns-zone.editing').forEach(item => item.classList.remove('editing'));
-      }
-    });
-
     quill.root.addEventListener('mousedown', function (event) {
+      // Mémorise la colonne cliquée : la toolbar .ql-align s'appuiera dessus
+      // si l'utilisateur n'a pas bougé la sélection avant de cliquer.
+      const colTarget = event.target.closest && event.target.closest('.two-columns-column');
+      if (colTarget) activeTwoColumnsColumn = colTarget;
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
       if (twoColumnsGrip) {
         const zone = twoColumnsGrip.closest('.two-columns-zone');
@@ -297,17 +311,16 @@ const Editor = (function () {
         const update = moveEvent => {
           const usableWidth = rect.width;
           if (!usableWidth) return;
-          const ratio = Math.min(0.8, Math.max(0.2, (moveEvent.clientX - rect.left) / usableWidth));
-          zone.style.setProperty('--col1-width', `${ratio * 100}%`);
+          const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100;
+          zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`);
         };
         const stop = () => {
           document.removeEventListener('mousemove', update);
-          document.body.classList.remove('resizing-two-columns');
+          document.removeEventListener('mouseup', stop);
           quill.update(Quill.sources.USER);
         };
         document.addEventListener('mousemove', update);
         document.addEventListener('mouseup', stop, { once: true });
-        document.body.classList.add('resizing-two-columns');
         return;
       }
       const handle = event.target.closest && event.target.closest('.table-col-resize-handle');
@@ -355,10 +368,11 @@ const Editor = (function () {
         return;
       }
       const column = activeTwoColumnsColumn || columnFromSelection();
-      if (!column) return; // let Quill's native toolbar handler handle normal text
-      applyColumnAlignment(column, value);
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      if (column) {
+        applyColumnAlignment(column, value);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     }, true);
 
     tableTools.addEventListener('click', function (event) {
@@ -380,10 +394,13 @@ const Editor = (function () {
       }
       if (action === 'remove-row' && table.rows.length > 1) row.remove();
       if (action === 'add-col-left' || action === 'add-col-right') {
-        table.querySelectorAll('tr').forEach(tr => tr.insertBefore(makeCell(), action.endsWith('left') ? tr.cells[col] : tr.cells[col].nextSibling));
+        Array.from(table.rows).forEach(r => r.insertBefore(
+          makeCell(),
+          action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling
+        ));
       }
-      if (action === 'remove-col' && table.rows[0].cells.length > 1) {
-        table.querySelectorAll('tr').forEach(tr => { if (tr.cells[col]) tr.cells[col].remove(); });
+      if (action === 'remove-col' && row.cells.length > 1) {
+        Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
       }
       ensureTableColumns(table);
       quill.update(Quill.sources.USER);
@@ -395,7 +412,7 @@ const Editor = (function () {
 
   function getQuill() { return quill; }
   function getHTML() { return quill.root.innerHTML; }
-  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); quill.update(Quill.sources.API); }
+  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
 
   return { init, getQuill, getHTML, setHTML };
 })();
