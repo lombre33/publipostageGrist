@@ -226,7 +226,7 @@ const Editor = (function () {
         tableBtn.title = 'Insérer un tableau 2×2';
       }
       if (twoColsBtn) {
-        twoColsBtn.innerHTML = '▥ Zone à deux colonnes';
+        twoColsBtn.innerHTML = '▥ Zone 2 colonnes';
         twoColsBtn.title = 'Insérer une zone à deux colonnes';
       }
       if (pageBreakBtn) {
