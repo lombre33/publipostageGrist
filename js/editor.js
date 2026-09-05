@@ -199,7 +199,12 @@ const Editor = (function () {
     const v = value || 'left';
     columnBlocks(column).forEach(block => {
       block.classList.remove('ql-align-center', 'ql-align-right', 'ql-align-justify');
-      block.style.textAlign = v;
+      if (v === 'center' || v === 'right' || v === 'justify') {
+        block.classList.add('ql-align-' + v);
+        block.style.textAlign = v;
+      } else {
+        block.style.textAlign = v;
+      }
     });
     quill.update(Quill.sources.USER);
   }
@@ -239,6 +244,29 @@ const Editor = (function () {
               if (!range) return;
               quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
               quill.setSelection(range.index + 1, 0, Quill.sources.USER);
+            },
+            // CORRECTIF bug 1 : handler natif Quill pour .ql-align neutralisé.
+            // Quill posait le format `align` sur le bloc racine de l'éditeur
+            // (à l'intérieur d'une .two-columns-zone c'est la zone entière,
+            // donc les deux colonnes étaient affectées en même temps).
+            // On délègue à applyColumnAlignment() quand la sélection est dans
+            // une colonne, à activeCell.style.textAlign si cellule de tableau,
+            // sinon on laisse Quill appliquer sur le bloc courant.
+            align: function (value) {
+              if (activeCell) {
+                activeCell.style.textAlign = value === 'justify' ? 'justify' : (value || 'left');
+                quill.update(Quill.sources.USER);
+                return false;
+              }
+              const column = activeTwoColumnsColumn || columnFromSelection();
+              if (column) {
+                applyColumnAlignment(column, value);
+                return false; // bloque le handler natif Quill
+              }
+              const range = quill.getSelection(true);
+              if (!range) return false;
+              quill.format('align', value || false, Quill.sources.USER);
+              return false;
             }
           }
         },
@@ -349,30 +377,18 @@ const Editor = (function () {
       quill.update(Quill.sources.USER);
     }, true);
 
-    // Handler toolbar .ql-align : trois branches disjointes
-    //   1. sélection dans une cellule de tableau -> applique sur la cellule (comportement historique)
-    //   2. sélection dans une colonne de .two-columns-zone -> applique UNIQUEMENT à cette colonne
-    //      (via applyColumnAlignment, jamais sur les deux ni sur le conteneur global)
-    //   3. ailleurs -> laisse la toolbar Quill par défaut s'appliquer (comportement historique)
-    // Le stopImmediatePropagation à l'étape 2 évite que Quill n'applique ensuite
-    // son alignement sur le bloc racine de l'éditeur, ce qui réappliquerait
-    // l'alignement aux DEUX colonnes.
+    // Handler capture-phase sur .ql-align conservé UNIQUEMENT pour le cas
+    // cellule de tableau (le handler natif Quill ne traite pas les td/th).
+    // Le cas colonne est géré par toolbar.handlers.align (au niveau du
+    // bouton, avant Quill) — voir handler `align` ci-dessus.
     if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
       if (!button) return;
+      if (!activeCell) return;
       const value = button.getAttribute('data-value') || 'left';
-      if (activeCell) {
-        activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      const column = activeTwoColumnsColumn || columnFromSelection();
-      if (column) {
-        applyColumnAlignment(column, value);
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
+      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
+      event.preventDefault();
+      event.stopPropagation();
     }, true);
 
     tableTools.addEventListener('click', function (event) {
