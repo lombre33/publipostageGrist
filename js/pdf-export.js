@@ -82,6 +82,9 @@ const PdfExport = (function () {
       Array.from(root.childNodes).forEach(collect);
       for (let i = 0; i < blocks.length && i < alignSources.length; i += 1) {
         const src = alignSources[i];
+        const isPlaceholder = src.classList &&
+          (src.classList.contains('editable-table') || src.classList.contains('two-columns-zone'));
+        if (isPlaceholder) continue; // preserve the index without imposing an embed's alignment
         const a = alignment(src);
         if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) {
           blocks[i].alignment = a;
