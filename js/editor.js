@@ -3,7 +3,6 @@
 // + saut de page forcé à l'export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
-// + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
 const Editor = (function () {
   let quill = null;
 
@@ -61,13 +60,20 @@ const Editor = (function () {
       node.classList.add('editable-table');
       node.setAttribute('contenteditable', 'false');
       let table = node.querySelector('table');
-      if (value && value.html) { node.innerHTML = value.html; table = node.querySelector('table'); }
-      if (!table) { table = document.createElement('table'); node.appendChild(table); }
+      if (!table) {
+        table = document.createElement('table');
+        node.appendChild(table);
+      }
       if (!table.querySelector('tbody')) {
         const tbody = document.createElement('tbody');
         for (let r = 0; r < 2; r += 1) {
           const tr = document.createElement('tr');
-          for (let c = 0; c < 2; c += 1) { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; tr.appendChild(td); }
+          for (let c = 0; c < 2; c += 1) {
+            const cell = document.createElement(c === 0 ? 'th' : 'td');
+            cell.contentEditable = 'true';
+            cell.innerHTML = '&nbsp;';
+            tr.appendChild(cell);
+          }
           tbody.appendChild(tr);
         }
         table.appendChild(tbody);
@@ -108,6 +114,42 @@ const Editor = (function () {
   TwoColumnsBlotClass.className = 'two-columns-zone';
   Quill.register(TwoColumnsBlotClass);
 
+  // Appliquer les formats au seul DOM de la colonne contenant la sélection.
+  function installTwoColumnsToolbarIsolation(toolbar) {
+    if (!toolbar) return;
+    let savedRange = null;
+    const activeColumn = range => {
+      if (!range) return null;
+      const start = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+      const end = range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement;
+      const column = start && start.closest('.two-columns-column');
+      return column && end && end.closest('.two-columns-column') === column ? column : null;
+    };
+    const saveSelection = () => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount && activeColumn(selection.getRangeAt(0))) savedRange = selection.getRangeAt(0).cloneRange();
+    };
+    quill.root.addEventListener('mouseup', saveSelection, true);
+    quill.root.addEventListener('keyup', saveSelection, true);
+    toolbar.addEventListener('mousedown', saveSelection, true);
+    toolbar.addEventListener('click', event => {
+      const control = event.target.closest('button, .ql-picker-item');
+      if (!control || !savedRange || !activeColumn(savedRange)) return;
+      const value = control.getAttribute('data-value') || '';
+      const commands = { 'ql-bold': ['bold'], 'ql-italic': ['italic'], 'ql-underline': ['underline'], 'ql-clean': ['removeFormat'], 'ql-align': [value === 'center' ? 'justifyCenter' : value === 'right' ? 'justifyRight' : value === 'justify' ? 'justifyFull' : 'justifyLeft'], 'ql-size': ['fontSize', { small: '2', large: '4', huge: '6' }[value] || '3'], 'ql-header': ['formatBlock', value ? 'H' + value : 'P'], 'ql-font': ['fontName', value] };
+      const key = Object.keys(commands).find(name => control.classList.contains(name) || control.closest('.' + name));
+      if (!key) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(savedRange);
+      document.execCommand(...commands[key]);
+      quill.update(Quill.sources.USER);
+      savedRange = selection.getRangeAt(0).cloneRange();
+    }, true);
+  }
+
   function ensureTwoColumnsGrip(zone) {
     if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return;
     let grip = zone.querySelector(':scope > .two-columns-resize-grip');
@@ -120,18 +162,14 @@ const Editor = (function () {
     }
   }
 
-  // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
-  // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
     const firstRow = table.rows[0];
     const count = firstRow.cells.length;
-    let colgroup = table.querySelector(':scope > colgroup');
+    let colgroup = table.querySelector('colgroup');
     if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
-    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
     table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
     Array.from(firstRow.cells).forEach((cell, index) => {
       if (index === firstRow.cells.length - 1) return;
@@ -145,16 +183,12 @@ const Editor = (function () {
 
   function resizeTableColumn(table, index, startX) {
     const firstRow = table.rows[0];
-    const colgroup = table.querySelector(':scope > colgroup');
-    if (!firstRow || !colgroup || !colgroup.children[index]) return;
     const startWidth = firstRow.cells[index].getBoundingClientRect().width;
-    const tableWidth = table.getBoundingClientRect().width;
     const onMove = event => {
-      const width = Math.max(40, startWidth + event.clientX - startX);
-      const widthPercent = tableWidth > 0 ? (width / tableWidth) * 100 : width;
-      colgroup.children[index].style.width = `${widthPercent}%`;
-      table.querySelectorAll('tr').forEach(row => {
-        if (row.cells[index]) row.cells[index].style.width = `${widthPercent}%`;
+      const delta = event.clientX - startX;
+      const newWidth = Math.max(40, startWidth + delta);
+      Array.from(table.rows).forEach(row => {
+        if (row.cells[index]) row.cells[index].style.width = `${newWidth}px`;
       });
     };
     const onUp = () => {
@@ -212,6 +246,7 @@ const Editor = (function () {
     });
 
     const toolbar = document.querySelector('.ql-toolbar');
+    installTwoColumnsToolbarIsolation(toolbar);
     console.log('[Editor][3] quill.root disponible: ', !!quill.root);
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
