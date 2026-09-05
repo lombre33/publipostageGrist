@@ -169,8 +169,10 @@ const Editor = (function () {
 
   function installTwoColumnsToolbarIsolation(toolbar) {
     toolbar.addEventListener('mousedown', function (event) {
-      const button = event.target.closest && event.target.closest('button');
-      if (!button) return;
+      const target = event.target;
+      const button = target.closest && target.closest('button');
+      const alignOption = target.closest && target.closest('.ql-align .ql-picker-item');
+      if (!button && !alignOption) return;
       const selection = document.getSelection();
       if (!selection || !selection.rangeCount) return;
       const range = selection.getRangeAt(0);
@@ -178,6 +180,19 @@ const Editor = (function () {
         ? range.commonAncestorContainer.closest('.two-columns-column')
         : range.commonAncestorContainer.parentElement.closest('.two-columns-column');
       if (!column) return;
+      if (alignOption) {
+        const value = alignOption.getAttribute('data-value') || '';
+        const alignPicker = alignOption.closest('.ql-align');
+        const label = alignPicker && alignPicker.querySelector('.ql-picker-label');
+        column.style.textAlign = value || 'left';
+        if (alignPicker) {
+          alignPicker.querySelectorAll('.ql-picker-item').forEach(item => item.classList.toggle('ql-active', item === alignOption));
+          if (label) label.setAttribute('data-value', value);
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const command = button.classList.contains('ql-bold') ? 'bold'
         : button.classList.contains('ql-italic') ? 'italic'
           : button.classList.contains('ql-underline') ? 'underline'
@@ -351,11 +366,28 @@ const Editor = (function () {
       quill.update(Quill.sources.USER);
     }, true);
 
+    function getRealActiveCell() {
+      const selection = window.getSelection && window.getSelection();
+      const nodes = [];
+      if (selection && selection.rangeCount) {
+        nodes.push(selection.anchorNode, selection.focusNode);
+      }
+      nodes.push(document.activeElement);
+      for (const node of nodes) {
+        const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+        const cell = element && element.closest && element.closest('.editable-table td, .editable-table th');
+        if (cell && cell.isContentEditable) return cell;
+      }
+      return null;
+    }
+
     if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button || !activeCell) return;
+      const cell = getRealActiveCell();
+      if (!button || !cell) return;
+      activeCell = cell;
       const value = button.getAttribute('data-value') || 'left';
-      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
+      cell.style.textAlign = value === 'justify' ? 'justify' : value;
       event.preventDefault();
       event.stopPropagation();
     }, true);
