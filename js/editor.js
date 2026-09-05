@@ -1,12 +1,12 @@
 // Éditeur Quill (snow theme) – publipostage Grist.
 // + variables #badge (v1.3.0)
-// + saut de page forcé à l’export PDF (v1.4.0)
+// + saut de page forcé à l'export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
 // + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
 // + alignement indépendant par colonne (v1.8.4) — la toolbar .ql-align
 //   cible désormais la colonne où se trouve la sélection, et le walker
-//   d’alignement de pdf-export.js suit l’ordre exact des blocs émis par
+//   d'alignement de pdf-export.js suit l'ordre exact des blocs émis par
 //   htmlToPdfContent (en incluant les embeds .editable-table / .two-columns-zone).
 const Editor = (function () {
   let quill = null;
@@ -124,7 +124,7 @@ const Editor = (function () {
     }
   }
 
-  // S’assure qu’un <colgroup> reflète le nombre de colonnes et que chaque cellule
+  // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
   // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
@@ -183,8 +183,8 @@ const Editor = (function () {
     return candidate && candidate.closest ? candidate.closest('.two-columns-column') : null;
   }
 
-  // Renvoie les blocs éditables directs d’une colonne (paragraphes et titres).
-  // Sert à appliquer l’alignement uniquement à l’intérieur d’une colonne.
+  // Renvoie les blocs éditables directs d'une colonne (paragraphes et titres).
+  // Sert à appliquer l'alignement uniquement à l'intérieur d'une colonne.
   function columnBlocks(column) {
     const sel = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre';
     return Array.from(column.querySelectorAll(':scope > ' + sel))
@@ -192,7 +192,7 @@ const Editor = (function () {
   }
 
   // Applique un alignement à tous les blocs de la colonne cible, sans toucher
-  // à l’autre colonne ni à la racine du document. Efface les classes
+  // à l'autre colonne ni à la racine du document. Efface les classes
   // ql-align-* et force un style inline text-align pour rester
   // indépendant du style hérité du conteneur (corrige la perte du justify).
   function applyColumnAlignment(column, value) {
