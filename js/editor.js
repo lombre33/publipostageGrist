@@ -121,7 +121,7 @@ const Editor = (function () {
   }
 
   // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
-  // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
+  // (sauf la dernière de chaque ligne) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
     const firstRow = table.rows[0];
@@ -131,15 +131,17 @@ const Editor = (function () {
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
     // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
-    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
+    // sur chaque ligne afin que le redimensionnement soit accessible partout dans le tableau.
     table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
-    Array.from(firstRow.cells).forEach((cell, index) => {
-      if (index === firstRow.cells.length - 1) return;
-      const handle = document.createElement('span');
-      handle.className = 'table-col-resize-handle';
-      handle.setAttribute('aria-label', 'Redimensionner la colonne');
-      handle.setAttribute('contenteditable', 'false');
-      cell.appendChild(handle);
+    Array.from(table.rows).forEach(row => {
+      Array.from(row.cells).forEach((cell, index) => {
+        if (index === row.cells.length - 1) return;
+        const handle = document.createElement('span');
+        handle.className = 'table-col-resize-handle';
+        handle.setAttribute('aria-label', 'Redimensionner la colonne');
+        handle.setAttribute('contenteditable', 'false');
+        cell.appendChild(handle);
+      });
     });
   }
 
