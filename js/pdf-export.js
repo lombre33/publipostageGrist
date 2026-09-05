@@ -28,6 +28,8 @@ const PdfExport = (function () {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
         const text = inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE });
         const pdfCell = { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true] };
+        const align = alignment(cell);
+        if (align) pdfCell.alignment = align;
         if (colSpan > 1) pdfCell.colSpan = colSpan;
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});
@@ -106,7 +108,11 @@ const PdfExport = (function () {
       }
       return blocks;
     });
-    const block = { columns: columns, columnGap: 16, margin: [0, 6, 0, 6] };
+    const pageWidth = 595.28;
+    const margins = 56;
+    const columnGap = 16;
+    const availableWidth = pageWidth - margins - columnGap;
+    const block = { columns: columns, columnWidths: [availableWidth / 2, availableWidth / 2], columnGap: columnGap, margin: [0, 6, 0, 6] };
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
   }
