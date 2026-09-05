@@ -1,11 +1,25 @@
 /* Publipostage Grist – stylesheet.
+   Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 
 /* === Typographie et mise en page de base === */
-
+html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
 body { display:flex; flex-direction:column; }
+#toolbar-top { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid #e1e5ea; background:#f7f9fb; }
+.template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:6px; }
+.template-bar label, .filename-bar label { font-size:.85em; color:#3a4654; }
+button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
+.var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
+#autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
+#autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
+#autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
+#ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
+#status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
+#editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
+#reader-container { flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
 /* === Éditeur Quill === */
 .ql-editor { min-height:240px; font-size: 14px; }
+.ql-toolbar.ql-snow { background:#f7f9fb; border-color:#cfd6dd; }
 
 /* === Tableaux éditables === */
 .editable-table { display:inline-block; margin: 8px 0; }
@@ -30,11 +44,14 @@ body { display:flex; flex-direction:column; }
 .editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
 .editable-table td, .editable-table th { text-align: inherit; }
 
-/*
-   Poignées de redimensionnement des colonnes
+/* === Slider de redimensionnement de colonnes (v1.8.2) ===
+   Poignee centree verticalement sur la hauteur de la cellule d'en-tete,
+   materialisee par un grip vertical central clairement visible.
+   - Ancre absolue : cellule d'en-tete (tr:first-child > td/th) en position:relative
+   - Recouvre la hauteur totale de la cellule -> cible de drag large et stable
    - Curseur ew-resize explicite
    - z-index eleve : reste au-dessus du contenu
-*/
+   - Grip central (::after) rend le slider visible et cliquable. */
 .table-col-resize-handle {
   position: absolute;
   top: 0;
@@ -60,19 +77,21 @@ body { display:flex; flex-direction:column; }
   background: #2c7be5;
   border-radius: 2px;
   opacity: 0.55;
+  transition: opacity .15s ease, height .15s ease, background .15s ease;
 }
-.table-col-resize-handle:hover {
+.editable-table tr:first-child > th:hover .table-col-resize-handle::after,
+.editable-table tr:first-child > td:hover .table-col-resize-handle::after {
   opacity: 1;
   height: 32px;
   background: #1f5dbf;
 }
+body.resizing-table-column { cursor: ew-resize; user-select: none; }
+body.resizing-table-column * { cursor: ew-resize !important; }
 
 /* === Saut de page forcé === */
-.ql-page-break {
-  border-top: 2px dashed #999;
-  margin: 16px 0;
-  page-break-after: always;
-}
+.page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
+#reader-container .page-break-marker { color: transparent; border-color: transparent; }
 
 /* === Mode lecture === */
+#reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 #reader-container p { margin: 6px 0; }
