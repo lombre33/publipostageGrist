@@ -134,13 +134,10 @@ const Editor = (function () {
     quill.root.addEventListener('keyup', rememberSelection, true);
     toolbar.addEventListener('mousedown', rememberSelection, true);
 
-    toolbar.addEventListener('click', event => {
-      const control = event.target.closest('button, .ql-picker-item');
-      if (!control || !savedRange) return;
-      const column = columnForRange(savedRange);
-      if (!column) return;
+    const applyControl = control => {
+      if (!control || !savedRange || !columnForRange(savedRange)) return false;
       const range = savedRange;
-      const value = control.getAttribute('data-value') || '';
+      const value = control.value || control.getAttribute('data-value') || '';
       let command = null;
       let commandValue = null;
       if (control.classList.contains('ql-bold')) command = 'bold';
@@ -159,14 +156,26 @@ const Editor = (function () {
       } else if (control.closest('.ql-header')) {
         command = 'formatBlock'; commandValue = value ? 'H' + value : 'P';
       }
-      if (!command) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      if (!command) return false;
       const selection = window.getSelection();
       selection.removeAllRanges(); selection.addRange(range);
       document.execCommand(command, false, commandValue);
       quill.update(Quill.sources.USER);
       savedRange = range.cloneRange();
+      return true;
+    };
+
+    toolbar.addEventListener('click', event => {
+      const control = event.target.closest('button, .ql-picker-item');
+      if (!control || !applyControl(control)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+    toolbar.addEventListener('change', event => {
+      const control = event.target.closest('select');
+      if (!control || !applyControl(control)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
     }, true);
   }
 
