@@ -1,16 +1,11 @@
 /* Publipostage Grist – stylesheet.
-   Palette claire, lisibilité et composants simples.
-*/
+   Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 
 /* === Typographie et mise en page de base === */
-:root { --blue:#2c7be5; --border:#cfd6dd; --muted:#6c757d; --panel:#f7f9fb; }
-* { box-sizing: border-box; }
-html, body { height:100%; margin:0; }
-body { display:flex; flex-direction:column; font-family: Arial, Helvetica, sans-serif; color:#1f2933; background:#f4f6f8; }
+html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
+body { display:flex; flex-direction:column; }
 button, input, select { font: inherit; }
-button { cursor:pointer; border:1px solid #b7c0c9; background:#fff; border-radius:4px; padding:5px 8px; }
-button:hover { background:#eef3f8; }
-input, select { border:1px solid #b7c0c9; border-radius:4px; padding:5px 7px; }
+button { cursor:pointer; }
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
 #toolbar-top { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid #e1e5ea; background:#f7f9fb; }
 .template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:6px; }
@@ -22,7 +17,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
 #status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
-#editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
+#editor-container { position:relative; flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 #reader-container { flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
 /* === Éditeur Quill === */
@@ -43,8 +38,8 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
-.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
-.two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 12px; height: 32px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; contenteditable: false; user-select: none; touch-action: none; }
+.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size:.68em; line-height:1; color:#6c757d; letter-spacing:.04em; text-transform:uppercase; user-select:none; pointer-events:none; }
+.two-columns-resize-grip { position:absolute; top:50%; left:var(--layout-left,50%); width:12px; height:32px; transform:translate(-50%,-50%); cursor:ew-resize; z-index:20; contenteditable:false; user-select:none; touch-action:none; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-marker { display: none; }
 #reader-container .two-columns-resize-grip { display: none; }
@@ -86,16 +81,19 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
   border-radius: 2px;
   opacity: 0.55;
 }
-.table-col-resize-handle:hover::after,
-.table-col-resize-handle:focus::after {
+.editable-table tr:first-child > th:hover .table-col-resize-handle::after,
+.editable-table tr:first-child > td:hover .table-col-resize-handle::after {
   opacity: 1;
   height: 32px;
   background: #1f5dbf;
 }
+body.resizing-table-column { cursor: ew-resize; user-select: none; }
+body.resizing-table-column * { cursor: ew-resize !important; }
 
 /* === Saut de page forcé === */
-.page-break-embed { display:block; height:0; border-top:2px dashed #6b7785; margin:14px 0; }
+.page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
+#reader-container .page-break-marker { color: transparent; border-color: transparent; }
 
 /* === Mode lecture === */
+#reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 #reader-container p { margin: 6px 0; }
-#reader-container .editable-table { display:block; }
