@@ -4,7 +4,6 @@
 /* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
 body { display:flex; flex-direction:column; }
-#app { display:flex; flex-direction:column; height:100%; min-height:0; }
 #toolbar-top { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid #e1e5ea; background:#f7f9fb; }
 .template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:6px; }
 .template-bar label, .filename-bar label { font-size:.85em; color:#3a4654; }
