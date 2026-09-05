@@ -167,56 +167,9 @@ const Editor = (function () {
     document.body.classList.add('resizing-table-column');
   }
 
-  // Résout la colonne (.two-columns-column) qui contient la sélection courante.
-  // Utilisé par le handler toolbar .ql-align pour ne cibler que la colonne où
-  // se trouve le curseur (jamais les deux ni le conteneur global).
-  function columnFromSelection() {
-    const sel = document.getSelection();
-    if (!sel || !sel.rangeCount) return null;
-    const node = sel.anchorNode;
-    if (!node) return null;
-    const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-    return candidate && candidate.closest ? candidate.closest('.two-columns-column') : null;
-  }
-
-  function cellFromSelection() {
-    const sel = document.getSelection();
-    if (!sel || !sel.rangeCount) return null;
-    const node = sel.anchorNode;
-    if (!node) return null;
-    const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-    if (!candidate || !candidate.closest) return null;
-    const cell = candidate.closest('td, th');
-    return cell && cell.closest('.editable-table') ? cell : null;
-  }
-
-  // Renvoie les blocs éditables directs d'une colonne (paragraphes et titres).
-  // Sert à appliquer l'alignement uniquement à l'intérieur d'une colonne.
-  function columnBlocks(column) {
-    const sel = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre';
-    return Array.from(column.querySelectorAll(':scope > ' + sel))
-      .filter(n => !n.classList.contains('two-columns-marker'));
-  }
-
-  // Applique un alignement à tous les blocs de la colonne cible, sans toucher
-  // à l'autre colonne ni à la racine du document. Efface les classes
-  // ql-align-* et force un style inline text-align pour rester
-  // indépendant du style hérité du conteneur (corrige la perte du justify).
-  function applyColumnAlignment(column, value) {
-    const v = value || 'left';
-    columnBlocks(column).forEach(block => {
-      block.classList.remove('ql-align-center', 'ql-align-right', 'ql-align-justify');
-      if (v === 'center' || v === 'right' || v === 'justify') {
-        block.classList.add('ql-align-' + v);
-        block.style.textAlign = v;
-      } else {
-        block.style.textAlign = v;
-      }
-    });
-    quill.update(Quill.sources.USER);
-  }
-
   function init() {
+    console.log('[Editor][1] Création toolbar...');
+    console.log('[Editor][2] Création quill...');
     quill = new Quill('#editor-container', {
       theme: 'snow',
       modules: {
@@ -251,36 +204,6 @@ const Editor = (function () {
               if (!range) return;
               quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
               quill.setSelection(range.index + 1, 0, Quill.sources.USER);
-            },
-            // CORRECTIF bug 1 : handler natif Quill pour .ql-align neutralisé.
-            // Quill posait le format `align` sur le bloc racine de l'éditeur
-            // (à l'intérieur d'une .two-columns-zone c'est la zone entière,
-            // donc les deux colonnes étaient affectées en même temps).
-            // On délègue à applyColumnAlignment() quand la sélection est dans
-            // une colonne, à activeCell.style.textAlign si cellule de tableau,
-            // sinon on laisse Quill appliquer sur le bloc courant.
-            align: function (value) {
-              const cell = activeCell || cellFromSelection();
-              if (cell) {
-                cell.style.textAlign = value === 'justify' ? 'justify' : (value || 'left');
-                activeCell = null;
-                activeTwoColumnsColumn = null;
-                quill.update(Quill.sources.USER);
-                return false;
-              }
-              const column = activeTwoColumnsColumn || columnFromSelection();
-              if (column) {
-                applyColumnAlignment(column, value);
-                activeCell = null;
-                activeTwoColumnsColumn = null;
-                return false; // bloque le handler natif Quill
-              }
-              activeCell = null;
-              activeTwoColumnsColumn = null;
-              const range = quill.getSelection(true);
-              if (!range) return false;
-              quill.format('align', value || false, Quill.sources.USER);
-              return false;
             }
           }
         },
@@ -289,6 +212,7 @@ const Editor = (function () {
     });
 
     const toolbar = document.querySelector('.ql-toolbar');
+    console.log('[Editor][3] quill.root disponible: ', !!quill.root);
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
       const redoBtn = toolbar.querySelector('.ql-redo');
@@ -325,33 +249,19 @@ const Editor = (function () {
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
-    let activeTwoColumnsColumn = null;
 
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
-      const column = event.target.closest && event.target.closest('.two-columns-column');
-      if (cell && cell.closest('.editable-table')) {
-        activeCell = cell;
-        activeTwoColumnsColumn = null;
-        tableTools.classList.add('visible');
+      if (!cell || !cell.closest('.editable-table')) {
+        tableTools.classList.remove('visible');
+        activeCell = null;
         return;
       }
-      activeCell = null;
-      activeTwoColumnsColumn = column || null;
-      tableTools.classList.remove('visible');
+      activeCell = cell;
+      tableTools.classList.add('visible');
     });
 
     quill.root.addEventListener('mousedown', function (event) {
-      const clickedCell = event.target.closest && event.target.closest('td,th');
-      if (clickedCell && clickedCell.closest('.editable-table')) {
-        activeCell = clickedCell;
-        activeTwoColumnsColumn = null;
-        tableTools.classList.add('visible');
-      }
-      // Mémorise la colonne cliquée : la toolbar .ql-align s'appuiera dessus
-      // si l'utilisateur n'a pas bougé la sélection avant de cliquer.
-      const colTarget = event.target.closest && event.target.closest('.two-columns-column');
-      if (colTarget) activeTwoColumnsColumn = colTarget;
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
       if (twoColumnsGrip) {
         const zone = twoColumnsGrip.closest('.two-columns-zone');
@@ -400,19 +310,11 @@ const Editor = (function () {
       quill.update(Quill.sources.USER);
     }, true);
 
-    // Handler capture-phase sur .ql-align conservé UNIQUEMENT pour le cas
-    // cellule de tableau (le handler natif Quill ne traite pas les td/th).
-    // Le cas colonne est géré par toolbar.handlers.align (au niveau du
-    // bouton, avant Quill) — voir handler `align` ci-dessus.
     if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button) return;
-      const cell = activeCell || cellFromSelection();
-      if (!cell) return;
+      if (!button || !activeCell) return;
       const value = button.getAttribute('data-value') || 'left';
-      cell.style.textAlign = value === 'justify' ? 'justify' : value;
-      activeCell = null;
-      activeTwoColumnsColumn = null;
+      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
       event.preventDefault();
       event.stopPropagation();
     }, true);
