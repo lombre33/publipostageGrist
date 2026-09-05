@@ -3,6 +3,7 @@
 // + saut de page forcé à l'export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
+// + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
 const Editor = (function () {
   let quill = null;
 
@@ -60,19 +61,13 @@ const Editor = (function () {
       node.classList.add('editable-table');
       node.setAttribute('contenteditable', 'false');
       let table = node.querySelector('table');
-      if (!table) {
-        table = document.createElement('table');
-        node.appendChild(table);
-      }
+      if (value && value.html) { node.innerHTML = value.html; table = node.querySelector('table'); }
+      if (!table) { table = document.createElement('table'); node.appendChild(table); }
       if (!table.querySelector('tbody')) {
         const tbody = document.createElement('tbody');
         for (let r = 0; r < 2; r += 1) {
           const tr = document.createElement('tr');
-          for (let c = 0; c < 2; c += 1) {
-            const td = document.createElement('td');
-            td.innerHTML = '<p><br></p>';
-            tr.appendChild(td);
-          }
+          for (let c = 0; c < 2; c += 1) { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; tr.appendChild(td); }
           tbody.appendChild(tr);
         }
         table.appendChild(tbody);
@@ -104,7 +99,7 @@ const Editor = (function () {
       return node;
     }
     static value(node) {
-      const cols = Array.from(node.children).filter(child => child.classList.contains('two-columns-column'));
+      const cols = node.querySelectorAll('.two-columns-column');
       return { cols: [cols[0] ? cols[0].innerHTML : '', cols[1] ? cols[1].innerHTML : ''] };
     }
   }
@@ -135,6 +130,8 @@ const Editor = (function () {
     if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
+    // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
+    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
     table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
     Array.from(firstRow.cells).forEach((cell, index) => {
       if (index === firstRow.cells.length - 1) return;
@@ -162,11 +159,12 @@ const Editor = (function () {
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('resizing-table-column');
       quill.update(Quill.sources.USER);
     };
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mouseup', onUp, { once: true });
+    document.body.classList.add('resizing-table-column');
   }
 
   function init() {
@@ -183,16 +181,16 @@ const Editor = (function () {
             [{ size: FontSize.whitelist }],
             [{ font: FontFamily.whitelist }],
             ['undo', 'redo'],
-            [{ color: [] }, { background: [] }],
+            ['page-break', 'insert-table', 'insert-two-columns'],
             ['clean']
           ],
           handlers: {
-            'undo': function () { quill.history.undo(); },
-            'redo': function () { quill.history.redo(); },
+            undo: function () { quill.history.undo(); },
+            redo: function () { quill.history.redo(); },
             'insert-table': function () {
               const range = quill.getSelection(true);
               if (!range) return;
-              quill.insertEmbed(range.index, 'editabletable', true, Quill.sources.USER);
+              quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER);
               quill.setSelection(range.index + 1, 0, Quill.sources.USER);
             },
             'insert-two-columns': function () {
@@ -204,21 +202,23 @@ const Editor = (function () {
             'page-break': function () {
               const range = quill.getSelection(true);
               if (!range) return;
-              quill.insertEmbed(range.index, 'pagebreak', true, Quill.sources.USER);
+              quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
               quill.setSelection(range.index + 1, 0, Quill.sources.USER);
             }
           }
-        }
+        },
+        history: { delay: 500, maxStack: 100, userOnly: true }
       }
     });
 
     const toolbar = document.querySelector('.ql-toolbar');
+    console.log('[Editor][3] quill.root disponible: ', !!quill.root);
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
       const redoBtn = toolbar.querySelector('.ql-redo');
+      const pageBreakBtn = toolbar.querySelector('.ql-page-break');
       const tableBtn = toolbar.querySelector('.ql-insert-table');
       const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns');
-      const pageBreakBtn = toolbar.querySelector('.ql-page-break');
       if (undoBtn) undoBtn.innerHTML = '↶';
       if (redoBtn) redoBtn.innerHTML = '↷';
       if (tableBtn) {
@@ -227,26 +227,26 @@ const Editor = (function () {
       }
       if (twoColsBtn) {
         twoColsBtn.innerHTML = '▥ Zone 2 colonnes';
-        twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables';
+        twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)';
       }
       if (pageBreakBtn) {
         pageBreakBtn.innerHTML = '⏎ Saut de page';
-        pageBreakBtn.title = 'Insérer un saut de page';
+        pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
       }
     }
 
     const tableTools = document.createElement('div');
     tableTools.className = 'table-context-toolbar';
-    tableTools.innerHTML = `
-      <button type="button" data-action="add-row-before" title="Ajouter une ligne au-dessus">＋Ligne ↑</button>
-      <button type="button" data-action="add-row-after" title="Ajouter une ligne en dessous">＋Ligne ↓</button>
-      <button type="button" data-action="delete-row" title="Supprimer la ligne">−Ligne</button>
-      <button type="button" data-action="add-col-before" title="Ajouter une colonne à gauche">＋Col ←</button>
-      <button type="button" data-action="add-col-after" title="Ajouter une colonne à droite">＋Col →</button>
-      <button type="button" data-action="delete-col" title="Supprimer la colonne">−Col</button>
-    `;
-    document.body.appendChild(tableTools);
+    tableTools.innerHTML =
+      '<button data-action="add-row-above">+ ligne au-dessus</button>' +
+      '<button data-action="add-row-below">+ ligne en dessous</button>' +
+      '<button data-action="remove-row">− ligne</button>' +
+      '<button data-action="add-col-left">+ colonne à gauche</button>' +
+      '<button data-action="add-col-right">+ colonne à droite</button>' +
+      '<button data-action="remove-col">− colonne</button>';
+    document.getElementById('editor-container').appendChild(tableTools);
 
+    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
 
@@ -264,10 +264,8 @@ const Editor = (function () {
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
       if (!cell || !cell.closest('.editable-table')) {
-        if (!event.target.closest('.table-context-toolbar')) {
-          tableTools.classList.remove('visible');
-          activeCell = null;
-        }
+        tableTools.classList.remove('visible');
+        activeCell = null;
         return;
       }
       activeCell = cell;
@@ -289,9 +287,8 @@ const Editor = (function () {
         const update = moveEvent => {
           const usableWidth = rect.width;
           if (!usableWidth) return;
-          const offset = moveEvent.clientX - rect.left;
-          const percent = Math.min(80, Math.max(20, (offset / usableWidth) * 100));
-          zone.style.setProperty('--layout-left', `${percent}%`);
+          const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100;
+          zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`);
         };
         const stop = () => {
           document.removeEventListener('mousemove', update);
@@ -299,7 +296,7 @@ const Editor = (function () {
           quill.update(Quill.sources.USER);
         };
         document.addEventListener('mousemove', update);
-        document.addEventListener('mouseup', stop);
+        document.addEventListener('mouseup', stop, { once: true });
         return;
       }
       const handle = event.target.closest && event.target.closest('.table-col-resize-handle');
@@ -307,30 +304,32 @@ const Editor = (function () {
       const cell = handle.closest('th, td');
       const table = handle.closest('table');
       if (!cell || !table) return;
-      const index = cell.cellIndex;
       event.preventDefault();
       event.stopPropagation();
-      resizeTableColumn(table, index, event.clientX);
+      resizeTableColumn(table, cell.cellIndex, event.clientX);
     });
 
+    // Paste sans saut de ligne parasite : on lit le `text/plain` brut et on insère
+    // le texte tel quel via `insertText` (qui préserve les \n existants du source
+    // mais n'ajoute rien quand le texte ne contient aucun retour à la ligne).
     quill.root.addEventListener('paste', function (event) {
-      const editableContainer = event.target.closest && event.target.closest('#editor-container');
+      const target = event.target;
+      const editableContainer = target && target.closest
+        && target.closest('.editable-table td, .editable-table th, .two-columns-column');
       if (!editableContainer) return;
       event.preventDefault();
       event.stopPropagation();
       const clipboard = event.clipboardData;
-      const html = clipboard ? clipboard.getData('text/html') : '';
       const text = clipboard ? clipboard.getData('text/plain') : '';
-      const range = quill.getSelection(true);
-      if (!range) return;
-      if (html) quill.clipboard.dangerouslyPasteHTML(range.index, html, 'user');
-      else if (text) quill.insertText(range.index, text.replace(/\r\n?/g, '\n'), 'user');
+      if (text) document.execCommand('insertText', false, text);
       quill.update(Quill.sources.USER);
     }, true);
 
-    tableTools.addEventListener('mousedown', function (event) {
-      const button = event.target.closest('button[data-action]');
+    if (toolbar) toolbar.addEventListener('click', function (event) {
+      const button = event.target.closest && event.target.closest('.ql-align');
       if (!button || !activeCell) return;
+      const value = button.getAttribute('data-value') || 'left';
+      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
       event.preventDefault();
       event.stopPropagation();
     }, true);
@@ -339,64 +338,40 @@ const Editor = (function () {
       const action = event.target.dataset.action;
       if (!action || !activeCell) return;
       const table = activeCell.closest('table');
-      if (!table) return;
       const row = activeCell.parentElement;
-      const index = activeCell.cellIndex;
-      const rows = Array.from(table.rows);
-      switch (action) {
-        case 'add-row-before': insertTableRow(table, row.rowIndex); break;
-        case 'add-row-after': insertTableRow(table, row.rowIndex + 1); break;
-        case 'delete-row': if (table.rows.length > 1) table.deleteRow(row.rowIndex); break;
-        case 'add-col-before': insertTableColumn(table, index); break;
-        case 'add-col-after': insertTableColumn(table, index + 1); break;
-        case 'delete-col': if (table.rows[0].cells.length > 1) Array.from(table.rows).forEach(r => r.deleteCell(index)); break;
+      const col = activeCell.cellIndex;
+      const makeCell = () => {
+        const td = document.createElement('td');
+        td.innerHTML = '&nbsp;';
+        td.contentEditable = 'true';
+        return td;
+      };
+      if (action === 'add-row-above' || action === 'add-row-below') {
+        const tr = document.createElement('tr');
+        for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell());
+        row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling);
+      }
+      if (action === 'remove-row' && table.rows.length > 1) row.remove();
+      if (action === 'add-col-left' || action === 'add-col-right') {
+        Array.from(table.rows).forEach(r => r.insertBefore(
+          makeCell(),
+          action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling
+        ));
+      }
+      if (action === 'remove-col' && row.cells.length > 1) {
+        Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
       }
       ensureTableColumns(table);
       quill.update(Quill.sources.USER);
     });
 
-    function insertTableRow(table, atIndex) {
-      const refRow = table.rows[Math.min(atIndex, table.rows.length) - 1] || table.rows[0];
-      const newRow = document.createElement('tr');
-      for (let c = 0; c < refRow.cells.length; c += 1) {
-        const td = document.createElement('td');
-        td.innerHTML = '<p><br></p>';
-        newRow.appendChild(td);
-      }
-      const target = table.rows[atIndex] || null;
-      table.tBodies[0].insertBefore(newRow, target);
-    }
-
-    function insertTableColumn(table, atIndex) {
-      Array.from(table.rows).forEach(row => {
-        const refCell = row.cells[Math.min(atIndex, row.cells.length) - 1] || row.cells[0];
-        const cell = document.createElement(refCell.tagName.toLowerCase());
-        cell.innerHTML = '<p><br></p>';
-        const target = row.cells[atIndex] || null;
-        row.insertBefore(cell, target);
-      });
-      const colgroup = table.querySelector(':scope > colgroup');
-      if (colgroup) {
-        const col = document.createElement('col');
-        const target = colgroup.children[atIndex] || null;
-        colgroup.insertBefore(col, target);
-      }
-    }
-
-    quill.on('text-change', function (delta, _old, source) {
-      if (source !== Quill.sources.USER) return;
-      quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-    });
-
-    return {
-      getQuill() { return quill; },
-      insertVarBadge(tableId, column, key) {
-        const range = quill.getSelection(true);
-        if (!range) return;
-        quill.insertEmbed(range.index, 'varbadge', { table: tableId, column, key }, Quill.sources.USER);
-      }
-    };
+    Variables.init(quill);
+    return quill;
   }
 
-  return { init };
+  function getQuill() { return quill; }
+  function getHTML() { return quill.root.innerHTML; }
+  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
+
+  return { init, getQuill, getHTML, setHTML };
 })();
