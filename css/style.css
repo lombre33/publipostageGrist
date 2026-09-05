@@ -4,8 +4,6 @@
 /* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
 body { display:flex; flex-direction:column; }
-button, input, select { font: inherit; }
-button { cursor:pointer; }
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
 #toolbar-top { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid #e1e5ea; background:#f7f9fb; }
 .template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:6px; }
@@ -38,8 +36,8 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
-.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size:.68em; line-height:1; color:#6c757d; letter-spacing:.04em; text-transform:uppercase; user-select:none; pointer-events:none; }
-.two-columns-resize-grip { position:absolute; top:50%; left:var(--layout-left,50%); width:12px; height:32px; transform:translate(-50%,-50%); cursor:ew-resize; z-index:20; contenteditable:false; user-select:none; touch-action:none; }
+.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
+.two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 12px; height: 32px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; contenteditable: false; user-select: none; touch-action: none; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-marker { display: none; }
 #reader-container .two-columns-resize-grip { display: none; }
