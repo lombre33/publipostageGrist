@@ -342,6 +342,12 @@ const Editor = (function () {
     });
 
     quill.root.addEventListener('mousedown', function (event) {
+      const clickedCell = event.target.closest && event.target.closest('td,th');
+      if (clickedCell && clickedCell.closest('.editable-table')) {
+        activeCell = clickedCell;
+        activeTwoColumnsColumn = null;
+        tableTools.classList.add('visible');
+      }
       // Mémorise la colonne cliquée : la toolbar .ql-align s'appuiera dessus
       // si l'utilisateur n'a pas bougé la sélection avant de cliquer.
       const colTarget = event.target.closest && event.target.closest('.two-columns-column');
