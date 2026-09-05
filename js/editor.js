@@ -108,6 +108,68 @@ const Editor = (function () {
   TwoColumnsBlotClass.className = 'two-columns-zone';
   Quill.register(TwoColumnsBlotClass);
 
+  // Quill sees the whole two-column BlockEmbed as one atomic blot. Keep the
+  // browser selection and apply toolbar formats to the selected column's DOM
+  // range instead of letting Toolbar#format target the whole embed.
+  function installTwoColumnsToolbarIsolation(toolbar) {
+    if (!toolbar) return;
+    let savedRange = null;
+    const columnForRange = range => {
+      if (!range || !range.commonAncestorContainer) return null;
+      const node = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+      const column = node && node.closest ? node.closest('.two-columns-column') : null;
+      if (!column || !column.closest('.two-columns-zone')) return null;
+      const endNode = range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? range.endContainer : range.endContainer.parentElement;
+      return endNode && endNode.closest && endNode.closest('.two-columns-column') === column ? column : null;
+    };
+    const rememberSelection = () => {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (columnForRange(range)) savedRange = range.cloneRange();
+    };
+    quill.root.addEventListener('mouseup', rememberSelection, true);
+    quill.root.addEventListener('keyup', rememberSelection, true);
+    toolbar.addEventListener('mousedown', rememberSelection, true);
+
+    toolbar.addEventListener('click', event => {
+      const control = event.target.closest('button, .ql-picker-item');
+      if (!control || !savedRange) return;
+      const column = columnForRange(savedRange);
+      if (!column) return;
+      const range = savedRange;
+      const value = control.getAttribute('data-value') || '';
+      let command = null;
+      let commandValue = null;
+      if (control.classList.contains('ql-bold')) command = 'bold';
+      else if (control.classList.contains('ql-italic')) command = 'italic';
+      else if (control.classList.contains('ql-underline')) command = 'underline';
+      else if (control.classList.contains('ql-clean')) command = 'removeFormat';
+      else if (control.closest('.ql-align')) {
+        const align = value || control.closest('.ql-align').getAttribute('data-value') || '';
+        command = align === 'center' ? 'justifyCenter' : align === 'right' ? 'justifyRight' : align === 'justify' ? 'justifyFull' : 'justifyLeft';
+      } else if (control.closest('.ql-color')) { command = 'foreColor'; commandValue = value || control.style.backgroundColor; }
+      else if (control.closest('.ql-background')) { command = 'backColor'; commandValue = value || control.style.backgroundColor; }
+      else if (control.closest('.ql-font')) { command = 'fontName'; commandValue = value || control.textContent.trim(); }
+      else if (control.closest('.ql-size')) {
+        const sizes = { small: '2', large: '4', huge: '6' };
+        command = 'fontSize'; commandValue = sizes[value] || '3';
+      } else if (control.closest('.ql-header')) {
+        command = 'formatBlock'; commandValue = value ? 'H' + value : 'P';
+      }
+      if (!command) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const selection = window.getSelection();
+      selection.removeAllRanges(); selection.addRange(range);
+      document.execCommand(command, false, commandValue);
+      quill.update(Quill.sources.USER);
+      savedRange = range.cloneRange();
+    }, true);
+  }
+
   function ensureTwoColumnsGrip(zone) {
     if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return;
     let grip = zone.querySelector(':scope > .two-columns-resize-grip');
@@ -120,8 +182,6 @@ const Editor = (function () {
     }
   }
 
-  // S'assure qu'un <colgroup> reflète le nombre de colonnes et que chaque cellule
-  // de la première ligne (sauf la dernière) reçoit une poignée de redimensionnement.
   function ensureTableColumns(table) {
     if (!table || !table.rows || !table.rows[0]) return;
     const firstRow = table.rows[0];
@@ -130,8 +190,6 @@ const Editor = (function () {
     if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
     while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
     while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    // Nettoie les anciennes poignées puis en ajoute une par colonne sauf la dernière,
-    // uniquement sur la première ligne (qui sert de référence visuelle aux en-têtes).
     table.querySelectorAll('.table-col-resize-handle').forEach(handle => handle.remove());
     Array.from(firstRow.cells).forEach((cell, index) => {
       if (index === firstRow.cells.length - 1) return;
@@ -159,12 +217,11 @@ const Editor = (function () {
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
-      document.body.classList.remove('resizing-table-column');
+      document.removeEventListener('mouseup', onUp);
       quill.update(Quill.sources.USER);
     };
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp, { once: true });
-    document.body.classList.add('resizing-table-column');
+    document.addEventListener('mouseup', onUp);
   }
 
   function init() {
@@ -212,6 +269,7 @@ const Editor = (function () {
     });
 
     const toolbar = document.querySelector('.ql-toolbar');
+    installTwoColumnsToolbarIsolation(toolbar);
     console.log('[Editor][3] quill.root disponible: ', !!quill.root);
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo');
@@ -227,24 +285,25 @@ const Editor = (function () {
       }
       if (twoColsBtn) {
         twoColsBtn.innerHTML = '▥ Zone 2 colonnes';
-        twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)';
+        twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables';
       }
       if (pageBreakBtn) {
         pageBreakBtn.innerHTML = '⏎ Saut de page';
-        pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)';
+        pageBreakBtn.title = 'Insérer un saut de page';
       }
     }
 
     const tableTools = document.createElement('div');
     tableTools.className = 'table-context-toolbar';
-    tableTools.innerHTML =
-      '<button data-action="add-row-above">+ ligne au-dessus</button>' +
-      '<button data-action="add-row-below">+ ligne en dessous</button>' +
-      '<button data-action="remove-row">− ligne</button>' +
-      '<button data-action="add-col-left">+ colonne à gauche</button>' +
-      '<button data-action="add-col-right">+ colonne à droite</button>' +
-      '<button data-action="remove-col">− colonne</button>';
-    document.getElementById('editor-container').appendChild(tableTools);
+    tableTools.innerHTML = `
+      <button type="button" data-action="add-row-before" title="Ajouter une ligne au-dessus">＋Ligne ↑</button>
+      <button type="button" data-action="add-row-after" title="Ajouter une ligne en dessous">＋Ligne ↓</button>
+      <button type="button" data-action="delete-row" title="Supprimer la ligne">−Ligne</button>
+      <button type="button" data-action="add-col-before" title="Ajouter une colonne à gauche">＋Col ←</button>
+      <button type="button" data-action="add-col-after" title="Ajouter une colonne à droite">＋Col →</button>
+      <button type="button" data-action="delete-col" title="Supprimer la colonne">−Col</button>
+    `;
+    document.body.appendChild(tableTools);
 
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
@@ -264,8 +323,10 @@ const Editor = (function () {
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
       if (!cell || !cell.closest('.editable-table')) {
-        tableTools.classList.remove('visible');
-        activeCell = null;
+        if (!event.target.closest('.table-context-toolbar')) {
+          tableTools.classList.remove('visible');
+          activeCell = null;
+        }
         return;
       }
       activeCell = cell;
@@ -287,8 +348,9 @@ const Editor = (function () {
         const update = moveEvent => {
           const usableWidth = rect.width;
           if (!usableWidth) return;
-          const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100;
-          zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`);
+          const offset = moveEvent.clientX - rect.left;
+          const percent = Math.min(80, Math.max(20, (offset / usableWidth) * 100));
+          zone.style.setProperty('--layout-left', `${percent}%`);
         };
         const stop = () => {
           document.removeEventListener('mousemove', update);
@@ -296,7 +358,7 @@ const Editor = (function () {
           quill.update(Quill.sources.USER);
         };
         document.addEventListener('mousemove', update);
-        document.addEventListener('mouseup', stop, { once: true });
+        document.addEventListener('mouseup', stop);
         return;
       }
       const handle = event.target.closest && event.target.closest('.table-col-resize-handle');
@@ -304,74 +366,47 @@ const Editor = (function () {
       const cell = handle.closest('th, td');
       const table = handle.closest('table');
       if (!cell || !table) return;
+      const index = cell.cellIndex;
       event.preventDefault();
       event.stopPropagation();
-      resizeTableColumn(table, cell.cellIndex, event.clientX);
+      resizeTableColumn(table, index, event.clientX);
     });
 
-    // Paste sans saut de ligne parasite : on lit le `text/plain` brut et on insère
-    // le texte tel quel via `insertText` (qui préserve les \n existants du source
-    // mais n'ajoute rien quand le texte ne contient aucun retour à la ligne).
     quill.root.addEventListener('paste', function (event) {
-      const target = event.target;
-      const editableContainer = target && target.closest
-        && target.closest('.editable-table td, .editable-table th, .two-columns-column');
+      const editableContainer = event.target.closest && event.target.closest('#editor-container');
       if (!editableContainer) return;
       event.preventDefault();
       event.stopPropagation();
       const clipboard = event.clipboardData;
+      const html = clipboard ? clipboard.getData('text/html') : '';
       const text = clipboard ? clipboard.getData('text/plain') : '';
-      if (text) document.execCommand('insertText', false, text);
+      const range = quill.getSelection(true);
+      if (!range) return;
+      if (html) quill.clipboard.dangerouslyPasteHTML(range.index, html, 'user');
+      else if (text) quill.insertText(range.index, text.replace(/\r\n?/g, '\n'), 'user');
       quill.update(Quill.sources.USER);
     }, true);
 
-    if (toolbar) toolbar.addEventListener('click', function (event) {
-      const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button || !activeCell) return;
-      const value = button.getAttribute('data-value') || 'left';
-      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
-      event.preventDefault();
-      event.stopPropagation();
-    }, true);
-
-    tableTools.addEventListener('click', function (event) {
-      const action = event.target.dataset.action;
-      if (!action || !activeCell) return;
-      const table = activeCell.closest('table');
-      const row = activeCell.parentElement;
-      const col = activeCell.cellIndex;
-      const makeCell = () => {
-        const td = document.createElement('td');
-        td.innerHTML = '&nbsp;';
-        td.contentEditable = 'true';
-        return td;
-      };
-      if (action === 'add-row-above' || action === 'add-row-below') {
-        const tr = document.createElement('tr');
-        for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell());
-        row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling);
-      }
-      if (action === 'remove-row' && table.rows.length > 1) row.remove();
-      if (action === 'add-col-left' || action === 'add-col-right') {
-        Array.from(table.rows).forEach(r => r.insertBefore(
-          makeCell(),
-          action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling
-        ));
-      }
-      if (action === 'remove-col' && row.cells.length > 1) {
-        Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
-      }
-      ensureTableColumns(table);
-      quill.update(Quill.sources.USER);
+    quill.on('text-change', function (delta, _old, source) {
+      if (source !== Quill.sources.USER) return;
+      quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
+      quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     });
 
-    Variables.init(quill);
-    return quill;
+    return {
+      getQuill() { return quill; },
+      insertVarBadge(tableId, column, key) {
+        const range = quill.getSelection(true);
+        if (!range) return;
+        quill.insertEmbed(range.index, 'varbadge', { table: tableId, column, key }, Quill.sources.USER);
+      }
+    };
   }
 
-  function getQuill() { return quill; }
   function getHTML() { return quill.root.innerHTML; }
-  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
+  function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
 
   return { init, getQuill, getHTML, setHTML };
 })();
+
+if (typeof window !== 'undefined') window.Editor = Editor;
