@@ -14,7 +14,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
 #status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
-#editor-container { position:relative; flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
+#editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 #reader-container { flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
 /* === Éditeur Quill === */
@@ -26,7 +26,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .editable-table table { border-collapse: collapse; table-layout: fixed; width: 100%; }
 .editable-table th, .editable-table td { border:1px solid #999; padding:6px 8px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .editable-table th { background:#eef3f8; }
-.table-context-toolbar { display:none; position:sticky; top:44px; left:14px; right:14px; background:#fff; border:1px solid #b7cdf2; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.12); border-radius:4px; gap:4px; z-index:50; }
+.table-context-toolbar { display:none; position:absolute; background:#fff; border:1px solid #b7cdf2; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.12); border-radius:4px; gap:4px; z-index:50; }
 .table-context-toolbar.visible { display:flex; flex-wrap:wrap; }
 .table-context-toolbar button { font-size: .8em; padding:3px 6px; }
 #reader-container table { width:100%; border-collapse:collapse; }
