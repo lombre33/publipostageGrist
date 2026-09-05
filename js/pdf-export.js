@@ -56,9 +56,8 @@ const PdfExport = (function () {
     const columns = colNodes.map(col => {
       const blocks = htmlToPdfContent(col.innerHTML);
       // collect() parcourt le DOM de la colonne en MIRROR exactement les
-      // règles de skip de htmlToPdfContent (page-break-marker / editable-table
-      // / two-columns-zone ne poussent pas de bloc, isBlock() pousse un bloc
-      // et ne récursive pas, les noeuds texte non vides poussent un bloc).
+      // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
+      // editable-table / two-columns-zone / isBlock() poussent un bloc).
       // L'ordre des sources collectées correspond donc 1-pour-1 à l'ordre
       // des blocs pdfmake produits par htmlToPdfContent, ce qui permet
       // d'aligner les indices sans avoir à dupliquer toute la logique.
@@ -70,8 +69,11 @@ const PdfExport = (function () {
         }
         if (n.nodeType !== Node.ELEMENT_NODE) return;
         if (n.classList.contains('page-break-marker')) return;
-        if (n.classList.contains('editable-table')) return;
-        if (n.classList.contains('two-columns-zone')) return;
+        // Ces embeds produisent eux aussi un bloc dans htmlToPdfContent ;
+        // les ajouter à alignSources préserve la correspondance d'indices
+        // (sinon les paragraphes qui les suivent seraient mal alignés).
+        if (n.classList.contains('editable-table')) { alignSources.push(n); return; }
+        if (n.classList.contains('two-columns-zone')) { alignSources.push(n); return; }
         if (isBlock(n)) { alignSources.push(n); return; }
         n.childNodes.forEach(collect);
       };

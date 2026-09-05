@@ -4,6 +4,10 @@
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
 // + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
+// + alignement indépendant par colonne (v1.8.4) — la toolbar .ql-align
+//   cible désormais la colonne où se trouve la sélection, et le walker
+//   d'alignement de pdf-export.js suit l'ordre exact des blocs émis par
+//   htmlToPdfContent (en incluant les embeds .editable-table / .two-columns-zone).
 const Editor = (function () {
   let quill = null;
 
@@ -167,6 +171,39 @@ const Editor = (function () {
     document.body.classList.add('resizing-table-column');
   }
 
+  // Résout la colonne (.two-columns-column) qui contient la sélection courante.
+  // Utilisé par le handler toolbar .ql-align pour ne cibler que la colonne où
+  // se trouve le curseur (jamais les deux ni le conteneur global).
+  function columnFromSelection() {
+    const sel = document.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const node = sel.anchorNode;
+    if (!node) return null;
+    const candidate = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return candidate && candidate.closest ? candidate.closest('.two-columns-column') : null;
+  }
+
+  // Renvoie les blocs éditables directs d'une colonne (paragraphes et titres).
+  // Sert à appliquer l'alignement uniquement à l'intérieur d'une colonne.
+  function columnBlocks(column) {
+    const sel = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre';
+    return Array.from(column.querySelectorAll(':scope > ' + sel))
+      .filter(n => !n.classList.contains('two-columns-marker'));
+  }
+
+  // Applique un alignement à tous les blocs de la colonne cible, sans toucher
+  // à l'autre colonne ni à la racine du document. Efface les classes
+  // ql-align-* et force un style inline text-align pour rester
+  // indépendant du style hérité du conteneur (corrige la perte du justify).
+  function applyColumnAlignment(column, value) {
+    const v = value || 'left';
+    columnBlocks(column).forEach(block => {
+      block.classList.remove('ql-align-center', 'ql-align-right', 'ql-align-justify');
+      block.style.textAlign = v;
+    });
+    quill.update(Quill.sources.USER);
+  }
+
   function init() {
     quill = new Quill('#editor-container', {
       theme: 'snow',
@@ -246,6 +283,7 @@ const Editor = (function () {
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     let activeCell = null;
+    let activeTwoColumnsColumn = null;
 
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('td,th');
@@ -259,6 +297,10 @@ const Editor = (function () {
     });
 
     quill.root.addEventListener('mousedown', function (event) {
+      // Mémorise la colonne cliquée : la toolbar .ql-align s'appuiera dessus
+      // si l'utilisateur n'a pas bougé la sélection avant de cliquer.
+      const colTarget = event.target.closest && event.target.closest('.two-columns-column');
+      if (colTarget) activeTwoColumnsColumn = colTarget;
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
       if (twoColumnsGrip) {
         const zone = twoColumnsGrip.closest('.two-columns-zone');
@@ -307,13 +349,29 @@ const Editor = (function () {
       quill.update(Quill.sources.USER);
     }, true);
 
+    // Handler toolbar .ql-align : trois branches disjointes
+    //   1. sélection dans une cellule de tableau -> applique sur la cellule (comportement historique)
+    //   2. sélection dans une colonne de .two-columns-zone -> applique UNIQUEMENT à cette colonne
+    //      (via applyColumnAlignment, jamais sur les deux ni sur le conteneur global)
+    //   3. ailleurs -> laisse la toolbar Quill par défaut s'appliquer (comportement historique)
+    // Le stopImmediatePropagation à l'étape 2 évite que Quill n'applique ensuite
+    // son alignement sur le bloc racine de l'éditeur, ce qui réappliquerait
+    // l'alignement aux DEUX colonnes.
     if (toolbar) toolbar.addEventListener('click', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button || !activeCell) return;
+      if (!button) return;
       const value = button.getAttribute('data-value') || 'left';
-      activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
+      if (activeCell) {
+        activeCell.style.textAlign = value === 'justify' ? 'justify' : value;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      const column = activeTwoColumnsColumn || columnFromSelection();
+      if (!column) return;
+      applyColumnAlignment(column, value);
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
     }, true);
 
     tableTools.addEventListener('click', function (event) {
