@@ -406,6 +406,7 @@ const Editor = (function () {
   }
 
   function init(selector) {
+    selector = selector || '#editor-container';
     const target = typeof selector === 'string' ? document.querySelector(selector) : selector;
     if (!target) throw new Error('Conteneur éditeur introuvable : ' + selector);
     quill = new Quill('#editor-container', {
