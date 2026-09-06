@@ -271,6 +271,38 @@ const Editor = (function () {
     imageToolbar.style.left = Math.min(Math.max(4, left), maxLeft) + 'px';
   }
 
+  // Mémorise, en plus de sa position CSS (relative à .ql-editor), la position
+  // de l'image RELATIVE au paragraphe qui la contient (data-anchor-off-*).
+  // Sert uniquement à l'export PDF (pdf-export.js) pour recaler une image en
+  // calque sur la position RÉELLE de son paragraphe telle que pdfmake la
+  // calcule, plutôt que sur une simple distance depuis le haut de l'éditeur :
+  // cette dernière ne tient pas compte du fait qu'un titre ou un paragraphe
+  // précédent peut occuper une hauteur différente en PDF qu'à l'écran (tailles
+  // de police, marges de bloc, interligne — tout ça diverge légèrement entre
+  // le rendu navigateur et le moteur de mise en page de pdfmake), ce qui
+  // décale verticalement toute image positionnée en absolu par rapport au
+  // texte qu'elle est censée recouvrir dès qu'il y a du contenu avant elle.
+  // Non calculé pour les images dans un tableau/zone 2 colonnes (mise en page
+  // PDF récursive séparée pour ces conteneurs, cf. pdf-export.js) : l'export
+  // retombe alors sur l'ancien calcul (marge de page + padding éditeur).
+  function updateAnchorOffset(img) {
+    if (img.closest('.two-columns-column, .editable-table')) {
+      delete img.dataset.anchorOffLeft;
+      delete img.dataset.anchorOffTop;
+      return;
+    }
+    const anchor = img.closest('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
+    if (!anchor || anchor === quill.root) {
+      delete img.dataset.anchorOffLeft;
+      delete img.dataset.anchorOffTop;
+      return;
+    }
+    const imgRect = img.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    img.dataset.anchorOffLeft = Math.round(imgRect.left - anchorRect.left);
+    img.dataset.anchorOffTop = Math.round(imgRect.top - anchorRect.top);
+  }
+
   // Bascule une image en calque "devant" / "derrière" le texte (position:absolute
   // + z-index, ancrée à sa position actuelle dans .ql-editor) ou la remet dans le
   // flux normal ("normal"). Le glisser-déposer prend ensuite le relais pour la
@@ -299,6 +331,7 @@ const Editor = (function () {
     img.dataset.layer = layer;
     img.classList.add('editor-image-floating');
     img.draggable = false;
+    updateAnchorOffset(img);
   }
 
   function updateImageToolbarState(img) {
@@ -546,6 +579,7 @@ const Editor = (function () {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
           quill.update(Quill.sources.USER);
+          updateAnchorOffset(floatingImg);
           positionImageHandles(floatingImg);
           positionAnchorMarker(floatingImg);
         };

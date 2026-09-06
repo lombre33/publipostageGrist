@@ -94,10 +94,28 @@ const PdfExport = (function () {
     image.width = Math.max(15, widthPx * PX_TO_PT);
     if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
     if (node.style.position === 'absolute') {
-      const leftPx = parseFloat(node.style.left) || 0;
-      const topPx = parseFloat(node.style.top) || 0;
-      const pad = getEditorPaddingPx();
-      image.absolutePosition = { x: PAGE_MARGIN_PT + (leftPx - pad.left) * PX_TO_PT, y: PAGE_MARGIN_PT + (topPx - pad.top) * PX_TO_PT };
+      // Si l'image porte data-anchor-off-left/top (editor.js:updateAnchorOffset),
+      // sa position a été mesurée en direct par rapport à SON PROPRE paragraphe,
+      // pas par rapport au haut de l'éditeur. On résout alors sa position finale
+      // (cf. resolveAnchoredImagePositions) en deux passes de mise en page
+      // pdfmake, à partir de la position RÉELLEMENT calculée par pdfmake pour ce
+      // paragraphe — la seule façon fiable de rester exact quel que soit ce qui
+      // précède l'image dans le document (titre, autres paragraphes...), leur
+      // hauteur en PDF ne coïncidant jamais exactement avec leur hauteur dans
+      // l'éditeur. Fallback (image sans ancre connue, ou dans un tableau/zone à
+      // 2 colonnes non couverts par ce mécanisme) : ancien calcul, marge de page
+      // + padding éditeur retranché.
+      const anchorLeft = node.dataset.anchorOffLeft;
+      const anchorTop = node.dataset.anchorOffTop;
+      if (anchorLeft !== undefined && anchorTop !== undefined) {
+        image._pendingOffset = { left: parseFloat(anchorLeft) || 0, top: parseFloat(anchorTop) || 0 };
+        image.absolutePosition = { x: 0, y: 0 }; // provisoire, résolu après la 1ère passe de mise en page
+      } else {
+        const leftPx = parseFloat(node.style.left) || 0;
+        const topPx = parseFloat(node.style.top) || 0;
+        const pad = getEditorPaddingPx();
+        image.absolutePosition = { x: PAGE_MARGIN_PT + (leftPx - pad.left) * PX_TO_PT, y: PAGE_MARGIN_PT + (topPx - pad.top) * PX_TO_PT };
+      }
       delete image.margin;
     } else {
       const align = node.dataset.align;
@@ -230,9 +248,10 @@ const PdfExport = (function () {
     const images = [];
     const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images);
     const blocks = [];
+    let block = null;
     let remainingPageBreak = pageBreakBefore;
     if (runs.length || !images.length) {
-      const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
+      block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
       const align = alignment(node); if (align) block.alignment = align;
       if (/^H[1-6]$/.test(tag)) block.bold = true;
       if (tag === 'LI') { block.text = [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs); block.margin[0] = 10; }
@@ -242,12 +261,32 @@ const PdfExport = (function () {
     }
     images.forEach(img => {
       const layer = img._layer; delete img._layer;
+      // Ancre l'image sur le bloc texte du MÊME paragraphe : c'est sa position
+      // pdfmake réelle (après mise en page, cf. resolveAnchoredImagePositions)
+      // qui sert de référence pour recalculer la position finale de l'image.
+      if (img._pendingOffset && block) img._anchorBlock = block;
       if (layer === 'behind' && behindImages) { behindImages.push(img); return; }
       if (layer === 'front' && frontImages) { frontImages.push(img); return; }
       if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
       blocks.push(img);
     });
     return blocks;
+  }
+  // Résout la position finale des images en calque ancrées (data-anchor-off-*,
+  // cf. pdfImageFromNode) une fois qu'une 1ère passe de mise en page pdfmake a
+  // rempli `.positions` sur leur bloc-paragraphe ancre. À appeler après avoir
+  // fait générer ce premier PDF "de mesure" (jamais montré à l'utilisateur).
+  function resolveAnchoredImagePositions(pendingImages) {
+    return pendingImages.map(img => {
+      const offset = img._pendingOffset;
+      const anchor = img._anchorBlock;
+      if (anchor && anchor.positions && anchor.positions[0]) {
+        return { x: anchor.positions[0].left + offset.left * PX_TO_PT, y: anchor.positions[0].top + offset.top * PX_TO_PT };
+      }
+      // Paragraphe ancre sans texte (image seule sur sa ligne) : pas de position
+      // pdfmake à lire, on retombe sur l'ancien calcul (marge de page).
+      return { x: PAGE_MARGIN_PT + offset.left * PX_TO_PT, y: PAGE_MARGIN_PT + offset.top * PX_TO_PT };
+    });
   }
   // Les images "derrière le texte" sont préfixées avant tout le reste du
   // contenu (peintes en premier, donc recouvertes par tout ce qui suit) et
@@ -315,7 +354,33 @@ const PdfExport = (function () {
     }));
     return wrapper.innerHTML;
   }
-  async function exportNativePdf(resolvedHtml, filename) { if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.'); const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml); const docDefinition = { pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [28, 28, 28, 28], defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE }, content: htmlToPdfContent(inlinedHtml), info: { title: filename || 'publipostage' } }; window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf'); }
+  function buildNativeDocDefinition(content, filename) {
+    return { pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [28, 28, 28, 28], defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE }, content, info: { title: filename || 'publipostage' } };
+  }
+  // S'il y a des images en calque ancrées (data-anchor-off-*), une 1ère passe de
+  // mise en page "de mesure" (jamais montrée à l'utilisateur, juste .getBuffer()
+  // pour forcer pdfmake à calculer .positions sur chaque bloc) donne la position
+  // RÉELLE de leur paragraphe ancre dans le PDF. On reconstruit alors le contenu
+  // à neuf (htmlToPdfContent est une fonction pure : rejouée sur le même HTML,
+  // elle produit des objets vierges, sans les métadonnées internes que pdfmake a
+  // écrites dans les objets de la 1ère passe) et on y reporte les positions
+  // ainsi résolues, dans le même ordre — pour la mise en page finale, la seule
+  // réellement écrite dans le fichier téléchargé/affiché.
+  async function resolveNativePdfContent(inlinedHtml, filename) {
+    let content = htmlToPdfContent(inlinedHtml);
+    const pending = content.filter(b => b && b._pendingOffset);
+    if (!pending.length) return content;
+    await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
+    const resolved = resolveAnchoredImagePositions(pending);
+    content = htmlToPdfContent(inlinedHtml);
+    content.filter(b => b && b._pendingOffset).forEach((img, i) => {
+      if (resolved[i]) img.absolutePosition = resolved[i];
+      delete img._pendingOffset;
+      delete img._anchorBlock;
+    });
+    return content;
+  }
+  async function exportNativePdf(resolvedHtml, filename) { if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.'); const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml); const content = await resolveNativePdfContent(inlinedHtml, filename); const docDefinition = buildNativeDocDefinition(content, filename); window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf'); }
   // Passe par la boîte de dialogue d'impression native du navigateur ("Enregistrer
   // au format PDF") plutôt que par un rendu canvas (html2canvas) ou une image
   // base64 (pdfmake). Les deux autres méthodes doivent RELIRE les pixels d'une
