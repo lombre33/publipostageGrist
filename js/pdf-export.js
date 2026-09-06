@@ -47,6 +47,25 @@ const PdfExport = (function () {
   // images rencontrées sont donc accumulées à part (floatingImages) pour être
   // ajoutées par l'appelant comme blocs de contenu indépendants.
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans exportNativePdf
+  // left/top d'une image en calque (editor.js:setImageLayer) sont capturés
+  // relatifs au bord EXTÉRIEUR de .ql-editor (getBoundingClientRect, qui
+  // inclut son propre padding CSS comme espace intérieur) — pas relatifs à
+  // l'endroit où le texte commence réellement à s'afficher. Ce padding
+  // (12/15px par défaut, 37px en mode "Aperçu format A4", volontairement
+  // choisi pour imiter visuellement la marge de la page PDF) doit donc être
+  // RETRANCHÉ avant d'ajouter PAGE_MARGIN_PT, sans quoi les deux marges se
+  // cumulent : une image callée bord à bord avec le texte se retrouvait
+  // décalée d'un plein padding éditeur vers la droite ET vers le bas dans le
+  // PDF (vérifié : padding 37px → x/y PDF à 55.75pt au lieu de 28/30pt, soit
+  // ~1cm d'écart dans les deux sens — plus visible horizontalement dans un
+  // document réel car le décalage vertical peut se confondre avec la dérive
+  // cumulative des marges de paragraphes qui précèdent l'image).
+  function getEditorPaddingPx() {
+    const editorEl = document.querySelector('.ql-editor');
+    if (!editorEl) return { left: 0, top: 0 };
+    const cs = getComputedStyle(editorEl);
+    return { left: parseFloat(cs.paddingLeft) || 0, top: parseFloat(cs.paddingTop) || 0 };
+  }
   // Construit le bloc image pdfmake à partir d'un <img class="editor-image"> déjà
   // en data URI, en px->pt standard (PX_TO_PT) dans TOUS les cas — y compris pour
   // la position absolue des images en calque devant/derrière.
@@ -77,7 +96,8 @@ const PdfExport = (function () {
     if (node.style.position === 'absolute') {
       const leftPx = parseFloat(node.style.left) || 0;
       const topPx = parseFloat(node.style.top) || 0;
-      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * PX_TO_PT, y: PAGE_MARGIN_PT + topPx * PX_TO_PT };
+      const pad = getEditorPaddingPx();
+      image.absolutePosition = { x: PAGE_MARGIN_PT + (leftPx - pad.left) * PX_TO_PT, y: PAGE_MARGIN_PT + (topPx - pad.top) * PX_TO_PT };
       delete image.margin;
     } else {
       const align = node.dataset.align;
