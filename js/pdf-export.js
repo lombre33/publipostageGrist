@@ -118,31 +118,59 @@ const PdfExport = (function () {
   }
   function blockFrom(node, pageBreakBefore) { const tag = node.tagName.toUpperCase(); if (tag === 'TABLE') return tableFrom(node, pageBreakBefore); if (tag === 'HR') return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }; const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }); const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] }; const align = alignment(node); if (align) block.alignment = align; if (/^H[1-6]$/.test(tag)) block.bold = true; if (tag === 'LI') { block.text = [{ text: '• ', ...({ fontSize: DEFAULT_FONT_SIZE }) }].concat(runs); block.margin[0] = 10; } if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; } if (pageBreakBefore) block.pageBreak = 'before'; return block; }
   function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blocks.push(blockFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); return blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; }
+  // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
+  // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
+  // On rastérise donc tout SVG en PNG via un aller-retour <img>/<canvas> avant de
+  // le transmettre.
+  function rasterizeSvgDataUri(dataUri) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 512;
+        canvas.height = img.naturalHeight || 512;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        try { resolve(canvas.toDataURL('image/png')); }
+        catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('Échec de décodage du SVG pour rastérisation'));
+      img.src = dataUri;
+    });
+  }
   // pdfmake exige une image en data URI base64 (ou une entrée "images" nommée) :
   // un simple src http(s)://... (upload Grist ou URL externe) n'est jamais
   // rendu, silencieusement. On convertit donc chaque <img class="editor-image">
-  // avant de construire le docDefinition ; en cas d'échec (réseau, CORS...), on
-  // marque l'image à ignorer plutôt que de faire planter tout l'export PDF.
+  // avant de construire le docDefinition (+ rastérisation si SVG, cf. ci-dessus) ;
+  // en cas d'échec (réseau, CORS...), on marque l'image à ignorer plutôt que de
+  // faire planter tout l'export PDF.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html || '';
     const images = Array.from(wrapper.querySelectorAll('img.editor-image'));
     await Promise.all(images.map(async img => {
-      const src = img.getAttribute('src') || '';
-      if (!src || src.startsWith('data:')) return;
+      let src = img.getAttribute('src') || '';
+      if (!src) return;
       try {
-        const resp = await fetch(src);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const blob = await resp.blob();
-        const dataUri = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
-          reader.readAsDataURL(blob);
-        });
-        img.setAttribute('src', dataUri);
+        if (!src.startsWith('data:')) {
+          console.log('[PdfExport] conversion base64 de', src);
+          const resp = await fetch(src);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          src = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
+            reader.readAsDataURL(blob);
+          });
+        }
+        if (src.startsWith('data:image/svg+xml')) {
+          console.log('[PdfExport] rastérisation SVG -> PNG pour', img.getAttribute('src'));
+          src = await rasterizeSvgDataUri(src);
+        }
+        img.setAttribute('src', src);
       } catch (e) {
-        console.warn('[PdfExport] image ignorée dans le PDF vectoriel (conversion base64 impossible) :', src, e);
+        console.warn('[PdfExport] image ignorée dans le PDF vectoriel (conversion impossible) :', img.getAttribute('src'), e);
         img.setAttribute('data-pdf-skip', '1');
       }
     }));
