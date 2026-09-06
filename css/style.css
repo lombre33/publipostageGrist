@@ -54,6 +54,8 @@ body { display:flex; flex-direction:column; }
   transition: background .12s ease, border-color .12s ease;
 }
 #toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
+.a4-toggle { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
+.a4-toggle input { accent-color: var(--accent); cursor: pointer; }
 #toolbar-top button::before { content:""; display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
 #btn-new::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
 #btn-save::before, #btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); }
@@ -84,6 +86,16 @@ body { display:flex; flex-direction:column; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
+/* Aperçu format A4 (case à cocher #toggle-a4-preview) : contraint .ql-editor à
+   la largeur de contenu réelle d'une page PDF A4 (page 595.28pt - 2×28pt de
+   marge = 539.28pt, converti en px standard 96/72 = 719px), pour que le texte
+   se répartisse sur les lignes exactement comme dans l'export PDF — utile en
+   particulier pour positionner une image en calque devant/derrière le texte
+   (cf. pdf-export.js, la position ne peut être fidèle que si l'éditeur et le
+   PDF font retomber le texte au même endroit). Purement visuel : ne change ni
+   le HTML enregistré, ni aucun comportement de l'éditeur. */
+#editor-container.a4-preview { background: var(--surface-sunken); }
+#editor-container.a4-preview .ql-editor { width: 719px; max-width: 100%; margin: 0 auto; padding: 37px; background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(20,28,46,.10); }
 /* z-index:0 (en plus de position:relative) : force #reader-container à établir
    son PROPRE contexte d'empilement local. Sans ça, son fond opaque (background:
    #fff) n'est qu'un enfant "en flux normal" du contexte d'empilement racine de
