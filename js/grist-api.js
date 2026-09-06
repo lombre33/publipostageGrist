@@ -268,13 +268,36 @@ const GristAPI = (function () {
     return row;
   }
 
+  // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré côté
+  // serveur), getAccessToken() renvoie un baseUrl avec un host interne injoignable
+  // depuis le navigateur (ex. 0.0.0.0). On le corrige en réutilisant l'origine de
+  // document.referrer (celle de la page Grist qui embarque ce widget en iframe),
+  // seul indice disponible côté client sans configuration serveur supplémentaire.
+  function fixBaseUrl(baseUrl) {
+    try {
+      const url = new URL(baseUrl);
+      if (['0.0.0.0', 'localhost', '127.0.0.1'].includes(url.hostname) && document.referrer) {
+        const ref = new URL(document.referrer);
+        url.protocol = ref.protocol;
+        url.hostname = ref.hostname;
+        url.port = ref.port;
+        return url.toString().replace(/\/$/, '');
+      }
+    } catch (e) {
+      console.warn('[GristAPI] fixBaseUrl: impossible d’analyser', baseUrl, e);
+    }
+    return baseUrl;
+  }
+
   // Jeton d'accès court terme (quelques minutes) réutilisé pour les appels REST
   // d'upload/téléchargement de pièces jointes, avec marge de sécurité avant expiration.
   async function getAccessTokenCached() {
     const now = Date.now();
     if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
     const info = await grist.docApi.getAccessToken({ readOnly: false });
-    _tokenCache = { token: info.token, baseUrl: info.baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
+    const baseUrl = fixBaseUrl(info.baseUrl);
+    if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
+    _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
     return _tokenCache;
   }
 
@@ -283,11 +306,16 @@ const GristAPI = (function () {
     const info = await getAccessTokenCached();
     const formData = new FormData();
     formData.append('upload', file, file.name || 'image');
-    const resp = await fetch(`${info.baseUrl}/attachments?auth=${info.token}`, {
-      method: 'POST',
-      body: formData
-    });
-    if (!resp.ok) throw new Error('Échec upload pièce jointe Grist (' + resp.status + ')');
+    const url = `${info.baseUrl}/attachments?auth=${info.token}`;
+    let resp;
+    try {
+      resp = await fetch(url, { method: 'POST', body: formData });
+    } catch (e) {
+      // Erreur réseau (CORS, host injoignable...) : on inclut l'URL cible (sans le
+      // jeton) dans le message pour permettre un diagnostic sans ouvrir les devtools.
+      throw new Error('Échec réseau vers ' + info.baseUrl + '/attachments (' + e.message + ')');
+    }
+    if (!resp.ok) throw new Error('Échec upload pièce jointe Grist (' + resp.status + ') — ' + info.baseUrl);
     const ids = await resp.json();
     const id = Array.isArray(ids) ? ids[0] : ids;
     if (!id) throw new Error('Réponse d’upload inattendue.');

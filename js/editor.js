@@ -122,11 +122,6 @@ const Editor = (function () {
     // dont la cible (e) n'est pas encore définie -> erreur "can't access property
     // 'readOnly', e is undefined".
     quill.update(Quill.sources.USER);
-    // Les poignées de redimensionnement ne sont sinon posées que sur les images déjà
-    // présentes au chargement (setHTML) : une image insérée en direct doit aussi les recevoir
-    // (ensureImageHandles est idempotente via un contrôle du DOM réel, donc un balayage
-    // complet reste bon marché et évite toute ambiguïté d'index/leaf juste après l'insertion).
-    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
     // Repositionne la sélection après l'image au prochain tick pour éviter le même
     // parcours findBlot sur un DOM en cours de mise à jour.
     const newIndex = range.index + 1;
@@ -155,73 +150,67 @@ const Editor = (function () {
 
   // --- UI resize/drag pour les images (upload ET URL, même blot .editor-image) ---
   let imageToolbar = null;
+  let imageHandles = null;
 
-  // Idempotente sur l'état RÉEL du DOM (pas seulement sur data-handle-ready) : un
-  // quill.update() reconcilie .ql-editor avec le modèle interne de Quill et supprime
-  // silencieusement les nœuds qu'il ne reconnaît pas (nos poignées), alors que
-  // l'attribut data-handle-ready, lui, reste posé sur l'image — sans cette vérification
-  // les poignées ne réapparaîtraient jamais après la première action sur l'image.
-  function ensureImageHandles(img) {
-    if (!img || !img.parentNode) return;
-    if (img.parentNode.querySelectorAll(':scope > .editor-image-handle').length >= 4) {
-      img.dataset.handleReady = '1';
-      return;
-    }
-    img.dataset.handleReady = '1';
-    img.setAttribute('contenteditable', 'false');
-    const isFloating = img.dataset.layer === 'front' || img.dataset.layer === 'behind';
-    if (isFloating) img.classList.add('editor-image-floating');
-    img.draggable = !isFloating;
+  // IMPORTANT : ces poignées vivent dans document.body, PAS dans .ql-editor. Quill
+  // pose un MutationObserver sur .ql-editor qui reconcilie le DOM avec son modèle
+  // interne à CHAQUE mutation (pas seulement après un quill.update() explicite) et
+  // efface au microtask suivant tout nœud injecté qu'il ne reconnaît pas comme blot
+  // — impossible donc de garder des poignées posées comme enfants de l'image ou de
+  // son paragraphe, elles seraient supprimées quasi instantanément. En les sortant
+  // de .ql-editor (comme .editor-image-toolbar, qui fonctionne déjà ainsi), elles
+  // échappent totalement à cette reconciliation. Un seul jeu de 4 poignées est créé
+  // et réutilisé pour l'image actuellement sélectionnée (repositionné à chaque fois).
+  function ensureImageHandlesOverlay() {
+    if (imageHandles) return imageHandles;
+    imageHandles = {};
     ['nw', 'ne', 'sw', 'se'].forEach(corner => {
       const handle = document.createElement('span');
       handle.className = 'editor-image-handle editor-image-handle-' + corner;
       handle.dataset.corner = corner;
       handle.contentEditable = 'false';
-      handle.style.display = 'none';
-      img.parentNode && img.parentNode.appendChild
-        ? img.parentNode.appendChild(handle)
-        : img.appendChild(handle);
+      document.body.appendChild(handle);
+      imageHandles[corner] = handle;
     });
+    return imageHandles;
   }
 
-  // Les poignées de coin sont positionnées en absolu par rapport au conteneur
-  // Quill (.ql-editor, position:relative) car le paragraphe hôte de l'image
-  // ne l'est pas nécessairement — c'est aussi ce conteneur qui sert de repère
-  // pour les images en calque devant/derrière le texte.
   function positionImageHandles(img) {
-    if (!img || !img.parentNode) return;
-    const container = img.closest('.ql-editor') || img.parentNode;
-    const handles = img.parentNode.querySelectorAll(':scope > .editor-image-handle');
-    if (!handles.length) return;
-    const imgRect = img.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const top = imgRect.top - containerRect.top + container.scrollTop;
-    const left = imgRect.left - containerRect.left + container.scrollLeft;
-    handles.forEach(h => {
-      const corner = h.dataset.corner;
-      h.style.top = (corner === 'nw' || corner === 'ne' ? top : top + imgRect.height) + 'px';
-      h.style.left = (corner === 'nw' || corner === 'sw' ? left : left + imgRect.width) + 'px';
-    });
+    const handles = ensureImageHandlesOverlay();
+    if (!img) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
+    const rect = img.getBoundingClientRect();
+    handles.nw.style.top = rect.top + 'px'; handles.nw.style.left = rect.left + 'px';
+    handles.ne.style.top = rect.top + 'px'; handles.ne.style.left = rect.right + 'px';
+    handles.sw.style.top = rect.bottom + 'px'; handles.sw.style.left = rect.left + 'px';
+    handles.se.style.top = rect.bottom + 'px'; handles.se.style.left = rect.right + 'px';
   }
 
   function setImageHandlesVisible(img, visible) {
-    if (!img || !img.parentNode) return;
-    if (visible) ensureImageHandles(img); // auto-guérison si un quill.update() ailleurs les a effacées
-    img.parentNode.querySelectorAll(':scope > .editor-image-handle').forEach(h => { h.style.display = visible ? 'block' : 'none'; });
-    if (visible) positionImageHandles(img);
+    const handles = ensureImageHandlesOverlay();
+    if (!visible) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
+    Object.values(handles).forEach(h => { h.style.display = 'block'; });
+    positionImageHandles(img);
   }
 
+  // Colle la barre d'outils juste au-dessus de l'image (ou en dessous s'il n'y a
+  // pas assez de place au-dessus, ex. image en haut de l'éditeur), et la maintient
+  // dans le viewport horizontalement. Mesure la taille réelle de la barre (rendue
+  // en position:fixed) plutôt qu'un décalage fixe arbitraire.
   function positionImageToolbar() {
     if (!imageToolbar) return;
     const img = quill && quill.root ? quill.root.querySelector('img.editor-image.editor-image-active') : null;
     if (!img) { imageToolbar.classList.remove('visible'); return; }
+    imageToolbar.classList.add('visible');
     const rect = img.getBoundingClientRect();
     const editorRect = quill.root.getBoundingClientRect();
-    const top = rect.top - editorRect.top - 32;
-    const left = rect.left - editorRect.left + rect.width / 2 - 110;
-    imageToolbar.style.top = (editorRect.top + Math.max(0, top)) + 'px';
-    imageToolbar.style.left = (editorRect.left + Math.max(0, left)) + 'px';
-    imageToolbar.classList.add('visible');
+    const toolbarRect = imageToolbar.getBoundingClientRect();
+    const gap = 8;
+    const spaceAbove = rect.top - Math.max(0, editorRect.top);
+    const top = spaceAbove >= toolbarRect.height + gap ? rect.top - toolbarRect.height - gap : rect.bottom + gap;
+    const left = rect.left + rect.width / 2 - toolbarRect.width / 2;
+    const maxLeft = Math.max(4, window.innerWidth - toolbarRect.width - 4);
+    imageToolbar.style.top = Math.max(4, top) + 'px';
+    imageToolbar.style.left = Math.min(Math.max(4, left), maxLeft) + 'px';
   }
 
   // Bascule une image en calque "devant" / "derrière" le texte (position:absolute
@@ -289,10 +278,8 @@ const Editor = (function () {
       return;
     }
     quill.update(Quill.sources.USER);
-    ensureImageHandles(img);
     setImageHandlesVisible(img, true);
     positionImageToolbar();
-    positionImageHandles(img);
     updateImageToolbarState(img);
   }
 
@@ -329,7 +316,6 @@ const Editor = (function () {
         if (!img) return;
         img.style.opacity = (parseInt(event.target.value, 10) / 100).toFixed(2);
         quill.update(Quill.sources.USER);
-        ensureImageHandles(img);
         setImageHandlesVisible(img, true);
       });
     }
@@ -384,7 +370,7 @@ const Editor = (function () {
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
     if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image'); const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; } if (imageBtn) { imageBtn.innerHTML = '🖼 Image'; imageBtn.title = 'Insérer une image (upload en pièce jointe Grist)'; } if (imageUrlBtn) { imageUrlBtn.innerHTML = '🔗 Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL externe'; } }
     const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar'; tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>'; document.getElementById('editor-container').appendChild(tableTools);
-    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles); let activeCell = null;
+    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
     function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
     quill.root.addEventListener('click', function (event) { const cell = event.target.closest && event.target.closest('td,th'); if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; } activeCell = cell; tableTools.classList.add('visible'); positionTableToolbar(); });
     quill.root.addEventListener('click', function (event) {
@@ -411,45 +397,46 @@ const Editor = (function () {
       const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
       if (activeImg) positionImageHandles(activeImg);
     });
-    quill.root.addEventListener('mousedown', function (event) {
+    // Les poignées de redimensionnement vivent dans document.body (cf. commentaire sur
+    // ensureImageHandlesOverlay), donc en dehors de quill.root : ce mousedown doit être
+    // posé sur document, pas sur quill.root, sans quoi il ne les verrait jamais.
+    document.addEventListener('mousedown', function (event) {
       const imgHandle = event.target.closest && event.target.closest('.editor-image-handle');
-      if (imgHandle) {
-        const img = imgHandle.parentNode && imgHandle.parentNode.querySelector ? imgHandle.parentNode.querySelector('img.editor-image') : null;
-        if (!img) return;
-        event.preventDefault(); event.stopPropagation();
-        const corner = imgHandle.dataset.corner;
-        const startX = event.clientX, startY = event.clientY;
-        const rect = img.getBoundingClientRect();
-        const startW = rect.width, startH = rect.height;
-        const aspect = startW / startH;
-        document.body.classList.add('resizing-editor-image');
-        const onMove = moveEvent => {
-          let dx = moveEvent.clientX - startX;
-          let dy = moveEvent.clientY - startY;
-          if (corner === 'nw') { dx = -dx; dy = -dy; }
-          else if (corner === 'ne') { dy = -dy; }
-          else if (corner === 'sw') { dx = -dx; }
-          let w = Math.max(40, startW + dx);
-          let h = Math.max(20, startH + dy);
-          if (moveEvent.shiftKey) h = w / aspect;
-          img.style.width = Math.round(w) + 'px';
-          img.style.height = Math.round(h) + 'px';
-          positionImageToolbar();
-          positionImageHandles(img);
-        };
-        const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          document.body.classList.remove('resizing-editor-image');
-          quill.update(Quill.sources.USER);
-          ensureImageHandles(img);
-          setImageHandlesVisible(img, true);
-          positionImageHandles(img);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp, { once: true });
-        return;
-      }
+      if (!imgHandle) return;
+      const img = quill.root.querySelector('img.editor-image.editor-image-active');
+      if (!img) return;
+      event.preventDefault(); event.stopPropagation();
+      const corner = imgHandle.dataset.corner;
+      const startX = event.clientX, startY = event.clientY;
+      const rect = img.getBoundingClientRect();
+      const startW = rect.width, startH = rect.height;
+      const aspect = startW / startH;
+      document.body.classList.add('resizing-editor-image');
+      const onMove = moveEvent => {
+        let dx = moveEvent.clientX - startX;
+        let dy = moveEvent.clientY - startY;
+        if (corner === 'nw') { dx = -dx; dy = -dy; }
+        else if (corner === 'ne') { dy = -dy; }
+        else if (corner === 'sw') { dx = -dx; }
+        let w = Math.max(40, startW + dx);
+        let h = Math.max(20, startH + dy);
+        if (moveEvent.shiftKey) h = w / aspect;
+        img.style.width = Math.round(w) + 'px';
+        img.style.height = Math.round(h) + 'px';
+        positionImageToolbar();
+        positionImageHandles(img);
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.classList.remove('resizing-editor-image');
+        quill.update(Quill.sources.USER);
+        positionImageHandles(img);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp, { once: true });
+    });
+    quill.root.addEventListener('mousedown', function (event) {
       const floatingImg = event.target.closest && event.target.closest('.editor-image.editor-image-floating');
       if (floatingImg) {
         event.preventDefault();
@@ -466,8 +453,6 @@ const Editor = (function () {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
           quill.update(Quill.sources.USER);
-          ensureImageHandles(floatingImg);
-          setImageHandlesVisible(floatingImg, true);
           positionImageHandles(floatingImg);
         };
         document.addEventListener('mousemove', onMove);
@@ -523,20 +508,19 @@ const Editor = (function () {
     Variables.init(quill); return quill;
   }
   function getQuill() { return quill; }
-  // Les poignées de redimensionnement, la poignée 2-colonnes et les poignées de
-  // colonnes de tableau sont de simples enfants DOM injectés pour l'édition : elles
-  // ne doivent jamais polluer le HTML persisté (ni bloquer leur recréation au
-  // prochain chargement via data-handle-ready).
+  // La poignée 2-colonnes et les poignées de colonnes de tableau sont de simples
+  // enfants DOM injectés pour l'édition : elles ne doivent jamais polluer le HTML
+  // persisté (les poignées de redimensionnement d'image, elles, vivent hors de
+  // quill.root — cf. ensureImageHandlesOverlay — donc n'ont pas besoin d'être
+  // nettoyées ici).
   function getHTML() {
     const clone = quill.root.cloneNode(true);
-    clone.querySelectorAll('.editor-image-handle, .two-columns-resize-grip, .table-col-resize-handle').forEach(el => el.remove());
-    clone.querySelectorAll('.editor-image').forEach(img => img.removeAttribute('data-handle-ready'));
+    clone.querySelectorAll('.two-columns-resize-grip, .table-col-resize-handle').forEach(el => el.remove());
     return clone.innerHTML;
   }
   function setHTML(html) {
     quill.root.innerHTML = html || '';
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
     // Le src des pièces jointes n'est jamais fiable dans le HTML enregistré (le jeton
     // d'accès expire après quelques minutes) : on le régénère à chaque chargement.
     GristAPI.hydrateAttachmentImages(quill.root).catch(function (e) { console.warn('[Editor] hydratation des images échouée', e); });

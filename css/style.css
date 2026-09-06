@@ -102,7 +102,10 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
 .editor-image:hover, .editor-image.editor-image-active { outline-color: #1f5dbf; }
 .editor-image.editor-image-floating { cursor: move; }
-.editor-image-toolbar { display: none; z-index: 10000; padding: 3px; background: #1f2d3d; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
+/* position:fixed est indispensable : sans elle, top/left posés en JS (coordonnées
+   viewport via getBoundingClientRect) n'ont aucun effet et la barre retombe dans
+   le flux normal, tout en bas du document (dernier enfant de <body>). */
+.editor-image-toolbar { display: none; position: fixed; z-index: 10000; padding: 3px; background: #1f2d3d; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
 .editor-image-toolbar.visible { display: block; }
 .editor-image-toolbar button { min-width: 25px; height: 25px; padding: 0 5px; margin: 0 1px; border: 0; border-radius: 3px; color: #fff; background: transparent; cursor: pointer; }
 .editor-image-toolbar button:hover { background: #3977c8; }
@@ -110,7 +113,14 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image-toolbar-sep { display: inline-block; width: 1px; height: 16px; background: rgba(255,255,255,.25); margin: 0 3px; vertical-align: middle; }
 .editor-image-opacity { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-size: 12px; padding: 0 3px; vertical-align: middle; }
 .editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; }
-.editor-image-handle { position: absolute; z-index: 9999; display: none; width: 9px; height: 9px; margin: -5px; border: 1px solid #fff; border-radius: 50%; background: #1f5dbf; cursor: nwse-resize; }
+/* Poignées volontairement grandes et contrastées (carré blanc, bordure bleue
+   épaisse) : ce sont elles qui portent le redimensionnement libre — les boutons
+   de zoom +/- de la barre d'outils ne sont qu'un raccourci rapide en +/-25%.
+   position:fixed (coordonnées viewport, comme .editor-image-toolbar) : ces
+   poignées vivent dans document.body, hors de .ql-editor, pour échapper à la
+   reconciliation DOM de Quill qui les effacerait sinon en quelques millisecondes. */
+.editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid #1f5dbf; border-radius: 3px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
+.editor-image-handle:hover { background: #eaf2ff; }
 .editor-image-handle-nw { cursor: nwse-resize; }
 .editor-image-handle-ne { cursor: nesw-resize; }
 .editor-image-handle-sw { cursor: nesw-resize; }
