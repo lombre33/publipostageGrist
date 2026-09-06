@@ -12,7 +12,16 @@ const PdfExport = (function () {
   function cssSize(value, fallback) { const n = parseFloat(value); return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback; }
   function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); return match ? match[1].toLowerCase() : undefined; }
   function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp(name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const out = Object.assign({}, parent); if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') out.decoration = 'underline'; if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration') && /underline/i.test(css('text-decoration'))) out.decoration = 'underline'; if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); return out; }
-  function inlineRuns(node, parentStyle) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (node.hasAttribute('data-pdf-skip') || !(node.getAttribute('src') || '').startsWith('data:')) return []; const image = { image: node.getAttribute('src'), width: Math.max(20, parseFloat(node.style.width) || 320), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] }; return [image]; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style)); }); return runs; }
+  // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" — un objet
+  // { image: ... } glissé dans un tableau assigné à la propriété `text` d'un
+  // bloc pdfmake n'est PAS une syntaxe valide (`text` attend des runs de texte
+  // uniquement) : pdfmake ne plante pas, il ignore juste l'entrée en silence.
+  // C'était le vrai bug derrière "aucune image dans le PDF vectoriel" — ni CORS
+  // ni SVG (déjà corrigés par ailleurs) n'y étaient pour quelque chose : une
+  // image atteignant bien inlineRuns() était de toute façon perdue ensuite. Les
+  // images rencontrées sont donc accumulées à part (floatingImages) pour être
+  // ajoutées par l'appelant comme blocs de contenu indépendants.
+  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push({ image: node.getAttribute('src'), width: Math.max(20, parseFloat(node.style.width) || 320), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] }); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
@@ -116,8 +125,36 @@ const PdfExport = (function () {
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
   }
-  function blockFrom(node, pageBreakBefore) { const tag = node.tagName.toUpperCase(); if (tag === 'TABLE') return tableFrom(node, pageBreakBefore); if (tag === 'HR') return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }; const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }); const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] }; const align = alignment(node); if (align) block.alignment = align; if (/^H[1-6]$/.test(tag)) block.bold = true; if (tag === 'LI') { block.text = [{ text: '• ', ...({ fontSize: DEFAULT_FONT_SIZE }) }].concat(runs); block.margin[0] = 10; } if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; } if (pageBreakBefore) block.pageBreak = 'before'; return block; }
-  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blocks.push(blockFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); return blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; }
+  // Retourne toujours un TABLEAU de blocs pdfmake (jamais un bloc unique) : un
+  // paragraphe contenant une image doit produire un bloc de texte ET un bloc
+  // image séparés (cf. note sur inlineRuns — une image ne peut pas être un run
+  // de texte). L'image suit le texte du même paragraphe plutôt que d'être
+  // repositionnée littéralement au milieu de la phrase, pdfmake ne supportant
+  // pas d'image réellement "en ligne" dans un flux de texte.
+  function blockFrom(node, pageBreakBefore) {
+    const tag = node.tagName.toUpperCase();
+    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
+    if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
+    const images = [];
+    const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images);
+    const blocks = [];
+    let remainingPageBreak = pageBreakBefore;
+    if (runs.length || !images.length) {
+      const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] };
+      const align = alignment(node); if (align) block.alignment = align;
+      if (/^H[1-6]$/.test(tag)) block.bold = true;
+      if (tag === 'LI') { block.text = [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs); block.margin[0] = 10; }
+      if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; }
+      if (remainingPageBreak) { block.pageBreak = 'before'; remainingPageBreak = false; }
+      blocks.push(block);
+    }
+    images.forEach(img => {
+      if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
+      blocks.push(img);
+    });
+    return blocks;
+  }
+  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); return blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; }
   // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
   // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
   // On rastérise donc tout SVG en PNG via un aller-retour <img>/<canvas> avant de
