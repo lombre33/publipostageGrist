@@ -3,6 +3,7 @@
 // + saut de page forcé à l’export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
+// + module image (upload PJ Grist + URL, resize, opacité) (v1.9.0)
 
 const Editor = (function () {
   let quill = null;
@@ -33,6 +34,29 @@ const Editor = (function () {
   VarBadgeBlot.tagName = 'span';
   VarBadgeBlot.className = 'var-badge';
   Quill.register(VarBadgeBlot);
+
+  class ImageBlot extends Embed {
+    static create(value) {
+      const node = super.create();
+      const data = value || {};
+      node.setAttribute('src', data.src || '');
+      node.setAttribute('alt', data.alt || 'Image');
+      node.setAttribute('contenteditable', 'false');
+      node.setAttribute('draggable', 'true');
+      node.dataset.source = data.source || 'url';
+      if (data.attachmentId) node.dataset.attachmentId = String(data.attachmentId);
+      if (data.column) node.dataset.column = data.column;
+      node.style.width = data.width || '320px';
+      node.style.opacity = data.opacity == null ? '1' : String(data.opacity);
+      node.dataset.wrap = data.wrap || 'inline';
+      node.classList.add('editor-image');
+      return node;
+    }
+    static value(node) {
+      return { src: node.getAttribute('src') || '', alt: node.getAttribute('alt') || '', source: node.dataset.source || 'url', attachmentId: node.dataset.attachmentId || '', column: node.dataset.column || '', width: node.style.width || '', opacity: node.style.opacity || '1', wrap: node.dataset.wrap || 'inline' };
+    }
+  }
+  ImageBlot.blotName = 'imagex'; ImageBlot.tagName = 'img'; ImageBlot.className = 'editor-image'; Quill.register(ImageBlot);
 
   const BlockEmbed = Quill.import('blots/block/embed');
   class PageBreakBlot extends BlockEmbed {
@@ -72,6 +96,22 @@ const Editor = (function () {
 
   function installTwoColumnsToolbarIsolation(toolbar) { toolbar.addEventListener('mousedown', function (event) { const button = event.target.closest && event.target.closest('button'); if (!button) return; const selection = document.getSelection(); if (!selection || !selection.rangeCount) return; const range = selection.getRangeAt(0); const column = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer.closest('.two-columns-column') : range.commonAncestorContainer.parentElement.closest('.two-columns-column'); if (!column) return; const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : null; if (!command) return; event.preventDefault(); event.stopPropagation(); column.focus(); selection.removeAllRanges(); selection.addRange(range); document.execCommand(command, false, null); }, true); }
 
+  function insertImage(value) { const range = quill.getSelection(true); if (!range || !value || !value.src) return; quill.insertEmbed(range.index, 'imagex', value, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }
+
+  async function uploadImage(file) {
+    if (!file || !window.grist || !grist.docApi || !grist.docApi.getAccessToken) throw new Error('API Grist d\u2019upload indisponible.');
+    const tokenInfo = await grist.docApi.getAccessToken();
+    const form = new FormData(); form.append('upload', file, file.name);
+    const response = await fetch(tokenInfo.baseUrl + '/attachments', { method: 'POST', headers: { Authorization: 'Bearer ' + tokenInfo.token }, body: form });
+    if (!response.ok) throw new Error('Échec upload image (' + response.status + ').');
+    const result = await response.json(); const attachmentId = result.id || result.attachmentId || (result.attachments && result.attachments[0] && result.attachments[0].id); if (!attachmentId) throw new Error('Réponse upload sans identifiant.');
+    const column = await Templates.ensureImageColumn(); const record = GristAPI.getCurrentRecord(); if (!record || record.id == null) throw new Error('Sélectionnez une ligne de modèle avant l\u2019upload.');
+    await grist.docApi.applyUserActions([['UpdateRecord', Templates.TABLE_NAME, record.id, { [column]: [attachmentId] }]]);
+    const src = tokenInfo.baseUrl + '/attachments/' + attachmentId + '/download?auth=' + encodeURIComponent(tokenInfo.token);
+    insertImage({ src, source: 'attachment', attachmentId, column, alt: file.name });
+  }
+  function chooseImageFile() { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = function () { const file = input.files && input.files[0]; if (file) uploadImage(file).catch(e => { console.error(e); window.alert(e.message); }); }; input.click(); }
+
   function init() {
     let pendingAlignmentCell = null;
     let pendingAlignmentColumn = null;
@@ -99,10 +139,10 @@ const Editor = (function () {
       activeCell = cell;
       return false;
     };
-    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
+    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l\u2019image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
-    if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; } }
+    if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image'); const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (imageBtn) { imageBtn.innerHTML = '▧ Image'; imageBtn.title = 'Importer une image dans une pièce jointe Grist'; } if (imageUrlBtn) { imageUrlBtn.innerHTML = '🔗 Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; } }
     const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar'; tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>'; document.getElementById('editor-container').appendChild(tableTools);
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
     function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
@@ -156,5 +196,5 @@ const Editor = (function () {
     Variables.init(quill); return quill;
   }
   function getQuill() { return quill; } function getHTML() { return quill.root.innerHTML; } function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); }
-  return { init, getQuill, getHTML, setHTML };
+  return { init, getQuill, getHTML, setHTML, insertImage, uploadImage };
 })();

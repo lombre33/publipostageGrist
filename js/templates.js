@@ -1,4 +1,5 @@
 // Module de gestion des modèles : CRUD sur la table Grist Publipostage_Modeles
+// + colonne PJ images auto-gérée (v1.9.0)
 const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Modeles';
   let templatesCache = [];
@@ -19,6 +20,18 @@ const Templates = (function () {
     } catch (e) {
       console.error('Erreur création table modèles', e);
     }
+  }
+
+  async function ensureImageColumn() {
+    await ensureTableExists();
+    const columns = await grist.docApi.fetchTable(TABLE_NAME);
+    const existing = Object.keys(columns || {}).find(name => /^ImagePJ/.test(name));
+    if (existing) return existing;
+    const colId = 'ImagePJ_' + Date.now().toString(36);
+    await grist.docApi.applyUserActions([
+      ['AddVisibleColumn', TABLE_NAME, colId, { type: 'Attachments', isFormula: false }]
+    ]);
+    return colId;
   }
 
   async function loadAll() {
@@ -75,6 +88,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, ensureImageColumn, TABLE_NAME };
 })();
-

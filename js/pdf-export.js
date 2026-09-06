@@ -1,4 +1,5 @@
 // Module export PDF : raster (historique) ou texte natif vectoriel (pdfmake).
+// + rendu images (upload PJ / URL) : taille + opacité (v1.9.0)
 const PdfExport = (function () {
   const QUALITY_PRESETS = {
     standard: { label: 'Standard', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 } },
@@ -12,7 +13,8 @@ const PdfExport = (function () {
   function cssSize(value, fallback) { const n = parseFloat(value); return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback; }
   function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); return match ? match[1].toLowerCase() : undefined; }
   function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp(name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const out = Object.assign({}, parent); if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') out.decoration = 'underline'; if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration') && /underline/i.test(css('text-decoration'))) out.decoration = 'underline'; if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); return out; }
-  function inlineRuns(node, parentStyle) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style)); }); return runs; }
+  function inlineRuns(node, parentStyle) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { const image = { image: node.getAttribute('src') || '', width: Math.max(20, parseFloat(node.style.width) || 320), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] }; return [image]; }
+    if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style)); }); return runs; }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
@@ -47,27 +49,9 @@ const PdfExport = (function () {
   }
   function twoColumnsFrom(node, pageBreakBefore) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
-    // Réapplique explicitement l'alignement (ql-align-center / -right / -justify
-    // ou style inline text-align) à CHAQUE bloc pdfmake issu du contenu de la
-    // colonne. Le flux hors-colonnes le fait déjà via blockFrom() /
-    // alignment() ; on reproduit exactement la même sémantique ici pour que
-    // les zones à 2 colonnes honorent enfin ql-align-justify à l'export PDF
-    // vectoriel (bug : le justify était perdu à l'export PDF dans les
-    // .two-columns-column). L'alignement par défaut (gauche) reste implicite
-    // côté pdfmake, on ne l'écrit donc que si une valeur explicite est lue.
     const columns = colNodes.map(col => {
       const blocks = htmlToPdfContent(col.innerHTML);
-      // L’alignement peut être porté par la colonne elle-même (style
-      // text-align ou classe ql-align-*), pas seulement par ses blocs.
-      // Conserver cette valeur comme repli garantit que les textes directs
-      // et les blocs sans alignement local héritent bien de la colonne.
       const columnAlign = alignment(col);
-      // collect() parcourt le DOM de la colonne en MIRROR exactement les
-      // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
-      // editable-table / two-columns-zone / isBlock() poussent un bloc).
-      // L'ordre des sources collectées correspond donc 1-pour-1 à l'ordre
-      // des blocs pdfmake produits par htmlToPdfContent, ce qui permet
-      // d'aligner les indices sans avoir à dupliquer toute la logique.
       const alignSources = [];
       const collect = n => {
         if (n.nodeType === Node.TEXT_NODE) {
@@ -76,9 +60,6 @@ const PdfExport = (function () {
         }
         if (n.nodeType !== Node.ELEMENT_NODE) return;
         if (n.classList.contains('page-break-marker')) return;
-        // Ces embeds produisent eux aussi un bloc dans htmlToPdfContent ;
-        // les ajouter à alignSources préserve la correspondance d’indices
-        // (sinon les paragraphes qui les suivent seraient mal alignés).
         if (n.classList.contains('editable-table')) { alignSources.push(n); return; }
         if (n.classList.contains('two-columns-zone')) { alignSources.push(n); return; }
         if (isBlock(n)) { alignSources.push(n); return; }
@@ -92,12 +73,6 @@ const PdfExport = (function () {
         const isPlaceholder = src.classList &&
           (src.classList.contains('editable-table') || src.classList.contains('two-columns-zone'));
         if (isPlaceholder) continue;
-        // CORRECTIF bug 2 : si la source est un TEXT_NODE (texte direct entre
-        // blocs, fréquent quand la colonne n'a pas de <p> wrapper pour chaque
-        // paragraphe), alignment(text_node) renvoie toujours undefined car
-        // un TextNode n'a ni classList ni style. On remonte au parent
-        // porteur (bloc ou deux-colonnes-column) qui porte ql-align-* ou
-        // text-align inline posés par applyColumnAlignment().
         const probe = (src.nodeType === Node.TEXT_NODE && src.parentElement) ? src.parentElement : src;
         let a;
         let cur = probe;
