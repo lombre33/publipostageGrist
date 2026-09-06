@@ -84,12 +84,27 @@ body { display:flex; flex-direction:column; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
-#reader-container { position:relative; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
+/* z-index:0 (en plus de position:relative) : force #reader-container à établir
+   son PROPRE contexte d'empilement local. Sans ça, son fond opaque (background:
+   #fff) n'est qu'un enfant "en flux normal" du contexte d'empilement racine de
+   toute la page — il se peint alors APRÈS (donc par-dessus) toute image en
+   calque "derrière le texte" (z-index négatif) qui, elle, se retrouve comparée
+   dans ce même contexte racine plutôt que localement au sein du conteneur.
+   Résultat sans ce correctif : l'image devient invisible ET ne reçoit plus les
+   clics (le fond de #reader-container/.ql-editor capte le point derrière elle). */
+#reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
 /* === Éditeur Quill === */
 /* position:relative : sert de repère aux poignées de redimensionnement et aux
-   images en calque devant/derrière le texte (position:absolute + z-index). */
-.ql-editor { position:relative; min-height:240px; font-size: 14px; }
+   images en calque devant/derrière le texte (position:absolute + z-index).
+   z-index:0 : force .ql-editor à établir son PROPRE contexte d'empilement —
+   sans ça son fond opaque (posé par le thème Quill) se peint comme un enfant
+   "normal" du contexte racine de la page, donc APRÈS toute image en z-index
+   négatif (calque "derrière le texte"), qui elle est comparée dans ce même
+   contexte racine : l'image devient alors invisible et cesse de recevoir les
+   clics (le fond de .ql-editor capte le point derrière elle). Voir la même
+   note sur #reader-container. */
+.ql-editor { position:relative; z-index:0; min-height:240px; font-size: 14px; }
 .ql-toolbar.ql-snow { background: var(--surface); border-color: var(--border); font-family: var(--font-ui); padding: 7px 10px; }
 .ql-snow .ql-picker { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); }
 .ql-snow .ql-stroke { stroke: var(--text); }

@@ -274,6 +274,10 @@ const Editor = (function () {
       const blot = Quill.find(img);
       if (blot) quill.deleteText(blot.offset(quill.scroll), 1, Quill.sources.USER);
       if (imageToolbar) imageToolbar.classList.remove('visible');
+      // Les poignées sont un overlay partagé (cf. ensureImageHandlesOverlay) : sans
+      // ce masquage explicite, elles restent affichées à l'ancienne position de
+      // l'image supprimée, orphelines.
+      positionImageHandles(null);
       quill.update(Quill.sources.USER);
       return;
     }
