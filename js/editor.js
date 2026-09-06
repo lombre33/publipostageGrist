@@ -552,6 +552,12 @@ const Editor = (function () {
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          // Reposé à CHAQUE glisser-déposer (pas seulement au premier passage en
+          // calque) : si la largeur de l'éditeur a changé entre-temps (fenêtre/
+          // panneau redimensionné), l'échelle utilisée par l'export PDF pour
+          // convertir cette position en coordonnées de page serait sinon fausse.
+          const container = floatingImg.closest('.ql-editor');
+          if (container) floatingImg.dataset.refWidth = String(Math.round(container.getBoundingClientRect().width));
           quill.update(Quill.sources.USER);
           positionImageHandles(floatingImg);
           positionAnchorMarker(floatingImg);
