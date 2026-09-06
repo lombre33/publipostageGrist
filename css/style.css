@@ -1,12 +1,26 @@
 /* Publipostage Grist – stylesheet.
    Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;1,400;1,500&display=swap');
+/* Roboto (import ci-dessus) : police par défaut de pdfmake (vfs_fonts.min.js,
+   chargée dans index.html) pour tout texte sans police explicite dans le
+   document. Avant ce chargement, .ql-editor/#reader-container retombaient sur
+   Helvetica/Arial (police système) alors que le PDF rendait ce même texte en
+   Roboto - deux polices aux métriques de caractères différentes, donc des
+   lignes qui ne se coupent PAS aux mêmes endroits entre l'éditeur et le PDF,
+   même à largeur et taille de police strictement identiques (cf. correctifs
+   précédents sur la largeur du mode A4 et la taille de police par défaut).
+   Chargée ici pour que .ql-editor/#reader-container l'utilisent AUSSI, et non
+   l'inverse (le PDF ne peut pas utiliser Helvetica sans embarquer ses
+   fichiers de police dans le VFS de pdfmake - non fait, hors de portée de ce
+   correctif). */
 
 /* === Design tokens ===
    --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils,
    boutons, libellés) : le contenu du courrier (.ql-editor, #reader-container)
-   garde volontairement Arial/la police choisie par l'utilisateur, jamais
-   Manrope, pour ne pas changer le rendu du document ni l'export PDF. */
+   garde volontairement Roboto (cf. import ci-dessus, pour matcher l'export
+   PDF) plutôt que Manrope, pour ne pas changer le rendu du document ni
+   l'export PDF au-delà de ce qui est nécessaire à leur faire correspondre. */
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -113,7 +127,7 @@ body { display:flex; flex-direction:column; }
    dans ce même contexte racine plutôt que localement au sein du conteneur.
    Résultat sans ce correctif : l'image devient invisible ET ne reçoit plus les
    clics (le fond de #reader-container/.ql-editor capte le point derrière elle). */
-#reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
+#reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 
 /* === Éditeur Quill === */
 /* position:relative : sert de repère aux poignées de redimensionnement et aux
@@ -125,7 +139,7 @@ body { display:flex; flex-direction:column; }
    contexte racine : l'image devient alors invisible et cesse de recevoir les
    clics (le fond de .ql-editor capte le point derrière elle). Voir la même
    note sur #reader-container. */
-.ql-editor { position:relative; z-index:0; min-height:240px; font-size: 14px; }
+.ql-editor { position:relative; z-index:0; min-height:240px; font-size: 14px; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 .ql-toolbar.ql-snow { background: var(--surface); border-color: var(--border); font-family: var(--font-ui); padding: 7px 10px; }
 .ql-snow .ql-picker { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); }
 .ql-snow .ql-stroke { stroke: var(--text); }
