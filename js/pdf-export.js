@@ -145,6 +145,24 @@ const PdfExport = (function () {
   }
   function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
+  // Le navigateur COLLAPSE (masque) les espaces/retours à la ligne en tout
+  // début/fin du contenu rendu d'un bloc (règles CSS standard de fusion des
+  // blancs) — pdfmake, lui, prend le texte tel quel. Un cas concret et
+  // fréquent : un paragraphe "<img> Lorem ipsum..." (espace tapée après une
+  // image insérée en début de ligne) affiche "Lorem ipsum" sans décalage dans
+  // l'éditeur (l'image ne compte plus une fois sortie du flux en calque, et
+  // l'espace qui suit est de toute façon collapsée), mais cette même espace,
+  // conservée telle quelle par pdfmake, s'ajoute au texte centré/justifié et
+  // se traduit par un décalage visible façon "alinéa" en tête de paragraphe.
+  // On ne trime PAS les espaces insécables ( ) : celles-ci sont un choix
+  // délibéré de mise en forme (indentation manuelle), pas un artefact HTML.
+  function trimEdgeWhitespace(runs) {
+    while (runs.length && !/[^ \t\n\r\f\v]/.test(runs[0].text)) runs.shift();
+    if (runs.length) runs[0] = Object.assign({}, runs[0], { text: runs[0].text.replace(/^[ \t\n\r\f\v]+/, '') });
+    while (runs.length && !/[^ \t\n\r\f\v]/.test(runs[runs.length - 1].text)) runs.pop();
+    if (runs.length) { const last = runs.length - 1; runs[last] = Object.assign({}, runs[last], { text: runs[last].text.replace(/[ \t\n\r\f\v]+$/, '') }); }
+    return runs;
+  }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
@@ -157,7 +175,7 @@ const PdfExport = (function () {
       const output = [];
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
-        const text = inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE });
+        const text = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
         const pdfCell = { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO };
         const align = alignment(cell);
         if (align) pdfCell.alignment = align;
@@ -258,7 +276,7 @@ const PdfExport = (function () {
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     const images = [];
-    const runs = inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images);
+    const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images));
     const blocks = [];
     let block = null;
     let remainingPageBreak = pageBreakBefore;
