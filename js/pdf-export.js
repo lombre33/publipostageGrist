@@ -57,6 +57,11 @@ const PdfExport = (function () {
     // côté pdfmake, on ne l'écrit donc que si une valeur explicite est lue.
     const columns = colNodes.map(col => {
       const blocks = htmlToPdfContent(col.innerHTML);
+      // L’alignement peut être porté par la colonne elle-même (style
+      // text-align ou classe ql-align-*), pas seulement par ses blocs.
+      // Conserver cette valeur comme repli garantit que les textes directs
+      // et les blocs sans alignement local héritent bien de la colonne.
+      const columnAlign = alignment(col);
       // collect() parcourt le DOM de la colonne en MIRROR exactement les
       // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
       // editable-table / two-columns-zone / isBlock() poussent un bloc).
@@ -72,7 +77,7 @@ const PdfExport = (function () {
         if (n.nodeType !== Node.ELEMENT_NODE) return;
         if (n.classList.contains('page-break-marker')) return;
         // Ces embeds produisent eux aussi un bloc dans htmlToPdfContent ;
-        // les ajouter à alignSources préserve la correspondance d'indices
+        // les ajouter à alignSources préserve la correspondance d’indices
         // (sinon les paragraphes qui les suivent seraient mal alignés).
         if (n.classList.contains('editable-table')) { alignSources.push(n); return; }
         if (n.classList.contains('two-columns-zone')) { alignSources.push(n); return; }
@@ -102,6 +107,7 @@ const PdfExport = (function () {
           if (cur.classList && (cur.classList.contains('two-columns-column') || cur === root)) break;
           cur = cur.parentElement;
         }
+        a = a || columnAlign;
         if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) {
           blocks[i].alignment = a;
         }
