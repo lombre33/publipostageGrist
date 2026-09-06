@@ -74,10 +74,20 @@ const Editor = (function () {
 
   function init() {
     let pendingAlignmentCell = null;
+    let pendingAlignmentColumn = null;
     const alignHandler = function (value) {
       const cell = pendingAlignmentCell;
+      const column = pendingAlignmentColumn;
       pendingAlignmentCell = null;
+      pendingAlignmentColumn = null;
       const alignment = value || 'left';
+      if (column && column.closest('.two-columns-zone')) {
+        column.style.textAlign = alignment === 'justify' ? 'justify' : alignment;
+        column.querySelectorAll('p, div, li, blockquote, pre').forEach(function (node) {
+          node.style.textAlign = column.style.textAlign;
+        });
+        return false;
+      }
       if (!cell || !cell.closest('.editable-table')) {
         quill.format('align', alignment, Quill.sources.USER);
         return;
@@ -102,11 +112,14 @@ const Editor = (function () {
     quill.root.addEventListener('paste', function (event) { const target = event.target; const editableContainer = target && target.closest && target.closest('.editable-table td, .editable-table th, .two-columns-column'); if (!editableContainer) return; event.preventDefault(); event.stopPropagation(); const clipboard = event.clipboardData; const text = clipboard ? clipboard.getData('text/plain') : ''; if (text) document.execCommand('insertText', false, text); quill.update(Quill.sources.USER); }, true);
 
     function getRealActiveCell() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const cell = element && element.closest && element.closest('.editable-table td, .editable-table th'); if (cell && cell.isContentEditable) return cell; } return null; }
+    function getRealActiveColumn() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const column = element && element.closest && element.closest('.two-columns-column'); if (column && column.isContentEditable) return column; } return null; }
     if (toolbar) toolbar.addEventListener('mousedown', function (event) {
       const button = event.target.closest && event.target.closest('.ql-align');
       if (!button) return;
       const cell = getRealActiveCell();
+      const column = getRealActiveColumn();
       if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
+      if (column) pendingAlignmentColumn = column;
     }, true);
     tableTools.addEventListener('click', function (event) { const action = event.target.dataset.action; if (!action || !activeCell) return; const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex; const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; }; if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); } if (action === 'remove-row' && table.rows.length > 1) row.remove(); if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling)); if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); }); ensureTableColumns(table); quill.update(Quill.sources.USER); });
     Variables.init(quill); return quill;
