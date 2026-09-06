@@ -20,3 +20,8 @@ Les versions stables sont créées lors d'une livraison explicitement demandée.
 - Les versions en développement seront ajoutées après validation explicite
 - Rollback : `git fetch origin --tags && git checkout tags/v0.5` (ou `git reset --hard tags/v0.5` sur une branche de restauration).
 - Le tag de la version stable est créé sur le commit final de livraison.
+
+- **2026-09-06** : Rollback effectué sur `main` vers la version stable **v0.6** (commit `e7f65706ff137910aabe5988d555fa9d6c104335`) suite à des régressions critiques : JS cassé après ajout du module image (erreur « Conteneur éditeur introuvable : #editor-container » levée depuis `Editor.init`). Fichiers restaurés :
+  - `js/editor.js` — 29329 octets — blob `cfaf6aca6b7d2b1089cb521f2b87a9b6e3c54c7d`
+  - `css/style.css` — 6401 octets — blob `ee7b1e9b2da701fb9d17c7cf4d43910399a4a685`
+  - `css/style.css.tmp_append` (recréé) — 1586 octets — blob `7f6e2772611b345a63e0cc6edaf01097da398e9a`
