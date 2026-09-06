@@ -642,6 +642,17 @@ const Editor = (function () {
   // quill.root — cf. ensureImageHandlesOverlay — donc n'ont pas besoin d'être
   // nettoyées ici).
   function getHTML() {
+    // Auto-guérison : une image en calque enregistrée AVANT l'introduction de
+    // data-anchor-off-* (ou jamais re-basculée/glissée depuis) n'a pas cette
+    // donnée — l'export PDF retombe alors sur un calcul de position moins
+    // fiable (cf. pdf-export.js). On la (re)calcule donc systématiquement ici,
+    // à CHAQUE sauvegarde/export, tant que l'éditeur est visible (sinon
+    // getBoundingClientRect ne renverrait que des rectangles vides — cf. mode
+    // lecture, #editor-container en display:none — et écrirait une donnée
+    // fausse plutôt que de laisser l'ancienne valeur ou l'absence de donnée).
+    if (quill.root.offsetParent !== null) {
+      quill.root.querySelectorAll('img.editor-image.editor-image-floating').forEach(updateAnchorOffset);
+    }
     const clone = quill.root.cloneNode(true);
     clone.querySelectorAll('.two-columns-resize-grip, .table-col-resize-handle').forEach(el => el.remove());
     return clone.innerHTML;
