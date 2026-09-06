@@ -10,6 +10,7 @@ Les versions stables sont créées lors d'une livraison explicitement demandée.
 |---------|------|-----------|--------|-------------|
 | v0.4 | 2026-09-05 | `3b6fc3af` | **stable** ✅ | Rollback au commit 886e74d - restauration état stable après régression |
 | v0.5 | 2026-09-06 | `02632d95` | **stable** ✅ | Alignement indépendant par cellule (tableau) et par colonne (2-colonnes) ; formats gras/italique/souligné/barré/taille/police dans les cellules ; export PDF vectorisé respectant l'alignement par colonne ; nouveau module image (upload PJ Grist ou URL, redimensionnement, opacité). |
+| v0.6 | 2026-09-06 | `e7f65706` | **stable** ✅ | Correction bug upload image (readOnly) + UI resize/drag/toolbar image. |
 
 ---
 
