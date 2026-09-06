@@ -45,9 +45,9 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .editable-table td, .editable-table th { text-align: inherit; }
 
 /* === Slider de redimensionnement de colonnes (v1.8.2) ===
-   Poignee centree verticalement sur la hauteur de la cellule d'en-tête,
+   Poignee centree verticalement sur la hauteur de la cellule d'en-tete,
    materialisee par un grip vertical central clairement visible.
-   - Ancre absolue : cellule d'en-tête (tr:first-child > td/th) en position:relative
+   - Ancre absolue : cellule d'en-tete (tr:first-child > td/th) en position:relative
    - Recouvre la hauteur totale de la cellule -> cible de drag large et stable
    - Curseur ew-resize explicite
    - z-index eleve : reste au-dessus du contenu
