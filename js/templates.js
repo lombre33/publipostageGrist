@@ -1,4 +1,5 @@
 // Module de gestion des modèles : CRUD sur la table Grist Publipostage_Modeles
+// + une colonne PJ (Attachments) dédiée par image insérée (v1.10.0)
 const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Modeles';
   let templatesCache = [];
@@ -19,6 +20,27 @@ const Templates = (function () {
     } catch (e) {
       console.error('Erreur création table modèles', e);
     }
+  }
+
+  // Crée une nouvelle colonne Pièce jointe dédiée à une image insérée dans le modèle.
+  // Une colonne par image (et non une colonne partagée) afin que chaque pièce jointe
+  // reste référencée par une cellule Grist et ne soit jamais purgée comme « orpheline ».
+  async function createImageColumn() {
+    await ensureTableExists();
+    const colId = 'ImagePJ_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await grist.docApi.applyUserActions([
+      ['AddVisibleColumn', TABLE_NAME, colId, { type: 'Attachments', isFormula: false, label: 'Image' }]
+    ]);
+    return colId;
+  }
+
+  // Rattache une pièce jointe déjà uploadée (attachmentId) à la ligne du modèle courant,
+  // dans la colonne dédiée créée par createImageColumn().
+  async function attachImage(templateId, colId, attachmentId) {
+    if (!templateId || !colId || !attachmentId) return;
+    await grist.docApi.applyUserActions([
+      ['UpdateRecord', TABLE_NAME, templateId, { [colId]: ['L', attachmentId] }]
+    ]);
   }
 
   async function loadAll() {
@@ -75,5 +97,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, createImageColumn, attachImage, TABLE_NAME };
 })();

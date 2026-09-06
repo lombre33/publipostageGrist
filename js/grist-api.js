@@ -10,6 +10,7 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
+  let _tokenCache = null;
 
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
@@ -267,6 +268,52 @@ const GristAPI = (function () {
     return row;
   }
 
+  // Jeton d'accès court terme (quelques minutes) réutilisé pour les appels REST
+  // d'upload/téléchargement de pièces jointes, avec marge de sécurité avant expiration.
+  async function getAccessTokenCached() {
+    const now = Date.now();
+    if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
+    const info = await grist.docApi.getAccessToken({ readOnly: false });
+    _tokenCache = { token: info.token, baseUrl: info.baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
+    return _tokenCache;
+  }
+
+  async function uploadAttachment(file) {
+    if (!file) throw new Error('Fichier manquant pour l’upload.');
+    const info = await getAccessTokenCached();
+    const formData = new FormData();
+    formData.append('upload', file, file.name || 'image');
+    const resp = await fetch(`${info.baseUrl}/attachments?auth=${info.token}`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!resp.ok) throw new Error('Échec upload pièce jointe Grist (' + resp.status + ')');
+    const ids = await resp.json();
+    const id = Array.isArray(ids) ? ids[0] : ids;
+    if (!id) throw new Error('Réponse d’upload inattendue.');
+    return id;
+  }
+
+  async function getAttachmentDownloadUrl(attachmentId) {
+    if (!attachmentId) return '';
+    const info = await getAccessTokenCached();
+    return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
+  }
+
+  // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès
+  // expire après quelques minutes, donc le src ne doit jamais être conservé tel quel
+  // dans le HTML enregistré — seul data-attachment-id est persistant.
+  async function hydrateAttachmentImages(root) {
+    if (!root || !root.querySelectorAll) return;
+    const images = Array.from(root.querySelectorAll('img.editor-image[data-source="attachment"][data-attachment-id]'));
+    await Promise.all(images.map(async img => {
+      const id = img.dataset.attachmentId;
+      if (!id) return;
+      try { img.src = await getAttachmentDownloadUrl(id); }
+      catch (e) { console.warn('[GristAPI] hydrateAttachmentImages: échec pour', id, e); }
+    }));
+  }
+
   async function detectCurrentContext() {
     if (!_currentRecord) {
       console.warn('[GristAPI] detectCurrentContext: pas de record courant.');
@@ -277,5 +324,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext };
+  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages };
 })();

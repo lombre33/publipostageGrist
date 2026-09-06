@@ -15,10 +15,12 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
 #status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
-#reader-container { flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
+#reader-container { position:relative; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
 /* === Éditeur Quill === */
-.ql-editor { min-height:240px; font-size: 14px; }
+/* position:relative : sert de repère aux poignées de redimensionnement et aux
+   images en calque devant/derrière le texte (position:absolute + z-index). */
+.ql-editor { position:relative; min-height:240px; font-size: 14px; }
 .ql-toolbar.ql-snow { background:#f7f9fb; border-color:#cfd6dd; }
 
 /* === Tableaux éditables === */
@@ -32,7 +34,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 .ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table { display: inline-flex; align-items: center; width: auto; }
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { display: inline-flex; align-items: center; width: auto; }
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
@@ -40,7 +42,7 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-marker { display: none; }
 #reader-container .two-columns-resize-grip { display: none; }
-.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
+.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns, .ql-toolbar .ql-formats > .ql-insert-image, .ql-toolbar .ql-formats > .ql-insert-image-url { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
 .editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
 .editable-table td, .editable-table th { text-align: inherit; }
 
@@ -95,3 +97,27 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 /* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 #reader-container p { margin: 6px 0; }
+
+/* === Images de l'éditeur : sélection, resize et repositionnement === */
+.editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
+.editor-image:hover, .editor-image.editor-image-active { outline-color: #1f5dbf; }
+.editor-image.editor-image-floating { cursor: move; }
+.editor-image-toolbar { display: none; z-index: 10000; padding: 3px; background: #1f2d3d; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
+.editor-image-toolbar.visible { display: block; }
+.editor-image-toolbar button { min-width: 25px; height: 25px; padding: 0 5px; margin: 0 1px; border: 0; border-radius: 3px; color: #fff; background: transparent; cursor: pointer; }
+.editor-image-toolbar button:hover { background: #3977c8; }
+.editor-image-toolbar button.active { background: #2c7be5; }
+.editor-image-toolbar-sep { display: inline-block; width: 1px; height: 16px; background: rgba(255,255,255,.25); margin: 0 3px; vertical-align: middle; }
+.editor-image-opacity { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-size: 12px; padding: 0 3px; vertical-align: middle; }
+.editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; }
+.editor-image-handle { position: absolute; z-index: 9999; display: none; width: 9px; height: 9px; margin: -5px; border: 1px solid #fff; border-radius: 50%; background: #1f5dbf; cursor: nwse-resize; }
+.editor-image-handle-nw { cursor: nwse-resize; }
+.editor-image-handle-ne { cursor: nesw-resize; }
+.editor-image-handle-sw { cursor: nesw-resize; }
+.editor-image-handle-se { cursor: nwse-resize; }
+.editor-image[data-align="left"] { display: block; margin-left: 0; margin-right: auto; }
+.editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
+.editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
+.editor-image[data-wrap="block"] { display: block; }
+body.resizing-editor-image { cursor: nwse-resize; user-select: none; }
+body.resizing-editor-image * { user-select: none; }

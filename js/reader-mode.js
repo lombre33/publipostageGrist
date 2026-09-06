@@ -14,6 +14,7 @@ const ReaderMode = (function () {
       catch (e) { return { badge, value: '[ERREUR: ' + e.message + ']', error: e }; }
     }));
     for (const r of results) { const span = document.createElement('span'); span.textContent = r.value; span.className = 'resolved-var' + (r.error ? ' error-msg' : ''); if (r.error) hasError = true; r.badge.replaceWith(span); }
+    await GristAPI.hydrateAttachmentImages(wrapper);
     if (renderId !== renderGeneration) return;
     container.innerHTML = '';
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.'; container.appendChild(warn); }
@@ -21,7 +22,9 @@ const ReaderMode = (function () {
   }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');
-    await Promise.all(Array.from(badges).map(async badge => { const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column'); try { const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {} })); return wrapper.innerHTML;
+    await Promise.all(Array.from(badges).map(async badge => { const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column'); try { const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {} }));
+    await GristAPI.hydrateAttachmentImages(wrapper);
+    return wrapper.innerHTML;
   }
   async function resolveFilename(filenameTemplate, tableId, record) {
     if (!filenameTemplate) return 'publipostage';
