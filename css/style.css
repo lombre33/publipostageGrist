@@ -1,4 +1,6 @@
-/* Publipostage Grist – stylesheet. Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
+/* Publipostage Grist – stylesheet.
+   Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
+
 /* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
 body { display:flex; flex-direction:column; }
@@ -14,9 +16,11 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 #status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 #reader-container { flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
+
 /* === Éditeur Quill === */
 .ql-editor { min-height:240px; font-size: 14px; }
 .ql-toolbar.ql-snow { background:#f7f9fb; border-color:#cfd6dd; }
+
 /* === Tableaux éditables === */
 .editable-table { display:inline-block; margin: 8px 0; }
 .editable-table table { border-collapse: collapse; table-layout: fixed; width: 100%; }
@@ -39,15 +43,55 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 .ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
 .editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
 .editable-table td, .editable-table th { text-align: inherit; }
-/* === Slider de redimensionnement de colonnes (v1.8.2) === Poignee centree verticalement sur la hauteur de la cellule d'en-tete, materialisee par un grip vertical central clairement visible. - Ancre absolue : cellule d'en-tete (tr:first-child > td/th) en position:relative - Recouvre la hauteur totale de la cellule -> cible de drag large et stable - Curseur ew-resize explicite - z-index eleve : reste au-dessus du contenu - Grip central (::after) rend le slider visible et cliquable. */
-.table-col-resize-handle { position: absolute; top: 0; right: -1px; width: 10px; height: 100%; cursor: ew-resize; z-index: 30; box-sizing: border-box; background: transparent; user-select: none; touch-action: none; border-right: 2px solid rgba(44,123,229,.45); }
-.table-col-resize-handle::after { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 22px; background: #2c7be5; border-radius: 2px; opacity: 0.55; transition: opacity .15s ease, height .15s ease, background .15s ease; }
-.editable-table tr:first-child > th:hover .table-col-resize-handle::after, .editable-table tr:first-child > td:hover .table-col-resize-handle::after { opacity: 1; height: 32px; background: #1f5dbf; }
+
+/* === Slider de redimensionnement de colonnes (v1.8.2) ===
+   Poignee centree verticalement sur la hauteur de la cellule d'en-tête,
+   materialisee par un grip vertical central clairement visible.
+   - Ancre absolue : cellule d'en-tête (tr:first-child > td/th) en position:relative
+   - Recouvre la hauteur totale de la cellule -> cible de drag large et stable
+   - Curseur ew-resize explicite
+   - z-index eleve : reste au-dessus du contenu
+   - Grip central (::after) rend le slider visible et cliquable. */
+.table-col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 30;
+  box-sizing: border-box;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+  border-right: 2px solid rgba(44,123,229,.45);
+}
+.table-col-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 22px;
+  background: #2c7be5;
+  border-radius: 2px;
+  opacity: 0.55;
+  transition: opacity .15s ease, height .15s ease, background .15s ease;
+}
+.editable-table tr:first-child > th:hover .table-col-resize-handle::after,
+.editable-table tr:first-child > td:hover .table-col-resize-handle::after {
+  opacity: 1;
+  height: 32px;
+  background: #1f5dbf;
+}
 body.resizing-table-column { cursor: ew-resize; user-select: none; }
 body.resizing-table-column * { cursor: ew-resize !important; }
+
 /* === Saut de page forcé === */
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
+
 /* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 #reader-container p { margin: 6px 0; }
