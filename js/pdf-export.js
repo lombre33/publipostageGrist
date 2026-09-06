@@ -21,36 +21,40 @@ const PdfExport = (function () {
   // image atteignant bien inlineRuns() était de toute façon perdue ensuite. Les
   // images rencontrées sont donc accumulées à part (floatingImages) pour être
   // ajoutées par l'appelant comme blocs de contenu indépendants.
-  const PAGE_WIDTH_PT = 595.28;
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans exportNativePdf
-  const CONTENT_WIDTH_PT = PAGE_WIDTH_PT - PAGE_MARGIN_PT * 2;
   // Construit le bloc image pdfmake à partir d'un <img class="editor-image"> déjà
-  // en data URI. Deux logiques de mise à l'échelle distinctes :
-  // - image normale (dans le flux) : conversion px->pt standard (PX_TO_PT, comme
-  //   pour les tailles de police ailleurs dans ce fichier) — un survol physique
-  //   indépendant de la largeur de rendu de l'éditeur.
-  // - image en calque devant/derrière (position:absolute, déplacée à la souris) :
-  //   ses coordonnées left/top sont en px RELATIFS à la largeur de l'éditeur au
-  //   moment du déplacement (data-ref-width, posé par setImageLayer/le glisser-
-  //   déposer dans editor.js) ; on les convertit donc au prorata de cette largeur
-  //   vers la largeur de contenu de la page PDF, pour reproduire fidèlement sa
-  //   position ET sa taille relative dans l'éditeur plutôt qu'une taille physique.
+  // en data URI, en px->pt standard (PX_TO_PT) dans TOUS les cas — y compris pour
+  // la position absolue des images en calque devant/derrière.
+  //
+  // Historique : la position d'une image en calque avait d'abord été mise à
+  // l'échelle au prorata de la largeur de l'éditeur (data-ref-width) vers la
+  // largeur de contenu de la page PDF, en supposant que "X% de la largeur de
+  // l'éditeur" correspondrait à "X% de la largeur de la page". FAUX : le reste
+  // du document (texte, tableaux) n'est PAS mis à l'échelle de cette façon — sa
+  // position verticale résulte du moteur de mise en page de pdfmake, qui calcule
+  // la hauteur des lignes à partir de tailles de police en pt (PX_TO_PT partout
+  // ailleurs dans ce fichier), sans aucun rapport avec la largeur de l'éditeur.
+  // Pire : l'éditeur (souvent large, ex. 965px) et la page PDF (largeur de
+  // contenu fixe, ~719px équivalents) ne font PAS retomber le texte aux mêmes
+  // endroits, puisque le nombre de mots par ligne diffère selon la largeur
+  // disponible — un simple ratio de largeur ne peut donc jamais aligner
+  // parfaitement une position "en calque" avec le texte qui l'entoure. Utiliser
+  // PX_TO_PT partout (la même base que tout le reste du document) rapproche
+  // nettement le résultat sans prétendre à une fidélité pixel-perfect : cette
+  // dernière est structurellement hors de portée tant que l'éditeur et la page
+  // PDF n'ont pas la même largeur de habillage du texte.
   function pdfImageFromNode(node) {
     const widthPx = parseFloat(node.style.width) || 320;
     const heightPx = parseFloat(node.style.height) || null;
     const image = { image: node.getAttribute('src'), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] };
-    const refWidth = parseFloat(node.dataset.refWidth);
-    if (node.style.position === 'absolute' && refWidth) {
-      const scale = CONTENT_WIDTH_PT / refWidth;
+    image.width = Math.max(15, widthPx * PX_TO_PT);
+    if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
+    if (node.style.position === 'absolute') {
       const leftPx = parseFloat(node.style.left) || 0;
       const topPx = parseFloat(node.style.top) || 0;
-      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * scale, y: PAGE_MARGIN_PT + topPx * scale };
-      image.width = Math.max(15, widthPx * scale);
-      if (heightPx) image.height = Math.max(10, heightPx * scale);
+      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * PX_TO_PT, y: PAGE_MARGIN_PT + topPx * PX_TO_PT };
       delete image.margin;
     } else {
-      image.width = Math.max(15, widthPx * PX_TO_PT);
-      if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
       const align = node.dataset.align;
       if (align === 'center' || align === 'right') image.alignment = align;
     }
