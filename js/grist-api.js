@@ -301,24 +301,64 @@ const GristAPI = (function () {
     return _tokenCache;
   }
 
+  // Récupère les id de pièces jointes déjà connus, pour pouvoir repérer la
+  // nouvelle après upload (cf. uploadAttachment).
+  async function knownAttachmentIds() {
+    try {
+      const data = await grist.docApi.fetchTable('_grist_Attachments');
+      return new Set(data && data.id ? data.id : []);
+    } catch (e) {
+      console.warn('[GristAPI] lecture _grist_Attachments impossible:', e);
+      return new Set();
+    }
+  }
+
+  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS sur
+  // l'endpoint POST /attachments pour l'origine du widget, même si le domaine est
+  // parfaitement valide et joignable (contrairement au cas "baseUrl cassé" traité
+  // par fixBaseUrl) : le navigateur lève alors une NetworkError et bloque
+  // totalement la requête en mode 'cors' normal. On repère la pièce jointe
+  // nouvellement créée en comparant les id de _grist_Attachments avant/après,
+  // celle-ci étant lue via le pont RPC du plugin (grist.docApi.fetchTable), qui
+  // n'est jamais soumis à CORS puisqu'il ne passe pas par un fetch réseau direct.
+  async function findNewAttachmentId(beforeIds, fileName) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      try {
+        const data = await grist.docApi.fetchTable('_grist_Attachments');
+        if (!data || !data.id) continue;
+        const candidates = [];
+        for (let i = 0; i < data.id.length; i++) {
+          if (!beforeIds.has(data.id[i])) candidates.push({ id: data.id[i], fileName: data.fileName ? data.fileName[i] : '' });
+        }
+        if (!candidates.length) continue;
+        const exactMatch = candidates.filter(c => c.fileName === fileName);
+        const pool = exactMatch.length ? exactMatch : candidates;
+        return pool.reduce((max, c) => (c.id > max.id ? c : max), pool[0]).id;
+      } catch (e) {
+        console.warn('[GristAPI] findNewAttachmentId: échec de lecture', e);
+      }
+    }
+    return null;
+  }
+
   async function uploadAttachment(file) {
     if (!file) throw new Error('Fichier manquant pour l’upload.');
     const info = await getAccessTokenCached();
     const formData = new FormData();
     formData.append('upload', file, file.name || 'image');
     const url = `${info.baseUrl}/attachments?auth=${info.token}`;
-    let resp;
+    const beforeIds = await knownAttachmentIds();
     try {
-      resp = await fetch(url, { method: 'POST', body: formData });
+      // mode: 'no-cors' — le navigateur envoie quand même la requête (l'upload a
+      // bien lieu côté serveur) mais la réponse devient opaque : impossible d'y
+      // lire l'identifiant créé, d'où la recherche via findNewAttachmentId ensuite.
+      await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
     } catch (e) {
-      // Erreur réseau (CORS, host injoignable...) : on inclut l'URL cible (sans le
-      // jeton) dans le message pour permettre un diagnostic sans ouvrir les devtools.
       throw new Error('Échec réseau vers ' + info.baseUrl + '/attachments (' + e.message + ')');
     }
-    if (!resp.ok) throw new Error('Échec upload pièce jointe Grist (' + resp.status + ') — ' + info.baseUrl);
-    const ids = await resp.json();
-    const id = Array.isArray(ids) ? ids[0] : ids;
-    if (!id) throw new Error('Réponse d’upload inattendue.');
+    const id = await findNewAttachmentId(beforeIds, file.name || 'image');
+    if (!id) throw new Error('Upload envoyé mais la pièce jointe n’a pas pu être confirmée dans le document (vérifiez si elle y apparaît malgré tout).');
     return id;
   }
 
