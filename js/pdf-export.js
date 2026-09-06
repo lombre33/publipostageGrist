@@ -21,7 +21,50 @@ const PdfExport = (function () {
   // image atteignant bien inlineRuns() était de toute façon perdue ensuite. Les
   // images rencontrées sont donc accumulées à part (floatingImages) pour être
   // ajoutées par l'appelant comme blocs de contenu indépendants.
-  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push({ image: node.getAttribute('src'), width: Math.max(20, parseFloat(node.style.width) || 320), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] }); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
+  const PAGE_WIDTH_PT = 595.28;
+  const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans exportNativePdf
+  const CONTENT_WIDTH_PT = PAGE_WIDTH_PT - PAGE_MARGIN_PT * 2;
+  // Construit le bloc image pdfmake à partir d'un <img class="editor-image"> déjà
+  // en data URI. Deux logiques de mise à l'échelle distinctes :
+  // - image normale (dans le flux) : conversion px->pt standard (PX_TO_PT, comme
+  //   pour les tailles de police ailleurs dans ce fichier) — un survol physique
+  //   indépendant de la largeur de rendu de l'éditeur.
+  // - image en calque devant/derrière (position:absolute, déplacée à la souris) :
+  //   ses coordonnées left/top sont en px RELATIFS à la largeur de l'éditeur au
+  //   moment du déplacement (data-ref-width, posé par setImageLayer/le glisser-
+  //   déposer dans editor.js) ; on les convertit donc au prorata de cette largeur
+  //   vers la largeur de contenu de la page PDF, pour reproduire fidèlement sa
+  //   position ET sa taille relative dans l'éditeur plutôt qu'une taille physique.
+  function pdfImageFromNode(node) {
+    const widthPx = parseFloat(node.style.width) || 320;
+    const heightPx = parseFloat(node.style.height) || null;
+    const image = { image: node.getAttribute('src'), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] };
+    const refWidth = parseFloat(node.dataset.refWidth);
+    if (node.style.position === 'absolute' && refWidth) {
+      const scale = CONTENT_WIDTH_PT / refWidth;
+      const leftPx = parseFloat(node.style.left) || 0;
+      const topPx = parseFloat(node.style.top) || 0;
+      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * scale, y: PAGE_MARGIN_PT + topPx * scale };
+      image.width = Math.max(15, widthPx * scale);
+      if (heightPx) image.height = Math.max(10, heightPx * scale);
+      delete image.margin;
+    } else {
+      image.width = Math.max(15, widthPx * PX_TO_PT);
+      if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
+      const align = node.dataset.align;
+      if (align === 'center' || align === 'right') image.alignment = align;
+    }
+    // Marqueur temporaire, retiré par l'appelant : permet de faire peindre les
+    // images "derrière" avant tout le reste du document et celles "devant"
+    // après tout le reste, pour approcher au mieux la superposition réelle vue
+    // dans l'éditeur (pdfmake peint son content[] dans l'ordre, sans notion de
+    // z-index — le seul levier disponible est l'ordre d'insertion).
+    if (node.style.position === 'absolute' && (node.dataset.layer === 'front' || node.dataset.layer === 'behind')) {
+      image._layer = node.dataset.layer;
+    }
+    return image;
+  }
+  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
@@ -131,7 +174,7 @@ const PdfExport = (function () {
   // de texte). L'image suit le texte du même paragraphe plutôt que d'être
   // repositionnée littéralement au milieu de la phrase, pdfmake ne supportant
   // pas d'image réellement "en ligne" dans un flux de texte.
-  function blockFrom(node, pageBreakBefore) {
+  function blockFrom(node, pageBreakBefore, frontImages, behindImages) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
@@ -149,12 +192,22 @@ const PdfExport = (function () {
       blocks.push(block);
     }
     images.forEach(img => {
+      const layer = img._layer; delete img._layer;
+      if (layer === 'behind' && behindImages) { behindImages.push(img); return; }
+      if (layer === 'front' && frontImages) { frontImages.push(img); return; }
       if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
       blocks.push(img);
     });
     return blocks;
   }
-  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); return blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; }
+  // Les images "derrière le texte" sont préfixées avant tout le reste du
+  // contenu (peintes en premier, donc recouvertes par tout ce qui suit) et
+  // celles "devant" ajoutées après tout (peintes en dernier, donc par-dessus) :
+  // pdfmake n'a pas de z-index, seul l'ordre d'insertion dans content[]
+  // détermine l'ordre de peinture. absolutePosition les sort de toute façon du
+  // flux normal, donc ce réordonnancement n'affecte pas la mise en page du
+  // reste du document.
+  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; const frontImages = []; const behindImages = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak, frontImages, behindImages).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; return behindImages.concat(content, frontImages); }
   // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
   // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
   // On rastérise donc tout SVG en PNG via un aller-retour <img>/<canvas> avant de

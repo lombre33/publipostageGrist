@@ -282,6 +282,7 @@ const Editor = (function () {
       img.style.left = '';
       img.style.top = '';
       img.style.zIndex = '';
+      delete img.dataset.refWidth;
       img.dataset.layer = 'normal';
       img.classList.remove('editor-image-floating');
       img.draggable = true;
@@ -294,6 +295,12 @@ const Editor = (function () {
       img.style.left = Math.round(imgRect.left - containerRect.left + container.scrollLeft) + 'px';
       img.style.top = Math.round(imgRect.top - containerRect.top + container.scrollTop) + 'px';
       img.style.position = 'absolute';
+      // Largeur de référence de l'éditeur au moment du passage en calque,
+      // conservée dans le HTML (data-*) pour que l'export PDF vectoriel
+      // puisse convertir left/top en coordonnées de page à l'échelle, même
+      // rouvert plus tard ou exporté depuis le mode lecture (éditeur masqué,
+      // donc non mesurable à ce moment-là). Voir pdf-export.js.
+      img.dataset.refWidth = String(Math.round(containerRect.width));
     }
     img.style.zIndex = layer === 'front' ? '5' : '-1';
     img.dataset.layer = layer;
