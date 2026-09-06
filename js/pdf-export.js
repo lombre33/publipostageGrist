@@ -8,6 +8,31 @@ const PdfExport = (function () {
   function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.standard; }
   const PX_TO_PT = 72 / 96;
   const DEFAULT_FONT_SIZE = 11;
+  // Correctif interligne : pdfmake espace ses lignes de texte plus serré que
+  // le rendu navigateur par défaut, ce qui fait qu'un paragraphe de N lignes
+  // occupe moins de hauteur dans le PDF que dans l'éditeur — une image
+  // "derrière le texte" dimensionnée pour couvrir tout le paragraphe (mesures
+  // éditeur) ne recouvre alors plus la ou les dernières lignes à l'export.
+  //
+  // EDITOR_LINE_HEIGHT_RATIO = interligne / taille de police mesuré en live
+  // sur .ql-editor (14px de police, 19.88px d'interligne réel via
+  // getComputedStyle ⇒ 19.88/14 ≈ 1.42).
+  //
+  // La propriété `lineHeight` de pdfmake n'est PAS un multiplicateur de la
+  // taille de police : c'est un multiplicateur de l'interligne *par défaut*
+  // de la police pdfmake elle-même (Roboto), qui a son propre ratio naturel
+  // — mesuré empiriquement à 12.890625pt d'interligne pour 11pt de police,
+  // soit un PDFMAKE_DEFAULT_LINE_RATIO ≈ 1.171875. Passer directement 1.42 à
+  // `lineHeight` revient donc à cumuler les deux ratios (1.42 × 1.172 ≈ 1.66),
+  // ce qui sur-corrige et rend les lignes du PDF plus hautes que dans
+  // l'éditeur (vérifié : positions de lignes espacées de 18.3pt au lieu des
+  // ~15.6pt attendus). Diviser par PDFMAKE_DEFAULT_LINE_RATIO annule ce ratio
+  // natif avant d'appliquer le nôtre, pour obtenir un interligne final
+  // réellement proportionnel à EDITOR_LINE_HEIGHT_RATIO quelle que soit la
+  // taille de police du run pdfmake concerné (vérifié : 15.62pt = 11 × 1.42).
+  const EDITOR_LINE_HEIGHT_RATIO = 1.42;
+  const PDFMAKE_DEFAULT_LINE_RATIO = 1.171875;
+  const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   function cssSize(value, fallback) { const n = parseFloat(value); return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback; }
   function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); return match ? match[1].toLowerCase() : undefined; }
@@ -83,7 +108,7 @@ const PdfExport = (function () {
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
         const text = inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE });
-        const pdfCell = { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true] };
+        const pdfCell = { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO };
         const align = alignment(cell);
         if (align) pdfCell.alignment = align;
         if (colSpan > 1) pdfCell.colSpan = colSpan;
@@ -187,7 +212,7 @@ const PdfExport = (function () {
     const blocks = [];
     let remainingPageBreak = pageBreakBefore;
     if (runs.length || !images.length) {
-      const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] };
+      const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
       const align = alignment(node); if (align) block.alignment = align;
       if (/^H[1-6]$/.test(tag)) block.bold = true;
       if (tag === 'LI') { block.text = [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs); block.margin[0] = 10; }
@@ -211,7 +236,7 @@ const PdfExport = (function () {
   // détermine l'ordre de peinture. absolutePosition les sort de toute façon du
   // flux normal, donc ce réordonnancement n'affecte pas la mise en page du
   // reste du document.
-  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; const frontImages = []; const behindImages = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak, frontImages, behindImages).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; return behindImages.concat(content, frontImages); }
+  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; const frontImages = []; const behindImages = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak, frontImages, behindImages).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; return behindImages.concat(content, frontImages); }
   // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
   // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
   // On rastérise donc tout SVG en PNG via un aller-retour <img>/<canvas> avant de
