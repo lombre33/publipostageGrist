@@ -3,7 +3,7 @@
 // + saut de page forcé à l’export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
-// + poignée de redimensionnement pour .two-columns-zone (v1.8.3)
+
 const Editor = (function () {
   let quill = null;
 
@@ -102,7 +102,7 @@ const Editor = (function () {
     quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
-    if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l\'export PDF)'; } }
+    if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; } }
     const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar'; tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>'; document.getElementById('editor-container').appendChild(tableTools);
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
     function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
@@ -114,9 +114,40 @@ const Editor = (function () {
     function getRealActiveCell() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const cell = element && element.closest && element.closest('.editable-table td, .editable-table th'); if (cell && cell.isContentEditable) return cell; } return null; }
     function getRealActiveColumn() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const column = element && element.closest && element.closest('.two-columns-column'); if (column && column.isContentEditable) return column; } return null; }
     if (toolbar) toolbar.addEventListener('mousedown', function (event) {
-      const button = event.target.closest && event.target.closest('.ql-align');
-      if (!button) return;
+      const target = event.target;
+      const button = target.closest && target.closest('button');
+      const pickerItem = target.closest && target.closest('.ql-picker-item');
       const cell = getRealActiveCell();
+      if (cell && cell.closest('.editable-table')) {
+        const formatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean'));
+        const formatPicker = pickerItem && (pickerItem.closest('.ql-size') || pickerItem.closest('.ql-font') || pickerItem.closest('.ql-header'));
+        if (formatButton || formatPicker) {
+          const selection = window.getSelection && window.getSelection();
+          if (selection && selection.rangeCount) {
+            const range = selection.getRangeAt(0).cloneRange();
+            event.preventDefault();
+            event.stopPropagation();
+            cell.focus();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            if (formatButton) {
+              const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : 'removeFormat';
+              document.execCommand(command, false, null);
+            } else if (formatPicker.closest('.ql-size')) {
+              const value = pickerItem.getAttribute('data-value');
+              document.execCommand('fontSize', false, value ? (value === 'small' ? '2' : value === 'large' ? '5' : value === 'huge' ? '7' : '3') : '3');
+            } else if (formatPicker.closest('.ql-font')) {
+              document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'sans-serif');
+            } else {
+              document.execCommand('formatBlock', false, pickerItem.getAttribute('data-value') || 'p');
+            }
+            quill.update(Quill.sources.USER);
+          }
+          return;
+        }
+      }
+      const alignButton = target.closest && target.closest('.ql-align');
+      if (!alignButton) return;
       const column = getRealActiveColumn();
       if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
       if (column) pendingAlignmentColumn = column;
