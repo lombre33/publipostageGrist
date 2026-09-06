@@ -1,0 +1,18 @@
+/* === Images de l’éditeur : sélection, resize et repositionnement === */
+.editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
+.editor-image:hover, .editor-image.editor-image-active { outline-color: #1f5dbf; }
+.editor-image-toolbar { display: none; z-index: 10000; padding: 3px; background: #1f2d3d; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
+.editor-image-toolbar.visible { display: block; }
+.editor-image-toolbar button { min-width: 25px; height: 25px; padding: 0 5px; margin: 0 1px; border: 0; border-radius: 3px; color: #fff; background: transparent; cursor: pointer; }
+.editor-image-toolbar button:hover { background: #3977c8; }
+.editor-image-handle { position: absolute; z-index: 9999; display: block; width: 9px; height: 9px; margin: -5px; border: 1px solid #fff; border-radius: 50%; background: #1f5dbf; cursor: nwse-resize; }
+.editor-image-handle-nw { cursor: nwse-resize; }
+.editor-image-handle-ne { cursor: nesw-resize; }
+.editor-image-handle-sw { cursor: nesw-resize; }
+.editor-image-handle-se { cursor: nwse-resize; }
+.editor-image[data-align="left"] { display: block; margin-left: 0; margin-right: auto; }
+.editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
+.editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
+.editor-image[data-wrap="block"] { display: block; }
+body.resizing-editor-image { cursor: nwse-resize; user-select: none; }
+body.resizing-editor-image * { user-select: none; }

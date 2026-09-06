@@ -1,4 +1,6 @@
-// public/js/editor.js — Quill 1.3.x avec modules : tableaux éditables, 2 colonnes, image
+// Éditeur Quill (snow theme) – publipostage Grist.
+// + variables #badge (v1.3.0)
+// + saut de page forcé à l’export PDF (v1.4.0)
 // + zone à 2 colonnes éditables (v1.8.0)
 // + paste sans saut de ligne parasite (v1.8.1)
 // + module image (upload PJ Grist + URL, resize, opacité) (v1.9.0)
@@ -7,22 +9,38 @@
 const Editor = (function () {
   let quill = null;
 
-  // --- Polices et tailles custom ---
-  const FontFamily = Quill.import('attributors/class/font');
-  FontFamily.whitelist = ['sans-serif', 'serif', 'monospace', 'arial', 'times-new-roman', 'courier-new'];
-  Quill.register(FontFamily, true);
-
-  const FontSize = Quill.import('attributors/class/size');
-  FontSize.whitelist = ['10px', '12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '40px', '48px'];
+  const FontSize = Quill.import('formats/size');
   Quill.register(FontSize, true);
 
-  // --- Blot Image custom (pour width / opacity / source) ---
-  const Embed = Quill.import('blots/embed');
+  const FontFamily = Quill.import('formats/font');
+  Quill.register(FontFamily, true);
 
+  const Embed = Quill.import('blots/embed');
+  class VarBadgeBlot extends Embed {
+    static create(value) {
+      const node = super.create();
+      node.setAttribute('data-table', value.table);
+      node.setAttribute('data-column', value.column);
+      node.setAttribute('data-key', value.key);
+      node.setAttribute('contenteditable', 'false');
+      node.classList.add('var-badge');
+      node.textContent = '#' + value.key;
+      return node;
+    }
+    static value(node) {
+      return { table: node.getAttribute('data-table'), column: node.getAttribute('data-column'), key: node.getAttribute('data-key') };
+    }
+  }
+  VarBadgeBlot.blotName = 'varbadge';
+  VarBadgeBlot.tagName = 'span';
+  VarBadgeBlot.className = 'var-badge';
+  Quill.register(VarBadgeBlot);
+
+  // --- Blot Image custom (sécurisé : accepte objet OU string src) ---
   class ImageBlot extends Embed {
     static create(value) {
-      const node = super.create(value);
       const data = (value && typeof value === 'object' && !(value instanceof Node)) ? value : { src: typeof value === 'string' ? value : '' };
+      const node = super.create(data);
       node.setAttribute('src', data.src || '');
       node.setAttribute('alt', data.alt || 'Image');
       node.setAttribute('contenteditable', 'false');
@@ -30,8 +48,7 @@ const Editor = (function () {
       node.dataset.source = data.source || 'url';
       if (data.attachmentId) node.dataset.attachmentId = String(data.attachmentId);
       if (data.column) node.dataset.column = data.column;
-      if (data.width) node.style.width = data.width;
-      else node.style.width = '320px';
+      node.style.width = data.width || '320px';
       node.style.opacity = data.opacity == null ? '1' : String(data.opacity);
       node.dataset.wrap = data.wrap || 'inline';
       node.classList.add('editor-image');
@@ -60,7 +77,10 @@ const Editor = (function () {
     static create(value) { const node = super.create(value || { type: 'pageBreak' }); node.setAttribute('contenteditable', 'false'); node.classList.add('page-break'); return node; }
     static value(node) { return { type: 'pageBreak' }; }
   }
-  PageBreakBlot.blotName = 'pagebreak'; PageBreakBlot.tagName = 'div'; PageBreakBlot.className = 'page-break'; Quill.register(PageBreakBlot);
+  PageBreakBlot.blotName = 'pagebreak';
+  PageBreakBlot.tagName = 'div';
+  PageBreakBlot.className = 'page-break';
+  Quill.register(PageBreakBlot);
 
   // --- Tableaux éditables ---
   class EditableTableBlot extends BlockEmbed {
@@ -173,13 +193,68 @@ const Editor = (function () {
     });
   }
 
-  function ensureTwoColumnsGrip(zone) { if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return; let grip = zone.querySelector(':scope > .two-columns-resize-grip'); if (!grip) { grip = document.createElement('div'); grip.className = 'two-columns-resize-grip'; grip.contentEditable = 'false'; zone.appendChild(grip); } }
+  function ensureTwoColumnsGrip(zone) {
+    if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return;
+    let grip = zone.querySelector(':scope > .two-columns-resize-grip');
+    if (!grip) {
+      grip = document.createElement('div');
+      grip.className = 'two-columns-resize-grip';
+      grip.contentEditable = 'false';
+      zone.appendChild(grip);
+    }
+  }
 
-  function resizeTableColumn(table, index, startX) { const firstRow = table.rows[0]; const colgroup = table.querySelector(':scope > colgroup'); if (!firstRow || !colgroup || !colgroup.children[index]) return; const rect = table.getBoundingClientRect(); const widths = Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 100 / firstRow.cells.length); const start = ((startX - rect.left) / rect.width) * 100; const current = widths[index]; const next = index + 1 < widths.length ? widths[index + 1] : null; const onMove = event => { const delta = ((event.clientX - startX) / rect.width) * 100; if (next !== null) { widths[index] = Math.max(5, current + delta); widths[index + 1] = Math.max(5, next - delta); } else widths[index] = Math.max(5, current + delta); widths.forEach((width, i) => { if (colgroup.children[i]) colgroup.children[i].style.width = `${width}%`; }); }; const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp, { once: true }); }
+  function resizeTableColumn(table, index, startX) {
+    const firstRow = table.rows[0];
+    const colgroup = table.querySelector(':scope > colgroup');
+    if (!firstRow || !colgroup || !colgroup.children[index]) return;
+    const rect = table.getBoundingClientRect();
+    const widths = Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 100 / firstRow.cells.length);
+    const current = widths[index];
+    const next = index + 1 < widths.length ? widths[index + 1] : null;
+    const onMove = event => {
+      const delta = ((event.clientX - startX) / rect.width) * 100;
+      if (next !== null) {
+        widths[index] = Math.max(5, current + delta);
+        widths[index + 1] = Math.max(5, next - delta);
+      } else widths[index] = Math.max(5, current + delta);
+      widths.forEach((width, i) => { if (colgroup.children[i]) colgroup.children[i].style.width = `${width}%`; });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp, { once: true });
+  }
 
-  function installTwoColumnsToolbarIsolation(toolbar) { toolbar.addEventListener('mousedown', function (event) { const button = event.target.closest && event.target.closest('button'); if (!button) return; const selection = document.getSelection(); if (!selection || !selection.rangeCount) return; const range = selection.getRangeAt(0); const column = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer.closest('.two-columns-column') : range.commonAncestorContainer.parentElement.closest('.two-columns-column'); if (!column) return; const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : null; if (!command) return; event.preventDefault(); event.stopPropagation(); column.focus(); selection.removeAllRanges(); selection.addRange(range); document.execCommand(command, false, null); }, true); }
+  function installTwoColumnsToolbarIsolation(toolbar) {
+    toolbar.addEventListener('mousedown', function (event) {
+      const button = event.target.closest && event.target.closest('button');
+      if (!button) return;
+      const selection = document.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const column = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer.closest('.two-columns-column')
+        : range.commonAncestorContainer.parentElement.closest('.two-columns-column');
+      if (!column) return;
+      const command = button.classList.contains('ql-bold') ? 'bold'
+        : button.classList.contains('ql-italic') ? 'italic'
+        : button.classList.contains('ql-underline') ? 'underline'
+        : button.classList.contains('ql-strike') ? 'strikeThrough'
+        : null;
+      if (!command) return;
+      event.preventDefault();
+      event.stopPropagation();
+      column.focus();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand(command, false, null);
+    }, true);
+  }
 
-  // --- Insertion d'image (upload + URL) ---
+  // --- Insertion d'image (upload + URL) — correction bug "readOnly" ---
   function insertImage(value) {
     if (!quill) return;
     const range = quill.getSelection(true);
@@ -197,18 +272,31 @@ const Editor = (function () {
   }
 
   async function uploadImage(file) {
-    if (!file || !window.grist || !grist.docApi || !grist.docApi.getAccessToken) throw new Error('API Grist d\u2019upload indisponible.');
+    if (!file || !window.grist || !grist.docApi || !grist.docApi.getAccessToken) {
+      throw new Error('API Grist d\u2019upload indisponible.');
+    }
     const token = await grist.docApi.getAccessToken({ scope: 'full' });
-    const column = (window.grist && window.grist.docApi && window.grist.docApi.fetchTable && grist.docApi.fetchTable) ? await pickImageColumn() : '';
+    const column = await pickImageColumn();
     const safeName = (file.name || 'image').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 80);
-    const attachmentId = await grist.docApi.getAttachmentUploadUrl ? null : null;
-    const resp = await fetch('https://gristfiles.com/api/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': safeName }, body: file });
+    const resp = await fetch('https://gristfiles.com/api/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-Filename': safeName
+      },
+      body: file
+    });
     if (!resp.ok) throw new Error('Échec upload Grist (' + resp.status + ')');
     const data = await resp.json();
-    const src = (data && (data.url || data.fileUrl || data.attachmentUrl || data.path)) || (data && data.attachments && data.attachments[0] && data.attachments[0].url) || '';
-    const attachmentIdFinal = (data && (data.attachmentId || data.id)) || (data && data.attachments && data.attachments[0] && (data.attachments[0].attachmentId || data.attachments[0].id)) || '';
-    insertImage({ src, source: 'attachment', attachmentId: attachmentIdFinal, column, alt: file.name });
-    return { src, attachmentId: attachmentIdFinal, column };
+    const src = (data && (data.url || data.fileUrl || data.attachmentUrl || data.path))
+      || (data && data.attachments && data.attachments[0] && data.attachments[0].url)
+      || '';
+    const attachmentId = (data && (data.attachmentId || data.id))
+      || (data && data.attachments && data.attachments[0] && (data.attachments[0].attachmentId || data.attachments[0].id))
+      || '';
+    insertImage({ src, source: 'attachment', attachmentId, column, alt: file.name });
+    return { src, attachmentId, column };
   }
 
   async function pickImageColumn() {
@@ -223,13 +311,7 @@ const Editor = (function () {
     } catch (e) { return ''; }
   }
 
-  // --- UI resize/drag pour les images (bug 2) ---
-  // Fonctionne identiquement pour les images upload et URL :
-  //   - 4 poignées de resize (NE/NW/SE/SW) + ratio Shift, taille libre sinon
-  //   - poignée de drag pour repositionner l'image dans le flux (gauche/centre/droite)
-  //   - toolbar flottante : zoom +/-25%, reset, align left/center/right, wrap, suppression
-  //   - fonctionne identiquement pour images upload ET URL (mêmes .editor-image)
-
+  // --- UI resize/drag pour les images (upload ET URL, même blot .editor-image) ---
   let imageToolbar = null;
 
   function ensureImageHandles(img) {
@@ -237,7 +319,7 @@ const Editor = (function () {
     img.dataset.handleReady = '1';
     img.setAttribute('contenteditable', 'false');
     img.setAttribute('draggable', 'true');
-    ['nw','ne','sw','se'].forEach(corner => {
+    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
       const handle = document.createElement('span');
       handle.className = 'editor-image-handle editor-image-handle-' + corner;
       handle.dataset.corner = corner;
@@ -320,10 +402,142 @@ const Editor = (function () {
   function init(selector) {
     const target = typeof selector === 'string' ? document.querySelector(selector) : selector;
     if (!target) throw new Error('Conteneur éditeur introuvable : ' + selector);
-    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l\u2019image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
+    quill = new Quill('#editor-container', {
+      theme: 'snow',
+      modules: {
+        toolbar: {
+          container: [
+            [{ header: [1, 2, 3, 4, 5, 6, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ align: [] }],
+            [{ size: FontSize.whitelist }],
+            [{ font: FontFamily.whitelist }],
+            [{ color: [] }, { background: [] }],
+            ['undo', 'redo'],
+            ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'],
+            ['clean']
+          ],
+          handlers: {
+            undo: function () { quill.history.undo(); },
+            redo: function () { quill.history.redo(); },
+            'insert-table': function () {
+              const range = quill.getSelection(true); if (!range) return;
+              quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER);
+              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
+            },
+            'insert-two-columns': function () {
+              const range = quill.getSelection(true); if (!range) return;
+              quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER);
+              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
+            },
+            'insert-image': function () { chooseImageFile(); },
+            'insert-image-url': function () {
+              const url = window.prompt('URL de l\u2019image :');
+              if (url) insertImage({ src: url, source: 'url' });
+            },
+            'page-break': function () {
+              const range = quill.getSelection(true); if (!range) return;
+              quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER);
+              quill.setSelection(range.index + 1, 0, Quill.sources.USER);
+            }
+          }
+        },
+        history: { delay: 500, maxStack: 100, userOnly: true }
+      }
+    });
     installTwoColumnsToolbarIsolation(quill.getModule('toolbar').container);
 
-    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles); let activeCell = null;
+    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
+    quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
+    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
+    let activeCell = null;
+    let pendingAlignmentCell = null;
+    let pendingAlignmentColumn = null;
+
+    function getRealActiveColumn() {
+      const selection = document.getSelection();
+      if (!selection || !selection.rangeCount) return null;
+      const range = selection.getRangeAt(0);
+      const node = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+      return node && node.closest ? node.closest('.two-columns-column') : null;
+    }
+
+    const tableTools = document.querySelector('.table-tools');
+    if (tableTools) {
+      tableTools.addEventListener('mousedown', function (event) {
+        const target = event.target;
+        const button = target.closest && target.closest('button');
+        const formatButton = button && button.closest('.ql-formats');
+        const formatPicker = button && button.closest('.ql-picker');
+        const pickerItem = button && button.closest('.ql-picker-item');
+        const cell = target.closest && target.closest('th, td');
+        if (formatButton || formatPicker) {
+          const selection = document.getSelection();
+          if (!selection || !selection.rangeCount) return;
+          const range = selection.getRangeAt(0);
+          let editableCell = cell;
+          if (!editableCell) {
+            const col = getRealActiveColumn();
+            if (col) {
+              editableCell = col;
+              col.focus();
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          } else {
+            editableCell.focus();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+          if (formatButton) {
+            const command = button.classList.contains('ql-bold') ? 'bold'
+              : button.classList.contains('ql-italic') ? 'italic'
+              : button.classList.contains('ql-underline') ? 'underline'
+              : button.classList.contains('ql-strike') ? 'strikeThrough'
+              : 'removeFormat';
+            document.execCommand(command, false, null);
+          } else if (formatPicker.closest('.ql-size')) {
+            const value = pickerItem.getAttribute('data-value');
+            document.execCommand('fontSize', false, value ? (value === 'small' ? '2' : value === 'large' ? '5' : value === 'huge' ? '7' : '3') : '3');
+          } else if (formatPicker.closest('.ql-font')) {
+            document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'sans-serif');
+          } else {
+            document.execCommand('formatBlock', false, pickerItem.getAttribute('data-value') || 'p');
+          }
+          quill.update(Quill.sources.USER);
+          return;
+        }
+        const alignButton = target.closest && target.closest('.ql-align');
+        if (!alignButton) return;
+        const column = getRealActiveColumn();
+        if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
+        if (column) pendingAlignmentColumn = column;
+      }, true);
+      tableTools.addEventListener('click', function (event) {
+        const action = event.target.dataset.action;
+        if (!action || !activeCell) return;
+        const table = activeCell.closest('table');
+        const row = activeCell.parentElement;
+        const col = activeCell.cellIndex;
+        const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; };
+        if (action === 'add-row-above' || action === 'add-row-below') {
+          const tr = document.createElement('tr');
+          for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell());
+          row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling);
+        }
+        if (action === 'remove-row' && table.rows.length > 1) row.remove();
+        if (action === 'add-col-left' || action === 'add-col-right') {
+          Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling));
+        }
+        if (action === 'remove-col' && row.cells.length > 1) {
+          Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); });
+        }
+        ensureTableColumns(table);
+        quill.update(Quill.sources.USER);
+      });
+    }
 
     quill.root.addEventListener('click', function (event) {
       const cell = event.target.closest && event.target.closest('th, td');
@@ -343,7 +557,8 @@ const Editor = (function () {
       }
     });
 
-    document.getElementById('editor-container').addEventListener('scroll', function () { positionTableToolbar(); positionImageToolbar(); }); window.addEventListener('resize', function () { positionTableToolbar(); positionImageToolbar(); });
+    document.getElementById('editor-container').addEventListener('scroll', function () { positionImageToolbar(); });
+    window.addEventListener('resize', function () { positionImageToolbar(); });
 
     quill.root.addEventListener('mousedown', function (event) {
       const handle = event.target.closest && event.target.closest('.editor-image-handle');
@@ -356,7 +571,6 @@ const Editor = (function () {
         const rect = img.getBoundingClientRect();
         const startW = rect.width, startH = rect.height;
         const aspect = startW / startH;
-        const ratioLock = event.shiftKey;
         document.body.classList.add('resizing-editor-image');
         const onMove = moveEvent => {
           let dx = moveEvent.clientX - startX;
@@ -366,30 +580,61 @@ const Editor = (function () {
           else if (corner === 'sw') { dx = -dx; }
           let w = Math.max(40, startW + dx);
           let h = Math.max(20, startH + dy);
-          if (ratioLock || event.shiftKey) h = w / aspect;
+          if (moveEvent.shiftKey) h = w / aspect;
           img.style.width = Math.round(w) + 'px';
           img.style.height = Math.round(h) + 'px';
           positionImageToolbar();
         };
-        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.classList.remove('resizing-editor-image'); quill.update(Quill.sources.USER); };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.classList.remove('resizing-editor-image');
+          quill.update(Quill.sources.USER);
+        };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp, { once: true });
         return;
       }
-      const img = event.target.closest && event.target.closest('img.editor-image');
-      if (img && !event.target.closest('.editor-image-handle')) {
-        // autoriser le drag natif pour repositionner dans le flux
+      const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip');
+      if (twoColumnsGrip) {
+        const zone = twoColumnsGrip.closest('.two-columns-zone');
+        if (!zone) return;
+        event.preventDefault(); event.stopPropagation();
+        const rect = zone.getBoundingClientRect();
+        const update = moveEvent => {
+          const usableWidth = rect.width;
+          if (!usableWidth) return;
+          const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100;
+          zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`);
+        };
+        const stop = () => {
+          document.removeEventListener('mousemove', update);
+          document.removeEventListener('mouseup', stop);
+          quill.update(Quill.sources.USER);
+        };
+        document.addEventListener('mousemove', update);
+        document.addEventListener('mouseup', stop, { once: true });
+        return;
       }
-      const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip'); if (twoColumnsGrip) { const zone = twoColumnsGrip.closest('.two-columns-zone'); if (!zone) return; event.preventDefault(); event.stopPropagation(); const rect = zone.getBoundingClientRect(); const update = moveEvent => { const usableWidth = rect.width; if (!usableWidth) return; const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100; zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`); }; const stop = () => { document.removeEventListener('mousemove', update); document.removeEventListener('mouseup', stop); quill.update(Quill.sources.USER); }; document.addEventListener('mousemove', update); document.addEventListener('mouseup', stop, { once: true }); return; }
-      const colHandle = event.target.closest && event.target.closest('.table-col-resize-handle'); if (!colHandle) return; const cell = colHandle.closest('th, td'); const table = colHandle.closest('table'); if (!cell || !table) return; event.preventDefault(); event.stopPropagation(); resizeTableColumn(table, cell.cellIndex, event.clientX);
+      const colHandle = event.target.closest && event.target.closest('.table-col-resize-handle');
+      if (!colHandle) return;
+      const cell = colHandle.closest('th, td');
+      const table = colHandle.closest('table');
+      if (!cell || !table) return;
+      event.preventDefault(); event.stopPropagation();
+      resizeTableColumn(table, cell.cellIndex, event.clientX);
     });
 
-    function positionTableToolbar() { /* placeholder: toolbar de tableau */ }
+    Variables.init(quill);
     return quill;
   }
 
-  function getQuill() { return quill; } function getHTML() { return quill.root.innerHTML; } function setHTML(html) { quill.root.innerHTML = html || ''; quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles); }
+  function getQuill() { return quill; }
+  function getHTML() { return quill.root.innerHTML; }
+  function setHTML(html) {
+    quill.root.innerHTML = html || '';
+    quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
+    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
+  }
   return { init, getQuill, getHTML, setHTML, insertImage, uploadImage };
 })();
-
-function alignHandler(value) { const range = quill && quill.getSelection && quill.getSelection(); if (!range) return; quill.formatText(range.index, range.length, 'align', value || false, Quill.sources.USER); }
