@@ -88,14 +88,23 @@ body { display:flex; flex-direction:column; }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 /* Aperçu format A4 (case à cocher #toggle-a4-preview) : contraint .ql-editor à
    la largeur de contenu réelle d'une page PDF A4 (page 595.28pt - 2×28pt de
-   marge = 539.28pt, converti en px standard 96/72 = 719px), pour que le texte
-   se répartisse sur les lignes exactement comme dans l'export PDF — utile en
-   particulier pour positionner une image en calque devant/derrière le texte
-   (cf. pdf-export.js, la position ne peut être fidèle que si l'éditeur et le
-   PDF font retomber le texte au même endroit). Purement visuel : ne change ni
-   le HTML enregistré, ni aucun comportement de l'éditeur. */
+   marge = 539.28pt, converti en px standard 96/72 = 719.04px), pour que le
+   texte se répartisse sur les lignes exactement comme dans l'export PDF —
+   utile en particulier pour positionner une image en calque devant/derrière
+   le texte (cf. pdf-export.js, la position ne peut être fidèle que si
+   l'éditeur et le PDF font retomber le texte au même endroit).
+   CORRECTIF : `width` doit être la largeur TOTALE de la boîte (page + marges),
+   pas la largeur de contenu visée — sinon le `padding` (qui simule la marge
+   de page) la retranche EN PLUS, et le texte se retrouve à retomber sur une
+   largeur de ~645px au lieu de 719.04px (un paragraphe qui semblait "caler"
+   avec une image en calque ne le faisait donc qu'à peu près : le texte
+   coupait ses lignes plus tôt que dans le PDF réel, ce qui décalait tout ce
+   qui suit). Largeur totale = 719.04px de contenu + 2×37.33px de marge
+   (28pt convertis en px) = 793.71px.
+   Purement visuel : ne change ni le HTML enregistré, ni aucun comportement de
+   l'éditeur. */
 #editor-container.a4-preview { background: var(--surface-sunken); }
-#editor-container.a4-preview .ql-editor { width: 719px; max-width: 100%; margin: 0 auto; padding: 37px; background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(20,28,46,.10); }
+#editor-container.a4-preview .ql-editor { width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(20,28,46,.10); }
 /* z-index:0 (en plus de position:relative) : force #reader-container à établir
    son PROPRE contexte d'empilement local. Sans ça, son fond opaque (background:
    #fff) n'est qu'un enfant "en flux normal" du contexte d'empilement racine de

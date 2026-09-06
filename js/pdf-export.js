@@ -7,7 +7,19 @@ const PdfExport = (function () {
   };
   function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.standard; }
   const PX_TO_PT = 72 / 96;
-  const DEFAULT_FONT_SIZE = 11;
+  // Taille de police par défaut du PDF pour tout texte sans taille inline
+  // explicite : DOIT correspondre à la taille réellement rendue par défaut
+  // dans l'éditeur (.ql-editor { font-size: 14px }), convertie via PX_TO_PT
+  // (14 × 0.75 = 10.5pt) — c'était fixé à 11pt (une taille "standard" pour du
+  // texte imprimé, mais qui ne correspond à rien de mesuré dans l'éditeur).
+  // Cet écart de taille de police, combiné à LINE_HEIGHT_RATIO (qui scale
+  // proportionnellement à la taille de police), se cumulait sur toute la
+  // hauteur d'un paragraphe : vérifié sur un paragraphe de 8 lignes, l'écart
+  // avec 11pt atteignait ~5.7pt (~2mm) entre la dernière ligne du texte et le
+  // bas d'une image "derrière le texte" dimensionnée sur la hauteur mesurée
+  // dans l'éditeur — largement suffisant pour laisser la dernière ligne
+  // visible hors de l'image. Avec 10.5pt, ce même test tombe pile.
+  const DEFAULT_FONT_SIZE = 10.5;
   // Correctif interligne : pdfmake espace ses lignes de texte plus serré que
   // le rendu navigateur par défaut, ce qui fait qu'un paragraphe de N lignes
   // occupe moins de hauteur dans le PDF que dans l'éditeur — une image
