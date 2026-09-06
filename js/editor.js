@@ -257,8 +257,14 @@ const Editor = (function () {
   // --- Insertion d'image (upload + URL) — correction bug "readOnly" ---
   function insertImage(value) {
     if (!quill) return;
-    const range = quill.getSelection(true);
+    const range = quill?.getSelection?.(true);
     if (!range || !value || !value.src) return;
+    // Quill peut exposer un scroll/domNode transitoirement indéfini pendant
+    // l'upload. Ne jamais lire .readOnly sur cette référence sans garde;
+    // l'absence d'information signifie ici « éditable » pour ne pas bloquer l'upload.
+    const editorDomNode = quill?.scroll?.domNode;
+    const isReadOnly = editorDomNode?.readOnly ?? false;
+    if (isReadOnly) return;
     quill.insertEmbed(range.index, 'imagex', value, Quill.sources.USER);
     // Force Quill à matérialiser l'embed dans le DOM AVANT tout findBlot/update interne.
     // Sans ce update explicite, Quill peut appeler scroll.update avec un MutationRecord
@@ -273,7 +279,7 @@ const Editor = (function () {
 
   async function uploadImage(file) {
     if (!file || !window.grist || !grist.docApi || !grist.docApi.getAccessToken) {
-      throw new Error('API Grist d\u2019upload indisponible.');
+      throw new Error('API Grist d’upload indisponible.');
     }
     const token = await grist.docApi.getAccessToken({ scope: 'full' });
     const column = await pickImageColumn();
@@ -315,7 +321,7 @@ const Editor = (function () {
   let imageToolbar = null;
 
   function ensureImageHandles(img) {
-    if (!img || img.dataset.handleReady === '1') return;
+    if (!img || !img.matches || !img.matches('img.editor-image') || img.dataset.handleReady === '1') return;
     img.dataset.handleReady = '1';
     img.setAttribute('contenteditable', 'false');
     img.setAttribute('draggable', 'true');
@@ -432,7 +438,7 @@ const Editor = (function () {
             },
             'insert-image': function () { chooseImageFile(); },
             'insert-image-url': function () {
-              const url = window.prompt('URL de l\u2019image :');
+              const url = window.prompt('URL de l’image :');
               if (url) insertImage({ src: url, source: 'url' });
             },
             'page-break': function () {
@@ -449,7 +455,19 @@ const Editor = (function () {
 
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
+    // Tous les img.editor-image sont contrôlables, quelle que soit leur origine
+    // (upload Grist ou URL externe), y compris lorsqu'ils arrivent après init.
+    quill.root.querySelectorAll('img.editor-image').forEach(ensureImageHandles);
+    const imageObserver = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        mutation.addedNodes.forEach(function (node) {
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          if (node.matches && node.matches('img.editor-image')) ensureImageHandles(node);
+          if (node.querySelectorAll) node.querySelectorAll('img.editor-image').forEach(ensureImageHandles);
+        });
+      });
+    });
+    imageObserver.observe(quill.root, { childList: true, subtree: true });
     let activeCell = null;
     let pendingAlignmentCell = null;
     let pendingAlignmentColumn = null;
@@ -634,7 +652,7 @@ const Editor = (function () {
   function setHTML(html) {
     quill.root.innerHTML = html || '';
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-    quill.root.querySelectorAll('.editor-image').forEach(ensureImageHandles);
+    quill.root.querySelectorAll('img.editor-image').forEach(ensureImageHandles);
   }
   return { init, getQuill, getHTML, setHTML, insertImage, uploadImage };
 })();
