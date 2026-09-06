@@ -255,6 +255,12 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image-handle-ne { cursor: nesw-resize; }
 .editor-image-handle-sw { cursor: nesw-resize; }
 .editor-image-handle-se { cursor: nwse-resize; }
+/* Marqueur d'ancrage des images devant/derrière le texte : reste cliquable
+   par-dessus tout (comme les poignées) pour resélectionner une image que le
+   flux normal du texte recouvre autrement complètement une fois désélectionnée. */
+.editor-image-anchor { position: fixed; z-index: 10001; width: 20px; height: 20px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); color: var(--accent); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.editor-image-anchor svg { width: 12px; height: 12px; }
+.editor-image-anchor:hover { background: var(--accent); color: #fff; }
 .editor-image[data-align="left"] { display: block; margin-left: 0; margin-right: auto; }
 .editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
 .editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }

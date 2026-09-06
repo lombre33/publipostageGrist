@@ -185,6 +185,64 @@ const Editor = (function () {
     handles.se.style.top = rect.bottom + 'px'; handles.se.style.left = rect.right + 'px';
   }
 
+  // --- Marqueur d'ancrage pour les images en calque devant/derrière le texte ---
+  // Une image "derrière le texte" devient, une fois désélectionnée, très
+  // difficile à recliquer : les paragraphes qui la recouvrent captent le clic
+  // avant elle, même là où ils n'affichent aucun texte (la boîte d'un
+  // paragraphe capte les clics sur toute sa largeur, pas seulement sur ses
+  // glyphes). Sans point d'ancrage toujours cliquable par-dessus tout, une
+  // image basculée "derrière" deviendrait donc impossible à resélectionner.
+  // Même principe que les poignées (overlay dans document.body, immunisé
+  // contre la réconciliation DOM de Quill), mais un marqueur PAR image
+  // flottante : plusieurs images peuvent être en calque simultanément.
+  const imageAnchorMarkers = new Map();
+
+  function ensureAnchorMarker(img) {
+    let marker = imageAnchorMarkers.get(img);
+    if (marker) return marker;
+    marker = document.createElement('button');
+    marker.type = 'button';
+    marker.className = 'editor-image-anchor';
+    marker.title = 'Sélectionner l’image (devant/derrière le texte)';
+    marker.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+    marker.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      quill.root.querySelectorAll('img.editor-image.editor-image-active').forEach(i => { if (i !== img) i.classList.remove('editor-image-active'); });
+      img.classList.add('editor-image-active');
+      setImageHandlesVisible(img, true);
+      showImageToolbar();
+    });
+    document.body.appendChild(marker);
+    imageAnchorMarkers.set(img, marker);
+    return marker;
+  }
+
+  function removeAnchorMarker(img) {
+    const marker = imageAnchorMarkers.get(img);
+    if (marker) { marker.remove(); imageAnchorMarkers.delete(img); }
+  }
+
+  function positionAnchorMarker(img) {
+    const marker = imageAnchorMarkers.get(img);
+    if (!marker) return;
+    const rect = img.getBoundingClientRect();
+    marker.style.top = Math.round(rect.top - 7) + 'px';
+    marker.style.left = Math.round(rect.left - 7) + 'px';
+  }
+
+  // Recalcule l'ensemble des marqueurs : crée ceux manquants pour les images
+  // actuellement en calque, retire ceux dont l'image a été supprimée ou est
+  // revenue en flux normal.
+  function refreshImageAnchorMarkers() {
+    if (!quill) return;
+    const floating = new Set(quill.root.querySelectorAll('.editor-image-floating'));
+    for (const img of Array.from(imageAnchorMarkers.keys())) {
+      if (!floating.has(img)) removeAnchorMarker(img);
+    }
+    floating.forEach(img => { ensureAnchorMarker(img); positionAnchorMarker(img); });
+  }
+
   function setImageHandlesVisible(img, visible) {
     const handles = ensureImageHandlesOverlay();
     if (!visible) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
@@ -278,11 +336,13 @@ const Editor = (function () {
       // ce masquage explicite, elles restent affichées à l'ancienne position de
       // l'image supprimée, orphelines.
       positionImageHandles(null);
+      removeAnchorMarker(img);
       quill.update(Quill.sources.USER);
       return;
     }
     quill.update(Quill.sources.USER);
     setImageHandlesVisible(img, true);
+    refreshImageAnchorMarkers();
     positionImageToolbar();
     updateImageToolbarState(img);
   }
@@ -419,11 +479,13 @@ const Editor = (function () {
       positionImageToolbar();
       const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
       if (activeImg) positionImageHandles(activeImg);
+      imageAnchorMarkers.forEach((marker, img) => positionAnchorMarker(img));
     });
     window.addEventListener('resize', function () {
       positionImageToolbar();
       const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
       if (activeImg) positionImageHandles(activeImg);
+      imageAnchorMarkers.forEach((marker, img) => positionAnchorMarker(img));
     });
     // Les poignées de redimensionnement vivent dans document.body (cf. commentaire sur
     // ensureImageHandlesOverlay), donc en dehors de quill.root : ce mousedown doit être
@@ -453,6 +515,7 @@ const Editor = (function () {
         img.style.height = Math.round(h) + 'px';
         positionImageToolbar();
         positionImageHandles(img);
+        positionAnchorMarker(img);
       };
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
@@ -460,6 +523,7 @@ const Editor = (function () {
         document.body.classList.remove('resizing-editor-image');
         quill.update(Quill.sources.USER);
         positionImageHandles(img);
+        positionAnchorMarker(img);
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp, { once: true });
@@ -476,12 +540,14 @@ const Editor = (function () {
           floatingImg.style.top = Math.round(startTop + (moveEvent.clientY - startY)) + 'px';
           positionImageToolbar();
           positionImageHandles(floatingImg);
+          positionAnchorMarker(floatingImg);
         };
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
           quill.update(Quill.sources.USER);
           positionImageHandles(floatingImg);
+          positionAnchorMarker(floatingImg);
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp, { once: true });
@@ -552,6 +618,10 @@ const Editor = (function () {
     // Le src des pièces jointes n'est jamais fiable dans le HTML enregistré (le jeton
     // d'accès expire après quelques minutes) : on le régénère à chaque chargement.
     GristAPI.hydrateAttachmentImages(quill.root).catch(function (e) { console.warn('[Editor] hydratation des images échouée', e); });
+    // Les images en calque devant/derrière (classe persistée dans le HTML) ont
+    // besoin de leur marqueur d'ancrage dès le chargement pour rester
+    // resélectionnables (cf. ensureAnchorMarker).
+    refreshImageAnchorMarkers();
   }
   return { init, getQuill, getHTML, setHTML, insertImage, uploadImage };
 })();

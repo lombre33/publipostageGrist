@@ -149,6 +149,59 @@ const PdfExport = (function () {
     return wrapper.innerHTML;
   }
   async function exportNativePdf(resolvedHtml, filename) { if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.'); const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml); const docDefinition = { pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [28, 28, 28, 28], defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE }, content: htmlToPdfContent(inlinedHtml), info: { title: filename || 'publipostage' } }; window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf'); }
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) { if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; } const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record); const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record); if (quality === 'native') { await exportNativePdf(resolvedHtml, filename); return; } const container = document.createElement('div'); container.style.padding = '20px'; container.style.position = 'relative'; container.style.fontFamily = 'Arial, sans-serif'; container.innerHTML = resolvedHtml; container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; }); container.querySelectorAll('.two-columns-marker').forEach(marker => { marker.innerHTML = ''; marker.style.display = 'none'; }); document.body.appendChild(container); const preset = getQualityPreset(quality); const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'], avoid: '.var-badge' } }; try { await html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); } }
+  // Passe par la boîte de dialogue d'impression native du navigateur ("Enregistrer
+  // au format PDF") plutôt que par un rendu canvas (html2canvas) ou une image
+  // base64 (pdfmake). Les deux autres méthodes doivent RELIRE les pixels d'une
+  // image via JS (fetch, ou canvas.toDataURL) pour l'intégrer au PDF, ce qui
+  // échoue silencieusement dès que l'hôte de l'image ne renvoie pas d'en-têtes
+  // CORS permissifs — restriction de sécurité du navigateur, pas un bug
+  // corrigeable côté widget. L'impression native, elle, compose la page comme à
+  // l'affichage normal (un <img> s'affiche sans CORS) et ne lit jamais les
+  // pixels en JS : les images s'impriment donc quelle que soit leur origine.
+  // Contrepartie : c'est le visiteur qui choisit "Enregistrer au format PDF"
+  // dans la boîte de dialogue native, il n'y a pas de téléchargement automatique.
+  async function exportViaBrowserPrint(resolvedHtml, filename) {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    try {
+      const doc = iframe.contentDocument;
+      doc.open();
+      doc.write(
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (filename || 'publipostage') + '</title>' +
+        '<style>' +
+        '@page { size: A4; margin: 18mm; }' +
+        'body { font-family: Arial, sans-serif; font-size: 13px; line-height: 1.45; color: #1b2430; margin: 0; }' +
+        'table { width: 100%; border-collapse: collapse; }' +
+        'td, th { border: 1px solid #999; padding: 6px; }' +
+        '.page-break-marker { page-break-after: always; break-after: page; height: 0; margin: 0; border: 0; }' +
+        '.two-columns-marker { display: none; }' +
+        '.two-columns-zone { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }' +
+        'img { max-width: 100%; }' +
+        '</style></head><body>' + resolvedHtml + '</body></html>'
+      );
+      doc.close();
+      // Attend le chargement des images avant d'imprimer (avec filet de sécurité),
+      // sans quoi certaines apparaîtraient blanches dans le PDF imprimé.
+      await new Promise(resolve => {
+        const imgs = Array.from(doc.images || []);
+        if (!imgs.length) { resolve(); return; }
+        let remaining = imgs.length;
+        const done = () => { remaining -= 1; if (remaining <= 0) resolve(); };
+        imgs.forEach(img => { if (img.complete) done(); else { img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); } });
+        setTimeout(resolve, 4000);
+      });
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } finally {
+      setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+    }
+  }
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) { if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; } const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record); const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record); if (quality === 'native') { await exportNativePdf(resolvedHtml, filename); return; } if (quality === 'browser-print') { await exportViaBrowserPrint(resolvedHtml, filename); return; } const container = document.createElement('div'); container.style.padding = '20px'; container.style.position = 'relative'; container.style.fontFamily = 'Arial, sans-serif'; container.innerHTML = resolvedHtml; container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; }); container.querySelectorAll('.two-columns-marker').forEach(marker => { marker.innerHTML = ''; marker.style.display = 'none'; }); document.body.appendChild(container); const preset = getQualityPreset(quality); const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'], avoid: '.var-badge' } }; try { await html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); } }
   return { exportCurrentRecord };
 })();
