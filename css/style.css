@@ -1,19 +1,88 @@
 /* Publipostage Grist – stylesheet.
    Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
+
+/* === Design tokens ===
+   --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils,
+   boutons, libellés) : le contenu du courrier (.ql-editor, #reader-container)
+   garde volontairement Arial/la police choisie par l'utilisateur, jamais
+   Manrope, pour ne pas changer le rendu du document ni l'export PDF. */
+:root {
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-sunken: #eef1f6;
+  --border: #dde2ea;
+  --border-strong: #c3cad6;
+  --text: #1b2430;
+  --text-muted: #667085;
+  --text-faint: #98a2b3;
+  --accent: #2f6fed;
+  --accent-hover: #2558c4;
+  --accent-soft: #e8f0fe;
+  --accent-soft-border: #c7dbfd;
+  --danger: #d84343;
+  --danger-soft: #fbe9e9;
+  --dark-bg: #182238;
+  --dark-bg-raised: #263457;
+  --dark-border: #32406a;
+  --dark-text: #eef2ff;
+  --dark-text-muted: #97a3c4;
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
+  --shadow-card: 0 1px 2px rgba(20,28,46,.05);
+  --font-ui: 'Manrope', system-ui, sans-serif;
+}
 
 /* === Typographie et mise en page de base === */
-html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; }
+html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
-#toolbar-top { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid #e1e5ea; background:#f7f9fb; }
-.template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:6px; }
-.template-bar label, .filename-bar label { font-size:.85em; color:#3a4654; }
-button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
+#toolbar-top { display:flex; flex-direction: column; gap: 8px; padding:10px 14px; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
+.template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:7px; flex-wrap: wrap; }
+.template-bar label, .filename-bar label { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); }
+#toolbar-top select, #toolbar-top input[type="text"] {
+  font-family: Arial, sans-serif; font-size: 13.5px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 6px 9px; height: 32px;
+}
+#toolbar-top button {
+  font-family: var(--font-ui); font-weight: 600; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 32px; padding: 0 12px; margin: 0;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+  background: transparent; color: var(--text); cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+#toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
+#toolbar-top button::before { content:""; display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+#btn-new::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
+#btn-save::before, #btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); }
+#btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
+#btn-export-pdf::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); }
+#btn-mode-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
+#btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+/* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de
+   la règle générique #toolbar-top button ci-dessus (même compte d'ID que la
+   règle générique + type "button" s'annuleraient sinon en cas d'égalité). */
+#toolbar-top #btn-save { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
+#toolbar-top #btn-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+#toolbar-top #btn-delete { color: var(--danger); }
+#toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
+#toolbar-top #btn-export-pdf { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
+#toolbar-top #btn-export-pdf:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+/* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté
+   (même comportement JS : ils gardent leurs id et leur classe .active togglée
+   par main.js, seul l'agencement CSS change). */
+#toolbar-top #btn-mode-edit, #toolbar-top #btn-mode-read { background: var(--surface-sunken); }
+#toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
+#toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+#toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
 #autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
 #autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
 #ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
-#status-msg { margin-left:auto; font-size:.8em; color:#3a4654; }
+#status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 #reader-container { position:relative; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; }
 
@@ -21,20 +90,58 @@ button.active { background:#2c7be5; color:#fff; border-color:#2c7be5; }
 /* position:relative : sert de repère aux poignées de redimensionnement et aux
    images en calque devant/derrière le texte (position:absolute + z-index). */
 .ql-editor { position:relative; min-height:240px; font-size: 14px; }
-.ql-toolbar.ql-snow { background:#f7f9fb; border-color:#cfd6dd; }
+.ql-toolbar.ql-snow { background: var(--surface); border-color: var(--border); font-family: var(--font-ui); padding: 7px 10px; }
+.ql-snow .ql-picker { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); }
+.ql-snow .ql-stroke { stroke: var(--text); }
+.ql-snow .ql-fill { fill: var(--text); }
+.ql-snow.ql-toolbar button:hover, .ql-snow .ql-toolbar button:hover,
+.ql-snow.ql-toolbar button.ql-active, .ql-snow .ql-toolbar button.ql-active,
+.ql-snow.ql-toolbar .ql-picker-label:hover, .ql-snow .ql-picker-label.ql-active {
+  color: var(--accent);
+}
+.ql-snow.ql-toolbar button:hover .ql-stroke, .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke: var(--accent); }
+.ql-snow.ql-toolbar button:hover .ql-fill, .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: var(--accent); }
+.ql-toolbar.ql-snow .ql-formats { margin-right: 10px; padding-right: 10px; border-right: 1px solid var(--border); }
+.ql-toolbar.ql-snow .ql-formats:last-child { border-right: 0; margin-right: 0; }
 
 /* === Tableaux éditables === */
 .editable-table { display:inline-block; margin: 8px 0; }
 .editable-table table { border-collapse: collapse; table-layout: fixed; width: 100%; }
 .editable-table th, .editable-table td { border:1px solid #999; padding:6px 8px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .editable-table th { background:#eef3f8; }
-.table-context-toolbar { display:none; position:absolute; background:#fff; border:1px solid #b7cdf2; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.12); border-radius:4px; gap:4px; z-index:50; }
+/* Même langage visuel que .editor-image-toolbar (pastille sombre flottante à
+   icônes) pour une barre contextuelle cohérente entre image et tableau. */
+.table-context-toolbar { display:none; position:absolute; align-items:center; background: var(--dark-bg); border: 1px solid var(--dark-border); padding:5px; box-shadow: var(--shadow-float); border-radius: 10px; gap:2px; z-index:50; }
 .table-context-toolbar.visible { display:flex; flex-wrap:wrap; }
-.table-context-toolbar button { font-size: .8em; padding:3px 6px; }
+.table-context-toolbar button {
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--dark-text-muted); cursor: pointer;
+  font-size: 0; position: relative;
+}
+.table-context-toolbar button svg { width: 15px; height: 15px; }
+.table-context-toolbar button:hover { background: var(--dark-bg-raised); color: var(--dark-text); }
+.table-context-toolbar button[data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
+  background: #0c1324; color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  padding: 4px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; z-index: 1;
+}
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 .ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { display: inline-flex; align-items: center; width: auto; }
+/* Boutons "large" injectés par editor.js (icône SVG + libellé) : page-break,
+   tableau, 2 colonnes, image, image URL. Même gabarit que les icon-btn Quill
+   voisins, mais avec du texte. */
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-two-columns, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url {
+  height: 30px; padding: 0 9px; gap: 6px; border-radius: var(--radius-sm);
+  font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text);
+}
+.ql-toolbar .ql-page-break:hover, .ql-toolbar .ql-insert-table:hover, .ql-toolbar .ql-insert-two-columns:hover { background: var(--surface-sunken); }
+.ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { color: var(--accent); }
+.ql-toolbar .ql-insert-image:hover, .ql-toolbar .ql-insert-image-url:hover { background: var(--accent-soft); }
+.ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
+.ql-toolbar .ql-undo svg, .ql-toolbar .ql-redo svg { width: 16px; height: 16px; vertical-align: -3px; }
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
@@ -105,22 +212,30 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 /* position:fixed est indispensable : sans elle, top/left posés en JS (coordonnées
    viewport via getBoundingClientRect) n'ont aucun effet et la barre retombe dans
    le flux normal, tout en bas du document (dernier enfant de <body>). */
-.editor-image-toolbar { display: none; position: fixed; z-index: 10000; padding: 3px; background: #1f2d3d; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
-.editor-image-toolbar.visible { display: block; }
-.editor-image-toolbar button { min-width: 25px; height: 25px; padding: 0 5px; margin: 0 1px; border: 0; border-radius: 3px; color: #fff; background: transparent; cursor: pointer; }
-.editor-image-toolbar button:hover { background: #3977c8; }
-.editor-image-toolbar button.active { background: #2c7be5; }
-.editor-image-toolbar-sep { display: inline-block; width: 1px; height: 16px; background: rgba(255,255,255,.25); margin: 0 3px; vertical-align: middle; }
-.editor-image-opacity { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-size: 12px; padding: 0 3px; vertical-align: middle; }
-.editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; }
+.editor-image-toolbar { display: none; align-items: center; position: fixed; z-index: 10000; padding: 5px; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 10px; box-shadow: var(--shadow-float); white-space: nowrap; }
+.editor-image-toolbar.visible { display: flex; }
+.editor-image-toolbar button { width: 30px; height: 30px; min-width: 30px; padding: 0; margin: 0; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--dark-text-muted); background: transparent; cursor: pointer; position: relative; }
+.editor-image-toolbar button svg { width: 15px; height: 15px; }
+.editor-image-toolbar button:hover { background: var(--dark-bg-raised); color: var(--dark-text); }
+.editor-image-toolbar button.active { background: var(--accent); color: #fff; }
+.editor-image-toolbar button.editor-image-toolbar-danger:hover { background: var(--danger); color: #fff; }
+.editor-image-toolbar button[data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
+  background: #0c1324; color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  padding: 4px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; z-index: 1;
+}
+.editor-image-toolbar-sep { display: inline-block; width: 1px; height: 18px; background: var(--dark-border); margin: 0 3px; vertical-align: middle; flex: none; }
+.editor-image-opacity { display: inline-flex; align-items: center; gap: 6px; color: var(--dark-text-muted); font-size: 12px; padding: 0 6px; vertical-align: middle; }
+.editor-image-opacity svg { width: 14px; height: 14px; flex: none; }
+.editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; accent-color: var(--accent); }
 /* Poignées volontairement grandes et contrastées (carré blanc, bordure bleue
    épaisse) : ce sont elles qui portent le redimensionnement libre — les boutons
    de zoom +/- de la barre d'outils ne sont qu'un raccourci rapide en +/-25%.
    position:fixed (coordonnées viewport, comme .editor-image-toolbar) : ces
    poignées vivent dans document.body, hors de .ql-editor, pour échapper à la
    reconciliation DOM de Quill qui les effacerait sinon en quelques millisecondes. */
-.editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid #1f5dbf; border-radius: 3px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
-.editor-image-handle:hover { background: #eaf2ff; }
+.editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid var(--accent); border-radius: 3px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
+.editor-image-handle:hover { background: var(--accent-soft); }
 .editor-image-handle-nw { cursor: nwse-resize; }
 .editor-image-handle-ne { cursor: nesw-resize; }
 .editor-image-handle-sw { cursor: nesw-resize; }

@@ -288,21 +288,23 @@ const Editor = (function () {
       imageToolbar = document.createElement('div');
       imageToolbar.className = 'editor-image-toolbar';
       imageToolbar.contentEditable = 'false';
+      const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + path + '</svg>';
       imageToolbar.innerHTML =
-        '<button data-act="zoom-out" title="Zoom -25%">−</button>' +
-        '<button data-act="zoom-in" title="Zoom +25%">+</button>' +
-        '<button data-act="reset" title="Taille originale">↺</button>' +
+        '<button data-act="zoom-out" data-tip="Zoom -25%" title="Zoom -25%">' + icon('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/>') + '</button>' +
+        '<button data-act="zoom-in" data-tip="Zoom +25%" title="Zoom +25%">' + icon('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/>') + '</button>' +
+        '<button data-act="reset" data-tip="Taille originale" title="Taille originale">' + icon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>') + '</button>' +
         '<span class="editor-image-toolbar-sep"></span>' +
-        '<button data-act="align-left" title="Aligner à gauche">⇤</button>' +
-        '<button data-act="align-center" title="Centrer">⇔</button>' +
-        '<button data-act="align-right" title="Aligner à droite">⇥</button>' +
-        '<button data-act="wrap" title="Wrap bloc/en ligne">⏎</button>' +
+        '<button data-act="align-left" data-tip="Aligner à gauche" title="Aligner à gauche">' + icon('<path d="M4 12H2m18-5H8m12 10H8M4 4v16"/>') + '</button>' +
+        '<button data-act="align-center" data-tip="Centrer" title="Centrer">' + icon('<path d="M12 2v20M6 7h12M4 12h16M6 17h12"/>') + '</button>' +
+        '<button data-act="align-right" data-tip="Aligner à droite" title="Aligner à droite">' + icon('<path d="M22 12h-2M4 7h12M4 17h12M20 4v16"/>') + '</button>' +
+        '<button data-act="wrap" data-tip="Wrap bloc/en ligne" title="Wrap bloc/en ligne">' + icon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/>') + '</button>' +
         '<span class="editor-image-toolbar-sep"></span>' +
-        '<label class="editor-image-opacity" title="Transparence">◐<input type="range" data-act="opacity" min="0" max="100" step="5" value="100"></label>' +
+        '<label class="editor-image-opacity" title="Transparence">' + icon('<path d="M12 3c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.6 3-7 7-12Z"/>') + '<input type="range" data-act="opacity" min="0" max="100" step="5" value="100"></label>' +
         '<span class="editor-image-toolbar-sep"></span>' +
-        '<button data-act="layer-front" title="Devant le texte">▲</button>' +
-        '<button data-act="layer-behind" title="Derrière le texte">▼</button>' +
-        '<button data-act="delete" title="Supprimer">✕</button>';
+        '<button data-act="layer-front" data-tip="Devant le texte" title="Devant le texte">' + icon('<path d="M12 19V5M6 11l6-6 6 6"/>') + '</button>' +
+        '<button data-act="layer-behind" data-tip="Derrière le texte" title="Derrière le texte">' + icon('<path d="M12 5v14M6 13l6 6 6-6"/>') + '</button>' +
+        '<span class="editor-image-toolbar-sep"></span>' +
+        '<button data-act="delete" data-tip="Supprimer" title="Supprimer" class="editor-image-toolbar-danger">' + icon('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>') + '</button>';
       document.body.appendChild(imageToolbar);
       imageToolbar.addEventListener('mousedown', function (event) {
         const btn = event.target.closest && event.target.closest('button[data-act]');
@@ -368,8 +370,30 @@ const Editor = (function () {
     quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
-    if (toolbar) { const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo'); const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table'); const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image'); const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url'); if (undoBtn) undoBtn.innerHTML = '↶'; if (redoBtn) redoBtn.innerHTML = '↷'; if (tableBtn) { tableBtn.innerHTML = '▦ Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; } if (twoColsBtn) { twoColsBtn.innerHTML = '▥ Zone 2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; } if (pageBreakBtn) { pageBreakBtn.innerHTML = '⏎ Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; } if (imageBtn) { imageBtn.innerHTML = '🖼 Image'; imageBtn.title = 'Insérer une image (upload en pièce jointe Grist)'; } if (imageUrlBtn) { imageUrlBtn.innerHTML = '🔗 Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL externe'; } }
-    const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar'; tableTools.innerHTML = '<button data-action="add-row-above">+ ligne au-dessus</button><button data-action="add-row-below">+ ligne en dessous</button><button data-action="remove-row">− ligne</button><button data-action="add-col-left">+ colonne à gauche</button><button data-action="add-col-right">+ colonne à droite</button><button data-action="remove-col">− colonne</button>'; document.getElementById('editor-container').appendChild(tableTools);
+    if (toolbar) {
+      const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
+      const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table');
+      const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image');
+      const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url');
+      const svgIcon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + path + '</svg>';
+      if (undoBtn) undoBtn.innerHTML = svgIcon('<path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/>');
+      if (redoBtn) redoBtn.innerHTML = svgIcon('<path d="M15 7l5 5-5 5M20 12H9A5 5 0 0 0 9 22h1"/>');
+      if (tableBtn) { tableBtn.innerHTML = svgIcon('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/>') + 'Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; }
+      if (twoColsBtn) { twoColsBtn.innerHTML = svgIcon('<rect x="3" y="5" width="8" height="14" rx="1"/><rect x="13" y="5" width="8" height="14" rx="1"/>') + '2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; }
+      if (pageBreakBtn) { pageBreakBtn.innerHTML = svgIcon('<path d="M4 4h16v16H4z M4 10h16M10 4v16"/>') + 'Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; }
+      if (imageBtn) { imageBtn.innerHTML = svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>') + 'Image'; imageBtn.title = 'Insérer une image (upload en pièce jointe Grist)'; }
+      if (imageUrlBtn) { imageUrlBtn.innerHTML = svgIcon('<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 19.5"/>') + 'Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL externe'; }
+    }
+    const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar';
+    tableTools.innerHTML =
+      '<button data-action="add-row-above" data-tip="+ ligne au-dessus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M12 4v4"/></svg></button>' +
+      '<button data-action="add-row-below" data-tip="+ ligne en dessous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M12 16v4"/></svg></button>' +
+      '<button data-action="remove-row" data-tip="− ligne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16"/></svg></button>' +
+      '<span class="editor-image-toolbar-sep"></span>' +
+      '<button data-action="add-col-left" data-tip="+ colonne à gauche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16M4 12h4"/></svg></button>' +
+      '<button data-action="add-col-right" data-tip="+ colonne à droite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16M16 12h4"/></svg></button>' +
+      '<button data-action="remove-col" data-tip="− colonne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16"/></svg></button>';
+    document.getElementById('editor-container').appendChild(tableTools);
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
     function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
     quill.root.addEventListener('click', function (event) { const cell = event.target.closest && event.target.closest('td,th'); if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; } activeCell = cell; tableTools.classList.add('visible'); positionTableToolbar(); });
@@ -504,7 +528,7 @@ const Editor = (function () {
       if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
       if (column) pendingAlignmentColumn = column;
     }, true);
-    tableTools.addEventListener('click', function (event) { const action = event.target.dataset.action; if (!action || !activeCell) return; const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex; const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; }; if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); } if (action === 'remove-row' && table.rows.length > 1) row.remove(); if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling)); if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); }); ensureTableColumns(table); quill.update(Quill.sources.USER); });
+    tableTools.addEventListener('click', function (event) { const actionBtn = event.target.closest && event.target.closest('button[data-action]'); const action = actionBtn && actionBtn.dataset.action; if (!action || !activeCell) return; const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex; const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; }; if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); } if (action === 'remove-row' && table.rows.length > 1) row.remove(); if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling)); if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); }); ensureTableColumns(table); quill.update(Quill.sources.USER); });
     Variables.init(quill); return quill;
   }
   function getQuill() { return quill; }
