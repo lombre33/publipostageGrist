@@ -106,29 +106,33 @@ const PdfExport = (function () {
     image.width = Math.max(15, widthPx * PX_TO_PT);
     if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
     if (node.style.position === 'absolute') {
-      // Si l'image porte data-anchor-off-left/top (editor.js:updateAnchorOffset),
-      // sa position a été mesurée en direct par rapport à SON PROPRE paragraphe,
-      // pas par rapport au haut de l'éditeur. On résout alors sa position finale
-      // (cf. resolveAnchoredImagePositions) en deux passes de mise en page
-      // pdfmake, à partir de la position RÉELLEMENT calculée par pdfmake pour ce
-      // paragraphe — la seule façon fiable de rester exact quel que soit ce qui
-      // précède l'image dans le document (titre, autres paragraphes...), leur
-      // hauteur en PDF ne coïncidant jamais exactement avec leur hauteur dans
-      // l'éditeur. Fallback (image sans ancre connue, ou dans un tableau/zone à
-      // 2 colonnes non couverts par ce mécanisme) : ancien calcul, marge de page
-      // + padding éditeur retranché.
+      // Si l'image porte data-anchor-off-left/above-*/below-*
+      // (editor.js:updateAnchorOffset), sa position a été mesurée en direct
+      // par rapport aux paragraphes qui l'ENCADRENT (le dernier qui finit
+      // avant elle, le premier qui commence après) - pas par rapport à un
+      // paragraphe unique "le plus proche", ni au haut de l'éditeur. On
+      // résout alors sa position finale (cf. resolveAnchoredImagePositions)
+      // par INTERPOLATION entre les positions RÉELLEMENT calculées par
+      // pdfmake pour ces deux repères, après une 1ère passe de mesure - exact
+      // quel que soit ce qui se trouve entre les deux (texte, zone 2-colonnes,
+      // tableau...), sans avoir à choisir "LE" bon paragraphe ni à calibrer
+      // chaque type de bloc séparément. Fallback (image sans aucun repère, ou
+      // dans un tableau/zone à 2 colonnes non couverts par ce mécanisme) :
+      // ancien calcul, marge de page + padding éditeur retranché.
       const anchorLeft = node.dataset.anchorOffLeft;
-      const anchorTop = node.dataset.anchorOffTop;
-      const anchorTargetId = node.dataset.anchorTargetId;
-      if (anchorLeft !== undefined && anchorTop !== undefined && anchorTargetId) {
-        image._pendingOffset = { left: parseFloat(anchorLeft) || 0, top: parseFloat(anchorTop) || 0 };
-        // Résolu après coup (cf. htmlToPdfContent) : le bloc-ancre référencé par
-        // cet identifiant peut être n'importe où dans le document (avant OU
-        // après cette image), pas forcément celui qui la contient dans le DOM —
-        // une image seule sur sa ligne, glissée pour recouvrir un AUTRE
-        // paragraphe, reste ancrée sur CE paragraphe-là, pas sur le sien
-        // (souvent vide une fois l'image sortie du flux).
-        image._anchorTargetId = anchorTargetId;
+      const aboveId = node.dataset.anchorAboveId;
+      const belowId = node.dataset.anchorBelowId;
+      if (anchorLeft !== undefined && (aboveId || belowId)) {
+        image._pendingOffset = {
+          left: parseFloat(anchorLeft) || 0,
+          top: node.dataset.anchorAboveOffTop !== undefined ? (parseFloat(node.dataset.anchorAboveOffTop) || 0) : undefined,
+          topBelow: node.dataset.anchorBelowOffTop !== undefined ? (parseFloat(node.dataset.anchorBelowOffTop) || 0) : undefined,
+        };
+        // Résolus après coup (cf. htmlToPdfContent) : les blocs-ancres référencés
+        // par ces identifiants peuvent être n'importe où dans le document,
+        // traités avant OU après cette image dans le parcours DOM.
+        image._anchorAboveId = aboveId || null;
+        image._anchorBelowId = belowId || null;
         image.absolutePosition = { x: 0, y: 0 }; // provisoire, résolu après la 1ère passe de mise en page
       } else {
         const leftPx = parseFloat(node.style.left) || 0;
@@ -412,28 +416,54 @@ const PdfExport = (function () {
   // cf. pdfImageFromNode) une fois qu'une 1ère passe de mise en page pdfmake a
   // rempli `.positions` sur leur bloc-paragraphe ancre. À appeler après avoir
   // fait générer ce premier PDF "de mesure" (jamais montré à l'utilisateur).
+  function resolvedTop(anchor) {
+    return anchor && anchor.block && anchor.block.positions && anchor.block.positions[0]
+      ? anchor.block.positions[0].top
+      : null;
+  }
   function resolveAnchoredImagePositions(pendingImages) {
     return pendingImages.map(img => {
       const offset = img._pendingOffset;
-      const anchor = img._anchorBlock;
-      if (anchor && anchor.block && anchor.block.positions && anchor.block.positions[0]) {
-        // x part de anchor.containerLeft (bord gauche de la BOÎTE du paragraphe,
-        // cf. calcul dans htmlToPdfContent), PAS de anchor.block.positions[0].left :
-        // pour un paragraphe centré/aligné à droite, .positions[0].left est le bord
-        // gauche du TEXTE RENDU de cette ligne précise (déjà décalé par le centrage,
-        // et variable ligne par ligne selon leur largeur) - alors que offset.left
-        // (editor.js:updateAnchorOffset) est mesuré par rapport à getBoundingClientRect()
-        // du paragraphe, c'est-à-dire le bord gauche de sa BOÎTE, insensible à
-        // l'alignement du texte qu'elle contient. Additionner offset.left à
-        // .positions[0].left revenait donc à appliquer DEUX FOIS l'effet du
-        // centrage (une fois dans le rendu pdfmake, une fois dans l'offset
-        // éditeur qui l'ignore) - confirmé comme cause du décalage persistant
-        // signalé par l'utilisateur sur un paragraphe centré.
-        return { x: anchor.containerLeft + offset.left * PX_TO_PT, y: anchor.block.positions[0].top + offset.top * PX_TO_PT };
+      const above = img._anchorAboveBlock;
+      const below = img._anchorBelowBlock;
+      const aboveTop = resolvedTop(above);
+      const belowTop = resolvedTop(below);
+      // x part du containerLeft de l'ancre de référence (bord gauche de la
+      // BOÎTE du paragraphe, cf. calcul dans htmlToPdfContent), PAS de
+      // .positions[0].left : pour un paragraphe centré/aligné à droite,
+      // .positions[0].left est le bord gauche du TEXTE RENDU de cette ligne
+      // précise (déjà décalé par le centrage, et variable ligne par ligne
+      // selon leur largeur) - alors que offset.left (editor.js:updateAnchorOffset)
+      // est mesuré par rapport à getBoundingClientRect() du paragraphe,
+      // c'est-à-dire le bord gauche de sa BOÎTE, insensible à l'alignement du
+      // texte qu'elle contient. Additionner offset.left à .positions[0].left
+      // reviendrait donc à appliquer DEUX FOIS l'effet du centrage.
+      const xRef = above || below;
+      const x = xRef ? xRef.containerLeft + offset.left * PX_TO_PT : PAGE_MARGIN_PT + offset.left * PX_TO_PT;
+      if (aboveTop !== null && belowTop !== null && offset.top !== undefined && offset.topBelow !== undefined) {
+        // Encadrement par les DEUX paragraphes qui bornent l'image (le dernier
+        // qui finit avant elle, le premier qui commence après) : on interpole
+        // sa position Y entre leurs positions RÉELLEMENT mesurées par pdfmake,
+        // selon la proportion mesurée dans l'éditeur - exact quel que soit ce
+        // qui se trouve entre les deux (texte, zone 2-colonnes, tableau...),
+        // sans avoir besoin de choisir "LE" bon paragraphe ni de calibrer
+        // séparément chaque type de bloc intercalé.
+        const editorSpan = offset.top - offset.topBelow;
+        const fraction = editorSpan !== 0 ? offset.top / editorSpan : 0;
+        const pdfSpan = belowTop - aboveTop;
+        return { x, y: aboveTop + fraction * pdfSpan };
       }
-      // Paragraphe ancre sans texte (image seule sur sa ligne) : pas de position
-      // pdfmake à lire, on retombe sur l'ancien calcul (marge de page).
-      return { x: PAGE_MARGIN_PT + offset.left * PX_TO_PT, y: PAGE_MARGIN_PT + offset.top * PX_TO_PT };
+      if (aboveTop !== null && offset.top !== undefined) {
+        return { x, y: aboveTop + offset.top * PX_TO_PT };
+      }
+      if (belowTop !== null && offset.topBelow !== undefined) {
+        return { x, y: belowTop + offset.topBelow * PX_TO_PT };
+      }
+      // Aucune ancre exploitable (paragraphe(s) sans texte, ex. image seule
+      // sur sa ligne) : pas de position pdfmake à lire, on retombe sur
+      // l'ancien calcul (marge de page).
+      const fallbackTop = offset.top !== undefined ? offset.top : offset.topBelow || 0;
+      return { x, y: PAGE_MARGIN_PT + fallbackTop * PX_TO_PT };
     });
   }
   // Les images "derrière le texte" sont préfixées avant tout le reste du
@@ -480,8 +510,10 @@ const PdfExport = (function () {
     root.childNodes.forEach(visit);
     behindImages.concat(frontImages).forEach(img => {
       if (!img._pendingOffset) return;
-      img._anchorBlock = anchorIdToBlock[img._anchorTargetId] || null;
-      delete img._anchorTargetId;
+      img._anchorAboveBlock = img._anchorAboveId ? (anchorIdToBlock[img._anchorAboveId] || null) : null;
+      img._anchorBelowBlock = img._anchorBelowId ? (anchorIdToBlock[img._anchorBelowId] || null) : null;
+      delete img._anchorAboveId;
+      delete img._anchorBelowId;
     });
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     return behindImages.concat(content, frontImages);
@@ -566,7 +598,8 @@ const PdfExport = (function () {
     content.filter(b => b && b._pendingOffset).forEach((img, i) => {
       if (resolved[i]) img.absolutePosition = resolved[i];
       delete img._pendingOffset;
-      delete img._anchorBlock;
+      delete img._anchorAboveBlock;
+      delete img._anchorBelowBlock;
     });
     return content;
   }

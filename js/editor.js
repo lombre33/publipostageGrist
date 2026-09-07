@@ -332,92 +332,80 @@ const Editor = (function () {
     }
     return el.dataset.pmAnchorId;
   }
-  function findVisualAnchor(img) {
+  // Historique : l'ancrage a d'abord choisi UN SEUL paragraphe (par distance
+  // au centre, puis par chevauchement, puis par hauteur propre en cas
+  // d'égalité - cf. l'historique de ce fichier) et appliqué un décalage brut
+  // à sa position PDF mesurée. Chaque affinage réglait un cas précis mais en
+  // cassait parfois un autre (empilement de lignes vides, zones 2-colonnes,
+  // paragraphes très longs...), le point commun étant : CE PARAGRAPHE UNIQUE
+  // devient lui-même une approximation dès que l'image ne lui est pas
+  // immédiatement adjacente. Remplacé par un encadrement : le bloc
+  // immédiatement AU-DESSUS et celui immédiatement EN DESSOUS de l'image
+  // (peu importe ce qu'elle recouvre entre les deux), puis une
+  // INTERPOLATION LINÉAIRE de sa position entre leurs deux positions PDF
+  // réellement mesurées après mise en page. Cela élimine le besoin de
+  // choisir "LE" bon paragraphe (et donc toute ambiguïté d'égalité) et reste
+  // exact quel que soit ce qui se trouve entre les deux repères, sans
+  // calibrage particulier par type de bloc.
+  function findBracketingAnchors(img) {
     const imgRect = img.getBoundingClientRect();
-    const imgCenterY = imgRect.top + imgRect.height / 2;
-    const candidates = quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
-    // Deux passes : (1) le paragraphe que l'image recouvre le PLUS (en hauteur
-    // partagée) - le plus fidèle à l'intuition "sur quel texte est posée cette
-    // image", surtout pour une image plus haute qu'une simple ligne, dont le
-    // CENTRE peut tomber sur une ligne courte adjacente (un titre, une ligne
-    // vide) alors qu'elle recouvre en réalité surtout un paragraphe voisin
-    // bien plus grand (confirmé : une image glissée loin sous son ancre
-    // s'accrochait à la ligne la plus proche de son centre plutôt qu'au
-    // paragraphe qu'elle recouvre visiblement le plus). (2) à défaut d'aucun
-    // chevauchement (image posée dans un intervalle entre deux blocs), on
-    // retombe sur l'ancienne méthode par distance au centre.
-    //
-    // Tolérance d'égalité du chevauchement (~un peu plus qu'une ligne) : une
-    // image assez haute pour chevaucher PLUSIEURS lignes courtes consécutives
-    // (titre + lignes vides d'espacement, chacune ~20px) les recouvre alors
-    // toutes de façon quasi identique (à 1-2px près) - un pur "plus grand
-    // chevauchement" n'est alors qu'un choix arbitraire dépendant de l'ordre
-    // du DOM, sans rapport avec l'intuition visuelle. Dans ce cas (égalité à
-    // cette tolérance près), on préfère le candidat dont la propre hauteur
-    // est la plus grande : un vrai paragraphe de plusieurs lignes est une
-    // ancre bien plus significative/stable qu'une ligne vide ou un titre
-    // d'une seule ligne, et son rendu PDF est calibré pour du texte réel (cf.
-    // le correctif marge nulle des paragraphes vides).
-    const OVERLAP_TIE_PX = 24;
-    let bestOverlap = null, bestOverlapAmount = -Infinity, bestOverlapHeight = -Infinity, bestOverlapContains = false;
-    let bestDist = null, bestDistAmount = Infinity, bestDistContains = false;
-    candidates.forEach(el => {
-      // Exclut aussi la zone 2-colonnes ELLE-MÊME (pas seulement son contenu,
-      // déjà exclu ci-dessus) : c'est un <div> comme un autre pour ce
-      // sélecteur, donc éligible comme ancre - mais pdf-export.js
-      // (htmlToPdfContent) traite les zones 2-colonnes dans une branche
-      // séparée qui ne renseigne JAMAIS `anchorIdToBlock` pour elles. Une
-      // image ancrée dessus n'a donc aucun bloc PDF sur lequel lire une
-      // position réelle, et retombe silencieusement sur l'ancien calcul
-      // "aucune ancre connue" (marge de page + petit décalage) - qui la place
-      // près du haut de la page sans rapport avec sa position réelle dans un
-      // document contenant des zones 2-colonnes (confirmé par l'utilisateur :
-      // image mal placée quand elle suit un ou deux blocs 2-colonnes).
+    const candidates = [];
+    quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre').forEach(el => {
       if (el.closest('.two-columns-column, .editable-table, .two-columns-zone')) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
-      const contains = el.contains(img);
-      const overlap = Math.min(imgRect.bottom, r.bottom) - Math.max(imgRect.top, r.top);
-      if (overlap > 0) {
-        const tied = Math.abs(overlap - bestOverlapAmount) <= OVERLAP_TIE_PX;
-        const better = overlap > bestOverlapAmount + OVERLAP_TIE_PX
-          || (tied && r.height > bestOverlapHeight + 0.5)
-          || (tied && Math.abs(r.height - bestOverlapHeight) <= 0.5 && contains && !bestOverlapContains);
-        if (better) { bestOverlapAmount = overlap; bestOverlapHeight = r.height; bestOverlap = el; bestOverlapContains = contains; }
-      }
-      const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
-      // À égalité (quasi-égalité, tolérance 0.5px) de distance, on privilégie le
-      // paragraphe qui contient RÉELLEMENT l'image dans le DOM. Cas fréquent :
-      // une image passée en position absolue laisse son propre paragraphe
-      // s'effondrer à hauteur ~0, exactement au même point que le bas du
-      // paragraphe précédent (ex. un titre juste au-dessus) — les deux se
-      // retrouvent alors à distance identique du centre de l'image, et sans ce
-      // départage l'ordre d'itération DOM (le voisin est vu en premier) faisait
-      // ancrer l'image sur le MAUVAIS paragraphe.
-      const betterDist = dist < bestDistAmount - 0.5 || (Math.abs(dist - bestDistAmount) <= 0.5 && contains && !bestDistContains);
-      if (betterDist) { bestDistAmount = dist; bestDist = el; bestDistContains = contains; }
+      candidates.push({ el, rect: r });
     });
-    return bestOverlap || bestDist;
+    candidates.sort((a, b) => a.rect.top - b.rect.top);
+    const EPS = 0.5;
+    let above = null, below = null;
+    candidates.forEach(c => {
+      if (c.rect.bottom <= imgRect.top + EPS) above = c; // le DERNIER qui finit avant l'image (le plus proche au-dessus)
+      else if (!below && c.rect.top >= imgRect.bottom - EPS) below = c; // le PREMIER qui commence après l'image
+    });
+    return { above: above ? above.el : null, below: below ? below.el : null };
   }
   function updateAnchorOffset(img) {
     if (img.closest('.two-columns-column, .editable-table')) {
       delete img.dataset.anchorOffLeft;
-      delete img.dataset.anchorOffTop;
-      delete img.dataset.anchorTargetId;
+      delete img.dataset.anchorAboveOffTop;
+      delete img.dataset.anchorBelowOffTop;
+      delete img.dataset.anchorAboveId;
+      delete img.dataset.anchorBelowId;
       return;
     }
-    const anchor = findVisualAnchor(img);
-    if (!anchor || anchor === quill.root) {
+    const { above, below } = findBracketingAnchors(img);
+    if (!above && !below) {
       delete img.dataset.anchorOffLeft;
-      delete img.dataset.anchorOffTop;
-      delete img.dataset.anchorTargetId;
+      delete img.dataset.anchorAboveOffTop;
+      delete img.dataset.anchorBelowOffTop;
+      delete img.dataset.anchorAboveId;
+      delete img.dataset.anchorBelowId;
       return;
     }
     const imgRect = img.getBoundingClientRect();
-    const anchorRect = anchor.getBoundingClientRect();
-    img.dataset.anchorOffLeft = Math.round(imgRect.left - anchorRect.left);
-    img.dataset.anchorOffTop = Math.round(imgRect.top - anchorRect.top);
-    img.dataset.anchorTargetId = ensureAnchorId(anchor);
+    // Référence horizontale : le repère au-dessus s'il existe (le plus
+    // probable pour un paragraphe indenté - liste, citation), sinon celui du
+    // dessous. Contrairement à la position verticale, l'horizontal ne dérive
+    // pas selon ce qui précède (le texte démarre toujours au même bord de
+    // page), un seul repère suffit donc, pas besoin d'interpoler.
+    const leftRef = above || below;
+    const leftRefRect = leftRef.getBoundingClientRect();
+    img.dataset.anchorOffLeft = Math.round(imgRect.left - leftRefRect.left);
+    if (above) {
+      img.dataset.anchorAboveId = ensureAnchorId(above);
+      img.dataset.anchorAboveOffTop = Math.round(imgRect.top - above.getBoundingClientRect().top);
+    } else {
+      delete img.dataset.anchorAboveId;
+      delete img.dataset.anchorAboveOffTop;
+    }
+    if (below) {
+      img.dataset.anchorBelowId = ensureAnchorId(below);
+      img.dataset.anchorBelowOffTop = Math.round(imgRect.top - below.getBoundingClientRect().top);
+    } else {
+      delete img.dataset.anchorBelowId;
+      delete img.dataset.anchorBelowOffTop;
+    }
   }
 
   // Bascule une image en calque "devant" / "derrière" le texte (position:absolute

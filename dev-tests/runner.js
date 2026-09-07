@@ -52,14 +52,23 @@
       setTimeout(resolve, 5000);
     });
 
-    if (sc.layer !== 'normal') {
+    if (sc.layer !== img.dataset.layer) {
+      // Editor.insertImage() met désormais une image fraîche par défaut en
+      // calque "devant" (cf. editor.js) : le bouton toolbar est un TOGGLE
+      // (état courant -> 'normal' si on reclique dessus, sinon l'état du
+      // bouton cliqué), donc on clique le bouton du calque COURANT pour
+      // revenir à 'normal', ou celui du calque VISÉ sinon — jamais un
+      // improbable "layer-normal" qui n'existe pas dans la toolbar.
+      const actToClick = sc.layer === 'normal' ? img.dataset.layer : sc.layer;
       img.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await new Promise(r => setTimeout(r, 40));
       const toolbar = document.querySelector('.editor-image-toolbar');
-      const btn = toolbar.querySelector('button[data-act="layer-' + sc.layer + '"]');
+      const btn = toolbar.querySelector('button[data-act="layer-' + actToClick + '"]');
       btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       await new Promise(r => setTimeout(r, 40));
       img = quill.root.querySelector('img.editor-image');
+    }
+    if (sc.layer !== 'normal') {
       const p = img.closest('p, h1, h2, h3, li, blockquote');
       const pRect = p.getBoundingClientRect();
       img.style.width = Math.round(pRect.width) + 'px';
