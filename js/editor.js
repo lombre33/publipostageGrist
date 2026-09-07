@@ -362,7 +362,18 @@ const Editor = (function () {
     let bestOverlap = null, bestOverlapAmount = -Infinity, bestOverlapHeight = -Infinity, bestOverlapContains = false;
     let bestDist = null, bestDistAmount = Infinity, bestDistContains = false;
     candidates.forEach(el => {
-      if (el.closest('.two-columns-column, .editable-table')) return;
+      // Exclut aussi la zone 2-colonnes ELLE-MÊME (pas seulement son contenu,
+      // déjà exclu ci-dessus) : c'est un <div> comme un autre pour ce
+      // sélecteur, donc éligible comme ancre - mais pdf-export.js
+      // (htmlToPdfContent) traite les zones 2-colonnes dans une branche
+      // séparée qui ne renseigne JAMAIS `anchorIdToBlock` pour elles. Une
+      // image ancrée dessus n'a donc aucun bloc PDF sur lequel lire une
+      // position réelle, et retombe silencieusement sur l'ancien calcul
+      // "aucune ancre connue" (marge de page + petit décalage) - qui la place
+      // près du haut de la page sans rapport avec sa position réelle dans un
+      // document contenant des zones 2-colonnes (confirmé par l'utilisateur :
+      // image mal placée quand elle suit un ou deux blocs 2-colonnes).
+      if (el.closest('.two-columns-column, .editable-table, .two-columns-zone')) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
       const contains = el.contains(img);
