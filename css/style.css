@@ -192,7 +192,14 @@ body { display:flex; flex-direction:column; }
 .ql-toolbar .ql-insert-image:hover, .ql-toolbar .ql-insert-image-url:hover { background: var(--accent-soft); }
 .ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
 .ql-toolbar .ql-undo svg, .ql-toolbar .ql-redo svg { width: 16px; height: 16px; vertical-align: -3px; }
-.two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 14px 0; padding: 20px 10px 10px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
+/* margin/padding volontairement réduits au minimum (juste la place du
+   repère "2 COLONNES" en haut) : cette "chrome" d'édition n'existe pas côté
+   PDF (pdf-export.js:twoColumnsFrom ne pose qu'une petite marge de 13/4pt,
+   calibrée pour correspondre à CETTE valeur précisément) - un padding/marge
+   plus généreux ici gonflait la hauteur de la zone dans l'éditeur sans
+   contrepartie dans le PDF, décalant tout ce qui suit (ex. une image en
+   calque ancrée juste après). */
+.two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
 .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 22px; height: 40px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; user-select: none; touch-action: none; display: flex; align-items: center; justify-content: center; }

@@ -213,6 +213,13 @@ const PdfExport = (function () {
     // .two-columns-column). L'alignement par défaut (gauche) reste implicite
     // côté pdfmake, on ne l'écrit donc que si une valeur explicite est lue.
     const columns = colNodes.map(col => {
+      // Alignement porté par la COLONNE elle-même (ex. style="text-align:
+      // justify" posé directement sur le <div class="two-columns-column">,
+      // cas courant quand son contenu est du texte brut sans <p> wrapper
+      // propre - confirmé sur le HTML réel de l'utilisateur). Servira de
+      // valeur par défaut : la boucle plus bas la remplace par un alignement
+      // plus spécifique si un élément interne en porte un.
+      const colAlign = alignment(col);
       const blocks = htmlToPdfContent(col.innerHTML);
       // collect() parcourt le DOM de la colonne en MIRROR exactement les
       // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
@@ -239,6 +246,16 @@ const PdfExport = (function () {
       const root = document.createElement('div');
       root.innerHTML = col.innerHTML || '';
       Array.from(root.childNodes).forEach(collect);
+      // Applique l'alignement de la colonne comme valeur par défaut à TOUS
+      // ses blocs : la boucle ci-dessous ne peut jamais le découvrir elle-même
+      // (elle ne parcourt que `root`, une reconstruction DOM déconnectée de
+      // `col` - la remontée s'arrête donc systématiquement à `root` avant
+      // d'atteindre le vrai `.two-columns-column` qui porte cet alignement).
+      // Les affectations plus spécifiques de la boucle (ql-align-* sur un
+      // élément interne précis) s'appliquent ensuite par-dessus.
+      if (colAlign) {
+        blocks.forEach(b => { if (b && typeof b === 'object' && !b.columns) b.alignment = colAlign; });
+      }
       for (let i = 0; i < blocks.length && i < alignSources.length; i += 1) {
         const src = alignSources[i];
         const isPlaceholder = src.classList &&
@@ -300,7 +317,17 @@ const PdfExport = (function () {
         { width: rightWidth, stack: columns[1] },
       ],
       columnGap: columnGap,
-      margin: [0, 6, 0, 6],
+      // Calibré pour correspondre exactement à la "chrome" d'édition réduite
+      // au minimum de .two-columns-zone (css/style.css) : marge(0)+padding
+      // haut(16px)+bordure(1px) = 17px*0.75 = 12.75pt en haut, marge(0)+
+      // padding bas(4px)+bordure(1px) = 5px*0.75 = 3.75pt en bas. Un écart
+      // ici décale tout le contenu qui suit cette zone dans le document
+      // (ex. une image en calque ancrée juste après) sans que l'ancrage
+      // (qui lit la position RÉELLE du bloc ancre après mise en page) ne
+      // puisse s'en apercevoir - contrairement à un paragraphe de texte, la
+      // hauteur de CETTE zone n'est jamais mesurée dans l'éditeur, seulement
+      // supposée correspondre à ces deux chiffres.
+      margin: [0, 12.75, 0, 3.75],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
