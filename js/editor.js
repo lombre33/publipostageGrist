@@ -272,35 +272,75 @@ const Editor = (function () {
   }
 
   // Mémorise, en plus de sa position CSS (relative à .ql-editor), la position
-  // de l'image RELATIVE au paragraphe qui la contient (data-anchor-off-*).
-  // Sert uniquement à l'export PDF (pdf-export.js) pour recaler une image en
-  // calque sur la position RÉELLE de son paragraphe telle que pdfmake la
-  // calcule, plutôt que sur une simple distance depuis le haut de l'éditeur :
-  // cette dernière ne tient pas compte du fait qu'un titre ou un paragraphe
-  // précédent peut occuper une hauteur différente en PDF qu'à l'écran (tailles
-  // de police, marges de bloc, interligne — tout ça diverge légèrement entre
-  // le rendu navigateur et le moteur de mise en page de pdfmake), ce qui
-  // décale verticalement toute image positionnée en absolu par rapport au
-  // texte qu'elle est censée recouvrir dès qu'il y a du contenu avant elle.
+  // de l'image RELATIVE au paragraphe qu'elle recouvre VISUELLEMENT en ce
+  // moment (data-anchor-off-*, data-anchor-target-id). Sert uniquement à
+  // l'export PDF (pdf-export.js) pour recaler une image en calque sur la
+  // position RÉELLE de ce paragraphe telle que pdfmake la calcule, plutôt que
+  // sur une simple distance depuis le haut de l'éditeur : cette dernière ne
+  // tient pas compte du fait qu'un titre ou un paragraphe précédent peut
+  // occuper une hauteur différente en PDF qu'à l'écran (tailles de police,
+  // marges de bloc, interligne — tout diverge légèrement entre le rendu
+  // navigateur et le moteur de mise en page de pdfmake), ce qui décale
+  // verticalement toute image positionnée en absolu par rapport au texte
+  // qu'elle est censée recouvrir dès qu'il y a du contenu avant elle.
+  //
+  // L'ancre est choisie par PROXIMITÉ VISUELLE (le bloc dont le rectangle est
+  // le plus proche du centre actuel de l'image), PAS par imbrication DOM
+  // (img.closest('p')). Bug corrigé : une image insérée seule sur sa propre
+  // ligne puis glissée pour recouvrir un AUTRE paragraphe restait ancrée sur
+  // son paragraphe d'origine — désormais vide/quasi invisible une fois
+  // l'image sortie du flux — au lieu du paragraphe qu'elle recouvre
+  // réellement, faisant atterrir l'image bien plus haut que prévu dans le
+  // PDF (souvent perçu comme "l'image saute en haut de la page").
+  //
+  // Comme le bloc-ancre n'est plus forcément celui qui contient l'image dans
+  // le DOM, il lui faut un identifiant stable (data-pm-anchor-id) que
+  // pdf-export.js peut retrouver après avoir traité tout le document (le
+  // bloc-ancre peut apparaître avant OU après l'image dans le HTML).
+  //
   // Non calculé pour les images dans un tableau/zone 2 colonnes (mise en page
   // PDF récursive séparée pour ces conteneurs, cf. pdf-export.js) : l'export
   // retombe alors sur l'ancien calcul (marge de page + padding éditeur).
+  function ensureAnchorId(el) {
+    if (!el.dataset.pmAnchorId) {
+      el.dataset.pmAnchorId = 'a' + Math.random().toString(36).slice(2, 10);
+    }
+    return el.dataset.pmAnchorId;
+  }
+  function findVisualAnchor(img) {
+    const imgRect = img.getBoundingClientRect();
+    const imgCenterY = imgRect.top + imgRect.height / 2;
+    const candidates = quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
+    let best = null;
+    let bestDist = Infinity;
+    candidates.forEach(el => {
+      if (el.closest('.two-columns-column, .editable-table')) return;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
+      const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
+      if (dist < bestDist) { bestDist = dist; best = el; }
+    });
+    return best;
+  }
   function updateAnchorOffset(img) {
     if (img.closest('.two-columns-column, .editable-table')) {
       delete img.dataset.anchorOffLeft;
       delete img.dataset.anchorOffTop;
+      delete img.dataset.anchorTargetId;
       return;
     }
-    const anchor = img.closest('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
+    const anchor = findVisualAnchor(img);
     if (!anchor || anchor === quill.root) {
       delete img.dataset.anchorOffLeft;
       delete img.dataset.anchorOffTop;
+      delete img.dataset.anchorTargetId;
       return;
     }
     const imgRect = img.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
     img.dataset.anchorOffLeft = Math.round(imgRect.left - anchorRect.left);
     img.dataset.anchorOffTop = Math.round(imgRect.top - anchorRect.top);
+    img.dataset.anchorTargetId = ensureAnchorId(anchor);
   }
 
   // Bascule une image en calque "devant" / "derrière" le texte (position:absolute

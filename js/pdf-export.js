@@ -119,8 +119,16 @@ const PdfExport = (function () {
       // + padding éditeur retranché.
       const anchorLeft = node.dataset.anchorOffLeft;
       const anchorTop = node.dataset.anchorOffTop;
-      if (anchorLeft !== undefined && anchorTop !== undefined) {
+      const anchorTargetId = node.dataset.anchorTargetId;
+      if (anchorLeft !== undefined && anchorTop !== undefined && anchorTargetId) {
         image._pendingOffset = { left: parseFloat(anchorLeft) || 0, top: parseFloat(anchorTop) || 0 };
+        // Résolu après coup (cf. htmlToPdfContent) : le bloc-ancre référencé par
+        // cet identifiant peut être n'importe où dans le document (avant OU
+        // après cette image), pas forcément celui qui la contient dans le DOM —
+        // une image seule sur sa ligne, glissée pour recouvrir un AUTRE
+        // paragraphe, reste ancrée sur CE paragraphe-là, pas sur le sien
+        // (souvent vide une fois l'image sortie du flux).
+        image._anchorTargetId = anchorTargetId;
         image.absolutePosition = { x: 0, y: 0 }; // provisoire, résolu après la 1ère passe de mise en page
       } else {
         const leftPx = parseFloat(node.style.left) || 0;
@@ -291,10 +299,6 @@ const PdfExport = (function () {
     }
     images.forEach(img => {
       const layer = img._layer; delete img._layer;
-      // Ancre l'image sur le bloc texte du MÊME paragraphe : c'est sa position
-      // pdfmake réelle (après mise en page, cf. resolveAnchoredImagePositions)
-      // qui sert de référence pour recalculer la position finale de l'image.
-      if (img._pendingOffset && block) img._anchorBlock = block;
       if (layer === 'behind' && behindImages) { behindImages.push(img); return; }
       if (layer === 'front' && frontImages) { frontImages.push(img); return; }
       if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
@@ -325,7 +329,44 @@ const PdfExport = (function () {
   // détermine l'ordre de peinture. absolutePosition les sort de toute façon du
   // flux normal, donc ce réordonnancement n'affecte pas la mise en page du
   // reste du document.
-  function htmlToPdfContent(html) { const root = document.createElement('div'); root.innerHTML = html || ''; const blocks = []; const frontImages = []; const behindImages = []; let pendingPageBreak = false; const visit = node => { if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; } if (node.nodeType !== Node.ELEMENT_NODE) return; if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; } if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; } if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; } if (isBlock(node)) { blockFrom(node, pendingPageBreak, frontImages, behindImages).forEach(b => blocks.push(b)); pendingPageBreak = false; return; } node.childNodes.forEach(visit); }; root.childNodes.forEach(visit); const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }]; return behindImages.concat(content, frontImages); }
+  function htmlToPdfContent(html) {
+    const root = document.createElement('div'); root.innerHTML = html || '';
+    const blocks = []; const frontImages = []; const behindImages = [];
+    // data-pm-anchor-id -> bloc pdfmake correspondant (cf. editor.js:findVisualAnchor
+    // / ensureAnchorId) : une image en calque peut être ancrée sur un paragraphe
+    // qui n'est PAS celui qui la contient dans le DOM (glissée pour recouvrir un
+    // autre paragraphe que le sien), donc potentiellement traité avant OU après
+    // elle dans ce parcours - la résolution se fait après coup, une fois tout
+    // le document parcouru (cf. boucle finale ci-dessous).
+    const anchorIdToBlock = {};
+    let pendingPageBreak = false;
+    const visit = node => {
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
+      if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; }
+      if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; }
+      if (isBlock(node)) {
+        const produced = blockFrom(node, pendingPageBreak, frontImages, behindImages);
+        produced.forEach(b => blocks.push(b));
+        if (node.dataset && node.dataset.pmAnchorId) {
+          const textBlock = produced.find(b => b && b.text);
+          if (textBlock) anchorIdToBlock[node.dataset.pmAnchorId] = textBlock;
+        }
+        pendingPageBreak = false;
+        return;
+      }
+      node.childNodes.forEach(visit);
+    };
+    root.childNodes.forEach(visit);
+    behindImages.concat(frontImages).forEach(img => {
+      if (!img._pendingOffset) return;
+      img._anchorBlock = anchorIdToBlock[img._anchorTargetId] || null;
+      delete img._anchorTargetId;
+    });
+    const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
+    return behindImages.concat(content, frontImages);
+  }
   // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
   // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
   // On rastérise donc tout SVG en PNG via un aller-retour <img>/<canvas> avant de
