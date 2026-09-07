@@ -796,6 +796,23 @@ const Editor = (function () {
     // lecture, #editor-container en display:none — et écrirait une donnée
     // fausse plutôt que de laisser l'ancienne valeur ou l'absence de donnée).
     if (quill.root.offsetParent !== null) {
+      // Purge tous les data-pm-anchor-id existants avant de recalculer : le
+      // navigateur (scission d'un bloc contenteditable par Entrée, ou la
+      // reconstruction interne de Quill) clone parfois les ATTRIBUTS du
+      // paragraphe existant sur les nouveaux paragraphes qu'il crée à côté -
+      // confirmé par repro : insérer 3 lignes vides juste au-dessus d'un
+      // paragraphe déjà ancré (data-pm-anchor-id posé par un export
+      // précédent) leur fait hériter TOUTES le même identifiant. Comme
+      // pdf-export.js résout `data-anchor-target-id` via une simple table
+      // {id -> bloc} remplie au fil d'un parcours du DOM (le dernier
+      // paragraphe partageant cet id "gagne", silencieusement), un tel
+      // doublon peut faire résoudre l'ancre d'une image sur N'IMPORTE LEQUEL
+      // des paragraphes dupliqués plutôt que sur le vrai - le choix dépendant
+      // alors de l'ordre du DOM, pas de la réalité. Repartir d'un état sans
+      // AUCUN data-pm-anchor-id avant chaque recalcul garantit que
+      // ensureAnchorId() ne réutilise jamais un id déjà posé ailleurs : cette
+      // passe réattribue toujours des id neufs et donc uniques.
+      quill.root.querySelectorAll('[data-pm-anchor-id]').forEach(el => { delete el.dataset.pmAnchorId; });
       quill.root.querySelectorAll('img.editor-image.editor-image-floating').forEach(updateAnchorOffset);
     }
     const clone = quill.root.cloneNode(true);
