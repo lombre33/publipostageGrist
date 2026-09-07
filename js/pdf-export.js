@@ -59,6 +59,67 @@ const PdfExport = (function () {
   // images rencontrées sont donc accumulées à part (floatingImages) pour être
   // ajoutées par l'appelant comme blocs de contenu indépendants.
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans exportNativePdf
+  // Largeur de contenu PDF (page A4 moins les deux marges), en px éditeur —
+  // référence commune pour toute mesure DOM offscreen destinée à imiter la
+  // largeur réellement disponible dans le PDF (cf. CONTENT_WIDTH_PX ci-dessous
+  // et twoColumnsFrom, qui l'utilisait déjà en calcul local avant extraction).
+  const CONTENT_WIDTH_PX = (595.28 - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
+  // Indentation horizontale RÉELLE d'un bloc (liste à puces/numérotée, citation,
+  // paragraphe indenté via ql-indent-N...) : plutôt que deviner/coder en dur une
+  // valeur par type de bloc (fragile, cf. les 3 tentatives ratées sur la largeur
+  // des colonnes plus bas dans ce fichier), on MESURE le rendu réel de `node`
+  // dans un hôte hors-écran portant la classe .ql-editor (pour hériter les
+  // règles CSS de Quill scopées par cette classe : padding des listes,
+  // bordure+padding des citations, padding em-based des ql-indent-N...) à la
+  // largeur de contenu du PDF. `node` doit être un enfant, direct ou non, du
+  // conteneur passé (voir attachMeasureHost) au moment de l'appel.
+  //
+  // Deux modes :
+  // - 'box' (utilisé pour LI) : le bord GAUCHE de la boîte du bloc lui-même,
+  //   c'est-à-dire l'indentation apportée par le <ul>/<ol> ANCÊTRE - pdf-export.js
+  //   ajoute lui-même un "• "/numéro en tête du texte pour imiter le marqueur de
+  //   Quill (posé via ::before, invisible pour un Range JS), donc mesurer le
+  //   bord de la boîte (pas le texte) évite de compter deux fois cette marque.
+  // - 'text' (utilisé pour tout le reste : paragraphe/titre/citation, avec ou
+  //   sans ql-indent-N) : la position du tout premier caractère de texte RENDU,
+  //   via un Range JS - capture aussi bien un retrait posé sur un ANCÊTRE
+  //   (comme 'box') qu'un padding/bordure posé sur l'élément LUI-MÊME (cas de
+  //   <blockquote>, padding-left + border-left Quill, invisible à une mesure
+  //   par simple getBoundingClientRect().left qui ne regarde que le bord de la
+  //   boîte).
+  function measureIndentPt(node, mode) {
+    const host = node.closest('.pdf-measure-host');
+    if (!host) return 0;
+    const hostLeft = host.getBoundingClientRect().left;
+    let leftPx;
+    if (mode === 'box') {
+      leftPx = node.getBoundingClientRect().left;
+    } else {
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
+        acceptNode: n => (n.nodeValue && n.nodeValue.trim()) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+      });
+      const textNode = walker.nextNode();
+      if (!textNode) return 0;
+      const range = document.createRange();
+      range.setStart(textNode, 0);
+      range.setEnd(textNode, 1);
+      leftPx = range.getBoundingClientRect().left;
+    }
+    return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
+  }
+  // Attache `root` (le conteneur détaché construit par htmlToPdfContent à partir
+  // du HTML source) à document.body, hors-écran, avec la classe .ql-editor et
+  // la largeur de contenu du PDF - condition nécessaire pour que measureIndentPt
+  // (et tout futur besoin de mesure DOM réelle sur ce contenu) lise des valeurs
+  // CSS calculées identiques à celles de l'éditeur réel. Retourne une fonction
+  // de nettoyage à appeler une fois le parcours terminé (toujours, y compris en
+  // cas d'erreur : cf. le try/finally de l'appelant).
+  function attachMeasureHost(root) {
+    root.classList.add('pdf-measure-host', 'ql-editor');
+    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + CONTENT_WIDTH_PX + 'px; padding:0; margin:0; box-sizing:border-box;';
+    document.body.appendChild(root);
+    return () => { if (root.parentNode) root.parentNode.removeChild(root); };
+  }
   // left/top d'une image en calque (editor.js:setImageLayer) sont capturés
   // relatifs au bord EXTÉRIEUR de .ql-editor (getBoundingClientRect, qui
   // inclut son propre padding CSS comme espace intérieur) — pas relatifs à
@@ -396,11 +457,30 @@ const PdfExport = (function () {
     // cumulent cet écart - confirmé être la cause d'un décalage vertical
     // d'environ "une ligne" signalé par l'utilisateur sur une image ancrée
     // après plusieurs lignes vides.
-    const block = { text: runs.length ? runs : ' ', margin: runs.length ? [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] : [0, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
+    // Indentation horizontale MESURÉE sur le rendu réel (measureIndentPt),
+    // jamais codée en dur : couvre à la fois les cas connus (retrait des
+    // <li>, padding+bordure des <blockquote>) et tout ql-indent-N posé par
+    // Quill sur N'IMPORTE QUEL bloc (paragraphe, titre, liste...) - notamment
+    // via un collage Word/Google Docs, jusqu'ici totalement ignoré par
+    // l'export PDF alors que visible dans l'éditeur. D'anciennes valeurs
+    // codées en dur (10pt pour <li>, 18pt pour <blockquote>) ont été vérifiées
+    // FAUSSES par mesure directe (respectivement ~15.7pt et ~15pt réels dans
+    // l'éditeur, à comparer à leur propre marge/bordure CSS) - tout document
+    // en contenant produisait donc du texte décalé horizontalement dans le
+    // PDF par rapport à l'éditeur, indépendamment de tout bug d'ancrage
+    // d'image (cf. hypothèse utilisateur : "si ça se trouve ce n'est pas
+    // l'image qui n'est pas à sa place, mais le texte").
+    const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
+    const block = { text: runs.length ? runs : ' ', margin: runs.length ? [indentPt, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] : [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) block.bold = true;
-    if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; block.margin[0] = 10; }
-    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; }
+    if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
+    // BLOCKQUOTE : marge droite nulle (mesurée : Quill ne pose de
+    // padding/bordure qu'à GAUCHE de la citation, jamais à droite - l'ancienne
+    // valeur codée en dur (8pt) rétrécissait sans raison la largeur de texte
+    // disponible côté PDF, un décalage de RETOUR À LA LIGNE en plus du simple
+    // décalage de départ de texte).
+    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, 0, 4]; }
     if (remainingPageBreak) { block.pageBreak = 'before'; remainingPageBreak = false; }
     blocks.push(block);
     images.forEach(img => {
@@ -475,6 +555,19 @@ const PdfExport = (function () {
   // reste du document.
   function htmlToPdfContent(html) {
     const root = document.createElement('div'); root.innerHTML = html || '';
+    // Attaché hors-écran le temps du parcours (cf. measureIndentPt / attachMeasureHost)
+    // pour que chaque bloc puisse mesurer son indentation RÉELLE sur du CSS
+    // effectivement calculé, pas sur un DOM détaché (où toute mesure de largeur/
+    // position renverrait des zéros). Toujours détaché en sortie, y compris si
+    // blockFrom/tableFrom/twoColumnsFrom lève une exception.
+    const detachMeasureHost = attachMeasureHost(root);
+    try {
+      return buildPdfContentFromRoot(root);
+    } finally {
+      detachMeasureHost();
+    }
+  }
+  function buildPdfContentFromRoot(root) {
     const blocks = []; const frontImages = []; const behindImages = [];
     // data-pm-anchor-id -> bloc pdfmake correspondant (cf. editor.js:findVisualAnchor
     // / ensureAnchorId) : une image en calque peut être ancrée sur un paragraphe
