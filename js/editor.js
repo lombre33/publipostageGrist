@@ -347,11 +347,23 @@ const Editor = (function () {
   // choisir "LE" bon paragraphe (et donc toute ambiguïté d'égalité) et reste
   // exact quel que soit ce qui se trouve entre les deux repères, sans
   // calibrage particulier par type de bloc.
+  // Si l'image est elle-même DANS une colonne d'une zone 2-colonnes, l'ancrage
+  // doit rester CONFINÉ à cette même colonne : un paragraphe d'une autre
+  // colonne, ou du flux principal avant/après toute la zone, n'a pas de
+  // rapport de position stable avec un point à l'intérieur de LA colonne
+  // (largeur différente, chrome de la zone intercalé...). `excludeSelector`
+  // exclut normalement toute colonne/tableau/zone de la liste des repères
+  // possibles - sauf la colonne elle-même quand c'est justement le
+  // périmètre de recherche (image DANS cette colonne).
   function findBracketingAnchors(img) {
+    const column = img.closest('.two-columns-column');
+    const scopeRoot = column || quill.root;
+    const excludeSelector = '.two-columns-column, .editable-table, .two-columns-zone';
     const imgRect = img.getBoundingClientRect();
     const candidates = [];
-    quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre').forEach(el => {
-      if (el.closest('.two-columns-column, .editable-table, .two-columns-zone')) return;
+    scopeRoot.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre').forEach(el => {
+      const excludedAncestor = el.closest(excludeSelector);
+      if (excludedAncestor && excludedAncestor !== column) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
       candidates.push({ el, rect: r });
@@ -365,25 +377,59 @@ const Editor = (function () {
     });
     return { above: above ? above.el : null, below: below ? below.el : null };
   }
+  function clearAnchorDataset(img) {
+    delete img.dataset.anchorOffLeft;
+    delete img.dataset.anchorAboveOffTop;
+    delete img.dataset.anchorBelowOffTop;
+    delete img.dataset.anchorAboveId;
+    delete img.dataset.anchorBelowId;
+    delete img.dataset.anchorColumnSide;
+  }
   function updateAnchorOffset(img) {
-    if (img.closest('.two-columns-column, .editable-table')) {
-      delete img.dataset.anchorOffLeft;
-      delete img.dataset.anchorAboveOffTop;
-      delete img.dataset.anchorBelowOffTop;
-      delete img.dataset.anchorAboveId;
-      delete img.dataset.anchorBelowId;
-      return;
-    }
+    // Une image dans une CELLULE DE TABLEAU reste non gérée (pas d'équivalent
+    // de la largeur/position de colonne mesurée dont dispose pdf-export.js
+    // pour les 2-colonnes) : fallback sur l'ancien calcul "page à plat",
+    // connu approximatif dans ce cas précis.
+    if (img.closest('.editable-table')) { clearAnchorDataset(img); return; }
     const { above, below } = findBracketingAnchors(img);
+    const imgRect = img.getBoundingClientRect();
     if (!above && !below) {
-      delete img.dataset.anchorOffLeft;
-      delete img.dataset.anchorAboveOffTop;
-      delete img.dataset.anchorBelowOffTop;
-      delete img.dataset.anchorAboveId;
-      delete img.dataset.anchorBelowId;
+      // Cas très fréquent pour une image DANS une colonne : la colonne ne
+      // contient souvent qu'un seul <p> (même volumineux, plusieurs lignes),
+      // que l'image recouvre visuellement en partie - ni "au-dessus" ni "en
+      // dessous" au sens de findBracketingAnchors (elle ne finit/commence
+      // jamais avant/après lui). Sans repère de secours, l'image retomberait
+      // sur l'ancien calcul "page à plat" de pdf-export.js, qui ignore
+      // totalement exister une zone 2-colonnes (l'image y est positionnée en
+      // absolu relativement à .two-columns-zone, pas à .ql-editor - vérifié
+      // via offsetParent) : décalage horizontal ET vertical systématique.
+      // Repli : ancrer sur la ZONE elle-même (seul élément englobant dont
+      // pdf-export.js peut connaître la position PDF réellement mesurée,
+      // cf. twoColumnsFrom), en gardant la mesure relative au bord de
+      // contenu de la COLONNE pour l'horizontal (pas la zone, plus étroite
+      // et décalée pour la colonne de droite).
+      const column = img.closest('.two-columns-column');
+      if (column) {
+        const zone = column.closest('.two-columns-zone');
+        const cols = Array.from(zone.querySelectorAll(':scope > .two-columns-column'));
+        const zoneRect = zone.getBoundingClientRect();
+        const zcs = getComputedStyle(zone);
+        const zoneContentTop = zoneRect.top + (parseFloat(zcs.borderTopWidth) || 0) + (parseFloat(zcs.paddingTop) || 0);
+        const colRect = column.getBoundingClientRect();
+        const ccs = getComputedStyle(column);
+        const colContentLeft = colRect.left + (parseFloat(ccs.borderLeftWidth) || 0) + (parseFloat(ccs.paddingLeft) || 0);
+        img.dataset.anchorOffLeft = Math.round(imgRect.left - colContentLeft);
+        img.dataset.anchorAboveId = ensureAnchorId(zone);
+        img.dataset.anchorAboveOffTop = Math.round(imgRect.top - zoneContentTop);
+        img.dataset.anchorColumnSide = cols.indexOf(column) === 0 ? 'left' : 'right';
+        delete img.dataset.anchorBelowId;
+        delete img.dataset.anchorBelowOffTop;
+        return;
+      }
+      clearAnchorDataset(img);
       return;
     }
-    const imgRect = img.getBoundingClientRect();
+    delete img.dataset.anchorColumnSide; // repère normal trouvé : pas de repli zone à appliquer
     // Référence horizontale : le repère au-dessus s'il existe (le plus
     // probable pour un paragraphe indenté - liste, citation), sinon celui du
     // dessous. Contrairement à la position verticale, l'horizontal ne dérive

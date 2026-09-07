@@ -194,6 +194,14 @@ const PdfExport = (function () {
         // traités avant OU après cette image dans le parcours DOM.
         image._anchorAboveId = aboveId || null;
         image._anchorBelowId = belowId || null;
+        // Repli "zone" (editor.js:updateAnchorOffset) : aucun paragraphe
+        // voisin trouvé DANS la colonne (cas fréquent, une colonne = souvent
+        // un seul <p> que l'image recouvre) - anchorAboveId pointe alors sur
+        // la ZONE elle-même, dont le containerLeft "par défaut" ne convient
+        // à AUCUNE colonne (cf. resolveAnchoredImagePositions, qui pioche
+        // dans anchor.columnOrigins[côté] à la place quand ce marqueur est
+        // présent).
+        image._columnSide = node.dataset.anchorColumnSide || null;
         image.absolutePosition = { x: 0, y: 0 }; // provisoire, résolu après la 1ère passe de mise en page
       } else {
         const leftPx = parseFloat(node.style.left) || 0;
@@ -267,8 +275,53 @@ const PdfExport = (function () {
     if (pageBreakBefore) table.pageBreak = 'before';
     return table;
   }
-  function twoColumnsFrom(node, pageBreakBefore) {
+  function twoColumnsFrom(node, pageBreakBefore, sharedAnchorIdToBlock) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
+    const pageWidth = 595.28;
+    const columnGapPt = 18 * PX_TO_PT; // css: .two-columns-zone { gap: 18px }
+    // Largeur RÉELLE de chaque colonne, mesurée AVANT de construire son
+    // contenu pdfmake (cf. plus bas) : le containerLeft d'une image en
+    // calque ancrée DANS la colonne de droite (pdf-export.js:buildPdfContentFromRoot,
+    // editor.js:findBracketingAnchors) a besoin de connaître l'abscisse PDF
+    // réelle où cette colonne démarre, qui dépend de la largeur MESURÉE de
+    // la colonne de gauche - ne peut donc plus être calculée après coup.
+    //
+    // Deux tentatives précédentes de reproduire À LA MAIN la chrome CSS de
+    // .two-columns-zone / .two-columns-column (padding, bordure, gap) par un
+    // calcul de constantes ont chacune laissé un léger écart dans un sens ou
+    // l'autre (texte qui ne retombe pas exactement au même endroit qu'dans
+    // l'éditeur) - fragile par nature : toute dérive entre ces constantes et
+    // le CSS réel (ou un style hérité d'un document plus ancien) reproduit le
+    // même bug. On MESURE donc directement la largeur de texte réellement
+    // disponible dans chaque colonne, en clonant la zone dans un conteneur
+    // hors-écran de la MÊME largeur que le contenu PDF (539.28pt / 0.75 =
+    // 719.04px, la largeur de référence utilisée partout ailleurs dans ce
+    // fichier pour faire correspondre éditeur et PDF), plutôt que de deviner.
+    // Immunisé contre tout futur ajustement de style.css.
+    const contentWidthPx = (pageWidth - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
+    const measureHost = document.createElement('div');
+    measureHost.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx + 'px;';
+    const zoneClone = node.cloneNode(true);
+    zoneClone.querySelectorAll('.two-columns-resize-grip').forEach(el => el.remove());
+    measureHost.appendChild(zoneClone);
+    document.body.appendChild(measureHost);
+    const measuredCols = Array.from(zoneClone.querySelectorAll(':scope > .two-columns-column'));
+    const measureTextWidthPt = el => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+      const bL = parseFloat(cs.borderLeftWidth) || 0, bR = parseFloat(cs.borderRightWidth) || 0;
+      return Math.max(10, (r.width - padL - padR - bL - bR) * PX_TO_PT);
+    };
+    const fallbackWidth = (pageWidth - 2 * PAGE_MARGIN_PT) / 2;
+    const leftWidth = measuredCols[0] ? measureTextWidthPt(measuredCols[0]) : fallbackWidth;
+    const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
+    document.body.removeChild(measureHost);
+    // Abscisse PDF du bord gauche du CONTENU de chaque colonne (cf. note sur
+    // buildPdfContentFromRoot/leftOriginPt) : la colonne de gauche démarre à
+    // la marge de page habituelle, celle de droite après la largeur mesurée
+    // de la colonne de gauche + l'espacement entre colonnes.
+    const columnOrigins = [PAGE_MARGIN_PT, PAGE_MARGIN_PT + leftWidth + columnGapPt];
     // Réapplique explicitement l'alignement (ql-align-center / -right / -justify
     // ou style inline text-align) à CHAQUE bloc pdfmake issu du contenu de la
     // colonne. Le flux hors-colonnes le fait déjà via blockFrom() /
@@ -277,7 +330,7 @@ const PdfExport = (function () {
     // vectoriel (bug : le justify était perdu à l'export PDF dans les
     // .two-columns-column). L'alignement par défaut (gauche) reste implicite
     // côté pdfmake, on ne l'écrit donc que si une valeur explicite est lue.
-    const columns = colNodes.map(col => {
+    const columns = colNodes.map((col, colIndex) => {
       // Alignement porté par la COLONNE elle-même (ex. style="text-align:
       // justify" posé directement sur le <div class="two-columns-column">,
       // cas courant quand son contenu est du texte brut sans <p> wrapper
@@ -285,7 +338,7 @@ const PdfExport = (function () {
       // valeur par défaut : la boucle plus bas la remplace par un alignement
       // plus spécifique si un élément interne en porte un.
       const colAlign = alignment(col);
-      const blocks = htmlToPdfContent(col.innerHTML);
+      const blocks = htmlToPdfContent(col.innerHTML, columnOrigins[colIndex], sharedAnchorIdToBlock);
       // collect() parcourt le DOM de la colonne en MIRROR exactement les
       // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
       // editable-table / two-columns-zone / isBlock() poussent un bloc).
@@ -347,44 +400,14 @@ const PdfExport = (function () {
       }
       return blocks;
     });
-    const pageWidth = 595.28;
     // La poignée de redimensionnement (editor.js, .two-columns-resize-grip) ne
     // change QUE la variable CSS --layout-left du conteneur ; jusqu'ici cette
     // fonction ignorait totalement cette valeur et imposait un partage 50/50
     // fixe - la largeur ajustée dans l'éditeur n'avait donc littéralement
-    // aucun effet sur l'export PDF.
+    // aucun effet sur l'export PDF (leftWidth/rightWidth, déjà mesurées
+    // plus haut dans cette fonction avant de construire le contenu des
+    // colonnes - cf. columnOrigins).
     //
-    // Deux tentatives précédentes de reproduire À LA MAIN la chrome CSS de
-    // .two-columns-zone / .two-columns-column (padding, bordure, gap) par un
-    // calcul de constantes ont chacune laissé un léger écart dans un sens ou
-    // l'autre (texte qui ne retombe pas exactement au même endroit qu'dans
-    // l'éditeur) - fragile par nature : toute dérive entre ces constantes et
-    // le CSS réel (ou un style hérité d'un document plus ancien) reproduit le
-    // même bug. On MESURE donc directement la largeur de texte réellement
-    // disponible dans chaque colonne, en clonant la zone dans un conteneur
-    // hors-écran de la MÊME largeur que le contenu PDF (539.28pt / 0.75 =
-    // 719.04px, la largeur de référence utilisée partout ailleurs dans ce
-    // fichier pour faire correspondre éditeur et PDF), plutôt que de deviner.
-    // Immunisé contre tout futur ajustement de style.css.
-    const contentWidthPx = (pageWidth - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
-    const measureHost = document.createElement('div');
-    measureHost.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx + 'px;';
-    const zoneClone = node.cloneNode(true);
-    zoneClone.querySelectorAll('.two-columns-resize-grip').forEach(el => el.remove());
-    measureHost.appendChild(zoneClone);
-    document.body.appendChild(measureHost);
-    const measuredCols = Array.from(zoneClone.querySelectorAll(':scope > .two-columns-column'));
-    const measureTextWidthPt = el => {
-      const r = el.getBoundingClientRect();
-      const cs = getComputedStyle(el);
-      const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
-      const bL = parseFloat(cs.borderLeftWidth) || 0, bR = parseFloat(cs.borderRightWidth) || 0;
-      return Math.max(10, (r.width - padL - padR - bL - bR) * PX_TO_PT);
-    };
-    const fallbackWidth = (pageWidth - 2 * PAGE_MARGIN_PT) / 2;
-    const leftWidth = measuredCols[0] ? measureTextWidthPt(measuredCols[0]) : fallbackWidth;
-    const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
-    document.body.removeChild(measureHost);
     // pdfmake IGNORE silencieusement la largeur passée via `columnWidths` sur
     // le parent quand chaque entrée de `columns` est un simple TABLEAU de blocs
     // (comme ici, `columns[i]` = le tableau retourné par htmlToPdfContent) -
@@ -400,7 +423,7 @@ const PdfExport = (function () {
         { width: leftWidth, stack: columns[0] },
         { width: rightWidth, stack: columns[1] },
       ],
-      columnGap: 18 * PX_TO_PT, // css: .two-columns-zone { gap: 18px }
+      columnGap: columnGapPt,
       // Calibré pour correspondre exactement à la "chrome" d'édition réduite
       // au minimum de .two-columns-zone (css/style.css) : marge(0)+padding
       // haut(16px)+bordure(1px) = 17px*0.75 = 12.75pt en haut, marge(0)+
@@ -413,6 +436,12 @@ const PdfExport = (function () {
       // supposée correspondre à ces deux chiffres.
       margin: [0, 12.75, 0, 3.75],
     };
+    // Exposée pour buildPdfContentFromRoot : quand une image en calque DANS
+    // cette zone n'a trouvé aucun paragraphe voisin à qui s'ancrer (cf.
+    // editor.js:updateAnchorOffset, repli "zone"), elle a besoin de savoir où
+    // chaque colonne démarre réellement dans la page PDF - PAS calculable
+    // après coup, une fois ce bloc retourné, sans redupliquer tout ce calcul.
+    block._columnOrigins = columnOrigins;
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
   }
@@ -519,7 +548,18 @@ const PdfExport = (function () {
       // texte qu'elle contient. Additionner offset.left à .positions[0].left
       // reviendrait donc à appliquer DEUX FOIS l'effet du centrage.
       const xRef = above || below;
-      const x = xRef ? xRef.containerLeft + offset.left * PX_TO_PT : PAGE_MARGIN_PT + offset.left * PX_TO_PT;
+      // Repli "zone" (cf. pdfImageFromNode/_columnSide) : xRef pointe alors
+      // sur la ZONE 2-colonnes elle-même (seul élément englobant mesurable),
+      // dont le containerLeft "par défaut" ne correspond à AUCUNE des deux
+      // colonnes - on pioche plutôt l'origine PDF de la colonne concernée
+      // (columnOrigins, exposée par twoColumnsFrom) selon le côté mémorisé
+      // par editor.js au moment où aucun paragraphe voisin n'a été trouvé.
+      let x;
+      if (xRef && img._columnSide && xRef.columnOrigins) {
+        x = xRef.columnOrigins[img._columnSide === 'left' ? 0 : 1] + offset.left * PX_TO_PT;
+      } else {
+        x = xRef ? xRef.containerLeft + offset.left * PX_TO_PT : PAGE_MARGIN_PT + offset.left * PX_TO_PT;
+      }
       if (aboveTop !== null && belowTop !== null && offset.top !== undefined && offset.topBelow !== undefined) {
         // Encadrement par les DEUX paragraphes qui bornent l'image (le dernier
         // qui finit avant elle, le premier qui commence après) : on interpole
@@ -553,7 +593,7 @@ const PdfExport = (function () {
   // détermine l'ordre de peinture. absolutePosition les sort de toute façon du
   // flux normal, donc ce réordonnancement n'affecte pas la mise en page du
   // reste du document.
-  function htmlToPdfContent(html) {
+  function htmlToPdfContent(html, leftOriginPt, sharedAnchorIdToBlock) {
     const root = document.createElement('div'); root.innerHTML = html || '';
     // Attaché hors-écran le temps du parcours (cf. measureIndentPt / attachMeasureHost)
     // pour que chaque bloc puisse mesurer son indentation RÉELLE sur du CSS
@@ -562,27 +602,60 @@ const PdfExport = (function () {
     // blockFrom/tableFrom/twoColumnsFrom lève une exception.
     const detachMeasureHost = attachMeasureHost(root);
     try {
-      return buildPdfContentFromRoot(root);
+      return buildPdfContentFromRoot(root, leftOriginPt, sharedAnchorIdToBlock);
     } finally {
       detachMeasureHost();
     }
   }
-  function buildPdfContentFromRoot(root) {
+  // leftOriginPt : abscisse PDF (pt) du bord gauche du contenu de CE parcours -
+  // PAGE_MARGIN_PT pour le flux principal de la page, mais l'origine propre de
+  // LA COLONNE (cf. twoColumnsFrom) quand ce HTML est le contenu d'une colonne
+  // d'une zone 2-colonnes, sans quoi tout repère (data-pm-anchor-id) enregistré
+  // ici pour une image en calque ancrée à l'intérieur de cette colonne se
+  // verrait attribuer un containerLeft de page entière au lieu de celui, bien
+  // plus étroit et décalé, de sa colonne réelle.
+  //
+  // sharedAnchorIdToBlock : map data-pm-anchor-id -> bloc pdfmake, PARTAGÉE
+  // entre CE parcours et tout parcours ANCÊTRE ou DESCENDANT (colonnes d'une
+  // zone 2-colonnes, cf. twoColumnsFrom, qui rappelle htmlToPdfContent pour
+  // le contenu de chaque colonne). Un repère de repli "zone" (cf.
+  // editor.js:updateAnchorOffset) posé par une image DANS une colonne
+  // référence l'id de la ZONE elle-même - un id enregistré par le parcours
+  // PARENT (celui du document global), pas par celui, isolé, de la colonne.
+  // Sans map partagée, le parcours de la colonne ne pourrait jamais résoudre
+  // ce repère (chercherait dans SA PROPRE map, locale, qui ne contient que
+  // les blocs DE la colonne) - la résolution finale de _anchorAboveId/
+  // _anchorBelowId est donc TOUJOURS différée à la toute fin, une fois le
+  // document entier (colonnes comprises) parcouru et cette map définitivement
+  // complète (cf. resolveNativePdfContent, seul endroit qui la consulte).
+  function buildPdfContentFromRoot(root, leftOriginPt, sharedAnchorIdToBlock) {
+    const origin = leftOriginPt !== undefined ? leftOriginPt : PAGE_MARGIN_PT;
     const blocks = []; const frontImages = []; const behindImages = [];
-    // data-pm-anchor-id -> bloc pdfmake correspondant (cf. editor.js:findVisualAnchor
-    // / ensureAnchorId) : une image en calque peut être ancrée sur un paragraphe
-    // qui n'est PAS celui qui la contient dans le DOM (glissée pour recouvrir un
-    // autre paragraphe que le sien), donc potentiellement traité avant OU après
-    // elle dans ce parcours - la résolution se fait après coup, une fois tout
-    // le document parcouru (cf. boucle finale ci-dessous).
-    const anchorIdToBlock = {};
+    const anchorIdToBlock = sharedAnchorIdToBlock || {};
     let pendingPageBreak = false;
     const visit = node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
       if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; }
-      if (node.classList.contains('two-columns-zone')) { blocks.push(twoColumnsFrom(node, pendingPageBreak)); pendingPageBreak = false; return; }
+      if (node.classList.contains('two-columns-zone')) {
+        const zoneBlock = twoColumnsFrom(node, pendingPageBreak, anchorIdToBlock);
+        blocks.push(zoneBlock);
+        // Repère de repli pour une image ancrée DANS une colonne de cette
+        // zone sans paragraphe voisin (cf. editor.js:updateAnchorOffset) :
+        // containerLeft n'est ici jamais utilisé directement (columnOrigins
+        // le remplace, cf. resolveAnchoredImagePositions), gardé seulement
+        // par cohérence avec la forme attendue d'une entrée anchorIdToBlock.
+        if (node.dataset && node.dataset.pmAnchorId) {
+          anchorIdToBlock[node.dataset.pmAnchorId] = {
+            block: zoneBlock,
+            containerLeft: origin,
+            columnOrigins: zoneBlock._columnOrigins,
+          };
+        }
+        pendingPageBreak = false;
+        return;
+      }
       if (isBlock(node)) {
         const produced = blockFrom(node, pendingPageBreak, frontImages, behindImages);
         produced.forEach(b => blocks.push(b));
@@ -591,7 +664,7 @@ const PdfExport = (function () {
           if (textBlock) {
             anchorIdToBlock[node.dataset.pmAnchorId] = {
               block: textBlock,
-              containerLeft: PAGE_MARGIN_PT + (textBlock.margin ? textBlock.margin[0] : 0),
+              containerLeft: origin + (textBlock.margin ? textBlock.margin[0] : 0),
             };
           }
         }
@@ -601,13 +674,14 @@ const PdfExport = (function () {
       node.childNodes.forEach(visit);
     };
     root.childNodes.forEach(visit);
-    behindImages.concat(frontImages).forEach(img => {
-      if (!img._pendingOffset) return;
-      img._anchorAboveBlock = img._anchorAboveId ? (anchorIdToBlock[img._anchorAboveId] || null) : null;
-      img._anchorBelowBlock = img._anchorBelowId ? (anchorIdToBlock[img._anchorBelowId] || null) : null;
-      delete img._anchorAboveId;
-      delete img._anchorBelowId;
-    });
+    // Résolution de _anchorAboveId/_anchorBelowId volontairement PAS faite
+    // ici (cf. note sur sharedAnchorIdToBlock ci-dessus) : une image DANS une
+    // colonne peut référencer un id enregistré par le parcours PARENT (la
+    // zone elle-même) qui n'existe pas encore forcément dans la map à CE
+    // stade précis (twoColumnsFrom n'a pas fini de construire le bloc de la
+    // zone tant que ce parcours de colonne n'est pas terminé). Différée à la
+    // toute fin, une fois tout le document (colonnes comprises) parcouru -
+    // cf. resolveNativePdfContent, seul endroit qui lit cette map pour de bon.
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     return behindImages.concat(content, frontImages);
   }
@@ -681,14 +755,51 @@ const PdfExport = (function () {
   // écrites dans les objets de la 1ère passe) et on y reporte les positions
   // ainsi résolues, dans le même ordre — pour la mise en page finale, la seule
   // réellement écrite dans le fichier téléchargé/affiché.
+  // Une image en attente de résolution (_pendingOffset, cf. pdfImageFromNode)
+  // n'est pas forcément un élément de PREMIER NIVEAU de `content` : une image
+  // ancrée à l'intérieur d'une colonne d'une zone 2-colonnes vit nichée dans
+  // `{columns: [{stack: [...]}, {stack: [...]}]}` (twoColumnsFrom). Un simple
+  // `content.filter(...)` de premier niveau la manquerait entièrement - ni
+  // mesurée lors de la 1ère passe, ni jamais patchée avec sa position finale
+  // lors de la 2e (elle resterait bloquée à {x:0,y:0}, sa valeur provisoire).
+  function collectPendingImages(content) {
+    const found = [];
+    (content || []).forEach(b => {
+      if (!b || typeof b !== 'object') return;
+      if (b._pendingOffset) found.push(b);
+      if (Array.isArray(b.columns)) b.columns.forEach(col => { if (col && Array.isArray(col.stack)) found.push(...collectPendingImages(col.stack)); });
+    });
+    return found;
+  }
+  // Résout _anchorAboveId/_anchorBelowId (chaînes, cf. pdfImageFromNode) en
+  // _anchorAboveBlock/_anchorBelowBlock (blocs pdfmake réels) pour chaque
+  // image en attente - TOUJOURS après que tout le document (colonnes d'une
+  // zone 2-colonnes comprises) a été parcouru, une fois `anchorIdToBlock`
+  // définitivement complète (cf. notes sur buildPdfContentFromRoot/
+  // sharedAnchorIdToBlock : un repère de repli "zone" posé par une image DANS
+  // une colonne référence un id enregistré par le parcours PARENT, pas
+  // disponible tant que le bloc de la zone elle-même n'est pas construit).
+  function resolveAnchorIds(pending, anchorIdToBlock) {
+    pending.forEach(img => {
+      img._anchorAboveBlock = img._anchorAboveId ? (anchorIdToBlock[img._anchorAboveId] || null) : null;
+      img._anchorBelowBlock = img._anchorBelowId ? (anchorIdToBlock[img._anchorBelowId] || null) : null;
+      delete img._anchorAboveId;
+      delete img._anchorBelowId;
+    });
+  }
   async function resolveNativePdfContent(inlinedHtml, filename) {
-    let content = htmlToPdfContent(inlinedHtml);
-    const pending = content.filter(b => b && b._pendingOffset);
+    let anchorIdToBlock = {};
+    let content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
+    let pending = collectPendingImages(content);
     if (!pending.length) return content;
+    resolveAnchorIds(pending, anchorIdToBlock);
     await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
     const resolved = resolveAnchoredImagePositions(pending);
-    content = htmlToPdfContent(inlinedHtml);
-    content.filter(b => b && b._pendingOffset).forEach((img, i) => {
+    anchorIdToBlock = {};
+    content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
+    pending = collectPendingImages(content);
+    resolveAnchorIds(pending, anchorIdToBlock);
+    pending.forEach((img, i) => {
       if (resolved[i]) img.absolutePosition = resolved[i];
       delete img._pendingOffset;
       delete img._anchorAboveBlock;
