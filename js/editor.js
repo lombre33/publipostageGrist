@@ -336,15 +336,29 @@ const Editor = (function () {
     const imgRect = img.getBoundingClientRect();
     const imgCenterY = imgRect.top + imgRect.height / 2;
     const candidates = quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
-    let best = null;
-    let bestDist = Infinity;
-    let bestContains = false;
+    // Deux passes : (1) le paragraphe que l'image recouvre le PLUS (en hauteur
+    // partagée) - le plus fidèle à l'intuition "sur quel texte est posée cette
+    // image", surtout pour une image plus haute qu'une simple ligne, dont le
+    // CENTRE peut tomber sur une ligne courte adjacente (un titre, une ligne
+    // vide) alors qu'elle recouvre en réalité surtout un paragraphe voisin
+    // bien plus grand (confirmé : une image glissée loin sous son ancre
+    // s'accrochait à la ligne la plus proche de son centre plutôt qu'au
+    // paragraphe qu'elle recouvre visiblement le plus). (2) à défaut d'aucun
+    // chevauchement (image posée dans un intervalle entre deux blocs), on
+    // retombe sur l'ancienne méthode par distance au centre.
+    let bestOverlap = null, bestOverlapAmount = -Infinity, bestOverlapContains = false;
+    let bestDist = null, bestDistAmount = Infinity, bestDistContains = false;
     candidates.forEach(el => {
       if (el.closest('.two-columns-column, .editable-table')) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
-      const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
       const contains = el.contains(img);
+      const overlap = Math.min(imgRect.bottom, r.bottom) - Math.max(imgRect.top, r.top);
+      if (overlap > 0) {
+        const better = overlap > bestOverlapAmount + 0.5 || (Math.abs(overlap - bestOverlapAmount) <= 0.5 && contains && !bestOverlapContains);
+        if (better) { bestOverlapAmount = overlap; bestOverlap = el; bestOverlapContains = contains; }
+      }
+      const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
       // À égalité (quasi-égalité, tolérance 0.5px) de distance, on privilégie le
       // paragraphe qui contient RÉELLEMENT l'image dans le DOM. Cas fréquent :
       // une image passée en position absolue laisse son propre paragraphe
@@ -352,12 +366,11 @@ const Editor = (function () {
       // paragraphe précédent (ex. un titre juste au-dessus) — les deux se
       // retrouvent alors à distance identique du centre de l'image, et sans ce
       // départage l'ordre d'itération DOM (le voisin est vu en premier) faisait
-      // ancrer l'image sur le MAUVAIS paragraphe (confirmé : image exportée
-      // décalée, ancrée sur le titre au lieu de son propre paragraphe).
-      const better = dist < bestDist - 0.5 || (Math.abs(dist - bestDist) <= 0.5 && contains && !bestContains);
-      if (better) { bestDist = dist; best = el; bestContains = contains; }
+      // ancrer l'image sur le MAUVAIS paragraphe.
+      const betterDist = dist < bestDistAmount - 0.5 || (Math.abs(dist - bestDistAmount) <= 0.5 && contains && !bestDistContains);
+      if (betterDist) { bestDistAmount = dist; bestDist = el; bestDistContains = contains; }
     });
-    return best;
+    return bestOverlap || bestDist;
   }
   function updateAnchorOffset(img) {
     if (img.closest('.two-columns-column, .editable-table')) {
