@@ -21,7 +21,11 @@
     quill.setSelection(0, 0);
 
     if (sc.headingIsHtml) {
-      quill.root.innerHTML = sc.heading + '<p><br></p>';
+      // Passe par le VRAI chemin de production (Editor.setHTML), pas un
+      // raccourci innerHTML direct — cf. le bug d'ancrage trouvé (commit
+      // 2f060a0) qui ne se manifestait QUE via ce chemin, précisément parce
+      // que ce harnais utilisait initialement innerHTML directement ici.
+      Editor.setHTML(sc.heading + '<p><br></p>');
       quill.setSelection(quill.getLength() - 1, 0);
     } else if (sc.heading) {
       quill.insertText(0, sc.heading, 'bold', true);
