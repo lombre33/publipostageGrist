@@ -284,7 +284,24 @@ const PdfExport = (function () {
     leftPercent = Math.max(20, Math.min(80, leftPercent));
     const leftWidth = availableWidth * (leftPercent / 100);
     const rightWidth = availableWidth - leftWidth;
-    const block = { columns: columns, columnWidths: [leftWidth, rightWidth], columnGap: columnGap, margin: [0, 6, 0, 6] };
+    // pdfmake IGNORE silencieusement la largeur passée via `columnWidths` sur
+    // le parent quand chaque entrée de `columns` est un simple TABLEAU de blocs
+    // (comme ici, `columns[i]` = le tableau retourné par htmlToPdfContent) -
+    // confirmé en inspectant le PDF réellement rendu : les données envoyées à
+    // pdfmake portaient bien le bon ratio, mais le rendu final restait 50/50.
+    // pdfmake attend une largeur portée par CHAQUE objet-colonne lui-même
+    // (`{ width, stack }`), pas par le tableau `columnWidths` du parent quand
+    // le contenu est un tableau brut plutôt qu'un objet - on enveloppe donc
+    // chaque colonne dans `{ width, stack }` plutôt que de compter sur
+    // `columnWidths`.
+    const block = {
+      columns: [
+        { width: leftWidth, stack: columns[0] },
+        { width: rightWidth, stack: columns[1] },
+      ],
+      columnGap: columnGap,
+      margin: [0, 6, 0, 6],
+    };
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
   }
