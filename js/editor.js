@@ -43,7 +43,15 @@ const Editor = (function () {
       node.setAttribute('src', data.src || '');
       node.setAttribute('alt', data.alt || 'Image');
       node.setAttribute('contenteditable', 'false');
-      node.setAttribute('draggable', 'true');
+      // PAS "true" inconditionnel : une image en calque (devant/derrière) doit
+      // rester "draggable=false" même si Quill reconstruit ce noeud depuis sa
+      // valeur (undo/redo, resynchronisation après un quill.update()...) - sinon
+      // le glisser natif HTML5 du navigateur reprend la main sur le glisser
+      // personnalisé (cf. setImageLayer/le handler mousedown sur
+      // .editor-image-floating), ce qui duplique l'image au lieu de la
+      // déplacer (le drop natif d'un élément "draggable" dans une zone
+      // contenteditable insère une copie plutôt que de déplacer l'original).
+      node.setAttribute('draggable', (data.layer === 'front' || data.layer === 'behind') ? 'false' : 'true');
       node.dataset.source = data.source || 'url';
       if (data.attachmentId) node.dataset.attachmentId = String(data.attachmentId);
       if (data.column) node.dataset.column = data.column;
@@ -386,6 +394,17 @@ const Editor = (function () {
     const behind = imageToolbar.querySelector('button[data-act="layer-behind"]');
     if (front) front.classList.toggle('active', layer === 'front');
     if (behind) behind.classList.toggle('active', layer === 'behind');
+    // L'alignement gauche/centre/droite d'une image repose sur margin:auto
+    // (cf. .editor-image[data-align] dans style.css), qui n'a aucun effet sur
+    // un élément position:absolute (une image en calque devant/derrière se
+    // positionne exclusivement via left/top, au glisser-déposer) : les boutons
+    // restaient cliquables sans rien faire, ce qui semblait cassé une fois
+    // l'image en calque. Désactivés explicitement pour que ce soit visible.
+    const floating = layer === 'front' || layer === 'behind';
+    ['align-left', 'align-center', 'align-right'].forEach(act => {
+      const btn = imageToolbar.querySelector('button[data-act="' + act + '"]');
+      if (btn) btn.disabled = floating;
+    });
   }
 
   function applyImageAction(act) {
@@ -395,9 +414,9 @@ const Editor = (function () {
     if (act === 'zoom-in') img.style.width = Math.round(currentPx * 1.25) + 'px';
     else if (act === 'zoom-out') img.style.width = Math.max(40, Math.round(currentPx * 0.75)) + 'px';
     else if (act === 'reset') { img.style.width = ''; img.removeAttribute('data-align'); }
-    else if (act === 'align-left') img.dataset.align = 'left';
-    else if (act === 'align-center') img.dataset.align = 'center';
-    else if (act === 'align-right') img.dataset.align = 'right';
+    else if (act === 'align-left') { if (img.style.position !== 'absolute') img.dataset.align = 'left'; }
+    else if (act === 'align-center') { if (img.style.position !== 'absolute') img.dataset.align = 'center'; }
+    else if (act === 'align-right') { if (img.style.position !== 'absolute') img.dataset.align = 'right'; }
     else if (act === 'wrap') img.dataset.wrap = img.dataset.wrap === 'block' ? 'inline' : 'block';
     else if (act === 'layer-front') setImageLayer(img, img.dataset.layer === 'front' ? 'normal' : 'front');
     else if (act === 'layer-behind') setImageLayer(img, img.dataset.layer === 'behind' ? 'normal' : 'behind');

@@ -267,6 +267,8 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image-toolbar button { width: 30px; height: 30px; min-width: 30px; padding: 0; margin: 0; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--dark-text-muted); background: transparent; cursor: pointer; position: relative; }
 .editor-image-toolbar button svg { width: 15px; height: 15px; }
 .editor-image-toolbar button:hover { background: var(--dark-bg-raised); color: var(--dark-text); }
+.editor-image-toolbar button:disabled { opacity: .3; cursor: not-allowed; }
+.editor-image-toolbar button:disabled:hover { background: transparent; color: var(--dark-text-muted); }
 .editor-image-toolbar button.active { background: var(--accent); color: #fff; }
 .editor-image-toolbar button.editor-image-toolbar-danger:hover { background: var(--danger); color: #fff; }
 .editor-image-toolbar button[data-tip]:hover::after {
