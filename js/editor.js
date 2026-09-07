@@ -43,15 +43,17 @@ const Editor = (function () {
       node.setAttribute('src', data.src || '');
       node.setAttribute('alt', data.alt || 'Image');
       node.setAttribute('contenteditable', 'false');
-      // PAS "true" inconditionnel : une image en calque (devant/derrière) doit
-      // rester "draggable=false" même si Quill reconstruit ce noeud depuis sa
-      // valeur (undo/redo, resynchronisation après un quill.update()...) - sinon
-      // le glisser natif HTML5 du navigateur reprend la main sur le glisser
-      // personnalisé (cf. setImageLayer/le handler mousedown sur
-      // .editor-image-floating), ce qui duplique l'image au lieu de la
-      // déplacer (le drop natif d'un élément "draggable" dans une zone
-      // contenteditable insère une copie plutôt que de déplacer l'original).
-      node.setAttribute('draggable', (data.layer === 'front' || data.layer === 'behind') ? 'false' : 'true');
+      // JAMAIS "true" : aucun mode (normal/devant/derrière) n'a de fonction qui
+      // dépende du glisser HTML5 natif du navigateur - le repositionnement
+      // passe TOUJOURS par notre gestionnaire personnalisé (mousedown sur
+      // .editor-image-floating, ou sur le marqueur d'ancrage qui relaie vers
+      // lui). Si "draggable" restait vrai (que ce soit ici ou remis à "true"
+      // par Quill en reconstruisant ce noeud depuis sa valeur - undo/redo,
+      // resynchronisation...), le glisser natif reprenait la main SANS que
+      // notre gestionnaire ne s'exécute, et un dépôt natif dans une zone
+      // contenteditable insère une COPIE plutôt que de déplacer l'original -
+      // d'où la duplication observée à l'usage.
+      node.setAttribute('draggable', 'false');
       node.dataset.source = data.source || 'url';
       if (data.attachmentId) node.dataset.attachmentId = String(data.attachmentId);
       if (data.column) node.dataset.column = data.column;
@@ -130,6 +132,16 @@ const Editor = (function () {
     // dont la cible (e) n'est pas encore définie -> erreur "can't access property
     // 'readOnly', e is undefined".
     quill.update(Quill.sources.USER);
+    // Calque "devant le texte" par défaut plutôt que "normal" (en flux) : le
+    // mode normal n'offre aucun moyen de repositionner l'image (le
+    // glisser-déposer personnalisé ne s'applique qu'aux images en calque), ce
+    // qui rendait une image fraîchement insérée immobile tant que
+    // l'utilisateur n'avait pas d'abord pensé à cliquer "Devant le texte".
+    if (!value.layer) {
+      const leaf = quill.getLeaf(range.index);
+      const node = leaf && leaf[0] && leaf[0].domNode;
+      if (node && node.tagName === 'IMG') setImageLayer(node, 'front');
+    }
     // Repositionne la sélection après l'image au prochain tick pour éviter le même
     // parcours findBlot sur un DOM en cours de mise à jour.
     const newIndex = range.index + 1;
@@ -220,6 +232,11 @@ const Editor = (function () {
       img.classList.add('editor-image-active');
       setImageHandlesVisible(img, true);
       showImageToolbar();
+      // Relaie vers le même geste de glisser que l'image elle-même (cf.
+      // startImageDrag) : un simple clic ne fait que sélectionner (l'image ne
+      // bouge pas si la souris ne bouge pas), mais un clic-maintenu-glissé
+      // déplace l'image "derrière le texte", exactement comme pour "devant".
+      startImageDrag(img, event.clientX, event.clientY);
     });
     document.body.appendChild(marker);
     imageAnchorMarkers.set(img, marker);
@@ -364,7 +381,7 @@ const Editor = (function () {
       img.style.zIndex = '';
       img.dataset.layer = 'normal';
       img.classList.remove('editor-image-floating');
-      img.draggable = true;
+      img.draggable = false; // jamais de glisser HTML5 natif, cf. ImageBlot.create()
       return;
     }
     if (img.style.position !== 'absolute') {
@@ -382,6 +399,64 @@ const Editor = (function () {
     updateAnchorOffset(img);
   }
 
+  // Geste de glisser-déposer d'une image en calque, factorisé pour être
+  // déclenché aussi bien depuis un mousedown direct sur l'image (calque
+  // "devant", qui reçoit les clics normalement) que depuis son marqueur
+  // d'ancrage (calque "derrière" : l'image ne reçoit pas les clics de façon
+  // fiable, cachée sous le texte qui la recouvre - cf. commentaire sur
+  // imageAnchorMarkers - donc le glisser doit pouvoir démarrer depuis le
+  // marqueur, seul élément garanti cliquable dans ce cas).
+  function startImageDrag(img, startX, startY) {
+    const startLeft = parseFloat(img.style.left) || 0;
+    const startTop = parseFloat(img.style.top) || 0;
+    const onMove = moveEvent => {
+      img.style.left = Math.round(startLeft + (moveEvent.clientX - startX)) + 'px';
+      img.style.top = Math.round(startTop + (moveEvent.clientY - startY)) + 'px';
+      positionImageToolbar();
+      positionImageHandles(img);
+      positionAnchorMarker(img);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      quill.update(Quill.sources.USER);
+      updateAnchorOffset(img);
+      positionImageHandles(img);
+      positionAnchorMarker(img);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp, { once: true });
+  }
+
+  // Aligner une image en calque (position:absolute) n'a pas de sens au sens
+  // CSS habituel (margin:auto n'a aucun effet sur un élément positionné en
+  // absolu) : on lui donne donc un sens dédié, demandé explicitement -
+  // recaler HORIZONTALEMENT l'image sur le bord gauche/le centre/le bord
+  // droit de la zone de texte, tout en conservant sa position VERTICALE
+  // actuelle (celle-ci n'a par définition aucun rapport avec un alignement
+  // gauche/centre/droite). Casse volontairement tout positionnement
+  // horizontal manuel précédent - c'est le but explicite de l'action.
+  function snapFloatingImageHorizontal(img, align) {
+    const container = img.closest('.ql-editor');
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const cs = getComputedStyle(container);
+    const padLeft = parseFloat(cs.paddingLeft) || 0;
+    const padRight = parseFloat(cs.paddingRight) || 0;
+    const contentWidth = containerRect.width - padLeft - padRight;
+    const imgWidth = img.getBoundingClientRect().width;
+    let leftPx;
+    if (align === 'left') leftPx = padLeft;
+    else if (align === 'right') leftPx = padLeft + Math.max(0, contentWidth - imgWidth);
+    else leftPx = padLeft + Math.max(0, (contentWidth - imgWidth) / 2);
+    img.style.left = Math.round(leftPx) + 'px';
+    positionImageToolbar();
+    positionImageHandles(img);
+    positionAnchorMarker(img);
+    updateAnchorOffset(img);
+    quill.update(Quill.sources.USER);
+  }
+
   function updateImageToolbarState(img) {
     if (!imageToolbar) return;
     const opacityInput = imageToolbar.querySelector('input[data-act="opacity"]');
@@ -394,17 +469,6 @@ const Editor = (function () {
     const behind = imageToolbar.querySelector('button[data-act="layer-behind"]');
     if (front) front.classList.toggle('active', layer === 'front');
     if (behind) behind.classList.toggle('active', layer === 'behind');
-    // L'alignement gauche/centre/droite d'une image repose sur margin:auto
-    // (cf. .editor-image[data-align] dans style.css), qui n'a aucun effet sur
-    // un élément position:absolute (une image en calque devant/derrière se
-    // positionne exclusivement via left/top, au glisser-déposer) : les boutons
-    // restaient cliquables sans rien faire, ce qui semblait cassé une fois
-    // l'image en calque. Désactivés explicitement pour que ce soit visible.
-    const floating = layer === 'front' || layer === 'behind';
-    ['align-left', 'align-center', 'align-right'].forEach(act => {
-      const btn = imageToolbar.querySelector('button[data-act="' + act + '"]');
-      if (btn) btn.disabled = floating;
-    });
   }
 
   function applyImageAction(act) {
@@ -414,9 +478,9 @@ const Editor = (function () {
     if (act === 'zoom-in') img.style.width = Math.round(currentPx * 1.25) + 'px';
     else if (act === 'zoom-out') img.style.width = Math.max(40, Math.round(currentPx * 0.75)) + 'px';
     else if (act === 'reset') { img.style.width = ''; img.removeAttribute('data-align'); }
-    else if (act === 'align-left') { if (img.style.position !== 'absolute') img.dataset.align = 'left'; }
-    else if (act === 'align-center') { if (img.style.position !== 'absolute') img.dataset.align = 'center'; }
-    else if (act === 'align-right') { if (img.style.position !== 'absolute') img.dataset.align = 'right'; }
+    else if (act === 'align-left') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'left'); else img.dataset.align = 'left'; }
+    else if (act === 'align-center') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'center'); else img.dataset.align = 'center'; }
+    else if (act === 'align-right') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'right'); else img.dataset.align = 'right'; }
     else if (act === 'wrap') img.dataset.wrap = img.dataset.wrap === 'block' ? 'inline' : 'block';
     else if (act === 'layer-front') setImageLayer(img, img.dataset.layer === 'front' ? 'normal' : 'front');
     else if (act === 'layer-behind') setImageLayer(img, img.dataset.layer === 'behind' ? 'normal' : 'behind');
@@ -624,26 +688,7 @@ const Editor = (function () {
       const floatingImg = event.target.closest && event.target.closest('.editor-image.editor-image-floating');
       if (floatingImg) {
         event.preventDefault();
-        const startX = event.clientX, startY = event.clientY;
-        const startLeft = parseFloat(floatingImg.style.left) || 0;
-        const startTop = parseFloat(floatingImg.style.top) || 0;
-        const onMove = moveEvent => {
-          floatingImg.style.left = Math.round(startLeft + (moveEvent.clientX - startX)) + 'px';
-          floatingImg.style.top = Math.round(startTop + (moveEvent.clientY - startY)) + 'px';
-          positionImageToolbar();
-          positionImageHandles(floatingImg);
-          positionAnchorMarker(floatingImg);
-        };
-        const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          quill.update(Quill.sources.USER);
-          updateAnchorOffset(floatingImg);
-          positionImageHandles(floatingImg);
-          positionAnchorMarker(floatingImg);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp, { once: true });
+        startImageDrag(floatingImg, event.clientX, event.clientY);
         return;
       }
       const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip'); if (twoColumnsGrip) { const zone = twoColumnsGrip.closest('.two-columns-zone'); if (!zone) return; event.preventDefault(); event.stopPropagation(); const rect = zone.getBoundingClientRect(); const update = moveEvent => { const usableWidth = rect.width; if (!usableWidth) return; const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100; zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`); }; const stop = () => { document.removeEventListener('mousemove', update); document.removeEventListener('mouseup', stop); quill.update(Quill.sources.USER); }; document.addEventListener('mousemove', update); document.addEventListener('mouseup', stop, { once: true }); return; } const handle = event.target.closest && event.target.closest('.table-col-resize-handle'); if (!handle) return; const cell = handle.closest('th, td'); const table = handle.closest('table'); if (!cell || !table) return; event.preventDefault(); event.stopPropagation(); resizeTableColumn(table, cell.cellIndex, event.clientX);
