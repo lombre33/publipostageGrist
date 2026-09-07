@@ -346,7 +346,20 @@ const Editor = (function () {
     // paragraphe qu'elle recouvre visiblement le plus). (2) à défaut d'aucun
     // chevauchement (image posée dans un intervalle entre deux blocs), on
     // retombe sur l'ancienne méthode par distance au centre.
-    let bestOverlap = null, bestOverlapAmount = -Infinity, bestOverlapContains = false;
+    //
+    // Tolérance d'égalité du chevauchement (~un peu plus qu'une ligne) : une
+    // image assez haute pour chevaucher PLUSIEURS lignes courtes consécutives
+    // (titre + lignes vides d'espacement, chacune ~20px) les recouvre alors
+    // toutes de façon quasi identique (à 1-2px près) - un pur "plus grand
+    // chevauchement" n'est alors qu'un choix arbitraire dépendant de l'ordre
+    // du DOM, sans rapport avec l'intuition visuelle. Dans ce cas (égalité à
+    // cette tolérance près), on préfère le candidat dont la propre hauteur
+    // est la plus grande : un vrai paragraphe de plusieurs lignes est une
+    // ancre bien plus significative/stable qu'une ligne vide ou un titre
+    // d'une seule ligne, et son rendu PDF est calibré pour du texte réel (cf.
+    // le correctif marge nulle des paragraphes vides).
+    const OVERLAP_TIE_PX = 24;
+    let bestOverlap = null, bestOverlapAmount = -Infinity, bestOverlapHeight = -Infinity, bestOverlapContains = false;
     let bestDist = null, bestDistAmount = Infinity, bestDistContains = false;
     candidates.forEach(el => {
       if (el.closest('.two-columns-column, .editable-table')) return;
@@ -355,8 +368,11 @@ const Editor = (function () {
       const contains = el.contains(img);
       const overlap = Math.min(imgRect.bottom, r.bottom) - Math.max(imgRect.top, r.top);
       if (overlap > 0) {
-        const better = overlap > bestOverlapAmount + 0.5 || (Math.abs(overlap - bestOverlapAmount) <= 0.5 && contains && !bestOverlapContains);
-        if (better) { bestOverlapAmount = overlap; bestOverlap = el; bestOverlapContains = contains; }
+        const tied = Math.abs(overlap - bestOverlapAmount) <= OVERLAP_TIE_PX;
+        const better = overlap > bestOverlapAmount + OVERLAP_TIE_PX
+          || (tied && r.height > bestOverlapHeight + 0.5)
+          || (tied && Math.abs(r.height - bestOverlapHeight) <= 0.5 && contains && !bestOverlapContains);
+        if (better) { bestOverlapAmount = overlap; bestOverlapHeight = r.height; bestOverlap = el; bestOverlapContains = contains; }
       }
       const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
       // À égalité (quasi-égalité, tolérance 0.5px) de distance, on privilégie le
