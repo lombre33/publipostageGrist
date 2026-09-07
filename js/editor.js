@@ -659,6 +659,20 @@ const Editor = (function () {
   }
   function setHTML(html) {
     quill.root.innerHTML = html || '';
+    // CRITIQUE : force Quill à reconstruire immédiatement son modèle interne
+    // (Delta/index/arbre de blots) à partir du DOM qu'on vient d'injecter.
+    // Sans cet appel, Quill ne se resynchronise que de façon asynchrone via
+    // son MutationObserver — tant que ça n'a pas eu lieu, `quill.getLength()`
+    // et `quill.getSelection()`/`insertEmbed(index, ...)` peuvent opérer sur
+    // un modèle interne qui ne correspond PAS au DOM réellement affiché.
+    // Bug constaté et reproduit : charger un modèle (titre + paragraphes)
+    // puis insérer IMMÉDIATEMENT une image (sans clic/frappe intermédiaire
+    // qui aurait forcé Quill à se resynchroniser tout seul) fait atterrir
+    // l'image dans le mauvais bloc (le titre, au lieu du paragraphe visé) —
+    // explique une image "en calque" qui semble atterrir n'importe où dans
+    // le document une fois exportée en PDF, alors que sa position PDF est
+    // elle-même calculée correctement PAR RAPPORT à ce bloc ancre erroné.
+    quill.update(Quill.sources.SILENT);
     quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
     // Le src des pièces jointes n'est jamais fiable dans le HTML enregistré (le jeton
     // d'accès expire après quelques minutes) : on le régénère à chaque chargement.
