@@ -326,8 +326,20 @@ const PdfExport = (function () {
     return pendingImages.map(img => {
       const offset = img._pendingOffset;
       const anchor = img._anchorBlock;
-      if (anchor && anchor.positions && anchor.positions[0]) {
-        return { x: anchor.positions[0].left + offset.left * PX_TO_PT, y: anchor.positions[0].top + offset.top * PX_TO_PT };
+      if (anchor && anchor.block && anchor.block.positions && anchor.block.positions[0]) {
+        // x part de anchor.containerLeft (bord gauche de la BOÎTE du paragraphe,
+        // cf. calcul dans htmlToPdfContent), PAS de anchor.block.positions[0].left :
+        // pour un paragraphe centré/aligné à droite, .positions[0].left est le bord
+        // gauche du TEXTE RENDU de cette ligne précise (déjà décalé par le centrage,
+        // et variable ligne par ligne selon leur largeur) - alors que offset.left
+        // (editor.js:updateAnchorOffset) est mesuré par rapport à getBoundingClientRect()
+        // du paragraphe, c'est-à-dire le bord gauche de sa BOÎTE, insensible à
+        // l'alignement du texte qu'elle contient. Additionner offset.left à
+        // .positions[0].left revenait donc à appliquer DEUX FOIS l'effet du
+        // centrage (une fois dans le rendu pdfmake, une fois dans l'offset
+        // éditeur qui l'ignore) - confirmé comme cause du décalage persistant
+        // signalé par l'utilisateur sur un paragraphe centré.
+        return { x: anchor.containerLeft + offset.left * PX_TO_PT, y: anchor.block.positions[0].top + offset.top * PX_TO_PT };
       }
       // Paragraphe ancre sans texte (image seule sur sa ligne) : pas de position
       // pdfmake à lire, on retombe sur l'ancien calcul (marge de page).
@@ -363,7 +375,12 @@ const PdfExport = (function () {
         produced.forEach(b => blocks.push(b));
         if (node.dataset && node.dataset.pmAnchorId) {
           const textBlock = produced.find(b => b && b.text);
-          if (textBlock) anchorIdToBlock[node.dataset.pmAnchorId] = textBlock;
+          if (textBlock) {
+            anchorIdToBlock[node.dataset.pmAnchorId] = {
+              block: textBlock,
+              containerLeft: PAGE_MARGIN_PT + (textBlock.margin ? textBlock.margin[0] : 0),
+            };
+          }
         }
         pendingPageBreak = false;
         return;
