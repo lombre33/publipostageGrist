@@ -283,24 +283,43 @@ const PdfExport = (function () {
       return blocks;
     });
     const pageWidth = 595.28;
-    const margins = 56;
-    const columnGap = 16;
-    const availableWidth = pageWidth - margins - columnGap;
     // La poignée de redimensionnement (editor.js, .two-columns-resize-grip) ne
     // change QUE la variable CSS --layout-left du conteneur ; jusqu'ici cette
     // fonction ignorait totalement cette valeur et imposait un partage 50/50
     // fixe - la largeur ajustée dans l'éditeur n'avait donc littéralement
     // aucun effet sur l'export PDF. On lit maintenant cette même variable
-    // (posée en style INLINE par le glisser, cf. editor.js) pour répartir
-    // `availableWidth` dans les mêmes proportions que la grille CSS de
+    // (posée en style INLINE par le glisser, cf. editor.js) pour répartir la
+    // largeur disponible dans les mêmes proportions que la grille CSS de
     // l'éditeur (`grid-template-columns: var(--layout-left) calc(100% -
-    // var(--layout-left) - 18px)`), en excluant le gap des deux côtés comme
-    // le fait déjà `availableWidth` pour le cas 50/50.
+    // var(--layout-left) - 18px)`).
+    //
+    // Ce calcul reproduit fidèlement TOUTE la chrome CSS de .two-columns-zone
+    // / .two-columns-column (css/style.css) qui réduit la largeur de texte
+    // réellement disponible par rapport à la simple largeur de page - sans
+    // quoi le texte ne retombe pas aux mêmes endroits entre éditeur et PDF
+    // (confirmé : un mot ("amet") qui termine la 1ère ligne dans le PDF mais
+    // pas dans l'éditeur, à cause de quelques px de largeur de trop côté
+    // PDF). Plutôt que de réduire encore la chrome éditeur (déjà fait pour la
+    // marge verticale, cf. 873fc9e), on calibre ici le calcul PDF pour
+    // correspondre exactement aux valeurs CSS actuelles :
+    // - .two-columns-zone : padding 10px + bordure 1px de chaque côté
+    //   (n'affecte pas la marge haut/bas déjà calibrée séparément) ;
+    // - .two-columns-zone : gap 18px entre les 2 colonnes (la valeur 16
+    //   utilisée jusqu'ici ne correspondait à RIEN de mesuré dans le CSS) ;
+    // - .two-columns-column : padding 6px + bordure 1px de chaque côté,
+    //   PAR colonne (retranché de la largeur de CHAQUE colonne, pas
+    //   seulement de la largeur totale de la zone).
+    const ZONE_H_CHROME_PX = 2 * (10 + 1); // padding + bordure, gauche+droite
+    const COLUMN_GAP_PX = 18; // css: .two-columns-zone { gap: 18px }
+    const COLUMN_H_CHROME_PX = 2 * (6 + 1); // padding + bordure, PAR colonne
+    const zoneInnerWidth = (pageWidth - 2 * PAGE_MARGIN_PT) - ZONE_H_CHROME_PX * PX_TO_PT;
     let leftPercent = parseFloat(node.style.getPropertyValue('--layout-left'));
     if (!Number.isFinite(leftPercent)) leftPercent = 50;
     leftPercent = Math.max(20, Math.min(80, leftPercent));
-    const leftWidth = availableWidth * (leftPercent / 100);
-    const rightWidth = availableWidth - leftWidth;
+    const leftTrack = zoneInnerWidth * (leftPercent / 100);
+    const rightTrack = zoneInnerWidth - leftTrack - COLUMN_GAP_PX * PX_TO_PT;
+    const leftWidth = leftTrack - COLUMN_H_CHROME_PX * PX_TO_PT;
+    const rightWidth = rightTrack - COLUMN_H_CHROME_PX * PX_TO_PT;
     // pdfmake IGNORE silencieusement la largeur passée via `columnWidths` sur
     // le parent quand chaque entrée de `columns` est un simple TABLEAU de blocs
     // (comme ici, `columns[i]` = le tableau retourné par htmlToPdfContent) -
@@ -316,7 +335,7 @@ const PdfExport = (function () {
         { width: leftWidth, stack: columns[0] },
         { width: rightWidth, stack: columns[1] },
       ],
-      columnGap: columnGap,
+      columnGap: COLUMN_GAP_PX * PX_TO_PT,
       // Calibré pour correspondre exactement à la "chrome" d'édition réduite
       // au minimum de .two-columns-zone (css/style.css) : marge(0)+padding
       // haut(16px)+bordure(1px) = 17px*0.75 = 12.75pt en haut, marge(0)+
