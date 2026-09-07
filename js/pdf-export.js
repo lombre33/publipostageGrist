@@ -310,6 +310,10 @@ const PdfExport = (function () {
       const cs = getComputedStyle(el);
       return ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0)) * PX_TO_PT;
     };
+    const rightPt = el => {
+      const cs = getComputedStyle(el);
+      return ((parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0)) * PX_TO_PT;
+    };
     const measureTextWidthPt = el => {
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
@@ -336,6 +340,18 @@ const PdfExport = (function () {
     const colOwnInsetLeft = [
       measuredCols[0] ? leftPt(measuredCols[0]) : 0,
       measuredCols[1] ? leftPt(measuredCols[1]) : 0,
+    ];
+    // Chrome droite propre à CHAQUE colonne (padding+bordure droits) : sans
+    // elle, le SLOT pdfmake alloué à la colonne de gauche (ci-dessous) ne
+    // réserve que largeur-de-texte + inset-GAUCHE, plus étroit que sa vraie
+    // largeur extérieure (mesurée, colOuterWidthPt) - la colonne de DROITE,
+    // positionnée juste après ce slot trop étroit, démarrait alors un peu
+    // trop tôt (trop à gauche) de tout juste cet inset droit manquant.
+    // Signalé par l'utilisateur après le premier correctif (gauche) : lui
+    // seul restait décalé, la colonne de gauche étant déjà correcte.
+    const colOwnInsetRight = [
+      measuredCols[0] ? rightPt(measuredCols[0]) : 0,
+      measuredCols[1] ? rightPt(measuredCols[1]) : 0,
     ];
     const colOuterWidthPt = [
       measuredCols[0] ? measuredCols[0].getBoundingClientRect().width * PX_TO_PT : leftWidth,
@@ -448,16 +464,21 @@ const PdfExport = (function () {
     // chaque colonne dans `{ width, stack }` plutôt que de compter sur
     // `columnWidths`.
     // Chaque colonne est enveloppée dans un stack imbriqué portant sa propre
-    // marge gauche (colOwnInsetLeft) : la largeur de SLOT allouée à la colonne
-    // (width) inclut cet inset, et le stack interne le retranche par sa marge,
-    // laissant exactement la largeur de TEXTE déjà mesurée (leftWidth/
-    // rightWidth) disponible pour le contenu réel - reproduit fidèlement le
-    // padding+bordure gauche propre à chaque .two-columns-column (cf.
-    // colOwnInsetLeft plus haut), jusqu'ici totalement ignoré à l'export.
+    // marge gauche ET droite (colOwnInsetLeft/Right) : la largeur de SLOT
+    // allouée à la colonne (width) est sa vraie largeur EXTÉRIEURE mesurée
+    // (colOuterWidthPt, padding+bordure des DEUX côtés compris), et le stack
+    // interne retranche les deux par sa marge, laissant exactement la largeur
+    // de TEXTE déjà mesurée (leftWidth/rightWidth) disponible pour le contenu
+    // réel. Utiliser une largeur de slot amputée du côté droit (comme une
+    // 1ère version le faisait) sous-évalue où se termine RÉELLEMENT la
+    // colonne de gauche : la colonne de DROITE, positionnée juste après ce
+    // slot, démarrerait alors trop tôt (trop à gauche) de tout juste cet
+    // inset droit manquant - confirmé par l'utilisateur après le premier
+    // correctif (gauche) : seule la colonne de droite restait décalée.
     const block = {
       columns: [
-        { width: leftWidth + colOwnInsetLeft[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, 0, 0] }] },
-        { width: rightWidth + colOwnInsetLeft[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], 0, 0, 0] }] },
+        { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, colOwnInsetRight[0], 0] }] },
+        { width: colOuterWidthPt[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], 0, colOwnInsetRight[1], 0] }] },
       ],
       columnGap: columnGapPt,
       // Marge gauche = chrome CSS RÉELLE de la zone elle-même (zoneChromeLeftPt,
