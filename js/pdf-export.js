@@ -306,6 +306,10 @@ const PdfExport = (function () {
     measureHost.appendChild(zoneClone);
     document.body.appendChild(measureHost);
     const measuredCols = Array.from(zoneClone.querySelectorAll(':scope > .two-columns-column'));
+    const leftPt = el => {
+      const cs = getComputedStyle(el);
+      return ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0)) * PX_TO_PT;
+    };
     const measureTextWidthPt = el => {
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
@@ -316,12 +320,37 @@ const PdfExport = (function () {
     const fallbackWidth = (pageWidth - 2 * PAGE_MARGIN_PT) / 2;
     const leftWidth = measuredCols[0] ? measureTextWidthPt(measuredCols[0]) : fallbackWidth;
     const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
+    // Chrome CSS RÉELLE (mesurée, pas devinée) qui décale visiblement le texte
+    // d'une colonne vers la droite dans l'éditeur, jusqu'ici totalement ignorée
+    // à l'export : le padding+bordure GAUCHE de la ZONE elle-même (une seule
+    // fois, avant la première colonne - reporté sur la marge gauche du bloc
+    // entier plus bas) PLUS le padding+bordure gauche propre à CHAQUE colonne
+    // (répété pour chacune). Distinct du bug de LARGEUR déjà corrigé
+    // : la largeur de texte disponible était déjà juste, mais son point de
+    // DÉPART restait implicitement supposé être la marge de page elle-même -
+    // signalé par l'utilisateur : le paragraphe simple juste au-dessus de la
+    // zone reste collé à gauche dans l'éditeur, alors que le texte de la
+    // colonne, lui, apparaît nettement indenté - écart totalement absent de
+    // l'export, où les deux retombaient à tort au même endroit.
+    const zoneChromeLeftPt = leftPt(zoneClone);
+    const colOwnInsetLeft = [
+      measuredCols[0] ? leftPt(measuredCols[0]) : 0,
+      measuredCols[1] ? leftPt(measuredCols[1]) : 0,
+    ];
+    const colOuterWidthPt = [
+      measuredCols[0] ? measuredCols[0].getBoundingClientRect().width * PX_TO_PT : leftWidth,
+      measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
+    ];
     document.body.removeChild(measureHost);
-    // Abscisse PDF du bord gauche du CONTENU de chaque colonne (cf. note sur
-    // buildPdfContentFromRoot/leftOriginPt) : la colonne de gauche démarre à
-    // la marge de page habituelle, celle de droite après la largeur mesurée
-    // de la colonne de gauche + l'espacement entre colonnes.
-    const columnOrigins = [PAGE_MARGIN_PT, PAGE_MARGIN_PT + leftWidth + columnGapPt];
+    // Abscisse PDF du bord gauche du TEXTE de chaque colonne (cf. note sur
+    // buildPdfContentFromRoot/leftOriginPt), pour l'ancrage d'une image en
+    // calque à l'intérieur - doit inclure exactement la même chrome que celle
+    // appliquée ci-dessous au bloc pdfmake réel (zoneChromeLeftPt une seule
+    // fois, puis l'inset propre de chaque colonne).
+    const columnOrigins = [
+      PAGE_MARGIN_PT + zoneChromeLeftPt + colOwnInsetLeft[0],
+      PAGE_MARGIN_PT + zoneChromeLeftPt + colOuterWidthPt[0] + columnGapPt + colOwnInsetLeft[1],
+    ];
     // Réapplique explicitement l'alignement (ql-align-center / -right / -justify
     // ou style inline text-align) à CHAQUE bloc pdfmake issu du contenu de la
     // colonne. Le flux hors-colonnes le fait déjà via blockFrom() /
@@ -418,23 +447,36 @@ const PdfExport = (function () {
     // le contenu est un tableau brut plutôt qu'un objet - on enveloppe donc
     // chaque colonne dans `{ width, stack }` plutôt que de compter sur
     // `columnWidths`.
+    // Chaque colonne est enveloppée dans un stack imbriqué portant sa propre
+    // marge gauche (colOwnInsetLeft) : la largeur de SLOT allouée à la colonne
+    // (width) inclut cet inset, et le stack interne le retranche par sa marge,
+    // laissant exactement la largeur de TEXTE déjà mesurée (leftWidth/
+    // rightWidth) disponible pour le contenu réel - reproduit fidèlement le
+    // padding+bordure gauche propre à chaque .two-columns-column (cf.
+    // colOwnInsetLeft plus haut), jusqu'ici totalement ignoré à l'export.
     const block = {
       columns: [
-        { width: leftWidth, stack: columns[0] },
-        { width: rightWidth, stack: columns[1] },
+        { width: leftWidth + colOwnInsetLeft[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, 0, 0] }] },
+        { width: rightWidth + colOwnInsetLeft[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], 0, 0, 0] }] },
       ],
       columnGap: columnGapPt,
-      // Calibré pour correspondre exactement à la "chrome" d'édition réduite
-      // au minimum de .two-columns-zone (css/style.css) : marge(0)+padding
-      // haut(16px)+bordure(1px) = 17px*0.75 = 12.75pt en haut, marge(0)+
-      // padding bas(4px)+bordure(1px) = 5px*0.75 = 3.75pt en bas. Un écart
-      // ici décale tout le contenu qui suit cette zone dans le document
-      // (ex. une image en calque ancrée juste après) sans que l'ancrage
-      // (qui lit la position RÉELLE du bloc ancre après mise en page) ne
-      // puisse s'en apercevoir - contrairement à un paragraphe de texte, la
-      // hauteur de CETTE zone n'est jamais mesurée dans l'éditeur, seulement
-      // supposée correspondre à ces deux chiffres.
-      margin: [0, 12.75, 0, 3.75],
+      // Marge gauche = chrome CSS RÉELLE de la zone elle-même (zoneChromeLeftPt,
+      // mesurée plus haut - padding+bordure gauche de .two-columns-zone),
+      // jusqu'ici ignorée (0 codé en dur) alors que visible dans l'éditeur :
+      // le paragraphe juste au-dessus de la zone reste collé à la marge de
+      // page tandis que le texte de la zone, lui, démarre plus loin.
+      //
+      // Marge verticale calibrée pour correspondre exactement à la "chrome"
+      // d'édition réduite au minimum de .two-columns-zone (css/style.css) :
+      // marge(0)+padding haut(16px)+bordure(1px) = 17px*0.75 = 12.75pt en
+      // haut, marge(0)+padding bas(4px)+bordure(1px) = 5px*0.75 = 3.75pt en
+      // bas. Un écart ici décale tout le contenu qui suit cette zone dans le
+      // document (ex. une image en calque ancrée juste après) sans que
+      // l'ancrage (qui lit la position RÉELLE du bloc ancre après mise en
+      // page) ne puisse s'en apercevoir - contrairement à un paragraphe de
+      // texte, la hauteur de CETTE zone n'est jamais mesurée dans l'éditeur,
+      // seulement supposée correspondre à ces deux chiffres.
+      margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
     };
     // Exposée pour buildPdfContentFromRoot : quand une image en calque DANS
     // cette zone n'a trouvé aucun paragraphe voisin à qui s'ancrer (cf.
@@ -768,6 +810,13 @@ const PdfExport = (function () {
       if (!b || typeof b !== 'object') return;
       if (b._pendingOffset) found.push(b);
       if (Array.isArray(b.columns)) b.columns.forEach(col => { if (col && Array.isArray(col.stack)) found.push(...collectPendingImages(col.stack)); });
+      // Un stack imbriqué ordinaire (cf. twoColumnsFrom : chaque colonne
+      // enveloppe désormais son contenu dans {stack:[...], margin:[...]}
+      // pour reproduire son propre padding/bordure gauche) doit AUSSI être
+      // descendu - pas seulement columns[i].stack - sous peine de manquer
+      // toute image nichée à CE niveau supplémentaire (jamais mesurée ni
+      // patchée, resterait bloquée à son {x:0,y:0} provisoire).
+      if (Array.isArray(b.stack)) found.push(...collectPendingImages(b.stack));
     });
     return found;
   }
