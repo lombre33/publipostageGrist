@@ -286,17 +286,29 @@ const PdfExport = (function () {
     const images = [];
     const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images));
     const blocks = [];
-    let block = null;
     let remainingPageBreak = pageBreakBefore;
-    if (runs.length || !images.length) {
-      block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
-      const align = alignment(node); if (align) block.alignment = align;
-      if (/^H[1-6]$/.test(tag)) block.bold = true;
-      if (tag === 'LI') { block.text = [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs); block.margin[0] = 10; }
-      if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; }
-      if (remainingPageBreak) { block.pageBreak = 'before'; remainingPageBreak = false; }
-      blocks.push(block);
-    }
+    // Toujours créer ce bloc-texte, MÊME pour un paragraphe qui ne contient
+    // qu'une image (aucun run - runs.length === 0) : sans lui, ce noeud n'a
+    // aucun bloc pdfmake sur lequel lire `.positions` une fois mis en page,
+    // ce qui casse l'ancrage (data-anchor-target-id, cf. htmlToPdfContent) si
+    // cette IMAGE elle-même s'ancre sur SON PROPRE paragraphe - cas fréquent
+    // depuis qu'une image insérée démarre directement en calque "devant" sur
+    // sa propre ligne (editor.js:insertImage). Sans ce bloc, la résolution
+    // d'ancre retombe sur `PAGE_MARGIN_PT + petit décalage`, une formule
+    // pensée pour "aucune ancre connue du tout", pas pour "ancre connue mais
+    // sans texte" - elle place alors l'image tout près du haut de la page,
+    // sans le moindre rapport avec sa position réelle dans le document.
+    // Contrepartie mineure acceptée : une ligne vide (' ', un espace) occupe
+    // un peu d'espace vertical là où le paragraphe de l'image collapsait à
+    // rien auparavant - un compromis nécessaire pour lui donner une position
+    // PDF exploitable.
+    const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
+    const align = alignment(node); if (align) block.alignment = align;
+    if (/^H[1-6]$/.test(tag)) block.bold = true;
+    if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; block.margin[0] = 10; }
+    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [18, 4, 8, 4]; }
+    if (remainingPageBreak) { block.pageBreak = 'before'; remainingPageBreak = false; }
+    blocks.push(block);
     images.forEach(img => {
       const layer = img._layer; delete img._layer;
       if (layer === 'behind' && behindImages) { behindImages.push(img); return; }
