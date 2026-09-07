@@ -302,7 +302,19 @@ const PdfExport = (function () {
     // un peu d'espace vertical là où le paragraphe de l'image collapsait à
     // rien auparavant - un compromis nécessaire pour lui donner une position
     // PDF exploitable.
-    const block = { text: runs.length ? runs : ' ', margin: [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO };
+    //
+    // Marge NULLE (pas [0,2,0,4]) pour ce cas précis (runs.length === 0,
+    // paragraphe vide/image seule) : dans l'éditeur, des paragraphes vides
+    // consécutifs (lignes vides utilisées comme espacement manuel) s'empilent
+    // SANS marge visible entre eux (confirmé : hauteur mesurée = exactement
+    // le line-height, aucun écart). La marge [0,2,0,4] est calibrée pour du
+    // texte réel (cf. LINE_HEIGHT_RATIO) ; l'appliquer aussi aux lignes vides
+    // ajoute ~6pt de trop À CHAQUE ligne vide, et plusieurs lignes vides
+    // consécutives (cas fréquent : espacement avant une image en calque)
+    // cumulent cet écart - confirmé être la cause d'un décalage vertical
+    // d'environ "une ligne" signalé par l'utilisateur sur une image ancrée
+    // après plusieurs lignes vides.
+    const block = { text: runs.length ? runs : ' ', margin: runs.length ? [0, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] : [0, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) block.bold = true;
     if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; block.margin[0] = 10; }
