@@ -110,8 +110,8 @@ const Editor = (function () {
 
   const TwoColumnsBlot = BlockEmbed;
   class TwoColumnsBlotClass extends TwoColumnsBlot {
-    static create(value) { const node = super.create(); node.classList.add('two-columns-zone'); node.setAttribute('contenteditable', 'false'); const build = html => { const col = document.createElement('div'); col.className = 'two-columns-column'; col.contentEditable = 'true'; col.innerHTML = html || ''; return col; }; node.appendChild(build(value && value.cols ? value.cols[0] : '')); node.appendChild(build(value && value.cols ? value.cols[1] : '')); return node; }
-    static value(node) { const cols = node.querySelectorAll('.two-columns-column'); return { cols: [cols[0] ? cols[0].innerHTML : '', cols[1] ? cols[1].innerHTML : ''] }; }
+    static create(value) { const node = super.create(); node.classList.add('two-columns-zone'); node.setAttribute('contenteditable', 'false'); const build = html => { const col = document.createElement('div'); col.className = 'two-columns-column'; col.contentEditable = 'true'; col.innerHTML = html || ''; return col; }; node.appendChild(build(value && value.cols ? value.cols[0] : '')); node.appendChild(build(value && value.cols ? value.cols[1] : '')); if (value && value.layoutLeft) node.style.setProperty('--layout-left', value.layoutLeft); ensureTwoColumnsGrip(node); return node; }
+    static value(node) { const cols = node.querySelectorAll('.two-columns-column'); const layoutLeft = node.style.getPropertyValue('--layout-left'); return { cols: [cols[0] ? cols[0].innerHTML : '', cols[1] ? cols[1].innerHTML : ''], ...(layoutLeft ? { layoutLeft } : {}) }; }
   }
   TwoColumnsBlotClass.blotName = 'twocolumns'; TwoColumnsBlotClass.tagName = 'div'; TwoColumnsBlotClass.className = 'two-columns-zone'; Quill.register(TwoColumnsBlotClass);
 

@@ -269,7 +269,22 @@ const PdfExport = (function () {
     const margins = 56;
     const columnGap = 16;
     const availableWidth = pageWidth - margins - columnGap;
-    const block = { columns: columns, columnWidths: [availableWidth / 2, availableWidth / 2], columnGap: columnGap, margin: [0, 6, 0, 6] };
+    // La poignée de redimensionnement (editor.js, .two-columns-resize-grip) ne
+    // change QUE la variable CSS --layout-left du conteneur ; jusqu'ici cette
+    // fonction ignorait totalement cette valeur et imposait un partage 50/50
+    // fixe - la largeur ajustée dans l'éditeur n'avait donc littéralement
+    // aucun effet sur l'export PDF. On lit maintenant cette même variable
+    // (posée en style INLINE par le glisser, cf. editor.js) pour répartir
+    // `availableWidth` dans les mêmes proportions que la grille CSS de
+    // l'éditeur (`grid-template-columns: var(--layout-left) calc(100% -
+    // var(--layout-left) - 18px)`), en excluant le gap des deux côtés comme
+    // le fait déjà `availableWidth` pour le cas 50/50.
+    let leftPercent = parseFloat(node.style.getPropertyValue('--layout-left'));
+    if (!Number.isFinite(leftPercent)) leftPercent = 50;
+    leftPercent = Math.max(20, Math.min(80, leftPercent));
+    const leftWidth = availableWidth * (leftPercent / 100);
+    const rightWidth = availableWidth - leftWidth;
+    const block = { columns: columns, columnWidths: [leftWidth, rightWidth], columnGap: columnGap, margin: [0, 6, 0, 6] };
     if (pageBreakBefore) block.pageBreak = 'before';
     return block;
   }
