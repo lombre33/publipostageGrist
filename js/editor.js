@@ -338,12 +338,24 @@ const Editor = (function () {
     const candidates = quill.root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
     let best = null;
     let bestDist = Infinity;
+    let bestContains = false;
     candidates.forEach(el => {
       if (el.closest('.two-columns-column, .editable-table')) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
       const dist = (r.top <= imgCenterY && imgCenterY <= r.bottom) ? 0 : Math.min(Math.abs(r.top - imgCenterY), Math.abs(r.bottom - imgCenterY));
-      if (dist < bestDist) { bestDist = dist; best = el; }
+      const contains = el.contains(img);
+      // À égalité (quasi-égalité, tolérance 0.5px) de distance, on privilégie le
+      // paragraphe qui contient RÉELLEMENT l'image dans le DOM. Cas fréquent :
+      // une image passée en position absolue laisse son propre paragraphe
+      // s'effondrer à hauteur ~0, exactement au même point que le bas du
+      // paragraphe précédent (ex. un titre juste au-dessus) — les deux se
+      // retrouvent alors à distance identique du centre de l'image, et sans ce
+      // départage l'ordre d'itération DOM (le voisin est vu en premier) faisait
+      // ancrer l'image sur le MAUVAIS paragraphe (confirmé : image exportée
+      // décalée, ancrée sur le titre au lieu de son propre paragraphe).
+      const better = dist < bestDist - 0.5 || (Math.abs(dist - bestDist) <= 0.5 && contains && !bestContains);
+      if (better) { bestDist = dist; best = el; bestContains = contains; }
     });
     return best;
   }
