@@ -6,10 +6,33 @@ const Variables = (function () {
   let acSelectedIndex = 0;
   let acRange = null;
   let activeTableCell = null;
+  // event.target NE SUFFIT PAS ici : une colonne 2-colonnes / cellule de
+  // tableau est un contenteditable IMBRIQUÉ dans .ql-editor (lui-même
+  // contenteditable) - par spec, un contenteditable dont le PARENT est déjà
+  // éditable ne forme pas son propre "editing host" : l'évènement 'input'
+  // (et 'keydown') cible alors l'éditing host englobant, c'est-à-dire
+  // .ql-editor lui-même, jamais la colonne/cellule réelle où l'utilisateur
+  // tape - vérifié en direct (event.target.tagName/className = DIV.ql-editor
+  // pour une frappe dans une colonne). .closest() sur ce mauvais target ne
+  // trouve donc jamais la colonne, et le "#" retombe sur le chemin Quill
+  // (checkForTrigger), dont les coordonnées n'ont aucun sens pour du texte
+  // hors du modèle Delta de Quill - d'où la popup mal positionnée. La
+  // Selection/Range du navigateur, elle, n'est PAS affectée par cette regle
+  // d'"editing host" : on part donc de window.getSelection() plutôt que de
+  // event.target, comme le fait déjà nativeCaretOffset() plus bas. Fonction
+  // partagée au niveau module (pas juste dans init()) : checkForTrigger()
+  // (chemin Quill) en a aussi besoin, cf. plus bas.
+  function cellFromEvent() {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return null;
+    const node = selection.anchorNode;
+    if (!node) return null;
+    const el = node.nodeType === 1 ? node : node.parentElement;
+    return el && el.closest ? el.closest('.editable-table td, .editable-table th, .two-columns-column') : null;
+  }
   function init(quillInstance) {
     activeQuill = quillInstance; acBox = document.getElementById('autocomplete-box');
     activeQuill.on('text-change', function (delta, oldDelta, source) { if (source !== 'user') return; checkForTrigger(); });
-    function cellFromEvent(event) { let target = event.target; if (target && target.nodeType !== 1) target = target.parentElement; return target && target.closest ? target.closest('.editable-table td, .editable-table th, .two-columns-column') : null; }
     function handleCellInput(event) { const cell = cellFromEvent(event); if (!cell) return; activeTableCell = cell; checkForCellTrigger(cell); }
     document.addEventListener('input', handleCellInput, true);
     document.addEventListener('keyup', handleCellInput, true);
@@ -19,7 +42,22 @@ const Variables = (function () {
     document.addEventListener('keydown', function (e) { const cell = cellFromEvent(e); if (cell) activeTableCell = cell; if (acBox.style.display === 'block') { if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); } else if (e.key === 'Enter') { e.preventDefault(); confirmSelection(); } else if (e.key === 'Escape') hideAutocomplete(); } });
     document.addEventListener('click', function (e) { if (acBox && !acBox.contains(e.target)) hideAutocomplete(); });
   }
-  function checkForTrigger() { const range = activeQuill.getSelection(); if (!range) { hideAutocomplete(); return; } const textBefore = activeQuill.getText(0, range.index); const match = textBefore.match(/#([A-Za-z0-9_]*)$/); if (match) { const query = match[1].toLowerCase(); const startIndex = range.index - match[0].length; acRange = { index: startIndex, length: match[0].length }; showAutocomplete(query, range); } else hideAutocomplete(); }
+  function checkForTrigger() {
+    // Une colonne 2-colonnes / cellule de tableau est gérée EXCLUSIVEMENT par
+    // checkForCellTrigger (cf. cellFromEvent ci-dessus) : ce texte n'existe
+    // pas dans le modèle Delta de Quill, donc activeQuill.getSelection()/
+    // getText() n'y ont aucun sens (range renvoyé n'importe quoi, souvent
+    // {index:0}). Sans ce garde-fou, ce chemin Quill s'exécute quand même
+    // (Quill voit une mutation DOM même à l'intérieur de l'embed) et écrase
+    // - généralement en la cachant - la popup correctement positionnée par
+    // checkForCellTrigger juste avant, dans le même cycle d'évènement.
+    if (cellFromEvent()) return;
+    const range = activeQuill.getSelection();
+    if (!range) { hideAutocomplete(); return; }
+    const textBefore = activeQuill.getText(0, range.index);
+    const match = textBefore.match(/#([A-Za-z0-9_]*)$/);
+    if (match) { const query = match[1].toLowerCase(); const startIndex = range.index - match[0].length; acRange = { index: startIndex, length: match[0].length }; showAutocomplete(query, range); } else hideAutocomplete();
+  }
   function showAutocomplete(query, range) { const allVars = GristAPI.getAllVariables(); acItems = allVars.filter(v => v.key.toLowerCase().includes(query)); if (acItems.length === 0) { hideAutocomplete(); return; } acSelectedIndex = 0; renderAutocomplete(); positionAutocomplete(range); acBox.style.display = 'block'; }
   function renderAutocomplete() { acBox.innerHTML = ''; acItems.forEach((item, idx) => { const div = document.createElement('div'); div.className = 'ac-item' + (idx === acSelectedIndex ? ' selected' : ''); div.textContent = item.key; div.addEventListener('mousedown', function (e) { e.preventDefault(); acSelectedIndex = idx; confirmSelection(); }); acBox.appendChild(div); }); }
   function moveSelection(delta) { acSelectedIndex = (acSelectedIndex + delta + acItems.length) % acItems.length; renderAutocomplete(); }
