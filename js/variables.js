@@ -304,47 +304,97 @@ const Variables = (function () {
     const sourceLabel = document.getElementById('link-config-table-source-name');
     const selectCible = document.getElementById('link-config-col-cible');
     const selectSource = document.getElementById('link-config-col-source');
+    const preview = document.getElementById('link-config-preview');
     const btnOk = document.getElementById('link-config-confirm');
     const btnCancel = document.getElementById('link-config-cancel');
 
     title.textContent = `Comment trouver la bonne ligne dans « ${targetTable} » ?`;
     cibleLabel.textContent = targetTable;
     sourceLabel.textContent = currentTableId;
-    selectCible.innerHTML = '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${c}</option>`).join('');
-    selectSource.innerHTML = '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${c}</option>`).join('');
+    // Un placeholder désactivé en 1ère position force un choix explicite -
+    // sans lui, un <select> non touché par l'utilisateur reste silencieusement
+    // sur "Identifiant de ligne" (1ère option), ce qui peut produire une règle
+    // qui a l'air valide mais compare deux identifiants de ligne sans rapport
+    // (un id de table A et un id de table B ne coïncident que par hasard).
+    const placeholder = '<option value="" disabled selected>— Choisissez une colonne —</option>';
+    selectCible.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${c}</option>`).join('');
+    selectSource.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${c}</option>`).join('');
 
-    let initialMode = existingRule ? existingRule.mode : null;
-    let initialCible = existingRule ? existingRule.colonneCible : 'id';
+    // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
+    // choix actif, pas un état par défaut dans lequel on tombe sans le
+    // réaliser (cf. retour utilisateur : confusion entre les deux options).
+    let initialMode = existingRule ? existingRule.mode : 'match';
+    let initialCible = existingRule ? existingRule.colonneCible : '';
     let initialSource = existingRule ? existingRule.colonneSource : '';
     if (!existingRule) {
       const candidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
-      if (candidates.length === 1) { initialMode = 'match'; initialCible = 'id'; initialSource = candidates[0]; }
+      if (candidates.length === 1) { initialCible = 'id'; initialSource = candidates[0]; }
     }
     radios.forEach(r => { r.checked = r.value === initialMode; });
-    selectCible.value = initialCible || 'id';
+    if (initialCible) selectCible.value = initialCible;
     if (initialSource) selectSource.value = initialSource;
     matchFields.hidden = initialMode !== 'match';
 
-    function onModeChange() {
+    function currentRuleFromForm() {
+      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
+      if (!checked) return null;
+      if (checked.value === 'singleton') return { mode: 'singleton' };
+      if (!selectCible.value || !selectSource.value) return null;
+      return { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
+    }
+    // Aperçu en direct : calcule et affiche ce que la règle en cours de
+    // saisie donnerait pour la ligne Grist actuellement sélectionnée - permet
+    // de vérifier immédiatement (avant de valider) que la correspondance est
+    // la bonne, et que "singleton" est bien statique alors que "match" varie
+    // selon la ligne courante (cf. retour utilisateur : "pas dynamique").
+    async function updatePreview() {
+      if (!preview) return;
+      const rule = currentRuleFromForm();
+      if (!rule) { preview.textContent = 'Choisissez les deux colonnes pour voir un aperçu.'; return; }
+      const record = GristAPI.getCurrentRecord();
+      if (!record) { preview.textContent = 'Aucune ligne sélectionnée dans Grist pour prévisualiser.'; return; }
+      preview.textContent = 'Calcul de l’aperçu…';
+      try {
+        const rows = await GristAPI.fetchTableRows(targetTable);
+        if (rule.mode === 'singleton') {
+          if (!rows.length) { preview.textContent = `Aperçu : « ${targetTable} » est vide.`; return; }
+          const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
+          preview.textContent = `Aperçu : toujours la ligne n°${first.id} de « ${targetTable} », quelle que soit la ligne courante.`;
+          return;
+        }
+        const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
+        const matches = rows.filter(r => sameValue(rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]), sourceVal));
+        preview.textContent = matches.length
+          ? `Aperçu : ${matches.length} ligne(s) trouvée(s) dans « ${targetTable} » pour la ligne courante (n° ${matches.map(r => r.id).join(', ')}).`
+          : `Aperçu : aucune ligne de « ${targetTable} » ne correspond à la ligne courante (valeur recherchée : ${sourceVal}).`;
+      } catch (e) {
+        console.warn('[variables] showLinkConfigModal: échec aperçu', e);
+        preview.textContent = 'Aperçu indisponible.';
+      }
+    }
+    function onFormChange() {
       const checked = modal.querySelector('input[name="link-config-mode"]:checked');
       matchFields.hidden = !checked || checked.value !== 'match';
+      updatePreview();
     }
-    radios.forEach(r => r.addEventListener('change', onModeChange));
+    radios.forEach(r => r.addEventListener('change', onFormChange));
+    selectCible.addEventListener('change', updatePreview);
+    selectSource.addEventListener('change', updatePreview);
     modal.style.display = 'flex';
+    updatePreview();
 
     return new Promise((resolve) => {
       function cleanup() {
         modal.style.display = 'none';
-        radios.forEach(r => r.removeEventListener('change', onModeChange));
+        radios.forEach(r => r.removeEventListener('change', onFormChange));
+        selectCible.removeEventListener('change', updatePreview);
+        selectSource.removeEventListener('change', updatePreview);
         btnOk.removeEventListener('click', onOk);
         btnCancel.removeEventListener('click', onCancel);
       }
       function onOk() {
-        const checked = modal.querySelector('input[name="link-config-mode"]:checked');
-        if (!checked) { cleanup(); resolve(null); return; }
-        const rule = checked.value === 'singleton'
-          ? { mode: 'singleton' }
-          : { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
+        const rule = currentRuleFromForm();
+        if (!rule) { preview.textContent = 'Choisissez les deux colonnes avant de valider.'; return; }
         cleanup();
         resolve(rule);
       }
