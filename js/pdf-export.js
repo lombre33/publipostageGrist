@@ -415,13 +415,33 @@ const PdfExport = (function () {
     // forme du texte - qui se répartit différemment selon la largeur réelle
     // de sa colonne - n'étaient respectées).
     const availableWidthPt = 595.28 - 56;
+    const minColWidthPt = 12;
     const colgroup = node.querySelector(':scope > colgroup');
     const colPercents = colgroup ? Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 0) : [];
     while (colPercents.length < columnCount) colPercents.push(0);
     const percentSum = colPercents.slice(0, columnCount).reduce((sum, p) => sum + p, 0);
-    const widths = percentSum > 0
-      ? colPercents.slice(0, columnCount).map(p => Math.max(12, (p / percentSum) * availableWidthPt))
-      : Array(columnCount).fill(Math.max(12, availableWidthPt / columnCount));
+    let widths;
+    if (percentSum > 0) {
+      // Normalise D'ABORD pour sommer exactement à availableWidthPt, quel que
+      // soit percentSum réel (resizeTableColumn peut légèrement dériver de
+      // 100% sur un redimensionnement extrême - un plancher de 5% clampé d'un
+      // côté sans que son voisin ne recule exactement d'autant).
+      widths = colPercents.slice(0, columnCount).map(p => (p / percentSum) * availableWidthPt);
+      const flooredTotal = widths.reduce((sum, w) => sum + Math.max(minColWidthPt, w), 0);
+      if (flooredTotal > availableWidthPt) {
+        // Le plancher minimal (colonne glissée très étroite) ferait à lui
+        // seul dépasser la largeur de page si on l'appliquait tel quel - on
+        // retire le manque aux colonnes encore AU-DESSUS du plancher, au
+        // prorata, plutôt que de laisser le tableau déborder à droite.
+        const deficit = flooredTotal - availableWidthPt;
+        const aboveFloorTotal = widths.reduce((sum, w) => sum + (w > minColWidthPt ? w : 0), 0) || 1;
+        widths = widths.map(w => w > minColWidthPt ? Math.max(minColWidthPt, w - deficit * (w / aboveFloorTotal)) : minColWidthPt);
+      } else {
+        widths = widths.map(w => Math.max(minColWidthPt, w));
+      }
+    } else {
+      widths = Array(columnCount).fill(Math.max(minColWidthPt, availableWidthPt / columnCount));
+    }
     const table = {
       table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }].concat(Array(Math.max(0, columnCount - 1)).fill({}) )] },
       layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777', paddingLeft: () => 4, paddingRight: () => 4, paddingTop: () => 3, paddingBottom: () => 3 },
