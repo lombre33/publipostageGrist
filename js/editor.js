@@ -306,7 +306,7 @@ const Editor = (function () {
       const pickerItem = target.closest && target.closest('.ql-picker-item');
       const selection = document.getSelection();
       if (!selection || !selection.rangeCount) return;
-      const range = selection.getRangeAt(0);
+      const range = selection.getRangeAt(0).cloneRange();
       const column = rangeClosest(range, '.two-columns-column');
       if (!column) return;
       let command = null; let value = null; let handled = false; let customAction = null;
@@ -345,9 +345,23 @@ const Editor = (function () {
       suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
       column.focus();
       selection.removeAllRanges(); selection.addRange(range);
-      if (customAction) { customAction(); return; }
+      // quill.update(SOURCE.USER) IMMÉDIATEMENT après la mutation DOM
+      // (execCommand/customAction) - cf. le même appel dans le gestionnaire de
+      // cellule de tableau plus bas. Sans lui, c'est le MutationObserver
+      // interne de Quill (asynchrone, un micro-tick plus tard - typiquement
+      // perçu par l'utilisateur comme "au relâchement du clic") qui finit par
+      // détecter seul cette mutation à l'intérieur du blot-conteneur opaque de
+      // la colonne, et RESYNCHRONISE sa sélection à ce moment-là - Quill ne
+      // sachant rien du détail interne de ce blot, il retombe alors sur "toute
+      // la plage" de ce blot plutôt que sur la sélection réelle qu'on vient de
+      // restaurer, ce qui affichait la colonne entière sélectionnée juste
+      // après le clic. Forcer la resynchronisation ICI, de façon synchrone et
+      // sous notre contrôle (juste après avoir nous-mêmes restauré la bonne
+      // sélection), l'empêche de se reproduire plus tard de façon incontrôlée.
+      if (customAction) { customAction(); quill.update(Quill.sources.USER); return; }
       if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
       document.execCommand(command, false, value);
+      quill.update(Quill.sources.USER);
     }, true);
   }
   // Tab/Maj+Tab à l'intérieur d'un item de liste, en cellule de tableau ou
@@ -401,6 +415,34 @@ const Editor = (function () {
     }, true);
   }
 
+  // Une image par URL externe s'AFFICHE toujours normalement dans l'éditeur/le
+  // mode lecture (un <img src="..."> cross-origin se charge et se peint très
+  // bien - le navigateur ne bloque QUE la lecture programmatique de ses
+  // octets), mais l'export PDF vectoriel (pdf-export.js:inlineEditorImagesAsDataUri)
+  // doit au contraire aller LIRE ces octets (fetch + blob) pour les intégrer
+  // en base64 à pdfmake, qui ne sait rien afficher d'autre - un serveur qui ne
+  // renvoie pas d'en-tête CORS permissif (Access-Control-Allow-Origin) fait
+  // alors échouer ce fetch, et pdf-export.js abandonne alors SILENCIEUSEMENT
+  // cette image (cf. son commentaire "on marque l'image à ignorer plutôt que
+  // de faire planter tout l'export") - découvert par l'utilisateur seulement
+  // en ouvrant le PDF généré, bien après coup. PAS contournable côté client
+  // (CORS est une protection du NAVIGATEUR contre le serveur qui héberge
+  // l'image, aucun contournement JS ne peut forcer ce serveur à répondre
+  // autrement - un vrai contournement demanderait un serveur relais/proxy,
+  // hors de portée de ce widget statique). On reproduit donc ICI, dès
+  // l'insertion, le MÊME fetch que celui que l'export PDF fera plus tard : en
+  // cas d'échec, on prévient l'utilisateur immédiatement plutôt que de le
+  // laisser découvrir l'absence de l'image après export.
+  function warnIfImageUrlNotExportable(src) {
+    if (!src || src.startsWith('data:')) return;
+    fetch(src).then(resp => {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.blob();
+    }).catch(e => {
+      console.warn('[Editor] image probablement non exportable en PDF (CORS/réseau) :', src, e);
+      alert('Attention : cette image ne pourra probablement pas être incluse dans le PDF exporté.\n\nLe serveur qui héberge cette image ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS) - elle continuera de s’afficher normalement ici et en mode lecture, mais l’export PDF devra l’ignorer.\n\nPour qu’elle soit bien exportée, préférez le bouton « Image » (téléversement direct dans Grist) plutôt qu’une URL externe.');
+    });
+  }
   // --- Insertion d'image (upload + URL) ---
   function insertImage(value) {
     if (!quill) return;
@@ -412,6 +454,7 @@ const Editor = (function () {
     // dont la cible (e) n'est pas encore définie -> erreur "can't access property
     // 'readOnly', e is undefined".
     quill.update(Quill.sources.USER);
+    if (value.source === 'url') warnIfImageUrlNotExportable(value.src);
     // Calque "devant le texte" par défaut plutôt que "normal" (en flux) : le
     // mode normal n'offre aucun moyen de repositionner l'image (le
     // glisser-déposer personnalisé ne s'applique qu'aux images en calque), ce

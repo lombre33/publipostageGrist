@@ -39,7 +39,22 @@ const Variables = (function () {
     activeQuill.root.addEventListener('input', handleCellInput);
     activeQuill.root.addEventListener('keyup', handleCellInput);
     activeQuill.root.addEventListener('focusin', function (event) { const cell = event.target && event.target.closest && event.target.closest('.editable-table td, .editable-table th'); activeTableCell = cell || null; if (cell) checkForCellTrigger(cell); });
-    document.addEventListener('keydown', function (e) { const cell = cellFromEvent(e); if (cell) activeTableCell = cell; if (acBox.style.display === 'block') { if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); } else if (e.key === 'Enter') { e.preventDefault(); confirmSelection(); } else if (e.key === 'Escape') hideAutocomplete(); } });
+    // Phase CAPTURE (dernier argument `true`) : Quill lie son propre
+    // gestionnaire 'Enter' (saut de ligne/scission de bloc) directement sur
+    // quill.root, en phase bulle - un keydown sur 'document' en phase bulle
+    // (comme c'était le cas avant ce correctif) atteint donc quill.root
+    // AVANT d'atteindre document, laissant Quill agir le premier : son
+    // insertion de texte déclenche un 'text-change' synchrone -> checkForTrigger()
+    // -> showAutocomplete() -> qui remet acSelectedIndex à 0 - AVANT même que
+    // ce gestionnaire-ci n'ait lu confirmSelection(). Résultat observé : la
+    // navigation au clavier (flèches) sélectionnait bien visuellement le bon
+    // item, mais Entrée insérait toujours le PREMIER (le clic souris, qui ne
+    // passe jamais par ce chemin keydown, n'était lui pas affecté). La phase
+    // capture s'exécute avant tout gestionnaire bulle, où qu'il soit dans
+    // l'arbre (cf. installToolbarClickSuppression/installTwoColumnsToolbarIsolation,
+    // même pattern) ; stopPropagation() empêche en plus l'évènement d'atteindre
+    // ensuite le gestionnaire de Quill.
+    document.addEventListener('keydown', function (e) { const cell = cellFromEvent(e); if (cell) activeTableCell = cell; if (acBox.style.display === 'block') { if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); moveSelection(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); moveSelection(-1); } else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); confirmSelection(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hideAutocomplete(); } } }, true);
     document.addEventListener('click', function (e) { if (acBox && !acBox.contains(e.target)) hideAutocomplete(); });
   }
   function checkForTrigger() {
