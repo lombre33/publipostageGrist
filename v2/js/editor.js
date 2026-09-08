@@ -9,22 +9,66 @@
 // classiques, comme le reste du projet) - un module ES ne voit JAMAIS les
 // `const` de niveau racine d'un autre script, même classique.
 //
-// Incrément agile en cours : cette première version couvre le flux
-// principal (titres, gras/italique/souligné/barré, alignement, listes,
-// citation, undo/redo, taille/police réelles). PAS ENCORE couverts (prochains
-// incréments) : variables #, tableaux, zone 2 colonnes, images, sommaire/
-// numérotation de titres, export PDF. `getHTML`/`setHTML` sont volontairement
-// la même forme d'API que l'éditeur V1 (js/editor.js), pour que main.js et
-// les modules partagés (Templates/ReaderMode) s'intègrent sans surprise.
+// Incrément agile en cours : couvre à ce stade le flux principal (titres,
+// gras/italique/souligné/barré, alignement, listes, citation, undo/redo,
+// taille/police réelles) et les variables #Variable (badge + autocomplétion
+// + résolution en mode Lecture, cf. js/variables.js). PAS ENCORE couverts
+// (prochains incréments) : tableaux, zone 2 colonnes, images, sommaire/
+// numérotation de titres, export PDF, configuration de règle inter-tables à
+// l'insertion (modale dédiée de la V1). `getHTML`/`setHTML` sont
+// volontairement la même forme d'API que l'éditeur V1 (js/editor.js), pour
+// que main.js et les modules partagés (Templates/ReaderMode) s'intègrent
+// sans surprise.
 const Editor = (function () {
   let editor = null;
 
   async function init() {
-    const { Editor: TiptapEditor, Extension } = await import('@tiptap/core');
+    const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
     const { StarterKit } = await import('@tiptap/starter-kit');
     const { TextAlign } = await import('@tiptap/extension-text-align');
     const { TextStyle } = await import('@tiptap/extension-text-style');
     const { FontFamily } = await import('@tiptap/extension-font-family');
+    const { Suggestion } = await import('@tiptap/suggestion');
+
+    // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
+    // caractère près (contenteditable="false"), même forme HTML que l'éditeur
+    // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
+    // (v1, réutilisés tels quels pour l'instant) le reconnaissent sans
+    // changement : <span class="var-badge" data-table data-column data-key>.
+    const VarBadge = Node.create({
+      name: 'varBadge',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap
+        // rend CHAQUE attribut par défaut comme un attribut HTML bare
+        // (table="..."/column="..."/key="...") EN PLUS des data-table/
+        // data-column/data-key posés à la main juste en dessous - un doublon
+        // constaté en conditions réelles. Ces attributs ne doivent exister
+        // QUE dans le JSON interne du nœud ProseMirror, leur rendu HTML est
+        // entièrement pris en charge par le renderHTML du nœud lui-même.
+        const noBareRender = { default: null, renderHTML: () => ({}) };
+        return {
+          table: noBareRender,
+          column: noBareRender,
+          key: noBareRender,
+        };
+      },
+      parseHTML() {
+        return [{
+          tag: 'span.var-badge',
+          getAttrs: el => ({ table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key') }),
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        return ['span', mergeAttributes(HTMLAttributes, {
+          class: 'var-badge', contenteditable: 'false',
+          'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
+        }), '#' + node.attrs.key];
+      },
+    });
 
     // `FontFamily` (paquet officiel) n'ÉTEND PAS 'textStyle' lui-même : c'est
     // une extension à part qui AUGMENTE la marque 'textStyle' via
@@ -63,6 +107,8 @@ const Editor = (function () {
         TextStyle,
         FontFamily,
         FontSize,
+        VarBadge,
+        Variables.createExtension(Extension, Suggestion),
       ],
       content: '',
     });
