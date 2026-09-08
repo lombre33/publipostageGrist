@@ -1,9 +1,10 @@
 // Orchestration V2 — même structure que js/main.js (V1), volontairement
 // simplifiée pour cet incrément agile : gestion de modèles + mode Édition/
-// Lecture + câblage Grist. PAS ENCORE couverts (prochains incréments) :
-// variables #, export PDF, panneau de configuration avancé. `Editor.init()`
-// est ASYNC ici (contrairement à V1) - v2/js/editor.js charge TipTap/
-// ProseMirror via import() dynamique au moment de l'appel.
+// Lecture + câblage Grist (variables/tableaux/2 colonnes/images/sommaire
+// sont gérés dans v2/js/editor.js, pas ici). PAS ENCORE couverts
+// (prochains incréments) : export PDF, panneau de configuration avancé.
+// `Editor.init()` est ASYNC ici (contrairement à V1) - v2/js/editor.js
+// charge TipTap/ProseMirror via import() dynamique au moment de l'appel.
 (function () {
   let currentMode = 'edit'; let currentTableId = null; let latestRecord = null; let latestRecordTableId = null;
   const statusMsg = document.getElementById('status-msg'); const templateSelect = document.getElementById('template-select'); const templateNameInput = document.getElementById('template-name');
@@ -11,7 +12,13 @@
   const btnEdit = document.getElementById('btn-mode-edit'); const btnRead = document.getElementById('btn-mode-read');
   function setStatus(msg, isError) { statusMsg.textContent = msg; statusMsg.className = isError ? 'error-msg' : ''; }
   async function refreshTemplateList() { const templates = await Templates.loadAll(); templateSelect.innerHTML = '-- Nouveau modèle --'; templates.forEach(t => { const opt = document.createElement('option'); opt.value = t.id; opt.textContent = t.nom; templateSelect.appendChild(opt); }); }
-  function loadTemplateIntoEditor(tpl) { Editor.setHTML(tpl ? tpl.contenu : ''); if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : ''; Templates.setCurrentId(tpl ? tpl.id : null); }
+  function loadTemplateIntoEditor(tpl) {
+    Editor.setHTML(tpl ? tpl.contenu : '');
+    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
+    Templates.setCurrentId(tpl ? tpl.id : null);
+    const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
+    if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
+  }
   async function onTemplateSelectChange() { const id = templateSelect.value; if (!id) { loadTemplateIntoEditor(null); return; } const tpl = Templates.getCached().find(t => String(t.id) === String(id)); if (tpl) loadTemplateIntoEditor(tpl); }
   async function onNew() { templateSelect.value = ''; loadTemplateIntoEditor(null); setStatus('Nouveau modèle prêt.'); }
   async function onSave() { const id = Templates.getCurrentId(); const nom = templateNameInput ? templateNameInput.value.trim() : ''; if (!nom) { setStatus('Nom du modèle requis.', true); return; } const savedId = await Templates.save(id, nom, Editor.getHTML(), ''); Templates.setCurrentId(savedId); await refreshTemplateList(); templateSelect.value = savedId; setStatus('Modèle enregistré.'); }

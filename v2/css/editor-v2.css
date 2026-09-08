@@ -1,6 +1,8 @@
 /* Style minimal de l'éditeur V2 (TipTap/ProseMirror) - équivalent basique du
-   look de .ql-editor (V1). Volontairement simple pour cet incrément agile,
-   affiné au fil des prochains incréments (tableaux/2 colonnes/images). */
+   look de .ql-editor (V1). Les classes/attributs partagés avec la V1
+   (.var-badge, .page-break-marker, .toc-marker, .heading-numbering-config)
+   sont déjà stylés dans ../css/style.css, réutilisé tel quel - ce fichier ne
+   couvre que ce qui est spécifique à .tiptap (racine ProseMirror). */
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 #editor-container .tiptap { outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; }
 #editor-container .tiptap p { margin: 0; }
@@ -24,6 +26,40 @@
 #editor-container .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 #editor-container .tiptap .two-columns-column > *:first-child { margin-top: 0; }
 #editor-container .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
+
+/* Numérotation des titres : mêmes compteurs CSS que la V1 (css/style.css,
+   .ql-editor[data-heading-style]), scopés à .tiptap au lieu de .ql-editor -
+   seuls les titres de premier niveau du flux principal sont numérotés
+   (sélecteur enfant direct), pas ceux d'un tableau ou d'une zone 2 colonnes. */
+#editor-container .tiptap[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
+#editor-container .tiptap[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
+#editor-container .tiptap[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
+#editor-container .tiptap[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
+#editor-container .tiptap[data-heading-style] > h4 { counter-reset: h5c h6c; counter-increment: h4c; }
+#editor-container .tiptap[data-heading-style] > h5 { counter-reset: h6c; counter-increment: h5c; }
+#editor-container .tiptap[data-heading-style] > h6 { counter-increment: h6c; }
+#editor-container .tiptap[data-heading-style="numeric"] > h1::before { content: counter(h1c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="numeric"] > h2::before { content: counter(h2c, lower-alpha) ") "; }
+#editor-container .tiptap[data-heading-style="numeric"] > h3::before { content: counter(h3c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="numeric"] > h4::before { content: counter(h4c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="numeric"] > h5::before { content: counter(h5c, lower-alpha) ") "; }
+#editor-container .tiptap[data-heading-style="numeric"] > h6::before { content: counter(h6c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h1::before { content: counter(h1c, lower-alpha) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h2::before { content: counter(h2c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h3::before { content: counter(h3c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h4::before { content: counter(h4c, lower-alpha) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h5::before { content: counter(h5c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="alpha"] > h6::before { content: counter(h6c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h1::before { content: counter(h1c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h2::before { content: counter(h2c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h3::before { content: counter(h3c, lower-alpha) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
+#editor-container .tiptap[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
+
+/* Aperçu vivant du sommaire dans l'éditeur (cf. Toc.addNodeView) - purement
+   visuel, la V1 n'avait pas cet aperçu en direct dans l'éditeur lui-même. */
+#editor-container .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }

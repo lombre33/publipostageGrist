@@ -46,7 +46,7 @@
 }
 </script>
 <link rel="stylesheet" href="../css/style.css?v=0.66">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.4">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.5">
 </head>
 <body>
 <div id="app">
@@ -110,6 +110,15 @@
       <span class="v2-sep"></span>
       <button id="v2-btn-two-columns" title="Insérer 2 colonnes">⫴2</button>
       <button id="v2-btn-image" title="Insérer une image (URL)">🖼</button>
+      <button id="v2-btn-page-break" title="Insérer un saut de page (forcé à l'export PDF)">⤓¶</button>
+      <button id="v2-btn-toc" title="Insérer un sommaire (généré à partir des titres)">☰§</button>
+      <span class="v2-sep"></span>
+      <select id="v2-heading-numbering-select" title="Numérotation des titres — ne s'applique qu'aux titres du flux principal (pas ceux d'un tableau ou d'une zone 2 colonnes)">
+        <option value="none">Numérotation : aucune</option>
+        <option value="numeric">1), 2), 3)…</option>
+        <option value="alpha">a), b), c)…</option>
+        <option value="roman">I), II), III)…</option>
+      </select>
       <span class="v2-sep"></span>
       <button id="v2-btn-undo" title="Annuler">↶</button>
       <button id="v2-btn-redo" title="Rétablir">↷</button>
@@ -120,9 +129,9 @@
 </div>
 <script src="../js/grist-api.js?v=0.66"></script>
 <script src="../js/templates.js?v=0.66"></script>
-<script src="../js/reader-mode.js?v=0.66"></script>
+<script src="../js/reader-mode.js?v=0.67"></script>
 <script src="js/variables.js?v=0.1"></script>
-<script src="js/editor.js?v=0.4"></script>
-<script src="js/main.js?v=0.1"></script>
+<script src="js/editor.js?v=0.6"></script>
+<script src="js/main.js?v=0.2"></script>
 </body>
 </html>
