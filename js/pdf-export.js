@@ -333,56 +333,86 @@ const PdfExport = (function () {
     if (runs.length) { const last = runs.length - 1; runs[last] = Object.assign({}, runs[last], { text: runs[last].text.replace(/[ \t\n\r\f\v]+$/, '') }); }
     return runs;
   }
-  // Descend dans les enfants DIRECTS d'une cellule/sous-liste et accumule dans
-  // `lines` un noeud par ligne pdfmake : un <p>/<div>/<h1-6> direct est sa
-  // propre ligne (comportement historique inchangé) ; un <ul>/<ol> DIRECT
-  // (execCommand insertOrderedList/insertUnorderedList, cf. editor.js) ajoute
-  // une ligne par <li>, et redescend récursivement dans toute sous-liste
-  // imbriquée trouvée À L'INTÉRIEUR de ce <li> (execCommand 'indent').
+  // Découpe les enfants DIRECTS d'une cellule/sous-liste en "lignes" pdfmake,
+  // accumulées dans `lines` : un <p>/<div>/<h1-6> direct est sa propre ligne
+  // (porte sa propre alignment, cf. cellLineToPdfObject) ; un <ul>/<ol> DIRECT
+  // ajoute une ligne par <li> (récursif pour toute sous-liste imbriquée) ;
+  // tout le RESTE (texte flottant, <br>, <b>/<i>/<span>...) - la frappe libre
+  // dans une cellule ne passe pas forcément par un <p>/<div> par ligne comme
+  // Quill le ferait - s'accumule dans un groupe "inline" commun, flush comme
+  // sa propre ligne dès qu'un bloc/une liste l'interrompt. Un texte "4<br><br>"
+  // AVANT un <div align="..."> reste ainsi une ligne à part (via inlineRuns,
+  // qui convertit lui-même <br> en "\n" - les lignes vides sont donc
+  // préservées), sans faire disparaître l'alignement du <div> qui suit : cf.
+  // le bug signalé où ce dernier n'était lu que sur la CELLULE elle-même
+  // (jamais alignée), la détection précédente exigeant que TOUS les enfants
+  // directs soient des blocs pour même chercher l'alignement par ligne.
   function collectCellLines(container, lines) {
+    let pending = [];
+    function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
     Array.from(container.childNodes).forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue) pending.push(node); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (/^(P|DIV|H[1-6])$/.test(node.tagName)) { lines.push(node); return; }
+      if (/^(P|DIV|H[1-6])$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) {
+        flushPending();
         Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
           lines.push(li);
           Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName)).forEach(nested => collectCellLines(nested, lines));
         });
+        return;
       }
+      pending.push(node); // <br>, <b>/<i>/<span>/.var-badge... : reste dans le flux inline courant
     });
+    flushPending();
   }
-  function cellLineToPdfObject(node) {
+  // `line` est soit un noeud réel (P/DIV/H1-6/LI), soit { inline: [...] } (un
+  // groupe de texte flottant sans bloc dédié, cf. collectCellLines) - `cellAlign`
+  // (alignment posée sur la CELLULE elle-même, éventuel repli quand aucune
+  // sélection valide n'était capturée à l'origine, cf. editor.js
+  // applyGranularAlignment) sert de repli pour toute ligne qui n'a PAS sa
+  // propre alignment explicite - jamais pour en écraser une qui existe déjà.
+  function cellLineToPdfObject(line, cellAlign, cellBaseStyle) {
+    if (line.inline) {
+      let runs = [];
+      line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle)); });
+      runs = trimEdgeWhitespace(runs);
+      const obj = { text: runs.length ? runs : ' ' };
+      if (cellAlign) obj.alignment = cellAlign;
+      return obj;
+    }
+    const node = line;
     const isLi = node.tagName === 'LI';
     const marker = isLi ? listMarkerFor(node) : '';
     const runs = trimEdgeWhitespace(isLi
-      ? inlineRunsExcludingNestedLists(node, { fontSize: DEFAULT_FONT_SIZE })
-      : inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }));
+      ? inlineRunsExcludingNestedLists(node, cellBaseStyle)
+      : inlineRuns(node, cellBaseStyle));
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
-    const align = alignment(node); if (align) obj.alignment = align;
+    const align = alignment(node) || cellAlign; if (align) obj.alignment = align;
     return obj;
   }
-  // Une cellule multi-lignes (plusieurs <p>/<div>/<h1-6> issus de retours à
-  // la ligne bruts, non gérés par Quill - OU une liste <ul>/<ol>, cf.
-  // collectCellLines) peut avoir une ligne alignée différemment des autres
-  // (même mécanisme execCommand par-sélection que pour une colonne 2-colonnes,
-  // cf. editor.js) - un simple inlineRuns(cell) aplatit tout dans UN SEUL
-  // tableau de texte avec UNE SEULE alignment (celle de la cellule), perdant
-  // l'alignement par ligne ET tout marqueur de liste. On construit donc un
-  // stack d'une ligne pdfmake par ligne HTML dès qu'il y en a plusieurs,
-  // chacune avec sa propre alignment - sinon (cas courant, une seule ligne)
-  // on garde le texte à plat, sans le surcoût d'un stack.
+  // Une cellule multi-lignes (plusieurs <p>/<div>/<h1-6>/<li>, ou un mélange
+  // de texte brut et de blocs alignés - cf. collectCellLines) peut avoir une
+  // ligne alignée différemment des autres (même mécanisme execCommand
+  // par-sélection que pour une colonne 2-colonnes, cf. editor.js) - un simple
+  // inlineRuns(cell) aplatit tout dans UN SEUL tableau de texte avec UNE
+  // SEULE alignment (celle de la cellule), perdant l'alignement par ligne ET
+  // tout marqueur de liste. On construit donc un stack d'une ligne pdfmake
+  // par ligne dès qu'il y en a plusieurs - sinon (cas courant, un seul groupe
+  // de texte flottant sans aucun bloc dédié) on garde le texte à plat, sans
+  // le surcoût d'un stack.
   function cellContentFrom(cell) {
-    const directChildren = Array.from(cell.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.nodeValue.trim() !== '');
-    const lineChildren = directChildren.filter(n => n.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|UL|OL)$/.test(n.tagName));
-    const onlyLineChildren = lineChildren.length > 0 && lineChildren.length === directChildren.length;
-    if (onlyLineChildren) {
-      const lines = [];
-      collectCellLines(cell, lines);
-      return { stack: lines.map(cellLineToPdfObject) };
+    const lines = [];
+    collectCellLines(cell, lines);
+    if (!lines.length) return { text: ' ' };
+    if (lines.length === 1 && lines[0].inline) {
+      const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
+      return { text: runs.length ? runs : ' ' };
     }
-    const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
-    return { text: runs.length ? runs : ' ' };
+    const cellAlign = alignment(cell);
+    const cellBaseStyle = inheritedStyle(cell, { fontSize: DEFAULT_FONT_SIZE });
+    return { stack: lines.map(line => cellLineToPdfObject(line, cellAlign, cellBaseStyle)) };
   }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
