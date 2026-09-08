@@ -7,7 +7,17 @@
   const editorContainer = document.getElementById('editor-container'); const readerContainer = document.getElementById('reader-container'); const btnEdit = document.getElementById('btn-mode-edit'); const btnRead = document.getElementById('btn-mode-read'); const toolbar = document.getElementById('toolbar'); let ind = document.getElementById('table-indicator');
   function setStatus(msg, isError) { statusMsg.textContent = msg; statusMsg.className = isError ? 'error-msg' : ''; }
   function updateTableIndicator(tableId) { if (!ind) { ind = document.createElement('span'); ind.id = 'table-indicator'; ind.style.marginLeft = '10px'; ind.style.fontSize = '0.85em'; ind.style.opacity = '0.8'; if (toolbar) toolbar.appendChild(ind); } ind.textContent = tableId ? ('Table: ' + tableId) : 'Table: —'; }
-  async function refreshTemplateList() { const templates = await Templates.loadAll(); templateSelect.innerHTML = '-- Nouveau modèle --'; templates.forEach(t => { const opt = document.createElement('option'); opt.value = t.id; opt.textContent = t.nom; templateSelect.appendChild(opt); }); const defaultTemplate = templates.find(t => String(t.id) === String(templateSelect.value)); if (defaultTemplate) try { loadTemplateIntoEditor(defaultTemplate); } catch (e) {} }
+  // Ne recharge PLUS l'éditeur depuis ici (ancien comportement : après avoir
+  // reconstruit les <option>, cherchait un modèle dont l'id correspondait à
+  // templateSelect.value ET le rechargeait dans l'éditeur - un onSave() de-
+  // vait ENSUITE remettre templateSelect.value sur le modèle sauvegardé, ce
+  // qui arrivait trop tard : l'éditeur, lui, avait déjà été rechargé avec le
+  // mauvais modèle - le PREMIER de la liste, puisque templateSelect.value
+  // valait encore '' au moment du find(). Reconstruire la liste des options
+  // ne doit affecter QUE le <select>, jamais le contenu de l'éditeur - au
+  // seul appelant qui veut réellement changer le modèle affiché (onNew,
+  // onDelete, onTemplateSelectChange) de le faire explicitement.
+  async function refreshTemplateList() { const templates = await Templates.loadAll(); templateSelect.innerHTML = '-- Nouveau modèle --'; templates.forEach(t => { const opt = document.createElement('option'); opt.value = t.id; opt.textContent = t.nom; templateSelect.appendChild(opt); }); }
   function loadTemplateIntoEditor(tpl) { Editor.setHTML(tpl ? tpl.contenu : ''); if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : ''; const input = getPdfFilenameInput(); if (input) input.value = tpl ? (tpl.nomFichierPDF || '') : ''; Templates.setCurrentId(tpl ? tpl.id : null); }
   async function onTemplateSelectChange() { const id = templateSelect.value; if (!id) { loadTemplateIntoEditor(null); return; } const tpl = Templates.getCached().find(t => String(t.id) === String(id)); if (tpl) loadTemplateIntoEditor(tpl); }
   async function onNew() { templateSelect.value = ''; loadTemplateIntoEditor(null); setStatus('Nouveau modèle prêt.'); }
