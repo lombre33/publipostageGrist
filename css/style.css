@@ -325,6 +325,71 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
 
+/* === Sommaire + numérotation des titres ===
+   Configuration invisible (persistée dans le contenu, cf. editor.js
+   HeadingNumberingConfigBlot) et placeholder du marqueur de sommaire dans
+   l'éditeur - remplacé par la vraie liste des titres au rendu (mode lecture/
+   export PDF, cf. reader-mode.js/pdf-export.js), jamais affiché tel quel. */
+.heading-numbering-config { display: none; }
+.toc-marker { display: block; margin: 18px 0; padding: 10px 14px; border: 1px dashed #6b7280; border-radius: 4px; color: #6b7280; font-size: .9em; user-select: none; }
+/* Mode lecture : le placeholder éditeur (encadré en pointillés) reste masqué,
+   remplacé par la vraie liste des titres construite par reader-mode.js
+   (marquée .toc-resolved) - ré-affichée avec une mise en forme normale. */
+#reader-container .toc-marker { display: none; }
+#reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
+#reader-container .toc-title { font-weight: 600; font-size: 1.15em; margin: 0 0 8px; }
+#reader-container .toc-empty { font-style: italic; color: #6b7280; }
+#reader-container .toc-entry { padding: 2px 0; }
+#reader-container .toc-entry.toc-level-2 { margin-left: 14px; }
+#reader-container .toc-entry.toc-level-3 { margin-left: 28px; }
+#reader-container .toc-entry.toc-level-4 { margin-left: 42px; }
+#reader-container .toc-entry.toc-level-5 { margin-left: 56px; }
+#reader-container .toc-entry.toc-level-6 { margin-left: 70px; }
+
+/* Numérotation automatique des titres H1-H6, pilotée par le data-attribute
+   data-heading-style posé sur .ql-editor (cf. editor.js:syncHeadingNumberingDataset)
+   ou sur .reader-content (cf. reader-mode.js - PAS #reader-container lui-même :
+   le HTML du modèle est chargé dans un <div> intermédiaire, .reader-content,
+   qui est le seul VRAI parent direct des titres - #reader-container > h1 ne
+   correspondrait jamais à rien) - un pur compteur CSS (::before), à l'image
+   des puces/numéros de liste déjà gérés ainsi (cf. listMarkerFor dans
+   pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF
+   plutôt que de réimplémenter la logique de compteurs à la main).
+   Cascade sur 3 styles (décimal -> alpha -> romain minuscule/majuscule), qui
+   se répète au-delà de h3 - point de départ choisi par l'utilisateur pour
+   h1 (cf. #heading-numbering-style). Uniquement les titres de PREMIER NIVEAU
+   du flux principal (combinateur enfant direct `>`) : un titre tapé/collé
+   dans un tableau ou une colonne 2-colonnes n'est pas numéroté (hors
+   périmètre du sommaire, qui ne liste que le flux principal). */
+.ql-editor[data-heading-style], .reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
+.ql-editor[data-heading-style] > h1, .reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
+.ql-editor[data-heading-style] > h2, .reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
+.ql-editor[data-heading-style] > h3, .reader-content[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
+.ql-editor[data-heading-style] > h4, .reader-content[data-heading-style] > h4 { counter-reset: h5c h6c; counter-increment: h4c; }
+.ql-editor[data-heading-style] > h5, .reader-content[data-heading-style] > h5 { counter-reset: h6c; counter-increment: h5c; }
+.ql-editor[data-heading-style] > h6, .reader-content[data-heading-style] > h6 { counter-increment: h6c; }
+
+.ql-editor[data-heading-style="numeric"] > h1::before, .reader-content[data-heading-style="numeric"] > h1::before { content: counter(h1c, decimal) ") "; }
+.ql-editor[data-heading-style="numeric"] > h2::before, .reader-content[data-heading-style="numeric"] > h2::before { content: counter(h2c, lower-alpha) ") "; }
+.ql-editor[data-heading-style="numeric"] > h3::before, .reader-content[data-heading-style="numeric"] > h3::before { content: counter(h3c, upper-roman) ") "; }
+.ql-editor[data-heading-style="numeric"] > h4::before, .reader-content[data-heading-style="numeric"] > h4::before { content: counter(h4c, decimal) ") "; }
+.ql-editor[data-heading-style="numeric"] > h5::before, .reader-content[data-heading-style="numeric"] > h5::before { content: counter(h5c, lower-alpha) ") "; }
+.ql-editor[data-heading-style="numeric"] > h6::before, .reader-content[data-heading-style="numeric"] > h6::before { content: counter(h6c, upper-roman) ") "; }
+
+.ql-editor[data-heading-style="alpha"] > h1::before, .reader-content[data-heading-style="alpha"] > h1::before { content: counter(h1c, lower-alpha) ") "; }
+.ql-editor[data-heading-style="alpha"] > h2::before, .reader-content[data-heading-style="alpha"] > h2::before { content: counter(h2c, upper-roman) ") "; }
+.ql-editor[data-heading-style="alpha"] > h3::before, .reader-content[data-heading-style="alpha"] > h3::before { content: counter(h3c, decimal) ") "; }
+.ql-editor[data-heading-style="alpha"] > h4::before, .reader-content[data-heading-style="alpha"] > h4::before { content: counter(h4c, lower-alpha) ") "; }
+.ql-editor[data-heading-style="alpha"] > h5::before, .reader-content[data-heading-style="alpha"] > h5::before { content: counter(h5c, upper-roman) ") "; }
+.ql-editor[data-heading-style="alpha"] > h6::before, .reader-content[data-heading-style="alpha"] > h6::before { content: counter(h6c, decimal) ") "; }
+
+.ql-editor[data-heading-style="roman"] > h1::before, .reader-content[data-heading-style="roman"] > h1::before { content: counter(h1c, upper-roman) ") "; }
+.ql-editor[data-heading-style="roman"] > h2::before, .reader-content[data-heading-style="roman"] > h2::before { content: counter(h2c, decimal) ") "; }
+.ql-editor[data-heading-style="roman"] > h3::before, .reader-content[data-heading-style="roman"] > h3::before { content: counter(h3c, lower-alpha) ") "; }
+.ql-editor[data-heading-style="roman"] > h4::before, .reader-content[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
+.ql-editor[data-heading-style="roman"] > h5::before, .reader-content[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
+.ql-editor[data-heading-style="roman"] > h6::before, .reader-content[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
+
 /* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 #reader-container p { margin: 6px 0; }

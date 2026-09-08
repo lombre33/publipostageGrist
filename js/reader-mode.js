@@ -6,7 +6,14 @@ const ReaderMode = (function () {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
     if (!record) { container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
-    const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent;
+    // .reader-content : PAS un simple <div> anonyme - c'est le parent DIRECT
+    // des titres de premier niveau, celui qui porte data-heading-style (cf.
+    // resolveTocMarkers ci-dessous et css/style.css : #reader-container lui-
+    // même ne peut pas jouer ce rôle, il n'est jamais le parent direct des
+    // titres puisque ce <div> s'intercale toujours entre les deux).
+    const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = htmlContent;
+    const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
+    wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
@@ -15,10 +22,54 @@ const ReaderMode = (function () {
     }));
     for (const r of results) { const span = document.createElement('span'); span.textContent = r.value; span.className = 'resolved-var' + (r.error ? ' error-msg' : ''); if (r.error) hasError = true; r.badge.replaceWith(span); }
     await GristAPI.hydrateAttachmentImages(wrapper);
+    // Variables déjà résolues (texte des titres définitif) : peut construire
+    // le sommaire maintenant, avant le swap DOM final ci-dessous.
+    resolveTocMarkers(wrapper);
     if (renderId !== renderGeneration) return;
     container.innerHTML = '';
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.'; container.appendChild(warn); }
     container.appendChild(wrapper);
+  }
+  // Remplace chaque placeholder .toc-marker (posé par l'éditeur, cf.
+  // editor.js:TocBlot) par la vraie liste des titres de premier niveau -
+  // numérotée comme dans l'éditeur (même mécanisme de compteur CSS ::before,
+  // cf. style.css), variables déjà résolues en texte (headings scannés APRÈS
+  // la boucle de résolution des badges ci-dessus). Pas de numéro de page ici
+  // (le mode lecture n'est pas paginé) - contrairement à l'export PDF vectoriel
+  // (cf. pdf-export.js:buildTocStack), seul endroit où cette information a un
+  // sens.
+  function resolveTocMarkers(wrapper) {
+    const tocMarkers = wrapper.querySelectorAll(':scope > .toc-marker');
+    if (!tocMarkers.length) return;
+    const headings = Array.from(wrapper.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+    // getComputedStyle(node, '::before').content n'est fiable que sur un noeud
+    // réellement en boîte (attaché au document) - cf. pdf-export.js:attachMeasureHost,
+    // même contrainte, même remède : attacher hors-écran le temps de la mesure,
+    // puis détacher avant le rattachement normal (fait par l'appelant juste après).
+    const prevPosition = wrapper.style.position, prevLeft = wrapper.style.left, prevVisibility = wrapper.style.visibility;
+    wrapper.style.position = 'absolute'; wrapper.style.left = '-99999px'; wrapper.style.visibility = 'hidden';
+    document.body.appendChild(wrapper);
+    const entries = headings.map(h => {
+      const level = parseInt(h.tagName.slice(1), 10) || 1;
+      let marker = '';
+      try {
+        const raw = getComputedStyle(h, '::before').content;
+        if (raw && raw !== 'none' && raw !== 'normal') { const stripped = raw.replace(/^["']|["']$/g, '').trim(); if (stripped) marker = stripped + ' '; }
+      } catch (e) { /* pas de numérotation configurée */ }
+      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
+    });
+    wrapper.parentNode.removeChild(wrapper);
+    wrapper.style.position = prevPosition; wrapper.style.left = prevLeft; wrapper.style.visibility = prevVisibility;
+    tocMarkers.forEach(marker => {
+      marker.innerHTML = '';
+      marker.classList.add('toc-resolved');
+      const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = 'Sommaire'; marker.appendChild(title);
+      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = 'Aucun titre trouvé.'; marker.appendChild(empty); return; }
+      entries.forEach(entry => {
+        const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
+        marker.appendChild(line);
+      });
+    });
   }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');

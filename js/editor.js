@@ -128,6 +128,30 @@ const Editor = (function () {
   }
   PageBreakBlot.blotName = 'pagebreak'; PageBreakBlot.tagName = 'div'; PageBreakBlot.className = 'page-break-marker'; Quill.register(PageBreakBlot);
 
+  // Configuration (invisible) du style de numérotation des titres - stockée
+  // DANS le contenu lui-même (comme un bloc Quill de plus, cf. PageBreakBlot
+  // ci-dessus) plutôt que dans une colonne Grist séparée : évite toute
+  // migration de schéma sur la table des modèles, déjà existante chez
+  // l'utilisateur. `data-style` piloté par le <select> #heading-numbering-style
+  // (cf. main.js) ; jamais montré à l'utilisateur (display:none, cf.
+  // css/style.css) - un seul par document, cf. Editor.setHeadingNumberingStyle.
+  class HeadingNumberingConfigBlot extends BlockEmbed {
+    static create(value) { const node = super.create(value); node.setAttribute('contenteditable', 'false'); node.classList.add('heading-numbering-config'); node.dataset.style = (value && value.style) || 'none'; return node; }
+    static value(node) { return { style: node.dataset.style || 'none' }; }
+  }
+  HeadingNumberingConfigBlot.blotName = 'headingnumbering'; HeadingNumberingConfigBlot.tagName = 'div'; HeadingNumberingConfigBlot.className = 'heading-numbering-config'; Quill.register(HeadingNumberingConfigBlot);
+
+  // Marqueur de sommaire : simple placeholder dans l'éditeur (les numéros de
+  // page n'ont aucun sens tant que le document n'est pas mis en page par
+  // pdfmake) - remplacé par la vraie liste des titres au rendu (mode lecture,
+  // cf. reader-mode.js) et à l'export PDF (cf. pdf-export.js, résolution des
+  // pages en 2 passes comme pour l'ancrage des images en calque).
+  class TocBlot extends BlockEmbed {
+    static create(value) { const node = super.create(value); node.setAttribute('contenteditable', 'false'); node.classList.add('toc-marker'); node.innerHTML = '<span class="toc-marker-label">Sommaire (généré automatiquement à partir des titres)</span>'; return node; }
+    static value(node) { return { type: 'toc' }; }
+  }
+  TocBlot.blotName = 'toc'; TocBlot.tagName = 'div'; TocBlot.className = 'toc-marker'; Quill.register(TocBlot);
+
   const TableBlot = Quill.import('blots/block/embed');
   class EditableTableBlot extends TableBlot {
     static create(value) {
@@ -961,7 +985,7 @@ const Editor = (function () {
       activeCell = cell;
       return false;
     };
-    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
+    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url', 'insert-toc'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-toc': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'toc', { type: 'toc' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
     if (toolbar) installToolbarClickSuppression(toolbar);
@@ -972,6 +996,7 @@ const Editor = (function () {
       const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table');
       const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image');
       const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url');
+      const tocBtn = toolbar.querySelector('.ql-insert-toc');
       const svgIcon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + path + '</svg>';
       if (undoBtn) undoBtn.innerHTML = svgIcon('<path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/>');
       if (redoBtn) redoBtn.innerHTML = svgIcon('<path d="M15 7l5 5-5 5M20 12H9A5 5 0 0 0 9 22h1"/>');
@@ -980,6 +1005,7 @@ const Editor = (function () {
       if (pageBreakBtn) { pageBreakBtn.innerHTML = svgIcon('<path d="M4 4h16v16H4z M4 10h16M10 4v16"/>') + 'Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; }
       if (imageBtn) { imageBtn.innerHTML = svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>') + 'Image'; imageBtn.title = 'Insérer une image (upload en pièce jointe Grist)'; }
       if (imageUrlBtn) { imageUrlBtn.innerHTML = svgIcon('<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 19.5"/>') + 'Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL externe'; }
+      if (tocBtn) { tocBtn.innerHTML = svgIcon('<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>') + 'Sommaire'; tocBtn.title = 'Insérer un sommaire (liste des titres, mis à jour à chaque export/lecture)'; }
     }
     const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar';
     tableTools.innerHTML =
@@ -1226,6 +1252,36 @@ const Editor = (function () {
     // besoin de leur marqueur d'ancrage dès le chargement pour rester
     // resélectionnables (cf. ensureAnchorMarker).
     refreshImageAnchorMarkers();
+    syncHeadingNumberingDataset();
   }
-  return { init, getQuill, getHTML, setHTML, insertImage, uploadImage };
+  // Reporte le style choisi (cf. HeadingNumberingConfigBlot) sur .ql-editor
+  // lui-même sous forme de data-attribute : c'est CE data-attribute que les
+  // compteurs CSS (cf. css/style.css, ".ql-editor[data-heading-style=...]
+  // h1::before") utilisent réellement pour numéroter les titres à l'écran -
+  // le bloc de config lui-même n'est qu'un moyen de PERSISTER le choix dans
+  // le contenu (donc dans le HTML sauvegardé), invisible et sans effet
+  // visuel direct par lui-même.
+  function syncHeadingNumberingDataset() {
+    const config = quill.root.querySelector(':scope > .heading-numbering-config');
+    quill.root.dataset.headingStyle = (config && config.dataset.style) || 'none';
+  }
+  function getHeadingNumberingStyle() {
+    const config = quill.root.querySelector(':scope > .heading-numbering-config');
+    return (config && config.dataset.style) || 'none';
+  }
+  // Crée le bloc de config s'il n'existe pas encore (tout premier réglage de
+  // ce document), sinon met à jour celui déjà présent - un seul par document,
+  // toujours en tête (peu importe sa position réelle pour la mesure CSS,
+  // seul le data-attribute posé sur .ql-editor compte pour le rendu).
+  function setHeadingNumberingStyle(style) {
+    let config = quill.root.querySelector(':scope > .heading-numbering-config');
+    if (config) {
+      config.dataset.style = style;
+    } else {
+      quill.insertEmbed(0, 'headingnumbering', { style }, Quill.sources.USER);
+      quill.update(Quill.sources.SILENT);
+    }
+    syncHeadingNumberingDataset();
+  }
+  return { init, getQuill, getHTML, setHTML, insertImage, uploadImage, getHeadingNumberingStyle, setHeadingNumberingStyle };
 })();

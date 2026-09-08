@@ -341,6 +341,52 @@ const PdfExport = (function () {
     }
     return '• ';
   }
+  // Marqueur de numérotation d'un titre (H1-H6), mesuré EXACTEMENT comme
+  // listMarkerFor ci-dessus : Quill/l'éditeur pilote l'affichage "1) "/"a) "/
+  // "I) " uniquement via un compteur CSS (::before, cf. style.css et
+  // editor.js:syncHeadingNumberingDataset qui pose data-heading-style sur la
+  // racine) - le mesurer en direct sur le DOM réellement attaché (cf.
+  // attachMeasureHost/htmlToPdfContent, qui pose ce même attribut sur la
+  // racine hors-écran) reproduit fidèlement n'importe quel style choisi sans
+  // dupliquer la logique de compteurs CSS (numérique/alpha/romain, par
+  // niveau) à la main en JS.
+  function headingMarkerFor(node) {
+    try {
+      const raw = getComputedStyle(node, '::before').content;
+      if (raw && raw !== 'none' && raw !== 'normal') {
+        const stripped = raw.replace(/^["']|["']$/g, '').trim();
+        if (stripped) return stripped + ' ';
+      }
+    } catch (e) { /* pas de numérotation configurée pour ce document */ }
+    return '';
+  }
+  // Construit le contenu pdfmake d'un sommaire à partir des blocs-titre déjà
+  // rencontrés (headingBlocks, cf. buildPdfContentFromRoot) - texte et niveau
+  // toujours connus dès cet appel, mais PAS le numéro de page (dépend d'une
+  // 1ère passe de mise en page, cf. resolveNativePdfContent) : chaque entrée
+  // réserve sa propre cellule de droite VIDE (largeur fixe, alignée à droite)
+  // dont la référence est renvoyée dans pageNumberCells pour être patchée
+  // après coup - sans changer la hauteur du sommaire entre les deux passes.
+  function buildTocStack(headingBlocks) {
+    const title = { text: 'Sommaire', bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
+    if (!headingBlocks.length) {
+      return { stack: [title, { text: 'Aucun titre trouvé.', italics: true, color: '#6b7280' }], pageNumberCells: [] };
+    }
+    const pageNumberCells = [];
+    const lines = headingBlocks.map(hb => {
+      const level = hb._headingLevel || 1;
+      const isH1 = level === 1;
+      const fontSize = isH1 ? 11 : 10.5;
+      const pageCell = { text: '', alignment: 'right', width: 30, bold: isH1, fontSize };
+      pageNumberCells.push(pageCell);
+      return {
+        columns: [{ text: hb._headingText || '', bold: isH1, fontSize }, pageCell],
+        columnGap: 4,
+        margin: [Math.max(0, level - 1) * 14, isH1 ? 6 : 2, 0, 2],
+      };
+    });
+    return { stack: [title].concat(lines), pageNumberCells };
+  }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   // Le navigateur COLLAPSE (masque) les espaces/retours à la ligne en tout
   // début/fin du contenu rendu d'un bloc (règles CSS standard de fusion des
@@ -833,7 +879,19 @@ const PdfExport = (function () {
     // dans le PDF une fois cette marge retirée, comme mesuré dans l'éditeur.
     const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
-    if (/^H[1-6]$/.test(tag)) block.bold = true;
+    if (/^H[1-6]$/.test(tag)) {
+      block.bold = true;
+      // Numérotation (cf. headingMarkerFor) affichée devant le texte du titre,
+      // ET utilisée telle quelle comme préfixe de l'entrée correspondante dans
+      // le sommaire (cf. buildTocStack/_headingText plus bas) - un seul calcul
+      // pour les deux, comme demandé ("apparaitre à la fois avant le texte des
+      // titres et dans le sommaire").
+      const marker = headingMarkerFor(node);
+      if (marker && runs.length) block.text = [{ text: marker, fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }].concat(runs);
+      block._isHeading = true;
+      block._headingLevel = parseInt(tag.slice(1), 10);
+      block._headingText = (marker + (node.textContent || '')).replace(/\s+/g, ' ').trim();
+    }
     if (tag === 'LI') { block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
     // BLOCKQUOTE : marge droite nulle (mesurée : Quill ne pose de
     // padding/bordure qu'à GAUCHE de la citation, jamais à droite - l'ancienne
@@ -948,6 +1006,17 @@ const PdfExport = (function () {
   // et repositionnée juste à côté de son ancre réelle par cette fonction.
   function htmlToPdfContent(html, leftOriginPt, sharedAnchorIdToBlock) {
     const root = document.createElement('div'); root.innerHTML = html || '';
+    // data-heading-style : posé UNIQUEMENT sur le parcours de premier niveau
+    // (leftOriginPt === undefined, cf. resolveNativePdfContent) - jamais sur un
+    // parcours de colonne (twoColumnsFrom rappelle htmlToPdfContent avec un
+    // leftOriginPt défini pour le contenu de CHAQUE colonne). Un titre dans une
+    // colonne 2-colonnes ou une cellule de tableau ne doit PAS être numéroté ni
+    // entrer dans le sommaire (cf. style.css : la numérotation ne cible QUE les
+    // enfants DIRECTS de .ql-editor/#reader-container - même exclusion ici).
+    if (leftOriginPt === undefined) {
+      const config = root.querySelector(':scope > .heading-numbering-config');
+      root.dataset.headingStyle = (config && config.dataset.style) || 'none';
+    }
     // Attaché hors-écran le temps du parcours (cf. measureIndentPt / attachMeasureHost)
     // pour que chaque bloc puisse mesurer son indentation RÉELLE sur du CSS
     // effectivement calculé, pas sur un DOM détaché (où toute mesure de largeur/
@@ -985,11 +1054,31 @@ const PdfExport = (function () {
     const origin = leftOriginPt !== undefined ? leftOriginPt : PAGE_MARGIN_PT;
     const blocks = []; const frontImages = []; const behindImages = [];
     const anchorIdToBlock = sharedAnchorIdToBlock || {};
+    // Titres rencontrés à CE niveau (jamais ceux d'une colonne/cellule, cf.
+    // htmlToPdfContent : hors de portée du parcours de premier niveau) et
+    // emplacements du sommaire (placeholder rempli juste après le parcours,
+    // cf. plus bas) - alimentent buildTocStack, cf. resolveNativePdfContent
+    // pour la résolution des numéros de page (2e passe, même principe que
+    // l'ancrage d'image).
+    const headingBlocks = []; const tocBlocks = [];
     let pendingPageBreak = false;
     const visit = node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
+      if (node.classList.contains('heading-numbering-config')) { return; }
+      if (node.classList.contains('toc-marker')) {
+        // Contenu réel posé après coup (cf. buildTocStack ci-dessous, appelé
+        // une fois root.childNodes.forEach(visit) terminé) : au moment où ce
+        // noeud est rencontré, les titres qui le SUIVENT dans le document
+        // (cas le plus fréquent - un sommaire est généralement en tête) ne
+        // sont pas encore connus.
+        const tocBlock = { stack: [{ text: 'Sommaire', bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
+        blocks.push(tocBlock);
+        tocBlocks.push(tocBlock);
+        pendingPageBreak = false;
+        return;
+      }
       if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; }
       if (node.classList.contains('two-columns-zone')) {
         const zoneBlock = twoColumnsFrom(node, pendingPageBreak, anchorIdToBlock);
@@ -1011,7 +1100,7 @@ const PdfExport = (function () {
       }
       if (isBlock(node)) {
         const produced = blockFrom(node, pendingPageBreak, frontImages, behindImages);
-        produced.forEach(b => blocks.push(b));
+        produced.forEach(b => { blocks.push(b); if (b && b._isHeading) headingBlocks.push(b); });
         if (node.dataset && node.dataset.pmAnchorId) {
           const textBlock = produced.find(b => b && b.text);
           if (textBlock) {
@@ -1035,8 +1124,26 @@ const PdfExport = (function () {
     // zone tant que ce parcours de colonne n'est pas terminé). Différée à la
     // toute fin, une fois tout le document (colonnes comprises) parcouru -
     // cf. resolveNativePdfContent, seul endroit qui lit cette map pour de bon.
+    // Rempli avec le texte/niveau RÉELS de chaque titre (déjà tous connus, le
+    // parcours ci-dessus est terminé) mais un numéro de page encore VIDE
+    // (_pageNumberCells, réservé mais non écrit) : donne au sommaire, dès
+    // CETTE passe, sa taille (presque) définitive - indispensable pour que la
+    // 1ère passe de mesure (cf. resolveNativePdfContent) place les titres qui
+    // SUIVENT le sommaire sur la bonne page. Les numéros eux-mêmes ne sont
+    // connus qu'après cette 1ère passe (positions pdfmake), et patchés dans
+    // les cellules réservées ici lors de la 2e passe (contenu neuf, mais
+    // rebâti de façon identique - mêmes titres, même ordre, cf. htmlToPdfContent
+    // fonction pure).
+    tocBlocks.forEach(tocBlock => {
+      const built = buildTocStack(headingBlocks);
+      tocBlock.stack = built.stack;
+      tocBlock._pageNumberCells = built.pageNumberCells;
+    });
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
-    return behindImages.concat(content, frontImages);
+    const result = behindImages.concat(content, frontImages);
+    result._headingBlocks = headingBlocks;
+    result._tocBlocks = tocBlocks;
+    return result;
   }
   // pdfmake ne sait embarquer que du JPEG/PNG (jamais du SVG — un data URI SVG
   // le fait bloquer indéfiniment sans erreur, confirmé en le testant isolément).
@@ -1237,12 +1344,25 @@ const PdfExport = (function () {
     let anchorIdToBlock = {};
     let content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
     let pending = collectPendingImages(content);
-    console.log('[PdfExport] resolveNativePdfContent: ' + pending.length + ' image(s) ancrée(s) (_pendingOffset) trouvée(s).');
-    if (pending.length) {
+    // Sommaire présent (cf. buildPdfContentFromRoot) : ses entrées ont besoin
+    // du numéro de PAGE de chaque titre, connu seulement après une 1ère passe
+    // de mise en page réelle (même mécanisme, même raison, que la résolution
+    // de position des images en calque ancrées ci-dessous) - déclenche donc
+    // cette 2e passe même en l'absence de toute image en attente.
+    const hasToc = (content._tocBlocks || []).length > 0;
+    console.log('[PdfExport] resolveNativePdfContent: ' + pending.length + ' image(s) ancrée(s) (_pendingOffset) trouvée(s), sommaire=' + hasToc + '.');
+    if (pending.length || hasToc) {
       resolveAnchorIds(pending, anchorIdToBlock);
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
       const resolved = resolveAnchoredImagePositions(pending);
       console.log('[PdfExport] resolveNativePdfContent: positions résolues =', JSON.stringify(resolved));
+      // Numéro de page RÉEL de chaque titre, lu sur les blocs de CETTE 1ère
+      // passe (seule pdfmake les a effectivement mis en page - .positions
+      // n'existe que sur les objets qu'elle a réellement traités) - capturé
+      // par INDEX (même ordre garanti par htmlToPdfContent, fonction pure
+      // rejouée à l'identique sur le même HTML) avant de reconstruire le
+      // contenu à neuf.
+      const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
       anchorIdToBlock = {};
       content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
       pending = collectPendingImages(content);
@@ -1251,6 +1371,15 @@ const PdfExport = (function () {
         if (resolved[i]) img.absolutePosition = resolved[i];
         console.log('[PdfExport] resolveNativePdfContent: image #' + i + ' anchorAbove=' + !!img._anchorAboveBlock + ' anchorBelow=' + !!img._anchorBelowBlock + ' absolutePosition=' + JSON.stringify(img.absolutePosition));
       });
+      // Patch des cellules de numéro de page réservées (cf. buildTocStack) sur
+      // le contenu NEUF de cette 2e passe - mêmes titres, même ordre que la
+      // 1ère passe, donc alignement par index fiable.
+      (content._tocBlocks || []).forEach(tocBlock => {
+        (tocBlock._pageNumberCells || []).forEach((cell, i) => {
+          if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]);
+        });
+      });
+      console.log('[PdfExport] resolveNativePdfContent: numéros de page du sommaire =', JSON.stringify(headingPageNumbers));
     }
     // Toujours appelé, même sans image "en attente" (_pendingOffset) : couvre
     // aussi les images en calque sans ancre précise résolue (cf. commentaire
@@ -1338,6 +1467,19 @@ const PdfExport = (function () {
     container.style.position = 'relative';
     container.style.fontFamily = 'Arial, sans-serif';
     container.innerHTML = resolvedHtml;
+    // .reader-content + data-heading-style : ce conteneur est bien attaché au
+    // document réel (contrairement à .pdf-measure-host, hors-écran mais
+    // toujours DANS ce même document) - css/style.css s'y applique déjà telle
+    // quelle, donc la numérotation des titres (::before, cf. style.css) se
+    // rend correctement à la capture html2canvas SANS rien réimplémenter ici,
+    // à condition que ce conteneur porte les mêmes marqueurs que .ql-editor/
+    // .reader-content (cf. reader-mode.js). Le sommaire lui-même (.toc-marker)
+    // n'est PAS résolu pour les qualités raster (html2canvas n'a aucune notion
+    // de "page" exploitable pour le numéro de page de chaque titre, contrairement
+    // à pdfmake) : reste affiché tel quel (l'encadré pointillé de l'éditeur).
+    const config = container.querySelector(':scope > .heading-numbering-config');
+    container.classList.add('reader-content');
+    container.dataset.headingStyle = (config && config.dataset.style) || 'none';
     container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; });
     container.querySelectorAll('.two-columns-marker').forEach(marker => { marker.innerHTML = ''; marker.style.display = 'none'; });
     document.body.appendChild(container);
