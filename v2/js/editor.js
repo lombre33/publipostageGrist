@@ -17,10 +17,14 @@
 // nœuds personnalisés twoColumnsZone/twoColumnsColumn, même principe -
 // une colonne accepte du contenu riche directement dans le même schéma de
 // document, cf. plan : aucune instance imbriquée nécessaire, contrairement
-// à la V1/Quill). PAS ENCORE couverts (prochains incréments) : images,
-// sommaire/numérotation de titres, export PDF, configuration de règle
-// inter-tables à l'insertion (modale dédiée de la V1), redimensionnement du
-// ratio des colonnes (2 colonnes égales pour l'instant). `getHTML`/`setHTML` sont
+// à la V1/Quill) et les images (insertion basique par URL, cf. EditorImage
+// ci-dessous). PAS ENCORE couverts (prochains incréments, le gros morceau à
+// venir étant l'export PDF) : calque devant/derrière + repositionnement par
+// glisser d'une image (V1 : image-floating/ancrage, système complexe non
+// repris pour cet incrément), sommaire/numérotation de titres,
+// export PDF, configuration de règle inter-tables à l'insertion (modale
+// dédiée de la V1), redimensionnement du ratio des colonnes (2 colonnes
+// égales pour l'instant). `getHTML`/`setHTML` sont
 // volontairement la même forme d'API que l'éditeur V1 (js/editor.js), pour
 // que main.js et les modules partagés (Templates/ReaderMode) s'intègrent
 // sans surprise.
@@ -146,6 +150,44 @@ const Editor = (function () {
       },
     });
 
+    // Image — nœud "atome" en ligne, insertion basique par URL pour cet
+    // incrément (V1 : image-floating/ancrage avec calque devant/derrière et
+    // repositionnement par glisser, cf. mémoire
+    // project_image_anchor_bracketing_interpolation - hors scope ici, à
+    // reprendre une fois l'export PDF V2 en chantier puisque c'est
+    // essentiellement pour l'export que ce système existe). `src`/`alt`
+    // restent des attributs HTML bruts de l'<img> (contrairement à
+    // VarBadge : ici c'est le comportement natif souhaité, même forme que la
+    // V1) ; seul `width` a besoin d'un renderHTML dédié (posé en style
+    // inline, pas en attribut HTML `width`).
+    const EditorImage = Node.create({
+      name: 'editorImage',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          src: { default: null },
+          alt: { default: 'Image' },
+          width: {
+            default: '320px',
+            parseHTML: el => el.style.width || null,
+            renderHTML: attrs => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
+          },
+        };
+      },
+      parseHTML() { return [{ tag: 'img.editor-image' }]; },
+      renderHTML({ HTMLAttributes }) {
+        return ['img', mergeAttributes(HTMLAttributes, { class: 'editor-image', draggable: 'false' })];
+      },
+      addCommands() {
+        return {
+          insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run(),
+        };
+      },
+    });
+
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       extensions: [
@@ -166,6 +208,7 @@ const Editor = (function () {
         TableCell,
         TwoColumnsColumn,
         TwoColumnsZone,
+        EditorImage,
       ],
       content: '',
     });
@@ -200,6 +243,11 @@ const Editor = (function () {
     bind('v2-btn-row-del', () => editor.chain().focus().deleteRow().run());
     bind('v2-btn-table-del', () => editor.chain().focus().deleteTable().run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
+    bind('v2-btn-image', () => {
+      const url = window.prompt('URL de l\'image :');
+      if (!url) return;
+      editor.chain().focus().insertImage({ src: url, alt: 'Image', width: '320px' }).run();
+    });
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
     // Un <select> (contrairement à un <button>) vole le focus DÈS le

@@ -23,6 +23,7 @@
 #editor-container .tiptap .two-columns-column { flex: 1 1 0; min-width: 0; padding: 4px; border: 1px dashed transparent; }
 #editor-container .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 #editor-container .tiptap .two-columns-column > *:first-child { margin-top: 0; }
+#editor-container .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }
