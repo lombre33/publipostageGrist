@@ -79,3 +79,30 @@ correspondant — pas une comparaison visuelle. Pour une vérification visuelle
 en plus (recommandé après toute modification de `blockFrom`/`inlineRuns`/
 `tableFrom`/`twoColumnsFrom`), construire un cas combiné réaliste, générer son
 PDF (`getBase64`), le décoder (`dev-tests/save_pdf.py`-style) et le lire.
+
+## Robustesse HTML personnalisé (`custom-html-export.js`)
+
+Complète encore les deux suites ci-dessus, mais pour un cas très différent :
+l'onglet "Code HTML" (mode avancé, `js/html-source-tab.js`) permet d'exporter
+du HTML tapé À LA MAIN, qui ne suit AUCUNE convention de l'éditeur (pas de
+`.editable-table`/`<colgroup>`, pas de `.two-columns-zone`, pas de classe
+`editor-image`...). Contrairement aux deux suites précédentes, celle-ci NE
+PASSE PAS par `Editor.setHTML()` — Quill supprimerait silencieusement ce qu'il
+ne reconnaît pas avant même que `pdf-export.js` ne le voie (cf. mémoire projet,
+piège du MutationObserver de `.ql-editor`) — le HTML de chaque cas est transmis
+tel quel à `PdfExport.exportCurrentRecord`, exactement comme le fait
+`main.js:getActiveHtml()` quand cet onglet est actif.
+
+Usage (même prérequis) :
+```js
+const c = await fetch('/dev-tests/custom-html-export.js', { cache: 'no-store' }).then(r => r.text());
+eval(c);
+const results = await CustomHtmlExport.runAll();
+results.filter(r => !r.pass);
+CustomHtmlExport.runSanitizeChecks().filter(r => !r.pass);   // HtmlSourceTab.sanitizeHtml (script/style/on*/javascript:)
+```
+Chaque cas vérifie surtout l'ABSENCE de plantage (`error` capturée plutôt que
+propagée) et une dégradation raisonnable — pas une fidélité pixel-parfaite,
+hors de portée pour du contenu qui ne suit aucune des conventions internes de
+l'éditeur (cf. `js/pdf-export.js:fallbackTextBlock` et les `try/catch` dans
+`buildPdfContentFromRoot`/`tableFrom`/`twoColumnsFrom`).

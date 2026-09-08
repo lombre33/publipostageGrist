@@ -134,6 +134,22 @@ body { display:flex; flex-direction:column; }
 #toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
+/* Bouton "Code HTML" (mode avancé) : délibérément À PART du groupe segmenté
+   Édition/Lecture ci-dessus (pas dans .mode-toggle) et visuellement discret
+   (pas de fond, texte atténué) - un onglet qu'on découvre en le cherchant,
+   pas une 3e option mise sur un pied d'égalité avec les deux premières. */
+#toolbar-top .html-mode-btn { background: transparent; border-style: dashed; color: var(--text-muted, #6b7280); font-family: 'Courier New', monospace; }
+#toolbar-top .html-mode-btn:hover { color: var(--text); border-color: var(--text-muted, #6b7280); }
+#toolbar-top .html-mode-btn.active { background: var(--surface-sunken); color: var(--accent); border-color: var(--accent); border-style: solid; }
+/* Onglet Code HTML : textarea pleine hauteur + bandeau d'avertissement fixe
+   (toujours visible, pas une modale qu'on ferme et oublie) rappelant les deux
+   limites actées avec l'utilisateur - pas d'aller-retour garanti vers
+   l'éditeur classique, export vectoriel best-effort pour du HTML non produit
+   par l'éditeur (cf. commentaire équivalent dans js/html-source-tab.js). */
+#html-source-container { display:flex; flex-direction:column; flex:1; min-height:0; }
+.html-source-warning { flex:none; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5b12; font-size:.82em; line-height:1.4; }
+#html-source-textarea { flex:1; min-height:0; width:100%; box-sizing:border-box; border:0; padding:14px 18px; resize:none; font-family:'Courier New', monospace; font-size:.85em; line-height:1.5; color:#1b2430; background:#fff; }
+#html-source-textarea:focus { outline:none; }
 /* Volet replié par défaut ([hidden] posé dans le HTML, togglé par main.js) :
    nom du modèle + nom de fichier PDF, moins souvent consultés que le reste
    du bandeau - la spécificité de [hidden] doit dépasser celle de .toolbar-panen

@@ -226,9 +226,15 @@ const PdfExport = (function () {
   // nettement le résultat sans prétendre à une fidélité pixel-perfect : cette
   // dernière est structurellement hors de portée tant que l'éditeur et la page
   // PDF n'ont pas la même largeur de habillage du texte.
+  // Une image insérée par les outils de l'éditeur porte TOUJOURS sa taille en
+  // style inline (node.style.width/height, cf. editor.js). Une <img> tapée à
+  // la main (onglet Code HTML) n'a souvent que les attributs HTML width/height
+  // (ou aucun des deux) - repli sur ceux-ci, puis sur une largeur par défaut
+  // raisonnable, plutôt que de dégénérer sur une image minuscule (15pt, le
+  // plancher ci-dessous) ou de planter sur parseFloat(undefined).
   function pdfImageFromNode(node) {
-    const widthPx = parseFloat(node.style.width) || 320;
-    const heightPx = parseFloat(node.style.height) || null;
+    const widthPx = parseFloat(node.style.width) || parseFloat(node.getAttribute('width')) || 320;
+    const heightPx = parseFloat(node.style.height) || parseFloat(node.getAttribute('height')) || null;
     const image = { image: node.getAttribute('src'), opacity: Math.max(0, Math.min(1, parseFloat(node.style.opacity) || 1)), margin: [0, 2, 0, 4] };
     image.width = Math.max(15, widthPx * PX_TO_PT);
     if (heightPx) image.height = Math.max(10, heightPx * PX_TO_PT);
@@ -290,7 +296,7 @@ const PdfExport = (function () {
     }
     return image;
   }
-  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; let sawLineBlock = false; node.childNodes.forEach(child => { const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(child.tagName); if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style }); if (isLineBlock) sawLineBlock = true; runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
+  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.tagName === 'IMG') { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; let sawLineBlock = false; node.childNodes.forEach(child => { const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(child.tagName); if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style }); if (isLineBlock) sawLineBlock = true; runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
   // Comme inlineRuns(node, ...), mais ignore les enfants <ul>/<ol> DIRECTS - une
   // sous-liste imbriquée (execCommand 'indent' dans une cellule/colonne 2-colonnes,
   // seul contexte où une VRAIE liste imbriquée peut apparaître : Quill lui-même
@@ -387,7 +393,29 @@ const PdfExport = (function () {
     });
     return { stack: [title].concat(lines), pageNumberCells };
   }
-  function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
+  // IMG inclus depuis le correctif "HTML personnalisé" (onglet Code HTML,
+  // cf. js/html-source-tab.js) : une image produite par l'éditeur vit
+  // TOUJOURS à l'intérieur d'un <p>/<div> (Quill l'insère comme embed DANS la
+  // ligne courante), donc jamais rencontrée directement ici (blockFrom la
+  // consomme déjà via inlineRuns pendant le traitement de son <p> parent) -
+  // mais une <img> tapée à la main peut parfaitement être un enfant DIRECT de
+  // la racine, sans aucun wrapper. Sans IMG ici, un tel noeud ne correspond à
+  // AUCUN cas de visit() (ni bloc, ni classe spéciale) et retombe sur
+  // `node.childNodes.forEach(visit)` - qui n'itère JAMAIS puisqu'une <img> n'a
+  // pas d'enfants : l'image disparaissait silencieusement, jamais transmise à
+  // inlineRuns/pdfImageFromNode.
+  function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR|IMG)$/i.test(node.tagName)); }
+  // Repli de robustesse (cf. buildPdfContentFromRoot) : un noeud dont la
+  // construction pdfmake (blockFrom/tableFrom/twoColumnsFrom) lève une
+  // exception - structure inattendue, notamment du HTML tapé à la main dans
+  // l'onglet Code HTML (mode avancé, cf. html-source-tab.js) qui ne suit pas
+  // les conventions exactes de l'éditeur - dégrade EN TEXTE BRUT plutôt que
+  // d'annuler tout l'export : mieux vaut un contenu incomplet/mal formaté
+  // qu'un PDF qui ne se génère pas du tout.
+  function fallbackTextBlock(node, pageBreakBefore) {
+    const text = ((node && node.textContent) || '').trim();
+    return { text: text || ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pageBreakBefore ? { pageBreak: 'before' } : {}) };
+  }
   // Le navigateur COLLAPSE (masque) les espaces/retours à la ligne en tout
   // début/fin du contenu rendu d'un bloc (règles CSS standard de fusion des
   // blancs) — pdfmake, lui, prend le texte tel quel. Un cas concret et
@@ -499,7 +527,9 @@ const PdfExport = (function () {
       const output = [];
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
-        const content = cellContentFrom(cell);
+        let content;
+        try { content = cellContentFrom(cell); }
+        catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
         const pdfCell = Object.assign({ margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (colSpan > 1) pdfCell.colSpan = colSpan;
@@ -568,6 +598,17 @@ const PdfExport = (function () {
   }
   function twoColumnsFrom(node, pageBreakBefore, sharedAnchorIdToBlock) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
+    // TOUJOURS exactement deux dans du contenu produit par l'éditeur
+    // (TwoColumnsBlot en pose systématiquement deux) - mais un
+    // .two-columns-zone tapé à la main (onglet Code HTML) avec zéro ou une
+    // seule .two-columns-column construirait plus bas `columns[1]` (voire
+    // `columns[0]`) undefined (`columns` = colNodes.map(...), plus court que
+    // 2), un objet pdfmake malformé (`stack: undefined`) qui ne lève PAS
+    // d'exception ICI (donc pas rattrapable par le try/catch de
+    // buildPdfContentFromRoot) mais peut échouer plus tard, de façon opaque,
+    // dans le moteur de mise en page de pdfmake lui-même. Repli explicite ET
+    // immédiat plutôt que de laisser construire cet objet malformé.
+    if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
     const pageWidth = 595.28;
     const columnGapPt = 18 * PX_TO_PT; // css: .two-columns-zone { gap: 18px }
     // Largeur RÉELLE de chaque colonne, mesurée AVANT de construire son
@@ -674,7 +715,9 @@ const PdfExport = (function () {
       // valeur par défaut : la boucle plus bas la remplace par un alignement
       // plus spécifique si un élément interne en porte un.
       const colAlign = alignment(col);
-      const blocks = htmlToPdfContent(col.innerHTML, columnOrigins[colIndex], sharedAnchorIdToBlock);
+      let blocks;
+      try { blocks = htmlToPdfContent(col.innerHTML, columnOrigins[colIndex], sharedAnchorIdToBlock); }
+      catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       // collect() parcourt le DOM de la colonne en MIRROR exactement les
       // règles de skip de htmlToPdfContent (page-break-marker ne pousse pas,
       // editable-table / two-columns-zone / isBlock() poussent un bloc).
@@ -1079,9 +1122,21 @@ const PdfExport = (function () {
         pendingPageBreak = false;
         return;
       }
-      if (node.classList.contains('editable-table')) { const table = node.querySelector('table'); if (table) blocks.push(tableFrom(table, pendingPageBreak)); pendingPageBreak = false; return; }
+      if (node.classList.contains('editable-table')) {
+        const table = node.querySelector('table');
+        if (table) {
+          let tableBlock;
+          try { tableBlock = tableFrom(table, pendingPageBreak); }
+          catch (e) { console.warn('[PdfExport] tableau ignoré (structure inattendue), repli en texte brut :', e); tableBlock = fallbackTextBlock(node, pendingPageBreak); }
+          blocks.push(tableBlock);
+        }
+        pendingPageBreak = false;
+        return;
+      }
       if (node.classList.contains('two-columns-zone')) {
-        const zoneBlock = twoColumnsFrom(node, pendingPageBreak, anchorIdToBlock);
+        let zoneBlock;
+        try { zoneBlock = twoColumnsFrom(node, pendingPageBreak, anchorIdToBlock); }
+        catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
         blocks.push(zoneBlock);
         // Repère de repli pour une image ancrée DANS une colonne de cette
         // zone sans paragraphe voisin (cf. editor.js:updateAnchorOffset) :
@@ -1099,7 +1154,9 @@ const PdfExport = (function () {
         return;
       }
       if (isBlock(node)) {
-        const produced = blockFrom(node, pendingPageBreak, frontImages, behindImages);
+        let produced;
+        try { produced = blockFrom(node, pendingPageBreak, frontImages, behindImages); }
+        catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
         produced.forEach(b => { blocks.push(b); if (b && b._isHeading) headingBlocks.push(b); });
         if (node.dataset && node.dataset.pmAnchorId) {
           const textBlock = produced.find(b => b && b.text);
@@ -1167,14 +1224,16 @@ const PdfExport = (function () {
   }
   // pdfmake exige une image en data URI base64 (ou une entrée "images" nommée) :
   // un simple src http(s)://... (upload Grist ou URL externe) n'est jamais
-  // rendu, silencieusement. On convertit donc chaque <img class="editor-image">
-  // avant de construire le docDefinition (+ rastérisation si SVG, cf. ci-dessus) ;
-  // en cas d'échec (réseau, CORS...), on marque l'image à ignorer plutôt que de
-  // faire planter tout l'export PDF.
+  // rendu, silencieusement. On convertit donc chaque <img> - PAS seulement
+  // celles marquées "editor-image" : l'onglet Code HTML (mode avancé, cf.
+  // html-source-tab.js) peut contenir une <img> tapée à la main, sans cette
+  // classe - avant de construire le docDefinition (+ rastérisation si SVG,
+  // cf. ci-dessus) ; en cas d'échec (réseau, CORS...), on marque l'image à
+  // ignorer plutôt que de faire planter tout l'export PDF.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html || '';
-    const images = Array.from(wrapper.querySelectorAll('img.editor-image'));
+    const images = Array.from(wrapper.querySelectorAll('img'));
     await Promise.all(images.map(async img => {
       let src = img.getAttribute('src') || '';
       if (!src) return;
