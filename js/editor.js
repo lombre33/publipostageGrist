@@ -116,7 +116,30 @@ const Editor = (function () {
   TwoColumnsBlotClass.blotName = 'twocolumns'; TwoColumnsBlotClass.tagName = 'div'; TwoColumnsBlotClass.className = 'two-columns-zone'; Quill.register(TwoColumnsBlotClass);
 
   function ensureTwoColumnsGrip(zone) { if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return; let grip = zone.querySelector(':scope > .two-columns-resize-grip'); if (!grip) { grip = document.createElement('div'); grip.className = 'two-columns-resize-grip'; grip.contentEditable = 'false'; zone.appendChild(grip); } }
-  function ensureTableColumns(table) { if (!table || !table.rows || !table.rows[0]) return; const firstRow = table.rows[0]; const count = firstRow.cells.length; let colgroup = table.querySelector(':scope > colgroup'); if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); } while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col')); while (colgroup.children.length > count) colgroup.lastElementChild.remove(); Array.from(colgroup.children).forEach((col, index) => { if (!col.style.width) col.style.width = `${100 / count}%`; col.dataset.index = index; }); }
+  function ensureTableColumns(table) {
+    if (!table || !table.rows || !table.rows[0]) return;
+    const firstRow = table.rows[0];
+    const count = firstRow.cells.length;
+    let colgroup = table.querySelector(':scope > colgroup');
+    if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
+    while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
+    while (colgroup.children.length > count) colgroup.lastElementChild.remove();
+    Array.from(colgroup.children).forEach((col, index) => { if (!col.style.width) col.style.width = `${100 / count}%`; col.dataset.index = index; });
+    // Poignée de redimensionnement de colonne (glisser la bordure droite d'une
+    // cellule d'en-tête, cf. .table-col-resize-handle dans css/style.css et le
+    // mousedown listener qui appelle resizeTableColumn) - un <span> par
+    // cellule de la 1ère ligne, recréé à chaque appel (plus simple et sans
+    // risque de doublon qu'un diff incrémental) puisque ensureTableColumns
+    // tourne déjà à chaque ajout/suppression de ligne/colonne.
+    Array.from(firstRow.cells).forEach(cell => cell.querySelectorAll(':scope > .table-col-resize-handle').forEach(h => h.remove()));
+    Array.from(firstRow.cells).forEach(cell => {
+      const handle = document.createElement('span');
+      handle.className = 'table-col-resize-handle';
+      handle.setAttribute('aria-label', 'Redimensionner la colonne');
+      handle.setAttribute('contenteditable', 'false');
+      cell.appendChild(handle);
+    });
+  }
   function resizeTableColumn(table, index, startX) { const firstRow = table.rows[0]; const colgroup = table.querySelector(':scope > colgroup'); if (!firstRow || !colgroup || !colgroup.children[index]) return; const rect = table.getBoundingClientRect(); const widths = Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 100 / firstRow.cells.length); const start = ((startX - rect.left) / rect.width) * 100; const current = widths[index]; const next = index + 1 < widths.length ? widths[index + 1] : null; const onMove = event => { const delta = ((event.clientX - startX) / rect.width) * 100; if (next !== null) { widths[index] = Math.max(5, current + delta); widths[index + 1] = Math.max(5, next - delta); } else widths[index] = Math.max(5, current + delta); widths.forEach((width, i) => { if (colgroup.children[i]) colgroup.children[i].style.width = `${width}%`; }); }; const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp, { once: true }); }
 
   // Valeur à passer à execCommand('formatBlock', ...) pour un item du picker
@@ -228,6 +251,33 @@ const Editor = (function () {
       if (!container) return;
       event.preventDefault();
       document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+      quill.update(Quill.sources.USER);
+    }, true);
+  }
+  // Raccourcis Ctrl/Cmd+B/I/U dans une cellule de tableau ou une colonne
+  // 2-colonnes : Quill fournit déjà ces raccourcis nativement dans le flux
+  // principal (module keyboard par défaut), mais une cellule/colonne est
+  // hors de son modèle Delta - rien n'écoutait le clavier là-bas, seul le
+  // clic sur les boutons de la toolbar fonctionnait. Posé en phase CAPTURE
+  // sur document (donc avant que l'évènement n'atteigne quill.root et son
+  // propre gestionnaire clavier) - stopPropagation obligatoire, pas seulement
+  // preventDefault (même leçon que installToolbarClickSuppression : un
+  // preventDefault seul n'empêche pas un gestionnaire tiers déjà accroché
+  // plus bas dans l'arbre de recevoir l'évènement).
+  function installFormattingShortcuts() {
+    document.addEventListener('keydown', function (event) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      const command = key === 'b' ? 'bold' : key === 'i' ? 'italic' : key === 'u' ? 'underline' : null;
+      if (!command) return;
+      const selection = window.getSelection && window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const container = rangeClosest(range, '.editable-table td, .editable-table th, .two-columns-column');
+      if (!container) return; // flux principal : laisser Quill gérer son propre raccourci
+      event.preventDefault();
+      event.stopPropagation();
+      document.execCommand(command, false, null);
       quill.update(Quill.sources.USER);
     }, true);
   }
@@ -821,6 +871,7 @@ const Editor = (function () {
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
     if (toolbar) installToolbarClickSuppression(toolbar);
     installListTabIndent();
+    installFormattingShortcuts();
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
       const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table');
