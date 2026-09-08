@@ -124,7 +124,21 @@ const Editor = (function () {
   // tout pour "Normal") - passer cette valeur BRUTE ("2") à formatBlock est
   // invalide (attend un nom de balise comme "h2"/"p") et échoue en silence.
   function headerExecValue(value) { return value ? 'H' + value : 'P'; }
-  function installTwoColumnsToolbarIsolation(toolbar) { toolbar.addEventListener('mousedown', function (event) { const target = event.target; const button = target.closest && target.closest('button'); const pickerItem = target.closest && target.closest('.ql-picker-item'); const selection = document.getSelection(); if (!selection || !selection.rangeCount) return; const range = selection.getRangeAt(0); const column = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer.closest('.two-columns-column') : range.commonAncestorContainer.parentElement.closest('.two-columns-column'); if (!column) return; let command = null; let value = null; if (button) { command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : null; } else if (pickerItem) { if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); command = 'fontSize'; value = v === 'small' ? '2' : v === 'large' ? '5' : v === 'huge' ? '7' : '3'; } else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'sans-serif'; } else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); } } if (!command) return; event.preventDefault(); event.stopPropagation(); column.focus(); selection.removeAllRanges(); selection.addRange(range); document.execCommand(command, false, value); }, true); }
+  // Utilitaire partagé : trouve l'ancêtre `selector` le plus proche du point de
+  // départ d'un Range (pas forcément un Element - un noeud texte n'a pas
+  // .closest, d'où la remontée au parentElement dans ce cas).
+  function rangeClosest(range, selector) {
+    const node = range.commonAncestorContainer;
+    const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return el && el.closest ? el.closest(selector) : null;
+  }
+  function installTwoColumnsToolbarIsolation(toolbar) { toolbar.addEventListener('mousedown', function (event) { const target = event.target; const button = target.closest && target.closest('button'); const pickerItem = target.closest && target.closest('.ql-picker-item'); const selection = document.getSelection(); if (!selection || !selection.rangeCount) return; const range = selection.getRangeAt(0); const column = rangeClosest(range, '.two-columns-column'); if (!column) return; let command = null; let value = null; if (button) {
+    // 'indent'/'outdent' hors d'une liste ferait basculer execCommand sur son
+    // propre comportement par défaut (souvent une indentation via <blockquote>
+    // dans Chrome) plutôt que sur la sémantique de retrait de liste attendue -
+    // n'intercepter ce bouton QUE si le curseur est dans un <li>.
+    command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : button.classList.contains('ql-list') ? (button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList') : (button.classList.contains('ql-indent') && rangeClosest(range, 'li')) ? (button.getAttribute('value') === '+1' ? 'indent' : 'outdent') : null;
+  } else if (pickerItem) { if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); command = 'fontSize'; value = v === 'small' ? '2' : v === 'large' ? '5' : v === 'huge' ? '7' : '3'; } else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'sans-serif'; } else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); } } if (!command) return; event.preventDefault(); event.stopPropagation(); column.focus(); selection.removeAllRanges(); selection.addRange(range); document.execCommand(command, false, value); }, true); }
 
   // --- Insertion d'image (upload + URL) ---
   function insertImage(value) {
@@ -710,7 +724,7 @@ const Editor = (function () {
       activeCell = cell;
       return false;
     };
-    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
+    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
     if (toolbar) {
@@ -838,7 +852,14 @@ const Editor = (function () {
       const pickerItem = target.closest && target.closest('.ql-picker-item');
       const cell = getRealActiveCell();
       if (cell && cell.closest('.editable-table')) {
-        const formatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean'));
+        const selectionNow = window.getSelection && window.getSelection();
+        const rangeNow = selectionNow && selectionNow.rangeCount ? selectionNow.getRangeAt(0) : null;
+        // cf. installTwoColumnsToolbarIsolation : 'indent'/'outdent' hors d'une
+        // liste ferait basculer execCommand sur son comportement par défaut
+        // (souvent un <blockquote> dans Chrome) plutôt que sur un retrait de
+        // liste - n'intercepter ce bouton QUE si le curseur est dans un <li>.
+        const inList = rangeNow ? !!rangeClosest(rangeNow, 'li') : false;
+        const formatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean') || button.classList.contains('ql-list') || (button.classList.contains('ql-indent') && inList));
         const formatPicker = pickerItem && (pickerItem.closest('.ql-size') || pickerItem.closest('.ql-font') || pickerItem.closest('.ql-header'));
         if (formatButton || formatPicker) {
           const selection = window.getSelection && window.getSelection();
@@ -850,7 +871,7 @@ const Editor = (function () {
             selection.removeAllRanges();
             selection.addRange(range);
             if (formatButton) {
-              const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : 'removeFormat';
+              const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : button.classList.contains('ql-list') ? (button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList') : button.classList.contains('ql-indent') ? (button.getAttribute('value') === '+1' ? 'indent' : 'outdent') : 'removeFormat';
               document.execCommand(command, false, null);
             } else if (formatPicker.closest('.ql-size')) {
               const value = pickerItem.getAttribute('data-value');

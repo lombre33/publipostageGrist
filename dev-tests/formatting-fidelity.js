@@ -95,8 +95,27 @@
     scenario('size_font_tag_column', 'column', '<p>Texte <font size="5">grand</font> ici</p>', [{ word: 'grand', expect: { fontSize: 18 } }]),
     scenario('size_font_tag_cell', 'cell', 'Texte <font size="7">enorme</font> ici', [{ word: 'enorme', expect: { fontSize: 36 } }]),
 
-    // --- Listes, citation, indentation (déjà support par blockFrom - regression) ---
-    scenario('list_plain', 'plain', '<ul><li>Item un</li><li>Item deux</li></ul>', [{ word: 'Item un', expect: {} }, { word: 'Item deux', expect: {} }]),
+    // --- Listes, citation, indentation ---
+    // Flux principal : fixture au format RÉELLEMENT produit par Quill (data-list
+    // sur le <li>, toujours enveloppé dans un <ol> quel que soit bullet/ordered -
+    // cf. listMarkerFor). Le texte de la puce/du numéro lui-même dépend des
+    // compteurs CSS de quill.snow.css (mesurés en direct, cf. listMarkerFor) :
+    // pas raisonnable à figer ici sans rendu réel - seule la présence du texte
+    // de l'item est vérifiée ; le texte exact du marqueur se vérifie visuellement
+    // en conditions réelles (Grist).
+    scenario('list_bullet_plain', 'plain', '<ol><li data-list="bullet">Item un</li><li data-list="bullet">Item deux</li></ol>', [{ word: 'Item un', expect: {} }, { word: 'Item deux', expect: {} }]),
+    scenario('list_ordered_plain', 'plain', '<ol><li data-list="ordered">Item un</li><li data-list="ordered">Item deux</li></ol>', [{ word: 'Item un', expect: {} }, { word: 'Item deux', expect: {} }]),
+    // Colonne/cellule : liste NATIVE du navigateur (execCommand insertOrderedList/
+    // insertUnorderedList, cf. editor.js) - vraies balises <ul>/<ol>, numérotation
+    // calculée par listMarkerFor (pas de mesure CSS nécessaire) donc le texte
+    // exact du marqueur EST vérifiable ici.
+    scenario('list_bullet_column', 'column', '<ul><li>Item un</li><li>Item deux</li></ul>', [{ word: '• ', expect: {} }]),
+    scenario('list_ordered_cell', 'cell', '<ol><li>Item un</li><li>Item deux</li></ol>', [{ word: '2. ', expect: {} }, { word: 'Item deux', expect: {} }]),
+    // Imbrication (execCommand 'indent' sur un item de liste) : sous-liste
+    // numérotée indépendamment (recommence à 1), avec sa propre indentation
+    // mesurée (measureIndentPt) - vérifie que le retrait du sous-item est bien
+    // strictement supérieur à celui de l'item racine.
+    scenario('list_nested_column', 'column', '<ol><li>Racine<ol><li>Sous-item</li></ol></li><li>Deuxieme racine</li></ol>', [{ word: '1. ', expect: {} }, { word: 'Sous-item', expect: {} }, { word: '2. ', expect: {} }]),
     scenario('blockquote_plain', 'plain', '<blockquote>Citation</blockquote>', [{ word: 'Citation', expect: { italics: true } }]),
     scenario('indent_plain', 'plain', '<p class="ql-indent-2">Indente</p>', [{ word: 'Indente', expect: {} }]),
 

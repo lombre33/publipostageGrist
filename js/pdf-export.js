@@ -264,6 +264,56 @@ const PdfExport = (function () {
     return image;
   }
   function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; let sawLineBlock = false; node.childNodes.forEach(child => { const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(child.tagName); if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style }); if (isLineBlock) sawLineBlock = true; runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
+  // Comme inlineRuns(node, ...), mais ignore les enfants <ul>/<ol> DIRECTS - une
+  // sous-liste imbriquée (execCommand 'indent' dans une cellule/colonne 2-colonnes,
+  // seul contexte où une VRAIE liste imbriquée peut apparaître : Quill lui-même
+  // n'imbrique jamais, cf. listMarkerFor) doit produire SES PROPRES blocs (un par
+  // <li>, avec sa propre indentation mesurée), pas être aplatie dans le texte du
+  // <li> parent - cf. appelants (blockFrom pour un <li> de premier niveau,
+  // cellLineToPdfObject pour une cellule de tableau).
+  function inlineRunsExcludingNestedLists(node, parentStyle, floatingImages) {
+    const style = inheritedStyle(node, parentStyle);
+    let runs = [];
+    node.childNodes.forEach(child => {
+      if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) return;
+      runs = runs.concat(inlineRuns(child, style, floatingImages));
+    });
+    return runs;
+  }
+  // Marqueur (puce/numéro) d'un <li>, mesuré/calculé selon son origine :
+  // - Liste native Quill (attribut data-list, posée par le format 'list' du
+  //   toolbar - TOUJOURS à plat, sur des <li> SIBLINGS avec classes ql-indent-N,
+  //   jamais de vraie imbrication <ol><li><ol>) : le texte du marqueur (puce,
+  //   ou numéro/lettre/romain selon le niveau ql-indent-N) est entièrement piloté
+  //   par les compteurs CSS de Quill (::before, cf. quill.snow.css) - le MESURER
+  //   en direct sur le DOM réel (déjà attaché à .pdf-measure-host, qui préserve
+  //   l'ordre des <li> siblings et donc l'état réel des compteurs CSS) est plus
+  //   fiable que réimplémenter ce mécanisme de compteurs à la main, et garantit
+  //   un texte de marqueur pixel-perfect quel que soit le niveau d'imbrication.
+  // - Liste native du navigateur (execCommand insertOrderedList/insertUnorderedList,
+  //   cellule de tableau ou colonne 2-colonnes - jamais de data-list ici) : une
+  //   VRAIE balise <ol>/<ul> avec de VRAIS <li> enfants ; puce fixe pour <ul>,
+  //   numéro calculé par position pour <ol> (respecte l'attribut start éventuel).
+  function listMarkerFor(node) {
+    if (node.hasAttribute('data-list')) {
+      try {
+        const raw = getComputedStyle(node, '::before').content;
+        if (raw && raw !== 'none' && raw !== 'normal') {
+          const stripped = raw.replace(/^["']|["']$/g, '').trim();
+          if (stripped) return stripped + ' ';
+        }
+      } catch (e) { /* repli ci-dessous */ }
+      return node.getAttribute('data-list') === 'ordered' ? '1. ' : '• ';
+    }
+    const parent = node.parentElement;
+    if (parent && parent.tagName === 'OL') {
+      const items = Array.from(parent.children).filter(c => c.tagName === 'LI');
+      const start = parseInt(parent.getAttribute('start') || '1', 10) || 1;
+      const idx = items.indexOf(node);
+      return (start + (idx === -1 ? 0 : idx)) + '. ';
+    }
+    return '• ';
+  }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   // Le navigateur COLLAPSE (masque) les espaces/retours à la ligne en tout
   // début/fin du contenu rendu d'un bloc (règles CSS standard de fusion des
@@ -283,20 +333,53 @@ const PdfExport = (function () {
     if (runs.length) { const last = runs.length - 1; runs[last] = Object.assign({}, runs[last], { text: runs[last].text.replace(/[ \t\n\r\f\v]+$/, '') }); }
     return runs;
   }
+  // Descend dans les enfants DIRECTS d'une cellule/sous-liste et accumule dans
+  // `lines` un noeud par ligne pdfmake : un <p>/<div>/<h1-6> direct est sa
+  // propre ligne (comportement historique inchangé) ; un <ul>/<ol> DIRECT
+  // (execCommand insertOrderedList/insertUnorderedList, cf. editor.js) ajoute
+  // une ligne par <li>, et redescend récursivement dans toute sous-liste
+  // imbriquée trouvée À L'INTÉRIEUR de ce <li> (execCommand 'indent').
+  function collectCellLines(container, lines) {
+    Array.from(container.childNodes).forEach(node => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (/^(P|DIV|H[1-6])$/.test(node.tagName)) { lines.push(node); return; }
+      if (/^(UL|OL)$/.test(node.tagName)) {
+        Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
+          lines.push(li);
+          Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName)).forEach(nested => collectCellLines(nested, lines));
+        });
+      }
+    });
+  }
+  function cellLineToPdfObject(node) {
+    const isLi = node.tagName === 'LI';
+    const marker = isLi ? listMarkerFor(node) : '';
+    const runs = trimEdgeWhitespace(isLi
+      ? inlineRunsExcludingNestedLists(node, { fontSize: DEFAULT_FONT_SIZE })
+      : inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }));
+    const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
+    const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
+    const align = alignment(node); if (align) obj.alignment = align;
+    return obj;
+  }
   // Une cellule multi-lignes (plusieurs <p>/<div>/<h1-6> issus de retours à
-  // la ligne bruts, non gérés par Quill) peut avoir une ligne alignée
-  // différemment des autres (même mécanisme execCommand par-sélection que
-  // pour une colonne 2-colonnes, cf. editor.js) - un simple inlineRuns(cell)
-  // aplatit tout dans UN SEUL tableau de texte avec UNE SEULE alignment
-  // (celle de la cellule), perdant l'alignement par ligne. On construit donc
-  // un stack d'une ligne pdfmake par ligne HTML dès qu'il y en a plusieurs,
+  // la ligne bruts, non gérés par Quill - OU une liste <ul>/<ol>, cf.
+  // collectCellLines) peut avoir une ligne alignée différemment des autres
+  // (même mécanisme execCommand par-sélection que pour une colonne 2-colonnes,
+  // cf. editor.js) - un simple inlineRuns(cell) aplatit tout dans UN SEUL
+  // tableau de texte avec UNE SEULE alignment (celle de la cellule), perdant
+  // l'alignement par ligne ET tout marqueur de liste. On construit donc un
+  // stack d'une ligne pdfmake par ligne HTML dès qu'il y en a plusieurs,
   // chacune avec sa propre alignment - sinon (cas courant, une seule ligne)
   // on garde le texte à plat, sans le surcoût d'un stack.
   function cellContentFrom(cell) {
-    const lineChildren = Array.from(cell.childNodes).filter(n => n.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(n.tagName));
-    const onlyLineChildren = lineChildren.length > 0 && lineChildren.length === Array.from(cell.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.nodeValue.trim() !== '').length;
+    const directChildren = Array.from(cell.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.nodeValue.trim() !== '');
+    const lineChildren = directChildren.filter(n => n.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|UL|OL)$/.test(n.tagName));
+    const onlyLineChildren = lineChildren.length > 0 && lineChildren.length === directChildren.length;
     if (onlyLineChildren) {
-      return { stack: lineChildren.map(line => { const runs = trimEdgeWhitespace(inlineRuns(line, { fontSize: DEFAULT_FONT_SIZE })); const obj = { text: runs.length ? runs : ' ' }; const align = alignment(line); if (align) obj.alignment = align; return obj; }) };
+      const lines = [];
+      collectCellLines(cell, lines);
+      return { stack: lines.map(cellLineToPdfObject) };
     }
     const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
     return { text: runs.length ? runs : ' ' };
@@ -575,7 +658,15 @@ const PdfExport = (function () {
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     const images = [];
-    const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images));
+    // Sous-liste imbriquée : seulement possible pour un <li> d'une liste NATIVE
+    // du navigateur (execCommand 'indent' en cellule/colonne 2-colonnes) -
+    // Quill lui-même n'imbrique jamais ses propres listes (cf. listMarkerFor).
+    // Ses enfants <ul>/<ol> DIRECTS sont exclus du texte de CE <li> (traités
+    // plus bas comme leurs propres blocs, avec leur propre marqueur/indentation).
+    const nestedLists = tag === 'LI' ? Array.from(node.children).filter(c => /^(UL|OL)$/.test(c.tagName)) : [];
+    const runs = trimEdgeWhitespace(nestedLists.length
+      ? inlineRunsExcludingNestedLists(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images)
+      : inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images));
     const blocks = [];
     let remainingPageBreak = pageBreakBefore;
     // Toujours créer ce bloc-texte, MÊME pour un paragraphe qui ne contient
@@ -637,7 +728,7 @@ const PdfExport = (function () {
     const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) block.bold = true;
-    if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
+    if (tag === 'LI') { block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
     // BLOCKQUOTE : marge droite nulle (mesurée : Quill ne pose de
     // padding/bordure qu'à GAUCHE de la citation, jamais à droite - l'ancienne
     // valeur codée en dur (8pt) rétrécissait sans raison la largeur de texte
@@ -658,6 +749,18 @@ const PdfExport = (function () {
       if (layer === 'front' && frontImages) { img._containingBlock = block; frontImages.push(img); return; }
       if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
       blocks.push(img);
+    });
+    // Sous-liste(s) imbriquée(s) (cf. plus haut) : traitées ICI plutôt que par
+    // le parcours générique de buildPdfContentFromRoot, qui ne redescend jamais
+    // dans le sous-arbre d'un noeud déjà transformé en bloc par blockFrom -
+    // chaque <li> enfant devient son propre bloc (récursivement, pour une
+    // imbrication à plusieurs niveaux), avec son propre marqueur et sa propre
+    // indentation mesurée sur le DOM réel (measureIndentPt s'applique telle
+    // quelle, quelle que soit la profondeur).
+    nestedLists.forEach(list => {
+      Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
+        blockFrom(li, false, frontImages, behindImages).forEach(b => blocks.push(b));
+      });
     });
     return blocks;
   }
