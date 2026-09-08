@@ -74,8 +74,35 @@ const PdfExport = (function () {
   // qu'il faut donc reproduire explicitement ici (pdfmake ne connaît rien du
   // rendu par défaut d'un <a>, contrairement au navigateur).
   const LINK_DEFAULT_COLOR = '#0066cc';
+  // Police web-safe choisie (picker "Police", cf. editor.js) -> nom de police
+  // pdfmake réellement embarquée (cf. pdf-fonts-extra.js) qui la remplace :
+  // pdfmake ne peut jamais utiliser une police du système, contrairement au
+  // navigateur - Arial/Times New Roman/Calibri sont des polices commerciales
+  // non redistribuables ici, remplacées par un équivalent libre à MÉTRIQUE
+  // IDENTIQUE (mêmes largeurs de caractères, donc même mise en page - formes
+  // de lettres légèrement différentes), même principe que LibreOffice/Google
+  // Docs. Clé en minuscules : la comparaison normalise la casse.
+  const FONT_FAMILY_MAP = {
+    'arial': 'Arimo',
+    'helvetica': 'Arimo',
+    'times new roman': 'Tinos',
+    'times': 'Tinos',
+    'georgia': 'Gelasio',
+    'courier new': 'Cousine',
+    'courier': 'Cousine',
+    'calibri': 'Carlito',
+  };
+  // `value` peut être une pile CSS ("Arial, Helvetica, sans-serif" ou
+  // "'Times New Roman', Times, serif") - seul le PREMIER nom compte (celui
+  // réellement choisi dans le picker), les suivants ne sont que des repli
+  // navigateur sans objet ici (la police est de toute façon substituée).
+  function pdfFontFor(value) {
+    if (!value) return null;
+    const first = value.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+    return FONT_FAMILY_MAP[first] || null;
+  }
   function addDecoration(out, name) { const list = Array.isArray(out.decoration) ? out.decoration.slice() : (out.decoration ? [out.decoration] : []); if (list.indexOf(name) === -1) list.push(name); out.decoration = list; }
-  function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const cls = node.nodeType === 1 ? (node.classList || { contains: () => false }) : { contains: () => false }; const out = Object.assign({}, parent); if (/^H[1-6]$/.test(tag)) { out.bold = true; out.fontSize = HEADING_SIZES[tag]; } if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') addDecoration(out, 'underline'); if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough'); if (tag === 'SUP') out.sup = true; if (tag === 'SUB') out.sub = true; if (tag === 'A' && node.getAttribute('href')) { out.link = node.getAttribute('href'); out.color = LINK_DEFAULT_COLOR; addDecoration(out, 'underline'); } if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration')) { if (/underline/i.test(css('text-decoration'))) addDecoration(out, 'underline'); if (/line-through/i.test(css('text-decoration'))) addDecoration(out, 'lineThrough'); } if (css('color')) out.color = cssColorToHex(css('color')); if (css('background-color')) out.background = cssColorToHex(css('background-color')); Object.keys(QL_SIZE_RATIO).forEach(name => { if (cls.contains(name)) out.fontSize = Math.max(6, Math.min(72, (parent && parent.fontSize || DEFAULT_FONT_SIZE) * QL_SIZE_RATIO[name])); }); if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); if (tag === 'FONT' && node.getAttribute('size') && FONT_TAG_SIZE_PX[node.getAttribute('size')]) out.fontSize = Math.max(6, Math.min(72, FONT_TAG_SIZE_PX[node.getAttribute('size')] * PX_TO_PT)); return out; }
+  function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const cls = node.nodeType === 1 ? (node.classList || { contains: () => false }) : { contains: () => false }; const out = Object.assign({}, parent); if (/^H[1-6]$/.test(tag)) { out.bold = true; out.fontSize = HEADING_SIZES[tag]; } if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') addDecoration(out, 'underline'); if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough'); if (tag === 'SUP') out.sup = true; if (tag === 'SUB') out.sub = true; if (tag === 'A' && node.getAttribute('href')) { out.link = node.getAttribute('href'); out.color = LINK_DEFAULT_COLOR; addDecoration(out, 'underline'); } if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration')) { if (/underline/i.test(css('text-decoration'))) addDecoration(out, 'underline'); if (/line-through/i.test(css('text-decoration'))) addDecoration(out, 'lineThrough'); } if (css('color')) out.color = cssColorToHex(css('color')); if (css('background-color')) out.background = cssColorToHex(css('background-color')); Object.keys(QL_SIZE_RATIO).forEach(name => { if (cls.contains(name)) out.fontSize = Math.max(6, Math.min(72, (parent && parent.fontSize || DEFAULT_FONT_SIZE) * QL_SIZE_RATIO[name])); }); if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); if (tag === 'FONT' && node.getAttribute('size') && FONT_TAG_SIZE_PX[node.getAttribute('size')]) out.fontSize = Math.max(6, Math.min(72, FONT_TAG_SIZE_PX[node.getAttribute('size')] * PX_TO_PT)); const fontFamilyValue = css('font-family') || (tag === 'FONT' ? node.getAttribute('face') : null); const legacyFontClass = cls.contains('ql-font-serif') ? 'Tinos' : cls.contains('ql-font-monospace') ? 'Cousine' : null; const pdfFont = pdfFontFor(fontFamilyValue) || legacyFontClass; if (pdfFont) out.font = pdfFont; return out; }
   // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" — un objet
   // { image: ... } glissé dans un tableau assigné à la propriété `text` d'un
   // bloc pdfmake n'est PAS une syntaxe valide (`text` attend des runs de texte

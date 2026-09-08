@@ -378,3 +378,38 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image[data-wrap="block"] { display: block; }
 body.resizing-editor-image { cursor: nwse-resize; user-select: none; }
 body.resizing-editor-image * { user-select: none; }
+
+/* === Pickers Taille/Police (tailles réelles en pt + polices web-safe,
+   cf. editor.js) - remplacent la liste petit/normal/grand/énorme et
+   serif/monospace de Quill par défaut, dont le CSS de quill.snow.css ne
+   connaît que CES valeurs précises (règles ::before ciblant
+   [data-value="small"] etc.) - sans ce qui suit, les nouvelles valeurs de la
+   whitelist n'affichent aucun texte du tout dans le picker. La valeur elle-
+   même (ex. "14pt", "Georgia") étant déjà lisible telle quelle, une seule
+   règle générique attr(data-value) suffit, pas besoin d'un libellé par
+   option comme le ferait Quill nativement. */
+.ql-snow .ql-picker.ql-size .ql-picker-label::before,
+.ql-snow .ql-picker.ql-size .ql-picker-item::before {
+  content: attr(data-value);
+}
+.ql-snow .ql-picker.ql-size .ql-picker-label:not([data-value])::before,
+.ql-snow .ql-picker.ql-size .ql-picker-item:not([data-value])::before {
+  content: 'Normal';
+}
+.ql-snow .ql-picker.ql-font .ql-picker-label::before,
+.ql-snow .ql-picker.ql-font .ql-picker-item::before {
+  content: attr(data-value);
+}
+.ql-snow .ql-picker.ql-font .ql-picker-label:not([data-value])::before,
+.ql-snow .ql-picker.ql-font .ql-picker-item:not([data-value])::before {
+  content: 'Roboto';
+}
+/* Aperçu visuel : chaque option du picker "Police" s'affiche dans sa propre
+   police (CSS n'autorise pas de attr() générique pour font-family, une règle
+   explicite par police est donc nécessaire ici - seulement 5, cf. la liste
+   volontairement restreinte choisie pour cette fonctionnalité). */
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Arial"] { font-family: Arial, Helvetica, sans-serif; }
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Times New Roman"] { font-family: 'Times New Roman', Times, serif; }
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Georgia"] { font-family: Georgia, serif; }
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Courier New"] { font-family: 'Courier New', Courier, monospace; }
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Calibri"] { font-family: Calibri, sans-serif; }

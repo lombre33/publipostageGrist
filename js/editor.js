@@ -8,10 +8,35 @@
 const Editor = (function () {
   let quill = null;
 
-  const FontSize = Quill.import('formats/size');
+  // Ancien système (petit/normal/grand/énorme via classes ql-size-*, et
+  // serif/monospace via ql-font-*) enregistré sous un nom Quill DISTINCT
+  // ('legacySize'/'legacyFont') plutôt que remplacé : Quill n'autorise qu'UN
+  // SEUL attributor par nom de format ('size'/'font' ci-dessous, réutilisés
+  // pour le nouveau système à tailles réelles/polices web-safe) - remplacer
+  // ces classes en place aurait fait disparaître silencieusement leur
+  // formatage sur tout modèle DÉJÀ enregistré, dès son premier rechargement
+  // (Quill ne reconnaîtrait plus la classe comme portant un format, donc ne
+  // la reporterait plus dans son modèle Delta ni à la resauvegarde). Ce
+  // second attributor, sous un nom différent, continue de reconnaître ces
+  // classes existantes (le rendu visuel ne dépend que de la classe CSS elle-
+  // même, pas du nom interne Quill qui la relie à son modèle) sans jamais
+  // être écrit par le nouveau picker.
+  const { ClassAttributor, Scope } = Quill.import('parchment');
+  Quill.register(new ClassAttributor('legacySize', 'ql-size', { scope: Scope.INLINE, whitelist: ['small', 'large', 'huge'] }), true);
+  Quill.register(new ClassAttributor('legacyFont', 'ql-font', { scope: Scope.INLINE, whitelist: ['serif', 'monospace'] }), true);
+
+  // Nouveau système : tailles réelles (pt) et polices web-safe usuelles, l'un
+  // et l'autre via un style inline (font-size/font-family) plutôt qu'une
+  // classe - pdf-export.js lit déjà un style inline générique (inheritedStyle),
+  // aucune nouvelle table de correspondance à maintenir pour la taille ; la
+  // police, elle, doit être réellement embarquée pour l'export PDF (cf.
+  // pdf-fonts-extra.js et FONT_FAMILY_MAP dans pdf-export.js).
+  const FontSize = Quill.import('attributors/style/size');
+  FontSize.whitelist = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
   Quill.register(FontSize, true);
 
-  const FontFamily = Quill.import('formats/font');
+  const FontFamily = Quill.import('attributors/style/font');
+  FontFamily.whitelist = ['Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Calibri'];
   Quill.register(FontFamily, true);
 
   const Embed = Quill.import('blots/embed');
@@ -155,6 +180,21 @@ const Editor = (function () {
     const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return el && el.closest ? el.closest(selector) : null;
   }
+  // document.execCommand('fontSize', ...) n'accepte QUE les tailles legacy
+  // 1-7 (échelle HTML historique), jamais un point réel arbitraire - seul
+  // moyen d'obtenir malgré tout une taille exacte : appliquer une taille
+  // legacy TEMPORAIRE bien reconnaissable (7, la plus grande - peu de risque
+  // qu'elle soit déjà utilisée ailleurs dans `container`), puis remplacer
+  // IMMÉDIATEMENT chaque <font size="7"> ainsi produit par un style inline
+  // portant la VRAIE valeur en pt - lu ensuite comme n'importe quel style
+  // inline générique par pdf-export.js (inheritedStyle), sans callback dédié.
+  function execRealFontSize(container, ptValue) {
+    document.execCommand('fontSize', false, '7');
+    container.querySelectorAll('font[size="7"]').forEach(f => {
+      f.removeAttribute('size');
+      f.style.fontSize = ptValue;
+    });
+  }
   // Un clic sur un bouton de toolbar déclenche DEUX évènements distincts,
   // 'mousedown' PUIS 'click' - Quill lie ses propres gestionnaires de format
   // ('list'/'indent' notamment) sur 'click' (phase bulle, par défaut), pas sur
@@ -194,7 +234,7 @@ const Editor = (function () {
       const range = selection.getRangeAt(0);
       const column = rangeClosest(range, '.two-columns-column');
       if (!column) return;
-      let command = null; let value = null; let handled = false;
+      let command = null; let value = null; let handled = false; let customAction = null;
       if (button) {
         if (button.classList.contains('ql-bold')) { command = 'bold'; handled = true; }
         else if (button.classList.contains('ql-italic')) { command = 'italic'; handled = true; }
@@ -218,16 +258,20 @@ const Editor = (function () {
         }
       } else if (pickerItem) {
         handled = true;
-        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); command = 'fontSize'; value = v === 'small' ? '2' : v === 'large' ? '5' : v === 'huge' ? '7' : '3'; }
-        else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'sans-serif'; }
+        // Taille réelle (pt) : cf. execRealFontSize - execCommand('fontSize')
+        // n'accepte pas directement une valeur en pt, d'où l'action dédiée
+        // plutôt qu'un simple command/value générique.
+        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); if (v) customAction = () => execRealFontSize(column, v); }
+        else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'Roboto'; }
         else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); }
       }
       if (!handled) return;
       event.preventDefault(); event.stopPropagation();
       suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
-      if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
       column.focus();
       selection.removeAllRanges(); selection.addRange(range);
+      if (customAction) { customAction(); return; }
+      if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
       document.execCommand(command, false, value);
     }, true);
   }
@@ -1033,10 +1077,12 @@ const Editor = (function () {
               // null, formatPicker null aussi) tombe ici SANS rien exécuter -
               // le clic reste absorbé (preventDefault/stopPropagation ci-dessus).
               if (formatPicker.closest('.ql-size')) {
+                // cf. installTwoColumnsToolbarIsolation/execRealFontSize :
+                // execCommand('fontSize') n'accepte pas une valeur en pt.
                 const value = pickerItem.getAttribute('data-value');
-                document.execCommand('fontSize', false, value ? (value === 'small' ? '2' : value === 'large' ? '5' : value === 'huge' ? '7' : '3') : '3');
+                if (value) execRealFontSize(cell, value);
               } else if (formatPicker.closest('.ql-font')) {
-                document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'sans-serif');
+                document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'Roboto');
               } else {
                 document.execCommand('formatBlock', false, headerExecValue(pickerItem.getAttribute('data-value')));
               }
