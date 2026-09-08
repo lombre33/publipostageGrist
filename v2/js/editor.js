@@ -13,12 +13,14 @@
 // gras/italique/souligné/barré, alignement, listes, citation, undo/redo,
 // taille/police réelles), les variables #Variable (badge + autocomplétion
 // + résolution en mode Lecture, cf. js/variables.js) et les tableaux
-// (@tiptap/extension-table officiel - une cellule accepte du contenu riche
-// directement dans le même schéma de document, cf. plan : aucune instance
-// imbriquée nécessaire, contrairement à la V1/Quill). PAS ENCORE couverts
-// (prochains incréments) : zone 2 colonnes, images, sommaire/
-// numérotation de titres, export PDF, configuration de règle inter-tables à
-// l'insertion (modale dédiée de la V1). `getHTML`/`setHTML` sont
+// (@tiptap/extension-table officiel) et les zones 2 colonnes (paire de
+// nœuds personnalisés twoColumnsZone/twoColumnsColumn, même principe -
+// une colonne accepte du contenu riche directement dans le même schéma de
+// document, cf. plan : aucune instance imbriquée nécessaire, contrairement
+// à la V1/Quill). PAS ENCORE couverts (prochains incréments) : images,
+// sommaire/numérotation de titres, export PDF, configuration de règle
+// inter-tables à l'insertion (modale dédiée de la V1), redimensionnement du
+// ratio des colonnes (2 colonnes égales pour l'instant). `getHTML`/`setHTML` sont
 // volontairement la même forme d'API que l'éditeur V1 (js/editor.js), pour
 // que main.js et les modules partagés (Templates/ReaderMode) s'intègrent
 // sans surprise.
@@ -106,6 +108,44 @@ const Editor = (function () {
       },
     });
 
+    // Zone 2 colonnes — pas d'extension officielle équivalente à
+    // extension-table ; construite comme une paire de nœuds suivant le même
+    // principe d'imbrication (une colonne accepte du contenu riche
+    // directement dans le schéma, cf. tableau ci-dessus). Mêmes noms de
+    // classe que la V1 (.two-columns-zone/.two-columns-column) pour limiter
+    // l'adaptation de pdf-export.js le moment venu. `isolating: true` sur les
+    // deux nœuds : empêche backspace/suppr en bord de colonne de fusionner
+    // la zone avec le paragraphe voisin (comportement par défaut de
+    // ProseMirror sans ça, vérifié en conditions réelles). Pas encore de
+    // poignée de redimensionnement (ratio des colonnes) - incrément
+    // ultérieur, comme le resize de tableau a suivi séparément en V1.
+    const TwoColumnsColumn = Node.create({
+      name: 'twoColumnsColumn',
+      content: 'block+',
+      isolating: true,
+      parseHTML() { return [{ tag: 'div.two-columns-column' }]; },
+      renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-column' }), 0]; },
+    });
+    const TwoColumnsZone = Node.create({
+      name: 'twoColumnsZone',
+      group: 'block',
+      content: 'twoColumnsColumn twoColumnsColumn',
+      isolating: true,
+      parseHTML() { return [{ tag: 'div.two-columns-zone' }]; },
+      renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone' }), 0]; },
+      addCommands() {
+        return {
+          insertTwoColumns: () => ({ chain }) => chain().insertContent({
+            type: this.name,
+            content: [
+              { type: 'twoColumnsColumn', content: [{ type: 'paragraph' }] },
+              { type: 'twoColumnsColumn', content: [{ type: 'paragraph' }] },
+            ],
+          }).run(),
+        };
+      },
+    });
+
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       extensions: [
@@ -124,6 +164,8 @@ const Editor = (function () {
         TableRow,
         TableHeader,
         TableCell,
+        TwoColumnsColumn,
+        TwoColumnsZone,
       ],
       content: '',
     });
@@ -157,6 +199,7 @@ const Editor = (function () {
     bind('v2-btn-row-after', () => editor.chain().focus().addRowAfter().run());
     bind('v2-btn-row-del', () => editor.chain().focus().deleteRow().run());
     bind('v2-btn-table-del', () => editor.chain().focus().deleteTable().run());
+    bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
     // Un <select> (contrairement à un <button>) vole le focus DÈS le

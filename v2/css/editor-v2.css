@@ -19,6 +19,10 @@
 #editor-container .tiptap table .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: #4285f4; pointer-events: none; }
 #editor-container .tiptap .tableWrapper { overflow-x: auto; }
 #editor-container .tiptap.resize-cursor { cursor: col-resize; }
+#editor-container .tiptap .two-columns-zone { display: flex; gap: 16px; margin: 6px 0; }
+#editor-container .tiptap .two-columns-column { flex: 1 1 0; min-width: 0; padding: 4px; border: 1px dashed transparent; }
+#editor-container .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
+#editor-container .tiptap .two-columns-column > *:first-child { margin-top: 0; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }
