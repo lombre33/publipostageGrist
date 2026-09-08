@@ -993,9 +993,16 @@ const PdfExport = (function () {
       const currentIdx = content.indexOf(img);
       let outcome = 'inconnue';
       if (currentIdx !== -1) {
+        // _anchorAboveBlock/_anchorBelowBlock (posés par resolveAnchorIds) sont
+        // l'enveloppe {block, containerLeft, ...} lue par resolveAnchoredImagePositions
+        // (anchor.block.positions...), PAS le bloc pdfmake lui-même - contrairement à
+        // _containingBlock (jamais enveloppé, posé directement dans blockFrom). Chercher
+        // l'enveloppe telle quelle dans content[] ne pouvait jamais la trouver (elle n'y
+        // a jamais été insérée, seul .block l'a été) : indexOf échouait toujours,
+        // laissant l'image bloquée à sa position d'origine malgré l'ancre "trouvée".
         let anchorBlock, insertAfter;
-        if (img._anchorAboveBlock) { anchorBlock = img._anchorAboveBlock; insertAfter = true; }
-        else if (img._anchorBelowBlock) { anchorBlock = img._anchorBelowBlock; insertAfter = false; }
+        if (img._anchorAboveBlock) { anchorBlock = img._anchorAboveBlock.block; insertAfter = true; }
+        else if (img._anchorBelowBlock) { anchorBlock = img._anchorBelowBlock.block; insertAfter = false; }
         else { anchorBlock = img._containingBlock; insertAfter = true; }
         let anchorIdx = content.indexOf(anchorBlock);
         if (anchorIdx !== -1) {
