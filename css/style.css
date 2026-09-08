@@ -1,19 +1,13 @@
 /* Publipostage Grist – stylesheet.
    Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;1,400;1,500&display=swap');
-/* Roboto (import ci-dessus) : police par défaut de pdfmake (vfs_fonts.min.js,
-   chargée dans index.html) pour tout texte sans police explicite dans le
-   document. Avant ce chargement, .ql-editor/#reader-container retombaient sur
-   Helvetica/Arial (police système) alors que le PDF rendait ce même texte en
-   Roboto - deux polices aux métriques de caractères différentes, donc des
-   lignes qui ne se coupent PAS aux mêmes endroits entre l'éditeur et le PDF,
-   même à largeur et taille de police strictement identiques (cf. correctifs
-   précédents sur la largeur du mode A4 et la taille de police par défaut).
-   Chargée ici pour que .ql-editor/#reader-container l'utilisent AUSSI, et non
-   l'inverse (le PDF ne peut pas utiliser Helvetica sans embarquer ses
-   fichiers de police dans le VFS de pdfmake - non fait, hors de portée de ce
-   correctif). */
+/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié
+   séparément dans index.html avant cette feuille. Auto-hébergée (et non plus
+   chargée depuis Google Fonts) pour garantir que .ql-editor/#reader-container
+   utilisent EXACTEMENT les mêmes fichiers de police que ceux embarqués dans
+   le PDF par pdfmake (vfs_fonts.min.js + js/pdf-fonts.js pour le gras) - sans
+   quoi le texte du courrier ne coupe pas ses lignes aux mêmes endroits dans
+   l'éditeur et dans l'export PDF. */
 
 /* === Design tokens ===
    --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils,
