@@ -1,0 +1,20 @@
+/* Style minimal de l'éditeur V2 (TipTap/ProseMirror) - équivalent basique du
+   look de .ql-editor (V1). Volontairement simple pour cet incrément agile,
+   affiné au fil des prochains incréments (tableaux/2 colonnes/images). */
+#editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
+#editor-container .tiptap { outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; }
+#editor-container .tiptap p { margin: 0; }
+#editor-container .tiptap h1, #editor-container .tiptap h2, #editor-container .tiptap h3,
+#editor-container .tiptap h4, #editor-container .tiptap h5, #editor-container .tiptap h6 { margin: 0; font-weight: 700; }
+#editor-container .tiptap h1 { font-size: 24pt; } #editor-container .tiptap h2 { font-size: 20pt; }
+#editor-container .tiptap h3 { font-size: 16pt; } #editor-container .tiptap h4 { font-size: 14pt; }
+#editor-container .tiptap h5 { font-size: 13pt; } #editor-container .tiptap h6 { font-size: 12pt; }
+#editor-container .tiptap ul, #editor-container .tiptap ol { margin: 0; padding-left: 1.4em; }
+#editor-container .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
+#editor-container .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
+
+#v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
+#v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }
+#v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
+#v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
+#v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
