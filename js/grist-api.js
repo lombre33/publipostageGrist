@@ -11,6 +11,7 @@ const GristAPI = (function () {
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   let _tables = [];
   let _columnsByTable = {};
+  let _columnTypesByTable = {};
   let _linkRulesByTable = {};
   let _currentRecord = null;
   let _currentMappings = null;
@@ -204,6 +205,35 @@ const GristAPI = (function () {
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
     }
+    await refreshColumnTypes();
+  }
+
+  // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - utilisé
+  // pour signaler dans la modale de liaison entre tables qu'une colonne est
+  // une Référence (et vers quelle table), afin que l'utilisateur sache qu'il
+  // faut la comparer à l'Identifiant de ligne de la table référencée, pas à
+  // une colonne texte (source du bug "aucune ligne ne correspond" quand on
+  // compare par erreur une Référence à un nom affiché).
+  async function refreshColumnTypes() {
+    _columnTypesByTable = {};
+    try {
+      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
+      const tableIdByRowId = {};
+      for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
+      const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
+      for (let i = 0; i < colsMeta.id.length; i++) {
+        const tableId = tableIdByRowId[colsMeta.parentId[i]];
+        if (!tableId) continue;
+        if (!_columnTypesByTable[tableId]) _columnTypesByTable[tableId] = {};
+        _columnTypesByTable[tableId][colsMeta.colId[i]] = colsMeta.type[i];
+      }
+    } catch (e) {
+      console.warn('[GristAPI] refreshColumnTypes: échec', e);
+    }
+  }
+
+  function getColumnType(tableId, colId) {
+    return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
   }
 
   function updateRowDebug(rowId, receivedAt) {
@@ -539,5 +569,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();

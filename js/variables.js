@@ -250,6 +250,17 @@ const Variables = (function () {
     }
   }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
+  // Signale dans le libellé qu'une colonne est une Référence (et vers quelle
+  // table) - sans ça, rien dans la modale n'indiquait qu'une colonne stocke
+  // en réalité un identifiant de ligne plutôt qu'un texte, menant à des
+  // comparaisons qui semblent raisonnables (comparer à un nom affiché) mais
+  // qui ne peuvent jamais correspondre (cf. retour utilisateur).
+  function describeColumnOption(tableId, colId) {
+    const type = GristAPI.getColumnType(tableId, colId);
+    if (type && type.indexOf('Ref:') === 0) return `${colId} (Référence → ${type.slice(4)})`;
+    if (type && type.indexOf('RefList:') === 0) return `${colId} (Références → ${type.slice(8)})`;
+    return colId;
+  }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
   async function resolveWithRule(varTable, varColumn, rule, record) {
     if (rule.mode === 'singleton') {
@@ -317,8 +328,8 @@ const Variables = (function () {
     // qui a l'air valide mais compare deux identifiants de ligne sans rapport
     // (un id de table A et un id de table B ne coïncident que par hasard).
     const placeholder = '<option value="" disabled selected>— Choisissez une colonne —</option>';
-    selectCible.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${c}</option>`).join('');
-    selectSource.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${c}</option>`).join('');
+    selectCible.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join('');
+    selectSource.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join('');
 
     // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
     // choix actif, pas un état par défaut dans lequel on tombe sans le
@@ -327,8 +338,22 @@ const Variables = (function () {
     let initialCible = existingRule ? existingRule.colonneCible : '';
     let initialSource = existingRule ? existingRule.colonneSource : '';
     if (!existingRule) {
-      const candidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
-      if (candidates.length === 1) { initialCible = 'id'; initialSource = candidates[0]; }
+      // Sens direct : la table courante a une colonne Référence vers la
+      // table cible (ex. "Commandes" -> "Clients" en consultant Commandes).
+      const forwardCandidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
+      if (forwardCandidates.length === 1) {
+        initialCible = 'id'; initialSource = forwardCandidates[0];
+      } else {
+        // Sens inverse (cas le plus courant en pratique) : la table cible a
+        // une colonne Référence vers la table courante (ex. on consulte un
+        // "Employé" et on veut ses "Congés", où c'est Congés.Employe qui
+        // référence Employés, pas l'inverse) - sans cette détection, ce cas
+        // n'était jamais pré-rempli et l'utilisateur devait deviner qu'il
+        // fallait comparer cette colonne Référence à "Identifiant de ligne"
+        // plutôt qu'à une colonne texte (nom affiché, etc.).
+        const reverseCandidates = await GristAPI.findReferenceColumns(targetTable, currentTableId);
+        if (reverseCandidates.length === 1) { initialCible = reverseCandidates[0]; initialSource = 'id'; }
+      }
     }
     radios.forEach(r => { r.checked = r.value === initialMode; });
     if (initialCible) selectCible.value = initialCible;
