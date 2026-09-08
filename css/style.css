@@ -45,6 +45,16 @@
 /* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
+/* #app n'avait ni hauteur ni flex propres : un enfant flex sans flex-basis
+   explicite se dimensionne à son CONTENU par défaut, donc dès que l'éditeur
+   contenait assez de texte pour dépasser la hauteur de la fenêtre, c'est
+   TOUTE LA PAGE qui gagnait sa propre barre de défilement (au lieu du
+   défilement interne déjà prévu sur #editor-container via flex:1+overflow:
+   auto plus bas) - faisant défiler la barre d'outils et le bandeau du haut
+   avec le contenu au lieu de les laisser fixes en haut. #app reproduit donc
+   le même schéma flex-column contraint en hauteur que body, pour que ce
+   soit #editor-container (et #reader-container) qui défile, jamais la page. */
+#app { display:flex; flex-direction:column; height:100%; min-height:0; }
 #toolbar-top { display:flex; flex-direction: column; gap: 8px; padding:10px 14px; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
 .template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:7px; flex-wrap: wrap; }
 .template-bar label, .filename-bar label { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); }
