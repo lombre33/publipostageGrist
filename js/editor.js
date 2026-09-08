@@ -193,20 +193,58 @@ const Editor = (function () {
     const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return el && el.closest ? el.closest(selector) : null;
   }
+  // Pour une sélection COLLAPSED (curseur seul, rien de sélectionné),
+  // execCommand ne matérialise en principe son effet qu'au moment où
+  // l'utilisateur tape RÉELLEMENT un caractère (état "en attente" interne au
+  // navigateur, pour appliquer le format à la PROCHAINE frappe) - ce
+  // mécanisme s'est avéré peu fiable ici (cellule/colonne = contenteditable
+  // imbriqué dans un autre, cf. les nombreux pièges déjà rencontrés dans ce
+  // fichier) : le format restait perdu, revenant à la police/taille par
+  // défaut, forçant l'utilisateur à sélectionner le texte après coup pour
+  // l'appliquer manuellement. Solution robuste, indépendante de cet état
+  // fragile : on insère nous-mêmes un repère de texte invisible (espace de
+  // largeur nulle) portant DÉJÀ le style demandé, et on y place le curseur
+  // JUSTE APRÈS - tout ce que l'utilisateur tape ensuite s'insère alors
+  // naturellement à l'intérieur de cet élément, héritant son style comme
+  // n'importe quel texte tapé dans un span existant.
+  function insertCollapsedFormatMarker(range, styleProps) {
+    const span = document.createElement('span');
+    Object.assign(span.style, styleProps);
+    span.appendChild(document.createTextNode('​'));
+    range.deleteContents();
+    range.insertNode(span);
+    const caret = document.createRange();
+    caret.setStart(span.firstChild, 1);
+    caret.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(caret);
+  }
   // document.execCommand('fontSize', ...) n'accepte QUE les tailles legacy
   // 1-7 (échelle HTML historique), jamais un point réel arbitraire - seul
-  // moyen d'obtenir malgré tout une taille exacte : appliquer une taille
-  // legacy TEMPORAIRE bien reconnaissable (7, la plus grande - peu de risque
-  // qu'elle soit déjà utilisée ailleurs dans `container`), puis remplacer
-  // IMMÉDIATEMENT chaque <font size="7"> ainsi produit par un style inline
-  // portant la VRAIE valeur en pt - lu ensuite comme n'importe quel style
-  // inline générique par pdf-export.js (inheritedStyle), sans callback dédié.
-  function execRealFontSize(container, ptValue) {
+  // moyen d'obtenir malgré tout une taille exacte SUR UNE SÉLECTION RÉELLE :
+  // appliquer une taille legacy TEMPORAIRE bien reconnaissable (7, la plus
+  // grande - peu de risque qu'elle soit déjà utilisée ailleurs dans
+  // `container`), puis remplacer IMMÉDIATEMENT chaque <font size="7"> ainsi
+  // produit par un style inline portant la VRAIE valeur en pt - lu ensuite
+  // comme n'importe quel style inline générique par pdf-export.js
+  // (inheritedStyle), sans callback dédié. Sélection COLLAPSED : cf.
+  // insertCollapsedFormatMarker ci-dessus, plus fiable ici que le mécanisme
+  // "en attente" d'execCommand.
+  function execRealFontSize(container, range, ptValue) {
+    if (range && range.collapsed) { insertCollapsedFormatMarker(range, { fontSize: ptValue }); return; }
     document.execCommand('fontSize', false, '7');
     container.querySelectorAll('font[size="7"]').forEach(f => {
       f.removeAttribute('size');
       f.style.fontSize = ptValue;
     });
+  }
+  // Police : execCommand('fontName', ...) accepte déjà une valeur libre sur
+  // une sélection réelle, mais souffre du même problème de fiabilité que la
+  // taille sur une sélection COLLAPSED (cf. insertCollapsedFormatMarker).
+  function execFontFamily(range, value) {
+    if (range && range.collapsed) { insertCollapsedFormatMarker(range, { fontFamily: value }); return; }
+    document.execCommand('fontName', false, value);
   }
   // Un clic sur un bouton de toolbar déclenche DEUX évènements distincts,
   // 'mousedown' PUIS 'click' - Quill lie ses propres gestionnaires de format
@@ -274,8 +312,8 @@ const Editor = (function () {
         // Taille réelle (pt) : cf. execRealFontSize - execCommand('fontSize')
         // n'accepte pas directement une valeur en pt, d'où l'action dédiée
         // plutôt qu'un simple command/value générique.
-        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); if (v) customAction = () => execRealFontSize(column, v); }
-        else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'Roboto'; }
+        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); if (v) customAction = () => execRealFontSize(column, range, v); }
+        else if (pickerItem.closest('.ql-font')) { const v = pickerItem.getAttribute('data-value') || 'Roboto'; customAction = () => execFontFamily(range, v); }
         else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); }
       }
       if (!handled) return;
@@ -1093,9 +1131,9 @@ const Editor = (function () {
                 // cf. installTwoColumnsToolbarIsolation/execRealFontSize :
                 // execCommand('fontSize') n'accepte pas une valeur en pt.
                 const value = pickerItem.getAttribute('data-value');
-                if (value) execRealFontSize(cell, value);
+                if (value) execRealFontSize(cell, range, value);
               } else if (formatPicker.closest('.ql-font')) {
-                document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'Roboto');
+                execFontFamily(range, pickerItem.getAttribute('data-value') || 'Roboto');
               } else {
                 document.execCommand('formatBlock', false, headerExecValue(pickerItem.getAttribute('data-value')));
               }
