@@ -132,13 +132,75 @@ const Editor = (function () {
     const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return el && el.closest ? el.closest(selector) : null;
   }
-  function installTwoColumnsToolbarIsolation(toolbar) { toolbar.addEventListener('mousedown', function (event) { const target = event.target; const button = target.closest && target.closest('button'); const pickerItem = target.closest && target.closest('.ql-picker-item'); const selection = document.getSelection(); if (!selection || !selection.rangeCount) return; const range = selection.getRangeAt(0); const column = rangeClosest(range, '.two-columns-column'); if (!column) return; let command = null; let value = null; if (button) {
-    // 'indent'/'outdent' hors d'une liste ferait basculer execCommand sur son
-    // propre comportement par défaut (souvent une indentation via <blockquote>
-    // dans Chrome) plutôt que sur la sémantique de retrait de liste attendue -
-    // n'intercepter ce bouton QUE si le curseur est dans un <li>.
-    command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : button.classList.contains('ql-list') ? (button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList') : (button.classList.contains('ql-indent') && rangeClosest(range, 'li')) ? (button.getAttribute('value') === '+1' ? 'indent' : 'outdent') : null;
-  } else if (pickerItem) { if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); command = 'fontSize'; value = v === 'small' ? '2' : v === 'large' ? '5' : v === 'huge' ? '7' : '3'; } else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'sans-serif'; } else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); } } if (!command) return; event.preventDefault(); event.stopPropagation(); column.focus(); selection.removeAllRanges(); selection.addRange(range); document.execCommand(command, false, value); }, true); }
+  function installTwoColumnsToolbarIsolation(toolbar) {
+    toolbar.addEventListener('mousedown', function (event) {
+      const target = event.target;
+      const button = target.closest && target.closest('button');
+      const pickerItem = target.closest && target.closest('.ql-picker-item');
+      const selection = document.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const column = rangeClosest(range, '.two-columns-column');
+      if (!column) return;
+      let command = null; let value = null; let handled = false;
+      if (button) {
+        if (button.classList.contains('ql-bold')) { command = 'bold'; handled = true; }
+        else if (button.classList.contains('ql-italic')) { command = 'italic'; handled = true; }
+        else if (button.classList.contains('ql-underline')) { command = 'underline'; handled = true; }
+        else if (button.classList.contains('ql-strike')) { command = 'strikeThrough'; handled = true; }
+        else if (button.classList.contains('ql-list')) { command = button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList'; handled = true; }
+        else if (button.classList.contains('ql-indent')) {
+          // TOUJOURS intercepté (handled=true) dès qu'on est dans une colonne,
+          // même hors liste : sans ce garde-fou large, un clic sur ce bouton
+          // hors d'un <li> (command reste null, rien n'est exécuté ici) n'était
+          // ni préventDefault ni stoppé - l'évènement continuait sa route
+          // jusqu'au propre gestionnaire par défaut de Quill pour le format
+          // 'indent', qui l'appliquait alors à SA propre sélection interne
+          // (périmée puisque la vraie sélection vit dans cette colonne, hors
+          // du modèle Delta) - concrètement le blot-conteneur de LA ZONE
+          // entière (classe ql-indent-1 posée sur .two-columns-zone/
+          // .editable-table, décalant tout le module) plutôt que la ligne de
+          // liste visée. Confirmé par retour utilisateur avec le HTML exporté.
+          handled = true;
+          if (rangeClosest(range, 'li')) command = button.getAttribute('value') === '+1' ? 'indent' : 'outdent';
+        }
+      } else if (pickerItem) {
+        handled = true;
+        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); command = 'fontSize'; value = v === 'small' ? '2' : v === 'large' ? '5' : v === 'huge' ? '7' : '3'; }
+        else if (pickerItem.closest('.ql-font')) { command = 'fontName'; value = pickerItem.getAttribute('data-value') || 'sans-serif'; }
+        else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); }
+      }
+      if (!handled) return;
+      event.preventDefault(); event.stopPropagation();
+      if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
+      column.focus();
+      selection.removeAllRanges(); selection.addRange(range);
+      document.execCommand(command, false, value);
+    }, true);
+  }
+  // Tab/Maj+Tab à l'intérieur d'un item de liste, en cellule de tableau ou
+  // colonne 2-colonnes : par défaut, Tab y déplace le focus vers la
+  // cellule/colonne suivante (comportement natif du navigateur pour du
+  // contenteditable, normal et voulu HORS liste) - dans une LISTE, l'usage
+  // attendu est plutôt d'indenter/désindenter la ligne, comme le fait déjà
+  // Quill nativement dans le flux principal (non touché ici, cf. garde-fou
+  // ci-dessous). Ne s'applique donc QUE si le curseur est dans un <li> ET que
+  // ce <li> vit dans une cellule/colonne.
+  function installListTabIndent() {
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Tab') return;
+      const selection = window.getSelection && window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const li = rangeClosest(range, 'li');
+      if (!li) return;
+      const container = li.closest('.editable-table td, .editable-table th, .two-columns-column');
+      if (!container) return;
+      event.preventDefault();
+      document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+      quill.update(Quill.sources.USER);
+    }, true);
+  }
 
   // --- Insertion d'image (upload + URL) ---
   function insertImage(value) {
@@ -727,6 +789,7 @@ const Editor = (function () {
     quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
+    installListTabIndent();
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
       const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table');
@@ -857,11 +920,20 @@ const Editor = (function () {
         // cf. installTwoColumnsToolbarIsolation : 'indent'/'outdent' hors d'une
         // liste ferait basculer execCommand sur son comportement par défaut
         // (souvent un <blockquote> dans Chrome) plutôt que sur un retrait de
-        // liste - n'intercepter ce bouton QUE si le curseur est dans un <li>.
+        // liste - n'intercepter L'EXÉCUTION de ce bouton QUE si le curseur est
+        // dans un <li>, mais le clic doit être absorbé (preventDefault/
+        // stopPropagation) dans TOUS les cas tant qu'on est dans une cellule :
+        // sinon, cliqué hors liste, l'évènement continue sa route jusqu'au
+        // gestionnaire par défaut de Quill pour le format 'indent', qui
+        // l'applique alors à SA propre sélection périmée (le blot-conteneur de
+        // la cellule/table entière, pas la ligne visée) - confirmé par retour
+        // utilisateur avec le HTML exporté (classe ql-indent-1 posée sur
+        // .editable-table au lieu du <li>).
         const inList = rangeNow ? !!rangeClosest(rangeNow, 'li') : false;
-        const formatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean') || button.classList.contains('ql-list') || (button.classList.contains('ql-indent') && inList));
+        const isFormatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean') || button.classList.contains('ql-list') || button.classList.contains('ql-indent'));
+        const formatButton = isFormatButton && (!button.classList.contains('ql-indent') || inList) ? button : null;
         const formatPicker = pickerItem && (pickerItem.closest('.ql-size') || pickerItem.closest('.ql-font') || pickerItem.closest('.ql-header'));
-        if (formatButton || formatPicker) {
+        if (isFormatButton || formatPicker) {
           const selection = window.getSelection && window.getSelection();
           if (selection && selection.rangeCount) {
             const range = selection.getRangeAt(0).cloneRange();
@@ -873,13 +945,18 @@ const Editor = (function () {
             if (formatButton) {
               const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : button.classList.contains('ql-list') ? (button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList') : button.classList.contains('ql-indent') ? (button.getAttribute('value') === '+1' ? 'indent' : 'outdent') : 'removeFormat';
               document.execCommand(command, false, null);
-            } else if (formatPicker.closest('.ql-size')) {
-              const value = pickerItem.getAttribute('data-value');
-              document.execCommand('fontSize', false, value ? (value === 'small' ? '2' : value === 'large' ? '5' : value === 'huge' ? '7' : '3') : '3');
-            } else if (formatPicker.closest('.ql-font')) {
-              document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'sans-serif');
-            } else {
-              document.execCommand('formatBlock', false, headerExecValue(pickerItem.getAttribute('data-value')));
+            } else if (formatPicker) {
+              // "Indenter" cliqué hors liste (isFormatButton vrai, formatButton
+              // null, formatPicker null aussi) tombe ici SANS rien exécuter -
+              // le clic reste absorbé (preventDefault/stopPropagation ci-dessus).
+              if (formatPicker.closest('.ql-size')) {
+                const value = pickerItem.getAttribute('data-value');
+                document.execCommand('fontSize', false, value ? (value === 'small' ? '2' : value === 'large' ? '5' : value === 'huge' ? '7' : '3') : '3');
+              } else if (formatPicker.closest('.ql-font')) {
+                document.execCommand('fontName', false, pickerItem.getAttribute('data-value') || 'sans-serif');
+              } else {
+                document.execCommand('formatBlock', false, headerExecValue(pickerItem.getAttribute('data-value')));
+              }
             }
             quill.update(Quill.sources.USER);
           }
