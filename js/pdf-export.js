@@ -416,31 +416,44 @@ const PdfExport = (function () {
     // de sa colonne - n'étaient respectées).
     const availableWidthPt = 595.28 - 56;
     const minColWidthPt = 12;
+    // pdfmake ajoute paddingLeft+paddingRight (cf. `layout` plus bas, 4+4=8pt)
+    // À CHAQUE colonne EN PLUS de la valeur qu'on lui donne dans `widths` -
+    // une valeur explicite dans `widths` est donc la largeur du CONTENU, pas
+    // la largeur totale rendue de la colonne. Vérifié en décodant le flux PDF
+    // réellement généré : chaque colonne sortait exactement 8.5pt plus large
+    // que prévu (8pt de padding + ~0.5pt de bordure), un tableau de 4 colonnes
+    // débordant ainsi de 34pt à droite de la page malgré des `widths` sommant
+    // pourtant exactement à la largeur disponible. Il faut donc retirer cet
+    // encombrement AVANT de répartir la largeur disponible, pour qu'une fois
+    // le padding rajouté par pdfmake, le total rendu retombe exactement sur
+    // la largeur de page.
+    const cellPaddingPt = 8; // doit rester cohérent avec layout.paddingLeft/paddingRight ci-dessous
+    const usableForColumnsPt = Math.max(minColWidthPt * columnCount, availableWidthPt - columnCount * cellPaddingPt);
     const colgroup = node.querySelector(':scope > colgroup');
     const colPercents = colgroup ? Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 0) : [];
     while (colPercents.length < columnCount) colPercents.push(0);
     const percentSum = colPercents.slice(0, columnCount).reduce((sum, p) => sum + p, 0);
     let widths;
     if (percentSum > 0) {
-      // Normalise D'ABORD pour sommer exactement à availableWidthPt, quel que
+      // Normalise D'ABORD pour sommer exactement à usableForColumnsPt, quel que
       // soit percentSum réel (resizeTableColumn peut légèrement dériver de
       // 100% sur un redimensionnement extrême - un plancher de 5% clampé d'un
       // côté sans que son voisin ne recule exactement d'autant).
-      widths = colPercents.slice(0, columnCount).map(p => (p / percentSum) * availableWidthPt);
+      widths = colPercents.slice(0, columnCount).map(p => (p / percentSum) * usableForColumnsPt);
       const flooredTotal = widths.reduce((sum, w) => sum + Math.max(minColWidthPt, w), 0);
-      if (flooredTotal > availableWidthPt) {
+      if (flooredTotal > usableForColumnsPt) {
         // Le plancher minimal (colonne glissée très étroite) ferait à lui
         // seul dépasser la largeur de page si on l'appliquait tel quel - on
         // retire le manque aux colonnes encore AU-DESSUS du plancher, au
         // prorata, plutôt que de laisser le tableau déborder à droite.
-        const deficit = flooredTotal - availableWidthPt;
+        const deficit = flooredTotal - usableForColumnsPt;
         const aboveFloorTotal = widths.reduce((sum, w) => sum + (w > minColWidthPt ? w : 0), 0) || 1;
         widths = widths.map(w => w > minColWidthPt ? Math.max(minColWidthPt, w - deficit * (w / aboveFloorTotal)) : minColWidthPt);
       } else {
         widths = widths.map(w => Math.max(minColWidthPt, w));
       }
     } else {
-      widths = Array(columnCount).fill(Math.max(minColWidthPt, availableWidthPt / columnCount));
+      widths = Array(columnCount).fill(Math.max(minColWidthPt, usableForColumnsPt / columnCount));
     }
     const table = {
       table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }].concat(Array(Math.max(0, columnCount - 1)).fill({}) )] },
