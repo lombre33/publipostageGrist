@@ -48,7 +48,34 @@ const PdfExport = (function () {
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   function cssSize(value, fallback) { const n = parseFloat(value); return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback; }
   function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); if (match) return match[1].toLowerCase(); const align = (node.getAttribute && node.getAttribute('align')) || ''; const alignLower = align.toLowerCase(); if (alignLower === 'center' || alignLower === 'right' || alignLower === 'justify' || alignLower === 'left') return alignLower; return undefined; }
-  function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp(name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const out = Object.assign({}, parent); if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') out.decoration = 'underline'; if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration') && /underline/i.test(css('text-decoration'))) out.decoration = 'underline'; if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); return out; }
+  // Table HTML5 legacy <font size="N"> : taille ABSOLUE (indépendante du
+  // contexte, contrairement aux classes ql-size-* relatives à la taille
+  // parente) - mesurée en live sur .editable-table (getComputedStyle), pas
+  // devinée depuis la spec HTML (qui ne garantit pas ces valeurs px exactes).
+  const FONT_TAG_SIZE_PX = { 1: 10, 2: 13, 3: 16, 4: 18, 5: 24, 6: 32, 7: 48 };
+  // Classes ql-size-* : RELATIVES (em) à la taille de police courante (0.75 /
+  // 1.5 / 2.5, mesuré en live sur .ql-editor) - contrairement à <font size>.
+  const QL_SIZE_RATIO = { 'ql-size-small': 0.75, 'ql-size-large': 1.5, 'ql-size-huge': 2.5 };
+  // Convertit une couleur CSS (rgb()/rgba(), hex déjà valide, ou nom CSS) en
+  // une valeur que pdfmake/PDFKit accepte directement (hex ou nom CSS - il ne
+  // comprend PAS la syntaxe fonctionnelle rgb()/rgba() que Quill/le collage
+  // Word/Gmail produisent pour color/background-color).
+  function cssColorToHex(value) {
+    if (!value) return null;
+    const v = value.trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
+    const m = v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (m) return '#' + [1, 2, 3].map(i => Math.max(0, Math.min(255, parseInt(m[i], 10))).toString(16).padStart(2, '0')).join('');
+    return v;
+  }
+  // Quill ne pose lui-même AUCUNE couleur sur <a> (seulement text-decoration:
+  // underline, cf. .ql-snow .ql-editor a) - le bleu #0066cc vient du style
+  // par défaut du NAVIGATEUR pour un lien (mesuré en live : rgb(0,102,204)),
+  // qu'il faut donc reproduire explicitement ici (pdfmake ne connaît rien du
+  // rendu par défaut d'un <a>, contrairement au navigateur).
+  const LINK_DEFAULT_COLOR = '#0066cc';
+  function addDecoration(out, name) { const list = Array.isArray(out.decoration) ? out.decoration.slice() : (out.decoration ? [out.decoration] : []); if (list.indexOf(name) === -1) list.push(name); out.decoration = list; }
+  function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const cls = node.nodeType === 1 ? (node.classList || { contains: () => false }) : { contains: () => false }; const out = Object.assign({}, parent); if (/^H[1-6]$/.test(tag)) { out.bold = true; out.fontSize = HEADING_SIZES[tag]; } if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') addDecoration(out, 'underline'); if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough'); if (tag === 'SUP') out.sup = true; if (tag === 'SUB') out.sub = true; if (tag === 'A' && node.getAttribute('href')) { out.link = node.getAttribute('href'); out.color = LINK_DEFAULT_COLOR; addDecoration(out, 'underline'); } if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration')) { if (/underline/i.test(css('text-decoration'))) addDecoration(out, 'underline'); if (/line-through/i.test(css('text-decoration'))) addDecoration(out, 'lineThrough'); } if (css('color')) out.color = cssColorToHex(css('color')); if (css('background-color')) out.background = cssColorToHex(css('background-color')); Object.keys(QL_SIZE_RATIO).forEach(name => { if (cls.contains(name)) out.fontSize = Math.max(6, Math.min(72, (parent && parent.fontSize || DEFAULT_FONT_SIZE) * QL_SIZE_RATIO[name])); }); if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); if (tag === 'FONT' && node.getAttribute('size') && FONT_TAG_SIZE_PX[node.getAttribute('size')]) out.fontSize = Math.max(6, Math.min(72, FONT_TAG_SIZE_PX[node.getAttribute('size')] * PX_TO_PT)); return out; }
   // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" — un objet
   // { image: ... } glissé dans un tableau assigné à la propriété `text` d'un
   // bloc pdfmake n'est PAS une syntaxe valide (`text` attend des runs de texte
@@ -100,10 +127,22 @@ const PdfExport = (function () {
       });
       const textNode = walker.nextNode();
       if (!textNode) return 0;
+      // Un bloc centré/aligné à droite pousse son texte loin du bord gauche du
+      // large hôte de mesure (largeur de page entière) - ce n'est PAS un retrait
+      // (padding/liste/citation), juste l'alignement. Neutraliser temporairement
+      // l'alignement du bloc pendant la mesure (le style inline gagne quelle que
+      // soit la source réelle : classe ql-align-*, style, ou attribut HTML
+      // legacy align="...") pour isoler le VRAI retrait, sinon un simple
+      // <p style="text-align:right"> mesurait un retrait de plusieurs centaines
+      // de points - largement de quoi faire passer le texte entier hors de la
+      // largeur de page restante et le forcer à couper un caractère par ligne.
+      const previousAlign = node.style.textAlign;
+      node.style.textAlign = 'left';
       const range = document.createRange();
       range.setStart(textNode, 0);
       range.setEnd(textNode, 1);
       leftPx = range.getBoundingClientRect().left;
+      node.style.textAlign = previousAlign;
     }
     return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
   }
@@ -224,7 +263,7 @@ const PdfExport = (function () {
     }
     return image;
   }
-  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; node.childNodes.forEach(child => { runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
+  function inlineRuns(node, parentStyle, floatingImages) { const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE }); if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : []; if (node.nodeType !== Node.ELEMENT_NODE) return []; if (node.classList.contains('page-break-marker')) return []; if (node.classList.contains('two-columns-marker')) return []; if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }]; if (node.classList.contains('editor-image')) { if (floatingImages && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) { floatingImages.push(pdfImageFromNode(node)); } return []; } if (node.tagName === 'BR') return [{ text: '\n', ...style }]; let runs = []; let sawLineBlock = false; node.childNodes.forEach(child => { const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(child.tagName); if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style }); if (isLineBlock) sawLineBlock = true; runs = runs.concat(inlineRuns(child, style, floatingImages)); }); return runs; }
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR)$/i.test(node.tagName)); }
   // Le navigateur COLLAPSE (masque) les espaces/retours à la ligne en tout
   // début/fin du contenu rendu d'un bloc (règles CSS standard de fusion des
@@ -244,6 +283,24 @@ const PdfExport = (function () {
     if (runs.length) { const last = runs.length - 1; runs[last] = Object.assign({}, runs[last], { text: runs[last].text.replace(/[ \t\n\r\f\v]+$/, '') }); }
     return runs;
   }
+  // Une cellule multi-lignes (plusieurs <p>/<div>/<h1-6> issus de retours à
+  // la ligne bruts, non gérés par Quill) peut avoir une ligne alignée
+  // différemment des autres (même mécanisme execCommand par-sélection que
+  // pour une colonne 2-colonnes, cf. editor.js) - un simple inlineRuns(cell)
+  // aplatit tout dans UN SEUL tableau de texte avec UNE SEULE alignment
+  // (celle de la cellule), perdant l'alignement par ligne. On construit donc
+  // un stack d'une ligne pdfmake par ligne HTML dès qu'il y en a plusieurs,
+  // chacune avec sa propre alignment - sinon (cas courant, une seule ligne)
+  // on garde le texte à plat, sans le surcoût d'un stack.
+  function cellContentFrom(cell) {
+    const lineChildren = Array.from(cell.childNodes).filter(n => n.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(n.tagName));
+    const onlyLineChildren = lineChildren.length > 0 && lineChildren.length === Array.from(cell.childNodes).filter(n => n.nodeType !== Node.TEXT_NODE || n.nodeValue.trim() !== '').length;
+    if (onlyLineChildren) {
+      return { stack: lineChildren.map(line => { const runs = trimEdgeWhitespace(inlineRuns(line, { fontSize: DEFAULT_FONT_SIZE })); const obj = { text: runs.length ? runs : ' ' }; const align = alignment(line); if (align) obj.alignment = align; return obj; }) };
+    }
+    const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
+    return { text: runs.length ? runs : ' ' };
+  }
   function tableFrom(node, pageBreakBefore) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
@@ -256,10 +313,9 @@ const PdfExport = (function () {
       const output = [];
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
-        const text = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
-        const pdfCell = { text: text.length ? text : ' ', margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO };
-        const align = alignment(cell);
-        if (align) pdfCell.alignment = align;
+        const content = cellContentFrom(cell);
+        const pdfCell = Object.assign({ margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
+        if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (colSpan > 1) pdfCell.colSpan = colSpan;
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});
