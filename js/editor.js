@@ -649,13 +649,43 @@ const Editor = (function () {
   function init() {
     let pendingAlignmentCell = null;
     let pendingAlignmentColumn = null;
+    let pendingAlignmentRange = null;
+    // Traduit la valeur du picker Quill (left/center/right/justify) en la
+    // commande native execCommand correspondante, pour appliquer l'alignement
+    // UNIQUEMENT au(x) bloc(s) réellement touché(s) par la sélection - pas à
+    // toute la cellule/colonne (cf. repli plus bas, ancien comportement gardé
+    // pour le seul cas où aucune sélection valide n'a pu être capturée).
+    const JUSTIFY_COMMAND = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight', justify: 'justifyFull' };
+    // Restaure la sélection capturée AVANT l'ouverture du picker (cf. le
+    // mousedown du toolbar plus bas) puis applique l'alignement via la
+    // commande native du navigateur : contrairement à un style posé sur tout
+    // le conteneur, execCommand scope naturellement l'effet au(x) bloc(s) que
+    // la sélection touche réellement (comportement standard de tout éditeur
+    // riche - le texte AVANT/APRÈS la sélection, dans un autre paragraphe de
+    // la même cellule/colonne, n'est jamais affecté).
+    function applyGranularAlignment(container, range, command) {
+      const selection = window.getSelection && window.getSelection();
+      if (!selection) return false;
+      container.focus();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand(command, false, null);
+      quill.update(Quill.sources.USER);
+      return true;
+    }
     const alignHandler = function (value) {
       const cell = pendingAlignmentCell;
       const column = pendingAlignmentColumn;
+      const range = pendingAlignmentRange;
       pendingAlignmentCell = null;
       pendingAlignmentColumn = null;
+      pendingAlignmentRange = null;
       const alignment = value || 'left';
+      const justifyCommand = JUSTIFY_COMMAND[alignment] || 'justifyLeft';
       if (column && column.closest('.two-columns-zone')) {
+        if (range && applyGranularAlignment(column, range, justifyCommand)) return false;
+        // Repli (aucune sélection valide capturée, ex. clic direct sans
+        // sélection préalable) : ancien comportement, toute la colonne.
         column.style.textAlign = alignment === 'justify' ? 'justify' : alignment;
         column.querySelectorAll('p, div, li, blockquote, pre').forEach(function (node) {
           node.style.textAlign = column.style.textAlign;
@@ -666,6 +696,8 @@ const Editor = (function () {
         quill.format('align', alignment, Quill.sources.USER);
         return;
       }
+      if (range && applyGranularAlignment(cell, range, justifyCommand)) { activeCell = cell; return false; }
+      // Repli (aucune sélection valide capturée) : ancien comportement, toute la cellule.
       cell.style.textAlign = alignment === 'justify' ? 'justify' : alignment;
       cell.querySelectorAll('p, div, li, blockquote, pre').forEach(function (node) {
         node.style.textAlign = cell.style.textAlign;
@@ -821,6 +853,17 @@ const Editor = (function () {
       const column = getRealActiveColumn();
       if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
       if (column) pendingAlignmentColumn = column;
+      // Capture la sélection UNIQUEMENT au clic sur le LABEL du picker (pas
+      // encore sur une valeur, pickerItem est alors null) : c'est le seul
+      // moment où la sélection dans la cellule/colonne est encore garantie
+      // valide - au clic sur l'item choisi ensuite, le picker déjà ouvert a
+      // pu faire perdre le focus (et donc la sélection réelle) à la cellule/
+      // colonne. Sans ce filtre, ce second passage écraserait la bonne
+      // sélection capturée au premier par une sélection vide/hors-contexte.
+      if (!pickerItem && (cell || column)) {
+        const selection = window.getSelection && window.getSelection();
+        pendingAlignmentRange = (selection && selection.rangeCount) ? selection.getRangeAt(0).cloneRange() : null;
+      }
     }, true);
     tableTools.addEventListener('click', function (event) { const actionBtn = event.target.closest && event.target.closest('button[data-action]'); const action = actionBtn && actionBtn.dataset.action; if (!action || !activeCell) return; const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex; const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; }; if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); } if (action === 'remove-row' && table.rows.length > 1) row.remove(); if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling)); if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); }); ensureTableColumns(table); quill.update(Quill.sources.USER); });
     Variables.init(quill); return quill;
