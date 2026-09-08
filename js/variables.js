@@ -74,7 +74,17 @@ const Variables = (function () {
     if (match) { const query = match[1].toLowerCase(); const startIndex = range.index - match[0].length; acRange = { index: startIndex, length: match[0].length }; showAutocomplete(query, range); } else hideAutocomplete();
   }
   function showAutocomplete(query, range) { const allVars = GristAPI.getAllVariables(); acItems = allVars.filter(v => v.key.toLowerCase().includes(query)); if (acItems.length === 0) { hideAutocomplete(); return; } acSelectedIndex = 0; renderAutocomplete(); positionAutocomplete(range); acBox.style.display = 'block'; }
-  function renderAutocomplete() { acBox.innerHTML = ''; acItems.forEach((item, idx) => { const div = document.createElement('div'); div.className = 'ac-item' + (idx === acSelectedIndex ? ' selected' : ''); div.textContent = item.key; div.addEventListener('mousedown', function (e) { e.preventDefault(); acSelectedIndex = idx; confirmSelection(); }); acBox.appendChild(div); }); }
+  // IMPORTANT : #autocomplete-box .ac-item:hover (cf. css/style.css) applique le
+  // MÊME surlignage visuel que .ac-item.selected - un survol à la souris SANS
+  // clic donnait donc l'impression trompeuse que "cet item est sélectionné",
+  // alors que acSelectedIndex (la seule chose que lit confirmSelection(), donc
+  // Entrée) restait sur sa dernière valeur réelle (0, ou le dernier item
+  // atteint au clavier/clic) - d'où le bug signalé : survoler un autre item à
+  // la souris puis appuyer sur Entrée insérait quand même le premier. Le
+  // listener 'mouseenter' ci-dessous fait converger l'état réel (acSelectedIndex)
+  // vers ce que l'utilisateur voit déjà en survolant, exactement comme le
+  // ferait n'importe quelle liste déroulante standard (survoler = pré-sélectionner).
+  function renderAutocomplete() { acBox.innerHTML = ''; acItems.forEach((item, idx) => { const div = document.createElement('div'); div.className = 'ac-item' + (idx === acSelectedIndex ? ' selected' : ''); div.textContent = item.key; div.addEventListener('mouseenter', function () { if (acSelectedIndex !== idx) { acSelectedIndex = idx; renderAutocomplete(); } }); div.addEventListener('mousedown', function (e) { e.preventDefault(); acSelectedIndex = idx; confirmSelection(); }); acBox.appendChild(div); }); }
   function moveSelection(delta) { acSelectedIndex = (acSelectedIndex + delta + acItems.length) % acItems.length; renderAutocomplete(); }
   function positionAutocomplete(range) { const bounds = activeQuill.getBounds(range.index); const containerRect = activeQuill.root.getBoundingClientRect(); acBox.style.left = (containerRect.left + bounds.left + window.scrollX) + 'px'; acBox.style.top = (containerRect.top + bounds.top + bounds.height + window.scrollY + 4) + 'px'; }
   function hideAutocomplete() { if (acBox) acBox.style.display = 'none'; acRange = null; }
