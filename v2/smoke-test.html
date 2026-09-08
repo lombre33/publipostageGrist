@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>TipTap smoke test</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  #editor { border: 1px solid #ccc; padding: 12px; min-height: 200px; }
+  #editor table { border-collapse: collapse; width: 100%; }
+  #editor td, #editor th { border: 1px solid #999; padding: 6px; min-width: 60px; }
+  #log { white-space: pre-wrap; background: #f4f4f4; padding: 10px; margin-top: 16px; font-family: monospace; font-size: 12px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "https://esm.sh/*prosemirror-model@1.25.11",
+    "orderedmap": "https://esm.sh/*orderedmap@2.1.1",
+    "prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.4",
+    "prosemirror-transform": "https://esm.sh/*prosemirror-transform@1.12.0",
+    "prosemirror-view": "https://esm.sh/*prosemirror-view@1.42.3",
+    "rope-sequence": "https://esm.sh/*rope-sequence@1.3.4",
+    "prosemirror-history": "https://esm.sh/*prosemirror-history@1.5.0",
+    "prosemirror-keymap": "https://esm.sh/*prosemirror-keymap@1.2.3",
+    "w3c-keyname": "https://esm.sh/*w3c-keyname@2.2.8",
+    "prosemirror-commands": "https://esm.sh/*prosemirror-commands@1.7.1",
+    "prosemirror-schema-list": "https://esm.sh/*prosemirror-schema-list@1.5.1",
+    "prosemirror-tables": "https://esm.sh/*prosemirror-tables@1.8.5",
+    "prosemirror-gapcursor": "https://esm.sh/*prosemirror-gapcursor@1.4.1",
+    "prosemirror-dropcursor": "https://esm.sh/*prosemirror-dropcursor@1.8.2",
+    "prosemirror-inputrules": "https://esm.sh/*prosemirror-inputrules@1.5.1",
+    "prosemirror-changeset": "https://esm.sh/*prosemirror-changeset@2.4.1",
+    "@tiptap/core": "https://esm.sh/@tiptap/core@3.31.3",
+    "@tiptap/pm": "https://esm.sh/@tiptap/pm@3.31.3",
+    "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@3.31.3",
+    "@tiptap/extension-table": "https://esm.sh/@tiptap/extension-table@3.31.3",
+    "@tiptap/extension-table-row": "https://esm.sh/@tiptap/extension-table-row@3.31.3",
+    "@tiptap/extension-table-cell": "https://esm.sh/@tiptap/extension-table-cell@3.31.3",
+    "@tiptap/extension-table-header": "https://esm.sh/@tiptap/extension-table-header@3.31.3"
+  }
+}
+</script>
+</head>
+<body>
+<h1>Test de fumée TipTap/ProseMirror</h1>
+<div id="toolbar">
+  <button id="btn-bold">Gras</button>
+  <button id="btn-bullet">Liste</button>
+  <button id="btn-table">Inserer tableau</button>
+</div>
+<div id="editor"></div>
+<div id="log">Chargement...</div>
+
+<script type="module">
+  const log = (msg) => { document.getElementById('log').textContent += '\n' + msg; };
+
+  try {
+    const { Editor } = await import('@tiptap/core');
+    const { StarterKit } = await import('@tiptap/starter-kit');
+    const { Table } = await import('@tiptap/extension-table');
+    const { TableRow } = await import('@tiptap/extension-table-row');
+    const { TableCell } = await import('@tiptap/extension-table-cell');
+    const { TableHeader } = await import('@tiptap/extension-table-header');
+
+    log('Imports OK via import map + esm.sh.');
+
+    const editor = new Editor({
+      element: document.getElementById('editor'),
+      extensions: [
+        StarterKit,
+        Table.configure({ resizable: false }),
+        TableRow,
+        TableHeader,
+        TableCell,
+      ],
+      content: `
+        <p>Paragraphe normal.</p>
+        <table>
+          <tbody>
+            <tr>
+              <td><p>Texte <strong>gras</strong> dans une cellule</p><ul><li>Item un</li><li>Item deux</li></ul></td>
+              <td><p>Autre cellule</p></td>
+            </tr>
+          </tbody>
+        </table>
+      `,
+    });
+
+    log('Editeur cree avec succes — une seule instance, table + starter-kit charges ensemble.');
+
+    document.getElementById('btn-bold').addEventListener('click', () => editor.chain().focus().toggleBold().run());
+    document.getElementById('btn-bullet').addEventListener('click', () => editor.chain().focus().toggleBulletList().run());
+    document.getElementById('btn-table').addEventListener('click', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run());
+
+    window.__editor = editor;
+
+    setTimeout(() => {
+      log('HTML produit par editor.getHTML():');
+      log(editor.getHTML());
+    }, 300);
+  } catch (e) {
+    log('ERREUR: ' + (e && e.stack || e));
+  }
+</script>
+</body>
+</html>
