@@ -752,14 +752,26 @@ const Editor = (function () {
         if (imageToolbar) imageToolbar.classList.remove('visible');
       }
     });
-    document.getElementById('editor-container').addEventListener('scroll', positionTableToolbar);
-    window.addEventListener('resize', positionTableToolbar);
-    document.getElementById('editor-container').addEventListener('scroll', function () {
+    // Écoute à la fois #editor-container ET quill.root (.ql-editor) : lequel
+    // des deux défile réellement dépend du contexte - #editor-container a
+    // overflow:auto pour le débordement HORIZONTAL (mode Aperçu format A4 sur
+    // fenêtre étroite, largeur fixe 793.71px), mais .ql-editor a sa PROPRE
+    // barre de défilement VERTICALE (height:100%; overflow-y:auto, posé par
+    // Quill lui-même) - et 'scroll' ne remonte PAS aux ancêtres (contrairement
+    // à 'input'/'click') : un listener sur #editor-container ne se déclenche
+    // donc JAMAIS pour un défilement vertical qui a réellement lieu un niveau
+    // plus bas, dans .ql-editor. Sans le second listener, les poignées/la
+    // bulle d'ancrage d'image restaient figées à l'écran (position:fixed
+    // jamais recalculée) pendant que le contenu défilait sous elles.
+    function repositionFloatingUi() {
+      positionTableToolbar();
       positionImageToolbar();
       const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
       if (activeImg) positionImageHandles(activeImg);
       imageAnchorMarkers.forEach((marker, img) => positionAnchorMarker(img));
-    });
+    }
+    document.getElementById('editor-container').addEventListener('scroll', repositionFloatingUi);
+    quill.root.addEventListener('scroll', repositionFloatingUi);
     window.addEventListener('resize', function () {
       positionImageToolbar();
       const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
