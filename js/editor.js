@@ -548,6 +548,54 @@ const Editor = (function () {
     floating.forEach(img => { ensureAnchorMarker(img); positionAnchorMarker(img); });
   }
 
+  // Remplace le contenu de chaque placeholder .toc-marker par un APERÇU en
+  // direct de la vraie liste des titres - numérotée exactement comme dans le
+  // document (même compteur CSS ::before, mesuré ici sur quill.root lui-même,
+  // DÉJÀ attaché à l'écran - contrairement à reader-mode.js/pdf-export.js, pas
+  // besoin d'un rattachement hors-écran temporaire). Variables #Variable NON
+  // résolues (affichées telles quelles, "#Clé") : l'éditeur n'a jamais accès à
+  // une ligne Grist réelle pour les résoudre, cohérent avec le reste de
+  // l'édition (un badge de variable reste "#Clé" partout ailleurs tant qu'on
+  // n'est pas en mode lecture/export). Appelée au chargement (setHTML), au
+  // changement de style de numérotation, et sur tout text-change (cf. init) -
+  // seul un embed contenteditable="false" comme celui-ci peut être modifié
+  // directement sans que Quill ne l'efface (cf. project_quill_mutation_observer).
+  //
+  // IMPORTANT (déclenché sur 'text-change', cf. init) : n'écrit dans le DOM
+  // QUE si le contenu a réellement changé (data-toc-signature comparée avant
+  // toute réécriture). Réécrire innerHTML à chaque appel, même à l'identique,
+  // déclencherait le MutationObserver interne de Quill (qui surveille TOUT
+  // .ql-editor) → un nouveau 'text-change' → une nouvelle exécution planifiée
+  // de cette même fonction → boucle infinie. Avec la garde, l'écho d'un SEUL
+  // rafraîchissement (le nôtre) s'éteint de lui-même au tour suivant, puisque
+  // les entrées recalculées sont alors identiques à la signature déjà posée.
+  function refreshTocMarkers() {
+    if (!quill) return;
+    const tocMarkers = quill.root.querySelectorAll(':scope > .toc-marker');
+    if (!tocMarkers.length) return;
+    const headings = Array.from(quill.root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+    const entries = headings.map(h => {
+      const level = parseInt(h.tagName.slice(1), 10) || 1;
+      let marker = '';
+      try {
+        const raw = getComputedStyle(h, '::before').content;
+        if (raw && raw !== 'none' && raw !== 'normal') { const stripped = raw.replace(/^["']|["']$/g, '').trim(); if (stripped) marker = stripped + ' '; }
+      } catch (e) { /* pas de numérotation configurée */ }
+      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
+    });
+    const signature = JSON.stringify(entries);
+    tocMarkers.forEach(marker => {
+      if (marker.dataset.tocSignature === signature) return;
+      marker.dataset.tocSignature = signature;
+      marker.innerHTML = '';
+      const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = 'Sommaire'; marker.appendChild(title);
+      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = 'Aucun titre trouvé pour l’instant.'; marker.appendChild(empty); return; }
+      entries.forEach(entry => {
+        const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
+        marker.appendChild(line);
+      });
+    });
+  }
   function setImageHandlesVisible(img, visible) {
     const handles = ensureImageHandlesOverlay();
     if (!visible) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
@@ -1018,6 +1066,16 @@ const Editor = (function () {
       '<button data-action="remove-col" data-tip="− colonne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16"/></svg></button>';
     document.getElementById('editor-container').appendChild(tableTools);
     quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
+    // Sommaire tenu à jour EN DIRECT pendant la frappe (titre édité, titre
+    // ajouté/supprimé...) - léger debounce (250ms) pour ne pas rescanner tous
+    // les titres à CHAQUE caractère tapé, sans effet perceptible pour
+    // l'utilisateur. refreshTocMarkers() lui-même sort tout de suite si aucun
+    // sommaire n'est présent dans le document (cas le plus courant).
+    let tocRefreshTimer = null;
+    quill.on('text-change', function () {
+      if (tocRefreshTimer) clearTimeout(tocRefreshTimer);
+      tocRefreshTimer = setTimeout(refreshTocMarkers, 250);
+    });
     function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
     quill.root.addEventListener('click', function (event) { const cell = event.target.closest && event.target.closest('td,th'); if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; } activeCell = cell; tableTools.classList.add('visible'); positionTableToolbar(); });
     quill.root.addEventListener('click', function (event) {
@@ -1253,6 +1311,7 @@ const Editor = (function () {
     // resélectionnables (cf. ensureAnchorMarker).
     refreshImageAnchorMarkers();
     syncHeadingNumberingDataset();
+    refreshTocMarkers();
   }
   // Reporte le style choisi (cf. HeadingNumberingConfigBlot) sur .ql-editor
   // lui-même sous forme de data-attribute : c'est CE data-attribute que les
@@ -1282,6 +1341,10 @@ const Editor = (function () {
       quill.update(Quill.sources.SILENT);
     }
     syncHeadingNumberingDataset();
+    // Le style choisi change le texte de CHAQUE marqueur (::before) déjà
+    // affiché devant les titres - le sommaire déjà inséré doit donc être
+    // regénéré immédiatement, pas seulement à la prochaine frappe.
+    refreshTocMarkers();
   }
   return { init, getQuill, getHTML, setHTML, insertImage, uploadImage, getHeadingNumberingStyle, setHeadingNumberingStyle };
 })();

@@ -244,18 +244,18 @@ body { display:flex; flex-direction:column; }
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 .ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { display: inline-flex; align-items: center; width: auto; }
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc { display: inline-flex; align-items: center; width: auto; }
 /* Boutons "large" injectés par editor.js (icône SVG + libellé) : page-break,
-   tableau, 2 colonnes, image, image URL. Même gabarit que les icon-btn Quill
-   voisins, mais avec du texte. */
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-two-columns, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url {
+   tableau, 2 colonnes, image, image URL, sommaire. Même gabarit que les
+   icon-btn Quill voisins, mais avec du texte. */
+.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-two-columns, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc {
   height: 30px; padding: 0 9px; gap: 6px; border-radius: var(--radius-sm);
   font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text);
 }
-.ql-toolbar .ql-page-break:hover, .ql-toolbar .ql-insert-table:hover, .ql-toolbar .ql-insert-two-columns:hover { background: var(--surface-sunken); }
+.ql-toolbar .ql-page-break:hover, .ql-toolbar .ql-insert-table:hover, .ql-toolbar .ql-insert-two-columns:hover, .ql-toolbar .ql-insert-toc:hover { background: var(--surface-sunken); }
 .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { color: var(--accent); }
 .ql-toolbar .ql-insert-image:hover, .ql-toolbar .ql-insert-image-url:hover { background: var(--accent-soft); }
-.ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
+.ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg, .ql-toolbar .ql-insert-toc svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
 .ql-toolbar .ql-undo svg, .ql-toolbar .ql-redo svg { width: 16px; height: 16px; vertical-align: -3px; }
 /* margin/padding volontairement réduits au minimum (juste la place du
    repère "2 COLONNES" en haut) : cette "chrome" d'édition n'existe pas côté
@@ -273,7 +273,7 @@ body { display:flex; flex-direction:column; }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-marker { display: none; }
 #reader-container .two-columns-resize-grip { display: none; }
-.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns, .ql-toolbar .ql-formats > .ql-insert-image, .ql-toolbar .ql-formats > .ql-insert-image-url { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
+.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns, .ql-toolbar .ql-formats > .ql-insert-image, .ql-toolbar .ql-formats > .ql-insert-image-url, .ql-toolbar .ql-formats > .ql-insert-toc { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
 .editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
 .editable-table td, .editable-table th { text-align: inherit; }
 
@@ -327,24 +327,31 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 
 /* === Sommaire + numérotation des titres ===
    Configuration invisible (persistée dans le contenu, cf. editor.js
-   HeadingNumberingConfigBlot) et placeholder du marqueur de sommaire dans
-   l'éditeur - remplacé par la vraie liste des titres au rendu (mode lecture/
-   export PDF, cf. reader-mode.js/pdf-export.js), jamais affiché tel quel. */
+   HeadingNumberingConfigBlot). Le marqueur de sommaire (.toc-marker) affiche
+   un APERÇU en direct de la vraie liste des titres DANS l'éditeur lui-même
+   (cf. editor.js:refreshTocMarkers - variables #Variable non résolues, comme
+   partout ailleurs à l'édition), dans un encadré en pointillés qui le
+   distingue du reste du contenu (même traitement visuel que .page-break-marker
+   ci-dessus). En mode lecture (reader-mode.js) et à l'export PDF
+   (pdf-export.js), le même marqueur est entièrement résolu (variables
+   comprises, + numéro de page en PDF) et perd cet encadré pour s'intégrer
+   normalement au document (.toc-resolved). */
 .heading-numbering-config { display: none; }
-.toc-marker { display: block; margin: 18px 0; padding: 10px 14px; border: 1px dashed #6b7280; border-radius: 4px; color: #6b7280; font-size: .9em; user-select: none; }
-/* Mode lecture : le placeholder éditeur (encadré en pointillés) reste masqué,
-   remplacé par la vraie liste des titres construite par reader-mode.js
-   (marquée .toc-resolved) - ré-affichée avec une mise en forme normale. */
-#reader-container .toc-marker { display: none; }
+.toc-marker { display: block; margin: 18px 0; padding: 10px 14px; border: 1px dashed #6b7280; border-radius: 4px; color: #6b7280; font-size: .9em; }
+.toc-title { font-weight: 600; font-size: 1.15em; margin: 0 0 8px; color: inherit; }
+.toc-empty { font-style: italic; color: #6b7280; }
+.toc-entry { padding: 2px 0; }
+.toc-entry.toc-level-2 { margin-left: 14px; }
+.toc-entry.toc-level-3 { margin-left: 28px; }
+.toc-entry.toc-level-4 { margin-left: 42px; }
+.toc-entry.toc-level-5 { margin-left: 56px; }
+.toc-entry.toc-level-6 { margin-left: 70px; }
+/* Mode lecture : le placeholder éditeur (encadré en pointillés, texte muet)
+   reste masqué tant qu'il n'est pas résolu par reader-mode.js - une fois
+   résolu (classe .toc-resolved posée par resolveTocMarkers), ré-affiché avec
+   une mise en forme normale, intégrée au document comme un vrai bloc. */
+#reader-container .toc-marker { display: none; user-select: none; }
 #reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
-#reader-container .toc-title { font-weight: 600; font-size: 1.15em; margin: 0 0 8px; }
-#reader-container .toc-empty { font-style: italic; color: #6b7280; }
-#reader-container .toc-entry { padding: 2px 0; }
-#reader-container .toc-entry.toc-level-2 { margin-left: 14px; }
-#reader-container .toc-entry.toc-level-3 { margin-left: 28px; }
-#reader-container .toc-entry.toc-level-4 { margin-left: 42px; }
-#reader-container .toc-entry.toc-level-5 { margin-left: 56px; }
-#reader-container .toc-entry.toc-level-6 { margin-left: 70px; }
 
 /* Numérotation automatique des titres H1-H6, pilotée par le data-attribute
    data-heading-style posé sur .ql-editor (cf. editor.js:syncHeadingNumberingDataset)
