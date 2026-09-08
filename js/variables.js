@@ -137,10 +137,31 @@ const Variables = (function () {
     acRange = { tableCell: cell, start: caret - match[0].length, end: caret };
     renderAutocomplete(); positionAutocompleteForCell(cell); acBox.style.display = 'block';
   }
+  // Positionne SOUS LE CURSEUR réel, pas sous tout le bloc colonne/cellule :
+  // une colonne peut contenir plusieurs paragraphes bien plus hauts que le
+  // popup lui-même - se caler sur cell.getBoundingClientRect() (bord du
+  // bloc entier) plaçait la popup après le DERNIER paragraphe, potentiel-
+  // lement très loin sous le "#" réellement tapé au milieu du bloc. Le rect
+  // d'un Range collapsed (le curseur) donne directement la ligne exacte.
   function positionAutocompleteForCell(cell) {
-    const cellRect = cell.getBoundingClientRect();
-    acBox.style.left = (cellRect.left + window.scrollX) + 'px';
-    acBox.style.top = (cellRect.bottom + window.scrollY + 4) + 'px';
+    const selection = window.getSelection();
+    let rect = null;
+    if (selection && selection.rangeCount) {
+      const liveRange = selection.getRangeAt(0);
+      const rects = liveRange.getClientRects();
+      rect = (rects && rects.length ? rects[0] : null) || liveRange.getBoundingClientRect();
+    }
+    // Rect vide (tout à 0) : arrive si le curseur est au tout début d'une
+    // ligne/d'un bloc vide - repli sur le bord du bloc, mieux qu'un popup à
+    // (0,0) en haut de la page.
+    if (!rect || (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0)) {
+      rect = cell.getBoundingClientRect();
+      acBox.style.left = (rect.left + window.scrollX) + 'px';
+      acBox.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+      return;
+    }
+    acBox.style.left = (rect.left + window.scrollX) + 'px';
+    acBox.style.top = (rect.bottom + window.scrollY + 4) + 'px';
   }
   async function resolveVariable(varTable, varColumn, currentTableId, record) { const resolvedTableId = currentTableId || GristAPI.getCurrentTableId(); try { if (!record) return ''; if (!resolvedTableId) return '[ERREUR: table courante indisponible]'; if (varTable === resolvedTableId) return formatValue(record[varColumn]); const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable); if (refCols.length === 0) return `[ERREUR: aucune référence vers ${varTable} trouvée dans ${resolvedTableId}]`; let refCol = refCols[0]; if (refCols.length > 1) { refCol = await askUserForRefColumn(refCols, varTable); if (!refCol) return '[Sélection annulée]'; } const refId = record[refCol]; if (!refId) return ''; const rowId = Array.isArray(refId) ? refId[1] : refId; const linkedRow = await GristAPI.fetchRowById(varTable, rowId); if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`; return formatValue(linkedRow[varColumn]); } catch (e) { console.error('[variables] échec résolution', e); return `[ERREUR: résolution de ${varTable}_${varColumn} impossible]`; } }
   function formatValue(val) { if (val === null || val === undefined) return ''; if (Array.isArray(val)) return val.join(', '); return String(val); }
