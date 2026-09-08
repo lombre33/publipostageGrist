@@ -50,7 +50,7 @@
 }
 </script>
 <link rel="stylesheet" href="../css/style.css?v=0.66">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.5">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.6">
 </head>
 <body>
 <div id="app">
@@ -67,6 +67,9 @@
         <button id="btn-mode-edit" class="active" title="Mode édition"><span class="btn-text">Édition</span></button>
         <button id="btn-mode-read" title="Mode lecture"><span class="btn-text">Lecture</span></button>
       </div>
+      <label id="v2-a4-toggle" title="Limite la largeur de l'éditeur à celle du contenu d'une page A4, pour que le texte se répartisse comme dans le PDF.">
+        <input type="checkbox" id="v2-toggle-a4-preview" checked> Aperçu A4
+      </label>
       <span class="bar-sep"></span>
       <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" style="min-width:220px;">
       <button id="btn-export-pdf" title="Exporter en PDF (vectoriel)"><span class="btn-text">Exporter PDF</span></button>
@@ -140,6 +143,6 @@
 <script src="js/variables.js?v=0.1"></script>
 <script src="js/editor.js?v=0.6"></script>
 <script src="js/pdf-export.js?v=0.2"></script>
-<script src="js/main.js?v=0.3"></script>
+<script src="js/main.js?v=0.4"></script>
 </body>
 </html>

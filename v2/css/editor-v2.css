@@ -32,6 +32,22 @@
 
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 
+/* Aperçu format A4 (case #v2-toggle-a4-preview, cf. v2/js/main.js) : contraint
+   .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
+   de marge = 539.28pt, converti en px standard 96/72 = 719.04px), pour que le
+   texte se répartisse sur les lignes comme dans l'export PDF (v2/js/pdf-export.js
+   utilise exactement la même largeur pour ses mesures hors-écran, cf.
+   CONTENT_WIDTH_PX) - même valeurs, même rationale que la V1 (css/style.css).
+   `width` = largeur TOTALE (page + marges), le `padding` simulant la marge de
+   page vient s'y RETRANCHER : 719.04px de contenu + 2×37.33px de marge
+   (28pt convertis en px) = 793.71px. Purement visuel : ne change ni le HTML
+   enregistré, ni aucun comportement de l'éditeur. */
+#editor-container.a4-preview { background: #eef1f5; }
+#editor-container.a4-preview .tiptap { width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+
+#v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
+#v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
+
 /* Numérotation des titres : mêmes compteurs CSS que la V1 (css/style.css,
    .ql-editor[data-heading-style]), scopés à .tiptap au lieu de .ql-editor -
    seuls les titres de premier niveau du flux principal sont numérotés

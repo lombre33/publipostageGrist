@@ -73,6 +73,12 @@
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
+    const toggleA4 = document.getElementById('v2-toggle-a4-preview');
+    if (toggleA4) {
+      const syncA4 = () => editorContainer.classList.toggle('a4-preview', toggleA4.checked);
+      toggleA4.addEventListener('change', syncA4);
+      syncA4();
+    }
     await switchMode('edit');
     setStatus('Widget V2 prêt.');
   }
