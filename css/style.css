@@ -55,32 +55,68 @@ body { display:flex; flex-direction:column; }
    le même schéma flex-column contraint en hauteur que body, pour que ce
    soit #editor-container (et #reader-container) qui défile, jamais la page. */
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
-#toolbar-top { display:flex; flex-direction: column; gap: 8px; padding:10px 14px; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
-.template-bar, .filename-bar, .mode-bar { display:inline-flex; align-items:center; gap:7px; flex-wrap: wrap; }
-.template-bar label, .filename-bar label { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); }
+/* Bandeau compact (demande : maximiser la hauteur dispo pour l'éditeur, on
+   perd déjà de la place en haut à cause de Grist lui-même) : UNE seule ligne
+   toujours visible (.bar-row) + un second volet (#toolbar-panel) replié par
+   défaut pour les deux champs texte rarement modifiés (nom du modèle, nom de
+   fichier PDF) - le reste (sélecteur de modèle, actions, mode, qualité,
+   export) reste des boutons/icônes à portée de clic immédiate. Tous les id
+   de bouton/input sont INCHANGÉS : main.js les cible toujours par les mêmes
+   id, seule la présentation change. */
+#toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
+.bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
+.bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
 #toolbar-top select, #toolbar-top input[type="text"] {
-  font-family: Arial, sans-serif; font-size: 13.5px; color: var(--text);
+  font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  padding: 6px 9px; height: 32px;
+  padding: 4px 8px; height: 28px;
 }
+.template-select { max-width: 160px; }
+.compact-select { max-width: 118px; }
 #toolbar-top button {
   font-family: var(--font-ui); font-weight: 600; font-size: 13px;
-  display: inline-flex; align-items: center; gap: 7px;
-  height: 32px; padding: 0 12px; margin: 0;
+  display: inline-flex; align-items: center;
+  height: 28px; padding: 0 7px; margin: 0;
   border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
   background: transparent; color: var(--text); cursor: pointer;
   transition: background .12s ease, border-color .12s ease;
 }
 #toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
-.a4-toggle { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
-.a4-toggle input { accent-color: var(--accent); cursor: pointer; }
+/* Icône seule par défaut, libellé texte révélé au survol/focus (place
+   minimale au repos, information complète accessible sans clic). Une
+   largeur max de 160px suffit large à tous les libellés de ce bandeau. */
+#toolbar-top button .btn-text, .a4-toggle .btn-text {
+  display:inline-block; max-width:0; opacity:0; overflow:hidden; white-space:nowrap;
+  transition: max-width .16s ease, opacity .1s ease, margin-left .16s ease;
+  vertical-align: middle;
+}
+#toolbar-top button:hover .btn-text, #toolbar-top button:focus-visible .btn-text,
+.a4-toggle:hover .btn-text, .a4-toggle:focus-within .btn-text {
+  max-width: 160px; opacity: 1; margin-left: 6px;
+}
+.a4-toggle { position:relative; display: inline-flex; align-items: center; height:28px; padding:0 7px; border:1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
+.a4-toggle:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
+.a4-toggle input { position:absolute; width:1px; height:1px; opacity:0; }
+.a4-toggle-icon { display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z'/%3E%3Cpath d='M14 2v6h6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z'/%3E%3Cpath d='M14 2v6h6'/%3E%3C/svg%3E"); }
+.a4-toggle.checked { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
 #toolbar-top button::before { content:""; display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
 #btn-new::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
-#btn-save::before, #btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); }
+#btn-save::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); }
+/* Enregistrer sous = copie du modèle courant sous un nouveau nom : icône de
+   duplication distincte de la disquette "Enregistrer" (même symbole que
+   celui déjà utilisé ailleurs dans l'app pour "dupliquer"). */
+#btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); }
 #btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 #btn-export-pdf::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); }
+/* Enregistrer dans PJ : trombone. */
+#btn-save-attachment::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); }
 #btn-mode-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+/* Bouton de bascule du volet #toolbar-panel (nom du modèle / nom de fichier
+   PDF) : chevron qui pivote à 180° quand le volet est ouvert (aria-expanded,
+   posé par main.js). */
+#btn-toggle-panel::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); transition: transform .15s ease; }
+#btn-toggle-panel[aria-expanded="true"]::before { transform: rotate(180deg); }
 /* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de
    la règle générique #toolbar-top button ci-dessus (même compte d'ID que la
    règle générique + type "button" s'annuleraient sinon en cas d'égalité). */
@@ -93,10 +129,20 @@ body { display:flex; flex-direction:column; }
 /* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté
    (même comportement JS : ils gardent leurs id et leur classe .active togglée
    par main.js, seul l'agencement CSS change). */
+.mode-toggle { display:inline-flex; }
 #toolbar-top #btn-mode-edit, #toolbar-top #btn-mode-read { background: var(--surface-sunken); }
 #toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
+/* Volet replié par défaut ([hidden] posé dans le HTML, togglé par main.js) :
+   nom du modèle + nom de fichier PDF, moins souvent consultés que le reste
+   du bandeau - la spécificité de [hidden] doit dépasser celle de .toolbar-panen
+   {display:flex} ci-dessous, d'où le doublement du sélecteur de classe. */
+.toolbar-panel { display:flex; flex-wrap:wrap; gap:10px 16px; padding:8px 10px; border-top:1px solid var(--border); background: var(--surface-sunken); }
+.toolbar-panel.toolbar-panel[hidden] { display:none; }
+.toolbar-panel-field { display:flex; flex-direction:column; gap:2px; flex:1; min-width:220px; }
+.toolbar-panel-field label { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); }
+.toolbar-panel-field input { width:100%; box-sizing:border-box; }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
 #autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
 #autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
