@@ -21,9 +21,22 @@ const Editor = (function () {
   // classes existantes (le rendu visuel ne dépend que de la classe CSS elle-
   // même, pas du nom interne Quill qui la relie à son modèle) sans jamais
   // être écrit par le nouveau picker.
-  const { ClassAttributor, Scope } = Quill.import('parchment');
-  Quill.register(new ClassAttributor('legacySize', 'ql-size', { scope: Scope.INLINE, whitelist: ['small', 'large', 'huge'] }), true);
-  Quill.register(new ClassAttributor('legacyFont', 'ql-font', { scope: Scope.INLINE, whitelist: ['serif', 'monospace'] }), true);
+  //
+  // On CLONE les instances que Quill a DÉJÀ construites avec succès
+  // (formats/size, formats/font), en ne changeant que leur attrName (la clé
+  // sous laquelle Quill.register() les enregistre), plutôt que d'appeler
+  // `new` sur la classe ClassAttributor nous-mêmes : celle-ci n'est pas
+  // exposée de façon fiable via Quill.import('parchment') selon le bundle -
+  // constaté en direct ("ClassAttributor is not a constructor" avec le build
+  // CDN 1.3.6 utilisé ici). Cloner un objet déjà construit contourne
+  // totalement ce problème, quelle que soit la forme exacte de cet export.
+  function cloneAttributorAs(instance, newAttrName) {
+    const clone = Object.create(Object.getPrototypeOf(instance), Object.getOwnPropertyDescriptors(instance));
+    clone.attrName = newAttrName;
+    return clone;
+  }
+  Quill.register(cloneAttributorAs(Quill.import('formats/size'), 'legacySize'), true);
+  Quill.register(cloneAttributorAs(Quill.import('formats/font'), 'legacyFont'), true);
 
   // Nouveau système : tailles réelles (pt) et polices web-safe usuelles, l'un
   // et l'autre via un style inline (font-size/font-family) plutôt qu'une
