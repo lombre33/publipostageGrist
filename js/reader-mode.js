@@ -30,36 +30,29 @@ const ReaderMode = (function () {
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.'; container.appendChild(warn); }
     container.appendChild(wrapper);
   }
-  // Remplace chaque placeholder .toc-marker (posé par l'éditeur, cf.
-  // editor.js:TocBlot) par la vraie liste des titres de premier niveau -
-  // numérotée comme dans l'éditeur (même mécanisme de compteur CSS ::before,
-  // cf. style.css), variables déjà résolues en texte (headings scannés APRÈS
-  // la boucle de résolution des badges ci-dessus). Pas de numéro de page ici
-  // (le mode lecture n'est pas paginé) - contrairement à l'export PDF vectoriel
-  // (cf. pdf-export.js:buildTocStack), seul endroit où cette information a un
-  // sens.
+  // Remplace chaque placeholder .toc-marker (posé par l'éditeur) par la
+  // vraie liste des titres de premier niveau - numérotée avec le même schéma
+  // que la numérotation CSS visible à l'écran (cf. style.css), variables
+  // déjà résolues en texte (headings scannés APRÈS la boucle de résolution
+  // des badges ci-dessus). Pas de numéro de page ici (le mode lecture n'est
+  // pas paginé) - contrairement à l'export PDF vectoriel (cf. pdf-export.js:
+  // buildTocStack), seul endroit où cette information a un sens.
+  //
+  // Le marqueur est RECALCULÉ EN JS (headingCounterEntries ci-dessous),
+  // PAS lu via getComputedStyle(h, '::before').content : ce dernier ne
+  // renvoie que la valeur CSS *déclarée* (ex. littéralement "counter(h1c)"),
+  // jamais le texte réellement affiché à l'écran - `counter()` n'est résolu
+  // qu'au moment de la peinture, la CSSOM ne l'expose pas (vérifié en
+  // conditions réelles, Chrome à jour - un ancien comportement resolu existait
+  // mais n'est plus spec-compliant). Bug pré-existant corrigé au passage :
+  // ce fichier n'a donc plus besoin d'attacher `wrapper` hors-écran pour
+  // mesurer quoi que ce soit ici.
   function resolveTocMarkers(wrapper) {
     const tocMarkers = wrapper.querySelectorAll(':scope > .toc-marker');
     if (!tocMarkers.length) return;
     const headings = Array.from(wrapper.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
-    // getComputedStyle(node, '::before').content n'est fiable que sur un noeud
-    // réellement en boîte (attaché au document) - cf. pdf-export.js:attachMeasureHost,
-    // même contrainte, même remède : attacher hors-écran le temps de la mesure,
-    // puis détacher avant le rattachement normal (fait par l'appelant juste après).
-    const prevPosition = wrapper.style.position, prevLeft = wrapper.style.left, prevVisibility = wrapper.style.visibility;
-    wrapper.style.position = 'absolute'; wrapper.style.left = '-99999px'; wrapper.style.visibility = 'hidden';
-    document.body.appendChild(wrapper);
-    const entries = headings.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
-      let marker = '';
-      try {
-        const raw = getComputedStyle(h, '::before').content;
-        if (raw && raw !== 'none' && raw !== 'normal') { const stripped = raw.replace(/^["']|["']$/g, '').trim(); if (stripped) marker = stripped + ' '; }
-      } catch (e) { /* pas de numérotation configurée */ }
-      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
-    });
-    wrapper.parentNode.removeChild(wrapper);
-    wrapper.style.position = prevPosition; wrapper.style.left = prevLeft; wrapper.style.visibility = prevVisibility;
+    const numberingStyle = wrapper.dataset.headingStyle || 'none';
+    const entries = headingCounterEntries(headings, numberingStyle);
     tocMarkers.forEach(marker => {
       marker.innerHTML = '';
       marker.classList.add('toc-resolved');
@@ -69,6 +62,34 @@ const ReaderMode = (function () {
         const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
         marker.appendChild(line);
       });
+    });
+  }
+  // Reproduit en JS la cascade de compteurs CSS de style.css
+  // (.reader-content[data-heading-style] > h1..h6) : chaque titre incrémente
+  // le compteur de SON niveau et réinitialise ceux des niveaux plus profonds
+  // - même ordre de style par niveau que les règles CSS ::before (numeric/
+  // alpha/roman). Un même titre affiche donc le MÊME marqueur ici qu'à
+  // l'écran dans l'éditeur, sans dépendre de la lecture (non fiable, cf.
+  // commentaire de resolveTocMarkers) d'un ::before déjà peint.
+  const HEADING_COUNTER_SCHEMES = {
+    numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
+    alpha: ['lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal'],
+    roman: ['upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha'],
+  };
+  function formatCounterValue(n, counterStyle) {
+    if (counterStyle === 'lower-alpha') { let s = ''; let v = n; while (v > 0) { const rem = (v - 1) % 26; s = String.fromCharCode(97 + rem) + s; v = Math.floor((v - 1) / 26); } return s; }
+    if (counterStyle === 'upper-roman') { const table = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let s = ''; let v = n; table.forEach(([val, sym]) => { while (v >= val) { s += sym; v -= val; } }); return s; }
+    return String(n);
+  }
+  function headingCounterEntries(headingEls, numberingStyle) {
+    const scheme = HEADING_COUNTER_SCHEMES[numberingStyle];
+    const counters = [0, 0, 0, 0, 0, 0];
+    return headingEls.map(h => {
+      const level = parseInt(h.tagName.slice(1), 10) || 1;
+      counters[level - 1] += 1;
+      for (let i = level; i < 6; i += 1) counters[i] = 0;
+      const marker = scheme ? formatCounterValue(counters[level - 1], scheme[level - 1]) + ') ' : '';
+      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
   async function preview(htmlContent, tableId, record) {
