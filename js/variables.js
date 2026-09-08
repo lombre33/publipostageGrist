@@ -71,6 +71,11 @@ const Variables = (function () {
       hideAutocomplete();
       return;
     }
+    if (acRange && acRange.filenameInput) {
+      insertFilenameVariable(item, acRange);
+      hideAutocomplete();
+      return;
+    }
     if (!acRange) return;
     insertBadge(item);
     hideAutocomplete();
@@ -163,8 +168,59 @@ const Variables = (function () {
     acBox.style.left = (rect.left + window.scrollX) + 'px';
     acBox.style.top = (rect.bottom + window.scrollY + 4) + 'px';
   }
+  // Champ "Nom de fichier PDF" (#pdf-filename-template) : un <input> plein
+  // texte, pas un contenteditable - pas de "badge" HTML possible dedans
+  // (un <input> ne peut contenir que du texte). ReaderMode.resolveFilename()
+  // sait déjà remplacer un motif texte brut "#Cle" par la vraie valeur à
+  // l'export (regex sur la valeur du champ) : insérer directement "#Cle" en
+  // texte, sans badge, est donc suffisant et cohérent avec ce mécanisme déjà
+  // en place - pas besoin d'inventer un nouveau format.
+  function insertFilenameVariable(item, state) {
+    const el = state.filenameInput;
+    const value = el.value;
+    const insertion = '#' + item.key;
+    el.value = value.slice(0, state.start) + insertion + value.slice(state.end);
+    const newCaret = state.start + insertion.length;
+    el.focus();
+    el.setSelectionRange(newCaret, newCaret);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function checkForFilenameTrigger(el) {
+    const caret = el.selectionStart;
+    if (caret == null) { hideAutocomplete(); return; }
+    const text = el.value.slice(0, caret);
+    const match = text.match(/#([A-Za-z0-9_]*)$/);
+    if (!match) { hideAutocomplete(); return; }
+    const query = match[1].toLowerCase();
+    const allVars = GristAPI.getAllVariables();
+    acItems = allVars.filter(v => v.key.toLowerCase().includes(query));
+    if (acItems.length === 0) { hideAutocomplete(); return; }
+    acSelectedIndex = 0;
+    acRange = { filenameInput: el, start: caret - match[0].length, end: caret };
+    renderAutocomplete(); positionAutocompleteForInput(el); acBox.style.display = 'block';
+  }
+  // Un <input> est mono-ligne : pas d'ambiguïté "quelle ligne" comme pour une
+  // colonne/cellule multi-lignes - se caler sous le champ entier revient déjà
+  // à se caler sous le curseur.
+  function positionAutocompleteForInput(el) {
+    const rect = el.getBoundingClientRect();
+    acBox.style.left = (rect.left + window.scrollX) + 'px';
+    acBox.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  }
+  // À appeler depuis main.js une fois le champ de nom de fichier PDF présent
+  // dans le DOM (indépendant de init(quill), qui ne concerne que l'éditeur).
+  function initFilenameInput(el) {
+    if (!el) return;
+    el.addEventListener('input', function () { checkForFilenameTrigger(el); });
+    el.addEventListener('keyup', function (e) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') checkForFilenameTrigger(el); });
+    // Un clic sur un item de la popup (mousedown) doit s'exécuter AVANT le
+    // blur du champ - laisser un court délai pour ne pas fermer la popup
+    // (hideAutocomplete côté document 'click', cf. init()) avant que le
+    // mousedown de renderAutocomplete() n'ait eu la main.
+    el.addEventListener('blur', function () { setTimeout(function () { if (acRange && acRange.filenameInput === el) hideAutocomplete(); }, 150); });
+  }
   async function resolveVariable(varTable, varColumn, currentTableId, record) { const resolvedTableId = currentTableId || GristAPI.getCurrentTableId(); try { if (!record) return ''; if (!resolvedTableId) return '[ERREUR: table courante indisponible]'; if (varTable === resolvedTableId) return formatValue(record[varColumn]); const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable); if (refCols.length === 0) return `[ERREUR: aucune référence vers ${varTable} trouvée dans ${resolvedTableId}]`; let refCol = refCols[0]; if (refCols.length > 1) { refCol = await askUserForRefColumn(refCols, varTable); if (!refCol) return '[Sélection annulée]'; } const refId = record[refCol]; if (!refId) return ''; const rowId = Array.isArray(refId) ? refId[1] : refId; const linkedRow = await GristAPI.fetchRowById(varTable, rowId); if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`; return formatValue(linkedRow[varColumn]); } catch (e) { console.error('[variables] échec résolution', e); return `[ERREUR: résolution de ${varTable}_${varColumn} impossible]`; } }
   function formatValue(val) { if (val === null || val === undefined) return ''; if (Array.isArray(val)) return val.join(', '); return String(val); }
   function askUserForRefColumn(refCols, targetTable) { return new Promise((resolve) => { const modal = document.getElementById('ref-choice-modal'); const text = document.getElementById('ref-choice-text'); const select = document.getElementById('ref-choice-select'); const btnOk = document.getElementById('ref-choice-confirm'); const btnCancel = document.getElementById('ref-choice-cancel'); text.textContent = `Plusieurs colonnes de référence vers "${targetTable}" existent. Laquelle utiliser ?`; select.innerHTML = ''; refCols.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; select.appendChild(opt); }); modal.style.display = 'flex'; function cleanup() { modal.style.display = 'none'; btnOk.removeEventListener('click', onOk); btnCancel.removeEventListener('click', onCancel); } function onOk() { const v = select.value; cleanup(); resolve(v); } function onCancel() { cleanup(); resolve(null); } btnOk.addEventListener('click', onOk); btnCancel.addEventListener('click', onCancel); }); }
-  return { init, resolveVariable, hideAutocomplete };
+  return { init, resolveVariable, hideAutocomplete, initFilenameInput };
 })();
