@@ -15,18 +15,18 @@ const GristAPI = (function () {
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      grist.ready({
-        requiredAccess: 'full',
-        // Fait apparaître une section de mappage dans le panneau de droite
-        // (mode configuration du widget) pour que l'utilisateur choisisse LA
-        // colonne Pièce Jointe de sa propre table où enregistrer le PDF
-        // exporté (bouton dédié, cf. main.js:onSaveToAttachment) - optionnel :
-        // le widget fonctionne normalement si rien n'est mappé, le bouton
-        // signale juste qu'aucune colonne n'est configurée.
-        columns: [
-          { name: 'pdfAttachment', title: 'Colonne PJ pour le PDF exporté', type: 'Attachments', optional: true }
-        ]
-      });
+      // ATTENTION : ne PAS ajouter columns:[...] ici sans revalider en conditions
+      // réelles (Grist) que ça ne casse rien. Un ajout de mappage de colonne
+      // "Colonne PJ pour le PDF exporté" (pour main.js:onSaveToAttachment, cf.
+      // commit 5dfecb1) a coïncidé avec une régression totale de la résolution
+      // des variables #Xxx (vide partout : lecture, export, nom de fichier),
+      // très probablement parce que déclarer des `columns` change la façon
+      // dont Grist peuple `mappings` (dont mappings.tableId, dont dépend toute
+      // la détection de table courante ici) - retiré en urgence tant que la
+      // fonctionnalité PJ elle-même est de toute façon différée (cf. mémoire
+      // project_pdf_attachment_column_feature.md). Revoir get PdfAttachmentColumnId()
+      // plus bas si cette fonctionnalité est reprise plus tard.
+      grist.ready({ requiredAccess: 'full' });
       console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.ready():', e);
