@@ -987,8 +987,11 @@ const PdfExport = (function () {
   // la MÊME page que son propre paragraphe plutôt que sur la dernière page du
   // document.
   function relocateTopLevelFloatingImages(content) {
-    (content || []).filter(b => b && typeof b === 'object' && b._containingBlock).forEach(img => {
+    const floating = (content || []).filter(b => b && typeof b === 'object' && b._containingBlock);
+    console.log('[PdfExport] relocateTopLevelFloatingImages: ' + floating.length + ' image(s) en calque de premier niveau à repositionner.');
+    floating.forEach(img => {
       const currentIdx = content.indexOf(img);
+      let outcome = 'inconnue';
       if (currentIdx !== -1) {
         let anchorBlock, insertAfter;
         if (img._anchorAboveBlock) { anchorBlock = img._anchorAboveBlock; insertAfter = true; }
@@ -998,9 +1001,16 @@ const PdfExport = (function () {
         if (anchorIdx !== -1) {
           content.splice(currentIdx, 1);
           if (currentIdx < anchorIdx) anchorIdx -= 1; // l'index de l'ancre se décale après cette suppression
-          content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, img);
+          const insertedAt = insertAfter ? anchorIdx + 1 : anchorIdx;
+          content.splice(insertedAt, 0, img);
+          outcome = `déplacée : index ${currentIdx} -> ${insertedAt} (ancre trouvée à ${anchorIdx}, insertAfter=${insertAfter})`;
+        } else {
+          outcome = 'ancre NON trouvée dans content[] (anchorBlock existe mais indexOf a échoué) - laissée à sa position d’origine ' + currentIdx;
         }
+      } else {
+        outcome = 'image elle-même absente de content[] au moment du repositionnement (nichée ailleurs ?)';
       }
+      console.log('[PdfExport] relocateTopLevelFloatingImages: image src=' + String(img.image).slice(0, 60) + '… absolutePosition=' + JSON.stringify(img.absolutePosition) + ' -> ' + outcome);
       delete img._containingBlock;
       delete img._anchorAboveBlock;
       delete img._anchorBelowBlock;
@@ -1011,15 +1021,20 @@ const PdfExport = (function () {
     let anchorIdToBlock = {};
     let content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
     let pending = collectPendingImages(content);
+    console.log('[PdfExport] resolveNativePdfContent: ' + pending.length + ' image(s) ancrée(s) (_pendingOffset) trouvée(s).');
     if (pending.length) {
       resolveAnchorIds(pending, anchorIdToBlock);
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
       const resolved = resolveAnchoredImagePositions(pending);
+      console.log('[PdfExport] resolveNativePdfContent: positions résolues =', JSON.stringify(resolved));
       anchorIdToBlock = {};
       content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
       pending = collectPendingImages(content);
       resolveAnchorIds(pending, anchorIdToBlock);
-      pending.forEach((img, i) => { if (resolved[i]) img.absolutePosition = resolved[i]; });
+      pending.forEach((img, i) => {
+        if (resolved[i]) img.absolutePosition = resolved[i];
+        console.log('[PdfExport] resolveNativePdfContent: image #' + i + ' anchorAbove=' + !!img._anchorAboveBlock + ' anchorBelow=' + !!img._anchorBelowBlock + ' absolutePosition=' + JSON.stringify(img.absolutePosition));
+      });
     }
     // Toujours appelé, même sans image "en attente" (_pendingOffset) : couvre
     // aussi les images en calque sans ancre précise résolue (cf. commentaire
