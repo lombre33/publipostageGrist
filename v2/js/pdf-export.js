@@ -109,38 +109,6 @@ const PdfExport = (function () {
     return match ? match[1].toLowerCase() : undefined;
   }
 
-  // Reproduit en JS la même cascade de compteurs que css/editor-v2.css
-  // (.tiptap[data-heading-style] > h1..h6) - PAS via getComputedStyle(h,
-  // '::before').content : ce dernier ne renvoie que la valeur CSS déclarée,
-  // jamais le texte réellement peint (bug réel trouvé et corrigé dans
-  // ../js/reader-mode.js et v2/js/editor.js - même logique dupliquée ici, ces
-  // trois fichiers n'ont historiquement jamais partagé de module utilitaire
-  // commun dans ce projet). Retourne un marqueur PAR titre (pas le texte
-  // complet : blockFrom construit le texte à partir du DOM réel pour
-  // préserver la mise en forme interne du titre, ce marqueur n'est qu'un
-  // préfixe séparé).
-  const HEADING_COUNTER_SCHEMES = {
-    numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
-    alpha: ['lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal'],
-    roman: ['upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha'],
-  };
-  function formatCounterValue(n, counterStyle) {
-    if (counterStyle === 'lower-alpha') { let s = ''; let v = n; while (v > 0) { const rem = (v - 1) % 26; s = String.fromCharCode(97 + rem) + s; v = Math.floor((v - 1) / 26); } return s; }
-    if (counterStyle === 'upper-roman') { const table = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let s = ''; let v = n; table.forEach(([val, sym]) => { while (v >= val) { s += sym; v -= val; } }); return s; }
-    return String(n);
-  }
-  function headingMarkersFor(headingEls, numberingStyle) {
-    const scheme = HEADING_COUNTER_SCHEMES[numberingStyle];
-    if (!scheme) return headingEls.map(() => '');
-    const counters = [0, 0, 0, 0, 0, 0];
-    return headingEls.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
-      counters[level - 1] += 1;
-      for (let i = level; i < 6; i += 1) counters[i] = 0;
-      return formatCounterValue(counters[level - 1], scheme[level - 1]) + ') ';
-    });
-  }
-
   // Construit le contenu pdfmake d'un sommaire à partir des blocs-titre déjà
   // rencontrés - texte et niveau toujours connus dès cet appel, mais PAS le
   // numéro de page (dépend d'une 1ère passe de mise en page, cf.
@@ -274,9 +242,9 @@ const PdfExport = (function () {
   // Marqueur (puce/numéro) d'un <li> : TOUJOURS une vraie liste HTML ici
   // (<ul>/<ol> réels, cf. StarterKit) - contrairement à la V1 (listes Quill
   // plates pilotées par data-list + compteur CSS ::before, jamais fiable via
-  // getComputedStyle, cf. commentaire sur headingMarkersFor), donc pas
-  // besoin de lire quoi que ce soit en CSS : puce fixe pour <ul>, numéro par
-  // position pour <ol> (respecte l'attribut start éventuel).
+  // getComputedStyle, cf. v2/js/heading-numbering.js), donc pas besoin de
+  // lire quoi que ce soit en CSS : puce fixe pour <ul>, numéro par position
+  // pour <ol> (respecte l'attribut start éventuel).
   function listMarkerFor(node) {
     const parent = node.parentElement;
     if (parent && parent.tagName === 'OL') {
@@ -652,7 +620,7 @@ const PdfExport = (function () {
       const style = (config && config.dataset.style) || 'none';
       root.dataset.headingStyle = style;
       const headingEls = Array.from(root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
-      const markers = headingMarkersFor(headingEls, style);
+      const markers = HeadingNumbering.markersFor(headingEls, style);
       headingMarkers = new Map(headingEls.map((el, i) => [el, markers[i]]));
     }
     const detachMeasureHost = attachMeasureHost(root);

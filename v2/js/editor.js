@@ -1,4 +1,5 @@
 // Éditeur V2 — TipTap/ProseMirror (remplace Quill, cf. plan d'architecture).
+//
 // Script CLASSIQUE (pas type="module") : les paquets TipTap/ProseMirror sont
 // chargés via import() DYNAMIQUE à l'intérieur de init() plutôt que via des
 // imports statiques ES module - un import() dynamique respecte la <script
@@ -9,100 +10,42 @@
 // classiques, comme le reste du projet) - un module ES ne voit JAMAIS les
 // `const` de niveau racine d'un autre script, même classique.
 //
-// Incrément agile en cours : couvre à ce stade le flux principal (titres,
-// gras/italique/souligné/barré, alignement, listes, citation, undo/redo,
-// taille/police réelles), les variables #Variable (badge + autocomplétion
-// + résolution en mode Lecture, cf. js/variables.js) et les tableaux
-// (@tiptap/extension-table officiel) et les zones 2 colonnes (paire de
-// nœuds personnalisés twoColumnsZone/twoColumnsColumn, même principe -
-// une colonne accepte du contenu riche directement dans le même schéma de
-// document, cf. plan : aucune instance imbriquée nécessaire, contrairement
-// à la V1/Quill), les images (insertion basique par URL, cf. EditorImage
-// ci-dessous), le saut de page forcé et le sommaire + numérotation des
-// titres (mêmes classes/attributs HTML que la V1 pour que reader-mode.js,
-// réutilisé tel quel, les résolve sans changement). PAS ENCORE couverts
-// (prochains incréments, le gros morceau à venir étant l'export PDF) :
-// calque devant/derrière + repositionnement par glisser d'une image (V1 :
-// image-floating/ancrage, système complexe non repris pour cet incrément),
-// export PDF, configuration de règle inter-tables à l'insertion (modale
-// dédiée de la V1), redimensionnement du ratio des colonnes (2 colonnes
-// égales pour l'instant). `getHTML`/`setHTML` sont
-// volontairement la même forme d'API que l'éditeur V1 (js/editor.js), pour
-// que main.js et les modules partagés (Templates/ReaderMode) s'intègrent
-// sans surprise.
+// `getHTML`/`setHTML` gardent volontairement la même forme d'API que
+// l'éditeur V1 (js/editor.js), pour que main.js et les modules partagés
+// (Templates/ReaderMode) s'intègrent sans surprise.
+//
+// Les nœuds/extensions personnalisés (VarBadge, tableaux 2 colonnes, image,
+// saut de page, numérotation des titres, sommaire) ont besoin des classes
+// TipTap (Node/Extension/mergeAttributes), qui n'existent qu'APRÈS résolution
+// de l'import() dynamique ci-dessus - ils sont donc construits par de petites
+// fonctions `createXxx(...)` qui reçoivent ces classes en paramètre, plutôt
+// que déclarés en haut de fichier. `init()` ne fait qu'appeler ces fonctions
+// et assembler le résultat - la définition de chaque nœud reste isolée et
+// nommée, au lieu de gonfler `init()` lui-même.
 const Editor = (function () {
   let editor = null;
 
-  // Reproduit en JS la cascade de compteurs CSS de css/editor-v2.css
-  // (.tiptap[data-heading-style] > h1..h6), pour l'aperçu vivant du sommaire
-  // (cf. Toc.addNodeView). Duplique volontairement la même logique que
-  // ../js/reader-mode.js:headingCounterEntries (petite fonction pure,
-  // autonome - pas de dépendance croisée entre un module d'édition et un
-  // module de rendu lecture pour ça) ; les deux DOIVENT rester synchronisées
-  // si le schéma de numérotation (css/style.css) change. Ne PAS lire
-  // getComputedStyle(h, '::before').content pour ça : ne renvoie que la
-  // valeur CSS déclarée (ex. littéralement "counter(h1c)"), jamais le texte
-  // réellement peint à l'écran - vérifié en conditions réelles, Chrome à
-  // jour ne résout pas `counter()` via la CSSOM.
-  const HEADING_COUNTER_SCHEMES = {
-    numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
-    alpha: ['lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal'],
-    roman: ['upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha'],
-  };
-  function formatCounterValue(n, counterStyle) {
-    if (counterStyle === 'lower-alpha') { let s = ''; let v = n; while (v > 0) { const rem = (v - 1) % 26; s = String.fromCharCode(97 + rem) + s; v = Math.floor((v - 1) / 26); } return s; }
-    if (counterStyle === 'upper-roman') { const table = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let s = ''; let v = n; table.forEach(([val, sym]) => { while (v >= val) { s += sym; v -= val; } }); return s; }
-    return String(n);
-  }
-  function headingCounterEntries(headingEls, numberingStyle) {
-    const scheme = HEADING_COUNTER_SCHEMES[numberingStyle];
-    const counters = [0, 0, 0, 0, 0, 0];
-    return headingEls.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
-      counters[level - 1] += 1;
-      for (let i = level; i < 6; i += 1) counters[i] = 0;
-      const marker = scheme ? formatCounterValue(counters[level - 1], scheme[level - 1]) + ') ' : '';
-      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
-    });
-  }
-
-  async function init() {
-    const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
-    const { StarterKit } = await import('@tiptap/starter-kit');
-    const { TextAlign } = await import('@tiptap/extension-text-align');
-    const { TextStyle } = await import('@tiptap/extension-text-style');
-    const { FontFamily } = await import('@tiptap/extension-font-family');
-    const { Suggestion } = await import('@tiptap/suggestion');
-    const { Table } = await import('@tiptap/extension-table');
-    const { TableRow } = await import('@tiptap/extension-table-row');
-    const { TableCell } = await import('@tiptap/extension-table-cell');
-    const { TableHeader } = await import('@tiptap/extension-table-header');
-
-    // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
-    // caractère près (contenteditable="false"), même forme HTML que l'éditeur
-    // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
-    // (v1, réutilisés tels quels pour l'instant) le reconnaissent sans
-    // changement : <span class="var-badge" data-table data-column data-key>.
-    const VarBadge = Node.create({
+  // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
+  // caractère près (contenteditable="false"), même forme HTML que l'éditeur
+  // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
+  // le reconnaissent sans changement :
+  // <span class="var-badge" data-table data-column data-key>.
+  function createVarBadgeNode(Node, mergeAttributes) {
+    return Node.create({
       name: 'varBadge',
       group: 'inline',
       inline: true,
       atom: true,
       selectable: true,
       addAttributes() {
-        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap
-        // rend CHAQUE attribut par défaut comme un attribut HTML bare
+        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap rend
+        // CHAQUE attribut par défaut comme un attribut HTML bare
         // (table="..."/column="..."/key="...") EN PLUS des data-table/
-        // data-column/data-key posés à la main juste en dessous - un doublon
-        // constaté en conditions réelles. Ces attributs ne doivent exister
-        // QUE dans le JSON interne du nœud ProseMirror, leur rendu HTML est
-        // entièrement pris en charge par le renderHTML du nœud lui-même.
+        // data-column/data-key posés à la main dans renderHTML ci-dessous -
+        // un doublon constaté en conditions réelles. Ces attributs ne
+        // doivent exister QUE dans le JSON interne du nœud ProseMirror.
         const noBareRender = { default: null, renderHTML: () => ({}) };
-        return {
-          table: noBareRender,
-          column: noBareRender,
-          key: noBareRender,
-        };
+        return { table: noBareRender, column: noBareRender, key: noBareRender };
       },
       parseHTML() {
         return [{
@@ -117,16 +60,18 @@ const Editor = (function () {
         }), '#' + node.attrs.key];
       },
     });
+  }
 
-    // `FontFamily` (paquet officiel) n'ÉTEND PAS 'textStyle' lui-même : c'est
-    // une extension à part qui AUGMENTE la marque 'textStyle' via
-    // `addGlobalAttributes` - la marque elle-même doit être enregistrée
-    // séparément (`TextStyle` ci-dessus), sans quoi ProseMirror lève "There is
-    // no mark type named 'textStyle'" (confirmé en conditions réelles).
-    // `FontSize` suit exactement le même schéma que Color/FontFamily dans
-    // l'écosystème officiel : une extension indépendante qui cible
-    // `types: ['textStyle']`, jamais une sous-classe.
-    const FontSize = Extension.create({
+  // `FontFamily` (paquet officiel, câblé dans init() ci-dessous) n'ÉTEND PAS
+  // 'textStyle' lui-même : c'est une extension à part qui AUGMENTE la marque
+  // 'textStyle' via `addGlobalAttributes` - la marque elle-même doit être
+  // enregistrée séparément (`TextStyle`, également câblée dans init()), sans
+  // quoi ProseMirror lève "There is no mark type named 'textStyle'" (confirmé
+  // en conditions réelles). `FontSize` suit exactement le même schéma que
+  // Color/FontFamily dans l'écosystème officiel : une extension indépendante
+  // qui cible `types: ['textStyle']`, jamais une sous-classe.
+  function createFontSizeExtension(Extension) {
+    return Extension.create({
       name: 'fontSize',
       addGlobalAttributes() {
         return [{
@@ -141,23 +86,23 @@ const Editor = (function () {
         }];
       },
       addCommands() {
-        return {
-          setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run(),
-        };
+        return { setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run() };
       },
     });
+  }
 
-    // Zone 2 colonnes — pas d'extension officielle équivalente à
-    // extension-table ; construite comme une paire de nœuds suivant le même
-    // principe d'imbrication (une colonne accepte du contenu riche
-    // directement dans le schéma, cf. tableau ci-dessus). Mêmes noms de
-    // classe que la V1 (.two-columns-zone/.two-columns-column) pour limiter
-    // l'adaptation de pdf-export.js le moment venu. `isolating: true` sur les
-    // deux nœuds : empêche backspace/suppr en bord de colonne de fusionner
-    // la zone avec le paragraphe voisin (comportement par défaut de
-    // ProseMirror sans ça, vérifié en conditions réelles). Pas encore de
-    // poignée de redimensionnement (ratio des colonnes) - incrément
-    // ultérieur, comme le resize de tableau a suivi séparément en V1.
+  // Zone 2 colonnes — pas d'extension officielle équivalente à
+  // extension-table ; construite comme une paire de nœuds suivant le même
+  // principe d'imbrication (une colonne accepte du contenu riche directement
+  // dans le schéma). Mêmes noms de classe que la V1
+  // (.two-columns-zone/.two-columns-column) pour limiter l'adaptation de
+  // pdf-export.js. `isolating: true` sur les deux nœuds : empêche
+  // backspace/suppr en bord de colonne de fusionner la zone avec le
+  // paragraphe voisin (comportement par défaut de ProseMirror sans ça,
+  // vérifié en conditions réelles). Pas encore de poignée de
+  // redimensionnement (ratio des colonnes) - les deux colonnes sont toujours
+  // 50/50 pour l'instant.
+  function createTwoColumnsNodes(Node, mergeAttributes) {
     const TwoColumnsColumn = Node.create({
       name: 'twoColumnsColumn',
       content: 'block+',
@@ -184,18 +129,20 @@ const Editor = (function () {
         };
       },
     });
+    return { TwoColumnsColumn, TwoColumnsZone };
+  }
 
-    // Image — nœud "atome" en ligne, insertion basique par URL pour cet
-    // incrément (V1 : image-floating/ancrage avec calque devant/derrière et
-    // repositionnement par glisser, cf. mémoire
-    // project_image_anchor_bracketing_interpolation - hors scope ici, à
-    // reprendre une fois l'export PDF V2 en chantier puisque c'est
-    // essentiellement pour l'export que ce système existe). `src`/`alt`
-    // restent des attributs HTML bruts de l'<img> (contrairement à
-    // VarBadge : ici c'est le comportement natif souhaité, même forme que la
-    // V1) ; seul `width` a besoin d'un renderHTML dédié (posé en style
-    // inline, pas en attribut HTML `width`).
-    const EditorImage = Node.create({
+  // Image — nœud "atome" en ligne, insertion basique par URL. V1 a en plus un
+  // calque devant/derrière avec repositionnement par glisser (cf. mémoire
+  // project_image_anchor_bracketing_interpolation) : système entièrement au
+  // service de l'export PDF, pas encore porté ici - à construire quand ce
+  // besoin deviendra concret (cf. mémoire
+  // feedback_v2_defer_complexity_to_pdf_phase), pas avant. `src`/`alt`
+  // restent des attributs HTML bruts de l'<img> (contrairement à VarBadge :
+  // ici c'est le comportement natif souhaité) ; seul `width` a besoin d'un
+  // renderHTML dédié (posé en style inline, pas en attribut HTML `width`).
+  function createEditorImageNode(Node, mergeAttributes) {
+    return Node.create({
       name: 'editorImage',
       group: 'inline',
       inline: true,
@@ -217,17 +164,17 @@ const Editor = (function () {
         return ['img', mergeAttributes(HTMLAttributes, { class: 'editor-image', draggable: 'false' })];
       },
       addCommands() {
-        return {
-          insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run(),
-        };
+        return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
       },
     });
+  }
 
-    // Saut de page forcé — nœud "atome" de bloc, même classe que la V1
-    // (.page-break-marker) pour que pdf-export.js le reconnaisse tel quel le
-    // moment venu ; aucun contenu ProseMirror réel (comme VarBadge), le
-    // libellé n'existe que dans le rendu.
-    const PageBreak = Node.create({
+  // Saut de page forcé — nœud "atome" de bloc, même classe que la V1
+  // (.page-break-marker) pour que pdf-export.js le reconnaisse tel quel ;
+  // aucun contenu ProseMirror réel (comme VarBadge), le libellé n'existe que
+  // dans le rendu.
+  function createPageBreakNode(Node) {
+    return Node.create({
       name: 'pageBreak',
       group: 'block',
       atom: true,
@@ -238,17 +185,18 @@ const Editor = (function () {
         return { insertPageBreak: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
       },
     });
+  }
 
-    // Numérotation des titres — configuration invisible persistée DANS le
-    // contenu (un nœud de plus, comme PageBreak), plutôt que dans une colonne
-    // Grist séparée : évite toute migration de schéma sur la table des
-    // modèles déjà existante (même choix que la V1, cf. HeadingNumberingConfigBlot).
-    // Attribut interne nommé `numberingStyle` (PAS `style`, qui collisionnerait
-    // avec l'attribut HTML `style=` lors du rendu bare par défaut) ; sérialisé
-    // en `data-style` pour rester lisible par reader-mode.js (réutilisé tel
-    // quel) et par les compteurs CSS (cf. css/editor-v2.css, sur `.tiptap`
-    // plutôt que `.ql-editor`).
-    const HeadingNumberingConfig = Node.create({
+  // Numérotation des titres — configuration invisible persistée DANS le
+  // contenu (un nœud de plus, comme PageBreak), plutôt que dans une colonne
+  // Grist séparée : évite toute migration de schéma sur la table des modèles
+  // déjà existante (même choix que la V1, cf. HeadingNumberingConfigBlot).
+  // Attribut interne nommé `numberingStyle` (PAS `style`, qui collisionnerait
+  // avec l'attribut HTML `style=` lors du rendu bare par défaut) ; sérialisé
+  // en `data-style` pour rester lisible par reader-mode.js (réutilisé tel
+  // quel) et par les compteurs CSS (cf. css/editor-v2.css, sur `.tiptap`).
+  function createHeadingNumberingConfigNode(Node) {
+    return Node.create({
       name: 'headingNumberingConfig',
       group: 'block',
       atom: true,
@@ -282,18 +230,20 @@ const Editor = (function () {
         };
       },
     });
+  }
 
-    // Sommaire — nœud "atome" de bloc. Le HTML SÉRIALISÉ (`getHTML()`, utilisé
-    // pour l'enregistrement) reste un simple placeholder statique, comme la
-    // V1 (résolu en vraie liste de titres par reader-mode.js/pdf-export.js
-    // au rendu, pas ici). L'éditeur affiche en revanche un aperçu VIVANT via
-    // un NodeView personnalisé : contrairement à la V1 (où muter le DOM
-    // directement dans .ql-editor risquait de déclencher une boucle avec le
-    // MutationObserver de Quill, cf. mémoire project_quill_mutation_observer),
-    // un NodeView ProseMirror possède son propre sous-arbre DOM et
-    // `ignoreMutation: () => true` suffit à l'isoler proprement du modèle -
-    // pas besoin de signature de garde anti-boucle ici.
-    const Toc = Node.create({
+  // Sommaire — nœud "atome" de bloc. Le HTML SÉRIALISÉ (`getHTML()`, utilisé
+  // pour l'enregistrement) reste un simple placeholder statique, comme la V1
+  // (résolu en vraie liste de titres par reader-mode.js/pdf-export.js au
+  // rendu, pas ici). L'éditeur affiche en revanche un aperçu VIVANT via un
+  // NodeView personnalisé : contrairement à la V1 (où muter le DOM
+  // directement dans .ql-editor risquait de déclencher une boucle avec le
+  // MutationObserver de Quill, cf. mémoire project_quill_mutation_observer),
+  // un NodeView ProseMirror possède son propre sous-arbre DOM et
+  // `ignoreMutation: () => true` suffit à l'isoler proprement du modèle - pas
+  // besoin de signature de garde anti-boucle ici.
+  function createTocNode(Node) {
+    return Node.create({
       name: 'toc',
       group: 'block',
       atom: true,
@@ -312,7 +262,7 @@ const Editor = (function () {
             dom.innerHTML = '';
             if (!headingEls.length) { dom.textContent = 'Sommaire (généré automatiquement à partir des titres)'; return; }
             const style = nodeViewEditor.view.dom.dataset.headingStyle || 'none';
-            headingCounterEntries(headingEls, style).forEach(entry => {
+            HeadingNumbering.entriesFor(headingEls, style).forEach(entry => {
               const line = document.createElement('div');
               line.className = 'toc-entry-preview';
               line.style.paddingLeft = ((entry.level - 1) * 14) + 'px';
@@ -326,6 +276,27 @@ const Editor = (function () {
         };
       },
     });
+  }
+
+  async function init() {
+    const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
+    const { StarterKit } = await import('@tiptap/starter-kit');
+    const { TextAlign } = await import('@tiptap/extension-text-align');
+    const { TextStyle } = await import('@tiptap/extension-text-style');
+    const { FontFamily } = await import('@tiptap/extension-font-family');
+    const { Suggestion } = await import('@tiptap/suggestion');
+    const { Table } = await import('@tiptap/extension-table');
+    const { TableRow } = await import('@tiptap/extension-table-row');
+    const { TableCell } = await import('@tiptap/extension-table-cell');
+    const { TableHeader } = await import('@tiptap/extension-table-header');
+
+    const VarBadge = createVarBadgeNode(Node, mergeAttributes);
+    const FontSize = createFontSizeExtension(Extension);
+    const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
+    const EditorImage = createEditorImageNode(Node, mergeAttributes);
+    const PageBreak = createPageBreakNode(Node);
+    const HeadingNumberingConfig = createHeadingNumberingConfigNode(Node);
+    const Toc = createTocNode(Node);
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
@@ -394,27 +365,36 @@ const Editor = (function () {
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
-    // Réglage de document (pas une mise en forme de sélection) : pas besoin
-    // du ballet capture/restauration de sélection des <select> ci-dessous,
-    // seul le focus est rendu à l'éditeur par confort. Le data-attribute
-    // est posé AVANT de dispatcher la commande (qui déclenche elle-même,
-    // synchronement, le rafraîchissement du sommaire via son NodeView) afin
-    // que ce rafraîchissement lise déjà la bonne valeur.
-    const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
-    if (headingNumberingSelect) {
-      headingNumberingSelect.addEventListener('change', () => {
-        editor.view.dom.dataset.headingStyle = headingNumberingSelect.value;
-        editor.chain().setHeadingNumberingStyle(headingNumberingSelect.value).focus().run();
-      });
-    }
-    // Un <select> (contrairement à un <button>) vole le focus DÈS le
-    // pointerdown, AVANT même l'évènement 'change' - le focus quittant
-    // l'éditeur, la sélection réelle qu'on veut mettre en forme peut être
-    // perdue d'ici là. On la capture donc au pointerdown (position ProseMirror
-    // {from,to}, un simple couple de nombres - PAS besoin de manipuler un
-    // Range DOM comme le faisait l'éditeur V1) et on la restaure
-    // explicitement juste avant d'appliquer la commande, plutôt que de
-    // compter sur .focus() seul pour la retrouver.
+
+    wireHeadingNumberingSelect();
+    wireSelectionDependentSelects();
+  }
+
+  // Réglage de DOCUMENT (numérotation des titres), pas une mise en forme de
+  // sélection : contrairement aux <select> ci-dessous, pas besoin de
+  // capturer/restaurer la sélection texte, seul le focus est rendu à
+  // l'éditeur par confort. Le data-attribute est posé AVANT de dispatcher la
+  // commande (qui déclenche elle-même, synchronement, le rafraîchissement du
+  // sommaire via son NodeView) afin que ce rafraîchissement lise déjà la
+  // bonne valeur.
+  function wireHeadingNumberingSelect() {
+    const select = document.getElementById('v2-heading-numbering-select');
+    if (!select) return;
+    select.addEventListener('change', () => {
+      editor.view.dom.dataset.headingStyle = select.value;
+      editor.chain().setHeadingNumberingStyle(select.value).focus().run();
+    });
+  }
+
+  // Un <select> de mise en forme (titre/taille/police), contrairement à un
+  // <button>, vole le focus DÈS le pointerdown, AVANT même l'évènement
+  // 'change' - le focus quittant l'éditeur, la sélection réelle qu'on veut
+  // mettre en forme peut être perdue d'ici là. On la capture donc au
+  // pointerdown (position ProseMirror {from,to}, un simple couple de nombres
+  // - PAS besoin de manipuler un Range DOM comme le faisait l'éditeur V1) et
+  // on la restaure explicitement juste avant d'appliquer la commande, plutôt
+  // que de compter sur .focus() seul pour la retrouver.
+  function wireSelectionDependentSelects() {
     let savedSelection = null;
     const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
     const withSavedSelection = (fn) => {
@@ -450,9 +430,9 @@ const Editor = (function () {
     editor.commands.setContent(html || '', { emitUpdate: false });
     editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
     // Un modèle chargé peut déjà porter une numérotation configurée : la
-    // valeur ci-dessus vient d'être posée mais le NodeView du sommaire a
-    // déjà fait son premier rendu (pendant setContent, donc AVANT). On force
-    // un rafraîchissement en dispatchant une transaction sans changement de
+    // valeur ci-dessus vient d'être posée mais le NodeView du sommaire a déjà
+    // fait son premier rendu (pendant setContent, donc AVANT). On force un
+    // rafraîchissement en dispatchant une transaction sans changement de
     // document - même idée que `quill.update(Quill.sources.SILENT)` en V1
     // pour resynchroniser l'affichage après une modification externe au flux
     // normal d'édition.
