@@ -63,27 +63,27 @@ const Variables = (function () {
   function moveSelection(delta) { acSelectedIndex = (acSelectedIndex + delta + acItems.length) % acItems.length; renderAutocomplete(); }
   function positionAutocomplete(range) { const bounds = activeQuill.getBounds(range.index); const containerRect = activeQuill.root.getBoundingClientRect(); acBox.style.left = (containerRect.left + bounds.left + window.scrollX) + 'px'; acBox.style.top = (containerRect.top + bounds.top + bounds.height + window.scrollY + 4) + 'px'; }
   function hideAutocomplete() { if (acBox) acBox.style.display = 'none'; acRange = null; }
-  function confirmSelection() {
+  // Insertion asynchrone : avant d'insérer une variable d'une AUTRE table que la
+  // table courante, on doit s'assurer qu'une règle de correspondance existe (cf.
+  // ensureLinkConfigured plus bas) - ce qui peut ouvrir une modale et donc
+  // suspendre l'insertion. On capture item/range AVANT de cacher la popup
+  // (hideAutocomplete() vide acRange), pour pouvoir insérer après coup.
+  async function confirmSelection() {
     if (acItems.length === 0) return;
     const item = acItems[acSelectedIndex];
-    if (acRange && acRange.tableCell) {
-      insertTableCellBadge(item, acRange);
-      hideAutocomplete();
-      return;
-    }
-    if (acRange && acRange.filenameInput) {
-      insertFilenameVariable(item, acRange);
-      hideAutocomplete();
-      return;
-    }
-    if (!acRange) return;
-    insertBadge(item);
+    const range = acRange;
+    if (!range) return;
     hideAutocomplete();
+    const ok = await ensureLinkConfigured(item);
+    if (!ok) return;
+    if (range.tableCell) { insertTableCellBadge(item, range); return; }
+    if (range.filenameInput) { insertFilenameVariable(item, range); return; }
+    insertBadge(item, range);
   }
-  function insertBadge(item) {
-    activeQuill.deleteText(acRange.index, acRange.length);
-    activeQuill.insertEmbed(acRange.index, 'varbadge', { table: item.table, column: item.column, key: item.key });
-    activeQuill.setSelection(acRange.index + 1, 0);
+  function insertBadge(item, range) {
+    activeQuill.deleteText(range.index, range.length);
+    activeQuill.insertEmbed(range.index, 'varbadge', { table: item.table, column: item.column, key: item.key });
+    activeQuill.setSelection(range.index + 1, 0);
   }
   function nativeCaretOffset(cell) {
     const selection = window.getSelection();
@@ -219,8 +219,188 @@ const Variables = (function () {
     // mousedown de renderAutocomplete() n'ait eu la main.
     el.addEventListener('blur', function () { setTimeout(function () { if (acRange && acRange.filenameInput === el) hideAutocomplete(); }, 150); });
   }
-  async function resolveVariable(varTable, varColumn, currentTableId, record) { const resolvedTableId = currentTableId || GristAPI.getCurrentTableId(); try { if (!record) return ''; if (!resolvedTableId) return '[ERREUR: table courante indisponible]'; if (varTable === resolvedTableId) return formatValue(record[varColumn]); const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable); if (refCols.length === 0) return `[ERREUR: aucune référence vers ${varTable} trouvée dans ${resolvedTableId}]`; let refCol = refCols[0]; if (refCols.length > 1) { refCol = await askUserForRefColumn(refCols, varTable); if (!refCol) return '[Sélection annulée]'; } const refId = record[refCol]; if (!refId) return ''; const rowId = Array.isArray(refId) ? refId[1] : refId; const linkedRow = await GristAPI.fetchRowById(varTable, rowId); if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`; return formatValue(linkedRow[varColumn]); } catch (e) { console.error('[variables] échec résolution', e); return `[ERREUR: résolution de ${varTable}_${varColumn} impossible]`; } }
+  // Référencer une colonne d'une AUTRE table que la table courante repose sur
+  // une règle de correspondance configurée UNE FOIS (cf. ensureLinkConfigured/
+  // showLinkConfigModal, appelées à l'INSERTION de la variable, pas ici) plutôt
+  // que sur une résolution ambiguë à chaque rendu - resolveVariable, appelée à
+  // chaque rendu du mode lecture ET à l'export (seul point d'entrée partagé),
+  // ne doit donc jamais bloquer sur une popup : elle applique la règle si elle
+  // existe, sinon retombe sur l'ancien mécanisme (1ère colonne Référence
+  // trouvée, sans demander confirmation) pour les variables insérées avant
+  // cette fonctionnalité.
+  async function resolveVariable(varTable, varColumn, currentTableId, record) {
+    const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
+    try {
+      if (!record) return '';
+      if (!resolvedTableId) return '[ERREUR: table courante indisponible]';
+      if (varTable === resolvedTableId) return formatValue(record[varColumn]);
+      const rule = GristAPI.getLinkRule(varTable);
+      if (rule) return await resolveWithRule(varTable, varColumn, rule, record);
+      const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
+      if (refCols.length === 0) return `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]`;
+      const refId = record[refCols[0]];
+      if (!refId) return '';
+      const rowId = unwrapRefValue(refId);
+      const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
+      if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
+      return formatValue(linkedRow[varColumn]);
+    } catch (e) {
+      console.error('[variables] échec résolution', e);
+      return `[ERREUR: résolution de ${varTable}.${varColumn} impossible]`;
+    }
+  }
+  function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
+  function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
+  async function resolveWithRule(varTable, varColumn, rule, record) {
+    if (rule.mode === 'singleton') {
+      const rows = await GristAPI.fetchTableRows(varTable);
+      if (!rows.length) return '';
+      const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
+      return formatValue(first[varColumn]);
+    }
+    const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
+    if (sourceVal === undefined || sourceVal === null) return '';
+    const rows = await GristAPI.fetchTableRows(varTable);
+    const matches = rows.filter(r => {
+      const cibleVal = rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]);
+      return sameValue(cibleVal, sourceVal);
+    });
+    if (!matches.length) return '';
+    return formatValue(matches.map(r => r[varColumn]));
+  }
   function formatValue(val) { if (val === null || val === undefined) return ''; if (Array.isArray(val)) return val.join(', '); return String(val); }
-  function askUserForRefColumn(refCols, targetTable) { return new Promise((resolve) => { const modal = document.getElementById('ref-choice-modal'); const text = document.getElementById('ref-choice-text'); const select = document.getElementById('ref-choice-select'); const btnOk = document.getElementById('ref-choice-confirm'); const btnCancel = document.getElementById('ref-choice-cancel'); text.textContent = `Plusieurs colonnes de référence vers "${targetTable}" existent. Laquelle utiliser ?`; select.innerHTML = ''; refCols.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; select.appendChild(opt); }); modal.style.display = 'flex'; function cleanup() { modal.style.display = 'none'; btnOk.removeEventListener('click', onOk); btnCancel.removeEventListener('click', onCancel); } function onOk() { const v = select.value; cleanup(); resolve(v); } function onCancel() { cleanup(); resolve(null); } btnOk.addEventListener('click', onOk); btnCancel.addEventListener('click', onCancel); }); }
-  return { init, resolveVariable, hideAutocomplete, initFilenameInput };
+
+  // --- Configuration des correspondances entre tables (à l'insertion + panneau
+  // de gestion) --------------------------------------------------------------
+
+  // Appelée avant toute insertion de variable (badge éditeur, badge cellule,
+  // texte du nom de fichier) : si la variable vient d'une AUTRE table que la
+  // table courante et qu'aucune règle n'existe encore pour cette table, ouvre
+  // la modale de configuration et enregistre la règle choisie AVANT que
+  // l'insertion ne se poursuive. Retourne false si l'utilisateur annule (rien
+  // n'est alors inséré).
+  async function ensureLinkConfigured(item) {
+    const currentTableId = GristAPI.getCurrentTableId();
+    if (!currentTableId || item.table === currentTableId) return true;
+    if (GristAPI.getLinkRule(item.table)) return true;
+    const rule = await showLinkConfigModal(item.table, currentTableId, null);
+    if (!rule) return false;
+    await GristAPI.saveLinkRule(item.table, rule);
+    refreshLinkRulesPanel();
+    return true;
+  }
+  // Modale de configuration d'une règle de correspondance, partagée par
+  // l'insertion (existingRule=null, pré-remplie par auto-détection si une
+  // seule colonne Référence candidate existe) et le panneau de gestion
+  // (existingRule fourni, pour modifier une règle déjà enregistrée). Résout
+  // avec {mode, colonneCible, colonneSource} ou null si annulé.
+  async function showLinkConfigModal(targetTable, currentTableId, existingRule) {
+    const modal = document.getElementById('link-config-modal');
+    if (!modal) return null;
+    const title = document.getElementById('link-config-title');
+    const radios = modal.querySelectorAll('input[name="link-config-mode"]');
+    const matchFields = document.getElementById('link-config-match-fields');
+    const cibleLabel = document.getElementById('link-config-table-cible-name');
+    const sourceLabel = document.getElementById('link-config-table-source-name');
+    const selectCible = document.getElementById('link-config-col-cible');
+    const selectSource = document.getElementById('link-config-col-source');
+    const btnOk = document.getElementById('link-config-confirm');
+    const btnCancel = document.getElementById('link-config-cancel');
+
+    title.textContent = `Comment trouver la bonne ligne dans « ${targetTable} » ?`;
+    cibleLabel.textContent = targetTable;
+    sourceLabel.textContent = currentTableId;
+    selectCible.innerHTML = '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${c}</option>`).join('');
+    selectSource.innerHTML = '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${c}</option>`).join('');
+
+    let initialMode = existingRule ? existingRule.mode : null;
+    let initialCible = existingRule ? existingRule.colonneCible : 'id';
+    let initialSource = existingRule ? existingRule.colonneSource : '';
+    if (!existingRule) {
+      const candidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
+      if (candidates.length === 1) { initialMode = 'match'; initialCible = 'id'; initialSource = candidates[0]; }
+    }
+    radios.forEach(r => { r.checked = r.value === initialMode; });
+    selectCible.value = initialCible || 'id';
+    if (initialSource) selectSource.value = initialSource;
+    matchFields.hidden = initialMode !== 'match';
+
+    function onModeChange() {
+      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
+      matchFields.hidden = !checked || checked.value !== 'match';
+    }
+    radios.forEach(r => r.addEventListener('change', onModeChange));
+    modal.style.display = 'flex';
+
+    return new Promise((resolve) => {
+      function cleanup() {
+        modal.style.display = 'none';
+        radios.forEach(r => r.removeEventListener('change', onModeChange));
+        btnOk.removeEventListener('click', onOk);
+        btnCancel.removeEventListener('click', onCancel);
+      }
+      function onOk() {
+        const checked = modal.querySelector('input[name="link-config-mode"]:checked');
+        if (!checked) { cleanup(); resolve(null); return; }
+        const rule = checked.value === 'singleton'
+          ? { mode: 'singleton' }
+          : { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
+        cleanup();
+        resolve(rule);
+      }
+      function onCancel() { cleanup(); resolve(null); }
+      btnOk.addEventListener('click', onOk);
+      btnCancel.addEventListener('click', onCancel);
+    });
+  }
+
+  function describeRule(rule) {
+    if (rule.mode === 'singleton') return 'une seule ligne (paramètres)';
+    const cible = rule.colonneCible === 'id' ? 'identifiant de ligne' : rule.colonneCible;
+    const source = rule.colonneSource === 'id' ? 'identifiant de ligne' : rule.colonneSource;
+    return `${cible} = ${source}`;
+  }
+  // Panneau de gestion (volet #toolbar-panel) : liste les tables déjà
+  // configurées, avec un bouton pour modifier ou supprimer chaque règle.
+  // Appelée au démarrage (main.js) et après chaque modification.
+  function refreshLinkRulesPanel() {
+    const list = document.getElementById('link-rules-list');
+    if (!list) return;
+    const rules = GristAPI.getAllLinkRules();
+    list.innerHTML = '';
+    if (!rules.length) {
+      const empty = document.createElement('p');
+      empty.className = 'link-rules-empty';
+      empty.textContent = 'Aucune table liée pour l’instant.';
+      list.appendChild(empty);
+      return;
+    }
+    rules.forEach(rule => {
+      const row = document.createElement('div');
+      row.className = 'link-rule-row';
+      const label = document.createElement('span');
+      label.className = 'link-rule-label';
+      label.textContent = `${rule.tableCible} : ${describeRule(rule)}`;
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button'; btnEdit.textContent = 'Modifier';
+      btnEdit.addEventListener('click', async () => {
+        const currentTableId = GristAPI.getCurrentTableId();
+        if (!currentTableId) return;
+        const newRule = await showLinkConfigModal(rule.tableCible, currentTableId, rule);
+        if (!newRule) return;
+        await GristAPI.saveLinkRule(rule.tableCible, newRule);
+        refreshLinkRulesPanel();
+      });
+      const btnDelete = document.createElement('button');
+      btnDelete.type = 'button'; btnDelete.textContent = 'Supprimer';
+      btnDelete.addEventListener('click', async () => {
+        if (!confirm(`Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`)) return;
+        await GristAPI.deleteLinkRule(rule.tableCible);
+        refreshLinkRulesPanel();
+      });
+      row.appendChild(label); row.appendChild(btnEdit); row.appendChild(btnDelete);
+      list.appendChild(row);
+    });
+  }
+  return { init, resolveVariable, hideAutocomplete, initFilenameInput, refreshLinkRulesPanel };
 })();

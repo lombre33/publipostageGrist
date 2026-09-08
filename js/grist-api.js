@@ -2,8 +2,16 @@
 console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.0');
 
 const GristAPI = (function () {
+  // Tables internes de bookkeeping du widget (modèles, règles de correspon-
+  // dance entre tables) - jamais des tables "métier" de l'utilisateur, donc
+  // exclues de _tables/getAllVariables/tout sélecteur de table présenté à
+  // l'utilisateur (sans quoi elles polluaient la liste d'autocomplétion #
+  // et les sélecteurs de table cible du panneau de liaison).
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables'];
+  const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   let _tables = [];
   let _columnsByTable = {};
+  let _linkRulesByTable = {};
   let _currentRecord = null;
   let _currentMappings = null;
   let _currentOptions = null;
@@ -104,6 +112,11 @@ const GristAPI = (function () {
     } catch (e) {
       console.error('[GristAPI] refreshSchema a échoué:', e);
     }
+    try {
+      await loadLinkRules();
+    } catch (e) {
+      console.error('[GristAPI] loadLinkRules a échoué:', e);
+    }
     console.log('[GristAPI] init terminé.');
   }
 
@@ -175,7 +188,7 @@ const GristAPI = (function () {
   async function refreshSchema() {
     try {
       const tables = await grist.docApi.listTables();
-      _tables = tables || [];
+      _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
       _columnsByTable = {};
       for (const t of _tables) {
@@ -277,6 +290,104 @@ const GristAPI = (function () {
     const row = {};
     for (const key of Object.keys(data)) row[key] = data[key][idx];
     return row;
+  }
+
+  // Toutes les lignes d'une table sous forme de tableau d'objets {colonne: valeur}
+  // (au lieu du format colonnaire brut de fetchTable) - utilisé par la résolution
+  // "match"/"singleton" des règles de liaison entre tables (cf. saveLinkRule plus
+  // bas), qui doit comparer/lire plusieurs lignes à la fois, contrairement à
+  // fetchRowById qui n'en cible qu'une seule.
+  async function fetchTableRows(tableId) {
+    const data = await grist.docApi.fetchTable(tableId);
+    const ids = data && data.id ? data.id : [];
+    const rows = [];
+    for (let i = 0; i < ids.length; i++) {
+      const row = {};
+      for (const key of Object.keys(data)) row[key] = data[key][i];
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  // Table de bookkeeping stockant, pour chaque table cible référencée via #
+  // depuis une table différente de la table courante, COMMENT en trouver la
+  // bonne ligne : soit "singleton" (une seule ligne pertinente, ex. une table
+  // de paramètres), soit "match" (comparer ColonneCible de la table cible à
+  // ColonneSource de la table courante - ColonneSource ou ColonneCible peut
+  // valoir le littéral "id" pour désigner l'identifiant de ligne Grist). Un
+  // seul mécanisme générique couvre donc colonne Référence directe, relation
+  // inverse, et correspondance par clé métier arbitraire. Même pattern que
+  // Publipostage_Modeles (templates.js) : table créée à la volée au premier
+  // besoin, jamais explicitement par l'utilisateur.
+  async function ensureLinksTableExists() {
+    const tables = await grist.docApi.listTables();
+    if (tables.includes(LINKS_TABLE_NAME)) return;
+    try {
+      await grist.docApi.applyUserActions([
+        ['AddTable', LINKS_TABLE_NAME, [
+          { id: 'TableCible', type: 'Text' },
+          { id: 'Mode', type: 'Text' },
+          { id: 'ColonneCible', type: 'Text' },
+          { id: 'ColonneSource', type: 'Text' }
+        ]]
+      ]);
+    } catch (e) {
+      console.error('[GristAPI] Erreur création table de liaison', e);
+    }
+  }
+
+  async function loadLinkRules() {
+    await ensureLinksTableExists();
+    _linkRulesByTable = {};
+    try {
+      const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+      const ids = data && data.id ? data.id : [];
+      for (let i = 0; i < ids.length; i++) {
+        _linkRulesByTable[data.TableCible[i]] = {
+          id: data.id[i],
+          mode: data.Mode[i],
+          colonneCible: data.ColonneCible[i],
+          colonneSource: data.ColonneSource[i]
+        };
+      }
+    } catch (e) {
+      console.warn('[GristAPI] loadLinkRules: échec de lecture', e);
+    }
+  }
+
+  function getLinkRule(tableId) { return _linkRulesByTable[tableId] || null; }
+
+  function getAllLinkRules() {
+    return Object.keys(_linkRulesByTable).map(t => Object.assign({ tableCible: t }, _linkRulesByTable[t]));
+  }
+
+  // Upsert (une seule règle par table cible) - écrase la précédente si l'utilisateur
+  // reconfigure une table déjà liée (depuis le panneau de gestion, ou en réinsérant
+  // la variable après une modification de schéma).
+  async function saveLinkRule(tableCible, rule) {
+    await ensureLinksTableExists();
+    const columns = {
+      TableCible: tableCible,
+      Mode: rule.mode,
+      ColonneCible: rule.mode === 'match' ? (rule.colonneCible || '') : '',
+      ColonneSource: rule.mode === 'match' ? (rule.colonneSource || '') : ''
+    };
+    const existing = _linkRulesByTable[tableCible];
+    if (existing) {
+      await grist.docApi.applyUserActions([['UpdateRecord', LINKS_TABLE_NAME, existing.id, columns]]);
+      _linkRulesByTable[tableCible] = { id: existing.id, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
+    } else {
+      const result = await grist.docApi.applyUserActions([['AddRecord', LINKS_TABLE_NAME, null, columns]]);
+      const newId = result.retValues[0];
+      _linkRulesByTable[tableCible] = { id: newId, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
+    }
+  }
+
+  async function deleteLinkRule(tableCible) {
+    const existing = _linkRulesByTable[tableCible];
+    if (!existing) return;
+    await grist.docApi.applyUserActions([['RemoveRecord', LINKS_TABLE_NAME, existing.id]]);
+    delete _linkRulesByTable[tableCible];
   }
 
   // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré côté
@@ -428,5 +539,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn };
+  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();

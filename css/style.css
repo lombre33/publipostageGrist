@@ -147,7 +147,18 @@ body { display:flex; flex-direction:column; }
 #autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
 #autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
-#ref-choice-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
+#link-config-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.modal-content { background:#fff; border-radius:8px; padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
+.link-config-modal-content h3 { margin:0 0 10px; font-size:14px; }
+.link-config-mode { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:13px; }
+.link-config-match-fields { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.link-config-match-fields select { width:100%; box-sizing:border-box; }
+.modal-actions { display:flex; justify-content:flex-end; gap:8px; }
+.link-rules-list { display:flex; flex-direction:column; gap:4px; max-height:120px; overflow:auto; }
+.link-rule-row { display:flex; align-items:center; gap:6px; font-size:12px; padding:3px 0; border-bottom:1px solid var(--border); }
+.link-rule-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.link-rule-row button { font-size:11px; padding:2px 6px; }
+.link-rules-empty { font-size:12px; color: var(--text-faint); margin:0; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
 /* Aperçu format A4 (case à cocher #toggle-a4-preview) : contraint .ql-editor à
