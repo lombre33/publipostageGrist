@@ -132,6 +132,35 @@ const Editor = (function () {
     const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return el && el.closest ? el.closest(selector) : null;
   }
+  // Un clic sur un bouton de toolbar déclenche DEUX évènements distincts,
+  // 'mousedown' PUIS 'click' - Quill lie ses propres gestionnaires de format
+  // ('list'/'indent' notamment) sur 'click' (phase bulle, par défaut), pas sur
+  // 'mousedown'. preventDefault()/stopPropagation() sur 'mousedown' (ce que
+  // font installTwoColumnsToolbarIsolation et le gestionnaire de cellule)
+  // n'empêche donc PAS ce second évènement 'click' d'atteindre ensuite le
+  // gestionnaire de Quill, qui applique alors le format à SA PROPRE sélection
+  // interne périmée (le blot-conteneur de la cellule/colonne, hors du modèle
+  // Delta) - reconstruisant parfois sa structure DOM au passage (cas de
+  // 'list' : le curseur/focus se retrouve alors éjecté du module, on tape en
+  // dehors). Pour un format CARACTÈRE (gras/italique...) appliqué à une
+  // sélection interne périmée généralement VIDE, cette fuite ne produisait
+  // aucun effet visible (rien à mettre en gras) - d'où un problème resté
+  // invisible jusqu'ici, mais bien réel pour tout format de BLOC (indent,
+  // list) qui s'applique au bloc contenant le curseur, jamais collapsed.
+  // Fix : le gestionnaire 'mousedown' pose ce drapeau dès qu'il absorbe un
+  // clic (cf. handled/isFormatButton) ; ce gestionnaire 'click', posé en
+  // phase CAPTURE (donc avant le gestionnaire bulle de Quill, quel que soit
+  // l'ordre d'enregistrement), consomme le drapeau et stoppe ce second
+  // évènement avant qu'il n'atteigne Quill.
+  let suppressNextToolbarClick = false;
+  function installToolbarClickSuppression(toolbar) {
+    toolbar.addEventListener('click', function (event) {
+      if (!suppressNextToolbarClick) return;
+      suppressNextToolbarClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+  }
   function installTwoColumnsToolbarIsolation(toolbar) {
     toolbar.addEventListener('mousedown', function (event) {
       const target = event.target;
@@ -172,6 +201,7 @@ const Editor = (function () {
       }
       if (!handled) return;
       event.preventDefault(); event.stopPropagation();
+      suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
       if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
       column.focus();
       selection.removeAllRanges(); selection.addRange(range);
@@ -789,6 +819,7 @@ const Editor = (function () {
     quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
     const toolbar = document.querySelector('.ql-toolbar');
     if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
+    if (toolbar) installToolbarClickSuppression(toolbar);
     installListTabIndent();
     if (toolbar) {
       const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
@@ -939,6 +970,7 @@ const Editor = (function () {
             const range = selection.getRangeAt(0).cloneRange();
             event.preventDefault();
             event.stopPropagation();
+            suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
             cell.focus();
             selection.removeAllRanges();
             selection.addRange(range);
