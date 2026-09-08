@@ -12,6 +12,13 @@
 #editor-container .tiptap ul, #editor-container .tiptap ol { margin: 0; padding-left: 1.4em; }
 #editor-container .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 #editor-container .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
+#editor-container .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
+#editor-container .tiptap table td, #editor-container .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; }
+#editor-container .tiptap table th { background: #f2f4f7; font-weight: 700; text-align: left; }
+#editor-container .tiptap table .selectedCell { background: rgba(66, 133, 244, 0.15); }
+#editor-container .tiptap table .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: #4285f4; pointer-events: none; }
+#editor-container .tiptap .tableWrapper { overflow-x: auto; }
+#editor-container .tiptap.resize-cursor { cursor: col-resize; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }

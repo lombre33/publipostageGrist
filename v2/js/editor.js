@@ -11,9 +11,12 @@
 //
 // Incrément agile en cours : couvre à ce stade le flux principal (titres,
 // gras/italique/souligné/barré, alignement, listes, citation, undo/redo,
-// taille/police réelles) et les variables #Variable (badge + autocomplétion
-// + résolution en mode Lecture, cf. js/variables.js). PAS ENCORE couverts
-// (prochains incréments) : tableaux, zone 2 colonnes, images, sommaire/
+// taille/police réelles), les variables #Variable (badge + autocomplétion
+// + résolution en mode Lecture, cf. js/variables.js) et les tableaux
+// (@tiptap/extension-table officiel - une cellule accepte du contenu riche
+// directement dans le même schéma de document, cf. plan : aucune instance
+// imbriquée nécessaire, contrairement à la V1/Quill). PAS ENCORE couverts
+// (prochains incréments) : zone 2 colonnes, images, sommaire/
 // numérotation de titres, export PDF, configuration de règle inter-tables à
 // l'insertion (modale dédiée de la V1). `getHTML`/`setHTML` sont
 // volontairement la même forme d'API que l'éditeur V1 (js/editor.js), pour
@@ -29,6 +32,10 @@ const Editor = (function () {
     const { TextStyle } = await import('@tiptap/extension-text-style');
     const { FontFamily } = await import('@tiptap/extension-font-family');
     const { Suggestion } = await import('@tiptap/suggestion');
+    const { Table } = await import('@tiptap/extension-table');
+    const { TableRow } = await import('@tiptap/extension-table-row');
+    const { TableCell } = await import('@tiptap/extension-table-cell');
+    const { TableHeader } = await import('@tiptap/extension-table-header');
 
     // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
     // caractère près (contenteditable="false"), même forme HTML que l'éditeur
@@ -109,6 +116,14 @@ const Editor = (function () {
         FontSize,
         VarBadge,
         Variables.createExtension(Extension, Suggestion),
+        // Tableau : extensions officielles, colonnes redimensionnables (même
+        // comportement de poignée que la V1, cf. mémoire
+        // project_table_resize_handle_regression) - validées dans
+        // v2/smoke-test.html avec du contenu riche réel dans une cellule.
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableHeader,
+        TableCell,
       ],
       content: '',
     });
@@ -134,6 +149,14 @@ const Editor = (function () {
     bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
     bind('v2-btn-ordered', () => editor.chain().focus().toggleOrderedList().run());
     bind('v2-btn-blockquote', () => editor.chain().focus().toggleBlockquote().run());
+    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run());
+    bind('v2-btn-col-before', () => editor.chain().focus().addColumnBefore().run());
+    bind('v2-btn-col-after', () => editor.chain().focus().addColumnAfter().run());
+    bind('v2-btn-col-del', () => editor.chain().focus().deleteColumn().run());
+    bind('v2-btn-row-before', () => editor.chain().focus().addRowBefore().run());
+    bind('v2-btn-row-after', () => editor.chain().focus().addRowAfter().run());
+    bind('v2-btn-row-del', () => editor.chain().focus().deleteRow().run());
+    bind('v2-btn-table-del', () => editor.chain().focus().deleteTable().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
     // Un <select> (contrairement à un <button>) vole le focus DÈS le
