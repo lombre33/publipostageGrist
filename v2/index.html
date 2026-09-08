@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8"><title>Publipostage Grist (V2 — TipTap)</title><meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js"></script>
+<script src="../js/pdf-fonts.js?v=0.67"></script>
+<script src="../js/pdf-fonts-extra.js?v=0.67"></script>
 <!-- Import map : necessaire pour charger TipTap/ProseMirror sans bundler
      local (absent de l'environnement de dev) - fixe explicitement UNE SEULE
      instance de chaque paquet prosemirror-* partage entre @tiptap/core et
@@ -63,6 +67,9 @@
         <button id="btn-mode-edit" class="active" title="Mode édition"><span class="btn-text">Édition</span></button>
         <button id="btn-mode-read" title="Mode lecture"><span class="btn-text">Lecture</span></button>
       </div>
+      <span class="bar-sep"></span>
+      <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" style="min-width:220px;">
+      <button id="btn-export-pdf" title="Exporter en PDF (vectoriel)"><span class="btn-text">Exporter PDF</span></button>
       <span id="status-msg"></span>
     </div>
     <div id="v2-toolbar">
@@ -132,6 +139,7 @@
 <script src="../js/reader-mode.js?v=0.67"></script>
 <script src="js/variables.js?v=0.1"></script>
 <script src="js/editor.js?v=0.6"></script>
-<script src="js/main.js?v=0.2"></script>
+<script src="js/pdf-export.js?v=0.2"></script>
+<script src="js/main.js?v=0.3"></script>
 </body>
 </html>
