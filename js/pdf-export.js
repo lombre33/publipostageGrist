@@ -648,8 +648,14 @@ const PdfExport = (function () {
     blocks.push(block);
     images.forEach(img => {
       const layer = img._layer; delete img._layer;
-      if (layer === 'behind' && behindImages) { behindImages.push(img); return; }
-      if (layer === 'front' && frontImages) { frontImages.push(img); return; }
+      // _containingBlock : repère de repli pour relocateTopLevelFloatingImages
+      // (plus bas) - posé pour TOUTE image en calque, même celle qui n'a PAS
+      // trouvé de paragraphe voisin exploitable (cf. pdfImageFromNode, branche
+      // sans data-anchor-off-* : _pendingOffset n'est alors jamais posé, donc
+      // jamais retrouvée par le seul mécanisme d'ancrage précis) - sans lui,
+      // cette image restait à l'extrémité globale du document (cf. plus bas).
+      if (layer === 'behind' && behindImages) { img._containingBlock = block; behindImages.push(img); return; }
+      if (layer === 'front' && frontImages) { img._containingBlock = block; frontImages.push(img); return; }
       if (remainingPageBreak) { img.pageBreak = 'before'; remainingPageBreak = false; }
       blocks.push(img);
     });
@@ -725,8 +731,12 @@ const PdfExport = (function () {
   // celles "devant" ajoutées après tout (peintes en dernier, donc par-dessus) :
   // pdfmake n'a pas de z-index, seul l'ordre d'insertion dans content[]
   // détermine l'ordre de peinture. absolutePosition les sort de toute façon du
-  // flux normal, donc ce réordonnancement n'affecte pas la mise en page du
-  // reste du document.
+  // flux normal, donc ce placement initial n'affecte PAS la mise en page du
+  // reste du document (aucun texte poussé/décalé) - MAIS détermine quelle
+  // PAGE pdfmake leur attribue (limitation pdfmake, cf.
+  // relocateTopLevelFloatingImages plus bas) : ce placement de premier niveau
+  // n'est que provisoire, chaque image de premier niveau est ensuite repêchée
+  // et repositionnée juste à côté de son ancre réelle par cette fonction.
   function htmlToPdfContent(html, leftOriginPt, sharedAnchorIdToBlock) {
     const root = document.createElement('div'); root.innerHTML = html || '';
     // Attaché hors-écran le temps du parcours (cf. measureIndentPt / attachMeasureHost)
@@ -961,38 +971,61 @@ const PdfExport = (function () {
   // périmètre bien plus restreint où ce même défaut pdfmake est nettement
   // moins susceptible de se manifester (une zone 2-colonnes s'étend rarement
   // sur plusieurs pages) - non corrigé ici, hors périmètre de ce correctif.
-  function relocateTopLevelPendingImages(content, pending) {
-    pending.forEach(img => {
+  //
+  // S'applique à TOUTE image en calque de premier niveau (marquée
+  // `_containingBlock`, cf. blockFrom), pas seulement celles ayant une ancre
+  // précise résolue (`_pendingOffset`) : une image SANS paragraphe voisin
+  // exploitable (cas fréquent sur un document simple - une seule ligne, ou
+  // l'image seule sur son propre paragraphe) ne passe jamais par ce mécanisme
+  // d'ancrage précis (cf. pdfImageFromNode, branche sans data-anchor-off-*) et
+  // restait donc, avant ce correctif, coincée à l'extrémité globale du
+  // document malgré le premier correctif ci-dessus (qui ne déplaçait que les
+  // images déjà ancrées). `_containingBlock` (son propre bloc-paragraphe,
+  // toujours connu - c'est celui dans lequel blockFrom l'a rencontrée) sert
+  // alors de repère de repli : moins précis qu'une vraie ancre pour le calcul
+  // x/y (déjà fait ailleurs), mais garantit qu'elle est au moins composée sur
+  // la MÊME page que son propre paragraphe plutôt que sur la dernière page du
+  // document.
+  function relocateTopLevelFloatingImages(content) {
+    (content || []).filter(b => b && typeof b === 'object' && b._containingBlock).forEach(img => {
       const currentIdx = content.indexOf(img);
-      if (currentIdx === -1) return; // pas de premier niveau (nichée dans une colonne) - laissée telle quelle
-      const anchorBlock = img._anchorAboveBlock || img._anchorBelowBlock;
-      if (!anchorBlock) return; // aucune ancre résolue - repli page/marge existant, aucun meilleur emplacement disponible
-      let anchorIdx = content.indexOf(anchorBlock);
-      if (anchorIdx === -1) return;
-      content.splice(currentIdx, 1);
-      if (currentIdx < anchorIdx) anchorIdx -= 1; // l'index de l'ancre se décale après cette suppression
-      content.splice(img._anchorAboveBlock ? anchorIdx + 1 : anchorIdx, 0, img);
+      if (currentIdx !== -1) {
+        let anchorBlock, insertAfter;
+        if (img._anchorAboveBlock) { anchorBlock = img._anchorAboveBlock; insertAfter = true; }
+        else if (img._anchorBelowBlock) { anchorBlock = img._anchorBelowBlock; insertAfter = false; }
+        else { anchorBlock = img._containingBlock; insertAfter = true; }
+        let anchorIdx = content.indexOf(anchorBlock);
+        if (anchorIdx !== -1) {
+          content.splice(currentIdx, 1);
+          if (currentIdx < anchorIdx) anchorIdx -= 1; // l'index de l'ancre se décale après cette suppression
+          content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, img);
+        }
+      }
+      delete img._containingBlock;
+      delete img._anchorAboveBlock;
+      delete img._anchorBelowBlock;
+      delete img._pendingOffset;
     });
   }
   async function resolveNativePdfContent(inlinedHtml, filename) {
     let anchorIdToBlock = {};
     let content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
     let pending = collectPendingImages(content);
-    if (!pending.length) return content;
-    resolveAnchorIds(pending, anchorIdToBlock);
-    await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
-    const resolved = resolveAnchoredImagePositions(pending);
-    anchorIdToBlock = {};
-    content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
-    pending = collectPendingImages(content);
-    resolveAnchorIds(pending, anchorIdToBlock);
-    pending.forEach((img, i) => { if (resolved[i]) img.absolutePosition = resolved[i]; });
-    relocateTopLevelPendingImages(content, pending);
-    pending.forEach(img => {
-      delete img._pendingOffset;
-      delete img._anchorAboveBlock;
-      delete img._anchorBelowBlock;
-    });
+    if (pending.length) {
+      resolveAnchorIds(pending, anchorIdToBlock);
+      await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
+      const resolved = resolveAnchoredImagePositions(pending);
+      anchorIdToBlock = {};
+      content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
+      pending = collectPendingImages(content);
+      resolveAnchorIds(pending, anchorIdToBlock);
+      pending.forEach((img, i) => { if (resolved[i]) img.absolutePosition = resolved[i]; });
+    }
+    // Toujours appelé, même sans image "en attente" (_pendingOffset) : couvre
+    // aussi les images en calque sans ancre précise résolue (cf. commentaire
+    // sur relocateTopLevelFloatingImages) - un retour anticipé ici (ancien
+    // comportement) les laissait à l'extrémité globale du document.
+    relocateTopLevelFloatingImages(content);
     return content;
   }
   // Construit le docDefinition pdfmake (résolution d'ancrage d'image incluse) sans
