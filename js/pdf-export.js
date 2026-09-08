@@ -406,8 +406,24 @@ const PdfExport = (function () {
       while (output.length < columnCount) output.push({ text: ' ', margin: [4, 3, 4, 3], border: [true, true, true, true] });
       return output.slice(0, columnCount);
     });
+    // Largeurs de colonnes RÉELLES (glissées via la poignée de redimensionnement,
+    // cf. editor.js:resizeTableColumn, qui écrit un pourcentage sur chaque
+    // <col> du <colgroup>) plutôt que toujours diviser la largeur disponible
+    // à parts égales - sans quoi tout redimensionnement de colonne fait dans
+    // l'éditeur était invisible à l'export (confirmé par retour utilisateur
+    // une fois la poignée elle-même réparée : ni la largeur ni la mise en
+    // forme du texte - qui se répartit différemment selon la largeur réelle
+    // de sa colonne - n'étaient respectées).
+    const availableWidthPt = 595.28 - 56;
+    const colgroup = node.querySelector(':scope > colgroup');
+    const colPercents = colgroup ? Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 0) : [];
+    while (colPercents.length < columnCount) colPercents.push(0);
+    const percentSum = colPercents.slice(0, columnCount).reduce((sum, p) => sum + p, 0);
+    const widths = percentSum > 0
+      ? colPercents.slice(0, columnCount).map(p => Math.max(12, (p / percentSum) * availableWidthPt))
+      : Array(columnCount).fill(Math.max(12, availableWidthPt / columnCount));
     const table = {
-      table: { headerRows: 0, widths: Array(columnCount).fill(Math.max(12, (595.28 - 56) / columnCount)), body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }].concat(Array(Math.max(0, columnCount - 1)).fill({}) )] },
+      table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }].concat(Array(Math.max(0, columnCount - 1)).fill({}) )] },
       layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777', paddingLeft: () => 4, paddingRight: () => 4, paddingTop: () => 3, paddingBottom: () => 3 },
       margin: [0, 5, 0, 5]
     };
