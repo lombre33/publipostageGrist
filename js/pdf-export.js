@@ -1,11 +1,20 @@
 // Module export PDF : raster (historique) ou texte natif vectoriel (pdfmake).
 const PdfExport = (function () {
+  // Ces deux préréglages ne couvrent QUE les qualités raster (html2canvas) -
+  // 'native' (vectoriel) et 'browser-print' ont chacun leur propre chemin
+  // dédié (exportNativePdf/exportViaBrowserPrint) et ne consultent jamais
+  // QUALITY_PRESETS. Réduits à 2 choix clairs (au lieu de 3 raster + 1
+  // vectoriel + 1 impression navigateur mal différenciés) : 'low' pour un
+  // fichier léger (compression jsPDF activée, qualité JPEG réellement
+  // dégradée - l'ancien "standard" gardait quality:0.98, ce qui n'avait de
+  // "standard" que le nom, jamais de fichier significativement plus petit),
+  // 'ultra' pour l'impression (reprend l'ancien "print", déjà la meilleure
+  // qualité raster disponible).
   const QUALITY_PRESETS = {
-    standard: { label: 'Standard', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 } },
-    high: { label: 'Haute qualité', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 4 }, jsPDF: { compress: false } },
-    print: { label: 'Impression (HD)', image: { type: 'png' }, html2canvas: { scale: 6 }, jsPDF: { compress: false } }
+    low: { label: 'Basse qualité (compressé)', image: { type: 'jpeg', quality: 0.6 }, html2canvas: { scale: 1.5 }, jsPDF: { compress: true } },
+    ultra: { label: 'Ultra HD (impression)', image: { type: 'png' }, html2canvas: { scale: 6 }, jsPDF: { compress: false } }
   };
-  function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.standard; }
+  function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.low; }
   const PX_TO_PT = 72 / 96;
   // Taille de police par défaut du PDF pour tout texte sans taille inline
   // explicite : DOIT correspondre à la taille réellement rendue par défaut

@@ -5,6 +5,16 @@
   function getPdfFilenameInput() { return document.getElementById('pdf-filename-template') || document.getElementById('pdfFilenameInput') || document.getElementById('pdf-filename'); }
   function getPdfFilenameTemplate() { const input = getPdfFilenameInput(); if (!input) return ''; return input.value.trim(); }
   const editorContainer = document.getElementById('editor-container'); const readerContainer = document.getElementById('reader-container'); const htmlSourceContainer = document.getElementById('html-source-container'); const btnEdit = document.getElementById('btn-mode-edit'); const btnRead = document.getElementById('btn-mode-read'); const btnHtml = document.getElementById('btn-mode-html'); const toolbar = document.getElementById('toolbar'); let ind = document.getElementById('table-indicator');
+  // La toolbar de mise en forme Quill (.ql-toolbar) est un élément que Quill
+  // crée et insère LUI-MÊME dans le DOM (sœur de #editor-container, jamais
+  // dedans) - switchMode ne la masquait donc jamais en changeant de mode :
+  // rester en mode Lecture ou Code HTML laissait la toolbar complète visible
+  // et cliquable au-dessus d'un contenu qu'elle ne peut plus affecter,
+  // trompeur pour l'utilisateur. Résolue paresseusement (querySelector au
+  // premier changement de mode) car Quill ne l'a pas forcément encore créée
+  // au moment où ce script s'exécute.
+  let quillToolbarEl = null;
+  function getQuillToolbarEl() { if (!quillToolbarEl) quillToolbarEl = document.querySelector('.ql-toolbar'); return quillToolbarEl; }
   // Point d'accès unique du HTML "actif" : celui de l'éditeur Quill classique,
   // SAUF quand l'onglet Code HTML (mode avancé, cf. html-source-tab.js) est
   // le dernier à avoir été explicitement choisi, auquel cas c'est son contenu
@@ -54,6 +64,8 @@
     editorContainer.style.display = mode === 'edit' ? 'block' : 'none';
     readerContainer.style.display = mode === 'read' ? 'block' : 'none';
     if (htmlSourceContainer) htmlSourceContainer.style.display = mode === 'html' ? 'block' : 'none';
+    const toolbarEl = getQuillToolbarEl();
+    if (toolbarEl) toolbarEl.style.display = mode === 'edit' ? '' : 'none';
     if (mode === 'read') {
       await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
     } else if (mode === 'html') {
@@ -61,18 +73,27 @@
     }
   }
   async function renderReader(record, recordTableId) { const html = getActiveHtml(); if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord(); let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId; if (!record) return; if (!tableId) { const ctx = await GristAPI.detectCurrentContext(); if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; updateTableIndicator(ctx.tableId); } } await ReaderMode.render(html, tableId, record); }
-  async function onExportPdf() { const record = GristAPI.getCurrentRecord(); if (!record) { alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.'); return; } setStatus('Génération du PDF en cours...'); try { const quality = (document.getElementById('pdf-quality') || {}).value || 'standard'; await PdfExport.exportCurrentRecord(getActiveHtml(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality); setStatus('PDF généré.'); } catch (e) { console.error(e); setStatus('Erreur génération PDF.', true); } }
+  async function onExportPdf() { const record = GristAPI.getCurrentRecord(); if (!record) { alert('Aucune ligne sélectionnée : impossible d\'exporter en PDF.'); return; } setStatus('Génération du PDF en cours...'); try { const quality = (document.getElementById('pdf-quality') || {}).value || 'native'; await PdfExport.exportCurrentRecord(getActiveHtml(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality); setStatus('PDF généré.'); } catch (e) { console.error(e); setStatus('Erreur génération PDF.', true); } }
   // Génère le même PDF que "Exporter en PDF" mais l'enregistre dans la
   // colonne Pièce Jointe mappée (panneau de config, à droite) au lieu de le
   // télécharger — écrase systématiquement la pièce jointe précédente de
   // cette cellule (une seule PJ "PDF exporté" par ligne pour ce widget).
+  //
+  // Bouton "PJ" retiré de la toolbar (cf. index.html) : DOUBLEMENT inerte en
+  // l'état - GristAPI.getPdfAttachmentColumnId() ne peut plus jamais rien
+  // renvoyer depuis le retrait d'urgence du mappage `columns:[...]` dans
+  // grist-api.js:init (cassait la résolution de #Variable partout ailleurs,
+  // cf. son commentaire), ET l'upload d'attachment lui-même échouait déjà en
+  // 401 sur l'instance Grist réelle avant ça. Fonction conservée telle
+  // quelle (non appelée depuis l'UI) pour ne pas perdre ce travail si les
+  // deux causes sont un jour résolues.
   async function onSaveToAttachment() {
     const record = GristAPI.getCurrentRecord();
     if (!record) { alert('Aucune ligne sélectionnée : impossible d\'enregistrer le PDF.'); return; }
     if (!GristAPI.getPdfAttachmentColumnId()) { alert('Aucune colonne Pièce Jointe n’est mappée pour le PDF.\nOuvrez le panneau de configuration du widget (à droite) et choisissez une colonne dans « Colonne PJ pour le PDF exporté ».'); return; }
     setStatus('Génération et enregistrement du PDF en pièce jointe...');
     try {
-      const quality = (document.getElementById('pdf-quality') || {}).value || 'standard';
+      const quality = (document.getElementById('pdf-quality') || {}).value || 'native';
       const { blob, filename } = await PdfExport.generatePdfBlob(getActiveHtml(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality);
       await GristAPI.saveAttachmentToMappedColumn(blob, (filename || 'publipostage') + '.pdf');
       setStatus('PDF enregistré dans la pièce jointe.');
@@ -82,6 +103,6 @@
       alert(e && e.message ? e.message : 'Erreur lors de l’enregistrement du PDF en pièce jointe.');
     }
   }
-  async function init() { try { await GristAPI.init(); } catch (e) { setStatus('Erreur init API Grist.', true); } quill = Editor.init(); HtmlSourceTab.init(); Variables.initFilenameInput(getPdfFilenameInput()); Variables.refreshLinkRulesPanel(); GristAPI.onRecord(async function (record, tableId) { latestRecord = record; latestRecordTableId = tableId || GristAPI.getCurrentTableId(); if (tableId) currentTableId = tableId; updateTableIndicator(latestRecordTableId); if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId); }); try { if (grist.onOptions) grist.onOptions(() => {}); } catch (e) {} try { if (grist.onRecords) grist.onRecords(() => {}); } catch (e) {} await refreshTemplateList(); await onTemplateSelectChange(); templateSelect.addEventListener('change', onTemplateSelectChange); document.getElementById('btn-new').addEventListener('click', onNew); document.getElementById('btn-save').addEventListener('click', onSave); document.getElementById('btn-save-as').addEventListener('click', onSaveAs); document.getElementById('btn-delete').addEventListener('click', onDelete); btnEdit.addEventListener('click', () => switchMode('edit')); btnRead.addEventListener('click', () => switchMode('read')); if (btnHtml) btnHtml.addEventListener('click', () => switchMode('html')); document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf); document.getElementById('btn-save-attachment').addEventListener('click', onSaveToAttachment); const toggleA4 = document.getElementById('toggle-a4-preview'); if (toggleA4) { const a4Label = toggleA4.closest('.a4-toggle'); const syncA4Checked = () => { editorContainer.classList.toggle('a4-preview', toggleA4.checked); if (a4Label) a4Label.classList.toggle('checked', toggleA4.checked); }; toggleA4.addEventListener('change', syncA4Checked); syncA4Checked(); } const headingStyleSelect = document.getElementById('heading-numbering-style'); if (headingStyleSelect) { headingStyleSelect.value = Editor.getHeadingNumberingStyle(); headingStyleSelect.addEventListener('change', () => Editor.setHeadingNumberingStyle(headingStyleSelect.value)); } const btnTogglePanel = document.getElementById('btn-toggle-panel'); const toolbarPanel = document.getElementById('toolbar-panel'); if (btnTogglePanel && toolbarPanel) { btnTogglePanel.addEventListener('click', () => { const willOpen = toolbarPanel.hidden; toolbarPanel.hidden = !willOpen; btnTogglePanel.setAttribute('aria-expanded', String(willOpen)); if (willOpen) { Variables.refreshLinkRulesPanel(); if (templateNameInput) templateNameInput.focus(); } }); } updateTableIndicator(GristAPI.getCurrentTableId()); await switchMode('edit'); setStatus('Widget prêt.'); }
+  async function init() { try { await GristAPI.init(); } catch (e) { setStatus('Erreur init API Grist.', true); } quill = Editor.init(); HtmlSourceTab.init(); Variables.initFilenameInput(getPdfFilenameInput()); Variables.refreshLinkRulesPanel(); GristAPI.onRecord(async function (record, tableId) { latestRecord = record; latestRecordTableId = tableId || GristAPI.getCurrentTableId(); if (tableId) currentTableId = tableId; updateTableIndicator(latestRecordTableId); if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId); }); try { if (grist.onOptions) grist.onOptions(() => {}); } catch (e) {} try { if (grist.onRecords) grist.onRecords(() => {}); } catch (e) {} await refreshTemplateList(); await onTemplateSelectChange(); templateSelect.addEventListener('change', onTemplateSelectChange); document.getElementById('btn-new').addEventListener('click', onNew); document.getElementById('btn-save').addEventListener('click', onSave); document.getElementById('btn-save-as').addEventListener('click', onSaveAs); document.getElementById('btn-delete').addEventListener('click', onDelete); btnEdit.addEventListener('click', () => switchMode('edit')); btnRead.addEventListener('click', () => switchMode('read')); if (btnHtml) btnHtml.addEventListener('click', () => switchMode('html')); document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf); const toggleA4 = document.getElementById('toggle-a4-preview'); if (toggleA4) { const a4Label = toggleA4.closest('.a4-toggle'); const syncA4Checked = () => { editorContainer.classList.toggle('a4-preview', toggleA4.checked); if (a4Label) a4Label.classList.toggle('checked', toggleA4.checked); }; toggleA4.addEventListener('change', syncA4Checked); syncA4Checked(); } const headingStyleSelect = document.getElementById('heading-numbering-style'); if (headingStyleSelect) { headingStyleSelect.value = Editor.getHeadingNumberingStyle(); headingStyleSelect.addEventListener('change', () => Editor.setHeadingNumberingStyle(headingStyleSelect.value)); } const btnTogglePanel = document.getElementById('btn-toggle-panel'); const toolbarPanel = document.getElementById('toolbar-panel'); if (btnTogglePanel && toolbarPanel) { btnTogglePanel.addEventListener('click', () => { const willOpen = toolbarPanel.hidden; toolbarPanel.hidden = !willOpen; btnTogglePanel.setAttribute('aria-expanded', String(willOpen)); if (willOpen) { Variables.refreshLinkRulesPanel(); if (templateNameInput) templateNameInput.focus(); } }); } updateTableIndicator(GristAPI.getCurrentTableId()); await switchMode('edit'); setStatus('Widget prêt.'); }
   init();
 })();
