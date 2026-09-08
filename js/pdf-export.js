@@ -47,7 +47,7 @@ const PdfExport = (function () {
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   function cssSize(value, fallback) { const n = parseFloat(value); return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback; }
-  function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); return match ? match[1].toLowerCase() : undefined; }
+  function alignment(node) { const cls = node.classList || { contains: () => false }; if (cls.contains('ql-align-center')) return 'center'; if (cls.contains('ql-align-right')) return 'right'; if (cls.contains('ql-align-justify')) return 'justify'; const style = (node.getAttribute && node.getAttribute('style')) || ''; const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i); if (match) return match[1].toLowerCase(); const align = (node.getAttribute && node.getAttribute('align')) || ''; const alignLower = align.toLowerCase(); if (alignLower === 'center' || alignLower === 'right' || alignLower === 'justify' || alignLower === 'left') return alignLower; return undefined; }
   function inheritedStyle(node, parent) { const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : ''; const css = name => { const m = style.match(new RegExp(name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); }; const tag = node.nodeType === 1 ? node.tagName : ''; const out = Object.assign({}, parent); if (tag === 'STRONG' || tag === 'B') out.bold = true; if (tag === 'EM' || tag === 'I') out.italics = true; if (tag === 'U') out.decoration = 'underline'; if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true; if (css('font-style') === 'italic') out.italics = true; if (css('text-decoration') && /underline/i.test(css('text-decoration'))) out.decoration = 'underline'; if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE); return out; }
   // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" — un objet
   // { image: ... } glissé dans un tableau assigné à la propriété `text` d'un
@@ -563,7 +563,22 @@ const PdfExport = (function () {
     // d'image (cf. hypothèse utilisateur : "si ça se trouve ce n'est pas
     // l'image qui n'est pas à sa place, mais le texte").
     const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
-    const block = { text: runs.length ? runs : ' ', margin: runs.length ? [indentPt, tag.match(/^H[1-6]$/) ? 5 : 2, 0, 4] : [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
+    // Marge verticale nulle (hors BLOCKQUOTE, cf. plus bas) : mesuré en live
+    // sur l'éditeur réel, l'écart entre deux blocs consécutifs (paragraphes,
+    // titres, items de liste - collés les uns aux autres SANS ligne vide) est
+    // TOUJOURS exactement nul, quel que soit le tag - Quill remet leur
+    // margin/padding CSS à 0 (.ql-editor p/h1-6/li/ol/ul/pre { margin:0 }),
+    // et un <div> issu d'un retour à la ligne brut dans une colonne/cellule
+    // (non géré par Quill) n'a de toute façon aucune marge par défaut. Un
+    // ancien +6pt (top 2 + bottom 4, +5 en haut pour les titres) ajoutait donc
+    // un espacement fictif à CHAQUE changement de bloc, absent de l'éditeur :
+    // visible en net sur des lignes courtes (un <div> par ligne dans une
+    // colonne ressemblait à un saut de ligne complet), et cumulatif sur tout
+    // document à plusieurs paragraphes (dérive de position détectée par
+    // ailleurs sur les ancres d'image). Vérifié : lignes consécutives à
+    // top-to-top espacées de exactement LINE_HEIGHT_RATIO × taille de police
+    // dans le PDF une fois cette marge retirée, comme mesuré dans l'éditeur.
+    const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) block.bold = true;
     if (tag === 'LI') { block.text = runs.length ? [{ text: '• ', fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
