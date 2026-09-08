@@ -928,6 +928,52 @@ const PdfExport = (function () {
       delete img._anchorBelowId;
     });
   }
+  // pdfmake résout `absolutePosition` par rapport à la page qu'il est EN TRAIN
+  // de composer au moment où il traite cet élément dans content[] (aucun moyen
+  // de préciser explicitement une page cible - limitation connue et documentée
+  // de pdfmake, cf. bpampuch/pdfmake#1476/#1738 : "any extra content with
+  // absolute positioning overlays on top of the second page when there is
+  // more than one page"). Poser TOUTES les images "devant" à la toute fin de
+  // content[] (comme avant ce correctif) les fait donc composer au moment où
+  // pdfmake a déjà traité TOUT le reste du document - sur un document de plus
+  // d'une page, elles atterrissent alors sur la DERNIÈRE page plutôt que sur
+  // celle où leur ancre réelle se trouve (souvent une page quasi vide en fin
+  // de document, d'où une image qui semble ne "jamais apparaître"). Les images
+  // "derrière" (posées au tout DÉBUT) ne présentaient pas ce symptôme car
+  // pdfmake les compose alors que son curseur est encore sur la page 1 - ce
+  // qui ne coïncide avec leur ancre réelle QUE si celle-ci est aussi page 1,
+  // par pure coïncidence sur un document court, pas parce que le mécanisme
+  // serait correct pour elles non plus.
+  //
+  // Fix : au lieu de laisser CHAQUE image ancrée à l'extrémité globale du
+  // document, on la déplace juste à côté du bloc-ancre réellement résolu
+  // (juste après le repère "au-dessus", ou juste avant celui "en dessous") -
+  // pdfmake la compose alors exactement au même moment que ce bloc, donc sur
+  // la même page que lui. absolutePosition la sort de toute façon du flux
+  // normal (position ET x/y déjà calculés indépendamment, cf.
+  // resolveAnchoredImagePositions) : la déplacer dans content[] ne change que
+  // QUAND pdfmake la peint, jamais où elle est dessinée ni la mise en page du
+  // reste du document.
+  //
+  // Portée : uniquement les images de PREMIER NIVEAU (flux principal) - une
+  // image ancrée DANS une colonne d'une zone 2-colonnes reste, elle, bornée
+  // au début/à la fin du stack de SA PROPRE colonne (cf. twoColumnsFrom), un
+  // périmètre bien plus restreint où ce même défaut pdfmake est nettement
+  // moins susceptible de se manifester (une zone 2-colonnes s'étend rarement
+  // sur plusieurs pages) - non corrigé ici, hors périmètre de ce correctif.
+  function relocateTopLevelPendingImages(content, pending) {
+    pending.forEach(img => {
+      const currentIdx = content.indexOf(img);
+      if (currentIdx === -1) return; // pas de premier niveau (nichée dans une colonne) - laissée telle quelle
+      const anchorBlock = img._anchorAboveBlock || img._anchorBelowBlock;
+      if (!anchorBlock) return; // aucune ancre résolue - repli page/marge existant, aucun meilleur emplacement disponible
+      let anchorIdx = content.indexOf(anchorBlock);
+      if (anchorIdx === -1) return;
+      content.splice(currentIdx, 1);
+      if (currentIdx < anchorIdx) anchorIdx -= 1; // l'index de l'ancre se décale après cette suppression
+      content.splice(img._anchorAboveBlock ? anchorIdx + 1 : anchorIdx, 0, img);
+    });
+  }
   async function resolveNativePdfContent(inlinedHtml, filename) {
     let anchorIdToBlock = {};
     let content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
@@ -940,8 +986,9 @@ const PdfExport = (function () {
     content = htmlToPdfContent(inlinedHtml, undefined, anchorIdToBlock);
     pending = collectPendingImages(content);
     resolveAnchorIds(pending, anchorIdToBlock);
-    pending.forEach((img, i) => {
-      if (resolved[i]) img.absolutePosition = resolved[i];
+    pending.forEach((img, i) => { if (resolved[i]) img.absolutePosition = resolved[i]; });
+    relocateTopLevelPendingImages(content, pending);
+    pending.forEach(img => {
       delete img._pendingOffset;
       delete img._anchorAboveBlock;
       delete img._anchorBelowBlock;
