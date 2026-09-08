@@ -15,7 +15,18 @@ const GristAPI = (function () {
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      grist.ready({ requiredAccess: 'full' });
+      grist.ready({
+        requiredAccess: 'full',
+        // Fait apparaître une section de mappage dans le panneau de droite
+        // (mode configuration du widget) pour que l'utilisateur choisisse LA
+        // colonne Pièce Jointe de sa propre table où enregistrer le PDF
+        // exporté (bouton dédié, cf. main.js:onSaveToAttachment) - optionnel :
+        // le widget fonctionne normalement si rien n'est mappé, le bouton
+        // signale juste qu'aucune colonne n'est configurée.
+        columns: [
+          { name: 'pdfAttachment', title: 'Colonne PJ pour le PDF exporté', type: 'Attachments', optional: true }
+        ]
+      });
       console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.ready():', e);
@@ -368,6 +379,31 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
+  // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de
+  // mappage de droite - cf. columns: [...] dans grist.ready() plus haut.
+  function getPdfAttachmentColumnId() {
+    return _currentMappings && _currentMappings.pdfAttachment ? _currentMappings.pdfAttachment : null;
+  }
+
+  // Enregistre un PDF déjà généré (Blob) dans la colonne mappée, sur la ligne
+  // actuellement sélectionnée. ['L', attachmentId] REMPLACE la liste de
+  // pièces jointes de la cellule (pas d'ajout) : une seule pièce jointe pour
+  // ce widget dans cette colonne, toujours la plus récemment exportée -
+  // l'ancienne devient orpheline et Grist la purge de lui-même.
+  async function saveAttachmentToMappedColumn(blob, filename) {
+    const colId = getPdfAttachmentColumnId();
+    if (!colId) throw new Error('Aucune colonne Pièce Jointe n’est mappée pour le PDF (panneau de configuration du widget, à droite).');
+    if (!_currentRecord || _currentRecord.id == null) throw new Error('Aucune ligne sélectionnée.');
+    const tableId = _currentTableId;
+    if (!tableId) throw new Error('Table du document introuvable.');
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    const attachmentId = await uploadAttachment(file);
+    await grist.docApi.applyUserActions([
+      ['UpdateRecord', tableId, _currentRecord.id, { [colId]: ['L', attachmentId] }]
+    ]);
+    return attachmentId;
+  }
+
   // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès
   // expire après quelques minutes, donc le src ne doit jamais être conservé tel quel
   // dans le HTML enregistré — seul data-attachment-id est persistant.
@@ -392,5 +428,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages };
+  return { init, refreshSchema, getTables, getColumns, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn };
 })();

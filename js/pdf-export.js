@@ -948,7 +948,22 @@ const PdfExport = (function () {
     });
     return content;
   }
-  async function exportNativePdf(resolvedHtml, filename) { if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.'); const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml); const content = await resolveNativePdfContent(inlinedHtml, filename); const docDefinition = buildNativeDocDefinition(content, filename); window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf'); }
+  // Construit le docDefinition pdfmake (résolution d'ancrage d'image incluse) sans
+  // déclencher de téléchargement — partagé par exportNativePdf (.download()) et
+  // getNativePdfBlob (.getBlob(), pour l'enregistrement en pièce jointe Grist).
+  async function buildNativePdfDocDefinition(resolvedHtml, filename) {
+    if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.');
+    const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
+    const content = await resolveNativePdfContent(inlinedHtml, filename);
+    return buildNativeDocDefinition(content, filename);
+  }
+  async function exportNativePdf(resolvedHtml, filename) { const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename); window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf'); }
+  async function getNativePdfBlob(resolvedHtml, filename) {
+    const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename);
+    return new Promise((resolve, reject) => {
+      try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
+    });
+  }
   // Passe par la boîte de dialogue d'impression native du navigateur ("Enregistrer
   // au format PDF") plutôt que par un rendu canvas (html2canvas) ou une image
   // base64 (pdfmake). Les deux autres méthodes doivent RELIRE les pixels d'une
@@ -1002,6 +1017,45 @@ const PdfExport = (function () {
       setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
     }
   }
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) { if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; } const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record); const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record); if (quality === 'native') { await exportNativePdf(resolvedHtml, filename); return; } if (quality === 'browser-print') { await exportViaBrowserPrint(resolvedHtml, filename); return; } const container = document.createElement('div'); container.style.padding = '20px'; container.style.position = 'relative'; container.style.fontFamily = 'Arial, sans-serif'; container.innerHTML = resolvedHtml; container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; }); container.querySelectorAll('.two-columns-marker').forEach(marker => { marker.innerHTML = ''; marker.style.display = 'none'; }); document.body.appendChild(container); const preset = getQualityPreset(quality); const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'], avoid: '.var-badge' } }; try { await html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); } }
-  return { exportCurrentRecord };
+  // Construit le conteneur détaché (DOM neutralisé des marqueurs de saut de
+  // page/2-colonnes) et les options html2pdf partagées par le téléchargement
+  // (exportCurrentRecord) et la génération de blob pour pièce jointe
+  // (generatePdfBlob) pour les qualités raster (standard/high/print).
+  function buildRasterContainerAndOptions(resolvedHtml, filename, quality) {
+    const container = document.createElement('div');
+    container.style.padding = '20px';
+    container.style.position = 'relative';
+    container.style.fontFamily = 'Arial, sans-serif';
+    container.innerHTML = resolvedHtml;
+    container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; });
+    container.querySelectorAll('.two-columns-marker').forEach(marker => { marker.innerHTML = ''; marker.style.display = 'none'; });
+    document.body.appendChild(container);
+    const preset = getQualityPreset(quality);
+    const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'], avoid: '.var-badge' } };
+    return { container, opt };
+  }
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) { if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; } const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record); const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record); if (quality === 'native') { await exportNativePdf(resolvedHtml, filename); return; } if (quality === 'browser-print') { await exportViaBrowserPrint(resolvedHtml, filename); return; } const { container, opt } = buildRasterContainerAndOptions(resolvedHtml, filename, quality); try { await html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); } }
+  // Génère le PDF en mémoire (Blob), sans déclencher ni téléchargement ni
+  // impression navigateur — pour l'enregistrement dans une pièce jointe Grist
+  // (cf. GristAPI.saveExportToAttachment). 'browser-print' n'a, par nature,
+  // aucun octet PDF disponible en JS (c'est le visiteur qui choisit
+  // "Enregistrer au format PDF" dans la boîte de dialogue native) : exclu.
+  async function generatePdfBlob(htmlContent, currentTableId, record, filenameTemplate, quality) {
+    if (!record) throw new Error("Aucune ligne sélectionnée : impossible de générer le PDF.");
+    if (quality === 'browser-print') throw new Error("La qualité « Impression navigateur » ne peut pas être enregistrée en pièce jointe (aucun fichier PDF n'est produit par le widget dans ce mode — c'est vous qui l'enregistrez depuis la boîte de dialogue d'impression).");
+    const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
+    const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
+    if (quality === 'native') {
+      const blob = await getNativePdfBlob(resolvedHtml, filename);
+      return { blob, filename };
+    }
+    const { container, opt } = buildRasterContainerAndOptions(resolvedHtml, filename, quality);
+    try {
+      const blob = await html2pdf().set(opt).from(container).outputPdf('blob');
+      return { blob, filename };
+    } finally {
+      document.body.removeChild(container);
+    }
+  }
+  return { exportCurrentRecord, generatePdfBlob };
 })();
