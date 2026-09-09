@@ -755,6 +755,28 @@ const PdfExport = (function () {
     return trimEdgeWhitespace(inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []));
   }
 
+  // Une ligne dictée mot-à-mot (cf. floatedImageParagraphFrom) ne peut
+  // JAMAIS être étirée par `alignment:'justify'` - pdfmake, comme le CSS,
+  // n'étire jamais la seule/dernière ligne d'un bloc de texte, or CHAQUE
+  // ligne dictée (nécessaire pour préserver la coupure EXACTE mesurée dans
+  // l'éditeur) EST toujours, à ses yeux, la seule ligne de son propre bloc -
+  // limitation confirmée de pdfmake, pas un bug de ce fichier (vérifié :
+  // un bloc `{text:'...', alignment:'justify'}` d'une seule ligne ne
+  // s'étire jamais, quelle que soit la largeur disponible). Deux techniques
+  // manuelles pour élargir les espaces ont été tentées et rejetées : répéter
+  // le CARACTÈRE espace ajoute de la largeur AVANT que pdfmake décide où
+  // couper - risque de re-couper la ligne ailleurs que la coupure réelle de
+  // l'éditeur (constaté : un mot entier basculait sur une ligne en trop) ;
+  // agrandir le `fontSize` d'un espace élargit bien le glyphe SANS ce risque,
+  // mais gonfle aussi la hauteur de ligne perçue par pdfmake - et AUCUNE
+  // compensation via `lineHeight` (ni sur le run, ignoré, ni sur le bloc
+  // conteneur, sans effet non plus, vérifié dans les deux cas) ne l'annule.
+  // Conclusion : justify ne s'applique donc QUE quand pdfmake gère lui-même
+  // le retour à la ligne (avant/après multi-lignes, cf. plus bas) - jamais
+  // sur une ligne dictée. Limitation assumée, pas de solution pdfmake propre
+  // trouvée sans mesure via une passe de rendu supplémentaire (hors de
+  // portée raisonnable ici).
+
   // Habillage réel (float CSS côté éditeur, .editor-image-view[data-align=
   // left|right], cf. css/editor-v2.css) reproduit ici via le mécanisme
   // `columns` NATIF de pdfmake : une colonne à largeur fixe pour l'image,
@@ -850,7 +872,6 @@ const PdfExport = (function () {
     let besideEnd = words.length;
     for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
     if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
-
     const blocks = [];
     let pendingPageBreak = pageBreakBefore;
     if (besideStart > 0) {
@@ -869,13 +890,13 @@ const PdfExport = (function () {
       const last = lineGroups[lineGroups.length - 1];
       if (last && Math.abs(last.top - w.top) < 2) last.words.push(w); else lineGroups.push({ top: w.top, words: [w] });
     });
-    // `textAlign === 'justify'` n'est PAS reporté ici : chaque ligne "à
-    // côté" est son propre bloc pdfmake d'une seule ligne, or la dernière
-    // (ici : la seule) ligne d'un paragraphe justifié n'est normalement
-    // jamais étirée (même convention que le CSS) - la reporter produirait un
-    // étirement mot-à-mot artificiel, pire que l'absence d'alignement.
-    // gauche/centre/droite en revanche repositionnent correctement une ligne
-    // plus courte que la colonne, et sont donc bien reportés.
+    // gauche/centre/droite repositionnent correctement une ligne plus
+    // courte que la colonne - reportés normalement. `justify` n'est PAS
+    // reporté ici : chaque ligne "à côté" est son propre bloc pdfmake d'une
+    // seule ligne, or la dernière (ici : la seule) ligne d'un bloc justifié
+    // n'est jamais étirée par pdfmake (même convention que le CSS - limite
+    // de pdfmake, pas de solution manuelle trouvée sans effet de bord,
+    // cf. commentaire au-dessus de floatedImageParagraphFrom).
     const besideAlign = textAlign === 'justify' ? undefined : textAlign;
     const besideBlocks = lineGroups.map((line, i) => {
       const startCut = (besideStart === 0 && i === 0) ? null : { textNode: line.words[0].textNode, offset: line.words[0].start };
