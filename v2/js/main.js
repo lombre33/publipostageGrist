@@ -2,10 +2,10 @@
 // simplifiée pour cet incrément agile : gestion de modèles + mode Édition/
 // Lecture + export PDF (vectoriel uniquement, cf. v2/js/pdf-export.js) +
 // câblage Grist (variables/tableaux/2 colonnes/images/sommaire sont gérés
-// dans v2/js/editor.js, pas ici). PAS ENCORE couvert : panneau de
-// configuration avancé (règles de correspondance inter-tables). `Editor.init()`
-// est ASYNC ici (contrairement à V1) - v2/js/editor.js charge TipTap/
-// ProseMirror via import() dynamique au moment de l'appel.
+// dans v2/js/editor.js, pas ici) + modale "Tables liées" (règles de
+// correspondance inter-tables, cf. wireLinkRulesModal/v2/js/variables.js).
+// `Editor.init()` est ASYNC ici (contrairement à V1) - v2/js/editor.js
+// charge TipTap/ProseMirror via import() dynamique au moment de l'appel.
 (function () {
   let currentMode = 'edit';
   let currentTableId = null;
@@ -134,6 +134,20 @@
     sync();
   }
 
+  // "Tables liées" (v2/js/variables.js) : modale séparée plutôt que le volet
+  // repliable de la V1 (#toolbar-panel) - v2 n'a pas ce volet du tout, une
+  // modale évite d'avoir à en introduire un pour ce seul besoin. Rafraîchit
+  // la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via
+  // l'insertion d'une variable).
+  function wireLinkRulesModal() {
+    const btn = document.getElementById('btn-link-rules');
+    const modal = document.getElementById('link-rules-modal');
+    const btnClose = document.getElementById('link-rules-close');
+    if (!btn || !modal || !btnClose) return;
+    btn.addEventListener('click', () => { Variables.refreshLinkRulesPanel(); modal.style.display = 'flex'; });
+    btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
+  }
+
   async function init() {
     try { await GristAPI.init(); } catch (e) { setStatus('Erreur init API Grist.', true); }
     await Editor.init();
@@ -154,6 +168,7 @@
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
+    wireLinkRulesModal();
     await switchMode('edit');
     setStatus('Widget V2 prêt.');
   }

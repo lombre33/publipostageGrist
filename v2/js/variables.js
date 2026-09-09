@@ -115,8 +115,21 @@ const Variables = (function () {
               const all = GristAPI.getAllVariables();
               return all.filter(v => v.key.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
             },
+            // Async : une variable venant d'une AUTRE table que la table
+            // courante peut nécessiter de configurer (ou de faire configurer
+            // à l'utilisateur, via une modale) une règle de correspondance
+            // AVANT que l'insertion ne se poursuive (cf. ensureLinkConfigured
+            // plus bas, porté tel quel de la V1 - js/variables.js). `range`
+            // (position ProseMirror pure, pas liée au focus DOM) reste valide
+            // pendant l'attente : rien d'autre ne modifie le document entre
+            // temps, exactement comme en V1 (confirmSelection y capture aussi
+            // `range` avant d'attendre la modale).
             command: ({ editor, range, props }) => {
-              editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: props.table, column: props.column, key: props.key } }).run();
+              (async () => {
+                const ok = await ensureLinkConfigured(props);
+                if (!ok) return;
+                editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: props.table, column: props.column, key: props.key } }).run();
+              })();
             },
             render: suggestionRender,
           }),
@@ -130,12 +143,10 @@ const Variables = (function () {
   // currentTableId, record), qui doit donc exister ici aussi). Portée telle
   // quelle depuis l'éditeur V1 (js/variables.js) - logique de résolution pure
   // (aucune dépendance à Quill/au DOM de l'éditeur), inchangée par la
-  // migration. Couvre la même table (accès direct) et les tables liées déjà
-  // configurées (règle singleton/correspondance, cf. GristAPI.getLinkRule) ;
-  // NE couvre PAS encore la configuration d'une règle à l'insertion (modale
-  // dédiée de la V1) - un incrément agile ultérieur, une variable inter-tables
-  // pas encore configurée affiche pour l'instant le même message d'erreur que
-  // la V1 dans ce cas (pas de plantage, juste pas encore d'UI pour la configurer).
+  // migration. Couvre la même table (accès direct) et les tables liées
+  // configurées (règle singleton/correspondance, cf. GristAPI.getLinkRule) -
+  // y compris leur CONFIGURATION à l'insertion, cf. ensureLinkConfigured/
+  // showLinkConfigModal plus bas (portées de la V1 juste après ce bloc).
   function formatValue(val) { if (val === null || val === undefined) return ''; if (Array.isArray(val)) return val.join(', '); return String(val); }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
@@ -178,5 +189,214 @@ const Variables = (function () {
     }
   }
 
-  return { createExtension, resolveVariable };
+  // --- Configuration des correspondances entre tables (à l'insertion +
+  // panneau de gestion) - porté quasi tel quel de la V1 (js/variables.js) :
+  // logique pure DOM/GristAPI, aucune dépendance à Quill ni à TipTap, donc
+  // réutilisable sans changement d'engin. Seule différence : la V1 range ce
+  // panneau dans un volet repliable dédié (#toolbar-panel/#btn-toggle-panel) ;
+  // ici, une modale séparée (#link-rules-modal, cf. v2/index.html) plutôt que
+  // d'introduire tout un système de volet repliable pour ce seul besoin.
+
+  // Signale dans le libellé qu'une colonne est une Référence (et vers quelle
+  // table) - sans ça, rien dans la modale n'indique qu'une colonne stocke en
+  // réalité un identifiant de ligne plutôt qu'un texte (piège déjà rencontré
+  // en V1, cf. mémoire project_cross_table_variable_links).
+  function describeColumnOption(tableId, colId) {
+    const type = GristAPI.getColumnType(tableId, colId);
+    if (type && type.indexOf('Ref:') === 0) return `${colId} (Référence → ${type.slice(4)})`;
+    if (type && type.indexOf('RefList:') === 0) return `${colId} (Références → ${type.slice(8)})`;
+    return colId;
+  }
+  function describeRule(rule) {
+    if (rule.mode === 'singleton') return 'une seule ligne (paramètres)';
+    const cible = rule.colonneCible === 'id' ? 'identifiant de ligne' : rule.colonneCible;
+    const source = rule.colonneSource === 'id' ? 'identifiant de ligne' : rule.colonneSource;
+    return `${cible} = ${source}`;
+  }
+  // Appelée avant toute insertion de variable (cf. le `command` de
+  // createExtension ci-dessus) : si la variable vient d'une AUTRE table que
+  // la table courante et qu'aucune règle n'existe encore pour cette table,
+  // ouvre la modale de configuration et enregistre la règle choisie AVANT
+  // que l'insertion ne se poursuive. Retourne false si l'utilisateur annule
+  // (rien n'est alors inséré).
+  async function ensureLinkConfigured(item) {
+    const currentTableId = GristAPI.getCurrentTableId();
+    if (!currentTableId || item.table === currentTableId) return true;
+    if (GristAPI.getLinkRule(item.table)) return true;
+    const rule = await showLinkConfigModal(item.table, currentTableId, null);
+    if (!rule) return false;
+    await GristAPI.saveLinkRule(item.table, rule);
+    refreshLinkRulesPanel();
+    return true;
+  }
+  // Modale de configuration d'une règle de correspondance, partagée par
+  // l'insertion (existingRule=null, pré-remplie par auto-détection si une
+  // seule colonne Référence candidate existe, sens direct OU inverse) et le
+  // panneau de gestion (existingRule fourni, pour modifier une règle déjà
+  // enregistrée). Résout avec {mode, colonneCible, colonneSource} ou null si
+  // annulé.
+  async function showLinkConfigModal(targetTable, currentTableId, existingRule) {
+    const modal = document.getElementById('link-config-modal');
+    if (!modal) return null;
+    const title = document.getElementById('link-config-title');
+    const radios = modal.querySelectorAll('input[name="link-config-mode"]');
+    const matchFields = document.getElementById('link-config-match-fields');
+    const cibleLabel = document.getElementById('link-config-table-cible-name');
+    const sourceLabel = document.getElementById('link-config-table-source-name');
+    const selectCible = document.getElementById('link-config-col-cible');
+    const selectSource = document.getElementById('link-config-col-source');
+    const preview = document.getElementById('link-config-preview');
+    const btnOk = document.getElementById('link-config-confirm');
+    const btnCancel = document.getElementById('link-config-cancel');
+
+    title.textContent = `Comment trouver la bonne ligne dans « ${targetTable} » ?`;
+    cibleLabel.textContent = targetTable;
+    sourceLabel.textContent = currentTableId;
+    // Un placeholder désactivé en 1ère position force un choix explicite -
+    // sans lui, un <select> non touché par l'utilisateur reste silencieusement
+    // sur "Identifiant de ligne" (1ère option), ce qui peut produire une règle
+    // qui a l'air valide mais compare deux identifiants de ligne sans rapport.
+    const placeholder = '<option value="" disabled selected>— Choisissez une colonne —</option>';
+    selectCible.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join('');
+    selectSource.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join('');
+
+    // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
+    // choix actif, pas un état par défaut dans lequel on tombe sans le
+    // réaliser.
+    let initialMode = existingRule ? existingRule.mode : 'match';
+    let initialCible = existingRule ? existingRule.colonneCible : '';
+    let initialSource = existingRule ? existingRule.colonneSource : '';
+    if (!existingRule) {
+      // Sens direct : la table courante a une colonne Référence vers la
+      // table cible (ex. "Commandes" -> "Clients" en consultant Commandes).
+      const forwardCandidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
+      if (forwardCandidates.length === 1) {
+        initialCible = 'id'; initialSource = forwardCandidates[0];
+      } else {
+        // Sens inverse (cas le plus courant en pratique) : la table cible a
+        // une colonne Référence vers la table courante (ex. on consulte un
+        // "Employé" et on veut ses "Congés", où c'est Congés.Employe qui
+        // référence Employés, pas l'inverse).
+        const reverseCandidates = await GristAPI.findReferenceColumns(targetTable, currentTableId);
+        if (reverseCandidates.length === 1) { initialCible = reverseCandidates[0]; initialSource = 'id'; }
+      }
+    }
+    radios.forEach(r => { r.checked = r.value === initialMode; });
+    if (initialCible) selectCible.value = initialCible;
+    if (initialSource) selectSource.value = initialSource;
+    matchFields.hidden = initialMode !== 'match';
+
+    function currentRuleFromForm() {
+      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
+      if (!checked) return null;
+      if (checked.value === 'singleton') return { mode: 'singleton' };
+      if (!selectCible.value || !selectSource.value) return null;
+      return { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
+    }
+    // Aperçu en direct : calcule et affiche ce que la règle en cours de
+    // saisie donnerait pour la ligne Grist actuellement sélectionnée -
+    // permet de vérifier immédiatement que la correspondance est la bonne,
+    // et que "singleton" est bien statique alors que "match" varie selon la
+    // ligne courante.
+    async function updatePreview() {
+      if (!preview) return;
+      const rule = currentRuleFromForm();
+      if (!rule) { preview.textContent = 'Choisissez les deux colonnes pour voir un aperçu.'; return; }
+      const record = GristAPI.getCurrentRecord();
+      if (!record) { preview.textContent = 'Aucune ligne sélectionnée dans Grist pour prévisualiser.'; return; }
+      preview.textContent = 'Calcul de l’aperçu…';
+      try {
+        const rows = await GristAPI.fetchTableRows(targetTable);
+        if (rule.mode === 'singleton') {
+          if (!rows.length) { preview.textContent = `Aperçu : « ${targetTable} » est vide.`; return; }
+          const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
+          preview.textContent = `Aperçu : toujours la ligne n°${first.id} de « ${targetTable} », quelle que soit la ligne courante.`;
+          return;
+        }
+        const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
+        const matches = rows.filter(r => sameValue(rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]), sourceVal));
+        preview.textContent = matches.length
+          ? `Aperçu : ${matches.length} ligne(s) trouvée(s) dans « ${targetTable} » pour la ligne courante (n° ${matches.map(r => r.id).join(', ')}).`
+          : `Aperçu : aucune ligne de « ${targetTable} » ne correspond à la ligne courante (valeur recherchée : ${sourceVal}).`;
+      } catch (e) {
+        console.warn('[variables] showLinkConfigModal: échec aperçu', e);
+        preview.textContent = 'Aperçu indisponible.';
+      }
+    }
+    function onFormChange() {
+      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
+      matchFields.hidden = !checked || checked.value !== 'match';
+      updatePreview();
+    }
+    radios.forEach(r => r.addEventListener('change', onFormChange));
+    selectCible.addEventListener('change', updatePreview);
+    selectSource.addEventListener('change', updatePreview);
+    modal.style.display = 'flex';
+    updatePreview();
+
+    return new Promise((resolve) => {
+      function cleanup() {
+        modal.style.display = 'none';
+        radios.forEach(r => r.removeEventListener('change', onFormChange));
+        selectCible.removeEventListener('change', updatePreview);
+        selectSource.removeEventListener('change', updatePreview);
+        btnOk.removeEventListener('click', onOk);
+        btnCancel.removeEventListener('click', onCancel);
+      }
+      function onOk() {
+        const rule = currentRuleFromForm();
+        if (!rule) { preview.textContent = 'Choisissez les deux colonnes avant de valider.'; return; }
+        cleanup();
+        resolve(rule);
+      }
+      function onCancel() { cleanup(); resolve(null); }
+      btnOk.addEventListener('click', onOk);
+      btnCancel.addEventListener('click', onCancel);
+    });
+  }
+  // Panneau de gestion (modale #link-rules-modal, cf. v2/index.html) : liste
+  // les tables déjà configurées, avec un bouton pour modifier ou supprimer
+  // chaque règle. Appelée au démarrage et à chaque ouverture de la modale
+  // (cf. v2/js/main.js).
+  function refreshLinkRulesPanel() {
+    const list = document.getElementById('link-rules-list');
+    if (!list) return;
+    const rules = GristAPI.getAllLinkRules();
+    list.innerHTML = '';
+    if (!rules.length) {
+      const empty = document.createElement('p');
+      empty.className = 'link-rules-empty';
+      empty.textContent = 'Aucune table liée pour l’instant.';
+      list.appendChild(empty);
+      return;
+    }
+    rules.forEach(rule => {
+      const row = document.createElement('div');
+      row.className = 'link-rule-row';
+      const label = document.createElement('span');
+      label.className = 'link-rule-label';
+      label.textContent = `${rule.tableCible} : ${describeRule(rule)}`;
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button'; btnEdit.textContent = 'Modifier';
+      btnEdit.addEventListener('click', async () => {
+        const currentTableId = GristAPI.getCurrentTableId();
+        if (!currentTableId) return;
+        const newRule = await showLinkConfigModal(rule.tableCible, currentTableId, rule);
+        if (!newRule) return;
+        await GristAPI.saveLinkRule(rule.tableCible, newRule);
+        refreshLinkRulesPanel();
+      });
+      const btnDelete = document.createElement('button');
+      btnDelete.type = 'button'; btnDelete.textContent = 'Supprimer';
+      btnDelete.addEventListener('click', async () => {
+        if (!confirm(`Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`)) return;
+        await GristAPI.deleteLinkRule(rule.tableCible);
+        refreshLinkRulesPanel();
+      });
+      row.appendChild(label); row.appendChild(btnEdit); row.appendChild(btnDelete);
+      list.appendChild(row);
+    });
+  }
+
+  return { createExtension, resolveVariable, refreshLinkRulesPanel };
 })();

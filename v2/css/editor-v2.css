@@ -272,3 +272,15 @@
    vraiment besoin avant le sélecteur à 3 états, où c'est essentiel pour
    voir lequel des 3 est actif). */
 .v2-floating-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); color: var(--accent, #2f6fed); }
+
+/* Panneau "Tables liées" (v2/js/variables.js) - même overlay plein écran que
+   #link-config-modal (../css/style.css, réutilisé tel quel pour son propre
+   contenu : .modal-content/.link-rules-list/.link-rule-row y sont déjà
+   stylés), mais un ID différent puisque ce sont deux modales DISTINCTES ici
+   (liste de gestion vs formulaire de configuration d'une règle) - la V1 n'a
+   qu'un seul de ces deux éléments dans un volet repliable dédié
+   (#toolbar-panel), pas une modale séparée ; ce fichier reste donc le bon
+   endroit pour cette règle plutôt que le CSS partagé, qui n'a pas cet ID. */
+#link-rules-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+.link-rules-modal-content h3 { margin: 0 0 10px; font-size: 14px; }
+.link-rules-empty { font-size: 12px; color: var(--text-faint, #8a94a3); margin: 0 0 8px; }
