@@ -1044,10 +1044,16 @@ const PdfExport = (function () {
     }
   }
 
-  // pdfmake ne sait embarquer que du JPEG/PNG (un data URI SVG le fait
-  // bloquer indéfiniment sans erreur) - rastérise donc tout SVG en PNG via
-  // un aller-retour <img>/<canvas>. Générique, sans dépendance à l'éditeur.
-  function rasterizeSvgDataUri(dataUri) {
+  // pdfmake ne sait embarquer que du JPEG/PNG (tout le reste - SVG, mais
+  // aussi WEBP - le fait bloquer indéfiniment ou lever "Unknown image
+  // format" sans que l'appelant ne soit prévenu) - rastérise donc en PNG via
+  // un aller-retour <img>/<canvas>, quel que soit le format source (le
+  // navigateur sait décoder n'importe quel format qu'il affiche
+  // normalement). Générique, sans dépendance à l'éditeur. Découvert sur du
+  // WEBP : les CDN d'images (Wikimedia compris) renvoient couramment du
+  // WEBP par négociation de contenu même pour une URL en ".png" - un cas
+  // bien plus courant qu'un simple SVG isolé.
+  function rasterizeDataUri(dataUri) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -1058,7 +1064,7 @@ const PdfExport = (function () {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         try { resolve(canvas.toDataURL('image/png')); } catch (e) { reject(e); }
       };
-      img.onerror = () => reject(new Error('Échec de décodage du SVG pour rastérisation'));
+      img.onerror = () => reject(new Error('Échec de décodage de l’image pour rastérisation'));
       img.src = dataUri;
     });
   }
@@ -1085,7 +1091,7 @@ const PdfExport = (function () {
             reader.readAsDataURL(blob);
           });
         }
-        if (src.startsWith('data:image/svg+xml')) src = await rasterizeSvgDataUri(src);
+        if (!/^data:image\/(png|jpe?g);/.test(src)) src = await rasterizeDataUri(src);
         img.setAttribute('src', src);
         // Décode l'image ICI (avant de resérialiser le HTML) plutôt que de
         // compter sur le hôte de mesure pour le faire : `getBoundingClientRect()`
