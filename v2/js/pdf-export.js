@@ -42,6 +42,36 @@ const PdfExport = (function () {
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
+
+  // ProseMirror pose `white-space: break-spaces` sur tout son contenu texte
+  // (nécessaire à son modèle d'édition - préserve les espaces significatifs)
+  // - PAS `normal` comme un paragraphe HTML ordinaire. Différence concrète :
+  // avec `break-spaces`, l'espace juste avant un retour à la ligne COMPTE
+  // dans la largeur de cette ligne (vérifié en conditions réelles : un même
+  // texte, à la même largeur en px, saute un mot de moins par ligne avec
+  // `break-spaces` qu'avec `normal`) ; avec `normal` (ce que fait pdfmake),
+  // cet espace "dépasse" sans compter, un mot de plus peut donc tenir. Sans
+  // compensation, pdfmake calait donc systématiquement un mot de trop par
+  // rapport à l'éditeur, plus visible dans une colonne étroite (moins de
+  // mots par ligne, marge de manœuvre plus faible). Corrigé en retranchant
+  // la largeur d'UNE espace (mesurée une fois, mise en cache) de chaque
+  // largeur de habillage utilisée par ce fichier - émule la même rigueur que
+  // `break-spaces` sans avoir à réimplémenter l'algorithme de retour à la
+  // ligne de pdfmake.
+  let cachedSpaceWidthPt = null;
+  function spaceWidthPt() {
+    if (cachedSpaceWidthPt !== null) return cachedSpaceWidthPt;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre; font-family:Roboto,Helvetica,Arial,sans-serif; font-size:' + DEFAULT_FONT_SIZE + 'pt;';
+    probe.textContent = 'a a';
+    document.body.appendChild(probe);
+    const withSpace = probe.getBoundingClientRect().width;
+    probe.textContent = 'aa';
+    const withoutSpace = probe.getBoundingClientRect().width;
+    document.body.removeChild(probe);
+    cachedSpaceWidthPt = Math.max(1, (withSpace - withoutSpace) * PX_TO_PT);
+    return cachedSpaceWidthPt;
+  }
   const CONTENT_WIDTH_PX = (595.28 - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
 
   function cssSize(value, fallback) {
@@ -355,8 +385,17 @@ const PdfExport = (function () {
   // proportion calculée - mesurer la boîte entière ferait compter ce padding
   // DEUX FOIS (une fois dans la proportion mesurée, une fois dans le budget
   // pdfmake), rendant le texte PDF disponible légèrement plus large que dans
-  // l'éditeur (un mot de plus tenait par ligne dans le PDF, vérifié en
-  // conditions réelles en comparant le texte ligne par ligne).
+  // l'éditeur.
+  //
+  // MESURÉE sur le premier enfant de bloc de la cellule (son <p>/<div>/...),
+  // PAS calculée en soustrayant padding+bordure de la boîte de la cellule
+  // elle-même : les deux ne coïncident pas toujours exactement (arrondi du
+  // moteur de mise en page du navigateur sur la largeur de colonne d'un
+  // tableau `table-layout:fixed` - vérifié en conditions réelles, un écart
+  // de 1px constaté entre les deux approches, juste assez pour faire
+  // basculer une coupure de ligne). Repli sur le calcul arithmétique
+  // seulement si la cellule n'a aucun enfant de bloc mesurable (cellule
+  // vide).
   function measuredColumnWidthsPx(table, columnCount) {
     const firstRow = table.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
     if (!firstRow) return null;
@@ -365,9 +404,15 @@ const PdfExport = (function () {
     const widths = [];
     cells.forEach(cell => {
       const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
-      const cs = getComputedStyle(cell);
-      const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
-      const perCol = (cell.getBoundingClientRect().width - inset) / span;
+      const contentEl = cell.querySelector(':scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol');
+      let perCol;
+      if (contentEl) {
+        perCol = contentEl.getBoundingClientRect().width / span;
+      } else {
+        const cs = getComputedStyle(cell);
+        const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+        perCol = (cell.getBoundingClientRect().width - inset) / span;
+      }
       for (let i = 0; i < span; i += 1) widths.push(perCol);
     });
     while (widths.length < columnCount) widths.push(0);
@@ -442,6 +487,22 @@ const PdfExport = (function () {
     } else {
       widths = Array(columnCount).fill(Math.max(minColWidthPt, usableForColumnsPt / columnCount));
     }
+    // spaceWidthPt() retranché PAR COLONNE, APRÈS la répartition proportionnelle
+    // (pas mélangé dans le budget total avant répartition) : compense
+    // `white-space: break-spaces` (cf. commentaire en tête de fichier) - sans
+    // ça, une colonne étroite en particulier cale régulièrement un mot de
+    // trop par rapport à l'éditeur. Mélanger cette compensation dans le
+    // budget total AVANT de répartir proportionnellement la diluait au
+    // prorata de la largeur de chaque colonne (une petite colonne n'en
+    // recevait qu'une fraction), au lieu de s'appliquer pleinement à chacune.
+    // ×1.5 (pas ×1 pile) : vérifié par recherche dichotomique sur un cas réel
+    // (colonne 241px) que la largeur EXACTE à laquelle un mot cesse de tenir
+    // dans pdfmake ne correspond pas exactement à "une largeur d'espace" -
+    // ×1 laissait encore, de justesse (< 1pt d'écart), un mot de trop tenir ;
+    // une marge de sécurité plus généreuse vaut mieux que de viser le seuil
+    // théorique au plus juste, quitte à couper très légèrement plus tôt que
+    // strictement nécessaire.
+    widths = widths.map(w => Math.max(minColWidthPt, w - spaceWidthPt() * 1.5));
     const table = {
       table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] },
       layout: {
@@ -490,7 +551,15 @@ const PdfExport = (function () {
     const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
     const zoneChromeLeftPt = leftPt(zoneClone);
     const colOwnInsetLeft = [measuredCols[0] ? leftPt(measuredCols[0]) : 0, measuredCols[1] ? leftPt(measuredCols[1]) : 0];
-    const colOwnInsetRight = [measuredCols[0] ? rightPt(measuredCols[0]) : 0, measuredCols[1] ? rightPt(measuredCols[1]) : 0];
+    // PAS de compensation `spaceWidthPt()` ici (contrairement à tableFrom) :
+    // `measureTextWidthPt` mesure directement la largeur de TEXTE réelle
+    // (pas une largeur de colonne pdfmake à repartir), déjà suffisamment
+    // stricte - vérifié en conditions réelles, en ajouter une ici faisait
+    // au contraire caler un mot de MOINS que l'éditeur (sur-correction).
+    const colOwnInsetRight = [
+      measuredCols[0] ? rightPt(measuredCols[0]) : 0,
+      measuredCols[1] ? rightPt(measuredCols[1]) : 0,
+    ];
     const colOuterWidthPt = [
       measuredCols[0] ? measuredCols[0].getBoundingClientRect().width * PX_TO_PT : leftWidth,
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
@@ -565,7 +634,13 @@ const PdfExport = (function () {
     // Marge verticale nulle entre blocs consécutifs (mesuré : .tiptap p/h1-6/
     // li/ol/ul { margin: 0 }, cf. css/editor-v2.css) - même raisonnement que
     // la V1 : ajouter une marge fictive ici dérive de la vraie mise en page.
-    const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, 0, 0], lineHeight: LINE_HEIGHT_RATIO };
+    // Marge droite = spaceWidthPt() : compense `white-space: break-spaces`
+    // (cf. commentaire en tête de fichier), même principe que pour les
+    // tableaux/zones 2 colonnes - un flux principal (pleine largeur de page)
+    // a rarement assez peu de mots par ligne pour que ça se voie, mais reste
+    // cohérent avec le reste du document plutôt que de laisser un cas limite
+    // non couvert.
+    const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) {
       block.bold = true;
@@ -576,7 +651,7 @@ const PdfExport = (function () {
       block._headingText = (marker + (node.textContent || '')).replace(/\s+/g, ' ').trim();
     }
     if (tag === 'LI') { block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
-    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, 0, 4]; }
+    if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
     if (pageBreakBefore) block.pageBreak = 'before';
     blocks.push(block);
     images.forEach(img => blocks.push(img));
