@@ -1087,6 +1087,18 @@ const PdfExport = (function () {
         }
         if (src.startsWith('data:image/svg+xml')) src = await rasterizeSvgDataUri(src);
         img.setAttribute('src', src);
+        // Décode l'image ICI (avant de resérialiser le HTML) plutôt que de
+        // compter sur le hôte de mesure pour le faire : `getBoundingClientRect()`
+        // sur un <img> dont la hauteur est en `auto` (cf. styleFor(), seul
+        // `width` est posé) a besoin du ratio intrinsèque de l'image, connu
+        // seulement une fois décodée - sans ce await, floatedImageParagraphFrom
+        // mesurait `imgRect.bottom` AVANT que l'image ne soit prête (racine du
+        // bug du "saut de ligne" : la frontière beside/after se basait sur une
+        // hauteur d'image encore incorrecte). `decode()` pré-chauffe le cache
+        // navigateur pour cette URI data: précise - un <img> recréé plus tard
+        // avec la MÊME src (reparsing du HTML dans htmlToPdfContent) obtient
+        // alors ses dimensions intrinsèques synchronement.
+        await img.decode().catch(() => {});
       } catch (e) {
         console.warn('[PdfExport] image ignorée dans le PDF vectoriel (conversion impossible) :', img.getAttribute('src'), e);
         img.setAttribute('data-pdf-skip', '1');
