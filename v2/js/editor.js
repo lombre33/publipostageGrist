@@ -311,22 +311,32 @@ const Editor = (function () {
       if (node.type.name !== 'table') return true;
       const firstRow = node.firstChild;
       if (!firstRow) return false;
+      // Le total/l'échelle se calculent sur la seule première ligne (les
+      // largeurs de colonne sont censées être identiques sur toutes les
+      // lignes), mais le correctif doit être appliqué à TOUTES LES LIGNES -
+      // sinon la ligne 2+ garde son ancienne largeur de colonne, et
+      // prosemirror-tables (qui exige une largeur cohérente par colonne à
+      // travers toutes les lignes) annule silencieusement la correction de
+      // la ligne 1 pour la réaligner sur cette valeur restée plus grande
+      // (vérifié en conditions réelles : un tableau à une seule ligne se
+      // corrigeait, un tableau à deux lignes non).
       let total = 0;
-      const cells = [];
-      firstRow.forEach((cellNode, offset) => {
+      firstRow.forEach(cellNode => {
         const span = cellNode.attrs.colspan || 1;
         const colwidth = cellNode.attrs.colwidth;
         total += colwidth ? colwidth.reduce((sum, w) => sum + (w || DEFAULT_COL_PX), 0) : DEFAULT_COL_PX * span;
-        cells.push({ pos: pos + 2 + offset, node: cellNode });
       });
       if (total <= containerWidth) return false;
       const scale = containerWidth / total;
-      cells.forEach(({ pos: cellPos, node: cellNode }) => {
-        const colwidth = cellNode.attrs.colwidth;
-        if (!colwidth) return; // colonne "auto" par défaut - laissée telle quelle
-        const newColwidth = colwidth.map(w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w));
-        if (!tr) tr = state.tr;
-        tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: newColwidth }));
+      node.forEach((rowNode, rowOffset) => {
+        rowNode.forEach((cellNode, cellOffset) => {
+          const colwidth = cellNode.attrs.colwidth;
+          if (!colwidth) return; // colonne "auto" par défaut - laissée telle quelle
+          const newColwidth = colwidth.map(w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w));
+          const cellPos = pos + 1 + rowOffset + 1 + cellOffset;
+          if (!tr) tr = state.tr;
+          tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: newColwidth }));
+        });
       });
       return false;
     });
