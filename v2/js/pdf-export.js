@@ -381,6 +381,20 @@ const PdfExport = (function () {
       const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
       return sum + span;
     }, 0)));
+    // Padding de cellule MESURÉ sur le CSS réel (.tiptap table td/th { padding:
+    // 4px 6px }, cf. css/editor-v2.css), pas une constante approximative :
+    // un ancien "4pt/3pt" arrondi (au lieu des 4.5pt/3pt réels) creusait un
+    // écart mesurable, signalé par l'utilisateur, entre la largeur de texte
+    // disponible dans l'éditeur et celle utilisée par pdfmake. Sert à la fois
+    // pour le budget de largeur ci-dessous ET pour `layout.paddingLeft/Right/
+    // Top/Bottom` plus bas - un seul et même chiffre, jamais deux valeurs
+    // qui pourraient diverger.
+    const firstCell = rawRows.length ? cellsOf(rawRows[0])[0] : null;
+    const cellCs = firstCell ? getComputedStyle(firstCell) : null;
+    const cellPadLeftPt = cellCs ? (parseFloat(cellCs.paddingLeft) || 0) * PX_TO_PT : 4.5;
+    const cellPadRightPt = cellCs ? (parseFloat(cellCs.paddingRight) || 0) * PX_TO_PT : 4.5;
+    const cellPadTopPt = cellCs ? (parseFloat(cellCs.paddingTop) || 0) * PX_TO_PT : 3;
+    const cellPadBottomPt = cellCs ? (parseFloat(cellCs.paddingBottom) || 0) * PX_TO_PT : 3;
     const body = rawRows.map(row => {
       const output = [];
       cellsOf(row).forEach(cell => {
@@ -388,13 +402,18 @@ const PdfExport = (function () {
         let content;
         try { content = cellContentFrom(cell); }
         catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
-        const pdfCell = Object.assign({ margin: [4, 3, 4, 3], border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
+        // Pas de `margin` propre à la cellule : le seul inset appliqué est
+        // `layout.paddingLeft/Right/Top/Bottom` ci-dessous (le budget de
+        // largeur, cf. usableForColumnsPt, est déjà calculé en fonction de
+        // CE padding précisément - un margin en plus double-compterait un
+        // inset déjà pris en compte).
+        const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (colSpan > 1) pdfCell.colSpan = colSpan;
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});
       });
-      while (output.length < columnCount) output.push({ text: ' ', margin: [4, 3, 4, 3], border: [true, true, true, true] });
+      while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
       return output.slice(0, columnCount);
     });
     const availableWidthPt = 595.28 - 56;
@@ -404,7 +423,7 @@ const PdfExport = (function () {
     // le PDF réellement généré, même constat que la V1) - retiré avant de
     // répartir la largeur disponible pour que le total rendu retombe
     // exactement sur la largeur de page.
-    const cellPaddingPt = 8; // doit rester cohérent avec layout.paddingLeft/paddingRight ci-dessous
+    const cellPaddingPt = cellPadLeftPt + cellPadRightPt;
     const usableForColumnsPt = Math.max(minColWidthPt * columnCount, availableWidthPt - columnCount * cellPaddingPt);
     const measuredPx = measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
@@ -424,8 +443,11 @@ const PdfExport = (function () {
       widths = Array(columnCount).fill(Math.max(minColWidthPt, usableForColumnsPt / columnCount));
     }
     const table = {
-      table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ', margin: [4, 3, 4, 3] }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] },
-      layout: { hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777', paddingLeft: () => 4, paddingRight: () => 4, paddingTop: () => 3, paddingBottom: () => 3 },
+      table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] },
+      layout: {
+        hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777',
+        paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
+      },
       margin: [0, 5, 0, 5],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
