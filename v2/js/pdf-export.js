@@ -702,16 +702,11 @@ const PdfExport = (function () {
       node = parent;
     }
   }
-  // Trouve, dans le texte de `node` (encore attaché à l'hôte de mesure, donc
-  // réellement mis en page par le float CSS - cf. css/editor-v2.css), le
-  // premier MOT dont le haut tombe au niveau ou au-delà de `imgBottom` (le
-  // bas réel de l'image flottante, en coordonnées écran) - le habillage se
-  // rompt toujours à une frontière de mot, jamais au milieu. Renvoie
-  // {textNode, offset} (position du début de ce mot) ou `null` si tout le
-  // texte tient à côté de l'image (rien à découper) ou si RIEN ne tient à
-  // côté (dès le premier mot déjà en dessous - cas dégénéré, pas de découpe
-  // utile non plus).
-  function splitParagraphAtImageBottom(node, imgBottom) {
+  // Tous les MOTS (délimités par un blanc) du texte de `node` (encore
+  // attaché à l'hôte de mesure, donc réellement mis en page par le float CSS
+  // - cf. css/editor-v2.css), avec la position Y réelle de la ligne sur
+  // laquelle chacun tombe.
+  function collectWords(node) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const words = [];
     let textNode;
@@ -726,31 +721,55 @@ const PdfExport = (function () {
           const range = document.createRange();
           range.setStart(textNode, start);
           range.setEnd(textNode, i);
-          words.push({ textNode, start, top: range.getBoundingClientRect().top });
+          words.push({ textNode, start, end: i, top: range.getBoundingClientRect().top });
         }
       }
     }
-    let splitIndex = words.length;
-    for (let w = 0; w < words.length; w += 1) {
-      if (words[w].top >= imgBottom - 0.5) { splitIndex = w; break; }
+    return words;
+  }
+  // Extrait les runs pdfmake (gras/italique préservés) du texte de `node`
+  // strictement compris entre `startCut` (position {textNode,offset}, ou
+  // `null` = depuis le tout début) et `endCut` (idem, ou `null` = jusqu'à la
+  // toute fin) - clone `node`, tronque le texte visé, retire tout ce qui
+  // précède/suit au clone (removeBefore/removeAfter), sans jamais modifier
+  // `node` lui-même (peut être appelé plusieurs fois sur le même `node`,
+  // pour des plages différentes).
+  function extractRunsBetween(node, startCut, endCut) {
+    const clone = node.cloneNode(true);
+    if (endCut) {
+      const target = nodeAtPath(clone, nodePathTo(node, endCut.textNode));
+      target.nodeValue = target.nodeValue.slice(0, endCut.offset);
+      removeAfter(clone, target);
     }
-    if (splitIndex === 0 || splitIndex === words.length) return null;
-    return { textNode: words[splitIndex].textNode, offset: words[splitIndex].start };
+    if (startCut) {
+      const target = nodeAtPath(clone, nodePathTo(node, startCut.textNode));
+      target.nodeValue = target.nodeValue.slice(startCut.offset);
+      removeBefore(clone, target);
+    }
+    return trimEdgeWhitespace(inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []));
   }
 
   // Habillage réel (float CSS côté éditeur, .editor-image-view[data-align=
   // left|right], cf. css/editor-v2.css) reproduit ici via le mécanisme
   // `columns` NATIF de pdfmake : une colonne à largeur fixe pour l'image,
-  // une colonne pour le texte du MÊME paragraphe dans la largeur restante -
-  // pdfmake répartit lui-même ce texte sur plusieurs lignes à l'intérieur,
-  // aucun découpage ligne par ligne à la main nécessaire pour la partie qui
-  // tient À CÔTÉ de l'image. Pour la partie qui, dans le MÊME paragraphe,
-  // dépasse le bas de l'image (texte plus long que l'image n'est haute) :
-  // mesurée en direct sur le rendu réel (déjà correctement habillé par le
-  // float CSS du navigateur, cf. splitParagraphAtImageBottom) et reconstruite
-  // en un second bloc plein-largeur séparé - sans cette étape, TOUT le texte
-  // du paragraphe restait à la largeur étroite pour toujours, même une fois
-  // passé le bas de l'image (signalé par l'utilisateur, capture à l'appui).
+  // une colonne pour le texte du MÊME paragraphe dans la largeur restante.
+  // Chaque LIGNE "à côté" de l'image est reconstruite comme son PROPRE bloc
+  // pdfmake, avec ses frontières EXACTES dictées par le rendu réel mesuré
+  // (mots consécutifs de même Y regroupés en une ligne) - PAS laissée à
+  // pdfmake pour re-répartir tout le texte "à côté" en un seul flux dans une
+  // largeur calculée : vérifié en conditions réelles que cette
+  // re-répartition ne tombe pas TOUJOURS exactement sur les mêmes coupures
+  // que l'éditeur (la même compensation break-spaces que tableFrom/
+  // blockFrom aide mais ne suffit pas toujours à elle seule) - dicter
+  // directement les lignes réelles élimine le problème à la racine plutôt
+  // que de chercher un facteur de compensation parfait. Chaque ligne, prise
+  // seule, tient par construction dans la largeur disponible : c'est très
+  // exactement ce qui l'a fait tenir dans l'éditeur à cette même largeur.
+  // Le texte qui, dans le MÊME paragraphe, dépasse le bas de l'image
+  // continue lui normalement (pdfmake répartit ce second bloc plein-largeur
+  // comme n'importe quel autre paragraphe - sans cette étape, TOUT le texte
+  // du paragraphe restait à tort à la largeur étroite pour toujours, même
+  // après le bas de l'image, signalé par l'utilisateur).
   // Portée de CET incrément : seulement le texte du MÊME paragraphe que
   // l'image - un paragraphe SUIVANT distinct ne vient pas encore s'habiller
   // si l'image est plus haute que ce seul paragraphe (limitation connue,
@@ -771,42 +790,43 @@ const PdfExport = (function () {
     const pageWidthPt = 595.28 - 2 * PAGE_MARGIN_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
-    // spaceWidthPt() * 1.5 : compense `white-space: break-spaces` (cf.
-    // commentaire en tête de fichier), même facteur que tableFrom pour les
-    // cellules de tableau (une colonne étroite du même ordre de grandeur).
-    // Résiduel constaté en conditions réelles sur un paragraphe assez long
-    // pour déborder sous l'image (9 lignes mesurées à côté de l'image dans
-    // l'éditeur contre 10 dans le PDF) : PAS entièrement résorbé par ce
-    // facteur - vérifié qu'élargir la marge de compensation (testé jusqu'à
-    // ×25) ne fait qu'AGGRAVER l'écart (plus de lignes, pas moins), donc la
-    // cause n'est pas (uniquement) la largeur de colonne elle-même. Même
-    // classe de limite pratique déjà acceptée ailleurs dans ce fichier
-    // (résidu d'un mot par endroits entre moteurs de rendu différents,
-    // cf. mémoire project_v2_tiptap_migration) - pas creusé plus loin.
-    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt - spaceWidthPt() * 1.5);
-    const makeColumns = (colRuns) => {
-      const textCol = { width: remainingWidthPt, stack: [{ text: colRuns.length ? colRuns : ' ', lineHeight: LINE_HEIGHT_RATIO }] };
+    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
+    const makeColumns = (besideContent) => {
+      const textCol = { width: remainingWidthPt, stack: besideContent.length ? besideContent : [{ text: ' ' }] };
       const imgCol = { width: imageWidthPt, stack: [floatImg] };
       return { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
     };
-    const split = imgNode ? splitParagraphAtImageBottom(node, imgNode.getBoundingClientRect().bottom) : null;
-    if (!split) {
-      const block = makeColumns(runs);
+
+    const words = imgNode ? collectWords(node) : [];
+    const imgBottom = imgNode ? imgNode.getBoundingClientRect().bottom : null;
+    let splitIndex = words.length;
+    if (imgBottom != null) {
+      for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgBottom - 0.5) { splitIndex = w; break; } }
+    }
+    if (splitIndex === 0 || splitIndex === words.length) {
+      // Rien à découper (tout tient à côté, ou rien n'y tient) - repli
+      // simple, laisse pdfmake répartir tout le texte comme avant.
+      const block = makeColumns([{ text: runs, lineHeight: LINE_HEIGHT_RATIO }]);
       if (pageBreakBefore) block.pageBreak = 'before';
       return block;
     }
-    const path = nodePathTo(node, split.textNode);
-    const besideNode = node.cloneNode(true);
-    const belowNode = node.cloneNode(true);
-    const besideText = nodeAtPath(besideNode, path);
-    const belowText = nodeAtPath(belowNode, path);
-    besideText.nodeValue = besideText.nodeValue.slice(0, split.offset);
-    removeAfter(besideNode, besideText);
-    belowText.nodeValue = belowText.nodeValue.slice(split.offset);
-    removeBefore(belowNode, belowText);
-    const besideRuns = trimEdgeWhitespace(inlineRuns(besideNode, { fontSize: DEFAULT_FONT_SIZE }, []));
-    const belowRuns = trimEdgeWhitespace(inlineRuns(belowNode, { fontSize: DEFAULT_FONT_SIZE }, []));
-    const block1 = makeColumns(besideRuns);
+
+    // Regroupe les mots "à côté" en lignes (mots consécutifs de Y quasi
+    // identique) et reconstruit chacune comme son propre bloc de texte.
+    const lineGroups = [];
+    words.slice(0, splitIndex).forEach(w => {
+      const last = lineGroups[lineGroups.length - 1];
+      if (last && Math.abs(last.top - w.top) < 2) last.words.push(w); else lineGroups.push({ top: w.top, words: [w] });
+    });
+    const besideBlocks = lineGroups.map((line, i) => {
+      const startCut = i === 0 ? null : { textNode: line.words[0].textNode, offset: line.words[0].start };
+      const lastWord = line.words[line.words.length - 1];
+      const lineRuns = extractRunsBetween(node, startCut, { textNode: lastWord.textNode, offset: lastWord.end });
+      return { text: lineRuns.length ? lineRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
+    });
+    const belowRuns = extractRunsBetween(node, { textNode: words[splitIndex].textNode, offset: words[splitIndex].start }, null);
+
+    const block1 = makeColumns(besideBlocks);
     if (pageBreakBefore) block1.pageBreak = 'before';
     const block2 = { text: belowRuns.length ? belowRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
     return [block1, block2];
