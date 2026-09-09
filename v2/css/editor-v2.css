@@ -126,6 +126,16 @@
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
+/* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle
+   générique `#toolbar-top button::before` de css/style.css (posée pour les
+   boutons du bandeau partagé Nouveau/Enregistrer/etc., chacun avec son propre
+   `#btn-xxx::before{mask-image:...}`) s'applique donc AUSSI par erreur ici :
+   sans mask-image dédié pour nos boutons, ce ::before affiche un carré plein
+   14×14 de `currentColor`, sans aucun masque - le "gros carré noir" signalé
+   par l'utilisateur, à côté de la vraie icône SVG injectée par
+   Editor.applyToolbarIcons(). Neutralisé explicitement ici (même spécificité
+   que la règle partagée, mais chargé après dans la cascade). */
+#v2-toolbar button::before { content: none; }
 /* Boutons icône-seule (16px, style trait cf. v2/js/icons.js) : plus compact
    et plus lisible que les glyphes texte/unicode bruts d'origine (signalé par
    l'utilisateur) - l'identification se fait via le `title` natif (tooltip au
