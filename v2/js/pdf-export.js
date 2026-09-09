@@ -1083,18 +1083,37 @@ const PdfExport = (function () {
     const pending = [];
     const rootRect = root.getBoundingClientRect();
     const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block }) => block && !block._pendingImgNode);
+    // Tolérance au demi-pixel, même valeur que la V1 (js/editor.js:
+    // findBracketingAnchors) - sous-pixels de rendu de police d'un
+    // navigateur à l'autre, pas une erreur de logique.
+    const BOUNDARY_EPS_PX = 0.5;
     blocks.forEach(block => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
       const imgTopPx = imgRect.top - rootRect.top;
+      const imgBottomPx = imgRect.bottom - rootRect.top;
       const imgLeftPx = imgRect.left - rootRect.left;
       let above = null, aboveTopPx = -Infinity;
       let below = null, belowTopPx = Infinity;
       measurable.forEach(({ block: other, node }) => {
         if (!node || !node.getBoundingClientRect) return;
-        const t = node.getBoundingClientRect().top - rootRect.top;
-        if (t <= imgTopPx && t > aboveTopPx) { aboveTopPx = t; above = other; }
-        if (t >= imgTopPx && t < belowTopPx) { belowTopPx = t; below = other; }
+        const r = node.getBoundingClientRect();
+        const top = r.top - rootRect.top;
+        const bottom = r.bottom - rootRect.top;
+        // Qualifie comme ancre "au-dessus"/"en dessous" seulement si le bloc
+        // ENTIER (haut ET bas, pas juste son sommet) se termine avant/
+        // commence après l'image - sans quoi le paragraphe qui CONTIENT
+        // l'image (texte avant ET après elle, cas d'une image en calque
+        // nichée au milieu d'un paragraphe) qualifiait à tort comme sa
+        // propre ancre "au-dessus" (son sommet précède bien l'image, mais
+        // son bas la dépasse largement) - donnant une position extrapolée
+        // depuis le TOUT DÉBUT du paragraphe au lieu d'un vrai encadrement,
+        // signalé cassé par l'utilisateur pour ce cas précis. Même critère
+        // de qualification que la V1, déjà résolu là-bas (cf.
+        // findBracketingAnchors, js/editor.js : `rect.bottom <= imgRect.top`
+        // / `rect.top >= imgRect.bottom`, jamais juste `rect.top`).
+        if (bottom <= imgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; above = other; }
+        if (top >= imgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; below = other; }
       });
       pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx });
     });
