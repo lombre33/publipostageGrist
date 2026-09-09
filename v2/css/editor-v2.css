@@ -7,7 +7,16 @@
    mesure le rendu réel de blocs détachés en leur donnant juste cette classe
    (cf. attachMeasureHost) - une dépendance à l'ID du conteneur éditeur les
    aurait rendues invisibles hors de la page de l'éditeur lui-même. */
-.tiptap { outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; }
+/* font-family Roboto EXPLICITE : sans elle, le navigateur retombe sur
+   Helvetica/Arial (police système) alors que pdfmake utilise Roboto par
+   défaut à l'export (cf. ../js/pdf-fonts.js/vfs_fonts.min.js) - deux polices
+   aux métriques de caractères différentes, qui ne coupent donc PAS les
+   lignes aux mêmes endroits entre l'éditeur et le PDF (répartition des mots
+   par ligne différente, surtout visible dans un espace étroit : cellule de
+   tableau, colonne d'une zone 2 colonnes). Même bug déjà rencontré et
+   corrigé côté V1 (cf. css/roboto-fonts.css, réutilisé tel quel ici - police
+   auto-hébergée, mêmes fichiers que ceux embarqués par pdfmake). */
+.tiptap { outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 .tiptap p { margin: 0; }
 .tiptap h1, .tiptap h2, .tiptap h3,
 .tiptap h4, .tiptap h5, .tiptap h6 { margin: 0; font-weight: 700; }
@@ -18,8 +27,11 @@
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-.tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; }
-.tiptap table th { background: #f2f4f7; font-weight: 700; text-align: left; }
+/* Pas de style particulier pour <th> (gras/fond coloré) : les tableaux
+   insérés depuis la toolbar n'ont pas de ligne d'en-tête (cf.
+   v2/js/editor.js:insertTable, withHeaderRow: false) - une cellule reste
+   visuellement identique à une autre quel que soit son tag HTML. */
+.tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 .tiptap table .selectedCell { background: rgba(66, 133, 244, 0.15); }
 .tiptap table .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: #4285f4; pointer-events: none; }
 .tiptap .tableWrapper { overflow-x: auto; }

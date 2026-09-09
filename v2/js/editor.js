@@ -347,7 +347,10 @@ const Editor = (function () {
     bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
     bind('v2-btn-ordered', () => editor.chain().focus().toggleOrderedList().run());
     bind('v2-btn-blockquote', () => editor.chain().focus().toggleBlockquote().run());
-    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run());
+    // withHeaderRow: false - un tableau inséré n'a pas de style de première
+    // ligne différent des autres (signalé par l'utilisateur : gras + fond
+    // coloré inattendus par défaut, cf. aussi css/editor-v2.css).
+    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-col-before', () => editor.chain().focus().addColumnBefore().run());
     bind('v2-btn-col-after', () => editor.chain().focus().addColumnAfter().run());
     bind('v2-btn-col-del', () => editor.chain().focus().deleteColumn().run());

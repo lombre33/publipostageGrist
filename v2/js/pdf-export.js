@@ -348,6 +348,15 @@ const PdfExport = (function () {
   // directement exploitable comme un pourcentage. Mesurer la boîte réelle de
   // chaque cellule évite de dépendre du format exact de cet attribut - et
   // fonctionne aussi bien pour un tableau jamais redimensionné manuellement.
+  //
+  // Largeur de CONTENU (sans le padding/bordure CSS propres à la cellule),
+  // pas la boîte entière : `tableFrom` applique déjà SON PROPRE padding
+  // pdfmake (`layout.paddingLeft/Right`, cellPaddingPt) une fois la
+  // proportion calculée - mesurer la boîte entière ferait compter ce padding
+  // DEUX FOIS (une fois dans la proportion mesurée, une fois dans le budget
+  // pdfmake), rendant le texte PDF disponible légèrement plus large que dans
+  // l'éditeur (un mot de plus tenait par ligne dans le PDF, vérifié en
+  // conditions réelles en comparant le texte ligne par ligne).
   function measuredColumnWidthsPx(table, columnCount) {
     const firstRow = table.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
     if (!firstRow) return null;
@@ -356,7 +365,9 @@ const PdfExport = (function () {
     const widths = [];
     cells.forEach(cell => {
       const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
-      const perCol = cell.getBoundingClientRect().width / span;
+      const cs = getComputedStyle(cell);
+      const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+      const perCol = (cell.getBoundingClientRect().width - inset) / span;
       for (let i = 0; i < span; i += 1) widths.push(perCol);
     });
     while (widths.length < columnCount) widths.push(0);
