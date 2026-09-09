@@ -807,16 +807,31 @@ const PdfExport = (function () {
 
     const words = collectWords(node);
     const imgRect = imgNode.getBoundingClientRect();
+    // Tolérance généreuse (pas 0.5px) sur les deux frontières : une ligne
+    // dont le haut tombe à quelques pixels À PEINE après le bord de l'image
+    // reste comptée "à côté" plutôt que "en dessous" - une frontière stricte
+    // au demi-pixel s'est avérée trop fragile en conditions réelles (vérifié :
+    // un même document, chez l'utilisateur, mesurait le bas de l'image à
+    // quelques pixels près d'une ligne suivante et basculait de "3 lignes à
+    // côté" à "4 lignes à côté" selon l'environnement - sous-pixels de
+    // rendu de police/image qui varient d'un navigateur à l'autre, pas une
+    // erreur de logique). ~20% d'une hauteur de ligne typique à 10.5pt.
+    const BOUNDARY_TOLERANCE_PX = 4;
     // Premier mot dont la ligne commence au niveau (ou après) le HAUT de
     // l'image - tout ce qui précède est sur des lignes entièrement
     // terminées avant que le flottement ne débute, donc pas affecté par lui.
     let besideStart = words.length;
-    for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgRect.top - 2) { besideStart = w; break; } }
+    for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgRect.top - BOUNDARY_TOLERANCE_PX) { besideStart = w; break; } }
     // Premier mot, à partir de besideStart, dont la ligne commence au
     // niveau (ou après) le BAS de l'image - tout ce qui suit n'est plus
     // affecté par le flottement.
+    // + tolérance ici (pas -) : on veut REPOUSSER le seuil vers le bas pour
+    // qu'une ligne à peine après le bord de l'image reste "à côté" - une
+    // soustraction, comme pour besideStart, aurait fait l'inverse (classé
+    // "en dessous" ENCORE PLUS de lignes, pas moins - erreur de signe
+    // commise puis corrigée après re-vérification sur le cas réel).
     let besideEnd = words.length;
-    for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom - 0.5) { besideEnd = w; break; } }
+    for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
     if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
 
     const blocks = [];
@@ -1167,6 +1182,15 @@ const PdfExport = (function () {
 
   async function buildNativePdfDocDefinition(resolvedHtml, filename) {
     if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.');
+    // Attend que Roboto (police de mesure, cf. css/roboto-fonts.css) soit
+    // réellement chargée avant toute mesure de mise en page - sans ça, un
+    // export lancé tôt (police pas encore appliquée) mesurerait sur une
+    // police de repli aux métriques différentes, un delta de quelques
+    // pixels qui peut suffire à faire basculer une ligne d'un côté ou
+    // l'autre d'une frontière fine (ex. habillage de texte autour d'une
+    // image, cf. floatedImageParagraphFrom) - jamais fait jusqu'ici dans ce
+    // fichier, alors que la sensibilité aux polices y est un thème récurrent.
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* repli silencieux */ } }
     const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
     const content = await resolveNativePdfContent(inlinedHtml, filename);
     return buildNativeDocDefinition(content, filename);
