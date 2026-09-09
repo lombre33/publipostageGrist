@@ -271,6 +271,21 @@ const PdfExport = (function () {
       // "devant" et "derrière" n'ont donc PAS la même direction d'insertion
       // par rapport à leur bloc-ancre.
       image._pendingLayer = layer;
+      // Placeholder (écrasé par la vraie valeur dans resolveNativePdfContent,
+      // une fois l'ancrage résolu) : SANS ceci, tant qu'aucune `absolutePosition`
+      // n'est posée, pdfmake traite ce bloc comme un élément de FLUX normal et
+      // lui réserve sa propre hauteur - y compris pendant la toute PREMIÈRE
+      // passe de mesure (celle qui sert justement à mesurer la position RÉELLE
+      // des blocs-ancre voisins, cf. resolveNativePdfContent). Chaque image en
+      // attente gonflait alors artificiellement de sa propre hauteur la
+      // position mesurée de TOUS les blocs qui la suivent - y compris ceux
+      // choisis comme ancres pour CETTE image ou pour une AUTRE image en
+      // attente plus loin dans le document - biaisant le calcul d'ancrage
+      // (constaté en conditions réelles : ~46pt d'écart correspondant
+      // exactement à la hauteur d'une des images en attente). `absolutePosition`
+      // sort un bloc du flux dès la première passe, quelle que soit sa valeur
+      // (non visible tant que ce bloc n'est pas dans le PDF final rendu).
+      image.absolutePosition = { x: 0, y: 0 };
     } else {
       const align = node.getAttribute('data-align');
       // gauche/droite = habillage (float CSS côté éditeur, cf.
@@ -999,8 +1014,21 @@ const PdfExport = (function () {
     }
     if (tag === 'LI') { block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
     if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
-    if (pageBreakBefore) block.pageBreak = 'before';
-    blocks.push(block);
+    // Un paragraphe SANS AUCUN texte (ex. ne contenant qu'une image) n'a pas
+    // besoin de ce bloc-texte de repli (`text: ' '`, prévu pour préserver la
+    // ligne vide d'un paragraphe RÉELLEMENT vide) : dans l'éditeur, un tel
+    // paragraphe s'effondre à hauteur nulle (l'image y est en flux normal ou
+    // sortie du flux si en calque) - le pousser quand même ajoutait une ligne
+    // vide fictive dans le PDF, absente de l'éditeur, qui décalait tout le
+    // contenu suivant de la hauteur d'une ligne (et, pour une image en calque,
+    // faussait la position mesurée des blocs-ancre voisins qui s'appuient sur
+    // ces positions réelles, cf. resolvePendingImageAnchors).
+    if (runs.length || !images.length) {
+      if (pageBreakBefore) block.pageBreak = 'before';
+      blocks.push(block);
+    } else if (pageBreakBefore && images[0]) {
+      images[0].pageBreak = 'before';
+    }
     images.forEach(img => blocks.push(img));
     nestedLists.forEach(list => {
       Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
@@ -1082,17 +1110,58 @@ const PdfExport = (function () {
   function resolvePendingImageAnchors(root, blocks, sourceNodes) {
     const pending = [];
     const rootRect = root.getBoundingClientRect();
-    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block }) => block && !block._pendingImgNode);
+    // Un paragraphe qui héberge une image en attente produit TOUJOURS, en plus
+    // du bloc image lui-même, un bloc-texte "compagnon" (cf. blockFrom : même
+    // sans aucun texte, `runs.length ? runs : ' '` pousse un bloc `{text:' '}`
+    // partageant le MÊME nœud source) - pour un paragraphe qui ne contient QUE
+    // l'image (aucun texte autour), ce compagnon fantôme s'effondre à une
+    // hauteur quasi nulle, à la position même du paragraphe hôte - donc à un
+    // endroit sans rapport avec la position réelle (absolue) de l'image qu'il
+    // accompagne. Il pouvait alors, par coïncidence de position, qualifier à
+    // tort comme ancre "au-dessus"/"en dessous" pour l'image elle-même (auto-
+    // référence non détectée par le test de boîte englobante ci-dessous, qui
+    // ne protège que le cas d'un paragraphe avec du VRAI texte avant/après
+    // l'image) OU pour une AUTRE image plus loin dans le document - constaté
+    // en conditions réelles (position finale décalée de ~150pt). Exclu donc
+    // de `measurable` au même titre que le bloc image lui-même : tout bloc
+    // partageant le nœud source d'une image en attente est écarté, qu'il
+    // porte ou non `_pendingImgNode`.
+    const pendingHostNodes = new Set(blocks.map((b, i) => (b && b._pendingImgNode) ? sourceNodes[i] : null).filter(Boolean));
+    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !pendingHostNodes.has(node));
+    // Une image en calque nichée au milieu d'un paragraphe qui a du texte
+    // RÉEL avant/après elle (ex. "...Duis aute irure<img>enderit in...") a
+    // un bien meilleur point de référence disponible que le bracketing
+    // générique ci-dessous : son PROPRE paragraphe, dont le tout DÉBUT est
+    // mesurable (mêmes px/pt que n'importe quel bloc), et dont on sait que
+    // l'échelle px→pt y est UNIFORME (texte réel en flux normal, vérifié :
+    // le même PX_TO_PT s'applique du premier au dernier pixel). Le
+    // bracketing générique doit exclure ce paragraphe (cf. plus haut) pour
+    // ne pas se prendre lui-même comme ancre - mais ça oblige alors à
+    // extrapoler depuis le bloc externe le plus proche, parfois à des
+    // dizaines de pixels de distance de l'autre côté de paragraphes vides à
+    // hauteur nulle (cf. commentaire ci-dessus) - une extrapolation linéaire
+    // sur cette distance suppose à tort une échelle uniforme sur tout le
+    // trajet, ce qui ne tient pas (constaté : plusieurs dizaines de points
+    // d'écart). Ici, le début du paragraphe hôte lui-même sert de référence
+    // locale directe - plus précis, et prioritaire sur le bracketing
+    // générique quand disponible (cf. resolveImageAbsolutePosition).
+    const hostToOwnTextBlock = new Map();
+    blocks.forEach((b, i) => {
+      if (b && !b._pendingImgNode && sourceNodes[i] && !hostToOwnTextBlock.has(sourceNodes[i])) hostToOwnTextBlock.set(sourceNodes[i], b);
+    });
     // Tolérance au demi-pixel, même valeur que la V1 (js/editor.js:
     // findBracketingAnchors) - sous-pixels de rendu de police d'un
     // navigateur à l'autre, pas une erreur de logique.
     const BOUNDARY_EPS_PX = 0.5;
-    blocks.forEach(block => {
+    blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
       const imgTopPx = imgRect.top - rootRect.top;
       const imgBottomPx = imgRect.bottom - rootRect.top;
       const imgLeftPx = imgRect.left - rootRect.left;
+      const hostNode = sourceNodes[idx];
+      const container = hostToOwnTextBlock.get(hostNode) || null;
+      const containerTopPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().top - rootRect.top) : null;
       let above = null, aboveTopPx = -Infinity;
       let below = null, belowTopPx = Infinity;
       measurable.forEach(({ block: other, node }) => {
@@ -1115,7 +1184,7 @@ const PdfExport = (function () {
         if (bottom <= imgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; above = other; }
         if (top >= imgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; below = other; }
       });
-      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx });
+      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx, container, containerTopPx });
     });
     return pending;
   }
@@ -1240,6 +1309,13 @@ const PdfExport = (function () {
   // ancre n'a pu être résolue (document sans aucun autre bloc mesurable).
   function resolveImageAbsolutePosition(a) {
     const xPt = PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    // Référence locale (cf. resolvePendingImageAnchors) prioritaire sur le
+    // bracketing générique ci-dessous quand disponible : plus précise, car
+    // fondée sur le début du paragraphe qui héberge l'image elle-même (échelle
+    // px→pt localement uniforme, texte réel en flux normal) plutôt que sur une
+    // extrapolation/interpolation depuis un bloc externe potentiellement
+    // éloigné de plusieurs paragraphes.
+    if (a.containerTop != null) return { x: xPt, y: a.containerTop + (a.imgTopPx - a.containerTopPx) * PX_TO_PT };
     if (a.aboveTop != null && a.belowTop != null && a.abovePage === a.belowPage && a.belowTopPx !== a.aboveTopPx) {
       const fraction = (a.imgTopPx - a.aboveTopPx) / (a.belowTopPx - a.aboveTopPx);
       return { x: xPt, y: a.aboveTop + fraction * (a.belowTop - a.aboveTop) };
@@ -1281,9 +1357,11 @@ const PdfExport = (function () {
       const resolvedAnchors = (content._pendingImages || []).map(p => {
         const aboveResolved = p.above && p.above.positions && p.above.positions[0];
         const belowResolved = p.below && p.below.positions && p.below.positions[0];
+        const containerResolved = p.container && p.container.positions && p.container.positions[0];
         return {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
+          containerTop: containerResolved ? containerResolved.top : null, containerTopPx: p.containerTopPx,
           hadAbove: !!p.above, hadBelow: !!p.below,
           imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
         };
