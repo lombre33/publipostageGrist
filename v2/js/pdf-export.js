@@ -771,11 +771,19 @@ const PdfExport = (function () {
     const pageWidthPt = 595.28 - 2 * PAGE_MARGIN_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
-    // spaceWidthPt() en repli : compense `white-space: break-spaces` (cf.
-    // commentaire en tête de fichier), même principe que blockFrom pour le
-    // flux principal (marge droite) - une colonne étroite comme celle-ci en
-    // a d'autant plus besoin.
-    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt - spaceWidthPt());
+    // spaceWidthPt() * 1.5 : compense `white-space: break-spaces` (cf.
+    // commentaire en tête de fichier), même facteur que tableFrom pour les
+    // cellules de tableau (une colonne étroite du même ordre de grandeur).
+    // Résiduel constaté en conditions réelles sur un paragraphe assez long
+    // pour déborder sous l'image (9 lignes mesurées à côté de l'image dans
+    // l'éditeur contre 10 dans le PDF) : PAS entièrement résorbé par ce
+    // facteur - vérifié qu'élargir la marge de compensation (testé jusqu'à
+    // ×25) ne fait qu'AGGRAVER l'écart (plus de lignes, pas moins), donc la
+    // cause n'est pas (uniquement) la largeur de colonne elle-même. Même
+    // classe de limite pratique déjà acceptée ailleurs dans ce fichier
+    // (résidu d'un mot par endroits entre moteurs de rendu différents,
+    // cf. mémoire project_v2_tiptap_migration) - pas creusé plus loin.
+    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt - spaceWidthPt() * 1.5);
     const makeColumns = (colRuns) => {
       const textCol = { width: remainingWidthPt, stack: [{ text: colRuns.length ? colRuns : ' ', lineHeight: LINE_HEIGHT_RATIO }] };
       const imgCol = { width: imageWidthPt, stack: [floatImg] };
