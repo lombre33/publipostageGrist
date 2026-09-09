@@ -235,9 +235,19 @@ const PdfExport = (function () {
       const topPx = parseFloat(node.style.top) || 0;
       image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * PX_TO_PT, y: PAGE_MARGIN_PT + topPx * PX_TO_PT };
     } else {
-      image.margin = [0, 2, 0, 4];
       const align = node.getAttribute('data-align');
-      if (align) image.alignment = align;
+      // gauche/droite = habillage (float CSS côté éditeur, cf.
+      // css/editor-v2.css) - marqué ici plutôt qu'aligné tel quel : géré à
+      // part par floatedImageParagraphFrom (colonne image + colonne texte),
+      // PAS par la propriété `alignment` de pdfmake (qui n'aurait fait
+      // qu'aligner l'image seule dans son propre espace, sans jamais faire
+      // habiller le texte autour).
+      if (align === 'left' || align === 'right') {
+        image._floatAlign = align;
+      } else {
+        image.margin = [0, 2, 0, 4];
+        if (align) image.alignment = align;
+      }
     }
     return image;
   }
@@ -641,6 +651,41 @@ const PdfExport = (function () {
     return block;
   }
 
+  // Habillage réel (float CSS côté éditeur, .editor-image-view[data-align=
+  // left|right], cf. css/editor-v2.css) reproduit ici via le mécanisme
+  // `columns` NATIF de pdfmake : une colonne à largeur fixe pour l'image,
+  // une colonne pour le texte du MÊME paragraphe dans la largeur restante -
+  // pdfmake répartit lui-même ce texte sur plusieurs lignes à l'intérieur,
+  // aucun découpage ligne par ligne à la main nécessaire. La hauteur du bloc
+  // `columns` est le MAX des deux colonnes (comportement pdfmake natif) :
+  // si le texte est plus court que l'image, le paragraphe SUIVANT démarre
+  // après l'image (pas collé au texte) - correct sans code supplémentaire.
+  // Portée de CET incrément : seulement le texte du MÊME paragraphe que
+  // l'image - un paragraphe SUIVANT ne vient pas encore s'habiller si
+  // l'image est plus haute qu'un seul paragraphe (limitation connue,
+  // nécessiterait de consommer des blocs frères suivants depuis
+  // buildPdfContentFromRoot, plus invasif - cf. mémoire
+  // project_v2_tiptap_migration). `null` si le paragraphe ne contient QUE
+  // l'image (aucun texte à habiller) - l'appelant retombe alors sur le
+  // rendu normal (image seule).
+  function floatedImageParagraphFrom(node, pageBreakBefore) {
+    const images = [];
+    const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images));
+    const floatImg = images.find(img => img._floatAlign);
+    if (!floatImg || !runs.length) return null;
+    const pageWidthPt = 595.28 - 2 * PAGE_MARGIN_PT;
+    const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
+    const imageWidthPt = floatImg.width;
+    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
+    const align = floatImg._floatAlign;
+    delete floatImg._floatAlign;
+    const textCol = { width: remainingWidthPt, stack: [{ text: runs, lineHeight: LINE_HEIGHT_RATIO }] };
+    const imgCol = { width: imageWidthPt, stack: [floatImg] };
+    const block = { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
+    if (pageBreakBefore) block.pageBreak = 'before';
+    return block;
+  }
+
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
   // paragraphe contenant une image produit un bloc de texte ET un bloc image
   // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
@@ -648,6 +693,17 @@ const PdfExport = (function () {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
+    if (tag === 'P' || tag === 'DIV') {
+      const floatImgEl = Array.from(node.querySelectorAll('img.editor-image')).find(img => {
+        const align = img.getAttribute('data-align');
+        const layer = img.getAttribute('data-layer') || 'normal';
+        return layer === 'normal' && (align === 'left' || align === 'right');
+      });
+      if (floatImgEl) {
+        const floated = floatedImageParagraphFrom(node, pageBreakBefore);
+        if (floated) return [floated];
+      }
+    }
     const images = [];
     // Sous-liste imbriquée : un <li> issu de StarterKit peut contenir un
     // <ul>/<ol> ENFANT après son <p> (Tab pour imbriquer, cf. v2/js/editor.js -

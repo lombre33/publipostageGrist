@@ -66,10 +66,14 @@
    margin:auto ait un effet sur l'image qu'il contient). */
 .tiptap .editor-image-view { position: relative; display: inline-block; max-width: 100%; }
 .tiptap .editor-image-view .editor-image { display: block; }
-.tiptap .editor-image-view[data-align] { display: block; width: fit-content; }
-.tiptap .editor-image-view[data-align="left"] { margin-left: 0; margin-right: auto; }
-.tiptap .editor-image-view[data-align="center"] { margin-left: auto; margin-right: auto; }
-.tiptap .editor-image-view[data-align="right"] { margin-left: auto; margin-right: 0; }
+/* gauche/droite = habillage RÉEL (float natif du navigateur - le texte, y
+   compris celui de paragraphes suivants si l'image est plus haute qu'un
+   seul paragraphe, se répartit tout seul autour, aucun JS nécessaire) ;
+   centre reste bloc centré SANS habillage, comme n'importe quel traitement
+   de texte (un habillage autour d'une image centrée n'a pas de sens). */
+.tiptap .editor-image-view[data-align="left"] { float: left; margin: 0 12px 8px 0; }
+.tiptap .editor-image-view[data-align="right"] { float: right; margin: 0 0 8px 12px; }
+.tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
