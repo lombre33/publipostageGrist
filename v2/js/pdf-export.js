@@ -753,23 +753,25 @@ const PdfExport = (function () {
   // left|right], cf. css/editor-v2.css) reproduit ici via le mécanisme
   // `columns` NATIF de pdfmake : une colonne à largeur fixe pour l'image,
   // une colonne pour le texte du MÊME paragraphe dans la largeur restante.
-  // Chaque LIGNE "à côté" de l'image est reconstruite comme son PROPRE bloc
-  // pdfmake, avec ses frontières EXACTES dictées par le rendu réel mesuré
-  // (mots consécutifs de même Y regroupés en une ligne) - PAS laissée à
-  // pdfmake pour re-répartir tout le texte "à côté" en un seul flux dans une
-  // largeur calculée : vérifié en conditions réelles que cette
-  // re-répartition ne tombe pas TOUJOURS exactement sur les mêmes coupures
-  // que l'éditeur (la même compensation break-spaces que tableFrom/
-  // blockFrom aide mais ne suffit pas toujours à elle seule) - dicter
-  // directement les lignes réelles élimine le problème à la racine plutôt
-  // que de chercher un facteur de compensation parfait. Chaque ligne, prise
-  // seule, tient par construction dans la largeur disponible : c'est très
-  // exactement ce qui l'a fait tenir dans l'éditeur à cette même largeur.
-  // Le texte qui, dans le MÊME paragraphe, dépasse le bas de l'image
-  // continue lui normalement (pdfmake répartit ce second bloc plein-largeur
-  // comme n'importe quel autre paragraphe - sans cette étape, TOUT le texte
-  // du paragraphe restait à tort à la largeur étroite pour toujours, même
-  // après le bas de l'image, signalé par l'utilisateur).
+  // L'image peut apparaître n'IMPORTE OÙ dans le paragraphe (pas
+  // nécessairement en tête - signalé par l'utilisateur : "Lorem ipsum...
+  // dolore m<img>agna aliqua...") - le texte se découpe donc en TROIS
+  // segments, pas deux : (1) tout ce qui précède la ligne où l'image
+  // commence (des lignes ENTIÈREMENT terminées avant que le flottement ne
+  // débute - un float CSS n'affecte jamais les lignes qui le précèdent, donc
+  // ce segment reste en flux normal pleine largeur, INCHANGÉ) ; (2) les
+  // lignes qui tombent dans la hauteur de l'image (reconstruites une par
+  // une, cf. plus bas) ; (3) tout ce qui suit le bas de l'image, de nouveau
+  // en flux normal pleine largeur. Chaque LIGNE du segment (2) est
+  // reconstruite comme son PROPRE bloc pdfmake, avec ses frontières EXACTES
+  // dictées par le rendu réel mesuré (mots consécutifs de même Y regroupés
+  // en une ligne) - PAS laissée à pdfmake pour re-répartir tout ce texte en
+  // un seul flux dans une largeur calculée : vérifié en conditions réelles
+  // que cette re-répartition ne tombe pas TOUJOURS exactement sur les mêmes
+  // coupures que l'éditeur - dicter directement les lignes réelles élimine
+  // le problème à la racine. Chaque ligne, prise seule, tient par
+  // construction dans la largeur disponible : c'est très exactement ce qui
+  // l'a fait tenir dans l'éditeur à cette même largeur.
   // Portée de CET incrément : seulement le texte du MÊME paragraphe que
   // l'image - un paragraphe SUIVANT distinct ne vient pas encore s'habiller
   // si l'image est plus haute que ce seul paragraphe (limitation connue,
@@ -796,40 +798,57 @@ const PdfExport = (function () {
       const imgCol = { width: imageWidthPt, stack: [floatImg] };
       return { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
     };
-
-    const words = imgNode ? collectWords(node) : [];
-    const imgBottom = imgNode ? imgNode.getBoundingClientRect().bottom : null;
-    let splitIndex = words.length;
-    if (imgBottom != null) {
-      for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgBottom - 0.5) { splitIndex = w; break; } }
-    }
-    if (splitIndex === 0 || splitIndex === words.length) {
-      // Rien à découper (tout tient à côté, ou rien n'y tient) - repli
-      // simple, laisse pdfmake répartir tout le texte comme avant.
+    const fallback = () => {
       const block = makeColumns([{ text: runs, lineHeight: LINE_HEIGHT_RATIO }]);
       if (pageBreakBefore) block.pageBreak = 'before';
       return block;
-    }
+    };
+    if (!imgNode) return fallback();
 
+    const words = collectWords(node);
+    const imgRect = imgNode.getBoundingClientRect();
+    // Premier mot dont la ligne commence au niveau (ou après) le HAUT de
+    // l'image - tout ce qui précède est sur des lignes entièrement
+    // terminées avant que le flottement ne débute, donc pas affecté par lui.
+    let besideStart = words.length;
+    for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgRect.top - 2) { besideStart = w; break; } }
+    // Premier mot, à partir de besideStart, dont la ligne commence au
+    // niveau (ou après) le BAS de l'image - tout ce qui suit n'est plus
+    // affecté par le flottement.
+    let besideEnd = words.length;
+    for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom - 0.5) { besideEnd = w; break; } }
+    if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
+
+    const blocks = [];
+    let pendingPageBreak = pageBreakBefore;
+    if (besideStart > 0) {
+      const beforeRuns = extractRunsBetween(node, null, { textNode: words[besideStart].textNode, offset: words[besideStart].start });
+      if (beforeRuns.length) {
+        blocks.push({ text: beforeRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) });
+        pendingPageBreak = false;
+      }
+    }
     // Regroupe les mots "à côté" en lignes (mots consécutifs de Y quasi
     // identique) et reconstruit chacune comme son propre bloc de texte.
     const lineGroups = [];
-    words.slice(0, splitIndex).forEach(w => {
+    words.slice(besideStart, besideEnd).forEach(w => {
       const last = lineGroups[lineGroups.length - 1];
       if (last && Math.abs(last.top - w.top) < 2) last.words.push(w); else lineGroups.push({ top: w.top, words: [w] });
     });
     const besideBlocks = lineGroups.map((line, i) => {
-      const startCut = i === 0 ? null : { textNode: line.words[0].textNode, offset: line.words[0].start };
+      const startCut = (besideStart === 0 && i === 0) ? null : { textNode: line.words[0].textNode, offset: line.words[0].start };
       const lastWord = line.words[line.words.length - 1];
       const lineRuns = extractRunsBetween(node, startCut, { textNode: lastWord.textNode, offset: lastWord.end });
       return { text: lineRuns.length ? lineRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
     });
-    const belowRuns = extractRunsBetween(node, { textNode: words[splitIndex].textNode, offset: words[splitIndex].start }, null);
-
-    const block1 = makeColumns(besideBlocks);
-    if (pageBreakBefore) block1.pageBreak = 'before';
-    const block2 = { text: belowRuns.length ? belowRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
-    return [block1, block2];
+    const columnsBlock = makeColumns(besideBlocks);
+    if (pendingPageBreak) columnsBlock.pageBreak = 'before';
+    blocks.push(columnsBlock);
+    if (besideEnd < words.length) {
+      const afterRuns = extractRunsBetween(node, { textNode: words[besideEnd].textNode, offset: words[besideEnd].start }, null);
+      blocks.push({ text: afterRuns.length ? afterRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
+    }
+    return blocks;
   }
 
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
