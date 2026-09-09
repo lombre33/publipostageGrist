@@ -16,7 +16,18 @@
    tableau, colonne d'une zone 2 colonnes). Même bug déjà rencontré et
    corrigé côté V1 (cf. css/roboto-fonts.css, réutilisé tel quel ici - police
    auto-hébergée, mêmes fichiers que ceux embarqués par pdfmake). */
-.tiptap { outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
+/* position:relative + z-index:0 : sert de conteneur de positionnement pour
+   les images en calque devant/derrière le texte (position:absolute posé sur
+   leur wrapper NodeView, cf. v2/js/editor.js) - même rôle que
+   .ql-editor{position:relative; z-index:0} en V1 (css/style.css). Le
+   z-index:0 est INDISPENSABLE, pas juste cosmétique : sans lui, .tiptap ne
+   crée PAS son propre contexte d'empilement (position:relative seul n'y
+   suffit pas), et une image "derrière le texte" (z-index:-1) passe alors
+   derrière l'arrière-plan BLANC de #editor-container au lieu de simplement
+   passer derrière le texte de .tiptap - elle devient invisible (vérifié en
+   conditions réelles). Même piège déjà rencontré ailleurs dans ce projet,
+   cf. mémoire project_stacking_context_trap. */
+.tiptap { position: relative; z-index: 0; outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 .tiptap p { margin: 0; }
 .tiptap h1, .tiptap h2, .tiptap h3,
 .tiptap h4, .tiptap h5, .tiptap h6 { margin: 0; font-weight: 700; }
@@ -41,6 +52,34 @@
 .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 .tiptap .two-columns-column > *:first-child { margin-top: 0; }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
+
+/* NodeView de l'image (v2/js/editor.js:createEditorImageNode) - structure
+   DIFFÉRENTE du HTML sérialisé (qui pose position/left/top/data-align/
+   data-wrap directement sur l'<img>, forme lue par pdf-export.js/reader-
+   mode.js et déjà stylée par les règles globales .editor-image[data-align=…]
+   de ../css/style.css) : ici un <span class="editor-image-view"> englobe
+   l'<img> + les poignées, pour que ces dernières s'ancrent par un simple CSS
+   absolu sans recalcul JS de position à chaque scroll (contrairement aux
+   overlays document.body de la V1, cf. mémoire
+   project_quill_mutation_observer). Nécessite ses PROPRES règles
+   data-align/data-wrap (le wrapper doit passer en display:block avant que
+   margin:auto ait un effet sur l'image qu'il contient). */
+.tiptap .editor-image-view { position: relative; display: inline-block; max-width: 100%; }
+.tiptap .editor-image-view .editor-image { display: block; }
+.tiptap .editor-image-view[data-align] { display: block; width: fit-content; }
+.tiptap .editor-image-view[data-align="left"] { margin-left: 0; margin-right: auto; }
+.tiptap .editor-image-view[data-align="center"] { margin-left: auto; margin-right: auto; }
+.tiptap .editor-image-view[data-align="right"] { margin-left: auto; margin-right: 0; }
+.tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
+.tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
+.tiptap .editor-image-view.editor-image-layered { cursor: default; }
+.tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
+.tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
+.tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.tiptap .editor-image-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.tiptap .editor-image-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.tiptap .editor-image-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.tiptap .editor-image-view.editor-image-selected.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: -12px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
 
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 

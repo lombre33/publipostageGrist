@@ -215,14 +215,31 @@ const PdfExport = (function () {
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }
 
-  // Image simple : V2 n'a pas encore de calque devant/derrière ni de
-  // repositionnement par glisser (cf. mémoire
-  // feedback_v2_defer_complexity_to_pdf_phase - reporté à quand ce besoin
-  // sera réel), donc jamais de position absolue à gérer ici, contrairement à
-  // js/pdf-export.js (V1) - juste une image dans le flux normal du texte.
+  // Image simple, opacité/alignement pris en compte, et position absolue
+  // pour un calque devant/derrière le texte - calculée directement depuis les
+  // left/top stockés (même formule de repli que la V1, js/pdf-export.js:
+  // 288-291), PAS ENCORE via le système de bracketing/interpolation par
+  // rapport aux blocs voisins (cf. mémoire project_v2_tiptap_migration,
+  // incrément suivant). Limitation connue et acceptée pour cet incrément :
+  // une image en calque loin dans un document long (au-delà de la première
+  // page) peut driver par rapport à sa position réelle dans l'éditeur, faute
+  // de re-belier sa position à un repère mesuré sur la page PDF réelle.
   function pdfImageFromNode(node) {
     const widthPx = parseFloat(node.style.width) || 320;
-    return { image: node.getAttribute('src'), width: Math.max(15, widthPx * PX_TO_PT), margin: [0, 2, 0, 4] };
+    const image = { image: node.getAttribute('src'), width: Math.max(15, widthPx * PX_TO_PT) };
+    const opacity = parseFloat(node.style.opacity);
+    if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
+    const layer = node.getAttribute('data-layer') || 'normal';
+    if (layer !== 'normal' && node.style.position === 'absolute') {
+      const leftPx = parseFloat(node.style.left) || 0;
+      const topPx = parseFloat(node.style.top) || 0;
+      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * PX_TO_PT, y: PAGE_MARGIN_PT + topPx * PX_TO_PT };
+    } else {
+      image.margin = [0, 2, 0, 4];
+      const align = node.getAttribute('data-align');
+      if (align) image.alignment = align;
+    }
+    return image;
   }
 
   // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" - un

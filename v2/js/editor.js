@@ -138,16 +138,26 @@ const Editor = (function () {
     return { TwoColumnsColumn, TwoColumnsZone };
   }
 
-  // Image — nœud "atome" en ligne, insertion basique par URL. V1 a en plus un
-  // calque devant/derrière avec repositionnement par glisser (cf. mémoire
-  // project_image_anchor_bracketing_interpolation) : système entièrement au
-  // service de l'export PDF, pas encore porté ici - à construire quand ce
-  // besoin deviendra concret (cf. mémoire
-  // feedback_v2_defer_complexity_to_pdf_phase), pas avant. `src`/`alt`
-  // restent des attributs HTML bruts de l'<img> (contrairement à VarBadge :
-  // ici c'est le comportement natif souhaité) ; seul `width` a besoin d'un
-  // renderHTML dédié (posé en style inline, pas en attribut HTML `width`).
-  function createEditorImageNode(Node, mergeAttributes) {
+  // Image — nœud "atome" en ligne. Parité V1 (js/editor.js:ImageBlot) pour les
+  // attributs de mise en forme : `layer` (normal/devant/derrière le texte,
+  // via position:absolute + left/top/z-index), `opacity`, `align` (gauche/
+  // centre/droite, uniquement en flux normal), `wrap` (en ligne/bloc).
+  // Contrairement à VarBadge, chaque attribut garde `renderHTML: () => ({})`
+  // (pas de rendu bare) : le nœud construit lui-même la chaîne `style`
+  // complète dans son propre renderHTML() ci-dessous plutôt que de compter
+  // sur le comportement de fusion par défaut de plusieurs attributs qui
+  // écriraient chacun dans `style` indépendamment.
+  function createEditorImageNode(Node) {
+    const noBareRender = () => ({});
+    function styleFor(a) {
+      const parts = [];
+      if (a.width) parts.push(`width: ${a.width}`);
+      if (a.layer !== 'normal') {
+        parts.push('position: absolute', `left: ${a.left || 0}px`, `top: ${a.top || 0}px`, `z-index: ${a.layer === 'front' ? 5 : -1}`);
+      }
+      if (a.opacity !== 1 && a.opacity != null) parts.push(`opacity: ${a.opacity}`);
+      return parts.join('; ');
+    }
     return Node.create({
       name: 'editorImage',
       group: 'inline',
@@ -158,19 +168,159 @@ const Editor = (function () {
         return {
           src: { default: null },
           alt: { default: 'Image' },
-          width: {
-            default: '320px',
-            parseHTML: el => el.style.width || null,
-            renderHTML: attrs => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
-          },
+          width: { default: '320px', parseHTML: el => el.style.width || null, renderHTML: noBareRender },
+          layer: { default: 'normal', parseHTML: el => el.getAttribute('data-layer') || 'normal', renderHTML: noBareRender },
+          left: { default: null, parseHTML: el => (el.style.left ? parseFloat(el.style.left) : null), renderHTML: noBareRender },
+          top: { default: null, parseHTML: el => (el.style.top ? parseFloat(el.style.top) : null), renderHTML: noBareRender },
+          opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
+          align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
+          wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
         };
       },
       parseHTML() { return [{ tag: 'img.editor-image' }]; },
-      renderHTML({ HTMLAttributes }) {
-        return ['img', mergeAttributes(HTMLAttributes, { class: 'editor-image', draggable: 'false' })];
+      renderHTML({ node }) {
+        const a = node.attrs;
+        const attrs = { class: 'editor-image', draggable: 'false', src: a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
+        if (a.align) attrs['data-align'] = a.align;
+        return ['img', attrs];
       },
       addCommands() {
         return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
+      },
+      // NodeView plutôt que les overlays document.body de la V1 (cf. mémoire
+      // project_quill_mutation_observer) : les poignées de redimensionnement/
+      // déplacement sont de vrais enfants DOM du wrapper, positionnés en pur
+      // CSS - pas besoin de recalculer leur position en JS à chaque scroll/
+      // resize comme le faisait la V1.
+      addNodeView() {
+        return ({ node, editor: nodeEditor, getPos }) => {
+          const wrap = document.createElement('span');
+          wrap.className = 'editor-image-view';
+          const img = document.createElement('img');
+          img.className = 'editor-image';
+          img.draggable = false;
+          wrap.appendChild(img);
+
+          const moveHandle = document.createElement('span');
+          moveHandle.className = 'editor-image-move-handle';
+          moveHandle.title = 'Déplacer';
+          wrap.appendChild(moveHandle);
+          ['nw', 'ne', 'sw', 'se'].forEach(corner => {
+            const h = document.createElement('span');
+            h.className = 'editor-image-handle editor-image-handle-' + corner;
+            wrap.appendChild(h);
+            h.addEventListener('mousedown', event => startResize(event, corner));
+          });
+          moveHandle.addEventListener('mousedown', startMove);
+
+          // NodeView vivante : structure DIFFÉRENTE du HTML sérialisé
+          // (renderHTML ci-dessus, qui pose position/left/top/z-index
+          // directement sur l'<img>, forme lue par pdf-export.js/reader-
+          // mode.js) - ici le positionnement en calque est porté par le
+          // <span> wrapper (position:relative en permanence, pour que les
+          // poignées s'y ancrent par un simple CSS absolu), l'<img> lui-même
+          // ne portant que largeur/opacité. Même précédent que le
+          // .tableWrapper de prosemirror-tables : un artefact d'édition en
+          // direct, absent de la sérialisation (cf. mémoire
+          // project_v2_tiptap_migration).
+          function applyAttrs(attrs) {
+            img.src = attrs.src || '';
+            img.alt = attrs.alt || '';
+            const imgStyle = [];
+            if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
+            if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
+            img.setAttribute('style', imgStyle.join('; '));
+            const layered = attrs.layer !== 'normal';
+            wrap.classList.toggle('editor-image-layered', layered);
+            if (layered) {
+              wrap.style.position = 'absolute';
+              wrap.style.left = (attrs.left || 0) + 'px';
+              wrap.style.top = (attrs.top || 0) + 'px';
+              wrap.style.zIndex = attrs.layer === 'front' ? '5' : '-1';
+            } else {
+              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.zIndex = '';
+            }
+            moveHandle.style.display = layered ? '' : 'none';
+            if (attrs.align) wrap.setAttribute('data-align', attrs.align); else wrap.removeAttribute('data-align');
+            wrap.setAttribute('data-wrap', attrs.wrap || 'inline');
+          }
+          applyAttrs(node.attrs);
+
+          function updateAttrs(patch) {
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const { state, view } = nodeEditor;
+            const current = state.doc.nodeAt(pos);
+            if (!current) return;
+            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, patch)));
+          }
+
+          let resizeState = null;
+          function startResize(event, corner) {
+            event.preventDefault(); event.stopPropagation();
+            const rect = img.getBoundingClientRect();
+            resizeState = { startX: event.clientX, startWidth: rect.width, sign: corner.includes('w') ? -1 : 1 };
+            document.addEventListener('mousemove', onResizeMove);
+            document.addEventListener('mouseup', onResizeUp, { once: true });
+          }
+          function onResizeMove(event) {
+            if (!resizeState) return;
+            const width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.sign);
+            img.style.width = Math.round(width) + 'px';
+          }
+          function onResizeUp() {
+            document.removeEventListener('mousemove', onResizeMove);
+            if (resizeState) updateAttrs({ width: Math.round(img.getBoundingClientRect().width) + 'px' });
+            resizeState = null;
+          }
+
+          let moveState = null;
+          function startMove(event) {
+            event.preventDefault(); event.stopPropagation();
+            // Lit les attributs COURANTS via getPos()/nodeAt (pas la variable
+            // `node` capturée à la création de la NodeView) : cette dernière
+            // ne se met jamais à jour toute seule après le premier rendu -
+            // seul `update(updatedNode)` reçoit le nœud frais à chaque
+            // transaction - donc `node.attrs.left` resterait bloqué sur sa
+            // valeur d'origine (souvent `null`) après un premier déplacement,
+            // faussant le point de départ du déplacement suivant.
+            const pos = getPos();
+            const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
+            moveState = { startX: event.clientX, startY: event.clientY, startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
+            document.addEventListener('mousemove', onMoveMove);
+            document.addEventListener('mouseup', onMoveUp, { once: true });
+          }
+          function onMoveMove(event) {
+            if (!moveState) return;
+            wrap.style.left = (moveState.startLeft + (event.clientX - moveState.startX)) + 'px';
+            wrap.style.top = (moveState.startTop + (event.clientY - moveState.startY)) + 'px';
+          }
+          function onMoveUp(event) {
+            document.removeEventListener('mousemove', onMoveMove);
+            if (moveState) {
+              updateAttrs({
+                left: Math.round(moveState.startLeft + (event.clientX - moveState.startX)),
+                top: Math.round(moveState.startTop + (event.clientY - moveState.startY)),
+              });
+            }
+            moveState = null;
+          }
+
+          return {
+            dom: wrap,
+            update: updatedNode => {
+              if (updatedNode.type.name !== 'editorImage') return false;
+              applyAttrs(updatedNode.attrs);
+              return true;
+            },
+            selectNode: () => wrap.classList.add('editor-image-selected'),
+            deselectNode: () => wrap.classList.remove('editor-image-selected'),
+            destroy: () => {
+              document.removeEventListener('mousemove', onResizeMove);
+              document.removeEventListener('mousemove', onMoveMove);
+            },
+          };
+        };
       },
     });
   }
@@ -299,17 +449,23 @@ const Editor = (function () {
   // le conteneur - perçu comme un léger rebond juste après avoir relâché la
   // poignée plutôt qu'une résistance pendant le glisser, mais garantit que
   // le tableau ne peut jamais rester plus large que la page.
+  // Largeur réellement disponible pour un enfant direct de la racine
+  // ProseMirror (.tiptap) - son clientWidth inclut SON PROPRE padding (utile
+  // pour simuler la marge de page en Aperçu A4, cf. css/editor-v2.css), qui
+  // n'est pas disponible à un enfant. Partagé entre clampOverflowingTables
+  // (tableaux) et l'alignement des images en calque (snap gauche/centre/
+  // droite), même calcul dans les deux cas.
+  function editorContentWidthPx(currentEditor) {
+    const rootEl = currentEditor.view.dom;
+    const rootCs = getComputedStyle(rootEl);
+    return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
+  }
+
   const DEFAULT_COL_PX = 25;
   function clampOverflowingTables(currentEditor) {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
-    // clientWidth de .tiptap (racine ProseMirror) inclut SON PROPRE padding
-    // (37.33px de chaque côté en Aperçu A4, cf. css/editor-v2.css) - retiré
-    // ici pour obtenir la largeur réellement disponible pour un enfant
-    // direct comme le tableau, pas la boîte entière de la racine.
-    const rootEl = currentEditor.view.dom;
-    const rootCs = getComputedStyle(rootEl);
-    const containerWidth = rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
+    const containerWidth = editorContentWidthPx(currentEditor);
     if (!containerWidth) return;
     const { state } = currentEditor;
     let tr = null;
@@ -357,7 +513,7 @@ const Editor = (function () {
   // souci de contexte d'empilement/débordement avec un ancêtre (cf. mémoire
   // project_stacking_context_trap), même principe que les overlays flottants
   // de la V1.
-  function createFloatingPanel(className, innerHTML, onAction) {
+  function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
     el.className = className;
     el.innerHTML = innerHTML;
@@ -371,9 +527,17 @@ const Editor = (function () {
       event.preventDefault();
       onAction(btn.dataset.action);
     });
+    // Un <input type=range> (curseur d'opacité de la toolbar image) a besoin
+    // de son évènement 'input' propre - un simple mousedown suffit aux
+    // boutons mais volerait la valeur en cours de glissement du curseur.
+    if (onInput) el.addEventListener('input', (event) => {
+      const input = event.target.closest('input[data-role]');
+      if (input) onInput(input.dataset.role, input.value);
+    });
     document.body.appendChild(el);
     let stopAutoUpdate = null;
     return {
+      el,
       show(referenceEl) {
         el.classList.add('visible');
         const update = () => {
@@ -440,6 +604,150 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
+  // Toolbar flottante d'image - parité V1 (js/editor.js:963-1003) : zoom -/+,
+  // taille d'origine, alignement (flux normal) ou alignement-bord (calque,
+  // réplique snapFloatingImageHorizontal), bascule en ligne/bloc, opacité,
+  // calque devant/derrière/normal, suppression. Réutilise createFloatingPanel
+  // (même helper que la toolbar de tableau, Incrément 1).
+  function wireImageFloatingToolbar() {
+    const html = [
+      `<button data-action="zoom-out" title="Réduire">${Icons.svg('zoomOut')}</button>`,
+      `<button data-action="zoom-in" title="Agrandir">${Icons.svg('zoomIn')}</button>`,
+      `<button data-action="reset" title="Taille d'origine">${Icons.svg('resetSize')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="align-left" title="Aligner à gauche">${Icons.svg('alignLeft')}</button>`,
+      `<button data-action="align-center" title="Centrer">${Icons.svg('alignCenter')}</button>`,
+      `<button data-action="align-right" title="Aligner à droite">${Icons.svg('alignRight')}</button>`,
+      `<button data-action="wrap" title="Basculer en ligne / bloc">${Icons.svg('wrapToggle')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      '<input type="range" data-role="opacity" min="10" max="100" value="100" title="Opacité">',
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="layer-front" title="Devant le texte">${Icons.svg('layerFront')}</button>`,
+      `<button data-action="layer-behind" title="Derrière le texte">${Icons.svg('layerBehind')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="delete" title="Supprimer">${Icons.svg('trash')}</button>`,
+    ].join('');
+
+    function updateSelectedImage(patch) {
+      if (!editor.isActive('editorImage')) return;
+      const { state, view } = editor;
+      const node = state.selection.node;
+      if (!node) return;
+      view.dispatch(state.tr.setNodeMarkup(state.selection.from, undefined, Object.assign({}, node.attrs, patch)));
+    }
+
+    // Aligner en flux normal (align gauche/centre/droite classique) ou, en
+    // calque devant/derrière, réaligner l'image sur le bord correspondant du
+    // conteneur (margin:auto n'a aucun effet sur un élément position:absolute,
+    // même limitation que la V1 - cf. snapFloatingImageHorizontal).
+    function alignOrSnap(align) {
+      if (!editor.isActive('editorImage')) return;
+      const { state } = editor;
+      const node = state.selection.node;
+      if (node.attrs.layer === 'normal') { updateSelectedImage({ align }); return; }
+      const dom = editor.view.nodeDOM(state.selection.from);
+      const img = dom && dom.querySelector && dom.querySelector('img');
+      if (!img) return;
+      const imgWidthPx = img.getBoundingClientRect().width;
+      const containerWidthPx = editorContentWidthPx(editor);
+      const left = align === 'left' ? 0 : align === 'center' ? Math.max(0, (containerWidthPx - imgWidthPx) / 2) : Math.max(0, containerWidthPx - imgWidthPx);
+      updateSelectedImage({ left: Math.round(left) });
+    }
+
+    // Bascule devant/derrière (reclique sur le même bouton -> retour à
+    // 'normal', même comportement que la V1). Au premier passage en calque,
+    // initialise left/top depuis la position RENDUE actuelle de l'image (son
+    // rect réel moins celui de la racine éditeur) pour qu'elle ne saute pas
+    // visuellement au passage en position:absolute.
+    function toggleLayer(target) {
+      if (!editor.isActive('editorImage')) return;
+      const { state, view } = editor;
+      const node = state.selection.node;
+      const pos = state.selection.from;
+      const newLayer = node.attrs.layer === target ? 'normal' : target;
+      const patch = { layer: newLayer };
+      if (newLayer !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
+        const dom = editor.view.nodeDOM(pos);
+        const img = dom && dom.querySelector && dom.querySelector('img');
+        if (img) {
+          const imgRect = img.getBoundingClientRect();
+          const rootEl = editor.view.dom;
+          const rootRect = rootEl.getBoundingClientRect();
+          const rootCs = getComputedStyle(rootEl);
+          patch.left = Math.round(imgRect.left - rootRect.left - (parseFloat(rootCs.paddingLeft) || 0));
+          patch.top = Math.round(imgRect.top - rootRect.top - (parseFloat(rootCs.paddingTop) || 0));
+        }
+      }
+      view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch)));
+    }
+
+    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+      if (!editor.isActive('editorImage')) return;
+      const attrs = editor.state.selection.node.attrs;
+      const commands = {
+        'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
+        'zoom-in': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }),
+        reset: () => updateSelectedImage({ width: '320px', align: null }),
+        'align-left': () => alignOrSnap('left'),
+        'align-center': () => alignOrSnap('center'),
+        'align-right': () => alignOrSnap('right'),
+        wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
+        'layer-front': () => toggleLayer('front'),
+        'layer-behind': () => toggleLayer('behind'),
+        delete: () => {
+          const pos = editor.state.selection.from;
+          editor.chain().focus().deleteRange({ from: pos, to: pos + editor.state.selection.node.nodeSize }).run();
+        },
+      };
+      (commands[action] || (() => {}))();
+    }, (role, value) => {
+      if (role === 'opacity') updateSelectedImage({ opacity: Math.max(0.1, parseInt(value, 10) / 100) });
+    });
+
+    function syncState() {
+      if (!editor.isActive('editorImage')) return;
+      const attrs = editor.state.selection.node.attrs;
+      const opacityInput = panel.el.querySelector('input[data-role="opacity"]');
+      if (opacityInput && document.activeElement !== opacityInput) opacityInput.value = Math.round((attrs.opacity != null ? attrs.opacity : 1) * 100);
+      const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
+      setActive('align-left', attrs.align === 'left');
+      setActive('align-center', attrs.align === 'center');
+      setActive('align-right', attrs.align === 'right');
+      setActive('wrap', attrs.wrap === 'block');
+      setActive('layer-front', attrs.layer === 'front');
+      setActive('layer-behind', attrs.layer === 'behind');
+    }
+
+    const check = () => {
+      if (!editor.isActive('editorImage')) { panel.hide(); return; }
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      const img = dom && dom.querySelector && dom.querySelector('img');
+      if (!img) { panel.hide(); return; }
+      syncState();
+      panel.show(img);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
+  }
+
+  // Même vérification qu'en V1 (js/editor.js:436-445) : un fetch() sur la
+  // même URL que pdf-export.js utilisera pour inliner l'image en base64 à
+  // l'export - si ça échoue (serveur sans en-tête CORS permissif), l'export
+  // devra silencieusement ignorer l'image. Non bloquant : l'insertion a déjà
+  // eu lieu, ceci prévient juste l'utilisateur à l'avance plutôt que de le
+  // laisser découvrir l'absence de l'image seulement après un export.
+  async function warnIfImageUrlNotExportable(src) {
+    if (!src || src.startsWith('data:')) return;
+    try {
+      const resp = await fetch(src);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      await resp.blob();
+    } catch (e) {
+      console.warn('[Editor] image probablement non exportable en PDF (CORS) :', src, e);
+      window.alert('Cette image ne pourra probablement pas être incluse dans le PDF exporté : le serveur qui l\'héberge ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS). Elle continuera de s\'afficher normalement ici et en mode lecture, mais l\'export PDF devra l\'ignorer.');
+    }
+  }
+
   // Icônes de la toolbar statique (posées en JS plutôt que dans le HTML : une
   // seule source de vérité pour les tracés SVG, partagée avec les toolbars
   // flottantes ci-dessus/ci-dessous qui doivent de toute façon construire
@@ -501,7 +809,7 @@ const Editor = (function () {
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
     const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
-    const EditorImage = createEditorImageNode(Node, mergeAttributes);
+    const EditorImage = createEditorImageNode(Node);
     const PageBreak = createPageBreakNode(Node);
     const HeadingNumberingConfig = createHeadingNumberingConfigNode(Node);
     const Toc = createTocNode(Node);
@@ -537,6 +845,7 @@ const Editor = (function () {
 
     wireToolbar();
     wireTableFloatingToolbar();
+    wireImageFloatingToolbar();
     editor.on('selectionUpdate', syncToolbarState);
     editor.on('transaction', syncToolbarState);
     return editor;
@@ -571,6 +880,7 @@ const Editor = (function () {
       const url = window.prompt('URL de l\'image :');
       if (!url) return;
       editor.chain().focus().insertImage({ src: url, alt: 'Image', width: '320px' }).run();
+      warnIfImageUrlNotExportable(url);
     });
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
