@@ -73,6 +73,19 @@
    de texte (un habillage autour d'une image centrée n'a pas de sens). */
 .tiptap .editor-image-view[data-align="left"] { float: left; margin: 0 12px 8px 0; }
 .tiptap .editor-image-view[data-align="right"] { float: right; margin: 0 0 8px 12px; }
+/* Même traitement, mais pour l'<img> BRUTE directement (sans wrapper) :
+   c'est la forme du HTML SÉRIALISÉ (getHTML()), celle que voit l'hôte de
+   mesure hors-écran de pdf-export.js (attachMeasureHost lui pose déjà la
+   classe .tiptap, cf. commentaire ci-dessus) - sans cette règle, l'image n'y
+   flotte pas du tout (juste une image en ligne normale), et
+   floatedImageParagraphFrom ne peut alors jamais mesurer où le texte
+   dépasse réellement son bas (constaté : tout le texte du paragraphe
+   restait à tort dans la colonne étroite, y compris bien après la fin de
+   l'image). Ne s'applique PAS en lecture seule (#reader-container, pas de
+   classe .tiptap) - limitation acceptée, pas encore signalée par
+   l'utilisateur pour ce mode. */
+.tiptap img.editor-image[data-align="left"] { float: left; margin: 0 12px 8px 0; }
+.tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; }
 .tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }

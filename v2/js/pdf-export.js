@@ -250,6 +250,10 @@ const PdfExport = (function () {
       // habiller le texte autour).
       if (align === 'left' || align === 'right') {
         image._floatAlign = align;
+        // Référence au <img> réel (encore attaché à l'hôte de mesure à ce
+        // stade) - floatedImageParagraphFrom en a besoin pour mesurer où
+        // le texte du MÊME paragraphe dépasse le bas de l'image.
+        image._sourceImgNode = node;
       } else {
         image.margin = [0, 2, 0, 4];
         if (align) image.alignment = align;
@@ -657,39 +661,147 @@ const PdfExport = (function () {
     return block;
   }
 
+  // Chemin d'indices d'enfants de `root` jusqu'à `target` (ex. [2,0,1]) -
+  // permet de retrouver "le même nœud" dans un clone de `root`
+  // (cloneNode(true) préserve exactement la même structure/ordre).
+  function nodePathTo(root, target) {
+    const path = [];
+    let cur = target;
+    while (cur && cur !== root) {
+      const parent = cur.parentNode;
+      if (!parent) return null;
+      path.unshift(Array.from(parent.childNodes).indexOf(cur));
+      cur = parent;
+    }
+    return cur === root ? path : null;
+  }
+  function nodeAtPath(root, path) {
+    let cur = root;
+    for (const idx of path) { if (!cur) return null; cur = cur.childNodes[idx]; }
+    return cur;
+  }
+  // Retire, à CHAQUE niveau entre `marker` et `root` (`marker` compris), tout
+  // ce qui suit `marker`/l'ancêtre courant - laisse un arbre ne contenant
+  // plus que "tout ce qui précède (ou suit) marker", tout en conservant les
+  // éléments ancêtres (gras/italique...) pour ce qu'ils contiennent avant.
+  function removeAfter(root, marker) {
+    let node = marker;
+    while (node !== root) {
+      const parent = node.parentNode;
+      let sib = node.nextSibling;
+      while (sib) { const next = sib.nextSibling; parent.removeChild(sib); sib = next; }
+      node = parent;
+    }
+  }
+  function removeBefore(root, marker) {
+    let node = marker;
+    while (node !== root) {
+      const parent = node.parentNode;
+      let sib = node.previousSibling;
+      while (sib) { const prev = sib.previousSibling; parent.removeChild(sib); sib = prev; }
+      node = parent;
+    }
+  }
+  // Trouve, dans le texte de `node` (encore attaché à l'hôte de mesure, donc
+  // réellement mis en page par le float CSS - cf. css/editor-v2.css), le
+  // premier MOT dont le haut tombe au niveau ou au-delà de `imgBottom` (le
+  // bas réel de l'image flottante, en coordonnées écran) - le habillage se
+  // rompt toujours à une frontière de mot, jamais au milieu. Renvoie
+  // {textNode, offset} (position du début de ce mot) ou `null` si tout le
+  // texte tient à côté de l'image (rien à découper) ou si RIEN ne tient à
+  // côté (dès le premier mot déjà en dessous - cas dégénéré, pas de découpe
+  // utile non plus).
+  function splitParagraphAtImageBottom(node, imgBottom) {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const words = [];
+    let textNode;
+    while ((textNode = walker.nextNode())) {
+      const value = textNode.nodeValue;
+      let i = 0;
+      while (i < value.length) {
+        while (i < value.length && /\s/.test(value[i])) i += 1;
+        const start = i;
+        while (i < value.length && !/\s/.test(value[i])) i += 1;
+        if (i > start) {
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, i);
+          words.push({ textNode, start, top: range.getBoundingClientRect().top });
+        }
+      }
+    }
+    let splitIndex = words.length;
+    for (let w = 0; w < words.length; w += 1) {
+      if (words[w].top >= imgBottom - 0.5) { splitIndex = w; break; }
+    }
+    if (splitIndex === 0 || splitIndex === words.length) return null;
+    return { textNode: words[splitIndex].textNode, offset: words[splitIndex].start };
+  }
+
   // Habillage réel (float CSS côté éditeur, .editor-image-view[data-align=
   // left|right], cf. css/editor-v2.css) reproduit ici via le mécanisme
   // `columns` NATIF de pdfmake : une colonne à largeur fixe pour l'image,
   // une colonne pour le texte du MÊME paragraphe dans la largeur restante -
   // pdfmake répartit lui-même ce texte sur plusieurs lignes à l'intérieur,
-  // aucun découpage ligne par ligne à la main nécessaire. La hauteur du bloc
-  // `columns` est le MAX des deux colonnes (comportement pdfmake natif) :
-  // si le texte est plus court que l'image, le paragraphe SUIVANT démarre
-  // après l'image (pas collé au texte) - correct sans code supplémentaire.
+  // aucun découpage ligne par ligne à la main nécessaire pour la partie qui
+  // tient À CÔTÉ de l'image. Pour la partie qui, dans le MÊME paragraphe,
+  // dépasse le bas de l'image (texte plus long que l'image n'est haute) :
+  // mesurée en direct sur le rendu réel (déjà correctement habillé par le
+  // float CSS du navigateur, cf. splitParagraphAtImageBottom) et reconstruite
+  // en un second bloc plein-largeur séparé - sans cette étape, TOUT le texte
+  // du paragraphe restait à la largeur étroite pour toujours, même une fois
+  // passé le bas de l'image (signalé par l'utilisateur, capture à l'appui).
   // Portée de CET incrément : seulement le texte du MÊME paragraphe que
-  // l'image - un paragraphe SUIVANT ne vient pas encore s'habiller si
-  // l'image est plus haute qu'un seul paragraphe (limitation connue,
+  // l'image - un paragraphe SUIVANT distinct ne vient pas encore s'habiller
+  // si l'image est plus haute que ce seul paragraphe (limitation connue,
   // nécessiterait de consommer des blocs frères suivants depuis
   // buildPdfContentFromRoot, plus invasif - cf. mémoire
   // project_v2_tiptap_migration). `null` si le paragraphe ne contient QUE
-  // l'image (aucun texte à habiller) - l'appelant retombe alors sur le
-  // rendu normal (image seule).
+  // l'image (aucun texte à habiller) - l'appelant retombe alors sur le rendu
+  // normal (image seule).
   function floatedImageParagraphFrom(node, pageBreakBefore) {
     const images = [];
     const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images));
     const floatImg = images.find(img => img._floatAlign);
     if (!floatImg || !runs.length) return null;
+    const align = floatImg._floatAlign;
+    const imgNode = floatImg._sourceImgNode;
+    delete floatImg._floatAlign;
+    delete floatImg._sourceImgNode;
     const pageWidthPt = 595.28 - 2 * PAGE_MARGIN_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
-    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
-    const align = floatImg._floatAlign;
-    delete floatImg._floatAlign;
-    const textCol = { width: remainingWidthPt, stack: [{ text: runs, lineHeight: LINE_HEIGHT_RATIO }] };
-    const imgCol = { width: imageWidthPt, stack: [floatImg] };
-    const block = { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
-    if (pageBreakBefore) block.pageBreak = 'before';
-    return block;
+    // spaceWidthPt() en repli : compense `white-space: break-spaces` (cf.
+    // commentaire en tête de fichier), même principe que blockFrom pour le
+    // flux principal (marge droite) - une colonne étroite comme celle-ci en
+    // a d'autant plus besoin.
+    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt - spaceWidthPt());
+    const makeColumns = (colRuns) => {
+      const textCol = { width: remainingWidthPt, stack: [{ text: colRuns.length ? colRuns : ' ', lineHeight: LINE_HEIGHT_RATIO }] };
+      const imgCol = { width: imageWidthPt, stack: [floatImg] };
+      return { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
+    };
+    const split = imgNode ? splitParagraphAtImageBottom(node, imgNode.getBoundingClientRect().bottom) : null;
+    if (!split) {
+      const block = makeColumns(runs);
+      if (pageBreakBefore) block.pageBreak = 'before';
+      return block;
+    }
+    const path = nodePathTo(node, split.textNode);
+    const besideNode = node.cloneNode(true);
+    const belowNode = node.cloneNode(true);
+    const besideText = nodeAtPath(besideNode, path);
+    const belowText = nodeAtPath(belowNode, path);
+    besideText.nodeValue = besideText.nodeValue.slice(0, split.offset);
+    removeAfter(besideNode, besideText);
+    belowText.nodeValue = belowText.nodeValue.slice(split.offset);
+    removeBefore(belowNode, belowText);
+    const besideRuns = trimEdgeWhitespace(inlineRuns(besideNode, { fontSize: DEFAULT_FONT_SIZE }, []));
+    const belowRuns = trimEdgeWhitespace(inlineRuns(belowNode, { fontSize: DEFAULT_FONT_SIZE }, []));
+    const block1 = makeColumns(besideRuns);
+    if (pageBreakBefore) block1.pageBreak = 'before';
+    const block2 = { text: belowRuns.length ? belowRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+    return [block1, block2];
   }
 
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
@@ -707,7 +819,7 @@ const PdfExport = (function () {
       });
       if (floatImgEl) {
         const floated = floatedImageParagraphFrom(node, pageBreakBefore);
-        if (floated) return [floated];
+        if (floated) return Array.isArray(floated) ? floated : [floated];
       }
     }
     const images = [];

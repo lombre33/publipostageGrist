@@ -684,6 +684,7 @@ const Editor = (function () {
       if (!editor.isActive('editorImage')) return;
       const { state } = editor;
       const node = state.selection.node;
+      if (!node) return;
       if (node.attrs.layer === 'normal') { updateSelectedImage({ align }); return; }
       const dom = editor.view.nodeDOM(state.selection.from);
       const img = dom && dom.querySelector && dom.querySelector('img');
@@ -703,6 +704,7 @@ const Editor = (function () {
       if (!editor.isActive('editorImage')) return;
       const { state, view } = editor;
       const node = state.selection.node;
+      if (!node) return;
       const pos = state.selection.from;
       const newLayer = node.attrs.layer === target ? 'normal' : target;
       const patch = { layer: newLayer };
@@ -724,8 +726,12 @@ const Editor = (function () {
     }
 
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
-      if (!editor.isActive('editorImage')) return;
-      const attrs = editor.state.selection.node.attrs;
+      // isActive('editorImage') peut être vrai sans que la sélection soit
+      // réellement une NodeSelection sur cette image (curseur texte juste à
+      // côté) - .node est alors undefined, vérifié en conditions réelles.
+      const selNode = editor.isActive('editorImage') && editor.state.selection.node;
+      if (!selNode) return;
+      const attrs = selNode.attrs;
       const commands = {
         'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
         'zoom-in': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }),
@@ -738,7 +744,7 @@ const Editor = (function () {
         'layer-behind': () => toggleLayer('behind'),
         delete: () => {
           const pos = editor.state.selection.from;
-          editor.chain().focus().deleteRange({ from: pos, to: pos + editor.state.selection.node.nodeSize }).run();
+          editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
         },
       };
       (commands[action] || (() => {}))();
@@ -747,8 +753,13 @@ const Editor = (function () {
     });
 
     function syncState() {
-      if (!editor.isActive('editorImage')) return;
-      const attrs = editor.state.selection.node.attrs;
+      // editor.isActive('editorImage') peut renvoyer true alors même que la
+      // sélection n'est PAS une NodeSelection sur cette image (ex. curseur
+      // texte juste avant/après elle) - .node n'existe alors pas, vérifié en
+      // conditions réelles (TypeError sans ce garde-fou).
+      const node = editor.isActive('editorImage') && editor.state.selection.node;
+      if (!node) return;
+      const attrs = node.attrs;
       const opacityInput = panel.el.querySelector('input[data-role="opacity"]');
       if (opacityInput && document.activeElement !== opacityInput) opacityInput.value = Math.round((attrs.opacity != null ? attrs.opacity : 1) * 100);
       const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
