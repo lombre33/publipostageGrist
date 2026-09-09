@@ -794,7 +794,8 @@ const PdfExport = (function () {
           const range = document.createRange();
           range.setStart(textNode, start);
           range.setEnd(textNode, i);
-          words.push({ textNode, start, end: i, top: range.getBoundingClientRect().top });
+          const r = range.getBoundingClientRect();
+          words.push({ textNode, start, end: i, top: r.top, left: r.left, right: r.right });
         }
       }
     }
@@ -807,7 +808,7 @@ const PdfExport = (function () {
   // précède/suit au clone (removeBefore/removeAfter), sans jamais modifier
   // `node` lui-même (peut être appelé plusieurs fois sur le même `node`,
   // pour des plages différentes).
-  function extractRunsBetween(node, startCut, endCut) {
+  function extractRunsBetweenRaw(node, startCut, endCut) {
     const clone = node.cloneNode(true);
     if (endCut) {
       const target = nodeAtPath(clone, nodePathTo(node, endCut.textNode));
@@ -819,7 +820,67 @@ const PdfExport = (function () {
       target.nodeValue = target.nodeValue.slice(startCut.offset);
       removeBefore(clone, target);
     }
-    return trimEdgeWhitespace(inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []));
+    return inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []);
+  }
+  function extractRunsBetween(node, startCut, endCut) {
+    return trimEdgeWhitespace(extractRunsBetweenRaw(node, startCut, endCut));
+  }
+
+  // Étire une ligne "à la main" jusqu'à `targetWidthPt`, en ajoutant de
+  // l'espacement UNIQUEMENT entre le dernier caractère de chaque mot et
+  // l'espace qui le suit (jamais à l'intérieur d'un mot, jamais en bordure
+  // de run - `characterSpacing` de pdfmake n'agit qu'ENTRE des caractères
+  // d'un même run, jamais en bordure - vérifié empiriquement, cf. mémoire
+  // project_v2_tiptap_migration : 1 unité = 1pt, linéaire, aucun effet sur
+  // la hauteur de ligne contrairement à une variation de fontSize). Répartit
+  // l'écart à combler également entre tous les mots de la ligne, comme un
+  // vrai justify. `lineWords` = sous-ensemble consécutif de collectWords()
+  // pour cette seule ligne (top identique) ; `startCut`/`endCut` bornent le
+  // texte RÉEL à extraire (peuvent déborder légèrement des mots eux-mêmes -
+  // espaces de bord - d'où le rognage final via trimEdgeWhitespace).
+  function buildJustifiedLine(node, lineWords, startCut, endCut, targetWidthPt) {
+    const gaps = lineWords.length - 1;
+    // PAS (dernier mot.right - premier mot.left) : le paragraphe porte
+    // réellement `text-align:justify` en CSS dans l'éditeur (pas juste à
+    // l'export) - measurer l'empan de la ligne RENDUE la mesurerait donc
+    // déjà étirée par la justification native du navigateur (constaté :
+    // largeur mesurée quasi identique à la largeur de colonne cible, alors
+    // que le texte est nettement plus court une fois posé tel quel dans
+    // pdfmake) - fausserait `extraPt` vers ~0 à tort. Somme plutôt la
+    // largeur PROPRE de chaque mot (jamais affectée par le justify - le
+    // navigateur n'étire QUE les espaces, jamais les mots eux-mêmes) plus un
+    // espace "normal" (non étiré) par intervalle, déjà mesuré ailleurs dans
+    // ce fichier via une sonde hors-flux non justifiée (spaceWidthPt()).
+    const naturalWidthPt = lineWords.reduce((sum, w) => sum + (w.right - w.left), 0) * PX_TO_PT + gaps * spaceWidthPt();
+    // Petite marge de sécurité : viser EXACTEMENT targetWidthPt laisse un
+    // écart nul avec la largeur réelle de la colonne - un sous-pixel
+    // d'arrondi entre notre estimation et le rendu réel de pdfmake (métriques
+    // de police jamais garanties identiques au dixième de point près,
+    // cf. commentaire au-dessus) suffit alors à faire dépasser la ligne
+    // étirée de sa largeur, et donc à la faire recouper par pdfmake (un mot
+    // entier bascule sur une ligne en trop - constaté). `noWrap` n'aide pas
+    // ici (n'a d'effet que sur un `text` chaîne simple, pas sur un tableau
+    // de runs stylés - vérifié). Un leger sous-étirement (quelques dixièmes
+    // de point, invisible) est préférable à ce risque.
+    const SAFETY_MARGIN_PT = 2;
+    const extraPt = gaps > 0 ? Math.max(0, (targetWidthPt - SAFETY_MARGIN_PT) - naturalWidthPt) / gaps : 0;
+    if (gaps <= 0 || extraPt < 0.01) {
+      return trimEdgeWhitespace(extractRunsBetweenRaw(node, startCut, endCut));
+    }
+    const runs = [];
+    let cursor = startCut;
+    for (let i = 0; i < lineWords.length - 1; i += 1) {
+      const w = lineWords[i];
+      const next = lineWords[i + 1];
+      const wordEndCut = { textNode: w.textNode, offset: w.end - 1 };
+      runs.push(...extractRunsBetweenRaw(node, cursor, wordEndCut));
+      const gapRuns = extractRunsBetweenRaw(node, wordEndCut, { textNode: next.textNode, offset: next.start });
+      gapRuns.forEach(r => { r.characterSpacing = extraPt; });
+      runs.push(...gapRuns);
+      cursor = { textNode: next.textNode, offset: next.start };
+    }
+    runs.push(...extractRunsBetweenRaw(node, cursor, endCut));
+    return trimEdgeWhitespace(runs);
   }
 
   // pdfmake n'étire JAMAIS (alignment:'justify') une ligne qu'il n'a pas
@@ -930,28 +991,86 @@ const PdfExport = (function () {
     let besideEnd = words.length;
     for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
     if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
+    // Regroupe des mots CONSÉCUTIFS (même Y à 2px près) en lignes - sert à
+    // reconstruire, ligne par ligne, le texte "avant" et "à côté" quand un
+    // étirement manuel (justify) est nécessaire (cf. buildJustifiedLine) :
+    // seule une ligne dictée séparément permet d'en connaître les bornes
+    // exactes (mots de début/fin) pour y calculer un étirement précis.
+    const groupIntoLines = wordsSlice => {
+      const lines = [];
+      wordsSlice.forEach(w => {
+        const last = lines[lines.length - 1];
+        if (last && Math.abs(last[0].top - w.top) < 2) last.push(w); else lines.push([w]);
+      });
+      return lines;
+    };
+    const besideStartCut = besideStart === 0 ? null : { textNode: words[besideStart].textNode, offset: words[besideStart].start };
+    const besideEndCut = besideEnd < words.length ? { textNode: words[besideEnd].textNode, offset: words[besideEnd].start } : null;
+    const hasAfter = besideEnd < words.length;
+
     const blocks = [];
     let pendingPageBreak = pageBreakBefore;
     if (besideStart > 0) {
-      const beforeRuns = extractRunsBetween(node, null, { textNode: words[besideStart].textNode, offset: words[besideStart].start });
-      if (beforeRuns.length) {
-        const beforeBlock = { text: beforeRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
-        if (textAlign) beforeBlock.alignment = textAlign;
-        blocks.push(beforeBlock);
-        pendingPageBreak = false;
+      if (textAlign === 'justify') {
+        // Texte "avant" TOUJOURS suivi du texte "à côté" - même sa propre
+        // dernière ligne doit donc s'étirer (ce n'est jamais la fin réelle
+        // du paragraphe).
+        const beforeLines = groupIntoLines(words.slice(0, besideStart));
+        let cursor = null;
+        beforeLines.forEach((line, li) => {
+          const isLastLine = li === beforeLines.length - 1;
+          const endCut = isLastLine ? besideStartCut : { textNode: beforeLines[li + 1][0].textNode, offset: beforeLines[li + 1][0].start };
+          // La largeur cible retranche la marge droite posée juste en
+          // dessous (spaceWidthPt(), compensation white-space:break-spaces
+          // déjà utilisée ailleurs dans ce fichier) - cette marge réduit
+          // elle aussi la largeur RÉELLEMENT disponible pour le texte, sans
+          // quoi l'étirement calculé dépassait de peu le bloc réel et
+          // pdfmake recoupait un mot entier sur une ligne en trop (constaté ;
+          // `noWrap` n'aide pas ici, cf. buildJustifiedLine - seule cette
+          // marge de sécurité compte).
+          const lineRuns = buildJustifiedLine(node, line, cursor, endCut, pageWidthPt - spaceWidthPt());
+          const block = { text: lineRuns.length ? lineRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+          if (li === 0 && pendingPageBreak) { block.pageBreak = 'before'; pendingPageBreak = false; }
+          blocks.push(block);
+          cursor = endCut;
+        });
+      } else {
+        const beforeRuns = extractRunsBetween(node, null, besideStartCut);
+        if (beforeRuns.length) {
+          const beforeBlock = { text: beforeRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
+          if (textAlign) beforeBlock.alignment = textAlign;
+          blocks.push(beforeBlock);
+          pendingPageBreak = false;
+        }
       }
     }
-    // Un seul bloc pour tout le texte "à côté" - auto-wrappé par pdfmake
-    // dans la largeur de colonne restante (cf. commentaire au-dessus de
-    // floatedImageParagraphFrom : c'est ce qui permet à `justify` de
-    // s'appliquer réellement ici, au prix d'une coupure de ligne pas
-    // garantie identique au rendu éditeur).
-    const besideStartCut = besideStart === 0 ? null : { textNode: words[besideStart].textNode, offset: words[besideStart].start };
-    const besideLastWord = words[besideEnd - 1];
-    const besideRuns = extractRunsBetween(node, besideStartCut, { textNode: besideLastWord.textNode, offset: besideLastWord.end });
-    const besideBlock = { text: besideRuns.length ? besideRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
-    if (textAlign) besideBlock.alignment = textAlign;
-    const columnsBlock = makeColumns([besideBlock]);
+    let besideContent;
+    if (textAlign === 'justify') {
+      // Chaque ligne "à côté" est dictée séparément (comme "avant" ci-dessus)
+      // et étirée - SAUF si c'est à la fois la dernière ligne à côté ET qu'il
+      // n'y a pas de texte "après" (cf. hasAfter) : dans ce seul cas, c'est
+      // la vraie dernière ligne du paragraphe, jamais étirée (même
+      // convention que le CSS).
+      const besideLines = groupIntoLines(words.slice(besideStart, besideEnd));
+      let cursor = besideStartCut;
+      besideContent = besideLines.map((line, li) => {
+        const isLastLine = li === besideLines.length - 1;
+        const endCut = isLastLine ? besideEndCut : { textNode: besideLines[li + 1][0].textNode, offset: besideLines[li + 1][0].start };
+        const isTrueLastLine = isLastLine && !hasAfter;
+        const lineRuns = isTrueLastLine
+          ? extractRunsBetween(node, cursor, endCut)
+          : buildJustifiedLine(node, line, cursor, endCut, remainingWidthPt);
+        cursor = endCut;
+        return { text: lineRuns.length ? lineRuns : ' ', lineHeight: LINE_HEIGHT_RATIO, alignment: textAlign };
+      });
+    } else {
+      const besideLastWord = words[besideEnd - 1];
+      const besideRuns = extractRunsBetween(node, besideStartCut, { textNode: besideLastWord.textNode, offset: besideLastWord.end });
+      const besideBlock = { text: besideRuns.length ? besideRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
+      if (textAlign) besideBlock.alignment = textAlign;
+      besideContent = [besideBlock];
+    }
+    const columnsBlock = makeColumns(besideContent);
     if (pendingPageBreak) columnsBlock.pageBreak = 'before';
     blocks.push(columnsBlock);
     if (besideEnd < words.length) {
