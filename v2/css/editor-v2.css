@@ -126,7 +126,26 @@
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
-#v2-toolbar button { border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 4px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; }
+/* Boutons icône-seule (16px, style trait cf. v2/js/icons.js) : plus compact
+   et plus lisible que les glyphes texte/unicode bruts d'origine (signalé par
+   l'utilisateur) - l'identification se fait via le `title` natif (tooltip au
+   survol), déjà présent sur chaque bouton. */
+#v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid var(--border, #d7dde3); background: #fff; border-radius: 5px; padding: 0; cursor: pointer; color: #3a4452; }
+#v2-toolbar button svg { width: 16px; height: 16px; }
 #v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
+/* État actif (ex. gras appliqué là où est le curseur) - absent jusqu'ici,
+   cf. Editor.syncToolbarState dans v2/js/editor.js. */
+#v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 #v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
+
+/* Toolbar contextuelle flottante (tableau pour l'instant, image dans un
+   incrément suivant) - positionnée par @floating-ui/dom (cf.
+   Editor.createFloatingPanel), ancrée dans document.body plutôt que dans
+   #editor-container pour éviter tout souci de contexte d'empilement/
+   débordement avec un ancêtre (cf. mémoire project_stacking_context_trap). */
+.v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: 2000; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border, #d7dde3); border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
+.v2-floating-toolbar.visible { display: flex; }
+.v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: #3a4452; }
+.v2-floating-toolbar button svg { width: 15px; height: 15px; }
+.v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }

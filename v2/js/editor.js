@@ -24,6 +24,12 @@
 // nommée, au lieu de gonfler `init()` lui-même.
 const Editor = (function () {
   let editor = null;
+  // Rempli dans init() après l'import dynamique de @floating-ui/dom (déjà
+  // épinglé dans l'importmap de v2/index.html mais jamais utilisé jusqu'ici) -
+  // conservé en variable de module pour que createFloatingPanel (utilisé pour
+  // la toolbar de tableau, puis celle de l'image) n'ait pas besoin de refaire
+  // l'import à chaque appel.
+  let floatingUi = null;
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
@@ -343,6 +349,141 @@ const Editor = (function () {
     if (tr) currentEditor.view.dispatch(tr);
   }
 
+  // Aide générique pour une toolbar contextuelle flottante, positionnée par
+  // @floating-ui/dom plutôt que par du calcul manuel de getBoundingClientRect
+  // (ce que faisait la V1 pour sa propre toolbar de tableau, js/editor.js:1122)
+  // - réutilisée ici pour le tableau, et pour l'image dans un incrément
+  // suivant. Ancrée dans document.body (pas #editor-container) : évite tout
+  // souci de contexte d'empilement/débordement avec un ancêtre (cf. mémoire
+  // project_stacking_context_trap), même principe que les overlays flottants
+  // de la V1.
+  function createFloatingPanel(className, innerHTML, onAction) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.innerHTML = innerHTML;
+    // mousedown (pas click) + preventDefault : évite qu'un clic sur un bouton
+    // du panneau ne fasse d'abord perdre le focus/la sélection ProseMirror
+    // avant que l'action ne s'exécute - même piège que les <select> de la
+    // toolbar principale (cf. wireSelectionDependentSelects).
+    el.addEventListener('mousedown', (event) => {
+      const btn = event.target.closest('button[data-action]');
+      if (!btn) return;
+      event.preventDefault();
+      onAction(btn.dataset.action);
+    });
+    document.body.appendChild(el);
+    let stopAutoUpdate = null;
+    return {
+      show(referenceEl) {
+        el.classList.add('visible');
+        const update = () => {
+          floatingUi.computePosition(referenceEl, el, {
+            placement: 'top',
+            middleware: [floatingUi.offset(8), floatingUi.flip(), floatingUi.shift({ padding: 8 })],
+          }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
+        };
+        if (stopAutoUpdate) stopAutoUpdate();
+        stopAutoUpdate = floatingUi.autoUpdate(referenceEl, el, update);
+      },
+      hide() {
+        el.classList.remove('visible');
+        if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
+      },
+    };
+  }
+
+  // Toolbar de gestion de tableau (ajout/suppr ligne/colonne, suppr tableau) -
+  // déplacée hors du bandeau statique (où elle restait affichée même sans
+  // aucun tableau dans le document) vers un panneau flottant qui n'apparaît
+  // que le curseur dans une cellule, ancré sur le <table> réel. `v2-btn-table`
+  // (insertion) reste dans le bandeau statique : seule la gestion d'un
+  // tableau déjà présent a besoin d'un contexte "curseur dans une cellule".
+  function wireTableFloatingToolbar() {
+    const buttons = [
+      ['row-before', 'rowBefore', 'Ligne avant'],
+      ['row-after', 'rowAfter', 'Ligne après'],
+      ['row-del', 'rowDel', 'Supprimer la ligne'],
+      ['col-before', 'colBefore', 'Colonne avant'],
+      ['col-after', 'colAfter', 'Colonne après'],
+      ['col-del', 'colDel', 'Supprimer la colonne'],
+      ['table-del', 'trash', 'Supprimer le tableau'],
+    ];
+    const html = buttons.map(([action, icon, title]) =>
+      `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('');
+    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+      const commands = {
+        'row-before': () => editor.chain().focus().addRowBefore().run(),
+        'row-after': () => editor.chain().focus().addRowAfter().run(),
+        'row-del': () => editor.chain().focus().deleteRow().run(),
+        'col-before': () => editor.chain().focus().addColumnBefore().run(),
+        'col-after': () => editor.chain().focus().addColumnAfter().run(),
+        'col-del': () => editor.chain().focus().deleteColumn().run(),
+        'table-del': () => editor.chain().focus().deleteTable().run(),
+      };
+      (commands[action] || (() => {}))();
+    });
+    const check = () => {
+      if (!editor.isActive('table')) { panel.hide(); return; }
+      const { $from } = editor.state.selection;
+      let tableDepth = -1;
+      for (let d = $from.depth; d > 0; d--) { if ($from.node(d).type.name === 'table') { tableDepth = d; break; } }
+      if (tableDepth === -1) { panel.hide(); return; }
+      // nodeDOM d'un nœud table renvoie le wrapper (.tableWrapper) posé par
+      // la NodeView interne de prosemirror-tables, pas le <table> lui-même -
+      // redescend dessus pour un ancrage visuel correct.
+      const dom = editor.view.nodeDOM($from.before(tableDepth));
+      if (!dom) { panel.hide(); return; }
+      const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
+      panel.show(tableEl);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
+  }
+
+  // Icônes de la toolbar statique (posées en JS plutôt que dans le HTML : une
+  // seule source de vérité pour les tracés SVG, partagée avec les toolbars
+  // flottantes ci-dessus/ci-dessous qui doivent de toute façon construire
+  // leur contenu en JS - cf. v2/js/icons.js).
+  function applyToolbarIcons() {
+    const set = (id, icon) => { const el = document.getElementById(id); if (el) el.innerHTML = Icons.svg(icon); };
+    set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
+    set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
+    set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
+    set('v2-btn-align-right', 'alignRight'); set('v2-btn-align-justify', 'alignJustify');
+    set('v2-btn-bullet', 'bulletList'); set('v2-btn-ordered', 'orderedList');
+    set('v2-btn-blockquote', 'blockquote'); set('v2-btn-table', 'table');
+    set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
+    set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
+    set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
+  }
+
+  // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
+  // pas que le curseur est déjà dans du texte en gras). Recalculé à chaque
+  // sélection/transaction plutôt que seulement au clic, pour rester juste
+  // aussi quand la sélection change au clavier/à la souris sans passer par la
+  // toolbar. Inclut aussi `v2-header-select`, pour la même raison (montrer
+  // "Titre 2" quand le curseur est dans un H2, pas seulement "Normal" figé).
+  function syncToolbarState() {
+    const setActive = (id, isActive) => { const el = document.getElementById(id); if (el) el.classList.toggle('is-active', !!isActive); };
+    setActive('v2-btn-bold', editor.isActive('bold'));
+    setActive('v2-btn-italic', editor.isActive('italic'));
+    setActive('v2-btn-underline', editor.isActive('underline'));
+    setActive('v2-btn-strike', editor.isActive('strike'));
+    setActive('v2-btn-align-left', editor.isActive({ textAlign: 'left' }));
+    setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
+    setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
+    setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
+    setActive('v2-btn-bullet', editor.isActive('bulletList'));
+    setActive('v2-btn-ordered', editor.isActive('orderedList'));
+    setActive('v2-btn-blockquote', editor.isActive('blockquote'));
+    const headerSelect = document.getElementById('v2-header-select');
+    if (headerSelect) {
+      let value = 'p';
+      for (let level = 1; level <= 6; level++) { if (editor.isActive('heading', { level })) value = String(level); }
+      if (headerSelect.value !== value) headerSelect.value = value;
+    }
+  }
+
   async function init() {
     const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
     const { StarterKit } = await import('@tiptap/starter-kit');
@@ -354,6 +495,8 @@ const Editor = (function () {
     const { TableRow } = await import('@tiptap/extension-table-row');
     const { TableCell } = await import('@tiptap/extension-table-cell');
     const { TableHeader } = await import('@tiptap/extension-table-header');
+    const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
+    floatingUi = { computePosition, offset, flip, shift, autoUpdate };
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
@@ -393,6 +536,9 @@ const Editor = (function () {
     });
 
     wireToolbar();
+    wireTableFloatingToolbar();
+    editor.on('selectionUpdate', syncToolbarState);
+    editor.on('transaction', syncToolbarState);
     return editor;
   }
 
@@ -401,6 +547,7 @@ const Editor = (function () {
   // dans une cellule/colonne" avant d'agir (contrairement à l'éditeur V1), et
   // plus aucun execCommand.
   function wireToolbar() {
+    applyToolbarIcons();
     const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
     bind('v2-btn-bold', () => editor.chain().focus().toggleBold().run());
     bind('v2-btn-italic', () => editor.chain().focus().toggleItalic().run());
@@ -417,13 +564,8 @@ const Editor = (function () {
     // ligne différent des autres (signalé par l'utilisateur : gras + fond
     // coloré inattendus par défaut, cf. aussi css/editor-v2.css).
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
-    bind('v2-btn-col-before', () => editor.chain().focus().addColumnBefore().run());
-    bind('v2-btn-col-after', () => editor.chain().focus().addColumnAfter().run());
-    bind('v2-btn-col-del', () => editor.chain().focus().deleteColumn().run());
-    bind('v2-btn-row-before', () => editor.chain().focus().addRowBefore().run());
-    bind('v2-btn-row-after', () => editor.chain().focus().addRowAfter().run());
-    bind('v2-btn-row-del', () => editor.chain().focus().deleteRow().run());
-    bind('v2-btn-table-del', () => editor.chain().focus().deleteTable().run());
+    // Gestion ligne/colonne/suppression de tableau : déplacée vers la
+    // toolbar flottante contextuelle, cf. wireTableFloatingToolbar.
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', () => {
       const url = window.prompt('URL de l\'image :');
