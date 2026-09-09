@@ -762,6 +762,104 @@ const Editor = (function () {
     };
   }
 
+  // Palettes courtes, sobres (inspirées des standards actuels - Google Docs/
+  // Notion) : couleurs de police plus saturées (lisibles en texte fin),
+  // couleurs de surlignage/fond de cellule en teintes pastel (le texte
+  // au-dessus reste lisible).
+  const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
+  const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
+
+  // Un seul menu déroulant de couleur ouvert à la fois - fermé par un clic
+  // n'importe où ailleurs (hors du bouton qui l'a ouvert ou du panneau
+  // lui-même).
+  let openColorPanel = null;
+  document.addEventListener('mousedown', (event) => {
+    if (!openColorPanel) return;
+    if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')) return;
+    openColorPanel.hide();
+    openColorPanel = null;
+  });
+
+  // Menu déroulant de couleur générique (grille de nuances + case
+  // "personnalisé" ouvrant le sélecteur natif + case "aucune", optionnelle) -
+  // même esprit que la toolbar de tableau/image (createFloatingPanel), pour
+  // le bouton de police/surlignage de la toolbar principale ET le bouton de
+  // fond de cellule de la toolbar de tableau. `onPick(chain, color)`/
+  // `onNone(chain)` reçoivent une chaîne TipTap déjà focus+sélection
+  // restaurée (cf. `withSavedSelection` de chaque appelant) - à eux
+  // d'appeler la commande adéquate dessus, sans jamais lancer .run() (fait
+  // par l'appelant, une seule fois).
+  function createColorDropdown(presets, { noneLabel, onPick, onNone, withSavedSelection }) {
+    const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
+    const html = '<div class="v2-color-grid">' + swatches + '</div>'
+      + '<div class="v2-color-dropdown-footer">'
+      + `<button data-action="custom" title="Couleur personnalisée">${Icons.svg('fill')}<span>Personnalisé…</span></button>`
+      + (onNone ? `<button data-action="none" title="${noneLabel}">${Icons.svg('noColor')}<span>${noneLabel}</span></button>` : '')
+      + '</div>'
+      + '<input type="color" class="v2-color-dropdown-native">';
+    const panel = createFloatingPanel('v2-color-dropdown', html, (action) => {
+      if (action === 'custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
+      if (action === 'none') { withSavedSelection(chain => onNone(chain)); closeColorPanel(); return; }
+      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); closeColorPanel(); }
+    });
+    panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', (event) => {
+      withSavedSelection(chain => onPick(chain, event.target.value));
+      closeColorPanel();
+    });
+    return panel;
+  }
+  function closeColorPanel() { if (openColorPanel) { openColorPanel.hide(); openColorPanel = null; } }
+  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas
+  // click) : même raison que la toolbar de tableau/image, éviter de perdre
+  // la sélection ProseMirror avant que le panneau ne s'ouvre. `getSelection`
+  // capture la sélection AU MOMENT du clic (avant que le panneau ne vole le
+  // focus) - restaurée par `withSavedSelection` quand une couleur est
+  // effectivement choisie, potentiellement bien après ce clic initial.
+  function wireColorButton(btn, panel, captureSelection) {
+    if (!btn) return;
+    btn.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      captureSelection();
+      if (openColorPanel === panel) { closeColorPanel(); return; }
+      closeColorPanel();
+      panel.show(btn);
+      openColorPanel = panel;
+    });
+  }
+  function setColorBar(id, color) {
+    const el = document.getElementById(id);
+    if (el) el.style.background = color || 'transparent';
+  }
+
+  // Couleur de police / surlignage (bandeau principal) - bouton + pastille
+  // (couleur courante) + menu déroulant, plutôt que le <input type=color> +
+  // bouton "retirer" séparés d'origine (signalé peu sobre/pas assez
+  // standard par l'utilisateur).
+  function wireColorPickers() {
+    let savedSelection = null;
+    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
+    const withSavedSelection = (fn) => {
+      const chain = editor.chain().focus();
+      if (savedSelection) chain.setTextSelection(savedSelection);
+      fn(chain);
+      chain.run();
+    };
+    const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
+      noneLabel: 'Par défaut',
+      withSavedSelection,
+      onPick: (chain, color) => { chain.setTextColor(color); setColorBar('v2-color-text-bar', color); },
+      onNone: (chain) => { chain.unsetTextColor(); setColorBar('v2-color-text-bar', null); },
+    });
+    wireColorButton(document.getElementById('v2-btn-text-color'), textColorPanel, captureSelection);
+    const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
+      noneLabel: 'Aucun',
+      withSavedSelection,
+      onPick: (chain, color) => { chain.setHighlight(color); setColorBar('v2-color-highlight-bar', color); },
+      onNone: (chain) => { chain.unsetHighlight(); setColorBar('v2-color-highlight-bar', null); },
+    });
+    wireColorButton(document.getElementById('v2-btn-highlight'), highlightPanel, captureSelection);
+  }
+
   // Toolbar de gestion de tableau (ajout/suppr ligne/colonne, suppr tableau) -
   // déplacée hors du bandeau statique (où elle restait affichée même sans
   // aucun tableau dans le document) vers un panneau flottant qui n'apparaît
@@ -781,8 +879,9 @@ const Editor = (function () {
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
       + '<span class="v2-floating-sep"></span>'
-      + '<input type="color" data-role="fill" class="v2-color-input" value="#ffff00" title="Fond de cellule (remplir)">'
-      + `<button data-action="fill-remove" title="Retirer le fond de cellule">${Icons.svg('cellFillRemove')}</button>`;
+      + '<button data-action="fill-open" class="v2-color-split" id="v2-table-fill-btn" title="Fond de cellule (remplir)">'
+      + Icons.svg('fill') + '<span class="v2-color-split-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
+      + '</button>';
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const commands = {
         'row-before': () => editor.chain().focus().addRowBefore().run(),
@@ -792,11 +891,26 @@ const Editor = (function () {
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
         'col-del': () => editor.chain().focus().deleteColumn().run(),
         'table-del': () => editor.chain().focus().deleteTable().run(),
-        'fill-remove': () => setCellsBackground(editor, null),
+        'fill-open': () => {
+          const btn = document.getElementById('v2-table-fill-btn');
+          if (openColorPanel === fillPanel) { closeColorPanel(); return; }
+          closeColorPanel();
+          fillPanel.show(btn);
+          openColorPanel = fillPanel;
+        },
       };
       (commands[action] || (() => {}))();
-    }, (role, value) => {
-      if (role === 'fill') setCellsBackground(editor, value);
+    });
+    // Pas de sélection à restaurer ici (contrairement au texte) :
+    // setCellsBackground lit `editor.state.selection` directement, qui
+    // persiste indépendamment du focus DOM - `withSavedSelection` n'est
+    // donc qu'un simple passe-plat (le paramètre `chain` de
+    // createColorDropdown ne sert à rien pour une cellule).
+    const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
+      noneLabel: 'Aucun',
+      withSavedSelection: fn => fn(null),
+      onPick: (chain, color) => { setCellsBackground(editor, color); setColorBar('v2-table-fill-bar', color); },
+      onNone: () => { setCellsBackground(editor, null); setColorBar('v2-table-fill-bar', null); },
     });
     const check = () => {
       if (!editor.isActive('table')) { panel.hide(); return; }
@@ -811,6 +925,8 @@ const Editor = (function () {
       if (!dom) { panel.hide(); return; }
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
       panel.show(tableEl);
+      const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
+      setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };
     editor.on('selectionUpdate', check);
     editor.on('transaction', check);
@@ -1027,7 +1143,8 @@ const Editor = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
-    set('v2-btn-color-reset', 'colorReset'); set('v2-btn-highlight-remove', 'highlightRemove');
+    set('v2-highlight-icon', 'highlight');
+    set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
   }
 
   // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
@@ -1055,6 +1172,9 @@ const Editor = (function () {
       for (let level = 1; level <= 6; level++) { if (editor.isActive('heading', { level })) value = String(level); }
       if (headerSelect.value !== value) headerSelect.value = value;
     }
+    const textStyleAttrs = editor.getAttributes('textStyle');
+    setColorBar('v2-color-text-bar', textStyleAttrs.color || '#000000');
+    setColorBar('v2-color-highlight-bar', textStyleAttrs.backgroundColor || null);
   }
 
   async function init() {
@@ -1116,6 +1236,7 @@ const Editor = (function () {
     });
 
     wireToolbar();
+    wireColorPickers();
     wireTableFloatingToolbar();
     wireImageFloatingToolbar();
     editor.on('selectionUpdate', syncToolbarState);
@@ -1154,8 +1275,6 @@ const Editor = (function () {
       editor.chain().focus().insertImage({ src: url, alt: 'Image', width: '320px' }).run();
       warnIfImageUrlNotExportable(url);
     });
-    bind('v2-btn-color-reset', () => editor.chain().focus().unsetTextColor().run());
-    bind('v2-btn-highlight-remove', () => editor.chain().focus().unsetHighlight().run());
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
@@ -1209,11 +1328,6 @@ const Editor = (function () {
     }));
     bindSelect('v2-size-select', value => { if (value) withSavedSelection(chain => chain.setFontSize(value)); });
     bindSelect('v2-font-select', value => { if (value) withSavedSelection(chain => chain.setFontFamily(value)); });
-    // <input type="color"> vole le focus au clic (ouverture du sélecteur
-    // natif) exactement comme un <select> - même traitement pointerdown/
-    // change que ci-dessus.
-    bindSelect('v2-color-text', value => withSavedSelection(chain => chain.setTextColor(value)));
-    bindSelect('v2-color-highlight', value => withSavedSelection(chain => chain.setHighlight(value)));
   }
 
   function getHTML() { return editor ? editor.getHTML() : ''; }
