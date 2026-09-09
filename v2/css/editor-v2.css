@@ -65,6 +65,28 @@
    de l'éditeur. */
 #editor-container.a4-preview { background: #eef1f5; }
 #editor-container.a4-preview .tiptap { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+/* Un tableau avec beaucoup de colonnes (ou une colonne ajoutée qui ne
+   trouve plus de place) peut dépasser la largeur disponible - chaque <col>
+   porte un `min-width` (TipTap) qui reste une contrainte dure même sous
+   table-layout:fixed, et une <col> SANS largeur du tout (nouvelle colonne
+   ajoutée à côté de colonnes déjà redimensionnées avec une largeur
+   explicite) garde quand même un minimum incompressible imposé par le
+   navigateur. .tableWrapper laisse alors défiler horizontalement (utile en
+   mode classique - un large écran peut se permettre une table plus large
+   que le flux normal). En Aperçu A4, ce défilement cachait la vraie largeur
+   qu'utilisera l'export PDF (qui, lui, ne défile jamais - tableFrom répartit
+   TOUJOURS proportionnellement dans la largeur de page réelle, cf.
+   v2/js/pdf-export.js) : signalé par l'utilisateur comme trompeur.
+   `min-width: 0 !important` supprime le plancher dans le cas courant
+   (colonnes jamais redimensionnées) ; `overflow-x: hidden` (au lieu de
+   `auto`) retire le défilement dans tous les cas - un recadrage visible du
+   tableau est un signal plus honnête qu'un scroll caché qu'un document
+   trop chargé ne rentre plus, plutôt que de prétendre à un ajustement
+   pixel-parfait qu'un CSS seul ne peut pas garantir dès qu'une colonne à
+   largeur explicite et une colonne sans largeur coexistent (vérifié en
+   conditions réelles - cas limite, pas la situation courante). */
+#editor-container.a4-preview .tiptap .tableWrapper { overflow-x: hidden; }
+#editor-container.a4-preview .tiptap table col { min-width: 0 !important; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
