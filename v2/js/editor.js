@@ -278,6 +278,61 @@ const Editor = (function () {
     });
   }
 
+  // En mode Aperçu A4, un tableau ne doit jamais dépasser la largeur de page
+  // réelle : signalé par l'utilisateur - agrandir une colonne à la main au
+  // point de manquer de place poussait le reste du tableau hors de la
+  // feuille (un <col> avec une largeur EXPLICITE n'a, contrairement à
+  // min-width, aucun plafond naturel - une largeur de 900px déborde
+  // simplement le conteneur, vérifié en conditions réelles). L'extension
+  // officielle de redimensionnement n'expose pas de crochet pendant le
+  // glisser lui-même ; ce correctif tourne donc sur CHAQUE mise à jour
+  // (comme le NodeView du sommaire ci-dessus) et rétrécit après coup les
+  // colonnes EXPLICITEMENT redimensionnées (attribut `colwidth` réel,
+  // jamais les colonnes "auto" par défaut - déjà couvertes par le
+  // `min-width: 0` de css/editor-v2.css) dès que la largeur totale dépasse
+  // le conteneur - perçu comme un léger rebond juste après avoir relâché la
+  // poignée plutôt qu'une résistance pendant le glisser, mais garantit que
+  // le tableau ne peut jamais rester plus large que la page.
+  const DEFAULT_COL_PX = 25;
+  function clampOverflowingTables(currentEditor) {
+    const editorContainer = document.getElementById('editor-container');
+    if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
+    // clientWidth de .tiptap (racine ProseMirror) inclut SON PROPRE padding
+    // (37.33px de chaque côté en Aperçu A4, cf. css/editor-v2.css) - retiré
+    // ici pour obtenir la largeur réellement disponible pour un enfant
+    // direct comme le tableau, pas la boîte entière de la racine.
+    const rootEl = currentEditor.view.dom;
+    const rootCs = getComputedStyle(rootEl);
+    const containerWidth = rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
+    if (!containerWidth) return;
+    const { state } = currentEditor;
+    let tr = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'table') return true;
+      const firstRow = node.firstChild;
+      if (!firstRow) return false;
+      let total = 0;
+      const cells = [];
+      firstRow.forEach((cellNode, offset) => {
+        const span = cellNode.attrs.colspan || 1;
+        const colwidth = cellNode.attrs.colwidth;
+        total += colwidth ? colwidth.reduce((sum, w) => sum + (w || DEFAULT_COL_PX), 0) : DEFAULT_COL_PX * span;
+        cells.push({ pos: pos + 2 + offset, node: cellNode });
+      });
+      if (total <= containerWidth) return false;
+      const scale = containerWidth / total;
+      cells.forEach(({ pos: cellPos, node: cellNode }) => {
+        const colwidth = cellNode.attrs.colwidth;
+        if (!colwidth) return; // colonne "auto" par défaut - laissée telle quelle
+        const newColwidth = colwidth.map(w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w));
+        if (!tr) tr = state.tr;
+        tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: newColwidth }));
+      });
+      return false;
+    });
+    if (tr) currentEditor.view.dispatch(tr);
+  }
+
   async function init() {
     const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
     const { StarterKit } = await import('@tiptap/starter-kit');
@@ -300,6 +355,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
+      onUpdate: ({ editor: updatedEditor }) => clampOverflowingTables(updatedEditor),
       extensions: [
         StarterKit,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -440,6 +496,12 @@ const Editor = (function () {
     // pour resynchroniser l'affichage après une modification externe au flux
     // normal d'édition.
     editor.view.dispatch(editor.state.tr);
+    // Un modèle chargé peut aussi contenir un tableau déjà trop large (créé
+    // avant ce correctif, ou importé) - le dispatch juste au-dessus ne
+    // déclenche PAS onUpdate (transaction sans changement réel), donc
+    // clampOverflowingTables ne tourne jamais tout seul pour ce cas précis ;
+    // appelé explicitement ici pour le couvrir aussi.
+    clampOverflowingTables(editor);
   }
 
   return { init, getHTML, setHTML, getHeadingNumberingStyle };
