@@ -231,9 +231,15 @@ const PdfExport = (function () {
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     const layer = node.getAttribute('data-layer') || 'normal';
     if (layer !== 'normal' && node.style.position === 'absolute') {
-      const leftPx = parseFloat(node.style.left) || 0;
-      const topPx = parseFloat(node.style.top) || 0;
-      image.absolutePosition = { x: PAGE_MARGIN_PT + leftPx * PX_TO_PT, y: PAGE_MARGIN_PT + topPx * PX_TO_PT };
+      // Position réelle résolue plus tard par ancrage/interpolation (cf.
+      // buildPdfContentFromRoot/resolveNativePdfContent) - PAS calculée ici :
+      // une formule directe depuis le pixel `top` de l'éditeur n'a aucune
+      // notion de pagination PDF (une image profondément dans un document
+      // long atterrissait n'importe où, signalé par l'utilisateur). Garde
+      // une référence au NOEUD DOM réel (encore attaché à l'hôte de mesure
+      // à ce stade) pour pouvoir mesurer sa position rendue par rapport aux
+      // blocs de texte voisins.
+      image._pendingImgNode = node;
     } else {
       const align = node.getAttribute('data-align');
       // gauche/droite = habillage (float CSS côté éditeur, cf.
@@ -750,16 +756,22 @@ const PdfExport = (function () {
 
   function buildPdfContentFromRoot(root, headingMarkers) {
     const blocks = [];
+    // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée -
+    // sert uniquement à mesurer la position RENDUE réelle des blocs voisins
+    // d'une image en calque (cf. résolution d'ancrage plus bas), pas besoin
+    // ailleurs.
+    const sourceNodes = [];
     const headingBlocks = []; const tocBlocks = [];
     let pendingPageBreak = false;
+    const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
     const visit = node => {
-      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) blocks.push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }); pendingPageBreak = false; return; }
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
       if (node.classList.contains('heading-numbering-config')) return;
       if (node.classList.contains('toc-marker')) {
         const tocBlock = { stack: [{ text: 'Sommaire', bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
-        blocks.push(tocBlock); tocBlocks.push(tocBlock); pendingPageBreak = false;
+        push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false;
         return;
       }
       // Pas de branche dédiée pour un <table> : @tiptap/extension-table
@@ -773,7 +785,7 @@ const PdfExport = (function () {
         let zoneBlock;
         try { zoneBlock = twoColumnsFrom(node, pendingPageBreak); }
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
-        blocks.push(zoneBlock);
+        push(zoneBlock, node);
         pendingPageBreak = false;
         return;
       }
@@ -781,7 +793,7 @@ const PdfExport = (function () {
         let produced;
         try { produced = blockFrom(node, pendingPageBreak, headingMarkers); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
-        produced.forEach(b => { blocks.push(b); if (b && b._isHeading) headingBlocks.push(b); });
+        produced.forEach(b => { push(b, node); if (b && b._isHeading) headingBlocks.push(b); });
         pendingPageBreak = false;
         return;
       }
@@ -796,7 +808,41 @@ const PdfExport = (function () {
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
+    content._pendingImages = resolvePendingImageAnchors(root, blocks, sourceNodes);
     return content;
+  }
+
+  // Une image en calque (devant/derrière le texte) est positionnée par
+  // glisser n'IMPORTE OÙ visuellement dans l'éditeur, sans lien avec
+  // l'endroit où son <img> vit textuellement dans le HTML - ancrer sur le
+  // bloc PRÉCÉDENT/SUIVANT dans le document ne suffit donc pas (l'image a pu
+  // être glissée loin de son paragraphe d'origine) : on cherche plutôt,
+  // parmi TOUS les blocs top-level déjà mesurables, ceux dont la position
+  // RENDUE (dans l'hôte de mesure, encore attaché ici) encadre le plus
+  // étroitement la position rendue de l'image elle-même. Contrairement à la
+  // V1 (qui devait persister des identifiants d'ancrage côté éditeur parce
+  // que le glisser pouvait survenir à tout moment), tout se recalcule ici,
+  // à l'export, à partir du HTML final - plus simple.
+  function resolvePendingImageAnchors(root, blocks, sourceNodes) {
+    const pending = [];
+    const rootRect = root.getBoundingClientRect();
+    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block }) => block && !block._pendingImgNode);
+    blocks.forEach(block => {
+      if (!block || !block._pendingImgNode) return;
+      const imgRect = block._pendingImgNode.getBoundingClientRect();
+      const imgTopPx = imgRect.top - rootRect.top;
+      const imgLeftPx = imgRect.left - rootRect.left;
+      let above = null, aboveTopPx = -Infinity;
+      let below = null, belowTopPx = Infinity;
+      measurable.forEach(({ block: other, node }) => {
+        if (!node || !node.getBoundingClientRect) return;
+        const t = node.getBoundingClientRect().top - rootRect.top;
+        if (t <= imgTopPx && t > aboveTopPx) { aboveTopPx = t; above = other; }
+        if (t >= imgTopPx && t < belowTopPx) { belowTopPx = t; below = other; }
+      });
+      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx });
+    });
+    return pending;
   }
 
   // isTopLevel=true pour le flux principal de la page (calcule la
@@ -879,27 +925,82 @@ const PdfExport = (function () {
     return { pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [28, 28, 28, 28], defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE }, content, info: { title: filename || 'publipostage' } };
   }
 
-  // S'il y a un sommaire, une 1ère passe de mise en page "de mesure" (jamais
-  // montrée à l'utilisateur, juste .getBuffer() pour forcer pdfmake à
-  // calculer .positions) donne le numéro de PAGE réel de chaque titre. Le
-  // contenu est ensuite reconstruit à neuf (htmlToPdfContent est une fonction
-  // pure) et ces numéros reportés dans les cellules réservées du sommaire.
-  // Pas de résolution d'ancrage d'image ici (contrairement à la V1) : une
-  // image en calque devant/derrière le texte est déjà positionnée en absolu
-  // par pdfImageFromNode (formule de repli directe depuis left/top), mais le
-  // système de bracketing/interpolation par rapport aux blocs voisins n'est
-  // pas encore construit (cf. mémoire project_v2_tiptap_migration, prochain
-  // incrément) - rien à résoudre ICI pour l'instant, seulement pour la
-  // pagination du sommaire.
+  // Convertit une image en calque en attente (cf. resolvePendingImageAnchors)
+  // en une vraie `absolutePosition` pdfmake, à partir des positions RÉELLES
+  // (déjà mesurées par pdfmake lui-même lors de la passe de mesure) des blocs-
+  // ancre au-dessus/en-dessous. Interpole entre les deux si les deux sont
+  // résolues et sur la MÊME page (même formule que la V1 :
+  // fraction = offset-au-dessus / (offset-au-dessus - offset-en-dessous)) ;
+  // repli sur une seule ancre si l'autre est absente (image en tête/fin de
+  // document, ou ancres sur des pages différentes - cas limite non traité
+  // plus finement, rare en pratique) ; repli final purement local si aucune
+  // ancre n'a pu être résolue (document sans aucun autre bloc mesurable).
+  function resolveImageAbsolutePosition(a) {
+    const xPt = PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    if (a.aboveTop != null && a.belowTop != null && a.abovePage === a.belowPage && a.belowTopPx !== a.aboveTopPx) {
+      const fraction = (a.imgTopPx - a.aboveTopPx) / (a.belowTopPx - a.aboveTopPx);
+      return { x: xPt, y: a.aboveTop + fraction * (a.belowTop - a.aboveTop) };
+    }
+    if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT };
+    if (a.belowTop != null) return { x: xPt, y: a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT };
+    return { x: xPt, y: PAGE_MARGIN_PT + a.imgTopPx * PX_TO_PT };
+  }
+
+  // S'il y a un sommaire ET/OU des images en calque en attente, une 1ère
+  // passe de mise en page "de mesure" (jamais montrée à l'utilisateur, juste
+  // .getBuffer() pour forcer pdfmake à calculer .positions) donne les vraies
+  // page/position des blocs-ancre. Le contenu est ensuite reconstruit à neuf
+  // (htmlToPdfContent est une fonction pure) : les numéros de page du
+  // sommaire sont reportés dans ses cellules réservées ; les images en
+  // attente reçoivent leur `absolutePosition` finale ET sont RELOCALISÉES
+  // dans le tableau `content[]` juste à côté de l'ancre utilisée - pdfmake
+  // place un `absolutePosition` sur la page COURANTE au moment où il traite
+  // cette entrée du tableau (pas sur la page indiquée par `y`), donc une
+  // image glissée loin de sa position DOM d'origine resterait composée sur
+  // la MAUVAISE page sans ce réalignement (même contrainte que la V1, cf.
+  // mémoire project_image_anchor_bracketing_interpolation). Portée de cet
+  // incrément : uniquement les images en calque au niveau racine du document
+  // - une image en calque imbriquée dans une cellule de tableau ou une
+  // colonne de zone 2-colonnes n'est pas résolue ici (aucun de ces deux
+  // chemins de construction n'a de blocs-ancre top-level à offrir) ; elle
+  // garde alors le repli le plus simple - aucune `absolutePosition`, rendue
+  // en flux normal à sa place dans sa cellule/colonne - pas invisible, juste
+  // pas positionnée au pixel près comme au niveau racine.
   async function resolveNativePdfContent(inlinedHtml, filename) {
     let content = htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
-    if (hasToc) {
+    const hasPendingImages = (content._pendingImages || []).length > 0;
+    if (hasToc || hasPendingImages) {
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
+      // Capturé AVANT de reconstruire : htmlToPdfContent recrée des objets
+      // neufs, ces références deviendraient obsolètes ensuite.
+      const resolvedAnchors = (content._pendingImages || []).map(p => {
+        const aboveResolved = p.above && p.above.positions && p.above.positions[0];
+        const belowResolved = p.below && p.below.positions && p.below.positions[0];
+        return {
+          aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
+          belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
+          hadAbove: !!p.above, hadBelow: !!p.below,
+          imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
+        };
+      });
       content = htmlToPdfContent(inlinedHtml, true);
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
+      });
+      (content._pendingImages || []).forEach((p, i) => {
+        const a = resolvedAnchors[i];
+        p.image.absolutePosition = resolveImageAbsolutePosition(a);
+        delete p.image._pendingImgNode;
+        const anchorBlock = a.aboveTop != null ? p.above : (a.belowTop != null ? p.below : null);
+        if (!anchorBlock) return;
+        const imgIdx = content.indexOf(p.image);
+        if (imgIdx === -1) return;
+        content.splice(imgIdx, 1);
+        const anchorIdx = content.indexOf(anchorBlock);
+        if (anchorIdx === -1) return;
+        content.splice(anchorBlock === p.above ? anchorIdx + 1 : anchorIdx, 0, p.image);
       });
     }
     return content;
