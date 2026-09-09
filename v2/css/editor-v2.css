@@ -79,7 +79,16 @@
 .tiptap .editor-image-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
-.tiptap .editor-image-view.editor-image-selected.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: -12px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
+/* PAS conditionnée par .editor-image-selected, contrairement aux poignées de
+   coin : une image "derrière le texte" (z-index négatif posé sur l'<img>
+   seule, cf. applyAttrs) n'est plus cliquable une fois du texte dessus - sans
+   un point d'accroche TOUJOURS visible, impossible de la resélectionner une
+   fois désélectionnée (problème d'œuf-et-poule, même raison que l'ancre de
+   la V1, cf. mémoire project_v2_tiptap_migration). Sert à la fois de bouton
+   de sélection et de poignée de déplacement (un simple clic sans glisser
+   sélectionne quand même, cf. onMoveUp qui appelle updateAttrs même à
+   distance nulle). */
+.tiptap .editor-image-view.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: -12px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
 
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 

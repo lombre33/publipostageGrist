@@ -816,8 +816,13 @@ const PdfExport = (function () {
   // calculer .positions) donne le numéro de PAGE réel de chaque titre. Le
   // contenu est ensuite reconstruit à neuf (htmlToPdfContent est une fonction
   // pure) et ces numéros reportés dans les cellules réservées du sommaire.
-  // Pas de résolution d'ancrage d'image ici (contrairement à la V1) : V2 n'a
-  // pas encore d'image en calque, donc rien à résoudre pour l'instant.
+  // Pas de résolution d'ancrage d'image ici (contrairement à la V1) : une
+  // image en calque devant/derrière le texte est déjà positionnée en absolu
+  // par pdfImageFromNode (formule de repli directe depuis left/top), mais le
+  // système de bracketing/interpolation par rapport aux blocs voisins n'est
+  // pas encore construit (cf. mémoire project_v2_tiptap_migration, prochain
+  // incrément) - rien à résoudre ICI pour l'instant, seulement pour la
+  // pagination du sommaire.
   async function resolveNativePdfContent(inlinedHtml, filename) {
     let content = htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;

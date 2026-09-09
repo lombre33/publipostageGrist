@@ -30,6 +30,16 @@ const Editor = (function () {
   // la toolbar de tableau, puis celle de l'image) n'ait pas besoin de refaire
   // l'import à chaque appel.
   let floatingUi = null;
+  // Rempli dans init() après import de prosemirror-state (déjà partagé via
+  // l'importmap, cf. en-tête de fichier) - nécessaire pour recréer
+  // explicitement une NodeSelection après tr.setNodeMarkup() sur l'image
+  // sélectionnée (cf. updateAttrs/updateSelectedImage) : setNodeMarkup
+  // remplace le nœud (suppression+insertion) plutôt que de le muter en
+  // place, et la préservation par défaut de la sélection de ProseMirror ne
+  // reconstruit alors PAS forcément une NodeSelection sur ce nœud de
+  // remplacement - elle retombe sur un simple curseur texte, ce qui referme
+  // aussitôt la toolbar flottante (vérifié en conditions réelles).
+  let NodeSelectionClass = null;
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
@@ -218,17 +228,26 @@ const Editor = (function () {
           // directement sur l'<img>, forme lue par pdf-export.js/reader-
           // mode.js) - ici le positionnement en calque est porté par le
           // <span> wrapper (position:relative en permanence, pour que les
-          // poignées s'y ancrent par un simple CSS absolu), l'<img> lui-même
-          // ne portant que largeur/opacité. Même précédent que le
-          // .tableWrapper de prosemirror-tables : un artefact d'édition en
-          // direct, absent de la sérialisation (cf. mémoire
-          // project_v2_tiptap_migration).
+          // poignées s'y ancrent par un simple CSS absolu). Le z-index NÉGATIF
+          // ("derrière le texte") est en revanche posé sur l'<img> SEULE, pas
+          // sur le wrapper : un enfant positionné SANS z-index propre ne crée
+          // PAS son propre contexte d'empilement, donc la poignée de
+          // déplacement (z-index positif, cf. CSS) reste comparée directement
+          // aux autres enfants de .tiptap et peut passer AU-DESSUS du texte
+          // même quand l'image elle-même passe dessous - sans quoi, avec le
+          // z-index négatif posé sur le wrapper, TOUT son contenu (poignée
+          // comprise) serait entraîné derrière le texte avec elle, la rendant
+          // impossible à re-sélectionner une fois cachée (vérifié en
+          // conditions réelles). Même précédent que le .tableWrapper de
+          // prosemirror-tables : un artefact d'édition en direct, absent de
+          // la sérialisation (cf. mémoire project_v2_tiptap_migration).
           function applyAttrs(attrs) {
             img.src = attrs.src || '';
             img.alt = attrs.alt || '';
             const imgStyle = [];
             if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
             if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
+            if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
             img.setAttribute('style', imgStyle.join('; '));
             const layered = attrs.layer !== 'normal';
             wrap.classList.toggle('editor-image-layered', layered);
@@ -236,9 +255,8 @@ const Editor = (function () {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
               wrap.style.top = (attrs.top || 0) + 'px';
-              wrap.style.zIndex = attrs.layer === 'front' ? '5' : '-1';
             } else {
-              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.zIndex = '';
+              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = '';
             }
             moveHandle.style.display = layered ? '' : 'none';
             if (attrs.align) wrap.setAttribute('data-align', attrs.align); else wrap.removeAttribute('data-align');
@@ -252,7 +270,21 @@ const Editor = (function () {
             const { state, view } = nodeEditor;
             const current = state.doc.nodeAt(pos);
             if (!current) return;
-            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, patch)));
+            const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, patch));
+            // Restaure explicitement la NodeSelection sur le nœud de
+            // remplacement - cf. commentaire sur NodeSelectionClass en tête
+            // de fichier. Le retour visuel de sélection (classe CSS) n'est
+            // PAS géré ici, ni via selectNode/deselectNode de la NodeView
+            // (constaté peu fiable après un setNodeMarkup en conditions
+            // réelles - remplace le nœud, et ProseMirror n'appelle alors pas
+            // systématiquement ces callbacks sur l'instance résultante, dans
+            // AUCUN des deux sens - ni pour l'ajouter, ni pour la retirer) :
+            // centralisé dans wireImageFloatingToolbar.check(), qui recalcule
+            // l'état à chaque sélection/transaction depuis une source fiable
+            // (editor.isActive('editorImage')) plutôt que de dépendre du
+            // cycle de vie par-NodeView.
+            if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+            view.dispatch(tr);
           }
 
           let resizeState = null;
@@ -633,7 +665,15 @@ const Editor = (function () {
       const { state, view } = editor;
       const node = state.selection.node;
       if (!node) return;
-      view.dispatch(state.tr.setNodeMarkup(state.selection.from, undefined, Object.assign({}, node.attrs, patch)));
+      const pos = state.selection.from;
+      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
+      // Restaure explicitement la NodeSelection - cf. commentaire sur
+      // NodeSelectionClass en tête de fichier : sans ça, un clic sur un
+      // bouton de CETTE toolbar referme la toolbar aussitôt après avoir
+      // appliqué l'action (setNodeMarkup remplace le nœud, la sélection par
+      // défaut ne redevient pas forcément une NodeSelection dessus).
+      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+      view.dispatch(tr);
     }
 
     // Aligner en flux normal (align gauche/centre/droite classique) ou, en
@@ -678,7 +718,9 @@ const Editor = (function () {
           patch.top = Math.round(imgRect.top - rootRect.top - (parseFloat(rootCs.paddingTop) || 0));
         }
       }
-      view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch)));
+      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
+      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+      view.dispatch(tr);
     }
 
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
@@ -718,11 +760,20 @@ const Editor = (function () {
       setActive('layer-behind', attrs.layer === 'behind');
     }
 
+    // Retour visuel de sélection (classe .editor-image-selected) recalculé
+    // ICI à chaque passage plutôt que de dépendre de selectNode/deselectNode
+    // de la NodeView (constaté peu fiable après un setNodeMarkup - cf.
+    // commentaire dans updateAttrs) : on efface d'abord toute classe
+    // résiduelle, puis on ne la repose que sur l'image RÉELLEMENT
+    // sélectionnée. Source de vérité unique, correcte même si une NodeView a
+    // été recréée entre-temps.
     const check = () => {
+      document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!editor.isActive('editorImage')) { panel.hide(); return; }
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       const img = dom && dom.querySelector && dom.querySelector('img');
       if (!img) { panel.hide(); return; }
+      dom.classList.add('editor-image-selected');
       syncState();
       panel.show(img);
     };
@@ -805,6 +856,7 @@ const Editor = (function () {
     const { TableHeader } = await import('@tiptap/extension-table-header');
     const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
     floatingUi = { computePosition, offset, flip, shift, autoUpdate };
+    ({ NodeSelection: NodeSelectionClass } = await import('prosemirror-state'));
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
