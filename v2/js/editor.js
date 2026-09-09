@@ -115,9 +115,7 @@ const Editor = (function () {
   // pdf-export.js. `isolating: true` sur les deux nœuds : empêche
   // backspace/suppr en bord de colonne de fusionner la zone avec le
   // paragraphe voisin (comportement par défaut de ProseMirror sans ça,
-  // vérifié en conditions réelles). Pas encore de poignée de
-  // redimensionnement (ratio des colonnes) - les deux colonnes sont toujours
-  // 50/50 pour l'instant.
+  // vérifié en conditions réelles).
   function createTwoColumnsNodes(Node, mergeAttributes) {
     const TwoColumnsColumn = Node.create({
       name: 'twoColumnsColumn',
@@ -131,8 +129,26 @@ const Editor = (function () {
       group: 'block',
       content: 'twoColumnsColumn twoColumnsColumn',
       isolating: true,
+      addAttributes() {
+        return {
+          // Pourcentage de largeur de la colonne GAUCHE (grille CSS, cf.
+          // css/editor-v2.css), clampé 20-80 au glisser de la poignée -
+          // même borne que la V1 (js/editor.js). Sérialisé en variable CSS
+          // `--layout-left` sur le nœud lui-même (comme la V1), pas en
+          // attribut HTML bare - lu par pdf-export.js indirectement (il
+          // mesure la géométrie RENDUE des colonnes, jamais cette variable
+          // par son nom, cf. twoColumnsFrom).
+          layoutLeft: {
+            default: 50,
+            parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
+            renderHTML: () => ({}),
+          },
+        };
+      },
       parseHTML() { return [{ tag: 'div.two-columns-zone' }]; },
-      renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone' }), 0]; },
+      renderHTML({ HTMLAttributes, node }) {
+        return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style: `--layout-left: ${node.attrs.layoutLeft || 50}%` }), 0];
+      },
       addCommands() {
         return {
           insertTwoColumns: () => ({ chain }) => chain().insertContent({
@@ -142,6 +158,70 @@ const Editor = (function () {
               { type: 'twoColumnsColumn', content: [{ type: 'paragraph' }] },
             ],
           }).run(),
+        };
+      },
+      // NodeView : le schéma (content: 'twoColumnsColumn twoColumnsColumn')
+      // n'autorise pas un enfant DOM supplémentaire hors contentDOM
+      // autrement - `dom` est donc un wrapper EXTERNE (position:relative,
+      // pour ancrer la poignée en absolu) englobant `contentDOM` (les deux
+      // colonnes, gérées par ProseMirror, avec la classe/grille réelle
+      // .two-columns-zone) et la poignée elle-même, en enfant du wrapper
+      // mais PAS de contentDOM - la laisser en dehors du contenu géré par
+      // ProseMirror évite tout risque qu'une reconciliation future la
+      // retire en la traitant comme un enfant inattendu. --layout-left posé
+      // sur le WRAPPER (pas sur contentDOM) : une variable CSS personnalisée
+      // hérite vers le BAS uniquement - posée sur contentDOM, la poignée
+      // (sa sœur, pas sa descendante) ne la verrait jamais.
+      addNodeView() {
+        return ({ node, editor: nodeEditor, getPos }) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'two-columns-zone-outer';
+          const contentDOM = document.createElement('div');
+          contentDOM.className = 'two-columns-zone';
+          wrap.appendChild(contentDOM);
+          const grip = document.createElement('div');
+          grip.className = 'two-columns-resize-grip';
+          grip.title = 'Redimensionner les colonnes';
+          wrap.appendChild(grip);
+
+          const applyLayout = attrs => wrap.style.setProperty('--layout-left', (attrs.layoutLeft || 50) + '%');
+          applyLayout(node.attrs);
+
+          let dragging = false;
+          function onMove(event) {
+            const rect = wrap.getBoundingClientRect();
+            if (!rect.width) return;
+            const left = ((event.clientX - rect.left) / rect.width) * 100;
+            wrap.style.setProperty('--layout-left', Math.max(20, Math.min(80, left)) + '%');
+          }
+          function onUp() {
+            dragging = false;
+            document.removeEventListener('mousemove', onMove);
+            const finalLeft = Math.round(parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50);
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const { state, view } = nodeEditor;
+            const current = state.doc.nodeAt(pos);
+            if (!current) return;
+            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeft: finalLeft })));
+          }
+          grip.addEventListener('mousedown', event => {
+            event.preventDefault(); event.stopPropagation();
+            dragging = true;
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+          });
+
+          return {
+            dom: wrap,
+            contentDOM,
+            update: updatedNode => {
+              if (updatedNode.type.name !== 'twoColumnsZone') return false;
+              if (!dragging) applyLayout(updatedNode.attrs);
+              return true;
+            },
+            destroy: () => document.removeEventListener('mousemove', onMove),
+          };
         };
       },
     });

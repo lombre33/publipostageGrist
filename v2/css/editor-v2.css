@@ -47,10 +47,21 @@
 .tiptap table .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: #4285f4; pointer-events: none; }
 .tiptap .tableWrapper { overflow-x: auto; }
 .tiptap.resize-cursor { cursor: col-resize; }
-.tiptap .two-columns-zone { display: flex; gap: 16px; margin: 6px 0; }
-.tiptap .two-columns-column { flex: 1 1 0; min-width: 0; padding: 4px; border: 1px dashed transparent; }
+/* Grille (pas flex) : la largeur de la colonne gauche vient de la variable
+   --layout-left (posée par la poignée de redimensionnement en édition, cf.
+   v2/js/editor.js:createTwoColumnsNodes, ou directement en style inline
+   dans le HTML sérialisé) - la droite prend le reste, moins le gap. */
+.tiptap .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; }
+.tiptap .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 .tiptap .two-columns-column > *:first-child { margin-top: 0; }
+/* Wrapper de la NodeView (v2/js/editor.js) - position:relative sert
+   uniquement à ancrer la poignée en absolu ; --layout-left est posée ICI
+   (pas sur .two-columns-zone, son enfant) car une variable CSS personnalisée
+   n'hérite que vers le bas - la poignée (sa sœur) doit aussi pouvoir la lire. */
+.tiptap .two-columns-zone-outer { position: relative; }
+.tiptap .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 14px; height: 32px; transform: translate(-50%, -50%); border-radius: 4px; background: var(--accent, #2f6fed); cursor: ew-resize; opacity: 0; transition: opacity .15s ease; z-index: 5; }
+.tiptap .two-columns-zone-outer:hover .two-columns-resize-grip { opacity: 1; }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
 /* NodeView de l'image (v2/js/editor.js:createEditorImageNode) - structure
