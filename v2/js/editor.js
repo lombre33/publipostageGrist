@@ -315,6 +315,23 @@ const Editor = (function () {
               return true;
             },
             destroy: () => document.removeEventListener('mousemove', onMove),
+            // Sans ça, ProseMirror surveille via MutationObserver le DOM de
+            // CE NodeView et considère toute mutation qu'IL n'a pas
+            // lui-même provoquée (ici : `wrap.style.setProperty(...)` dans
+            // onMove, en dehors de toute transaction) comme "inattendue" -
+            // il tente alors de "réparer" la vue en RECRÉANT le NodeView.
+            // Constaté précisément : `getPos()` valait un nombre correct au
+            // mousedown, mais `wrap`/`contentDOM` étaient déjà DÉTACHÉS du
+            // document (`isConnected: false`) au moment du mouseup, quelques
+            // dizaines de ms plus tard - le glisser semblait fonctionner
+            // (la poignée bougeait bien à l'écran) mais le commit final sur
+            // relâchement de la souris s'appliquait à un nœud fantôme,
+            // jamais reporté sur le document réel (signalé par
+            // l'utilisateur : "la poignée ne fonctionne pas"). Cette
+            // NodeView gère elle-même toutes les mutations de son propre
+            // `dom` (le style CSS pendant le glisser) - dire à ProseMirror
+            // de les ignorer TOUTES est donc correct ici, pas une échappatoire.
+            ignoreMutation: () => true,
           };
         };
       },
