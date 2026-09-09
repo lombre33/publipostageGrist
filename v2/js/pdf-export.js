@@ -42,6 +42,28 @@ const PdfExport = (function () {
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
+  // left/top d'une image en calque (editor.js:setLayer/moveState) sont captures
+  // relatifs au bord de la boite de PADDING de `.tiptap` (position:absolute
+  // standard) - en mode Apercu A4 (coche par defaut, cf. #editor-container.
+  // a4-preview .tiptap { padding: 37.33px }), ce padding REPRESENTE visuellement
+  // la marge de page, donc ce bord de boite est celui de la PAGE ENTIERE (coin
+  // physique de la feuille), pas celui de la zone de contenu. L'hote de mesure
+  // PDF (attachMeasureHost) a au contraire un padding NUL - `left`/`top`, une
+  // fois reappliques tels quels sur l'image reconstruite dans cet hote, se
+  // retrouvent donc mesures depuis un bord DIFFERENT (le debut du contenu, pas
+  // le coin de page) sans que la valeur elle-meme ne change. Sans correction,
+  // une image glissee pres du coin de la page (ex. left:4px, top:3px - a
+  // peine a l'interieur de la marge) atterrissait donc a l'export comme si
+  // elle etait a 4px/3px APRES la marge (dans le texte), un ecart d'exactement
+  // un paragraphe de marge (~28pt/~1cm) - confirme par l'utilisateur et par un
+  // test dedie (une image fraichement basculee en calque, encore a sa position
+  // de flux normal juste apres le padding, se retrouve avec left/top ~37px,
+  // soit tres precisement le padding Apercu A4 lui-meme). Corrige en ramenant
+  // left/top dans le MEME referentiel (sans padding) que le reste de ce
+  // fichier avant toute comparaison/interpolation, en soustrayant ce padding
+  // une seule fois (il ne represente que la marge du DEBUT du document, un
+  // éditeur continu n'ayant pas de rupture de page visuelle repetee).
+  const A4_PREVIEW_PADDING_PX = PAGE_MARGIN_PT / PX_TO_PT;
 
   // ProseMirror pose `white-space: break-spaces` sur tout son contenu texte
   // (nécessaire à son modèle d'édition - préserve les espaces significatifs)
@@ -1156,9 +1178,12 @@ const PdfExport = (function () {
     blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
-      const imgTopPx = imgRect.top - rootRect.top;
-      const imgBottomPx = imgRect.bottom - rootRect.top;
-      const imgLeftPx = imgRect.left - rootRect.left;
+      // cf. A4_PREVIEW_PADDING_PX ci-dessus : ramène au référentiel sans
+      // padding utilisé par tout le reste de cette fonction (mesures prises
+      // dans l'hôte de mesure, lui-même sans padding).
+      const imgTopPx = imgRect.top - rootRect.top - A4_PREVIEW_PADDING_PX;
+      const imgBottomPx = imgRect.bottom - rootRect.top - A4_PREVIEW_PADDING_PX;
+      const imgLeftPx = imgRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
       const hostNode = sourceNodes[idx];
       const container = hostToOwnTextBlock.get(hostNode) || null;
       const containerTopPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().top - rootRect.top) : null;
