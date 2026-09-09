@@ -348,10 +348,14 @@ const PdfExport = (function () {
     });
     flushPending();
   }
-  function cellLineToPdfObject(line, cellAlign, cellBaseStyle) {
+  // `images` accumule les <img> rencontrées (même mécanisme que blockFrom
+  // pour le flux principal) - sans ce paramètre, inlineRuns() les ignore
+  // purement et simplement (une image dans une cellule de tableau disparaissait
+  // donc silencieusement de l'export, signalé par l'utilisateur).
+  function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images) {
     if (line.inline) {
       let runs = [];
-      line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle)); });
+      line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle, images)); });
       runs = trimEdgeWhitespace(runs);
       const obj = { text: runs.length ? runs : ' ' };
       if (cellAlign) obj.alignment = cellAlign;
@@ -361,8 +365,8 @@ const PdfExport = (function () {
     const isLi = node.tagName === 'LI';
     const marker = isLi ? listMarkerFor(node) : '';
     const runs = trimEdgeWhitespace(isLi
-      ? inlineRunsExcludingNestedLists(node, cellBaseStyle)
-      : inlineRuns(node, cellBaseStyle));
+      ? inlineRunsExcludingNestedLists(node, cellBaseStyle, images)
+      : inlineRuns(node, cellBaseStyle, images));
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
     const align = alignment(node) || cellAlign; if (align) obj.alignment = align;
@@ -371,18 +375,26 @@ const PdfExport = (function () {
   // Une cellule multi-lignes (plusieurs blocs, ou un mélange de texte brut et
   // de blocs alignés) construit un stack d'une ligne pdfmake par ligne ;
   // sinon (cas courant, un seul groupe de texte flottant) le texte reste à
-  // plat, sans le surcoût d'un stack.
+  // plat, sans le surcoût d'un stack - SAUF si des images ont été trouvées,
+  // auquel cas la cellule doit de toute façon devenir un stack (texte + une
+  // entrée par image, à la suite - même limitation que le flux principal :
+  // pdfmake n'accepte pas d'image au milieu d'un tableau de `text`, donc une
+  // image au milieu d'une phrase atterrit après tout le texte de la cellule,
+  // pas exactement à sa place).
   function cellContentFrom(cell) {
     const lines = [];
     collectCellLines(cell, lines);
+    const images = [];
     if (!lines.length) return { text: ' ' };
     if (lines.length === 1 && lines[0].inline) {
-      const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }));
-      return { text: runs.length ? runs : ' ' };
+      const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }, images));
+      const textObj = { text: runs.length ? runs : ' ' };
+      return images.length ? { stack: [textObj].concat(images) } : textObj;
     }
     const cellAlign = alignment(cell);
     const cellBaseStyle = inheritedStyle(cell, { fontSize: DEFAULT_FONT_SIZE });
-    return { stack: lines.map(line => cellLineToPdfObject(line, cellAlign, cellBaseStyle)) };
+    const stack = lines.map(line => cellLineToPdfObject(line, cellAlign, cellBaseStyle, images));
+    return { stack: stack.concat(images) };
   }
 
   // Largeurs de colonnes : MESURÉES sur le rendu réel de la première ligne
