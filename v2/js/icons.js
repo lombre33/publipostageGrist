@@ -45,6 +45,9 @@ const Icons = (function () {
     wrapToggle: '<path d="M4 6h16M4 18h16M4 12h9M15 9.5 18 12l-3 2.5"/>',
     layerFront: '<rect x="3" y="3" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="9" y="9" width="12" height="12" rx="1.5"/>',
     layerBehind: '<rect x="9" y="9" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="3" y="3" width="12" height="12" rx="1.5"/>',
+    colorReset: '<text x="4" y="18" font-size="15" font-weight="bold" fill="currentColor" stroke="none">A</text><path d="M4 20h15"/>',
+    highlightRemove: '<path d="m8 15-4 4M15.5 4.5 19 8l-9 9-4.5-.5L5 12z"/><path d="M4 20h16"/>',
+    cellFillRemove: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 4l16 16"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();

@@ -224,6 +224,13 @@
 #v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 #v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
+/* <input type="color"> (couleur de police/surlignage, et fond de cellule
+   dans la toolbar flottante de tableau) - neutralise le chrome natif du
+   picker pour qu'il tienne dans le même gabarit qu'un bouton icône. */
+.v2-color-input { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border, #d7dde3); border-radius: 5px; cursor: pointer; background: none; }
+.v2-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.v2-color-input::-webkit-color-swatch { border: none; border-radius: 3px; }
+.v2-color-input::-moz-color-swatch { border: none; border-radius: 3px; }
 
 /* Toolbar contextuelle flottante (tableau pour l'instant, image dans un
    incrément suivant) - positionnée par @floating-ui/dom (cf.

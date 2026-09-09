@@ -102,11 +102,34 @@ const PdfExport = (function () {
     out.decoration = list;
   }
 
-  // Style hérité d'un nœud DOM -> attributs de "run" pdfmake. Ne lit QUE des
-  // marques réellement produites par l'éditeur V2 aujourd'hui (gras/italique/
-  // souligné/barré, taille/police inline posées par FontSize/FontFamily) -
-  // pas de couleur/lien/exposant, pas encore de bouton pour ça dans la
-  // toolbar V2 (à étendre ici le jour où ces marques existeront).
+  // pdfmake n'interprète PAS `rgb(r, g, b)` pour `color`/`background`/
+  // `fillColor` (vérifié : rend en noir, aucune erreur) - or c'est très
+  // exactement la forme sous laquelle un navigateur RENORMALISE un style
+  // inline posé en hexa dès qu'il repasse par le DOM (`span.style.color =
+  // '#ff0000'` puis relu via `getAttribute('style')`/`outerHTML` ressort en
+  // `rgb(255, 0, 0)`, jamais en hexa) - donc systématiquement ce que ce
+  // fichier reçoit en pratique (`<input type="color">` produit du hexa,
+  // mais passe par un nœud TipTap avant d'arriver ici). Convertit vers
+  // l'hexa que pdfmake sait afficher ; laisse passer tel quel un nom de
+  // couleur CSS (pdfmake les accepte nativement) ou un hexa déjà présent.
+  function cssColorToHex(value) {
+    if (!value) return null;
+    const v = value.trim();
+    const m = v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)$/i);
+    if (!m) return v;
+    const hex = n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
+    return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
+  }
+
+  // Style hérité d'un nœud DOM -> attributs de "run" pdfmake. Marques
+  // produites par l'éditeur V2 (gras/italique/souligné/barré, taille/police/
+  // couleur/surlignage inline posées par FontSize/FontFamily/TextColor/
+  // HighlightColor, toutes des attributs de la même marque 'textStyle', cf.
+  // editor.js) - pdfmake accepte `color`/`background` directement sur un run
+  // de texte (vérifié), donc lecture symétrique à font-size/font-family
+  // juste en dessous, sans rien de spécial pour tableaux/2-colonnes : cette
+  // fonction est déjà le point de passage unique pour tout texte, où qu'il
+  // vive dans le schéma.
   function inheritedStyle(node, parent) {
     const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : '';
     const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); };
@@ -126,6 +149,8 @@ const PdfExport = (function () {
     if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE);
     const pdfFont = pdfFontFor(css('font-family'));
     if (pdfFont) out.font = pdfFont;
+    if (css('color')) out.color = cssColorToHex(css('color'));
+    if (css('background-color')) out.background = cssColorToHex(css('background-color'));
     return out;
   }
 
@@ -509,6 +534,11 @@ const PdfExport = (function () {
         // inset déjà pris en compte).
         const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
+        // Fond de cellule (TableCell/TableHeader.backgroundColor, cf.
+        // editor.js:withCellBackground) - pdfmake accepte `fillColor`
+        // directement sur l'objet cellule, symétrique à `color`/`background`
+        // sur un run de texte (inheritedStyle).
+        if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
         if (colSpan > 1) pdfCell.colSpan = colSpan;
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});

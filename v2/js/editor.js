@@ -107,6 +107,100 @@ const Editor = (function () {
     });
   }
 
+  // Couleur de police / surlignage - même schéma exact que FontSize
+  // ci-dessus (une extension par attribut, toutes deux augmentant la marque
+  // 'textStyle') : rien de spécifique aux tableaux/2-colonnes à écrire, une
+  // marque s'applique au texte où qu'il vive dans le schéma - lue par
+  // pdf-export.js au même endroit générique que gras/italique/souligné/
+  // taille/police (inheritedStyle), donc déjà correcte partout où ce
+  // dernier est déjà appelé (flux principal, cellule de tableau, colonne).
+  function createTextColorExtension(Extension) {
+    return Extension.create({
+      name: 'textColor',
+      addGlobalAttributes() {
+        return [{
+          types: ['textStyle'],
+          attributes: {
+            color: {
+              default: null,
+              parseHTML: el => el.style.color || null,
+              renderHTML: attrs => (attrs.color ? { style: `color: ${attrs.color}` } : {}),
+            },
+          },
+        }];
+      },
+      addCommands() {
+        return {
+          setTextColor: color => ({ chain }) => chain().setMark('textStyle', { color }).run(),
+          unsetTextColor: () => ({ chain }) => chain().setMark('textStyle', { color: null }).run(),
+        };
+      },
+    });
+  }
+  function createHighlightExtension(Extension) {
+    return Extension.create({
+      name: 'highlightColor',
+      addGlobalAttributes() {
+        return [{
+          types: ['textStyle'],
+          attributes: {
+            backgroundColor: {
+              default: null,
+              parseHTML: el => el.style.backgroundColor || null,
+              renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+            },
+          },
+        }];
+      },
+      addCommands() {
+        return {
+          setHighlight: backgroundColor => ({ chain }) => chain().setMark('textStyle', { backgroundColor }).run(),
+          unsetHighlight: () => ({ chain }) => chain().setMark('textStyle', { backgroundColor: null }).run(),
+        };
+      },
+    });
+  }
+
+  // Fond de cellule (remplir) - augmente TableCell/TableHeader (extensions
+  // officielles) du même `backgroundColor` que le surlignage de texte
+  // ci-dessus, MÊME NOM d'attribut/style CSS que par coïncidence utile (pas
+  // de lien réel entre les deux, une cellule et une marque de texte sont des
+  // choses différentes) : lu par pdf-export.js à l'endroit dédié aux
+  // cellules (tableFrom), pas via inheritedStyle (une cellule n'est pas un
+  // run de texte).
+  function withCellBackground(CellExtension) {
+    return CellExtension.extend({
+      addAttributes() {
+        return Object.assign({}, this.parent(), {
+          backgroundColor: {
+            default: null,
+            parseHTML: el => el.style.backgroundColor || null,
+            renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+          },
+        });
+      },
+    });
+  }
+  // Applique à TOUTES les cellules touchées par la sélection - un simple
+  // curseur dans une cellule (editor.commands.updateAttributes suffit) ou
+  // une vraie sélection de plusieurs cellules (CellSelection de
+  // prosemirror-tables, reconnue par duck-typing sur `forEachCell` plutôt
+  // que d'importer le type rien que pour un instanceof - évite une
+  // dépendance supplémentaire pour une simple vérification de forme).
+  function setCellsBackground(nodeEditor, color) {
+    const { state, view } = nodeEditor;
+    const { selection } = state;
+    if (typeof selection.forEachCell === 'function') {
+      const tr = state.tr;
+      selection.forEachCell((cell, pos) => {
+        tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: color }));
+      });
+      view.dispatch(tr);
+      return;
+    }
+    nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
+  }
+
   // Zone 2 colonnes — pas d'extension officielle équivalente à
   // extension-table ; construite comme une paire de nœuds suivant le même
   // principe d'imbrication (une colonne accepte du contenu riche directement
@@ -685,7 +779,10 @@ const Editor = (function () {
       ['table-del', 'trash', 'Supprimer le tableau'],
     ];
     const html = buttons.map(([action, icon, title]) =>
-      `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('');
+      `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
+      + '<span class="v2-floating-sep"></span>'
+      + '<input type="color" data-role="fill" class="v2-color-input" value="#ffff00" title="Fond de cellule (remplir)">'
+      + `<button data-action="fill-remove" title="Retirer le fond de cellule">${Icons.svg('cellFillRemove')}</button>`;
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const commands = {
         'row-before': () => editor.chain().focus().addRowBefore().run(),
@@ -695,8 +792,11 @@ const Editor = (function () {
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
         'col-del': () => editor.chain().focus().deleteColumn().run(),
         'table-del': () => editor.chain().focus().deleteTable().run(),
+        'fill-remove': () => setCellsBackground(editor, null),
       };
       (commands[action] || (() => {}))();
+    }, (role, value) => {
+      if (role === 'fill') setCellsBackground(editor, value);
     });
     const check = () => {
       if (!editor.isActive('table')) { panel.hide(); return; }
@@ -927,6 +1027,7 @@ const Editor = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
+    set('v2-btn-color-reset', 'colorReset'); set('v2-btn-highlight-remove', 'highlightRemove');
   }
 
   // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
@@ -973,6 +1074,10 @@ const Editor = (function () {
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
+    const TextColor = createTextColorExtension(Extension);
+    const HighlightColor = createHighlightExtension(Extension);
+    const TableHeaderWithBg = withCellBackground(TableHeader);
+    const TableCellWithBg = withCellBackground(TableCell);
     const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
     const EditorImage = createEditorImageNode(Node);
     const PageBreak = createPageBreakNode(Node);
@@ -988,6 +1093,8 @@ const Editor = (function () {
         TextStyle,
         FontFamily,
         FontSize,
+        TextColor,
+        HighlightColor,
         VarBadge,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
@@ -996,8 +1103,8 @@ const Editor = (function () {
         // v2/smoke-test.html avec du contenu riche réel dans une cellule.
         Table.configure({ resizable: true }),
         TableRow,
-        TableHeader,
-        TableCell,
+        TableHeaderWithBg,
+        TableCellWithBg,
         TwoColumnsColumn,
         TwoColumnsZone,
         EditorImage,
@@ -1047,6 +1154,8 @@ const Editor = (function () {
       editor.chain().focus().insertImage({ src: url, alt: 'Image', width: '320px' }).run();
       warnIfImageUrlNotExportable(url);
     });
+    bind('v2-btn-color-reset', () => editor.chain().focus().unsetTextColor().run());
+    bind('v2-btn-highlight-remove', () => editor.chain().focus().unsetHighlight().run());
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
@@ -1100,6 +1209,11 @@ const Editor = (function () {
     }));
     bindSelect('v2-size-select', value => { if (value) withSavedSelection(chain => chain.setFontSize(value)); });
     bindSelect('v2-font-select', value => { if (value) withSavedSelection(chain => chain.setFontFamily(value)); });
+    // <input type="color"> vole le focus au clic (ouverture du sélecteur
+    // natif) exactement comme un <select> - même traitement pointerdown/
+    // change que ci-dessus.
+    bindSelect('v2-color-text', value => withSavedSelection(chain => chain.setTextColor(value)));
+    bindSelect('v2-color-highlight', value => withSavedSelection(chain => chain.setHighlight(value)));
   }
 
   function getHTML() { return editor ? editor.getHTML() : ''; }
