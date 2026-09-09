@@ -240,6 +240,12 @@ const PdfExport = (function () {
       // à ce stade) pour pouvoir mesurer sa position rendue par rapport aux
       // blocs de texte voisins.
       image._pendingImgNode = node;
+      // Conservé jusqu'à la relocation dans content[] (cf.
+      // resolveNativePdfContent) : pdfmake peint content[] séquentiellement
+      // (une entrée plus tardive dans le tableau recouvre les précédentes) -
+      // "devant" et "derrière" n'ont donc PAS la même direction d'insertion
+      // par rapport à leur bloc-ancre.
+      image._pendingLayer = layer;
     } else {
       const align = node.getAttribute('data-align');
       // gauche/droite = habillage (float CSS côté éditeur, cf.
@@ -786,6 +792,15 @@ const PdfExport = (function () {
     const floatImg = images.find(img => img._floatAlign);
     if (!floatImg || !runs.length) return null;
     const align = floatImg._floatAlign;
+    // Alignement du PARAGRAPHE (justify/center/right/left posé sur <p> dans
+    // l'éditeur) - distinct de `align`, qui est le côté du FLOTTEMENT de
+    // l'image (gauche/droite). blockFrom() applique normalement `alignment`
+    // au bloc texte qu'il construit lui-même, mais cette fonction retourne
+    // AVANT ce point-là (chemin séparé pour l'habillage) - sans le reporter
+    // ici explicitement sur chaque bloc texte produit, l'alignement du
+    // paragraphe était silencieusement perdu à l'export (jamais lu du tout
+    // sur ce chemin), constaté par l'utilisateur sur un paragraphe justifié.
+    const textAlign = alignment(node);
     const imgNode = floatImg._sourceImgNode;
     delete floatImg._floatAlign;
     delete floatImg._sourceImgNode;
@@ -799,7 +814,9 @@ const PdfExport = (function () {
       return { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
     };
     const fallback = () => {
-      const block = makeColumns([{ text: runs, lineHeight: LINE_HEIGHT_RATIO }]);
+      const textBlock = { text: runs, lineHeight: LINE_HEIGHT_RATIO };
+      if (textAlign) textBlock.alignment = textAlign;
+      const block = makeColumns([textBlock]);
       if (pageBreakBefore) block.pageBreak = 'before';
       return block;
     };
@@ -839,7 +856,9 @@ const PdfExport = (function () {
     if (besideStart > 0) {
       const beforeRuns = extractRunsBetween(node, null, { textNode: words[besideStart].textNode, offset: words[besideStart].start });
       if (beforeRuns.length) {
-        blocks.push({ text: beforeRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) });
+        const beforeBlock = { text: beforeRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
+        if (textAlign) beforeBlock.alignment = textAlign;
+        blocks.push(beforeBlock);
         pendingPageBreak = false;
       }
     }
@@ -850,18 +869,30 @@ const PdfExport = (function () {
       const last = lineGroups[lineGroups.length - 1];
       if (last && Math.abs(last.top - w.top) < 2) last.words.push(w); else lineGroups.push({ top: w.top, words: [w] });
     });
+    // `textAlign === 'justify'` n'est PAS reporté ici : chaque ligne "à
+    // côté" est son propre bloc pdfmake d'une seule ligne, or la dernière
+    // (ici : la seule) ligne d'un paragraphe justifié n'est normalement
+    // jamais étirée (même convention que le CSS) - la reporter produirait un
+    // étirement mot-à-mot artificiel, pire que l'absence d'alignement.
+    // gauche/centre/droite en revanche repositionnent correctement une ligne
+    // plus courte que la colonne, et sont donc bien reportés.
+    const besideAlign = textAlign === 'justify' ? undefined : textAlign;
     const besideBlocks = lineGroups.map((line, i) => {
       const startCut = (besideStart === 0 && i === 0) ? null : { textNode: line.words[0].textNode, offset: line.words[0].start };
       const lastWord = line.words[line.words.length - 1];
       const lineRuns = extractRunsBetween(node, startCut, { textNode: lastWord.textNode, offset: lastWord.end });
-      return { text: lineRuns.length ? lineRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
+      const lineBlock = { text: lineRuns.length ? lineRuns : ' ', lineHeight: LINE_HEIGHT_RATIO };
+      if (besideAlign) lineBlock.alignment = besideAlign;
+      return lineBlock;
     });
     const columnsBlock = makeColumns(besideBlocks);
     if (pendingPageBreak) columnsBlock.pageBreak = 'before';
     blocks.push(columnsBlock);
     if (besideEnd < words.length) {
       const afterRuns = extractRunsBetween(node, { textNode: words[besideEnd].textNode, offset: words[besideEnd].start }, null);
-      blocks.push({ text: afterRuns.length ? afterRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
+      const afterBlock = { text: afterRuns.length ? afterRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+      if (textAlign) afterBlock.alignment = textAlign;
+      blocks.push(afterBlock);
     }
     return blocks;
   }
@@ -1195,14 +1226,36 @@ const PdfExport = (function () {
         const a = resolvedAnchors[i];
         p.image.absolutePosition = resolveImageAbsolutePosition(a);
         delete p.image._pendingImgNode;
-        const anchorBlock = a.aboveTop != null ? p.above : (a.belowTop != null ? p.below : null);
+        const layer = p.image._pendingLayer;
+        delete p.image._pendingLayer;
+        // Choix du bloc-ancre pour la RELOCATION dans content[] - distinct du
+        // calcul de position ci-dessus. pdfmake peint content[] dans l'ordre
+        // du tableau (une entrée plus tardive recouvre les précédentes) :
+        // "devant le texte" doit donc finir aussi TARD que possible (ancré de
+        // préférence sur le bloc D'EN DESSOUS, inséré APRÈS lui, pour que le
+        // texte proche - au-dessus ET en dessous - soit peint AVANT, donc
+        // recouvert) ; "derrière le texte" doit à l'inverse finir aussi TÔT
+        // que possible (ancré de préférence sur le bloc AU-DESSUS, inséré
+        // AVANT lui). Avant ce correctif, les deux calques utilisaient la
+        // MÊME ancre/direction ("au-dessus", inséré après) - correct pour
+        // "devant" seulement dans le cas où il n'y a rien en dessous, mais
+        // signalé cassé pour "derrière" (l'image recouvrait quand même le
+        // texte juste avant elle, déjà peint à ce moment du tableau).
+        let anchorBlock = null; let insertAfter = true;
+        if (layer === 'front') {
+          if (a.belowTop != null) { anchorBlock = p.below; insertAfter = true; }
+          else if (a.aboveTop != null) { anchorBlock = p.above; insertAfter = true; }
+        } else {
+          if (a.aboveTop != null) { anchorBlock = p.above; insertAfter = false; }
+          else if (a.belowTop != null) { anchorBlock = p.below; insertAfter = false; }
+        }
         if (!anchorBlock) return;
         const imgIdx = content.indexOf(p.image);
         if (imgIdx === -1) return;
         content.splice(imgIdx, 1);
         const anchorIdx = content.indexOf(anchorBlock);
         if (anchorIdx === -1) return;
-        content.splice(anchorBlock === p.above ? anchorIdx + 1 : anchorIdx, 0, p.image);
+        content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
       });
     }
     return content;

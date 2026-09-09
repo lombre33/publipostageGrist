@@ -771,7 +771,13 @@ const Editor = (function () {
       if (!img) return;
       const imgWidthPx = img.getBoundingClientRect().width;
       const containerWidthPx = editorContentWidthPx(editor);
-      const left = align === 'left' ? 0 : align === 'center' ? Math.max(0, (containerWidthPx - imgWidthPx) / 2) : Math.max(0, containerWidthPx - imgWidthPx);
+      // `left` est stocké/appliqué depuis le bord de la boîte de PADDING
+      // (cf. toggleLayer ci-dessus), mais l'alignement doit lui viser le
+      // bord du TEXTE (boîte de contenu, cf. editorContentWidthPx) - d'où le
+      // décalage explicite du padding ici, dans les deux sens.
+      const rootCs = getComputedStyle(editor.view.dom);
+      const padLeft = parseFloat(rootCs.paddingLeft) || 0;
+      const left = align === 'left' ? padLeft : align === 'center' ? padLeft + Math.max(0, (containerWidthPx - imgWidthPx) / 2) : padLeft + Math.max(0, containerWidthPx - imgWidthPx);
       updateSelectedImage({ left: Math.round(left) });
     }
 
@@ -795,9 +801,25 @@ const Editor = (function () {
           const imgRect = img.getBoundingClientRect();
           const rootEl = editor.view.dom;
           const rootRect = rootEl.getBoundingClientRect();
-          const rootCs = getComputedStyle(rootEl);
-          patch.left = Math.round(imgRect.left - rootRect.left - (parseFloat(rootCs.paddingLeft) || 0));
-          patch.top = Math.round(imgRect.top - rootRect.top - (parseFloat(rootCs.paddingTop) || 0));
+          // PAS de soustraction du padding ici : `left`/`top` sont ensuite
+          // appliqués tels quels en CSS `position:absolute` (styleFor(),
+          // ci-dessus) sur un wrapper dont le bloc englobant est CE MÊME
+          // `rootEl` (.tiptap, position:relative) - le CSS interprète déjà
+          // `left`/`top` depuis le bord de la boîte de PADDING (= bord de la
+          // boîte de bordure, ici sans bordure), PAS depuis le bord de la
+          // zone de contenu. Soustraire le padding ici décalait donc le
+          // stockage vers une convention "depuis le contenu" que le rendu
+          // CSS ne respecte jamais - l'image sautait visiblement de la
+          // largeur du padding dès la bascule en calque (constaté
+          // directement, sans même exporter), et ce même delta faussait
+          // ensuite la position PDF (mêmes valeurs left/top réutilisées par
+          // pdf-export.js). En ne retranchant rien, la valeur stockée
+          // correspond exactement à ce que le CSS applique, dans N'IMPORTE
+          // QUEL contexte de padding (éditeur réel à 37px, hôte de mesure PDF
+          // à 0px compris) - le bord de boîte de padding ne bouge pas avec le
+          // padding, seule la zone de contenu bouge.
+          patch.left = Math.round(imgRect.left - rootRect.left);
+          patch.top = Math.round(imgRect.top - rootRect.top);
         }
       }
       const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
