@@ -52,10 +52,19 @@
    CONTENT_WIDTH_PX) - même valeurs, même rationale que la V1 (css/style.css).
    `width` = largeur TOTALE (page + marges), le `padding` simulant la marge de
    page vient s'y RETRANCHER : 719.04px de contenu + 2×37.33px de marge
-   (28pt convertis en px) = 793.71px. Purement visuel : ne change ni le HTML
-   enregistré, ni aucun comportement de l'éditeur. */
+   (28pt convertis en px) = 793.71px. `box-sizing: border-box` est
+   INDISPENSABLE pour ça - sans lui (comportement par défaut), le padding
+   s'AJOUTE à `width` au lieu d'en être retranché, et la zone de contenu
+   réelle fait alors 793.71px, pas 719.04px (~10% de trop, vérifié en
+   conditions réelles : un tableau/une colonne s'y répartit sur une largeur
+   différente de celle utilisée par pdf-export.js, d'où un texte qui ne
+   coupe pas au même endroit qu'à l'export). La V1 profitait sans le savoir
+   du CSS de Quill (quill.snow.css, chargé en CDN) qui pose déjà ce
+   box-sizing globalement - absent ici, TipTap ne charge aucun CSS externe.
+   Purement visuel : ne change ni le HTML enregistré, ni aucun comportement
+   de l'éditeur. */
 #editor-container.a4-preview { background: #eef1f5; }
-#editor-container.a4-preview .tiptap { width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+#editor-container.a4-preview .tiptap { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
