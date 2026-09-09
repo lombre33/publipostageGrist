@@ -266,3 +266,9 @@
 .v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: #3a4452; }
 .v2-floating-toolbar button svg { width: 15px; height: 15px; }
 .v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
+/* État actif (ex. le calque courant du sélecteur normal/devant/derrière) -
+   même traitement que la toolbar principale (#v2-toolbar button.is-active),
+   manquait ici jusqu'ici (aucun bouton de cette toolbar n'en avait
+   vraiment besoin avant le sélecteur à 3 états, où c'est essentiel pour
+   voir lequel des 3 est actif). */
+.v2-floating-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); color: var(--accent, #2f6fed); }

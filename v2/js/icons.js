@@ -42,7 +42,12 @@ const Icons = (function () {
     zoomOut: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M7 10h6"/>',
     zoomIn: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M10 7v6M7 10h6"/>',
     resetSize: '<path d="M20 11A8 8 0 1 0 18 16"/><path d="M20 5v6h-6"/>',
-    wrapToggle: '<path d="M4 6h16M4 18h16M4 12h9M15 9.5 18 12l-3 2.5"/>',
+    // Distinct de alignJustify (3 lignes pleine largeur) : ici un petit carré
+    // (l'image) à côté de lignes COURTES (texte qui l'habille) puis des
+    // lignes pleines EN DESSOUS (le flux qui reprend) - confondu avec
+    // justify par l'utilisateur avant ce redessin, cf. mémoire.
+    wrapToggle: '<rect x="4" y="4" width="7" height="7" rx="1"/><path d="M13 6h7M13 9h7M4 16h16M4 20h11"/>',
+    layerNormal: '<path d="M4 6h6M4 18h16M4 12h6"/><rect x="12" y="9" width="8" height="6" rx="1"/>',
     layerFront: '<rect x="3" y="3" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="9" y="9" width="12" height="12" rx="1.5"/>',
     layerBehind: '<rect x="9" y="9" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="3" y="3" width="12" height="12" rx="1.5"/>',
     highlight: '<path d="m8 15-4 4M15.5 4.5 19 8l-9 9-4.5-.5L5 12z"/>',

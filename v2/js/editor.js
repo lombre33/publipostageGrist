@@ -967,6 +967,7 @@ const Editor = (function () {
       '<span class="v2-floating-sep"></span>',
       '<input type="range" data-role="opacity" min="10" max="100" value="100" title="Opacité">',
       '<span class="v2-floating-sep"></span>',
+      `<button data-action="layer-normal" title="Au cœur du texte">${Icons.svg('layerNormal')}</button>`,
       `<button data-action="layer-front" title="Devant le texte">${Icons.svg('layerFront')}</button>`,
       `<button data-action="layer-behind" title="Derrière le texte">${Icons.svg('layerBehind')}</button>`,
       '<span class="v2-floating-sep"></span>',
@@ -1014,20 +1015,27 @@ const Editor = (function () {
       updateSelectedImage({ left: Math.round(left) });
     }
 
-    // Bascule devant/derrière (reclique sur le même bouton -> retour à
-    // 'normal', même comportement que la V1). Au premier passage en calque,
-    // initialise left/top depuis la position RENDUE actuelle de l'image (son
-    // rect réel moins celui de la racine éditeur) pour qu'elle ne saute pas
+    // Sélecteur explicite à 3 états (normal/devant/derrière) - PAS un
+    // bouton-bascule par calque comme avant (2 boutons seulement, aucune
+    // icône dédiée pour "normal" - signalé confus par l'utilisateur : pas
+    // clair qu'il y a 3 statuts distincts, ni comment revenir à "normal" si
+    // on ne devine pas que c'est un bouton-bascule). Chaque bouton FIXE
+    // explicitement le calque visé, cliquer celui déjà actif ne fait rien
+    // (contrairement à l'ancien comportement "re-clique -> retour à
+    // normal" : la case "normal" a maintenant sa propre icône dédiée pour
+    // ça). Au premier passage en calque (devant/derrière), initialise
+    // left/top depuis la position RENDUE actuelle de l'image (son rect réel
+    // moins celui de la racine éditeur) pour qu'elle ne saute pas
     // visuellement au passage en position:absolute.
-    function toggleLayer(target) {
+    function setLayer(target) {
       if (!editor.isActive('editorImage')) return;
       const { state, view } = editor;
       const node = state.selection.node;
       if (!node) return;
       const pos = state.selection.from;
-      const newLayer = node.attrs.layer === target ? 'normal' : target;
-      const patch = { layer: newLayer };
-      if (newLayer !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
+      if (node.attrs.layer === target) return;
+      const patch = { layer: target };
+      if (target !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
         const dom = editor.view.nodeDOM(pos);
         const img = dom && dom.querySelector && dom.querySelector('img');
         if (img) {
@@ -1075,8 +1083,9 @@ const Editor = (function () {
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
         wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
-        'layer-front': () => toggleLayer('front'),
-        'layer-behind': () => toggleLayer('behind'),
+        'layer-normal': () => setLayer('normal'),
+        'layer-front': () => setLayer('front'),
+        'layer-behind': () => setLayer('behind'),
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -1102,6 +1111,7 @@ const Editor = (function () {
       setActive('align-center', attrs.align === 'center');
       setActive('align-right', attrs.align === 'right');
       setActive('wrap', attrs.wrap === 'block');
+      setActive('layer-normal', !attrs.layer || attrs.layer === 'normal');
       setActive('layer-front', attrs.layer === 'front');
       setActive('layer-behind', attrs.layer === 'behind');
     }
