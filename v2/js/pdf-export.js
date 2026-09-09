@@ -573,7 +573,7 @@ const PdfExport = (function () {
   // ajustable pour l'instant (cf. v2/js/editor.js:TwoColumnsZone) - les deux
   // colonnes sont toujours 50/50 (flex: 1 1 0, css/editor-v2.css), mesurées
   // ici comme telles.
-  function twoColumnsFrom(node, pageBreakBefore) {
+  async function twoColumnsFrom(node, pageBreakBefore) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
     const pageWidth = 595.28;
@@ -614,10 +614,10 @@ const PdfExport = (function () {
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
     ];
     document.body.removeChild(measureHost);
-    const columns = colNodes.map(col => {
+    const columns = await Promise.all(colNodes.map(async col => {
       const colAlign = alignment(col);
       let blocks;
-      try { blocks = htmlToPdfContent(col.innerHTML, false); }
+      try { blocks = await htmlToPdfContent(col.innerHTML, false); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       const alignSources = [];
       const collect = n => {
@@ -648,7 +648,7 @@ const PdfExport = (function () {
         if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) blocks[i].alignment = a;
       }
       return blocks;
-    });
+    }));
     const block = {
       columns: [
         { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, colOwnInsetRight[0], 0] }] },
@@ -928,7 +928,7 @@ const PdfExport = (function () {
     return blocks;
   }
 
-  function buildPdfContentFromRoot(root, headingMarkers) {
+  async function buildPdfContentFromRoot(root, headingMarkers) {
     const blocks = [];
     // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée -
     // sert uniquement à mesurer la position RENDUE réelle des blocs voisins
@@ -938,7 +938,7 @@ const PdfExport = (function () {
     const headingBlocks = []; const tocBlocks = [];
     let pendingPageBreak = false;
     const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
-    const visit = node => {
+    const visit = async node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
@@ -957,7 +957,7 @@ const PdfExport = (function () {
       // ci-dessous comme n'importe quel autre bloc.
       if (node.classList.contains('two-columns-zone')) {
         let zoneBlock;
-        try { zoneBlock = twoColumnsFrom(node, pendingPageBreak); }
+        try { zoneBlock = await twoColumnsFrom(node, pendingPageBreak); }
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
         push(zoneBlock, node);
         pendingPageBreak = false;
@@ -971,9 +971,9 @@ const PdfExport = (function () {
         pendingPageBreak = false;
         return;
       }
-      node.childNodes.forEach(visit);
+      for (const child of Array.from(node.childNodes)) { await visit(child); }
     };
-    root.childNodes.forEach(visit);
+    for (const child of Array.from(root.childNodes)) { await visit(child); }
     tocBlocks.forEach(tocBlock => {
       const built = buildTocStack(headingBlocks);
       tocBlock.stack = built.stack;
@@ -1025,7 +1025,7 @@ const PdfExport = (function () {
   // dans une colonne n'est ni numéroté ni inclus dans le sommaire, même
   // exclusion que css/editor-v2.css (compteurs scopés aux enfants DIRECTS de
   // .tiptap).
-  function htmlToPdfContent(html, isTopLevel) {
+  async function htmlToPdfContent(html, isTopLevel) {
     const root = document.createElement('div'); root.innerHTML = html || '';
     let headingMarkers = null;
     if (isTopLevel) {
@@ -1038,7 +1038,17 @@ const PdfExport = (function () {
     }
     const detachMeasureHost = attachMeasureHost(root);
     try {
-      return buildPdfContentFromRoot(root, headingMarkers);
+      // Attend le décodage de CHAQUE <img> de CE root précis (pas un
+      // pré-chauffage sur un élément séparé, cf. inlineEditorImagesAsDataUri
+      // plus haut - un simple pré-chauffage du cache navigateur s'est avéré
+      // insuffisamment fiable en conditions réelles, signalé par
+      // l'utilisateur : même bug persistant malgré ce premier correctif)
+      // AVANT toute mesure (`getBoundingClientRect()` sur une image en
+      // hauteur `auto` a besoin du ratio intrinsèque réel, cf.
+      // floatedImageParagraphFrom) - la seule garantie robuste est d'attendre
+      // le décodage des images DE CE ROOT MESURÉ lui-même.
+      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      return await buildPdfContentFromRoot(root, headingMarkers);
     } finally {
       detachMeasureHost();
     }
@@ -1159,7 +1169,7 @@ const PdfExport = (function () {
   // en flux normal à sa place dans sa cellule/colonne - pas invisible, juste
   // pas positionnée au pixel près comme au niveau racine.
   async function resolveNativePdfContent(inlinedHtml, filename) {
-    let content = htmlToPdfContent(inlinedHtml, true);
+    let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
     const hasPendingImages = (content._pendingImages || []).length > 0;
     if (hasToc || hasPendingImages) {
@@ -1177,7 +1187,7 @@ const PdfExport = (function () {
           imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
         };
       });
-      content = htmlToPdfContent(inlinedHtml, true);
+      content = await htmlToPdfContent(inlinedHtml, true);
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
       });
