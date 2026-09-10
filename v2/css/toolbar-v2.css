@@ -28,15 +28,15 @@
 #toolbar-top #btn-rename-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 
 /* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/
-   Tables liées) === Regroupement visuel discret (fond légèrement enfoncé)
-   pour lire d'un coup d'œil "ce sont des actions sur le document", plutôt
-   que des boutons isolés qui se confondent avec des réglages. Les règles
-   #toolbar-top #btn-save/#btn-delete/#btn-export-pdf (css/style.css, plus
-   spécifiques par ID) continuent de s'appliquer par-dessus - Enregistrer
-   reste en accent plein, Supprimer reste en rouge. */
-.action-cluster { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: calc(var(--radius-sm) + 3px); background: var(--surface-sunken); border: 1px solid var(--border); }
-.action-cluster button { border-color: transparent; background: var(--surface); }
-.action-cluster button:hover { border-color: var(--border-strong); }
+   Tables liées) === Juste un regroupement par ESPACEMENT (gap), sans boîte
+   visuelle autour : une première version encadrait le groupe d'un fond gris
+   + bordure (pour lire d'un coup d'œil "ce sont des actions liées"), mais
+   à l'usage ce cadre lisait comme un bloc gris terne, pas dans le style du
+   reste de l'app - retiré sur retour utilisateur. Chaque bouton garde son
+   style par défaut (#toolbar-top button, css/style.css) ; Enregistrer/
+   Supprimer/Exporter restent distingués par COULEUR (accent/rouge), pas par
+   un encadré de groupe. */
+.action-cluster { display: inline-flex; align-items: center; gap: 4px; }
 
 /* Icône "Tables liées" : deux mini-tableaux reliés par un trait - distincte
    du bouton "Insérer un tableau" de la ligne de mise en forme (un seul
@@ -95,8 +95,31 @@
 .link-config-toggle-link { font-size: 12px; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; font-family: var(--font-ui); font-weight: 600; display: block; margin-bottom: 4px; }
 .link-config-toggle-link:hover { color: var(--accent-hover); text-decoration: underline; }
 .link-config-toggle-link[hidden] { display: none; }
-.link-config-modal-content .modal-actions { margin-top: 16px; }
-.link-config-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
-.link-config-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
+.link-config-modal-content .modal-actions,
+.link-rules-modal-content .modal-actions { margin-top: 16px; }
+.link-config-modal-content .modal-actions button,
+.link-rules-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.link-config-modal-content .modal-actions button:hover,
+.link-rules-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 .link-config-modal-content .modal-actions .link-config-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .link-config-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }
+
+/* === Modale "Tables liées" (#link-rules-modal, cf.
+   v2/js/variables.js:refreshLinkRulesPanel) === Liste des règles déjà
+   configurées ; chaque ligne avait 2 boutons texte bruts ("Modifier"/
+   "Supprimer", aucun style) - remplacés par des icônes cohérentes avec le
+   reste de la toolbar (même crayon que le renommage de modèle, même
+   corbeille que Supprimer). */
+.link-rules-modal-content { font-family: var(--font-ui); width: 340px; }
+.link-rules-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+.link-rules-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
+.link-rule-row { display: flex; align-items: center; gap: 6px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.link-rule-row:last-child { border-bottom: none; }
+.link-rule-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
+.link-rule-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.link-rule-btn:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
+.link-rule-btn::before { content: ""; display: inline-block; width: 14px; height: 14px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+.link-rule-btn-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
+.link-rule-btn-delete:hover { background: var(--danger-soft, #fbe9e9); border-color: var(--danger, #d84343); color: var(--danger, #d84343); }
+.link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
+.link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }

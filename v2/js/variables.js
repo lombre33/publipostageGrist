@@ -465,7 +465,8 @@ const Variables = (function () {
       label.className = 'link-rule-label';
       label.textContent = `${rule.tableCible} : ${describeRule(rule)}`;
       const btnEdit = document.createElement('button');
-      btnEdit.type = 'button'; btnEdit.textContent = 'Modifier';
+      btnEdit.type = 'button'; btnEdit.className = 'link-rule-btn link-rule-btn-edit';
+      btnEdit.setAttribute('aria-label', 'Modifier'); btnEdit.title = 'Modifier';
       btnEdit.addEventListener('click', async () => {
         const currentTableId = GristAPI.getCurrentTableId();
         if (!currentTableId) return;
@@ -475,7 +476,8 @@ const Variables = (function () {
         refreshLinkRulesPanel();
       });
       const btnDelete = document.createElement('button');
-      btnDelete.type = 'button'; btnDelete.textContent = 'Supprimer';
+      btnDelete.type = 'button'; btnDelete.className = 'link-rule-btn link-rule-btn-delete';
+      btnDelete.setAttribute('aria-label', 'Supprimer'); btnDelete.title = 'Supprimer';
       btnDelete.addEventListener('click', async () => {
         if (!confirm(`Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`)) return;
         await GristAPI.deleteLinkRule(rule.tableCible);
