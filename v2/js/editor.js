@@ -1711,6 +1711,7 @@ const Editor = (function () {
       container.style.setProperty('--hf-banner-text', JSON.stringify(`Édition de ${zoneLabel} — ${variantLabel}`));
     }
     syncToolbarState();
+    renderPaginationOverlay(); // masqué pendant hfMode (cf. sa propre garde) - fait disparaître l'aperçu le temps de l'édition
   }
 
   // Sauvegarde le contenu courant dans le brouillon, restaure le document
@@ -1729,6 +1730,7 @@ const Editor = (function () {
     if (contextBar) contextBar.hidden = true;
     if (toggleBtn) toggleBtn.classList.remove('active');
     syncToolbarState();
+    renderPaginationOverlay(); // ré-affiche l'aperçu (hfMode redevenu null)
   }
 
   // Filet de sécurité appelé par v2/js/main.js AVANT Save/Enregistrer sous/
@@ -1761,6 +1763,7 @@ const Editor = (function () {
           footer: Object.assign({}, empty.footer, data.footer),
         })
       : empty;
+    renderPaginationOverlay();
   }
 
   // Bouton bascule (#v2-btn-header-footer) + sous-barre contextuelle
@@ -1823,6 +1826,200 @@ const Editor = (function () {
         });
       });
     }
+  }
+
+  // === Aperçu paginé réel - éditeur (incrément 2.3) ===
+  // Constantes dupliquées depuis v2/js/pdf-export.js (mêmes valeurs - A4 =
+  // 595.28×841.89pt, marge de base 28pt, 1pt = 96/72px) : aucun mécanisme de
+  // module partagé entre les deux fichiers, même tolérance à la duplication
+  // que le reste de ce projet pour ce genre de petites constantes (cf. les
+  // marqueurs de numérotation des titres, dupliqués entre reader-mode.js et
+  // heading-numbering.js).
+  const PT_TO_PX = 96 / 72;
+  const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
+  // Doit matcher le padding de `.tiptap` en Aperçu A4 (css/editor-v2.css,
+  // déjà 28pt convertis en px) - PAS une nouvelle valeur.
+  const A4_BASE_MARGIN_PX = 37.33;
+  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
+  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
+
+  // Hauteur RENDUE d'un fragment HTML, hors écran - même mécanisme que
+  // attachMeasureHost côté pdf-export.js, MÊME correctif `min-height:0`
+  // (`.tiptap` réserve 200px pour que l'éditeur VIDE reste cliquable, cf.
+  // css/editor-v2.css - sans ce correctif un en-tête d'une seule ligne
+  // mesurerait 200px, bug déjà rencontré et corrigé côté export PDF).
+  function measureHtmlHeightPx(html) {
+    if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
+    const host = document.createElement('div');
+    host.className = 'tiptap';
+    host.innerHTML = html;
+    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    document.body.appendChild(host);
+    const h = host.getBoundingClientRect().height;
+    document.body.removeChild(host);
+    return h;
+  }
+
+  // Limites de page : mesure les blocs de haut niveau réellement rendus dans
+  // .tiptap (même principe que clampOverflowingTables plus haut), accumule
+  // leur hauteur, respecte .page-break-marker comme coupure forcée. Grain du
+  // BLOC, jamais de la ligne/du pixel comme pdfmake (limite assumée et
+  // annoncée, cf. le plan) - un bloc entier bascule à la page suivante dès
+  // qu'il ne rentre plus, jamais coupé en deux visuellement ici.
+  function computePageBreakOffsets(tiptapEl, pageContentHeightPx) {
+    const tiptapRect = tiptapEl.getBoundingClientRect();
+    const offsets = [];
+    let consumed = 0;
+    Array.from(tiptapEl.children).forEach(child => {
+      const rect = child.getBoundingClientRect();
+      const top = rect.top - tiptapRect.top;
+      const height = rect.height;
+      if (child.classList.contains('page-break-marker')) {
+        offsets.push(top + height);
+        consumed = 0;
+        return;
+      }
+      if (consumed > 0 && consumed + height > pageContentHeightPx) {
+        offsets.push(top);
+        consumed = height;
+      } else {
+        consumed += height;
+      }
+    });
+    return offsets;
+  }
+
+  // Résout chaque badge .page-number-badge (posé tel quel dans le HTML
+  // stocké, avec son libellé-espace-réservé - "#"/"Page #"/"#/#") en son
+  // texte réel pour LA page où cette bande tombe - même conversion que
+  // formatPageNumberText côté pdf-export.js (dupliquée, pas partagée).
+  function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
+    const host = document.createElement('div');
+    host.innerHTML = html || '';
+    host.querySelectorAll('.page-number-badge').forEach(badge => {
+      const format = badge.getAttribute('data-format') || 'n';
+      badge.textContent = format === 'page-n' ? ('Page ' + pageNum) : format === 'n-slash-total' ? (pageNum + '/' + totalPages) : String(pageNum);
+    });
+    return host.innerHTML;
+  }
+
+  let paginationOverlayEl = null;
+  let paginationEdgeTopEl = null;
+  let paginationEdgeBottomEl = null;
+  let paginationRecomputeTimer = null;
+  function schedulePaginationRecompute() {
+    if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
+    paginationRecomputeTimer = setTimeout(renderPaginationOverlay, 200);
+  }
+  function clearPaginationOverlay() {
+    if (paginationOverlayEl) paginationOverlayEl.innerHTML = '';
+    if (paginationEdgeTopEl && paginationEdgeTopEl.parentNode) paginationEdgeTopEl.parentNode.removeChild(paginationEdgeTopEl);
+    if (paginationEdgeBottomEl && paginationEdgeBottomEl.parentNode) paginationEdgeBottomEl.parentNode.removeChild(paginationEdgeBottomEl);
+    paginationEdgeTopEl = null; paginationEdgeBottomEl = null;
+  }
+
+  // Bandes décoratives (PAS du contenu réel du document, cf. le plan) montrant
+  // où l'export PDF romprait approximativement les pages, avec l'en-tête/
+  // pied résolu à cette position - recalculées au fil de la frappe (débounce,
+  // cf. schedulePaginationRecompute) et du redimensionnement. Masquées dès
+  // que : Aperçu A4 désactivé, en-tête/pied pas actif, ou édition d'en-tête/
+  // pied en cours (le document affiché n'est alors plus le document
+  // principal, cf. hfMode - rien de pertinent à prévisualiser).
+  //
+  // Deux natures de bandes, pour un résultat honnête plutôt qu'un faux
+  // pixel-parfait généralisé : le tout début (en-tête de la page 1) et la
+  // toute fin (pied de la dernière page) du document ont un vrai espace
+  // libre disponible avant/après `.tiptap` - ce sont donc de VRAIS éléments
+  // DOM en flux normal (`.v2-page-edge-spacer`, frères de `.tiptap`, JAMAIS
+  // enfants - un enfant inattendu dans `.tiptap` serait la même trappe que la
+  // V1 avec Quill, cf. mémoire project_quill_mutation_observer), qui ne
+  // recouvrent donc jamais de texte réel. Les limites INTERMÉDIAIRES (pied
+  // d'une page + en-tête de la suivante) n'ont PAS cet espace - le contenu
+  // continue de défiler sans interruption réelle - ces bandes-là restent de
+  // purs overlays en position:absolute qui PEUVENT recouvrir un peu de texte
+  // exactement à la limite, résidu assumé (même classe que les écarts de
+  // rendu police déjà acceptés ailleurs dans ce projet).
+  function renderPaginationOverlay() {
+    const container = document.getElementById('editor-container');
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!container || !tiptapEl) return;
+    if (hfMode || !headerFooterDraft.enabled || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
+
+    if (!paginationOverlayEl) {
+      paginationOverlayEl = document.createElement('div');
+      paginationOverlayEl.className = 'v2-pagination-overlay';
+      container.appendChild(paginationOverlayEl);
+    }
+    paginationOverlayEl.innerHTML = '';
+
+    const differentFirstPage = !!headerFooterDraft.differentFirstPage;
+    const headerHtml = headerFooterDraft.header.default;
+    const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
+    const footerHtml = headerFooterDraft.footer.default;
+    const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
+    const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml;
+    const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml;
+
+    const headerHeightPx = Math.max(measureHtmlHeightPx(headerHtml), measureHtmlHeightPx(headerFirstHtml));
+    const footerHeightPx = Math.max(measureHtmlHeightPx(footerHtml), measureHtmlHeightPx(footerFirstHtml));
+    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    const offsets = computePageBreakOffsets(tiptapEl, pageContentHeightPx);
+    const totalPages = offsets.length + 1;
+
+    // Espaceurs de bord (vrais éléments en flux, cf. commentaire ci-dessus) -
+    // insérés en frères de `.tiptap`, jamais dedans.
+    if (!paginationEdgeTopEl) {
+      paginationEdgeTopEl = document.createElement('div');
+      paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top';
+      container.insertBefore(paginationEdgeTopEl, tiptapEl);
+    }
+    if (!paginationEdgeBottomEl) {
+      paginationEdgeBottomEl = document.createElement('div');
+      paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom';
+      container.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
+    }
+    paginationEdgeTopEl.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
+    paginationEdgeBottomEl.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
+
+    const tiptapOffsetTop = tiptapEl.offsetTop;
+    const tiptapOffsetLeft = tiptapEl.offsetLeft;
+    const tiptapWidth = tiptapEl.getBoundingClientRect().width;
+
+    // Limites intermédiaires - une bande "couture" (pied + en-tête empilés)
+    // par frontière entre 2 pages, positionnée APRÈS insertion (nécessite sa
+    // propre hauteur rendue) pour que son BAS tombe exactement où le contenu
+    // de la page suivante commence réellement dans le flux continu.
+    offsets.forEach((offsetPx, i) => {
+      const pageEnding = i + 1;
+      const pageStarting = i + 2;
+      const footerText = footerForPage(pageEnding);
+      const headerText = headerForPage(pageStarting);
+      if (!footerText && !headerText) return;
+      const seam = document.createElement('div');
+      seam.className = 'v2-page-band v2-page-seam';
+      if (footerText) {
+        const f = document.createElement('div');
+        f.className = 'v2-page-band-footer';
+        f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
+        seam.appendChild(f);
+      }
+      const divider = document.createElement('div');
+      divider.className = 'v2-page-seam-divider';
+      seam.appendChild(divider);
+      if (headerText) {
+        const h = document.createElement('div');
+        h.className = 'v2-page-band-header';
+        h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
+        seam.appendChild(h);
+      }
+      paginationOverlayEl.appendChild(seam);
+      seam.style.left = tiptapOffsetLeft + 'px';
+      seam.style.width = tiptapWidth + 'px';
+      const seamHeight = seam.getBoundingClientRect().height;
+      seam.style.top = (tiptapOffsetTop + offsetPx - seamHeight) + 'px';
+    });
   }
 
   // Icônes de la toolbar statique (posées en JS plutôt que dans le HTML : une
@@ -1972,7 +2169,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); },
+      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); },
       extensions: [
         StarterKit,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -2019,6 +2216,7 @@ const Editor = (function () {
     wireVariableFloatingToolbar();
     editor.on('selectionUpdate', syncToolbarState);
     editor.on('transaction', syncToolbarState);
+    window.addEventListener('resize', schedulePaginationRecompute);
     return editor;
   }
 
@@ -2254,10 +2452,12 @@ const Editor = (function () {
     // appelé explicitement ici pour le couvrir aussi.
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
+    renderPaginationOverlay();
   }
 
   return {
     init, getHTML, setHTML, getHeadingNumberingStyle,
     getHeaderFooterData, setHeaderFooterData, exitHeaderFooterModeIfActive,
+    refreshPaginationPreview: renderPaginationOverlay,
   };
 })();

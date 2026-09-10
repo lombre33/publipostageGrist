@@ -197,6 +197,7 @@
       editorContainer.classList.toggle('a4-preview', toggle.checked);
       readerContainer.classList.toggle('a4-preview', toggle.checked);
       if (label) label.classList.toggle('checked', toggle.checked);
+      Editor.refreshPaginationPreview();
     };
     toggle.addEventListener('change', sync);
     sync();
