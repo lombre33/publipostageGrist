@@ -440,13 +440,59 @@ const PdfExport = (function () {
   // pour le flux principal) - sans ce paramètre, inlineRuns() les ignore
   // purement et simplement (une image dans une cellule de tableau disparaissait
   // donc silencieusement de l'export, signalé par l'utilisateur).
-  function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt) {
+  // Une image en calque (devant/derrière le texte) trouvée dans `images`
+  // entre les index [before, images.length) est rattachée à `obj` (le bloc
+  // pdfmake tout juste construit pour CETTE ligne/cellule) comme son ancre
+  // LOCALE - même principe que le raccourci "container" du flux principal
+  // (cf. resolvePendingImageAnchors), mais sans recherche de bracketing :
+  // dans une cellule, le paragraphe qui héberge l'image EST la référence la
+  // plus proche disponible, pas besoin de chercher plus loin. Sans cette
+  // fonction, une image en calque nichée dans une cellule n'avait NULLE PART
+  // où s'ancrer et retombait au coin de la page (ou, après le repli sûr
+  // ajouté dans un premier temps, tout en bas de la cellule, en flux normal)
+  // - signalé cassé par l'utilisateur dans les deux cas.
+  // PAS de correction A4_PREVIEW_PADDING_PX ici (contrairement à
+  // resolvePendingImageAnchors, flux principal) : `.tiptap table td, th` a
+  // son PROPRE `position: relative` (cf. css/editor-v2.css) - une image en
+  // calque nichée dans une cellule a donc pour bloc englobant CSS la
+  // CELLULE elle-même, pas `.tiptap`/la page (contrairement à une colonne de
+  // zone 2-colonnes, qui n'a aucun `position:relative` propre et reste donc
+  // ancrée sur `.tiptap` comme le flux principal). `imgTopPx`/`imgLeftPx`
+  // ici ne sont JAMAIS interprétés comme des valeurs absolues page-relative
+  // (cf. `containerLeftPx`/xPt spécifique cellule dans
+  // resolveImageAbsolutePosition) - seule leur DIFFÉRENCE avec le
+  // paragraphe-conteneur compte, qui reste valide quel que soit le bloc
+  // englobant CSS réel (simple arithmétique de rects viewport). Appliquer
+  // par erreur la correction A4 ici décalait la position d'un ~28pt
+  // constant, signalé cassé par l'utilisateur (image retombée bien plus bas
+  // que son propre paragraphe hôte).
+  function attributeNestedPendingImages(images, before, obj, containerNode, rootRect, nestedPending) {
+    if (!nestedPending || !rootRect) return;
+    for (let i = before; i < images.length; i += 1) {
+      const img = images[i];
+      if (!img._pendingImgNode) continue;
+      const imgRect = img._pendingImgNode.getBoundingClientRect();
+      const containerRect = containerNode.getBoundingClientRect();
+      const entry = {
+        image: img,
+        container: obj,
+        containerTopPx: containerRect.top - rootRect.top,
+        containerLeftPx: containerRect.left - rootRect.left,
+        imgTopPx: imgRect.top - rootRect.top,
+        imgLeftPx: imgRect.left - rootRect.left,
+      };
+      nestedPending.push(entry);
+    }
+  }
+  function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending) {
     if (line.inline) {
+      const before = images.length;
       let runs = [];
       line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle, images)); });
       runs = trimEdgeWhitespace(runs);
       const obj = { text: runs.length ? runs : ' ' };
       if (cellAlign) obj.alignment = cellAlign;
+      attributeNestedPendingImages(images, before, obj, line.inline[0].parentElement || line.inline[0], rootRect, nestedPending);
       return obj;
     }
     const node = line;
@@ -470,12 +516,14 @@ const PdfExport = (function () {
     }
     const isLi = node.tagName === 'LI';
     const marker = isLi ? listMarkerFor(node) : '';
+    const before = images.length;
     const runs = trimEdgeWhitespace(isLi
       ? inlineRunsExcludingNestedLists(node, cellBaseStyle, images)
       : inlineRuns(node, cellBaseStyle, images));
     const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
     const align = alignment(node) || cellAlign; if (align) obj.alignment = align;
+    attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
   // Une cellule multi-lignes (plusieurs blocs, ou un mélange de texte brut et
@@ -487,24 +535,35 @@ const PdfExport = (function () {
   // pdfmake n'accepte pas d'image au milieu d'un tableau de `text`, donc une
   // image au milieu d'une phrase atterrit après tout le texte de la cellule,
   // pas exactement à sa place).
-  function cellContentFrom(cell, cellWidthPt) {
+  function cellContentFrom(cell, cellWidthPt, rootRect) {
     const lines = [];
     collectCellLines(cell, lines);
     const images = [];
+    const nestedPending = [];
     if (!lines.length) return { text: ' ' };
     if (lines.length === 1 && lines[0].inline) {
       const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }, images));
       const textObj = { text: runs.length ? runs : ' ' };
-      return images.length ? { stack: [textObj].concat(images) } : textObj;
+      if (!images.length) return textObj;
+      const finalStack = [textObj].concat(images);
+      attributeNestedPendingImages(images, 0, textObj, cell, rootRect, nestedPending);
+      nestedPending.forEach(p => { p.parentArray = finalStack; });
+      const result = { stack: finalStack };
+      if (nestedPending.length) result._nestedPending = nestedPending;
+      return result;
     }
     const cellAlign = alignment(cell);
     const cellBaseStyle = inheritedStyle(cell, { fontSize: DEFAULT_FONT_SIZE });
     const stack = [];
     lines.forEach(line => {
-      const obj = cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt);
+      const obj = cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending);
       if (Array.isArray(obj)) obj.forEach(o => stack.push(o)); else stack.push(obj);
     });
-    return { stack: stack.concat(images) };
+    const finalStack = stack.concat(images);
+    nestedPending.forEach(p => { p.parentArray = finalStack; });
+    const result = { stack: finalStack };
+    if (nestedPending.length) result._nestedPending = nestedPending;
+    return result;
   }
 
   // Largeurs de colonnes : MESURÉES sur le rendu réel de la première ligne
@@ -557,7 +616,7 @@ const PdfExport = (function () {
     while (widths.length < columnCount) widths.push(0);
     return widths.slice(0, columnCount);
   }
-  function tableFrom(node, pageBreakBefore) {
+  function tableFrom(node, pageBreakBefore, rootRect) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
     const cellsOf = row => Array.from(row.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
@@ -627,14 +686,20 @@ const PdfExport = (function () {
     // correctement, cf. cellContentFrom/floatedImageParagraphFrom - sans
     // cette largeur, ce calcul se basait sur la pleine largeur de page,
     // signalé cassé par l'utilisateur.
+    // Images en calque imbriquées dans une cellule (cf. cellContentFrom) -
+    // récoltées ici puis portées sur le bloc `table` retourné (`_nestedPending`),
+    // remontées jusqu'à buildPdfContentFromRoot qui les fusionne dans
+    // `content._pendingImages` (même résolution que les images top-level).
+    const tableNestedPending = [];
     const body = rawRows.map(row => {
       const output = [];
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
         const cellWidthPt = widths.slice(output.length, output.length + colSpan).reduce((sum, w) => sum + w, 0) || null;
         let content;
-        try { content = cellContentFrom(cell, cellWidthPt); }
+        try { content = cellContentFrom(cell, cellWidthPt, rootRect); }
         catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
+        if (content._nestedPending) { tableNestedPending.push(...content._nestedPending); delete content._nestedPending; }
         // Pas de `margin` propre à la cellule : le seul inset appliqué est
         // `layout.paddingLeft/Right/Top/Bottom` ci-dessous (le budget de
         // largeur, cf. usableForColumnsPt, est déjà calculé en fonction de
@@ -663,6 +728,7 @@ const PdfExport = (function () {
       margin: [0, 5, 0, 5],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
+    if (tableNestedPending.length) table._nestedPending = tableNestedPending;
     return table;
   }
 
@@ -675,7 +741,7 @@ const PdfExport = (function () {
   // ajustable pour l'instant (cf. v2/js/editor.js:TwoColumnsZone) - les deux
   // colonnes sont toujours 50/50 (flex: 1 1 0, css/editor-v2.css), mesurées
   // ici comme telles.
-  async function twoColumnsFrom(node, pageBreakBefore) {
+  async function twoColumnsFrom(node, pageBreakBefore, rootRect) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
     const pageWidth = 595.28;
@@ -760,6 +826,61 @@ const PdfExport = (function () {
       }
       return blocks;
     }));
+    // Images en calque imbriquées dans une colonne : chaque colonne a déjà
+    // sa PROPRE résolution complète (bracketing+interpolation, pas juste le
+    // raccourci "container") via son propre appel à htmlToPdfContent/
+    // buildPdfContentFromRoot ci-dessus - `columns[i]._pendingImages` porte
+    // déjà `parentArray: columns[i]` (posé par resolvePendingImageAnchors,
+    // puisque `columns[i]` EST le tableau `blocks`/`content` de cet appel).
+    // Sans cette récolte, cette résolution déjà correcte était silencieusement
+    // jetée : rien ne la remontait jusqu'à resolveNativePdfContent, l'image
+    // gardait alors son placeholder (coin de la page) puis, après le repli de
+    // sécurité ajouté dans un premier temps, retombait en flux normal tout en
+    // bas de la colonne - signalé cassé par l'utilisateur dans les deux cas.
+    //
+    // Correction Y indispensable : cet appel imbriqué reconstruit le contenu
+    // de la colonne dans un sous-arbre DÉTACHÉ (`htmlToPdfContent` crée un
+    // `root` neuf à partir du seul `col.innerHTML`), pas le même sous-arbre
+    // que la zone réelle - son `imgTopPx` (mesuré dans CE sous-arbre isolé,
+    // dont l'origine est le début de la colonne, PAS le début du document
+    // réel) vaut le `top` CSS BRUT de l'image (relatif à `.tiptap`, cf.
+    // attributeNestedPendingImages) tel quel - une valeur pensée pour tout
+    // le document, pas pour ce fragment isolé. `containerTopPx` (mesuré dans
+    // ce MÊME sous-arbre isolé, sur un paragraphe en flux normal) vaut lui
+    // la position LOCALE au fragment (~0 si la colonne ne contient qu'un
+    // seul paragraphe) - comparer les deux sans correction revenait à
+    // comparer un décalage "depuis le début du document" à un décalage
+    // "depuis le début de la colonne", décalé de la position RÉELLE de la
+    // colonne dans le document (des centaines de points dès que du contenu
+    // la précède) - signalé cassé par l'utilisateur (image très éloignée de
+    // son paragraphe hôte dès que la zone 2-colonnes n'est pas tout en tête
+    // du document). Fixé en soustrayant la position Y RÉELLE de la colonne
+    // (mesurée sur le node RÉEL `col`, encore attaché à l'hôte de mesure
+    // top-level à ce stade) de `imgTopPx` - ramène cette valeur dans le MÊME
+    // référentiel "local au fragment isolé" que `containerTopPx`/
+    // `aboveTopPx`/`belowTopPx`, qui eux n'ont pas besoin de correction
+    // (déjà mesurés dans ce référentiel).
+    //
+    // PAS de correction équivalente pour X (`imgLeftPx`) : contrairement à Y
+    // (dont la formule finale s'appuie sur la position RÉSOLUE du conteneur,
+    // exprimée dans le référentiel du fragment isolé), X se calcule pour une
+    // colonne directement depuis la marge de page (`resolveImageAbsolutePosition`,
+    // aucune colonne ne pose son propre `position:relative` - seule une
+    // CELLULE le fait, cf. attributeNestedPendingImages) : le `left` CSS brut
+    // EST déjà, sans correction, la distance depuis le bord gauche de
+    // `.tiptap` - valable identiquement que l'image soit dans la colonne de
+    // gauche ou de droite, glissée dans le fragment isolé ou dans le document
+    // réel (une correction ici aurait au contraire FAUSSÉ X, testé et
+    // confirmé cassé lors d'un premier essai).
+    const nestedPending = [];
+    columns.forEach((colBlocks, colIdx) => {
+      const pending = colBlocks._pendingImages || [];
+      if (pending.length) {
+        const colOffsetTopPx = colNodes[colIdx].getBoundingClientRect().top - rootRect.top;
+        pending.forEach(p => { p.imgTopPx -= colOffsetTopPx; nestedPending.push(p); });
+      }
+      delete colBlocks._pendingImages;
+    });
     const block = {
       columns: [
         { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, colOwnInsetRight[0], 0] }] },
@@ -769,6 +890,7 @@ const PdfExport = (function () {
       margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
+    if (nestedPending.length) block._nestedPending = nestedPending;
     return block;
   }
 
@@ -1129,9 +1251,9 @@ const PdfExport = (function () {
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
   // paragraphe contenant une image produit un bloc de texte ET un bloc image
   // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
-  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt) {
+  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect) {
     const tag = node.tagName.toUpperCase();
-    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
+    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     if (tag === 'P' || tag === 'DIV') {
       const floatImgEl = Array.from(node.querySelectorAll('img.editor-image')).find(img => {
@@ -1195,7 +1317,7 @@ const PdfExport = (function () {
     images.forEach(img => blocks.push(img));
     nestedLists.forEach(list => {
       Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
-        blockFrom(li, false, headingMarkers, availableWidthPt).forEach(b => blocks.push(b));
+        blockFrom(li, false, headingMarkers, availableWidthPt, rootRect).forEach(b => blocks.push(b));
       });
     });
     return blocks;
@@ -1209,6 +1331,14 @@ const PdfExport = (function () {
     // ailleurs.
     const sourceNodes = [];
     const headingBlocks = []; const tocBlocks = [];
+    // Images en calque IMBRIQUÉES (cellule de tableau, colonne de zone
+    // 2-colonnes) - accumulées ici à part de `resolvePendingImageAnchors`
+    // (qui ne voit que les blocs TOP-LEVEL) : tableFrom/twoColumnsFrom
+    // posent un `_nestedPending` sur le bloc qu'ils retournent, récolté ici
+    // puis fusionné dans `content._pendingImages` plus bas - un seul et même
+    // mécanisme de résolution (cf. resolveNativePdfContent) pour les deux.
+    const nestedPendingAll = [];
+    const rootRect = root.getBoundingClientRect();
     let pendingPageBreak = false;
     const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
     const visit = async node => {
@@ -1230,17 +1360,21 @@ const PdfExport = (function () {
       // ci-dessous comme n'importe quel autre bloc.
       if (node.classList.contains('two-columns-zone')) {
         let zoneBlock;
-        try { zoneBlock = await twoColumnsFrom(node, pendingPageBreak); }
+        try { zoneBlock = await twoColumnsFrom(node, pendingPageBreak, rootRect); }
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
+        if (zoneBlock && zoneBlock._nestedPending) { nestedPendingAll.push(...zoneBlock._nestedPending); delete zoneBlock._nestedPending; }
         push(zoneBlock, node);
         pendingPageBreak = false;
         return;
       }
       if (isBlock(node)) {
         let produced;
-        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt); }
+        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
-        produced.forEach(b => { push(b, node); if (b && b._isHeading) headingBlocks.push(b); });
+        produced.forEach(b => {
+          if (b && b._nestedPending) { nestedPendingAll.push(...b._nestedPending); delete b._nestedPending; }
+          push(b, node); if (b && b._isHeading) headingBlocks.push(b);
+        });
         pendingPageBreak = false;
         return;
       }
@@ -1255,7 +1389,7 @@ const PdfExport = (function () {
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
-    content._pendingImages = resolvePendingImageAnchors(root, blocks, sourceNodes);
+    content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll);
     return content;
   }
 
@@ -1270,9 +1404,8 @@ const PdfExport = (function () {
   // V1 (qui devait persister des identifiants d'ancrage côté éditeur parce
   // que le glisser pouvait survenir à tout moment), tout se recalcule ici,
   // à l'export, à partir du HTML final - plus simple.
-  function resolvePendingImageAnchors(root, blocks, sourceNodes) {
+  function resolvePendingImageAnchors(rootRect, blocks, sourceNodes) {
     const pending = [];
-    const rootRect = root.getBoundingClientRect();
     // Un paragraphe qui héberge une image en attente produit TOUJOURS, en plus
     // du bloc image lui-même, un bloc-texte "compagnon" (cf. blockFrom : même
     // sans aucun texte, `runs.length ? runs : ' '` pousse un bloc `{text:' '}`
@@ -1350,7 +1483,14 @@ const PdfExport = (function () {
         if (bottom <= imgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; above = other; }
         if (top >= imgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; below = other; }
       });
-      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx, container, containerTopPx });
+      // `parentArray: blocks` - tableau dans lequel `block` (l'image) et son
+      // ancre vivent tous les deux ; utilisé par resolveNativePdfContent pour
+      // relocaliser l'image à côté de son ancre (paint-order devant/derrière)
+      // sans dépendre d'un tableau top-level codé en dur - même champ posé
+      // par les images imbriquées dans une cellule/colonne (cf.
+      // cellLineToPdfObject/twoColumnsFrom), qui utilisent leur propre
+      // tableau local plutôt que le `content` top-level.
+      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx, container, containerTopPx, parentArray: blocks });
     });
     return pending;
   }
@@ -1483,7 +1623,21 @@ const PdfExport = (function () {
   // plus finement, rare en pratique) ; repli final purement local si aucune
   // ancre n'a pu être résolue (document sans aucun autre bloc mesurable).
   function resolveImageAbsolutePosition(a) {
-    const xPt = PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    // `imgLeftPx` est page-relative (bloc englobant CSS = `.tiptap`) pour le
+    // flux principal ET une colonne de zone 2-colonnes (aucune des deux ne
+    // pose son propre `position:relative`) - X s'y calcule directement depuis
+    // la marge de page. Une cellule de tableau (`.tiptap table td/th` a SON
+    // PROPRE `position:relative`, cf. attributeNestedPendingImages) n'entre
+    // PAS dans ce cas : `imgLeftPx` y est relatif à la CELLULE, pas à la
+    // page - `containerLeftPx`/`containerLeft` (posés uniquement par
+    // attributeNestedPendingImages) signalent ce cas et pilotent alors X de
+    // la MÊME façon que Y (différence locale par rapport au conteneur,
+    // reportée sur la position RÉELLE déjà résolue de ce conteneur) plutôt
+    // que la formule page-relative, qui donnait une position n'importe où
+    // sur la page (signalé cassé par l'utilisateur).
+    const xPt = a.containerLeftPx != null && a.containerLeft != null
+      ? a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT
+      : PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
     // Référence locale (cf. resolvePendingImageAnchors) prioritaire sur le
     // bracketing générique ci-dessous quand disponible : plus précise, car
     // fondée sur le début du paragraphe qui héberge l'image elle-même (échelle
@@ -1507,19 +1661,22 @@ const PdfExport = (function () {
   // (htmlToPdfContent est une fonction pure) : les numéros de page du
   // sommaire sont reportés dans ses cellules réservées ; les images en
   // attente reçoivent leur `absolutePosition` finale ET sont RELOCALISÉES
-  // dans le tableau `content[]` juste à côté de l'ancre utilisée - pdfmake
-  // place un `absolutePosition` sur la page COURANTE au moment où il traite
-  // cette entrée du tableau (pas sur la page indiquée par `y`), donc une
-  // image glissée loin de sa position DOM d'origine resterait composée sur
-  // la MAUVAISE page sans ce réalignement (même contrainte que la V1, cf.
-  // mémoire project_image_anchor_bracketing_interpolation). Portée de cet
-  // incrément : uniquement les images en calque au niveau racine du document
-  // - une image en calque imbriquée dans une cellule de tableau ou une
-  // colonne de zone 2-colonnes n'est pas résolue ici (aucun de ces deux
-  // chemins de construction n'a de blocs-ancre top-level à offrir) ; elle
-  // garde alors le repli le plus simple - aucune `absolutePosition`, rendue
-  // en flux normal à sa place dans sa cellule/colonne - pas invisible, juste
-  // pas positionnée au pixel près comme au niveau racine.
+  // dans le tableau qui les héberge (`p.parentArray` - le tableau `content[]`
+  // top-level, OU le tableau local d'une cellule de tableau/colonne de zone
+  // 2-colonnes, cf. cellContentFrom/twoColumnsFrom) juste à côté de l'ancre
+  // utilisée - pdfmake place un `absolutePosition` sur la page COURANTE au
+  // moment où il traite cette entrée du tableau (pas sur la page indiquée par
+  // `y`), donc une image glissée loin de sa position DOM d'origine resterait
+  // composée sur la MAUVAISE page sans ce réalignement (même contrainte que
+  // la V1, cf. mémoire project_image_anchor_bracketing_interpolation). Une
+  // image en calque imbriquée dans une cellule/colonne partage cette MÊME
+  // résolution (`content._pendingImages` fusionne les deux, cf.
+  // buildPdfContentFromRoot) : `getBuffer()` pose bien `.positions` sur
+  // n'importe quel objet qu'il peint, même nichée dans une table/columns
+  // (vérifié empiriquement) - seule la recherche d'ancre diffère (bracketing
+  // complet pour une colonne, qui a déjà son propre passage par
+  // buildPdfContentFromRoot ; raccourci "container" - le paragraphe hôte lui-
+  // même - pour une cellule, plus simple, cf. attributeNestedPendingImages).
   async function resolveNativePdfContent(inlinedHtml, filename) {
     let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
@@ -1537,6 +1694,11 @@ const PdfExport = (function () {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
           containerTop: containerResolved ? containerResolved.top : null, containerTopPx: p.containerTopPx,
+          // `containerLeft`/`containerLeftPx` : seules les images imbriquées
+          // dans une cellule (cf. attributeNestedPendingImages) les posent -
+          // pilote le calcul de X en cellule-relatif dans
+          // resolveImageAbsolutePosition (cf. commentaire là-bas).
+          containerLeft: containerResolved ? containerResolved.left : null, containerLeftPx: p.containerLeftPx,
           hadAbove: !!p.above, hadBelow: !!p.below,
           imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
         };
@@ -1572,31 +1734,32 @@ const PdfExport = (function () {
           if (a.aboveTop != null) { anchorBlock = p.above; insertAfter = false; }
           else if (a.belowTop != null) { anchorBlock = p.below; insertAfter = false; }
         }
+        // Repli sur le "container" (paragraphe hôte, cf. raccourci local des
+        // images imbriquées dans une cellule - pas de bracketing above/below
+        // disponible dans ce cas) - même logique devant/derrière que ci-
+        // dessus : "devant" doit finir peint APRÈS son texte hôte (recouvre),
+        // "derrière" doit finir peint AVANT (recouvert).
+        if (!anchorBlock && p.container) { anchorBlock = p.container; insertAfter = layer === 'front'; }
         if (!anchorBlock) return;
-        const imgIdx = content.indexOf(p.image);
+        const arr = p.parentArray || content;
+        const imgIdx = arr.indexOf(p.image);
         if (imgIdx === -1) return;
-        content.splice(imgIdx, 1);
-        const anchorIdx = content.indexOf(anchorBlock);
+        arr.splice(imgIdx, 1);
+        const anchorIdx = arr.indexOf(anchorBlock);
         if (anchorIdx === -1) return;
-        content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
+        arr.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
       });
     }
-    // Une image en calque IMBRIQUÉE (cellule de tableau, colonne d'une zone
-    // 2-colonnes) reçoit elle aussi `_pendingImgNode`/`absolutePosition` de
-    // secours (cf. pdfImageFromNode, contexte-agnostique - il ne sait pas où
-    // il est appelé) mais `content._pendingImages` (résolu ci-dessus) ne
-    // recense QUE les images de premier niveau : `resolvePendingImageAnchors`
-    // n'est appelé que sur les blocs top-level de buildPdfContentFromRoot, pas
-    // sur le contenu d'une cellule/colonne, qui n'a pas de blocs-ancre de
-    // premier niveau à offrir. Sans ce balayage, une telle image gardait
-    // l'`absolutePosition` PLACEHOLDER ({x:0,y:0}, ajoutée pour éviter de
-    // gonfler la mesure du flux, cf. plus haut) indéfiniment - littéralement
-    // coincée au coin supérieur gauche de la PAGE entière plutôt que dans sa
-    // cellule/colonne, régression constatée par l'utilisateur. Repli : aucune
-    // position absolue du tout, rendue en flux normal à sa place dans sa
-    // cellule/colonne - pas positionnée au pixel près, mais au moins visible
-    // au bon endroit (limitation connue et acceptée, cf. commentaire plus haut
-    // sur la portée de cet incrément).
+    // Filet de sécurité résiduel : `content._pendingImages` (fusionné plus
+    // haut, top-level + imbriqué) couvre le cas normal, mais une image en
+    // calque dont ni bracket ni container n'a pu être résolu (ex. cellule
+    // dont le seul contenu est le groupe "inline" brut sans paragraphe hôte
+    // mesurable) garderait sinon son `absolutePosition` PLACEHOLDER
+    // ({x:0,y:0}, posée par pdfImageFromNode pour éviter de gonfler la
+    // mesure du flux, cf. plus haut) indéfiniment - littéralement coincée au
+    // coin supérieur gauche de la PAGE entière. Repli : aucune position
+    // absolue du tout, rendue en flux normal à sa place - pas positionnée au
+    // pixel près, mais au moins visible au bon endroit.
     stripUnresolvedPendingImages(content);
     return content;
   }
