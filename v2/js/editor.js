@@ -40,6 +40,13 @@ const Editor = (function () {
   // remplacement - elle retombe sur un simple curseur texte, ce qui referme
   // aussitôt la toolbar flottante (vérifié en conditions réelles).
   let NodeSelectionClass = null;
+  // Rempli aux côtés de NodeSelectionClass ci-dessus (même import
+  // prosemirror-state) - utilisé par createTabNavigationExtension pour
+  // placer le curseur à un endroit précis (colonne suivante, paragraphe
+  // après la zone) sans connaître à l'avance une position EXACTE valide
+  // (TextSelection.near cherche la plus proche position de curseur
+  // valide à partir d'une position candidate, cf. son usage plus bas).
+  let TextSelectionClass = null;
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
@@ -210,6 +217,62 @@ const Editor = (function () {
   // backspace/suppr en bord de colonne de fusionner la zone avec le
   // paragraphe voisin (comportement par défaut de ProseMirror sans ça,
   // vérifié en conditions réelles).
+  // Tab personnalisé : AVANT toute autre chose, préserve le comportement
+  // natif d'indentation de liste (sinkListItem) - sans ce court-circuit
+  // explicite, l'extension Table (dont le propre Tab - goToNextCell -
+  // l'emporte en pratique sur celui de StarterKit pour une liste nichée
+  // dans une cellule, vérifié en conditions réelles, l'ordre exact de
+  // préséance entre extensions pour une MÊME touche n'étant pas fiable à
+  // deviner) changeait de cellule au lieu d'indenter, signalé cassé par
+  // l'utilisateur. Hors liste, Tab dans une colonne de zone 2-colonnes
+  // (aucun comportement par défaut avant ce correctif - signalé cassé,
+  // "il ne se passe rien") déplace le curseur vers la colonne de droite,
+  // ou - déjà dans la colonne de droite - vers le paragraphe suivant après
+  // la zone (nouveau paragraphe vide créé s'il n'y en a pas déjà un).
+  // Enregistrée en DERNIER dans `extensions` (cf. init()) : conditionne
+  // empiriquement quelle extension gagne la main sur une touche partagée.
+  function createTabNavigationExtension(Extension) {
+    return Extension.create({
+      name: 'tabNavigation',
+      addKeyboardShortcuts() {
+        return {
+          Tab: ({ editor: ed }) => {
+            if (ed.isActive('listItem')) {
+              // Résultat (succès ou non - ex. premier item sans rien
+              // au-dessus où s'imbriquer) toujours consommé : un échec de
+              // sink doit rester SANS EFFET, pas retomber sur un
+              // changement de cellule/colonne à la place.
+              ed.commands.sinkListItem('listItem');
+              return true;
+            }
+            const { $from } = ed.state.selection;
+            let columnDepth = -1;
+            for (let d = $from.depth; d > 0; d -= 1) {
+              if ($from.node(d).type.name === 'twoColumnsColumn') { columnDepth = d; break; }
+            }
+            if (columnDepth === -1) return false;
+            const zoneDepth = columnDepth - 1;
+            if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return false;
+            const colIndex = $from.index(zoneDepth);
+            if (colIndex === 0) {
+              const afterLeftCol = $from.after(columnDepth);
+              const target = ed.state.doc.resolve(Math.min(afterLeftCol + 1, ed.state.doc.content.size));
+              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, 1)).run();
+              return true;
+            }
+            const afterZone = $from.after(zoneDepth);
+            if (afterZone >= ed.state.doc.content.size) {
+              ed.chain().focus().insertContentAt(afterZone, { type: 'paragraph' }).setTextSelection(afterZone + 1).run();
+              return true;
+            }
+            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(afterZone), 1)).run();
+            return true;
+          },
+        };
+      },
+    });
+  }
+
   function createTwoColumnsNodes(Node, mergeAttributes) {
     const TwoColumnsColumn = Node.create({
       name: 'twoColumnsColumn',
@@ -1264,7 +1327,7 @@ const Editor = (function () {
     const { TableHeader } = await import('@tiptap/extension-table-header');
     const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
     floatingUi = { computePosition, offset, flip, shift, autoUpdate };
-    ({ NodeSelection: NodeSelectionClass } = await import('prosemirror-state'));
+    ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass } = await import('prosemirror-state'));
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
@@ -1305,6 +1368,7 @@ const Editor = (function () {
         PageBreak,
         HeadingNumberingConfig,
         Toc,
+        createTabNavigationExtension(Extension),
       ],
       content: '',
     });
