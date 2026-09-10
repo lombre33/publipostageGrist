@@ -474,6 +474,17 @@ const Variables = (function () {
       btnCancel.addEventListener('click', onCancel);
     });
   }
+  // Modèles (Templates.getCached(), déjà chargés en mémoire par main.js -
+  // aucun aller-retour Grist supplémentaire ici) dont le contenu contient au
+  // moins un badge #Variable pointant vers `tableCible` - recherche brute sur
+  // l'attribut sérialisé par createVarBadgeNode (v2/js/editor.js), pas besoin
+  // d'un DOMParser complet pour ce seul besoin. Utilisé pour avertir avant de
+  // supprimer une règle de correspondance encore utilisée ailleurs.
+  function findTemplatesUsingTable(tableCible) {
+    const templates = (typeof Templates !== 'undefined' && Templates.getCached) ? Templates.getCached() : [];
+    const needle = 'data-table="' + tableCible + '"';
+    return templates.filter(tpl => tpl.contenu && tpl.contenu.indexOf(needle) !== -1);
+  }
   // Panneau de gestion (modale #link-rules-modal, cf. v2/index.html) : liste
   // les tables déjà configurées, avec un bouton pour modifier ou supprimer
   // chaque règle. Appelée au démarrage et à chaque ouverture de la modale
@@ -511,7 +522,13 @@ const Variables = (function () {
       btnDelete.type = 'button'; btnDelete.className = 'link-rule-btn link-rule-btn-delete';
       btnDelete.setAttribute('aria-label', 'Supprimer'); btnDelete.title = 'Supprimer';
       btnDelete.addEventListener('click', async () => {
-        if (!confirm(`Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`)) return;
+        const affected = findTemplatesUsingTable(rule.tableCible);
+        let message = `Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`;
+        if (affected.length) {
+          message += `\n\nUtilisée dans : ${affected.map(t => t.nom || '(sans nom)').join(', ')}.\n`
+            + `Les #Variable de ${affected.length > 1 ? 'ces modèles' : 'ce modèle'} ne pourront plus être résolues tant qu'une nouvelle correspondance n'aura pas été configurée.`;
+        }
+        if (!confirm(message)) return;
         await GristAPI.deleteLinkRule(rule.tableCible);
         refreshLinkRulesPanel();
       });
