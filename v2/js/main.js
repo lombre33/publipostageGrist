@@ -162,7 +162,7 @@
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
-      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality);
+      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData());
       setStatus('PDF généré.');
     } catch (e) {
       console.error(e);

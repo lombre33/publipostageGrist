@@ -103,7 +103,8 @@ const PdfExport = (function () {
     cachedSpaceWidthPt = Math.max(1, (withSpace - withoutSpace) * PX_TO_PT);
     return cachedSpaceWidthPt;
   }
-  const CONTENT_WIDTH_PX = (595.28 - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
+  const CONTENT_WIDTH_PT = 595.28 - 2 * PAGE_MARGIN_PT;
+  const CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
 
   function cssSize(value, fallback) {
     const n = parseFloat(value);
@@ -282,7 +283,18 @@ const PdfExport = (function () {
   // éditeur réel) et la largeur de contenu du PDF.
   function attachMeasureHost(root, widthPx) {
     root.classList.add('pdf-measure-host', 'tiptap');
-    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + (widthPx || CONTENT_WIDTH_PX) + 'px; padding:0; margin:0; box-sizing:border-box;';
+    // `min-height: 0` EN INLINE (l'emporte sur `.tiptap { min-height: 200px }`,
+    // css/editor-v2.css - pensé pour que l'éditeur VIDE garde une zone
+    // cliquable confortable, sans rapport avec la mesure) : sans ce correctif,
+    // toute mesure de la HAUTEUR TOTALE de `root` lui-même (au lieu d'un
+    // élément précis à l'intérieur) plafonne à 200px quel que soit le contenu
+    // réel - découvert en mesurant un en-tête d'une seule ligne (incrément 2.2,
+    // en-têtes/pieds de page) : 200px de haut mesurés pour ~20px de texte
+    // réel, gonflant à tort la marge de page réservée. Les mesures PAR
+    // ÉLÉMENT déjà faites ailleurs dans ce fichier (images, indentation...)
+    // n'étaient jamais affectées (elles ne lisent jamais la hauteur du root
+    // lui-même) - ce correctif est donc sans risque pour elles.
+    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + (widthPx || CONTENT_WIDTH_PX) + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(root);
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }
@@ -369,6 +381,17 @@ const PdfExport = (function () {
     // ne voie le HTML - gardé par robustesse si ce module est un jour appelé
     // sur du HTML non résolu.
     if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }];
+    // Numéro de page (en-tête/pied de page, incrément 2.2) : contrairement à
+    // .var-badge, AUCUNE valeur réelle n'existe avant que pdfmake n'ait
+    // choisi le numéro de page final - le run porte juste un marqueur
+    // `_pendingPageNumber` (format demandé), résolu plus tard par
+    // resolvePageNumberPlaceholders à CHAQUE appel du callback header/footer
+    // natif de pdfmake (une fois par page, currentPage/pageCount déjà connus
+    // à ce stade - pas besoin d'une passe de mesure séparée comme pour le
+    // sommaire/les images en calque).
+    if (node.classList.contains('page-number-badge')) {
+      return [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }];
+    }
     if (node.tagName === 'IMG') {
       if (images && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) {
         images.push(pdfImageFromNode(node));
@@ -1869,8 +1892,43 @@ const PdfExport = (function () {
     return wrapper.innerHTML;
   }
 
-  function buildNativeDocDefinition(content, filename) {
-    return { pageSize: 'A4', pageOrientation: 'portrait', pageMargins: [28, 28, 28, 28], defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE }, content, info: { title: filename || 'publipostage' } };
+  // `headerFooterChunks` (cf. buildHeaderFooterPdfChunks) - threadé à
+  // l'IDENTIQUE dans les DEUX appels de cette fonction (passe de mesure
+  // jetable dans resolveNativePdfContent ET passe réelle dans
+  // buildNativePdfDocDefinition) pour que la pagination TOC/images-ancrées
+  // calculée pendant la mesure corresponde exactement au document final -
+  // sans ça, un en-tête/pied changerait la hauteur de page disponible entre
+  // les deux passes, et un titre/une image pourrait se retrouver sur une
+  // page différente entre la mesure et le rendu réel.
+  function buildNativeDocDefinition(content, filename, headerFooterChunks) {
+    const hf = headerFooterChunks || { enabled: false, topExtraPt: 0, bottomExtraPt: 0 };
+    const topMarginPt = PAGE_MARGIN_PT + (hf.topExtraPt || 0);
+    const bottomMarginPt = PAGE_MARGIN_PT + (hf.bottomExtraPt || 0);
+    const doc = {
+      pageSize: 'A4', pageOrientation: 'portrait',
+      pageMargins: [PAGE_MARGIN_PT, topMarginPt, PAGE_MARGIN_PT, bottomMarginPt],
+      defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
+      content, info: { title: filename || 'publipostage' },
+    };
+    // pdfmake appelle header/footer PAR PAGE au moment de peindre (currentPage
+    // ET pageCount déjà connus, cf. resolvePageNumberPlaceholders) - "première
+    // page différente" se résout ICI (currentPage === 1), pas dans
+    // buildHeaderFooterPdfChunks qui se contente de préparer les 2 variantes.
+    if (hf.enabled && (hf.header.default || hf.header.first)) {
+      doc.header = (currentPage, pageCount) => {
+        const chunk = (currentPage === 1 && hf.differentFirstPage) ? hf.header.first : hf.header.default;
+        if (!chunk) return null;
+        return { margin: [PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5, PAGE_MARGIN_PT, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
+      };
+    }
+    if (hf.enabled && (hf.footer.default || hf.footer.first)) {
+      doc.footer = (currentPage, pageCount) => {
+        const chunk = (currentPage === 1 && hf.differentFirstPage) ? hf.footer.first : hf.footer.default;
+        if (!chunk) return null;
+        return { margin: [PAGE_MARGIN_PT, 0, PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
+      };
+    }
+    return doc;
   }
 
   // Convertit une image en calque en attente (cf. resolvePendingImageAnchors)
@@ -1883,7 +1941,14 @@ const PdfExport = (function () {
   // document, ou ancres sur des pages différentes - cas limite non traité
   // plus finement, rare en pratique) ; repli final purement local si aucune
   // ancre n'a pu être résolue (document sans aucun autre bloc mesurable).
-  function resolveImageAbsolutePosition(a) {
+  // `topMarginPt` : marge haute RÉELLE de la page (peut dépasser PAGE_MARGIN_PT
+  // si un en-tête est actif, cf. buildNativeDocDefinition/buildHeaderFooterPdfChunks,
+  // incrément 2.2) - seul le tout dernier repli ci-dessous (aucune ancre du
+  // tout résolue) en a besoin ; les autres branches se basent sur des
+  // positions déjà mesurées par pdfmake lui-même (aboveTop/belowTop/
+  // containerTop), qui reflètent déjà la vraie marge sans calcul manuel.
+  function resolveImageAbsolutePosition(a, topMarginPt) {
+    const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
     // `imgLeftPx` est page-relative (bloc englobant CSS = `.tiptap`) pour le
     // flux principal ET une colonne de zone 2-colonnes (aucune des deux ne
     // pose son propre `position:relative`) - X s'y calcule directement depuis
@@ -1912,7 +1977,7 @@ const PdfExport = (function () {
     }
     if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT };
     if (a.belowTop != null) return { x: xPt, y: a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT };
-    return { x: xPt, y: PAGE_MARGIN_PT + a.imgTopPx * PX_TO_PT };
+    return { x: xPt, y: effectiveTopMarginPt + a.imgTopPx * PX_TO_PT };
   }
 
   // S'il y a un sommaire ET/OU des images en calque en attente, une 1ère
@@ -1938,12 +2003,17 @@ const PdfExport = (function () {
   // complet pour une colonne, qui a déjà son propre passage par
   // buildPdfContentFromRoot ; raccourci "container" - le paragraphe hôte lui-
   // même - pour une cellule, plus simple, cf. attributeNestedPendingImages).
-  async function resolveNativePdfContent(inlinedHtml, filename) {
+  async function resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks) {
     let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
     const hasPendingImages = (content._pendingImages || []).length > 0;
+    // Marge haute réelle de CETTE passe - doit être identique à celle de la
+    // passe réelle (buildNativePdfDocDefinition, même headerFooterChunks
+    // threadé aux deux endroits) pour que la pagination mesurée ici (sommaire/
+    // ancres d'image) corresponde exactement au document final.
+    const topMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
     if (hasToc || hasPendingImages) {
-      await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename)).getBuffer(() => resolve()); });
+      await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename, headerFooterChunks)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
       // Capturé AVANT de reconstruire : htmlToPdfContent recrée des objets
       // neufs, ces références deviendraient obsolètes ensuite.
@@ -1970,7 +2040,7 @@ const PdfExport = (function () {
       });
       (content._pendingImages || []).forEach((p, i) => {
         const a = resolvedAnchors[i];
-        p.image.absolutePosition = resolveImageAbsolutePosition(a);
+        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt);
         delete p.image._pendingImgNode;
         const layer = p.image._pendingLayer;
         delete p.image._pendingLayer;
@@ -2038,7 +2108,108 @@ const PdfExport = (function () {
     if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
-  async function buildNativePdfDocDefinition(resolvedHtml, filename) {
+  // Numéro de page (en-tête/pied de page, incrément 2.2) - pure, aucun accès
+  // au DOM/à pdfmake.
+  function formatPageNumberText(format, currentPage, pageCount) {
+    if (format === 'page-n') return 'Page ' + currentPage;
+    if (format === 'n-slash-total') return currentPage + '/' + pageCount;
+    return String(currentPage);
+  }
+  // Clone-et-parcours (même forme que stripUnresolvedPendingImages ci-dessus)
+  // remplaçant chaque run marqué `_pendingPageNumber` (posé par inlineRuns)
+  // par son texte résolu pour LA page en cours d'impression - appelé à
+  // CHAQUE invocation du callback header/footer natif de pdfmake (une fois
+  // par page). `currentPage`/`pageCount` sont déjà connus nativement à ce
+  // stade (pdfmake a déjà achevé la pagination complète du document avant
+  // de peindre le premier en-tête/pied) : contrairement au sommaire/aux
+  // images en calque, ÇA NE NÉCESSITE PAS de 2ᵉ passe de mesure séparée.
+  function resolvePageNumberPlaceholders(node, currentPage, pageCount) {
+    if (Array.isArray(node)) return node.map(n => resolvePageNumberPlaceholders(n, currentPage, pageCount));
+    if (!node || typeof node !== 'object') return node;
+    const out = Object.assign({}, node);
+    if (out._pendingPageNumber) {
+      out.text = formatPageNumberText(out._pendingPageNumber.format, currentPage, pageCount);
+      delete out._pendingPageNumber;
+    } else if (Array.isArray(out.text)) {
+      out.text = out.text.map(t => resolvePageNumberPlaceholders(t, currentPage, pageCount));
+    }
+    if (out.columns) out.columns = resolvePageNumberPlaceholders(out.columns, currentPage, pageCount);
+    if (out.stack) out.stack = resolvePageNumberPlaceholders(out.stack, currentPage, pageCount);
+    return out;
+  }
+
+  // Convertit les 4 fragments d'en-tête/pied (déjà résolus - #Variable comme
+  // le corps, cf. resolveHeaderFooterVariables/exportCurrentRecord) en
+  // contenu pdfmake, UNE SEULE FOIS - réutilisé tel quel par les DEUX appels
+  // de buildNativeDocDefinition (passe de mesure jetable ET passe réelle,
+  // cf. resolveNativePdfContent) pour que la pagination TOC/images-ancrées
+  // calculée pendant la mesure jetable corresponde exactement au document
+  // final (mêmes marges de page dans les deux cas). La hauteur RÉELLEMENT
+  // rendue de chaque fragment (mesurée hors-écran, même mécanisme que
+  // htmlToPdfContent) dimensionne les marges haute/basse de page - un en-tête
+  // d'une seule ligne ne réserve pas la même place qu'un en-tête de 3 lignes.
+  const HEADER_FOOTER_GAP_PT = 10; // espace entre le contenu en-tête/pied et le corps du document
+  async function buildHeaderFooterPdfChunks(headerFooterData) {
+    const empty = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
+    if (!headerFooterData || !headerFooterData.enabled) return empty;
+    async function resolveZone(html) {
+      if (!html || !html.replace(/<[^>]*>/g, '').trim()) return { content: null, heightPt: 0 };
+      const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
+      const measureRoot = document.createElement('div');
+      measureRoot.innerHTML = html;
+      const detach = attachMeasureHost(measureRoot, CONTENT_WIDTH_PX);
+      const heightPt = measureRoot.getBoundingClientRect().height * PX_TO_PT;
+      detach();
+      return { content, heightPt };
+    }
+    const differentFirstPage = !!headerFooterData.differentFirstPage;
+    const headerDefault = await resolveZone(headerFooterData.header && headerFooterData.header.default);
+    const headerFirst = differentFirstPage ? await resolveZone(headerFooterData.header && headerFooterData.header.first) : { content: null, heightPt: 0 };
+    const footerDefault = await resolveZone(headerFooterData.footer && headerFooterData.footer.default);
+    const footerFirst = differentFirstPage ? await resolveZone(headerFooterData.footer && headerFooterData.footer.first) : { content: null, heightPt: 0 };
+    // Une SEULE hauteur de marge par zone (pas une par page/variante) : la
+    // marge de page ne peut pas varier d'une page à l'autre chez pdfmake,
+    // donc "page 1 différente" ne change que le CONTENU, jamais la place
+    // réservée - le plus grand des deux fragments dimensionne la marge des
+    // DEUX variantes, pour qu'aucune des deux ne déborde sur le corps.
+    const headerHeightPt = Math.max(headerDefault.heightPt, headerFirst.heightPt);
+    const footerHeightPt = Math.max(footerDefault.heightPt, footerFirst.heightPt);
+    return {
+      enabled: true,
+      differentFirstPage,
+      header: { default: headerDefault.content, first: headerFirst.content },
+      footer: { default: footerDefault.content, first: footerFirst.content },
+      topExtraPt: headerHeightPt ? headerHeightPt + HEADER_FOOTER_GAP_PT : 0,
+      bottomExtraPt: footerHeightPt ? footerHeightPt + HEADER_FOOTER_GAP_PT : 0,
+    };
+  }
+
+  // #Variable des 4 fragments d'en-tête/pied résolus ICI, au même niveau que
+  // le corps du document (exportCurrentRecord résout déjà celui-ci via
+  // ReaderMode.preview juste avant) - pas plus bas dans la chaîne
+  // (buildNativePdfDocDefinition/buildHeaderFooterPdfChunks), pour que
+  // getNativePdfBlob (utilisé pour les tests locaux, cf. mémoire "Verify test
+  // harness signature") reste appelable avec du HTML DÉJÀ résolu et sans
+  // avoir besoin d'un vrai enregistrement Grist à ce niveau, exactement comme
+  // pour le corps.
+  async function resolveHeaderFooterVariables(headerFooterData, currentTableId, record) {
+    if (!headerFooterData || !headerFooterData.enabled) return headerFooterData;
+    const resolveZone = html => (html ? ReaderMode.preview(html, currentTableId, record) : html);
+    return {
+      enabled: true,
+      differentFirstPage: !!headerFooterData.differentFirstPage,
+      header: {
+        default: await resolveZone(headerFooterData.header && headerFooterData.header.default),
+        first: await resolveZone(headerFooterData.header && headerFooterData.header.first),
+      },
+      footer: {
+        default: await resolveZone(headerFooterData.footer && headerFooterData.footer.default),
+        first: await resolveZone(headerFooterData.footer && headerFooterData.footer.first),
+      },
+    };
+  }
+
+  async function buildNativePdfDocDefinition(resolvedHtml, filename, headerFooterData) {
     if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.');
     // Attend que Roboto (police de mesure, cf. css/roboto-fonts.css) soit
     // réellement chargée avant toute mesure de mise en page - sans ça, un
@@ -2050,15 +2221,16 @@ const PdfExport = (function () {
     // fichier, alors que la sensibilité aux polices y est un thème récurrent.
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* repli silencieux */ } }
     const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
-    const content = await resolveNativePdfContent(inlinedHtml, filename);
-    return buildNativeDocDefinition(content, filename);
+    const headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData);
+    const content = await resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks);
+    return buildNativeDocDefinition(content, filename, headerFooterChunks);
   }
-  async function exportNativePdf(resolvedHtml, filename) {
-    const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename);
+  async function exportNativePdf(resolvedHtml, filename, headerFooterData) {
+    const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename, headerFooterData);
     window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf');
   }
-  async function getNativePdfBlob(resolvedHtml, filename) {
-    const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename);
+  async function getNativePdfBlob(resolvedHtml, filename, headerFooterData) {
+    const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename, headerFooterData);
     return new Promise((resolve, reject) => {
       try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
     });
@@ -2169,7 +2341,7 @@ const PdfExport = (function () {
     return { container, opt };
   }
 
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality) {
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData) {
     if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
@@ -2179,7 +2351,13 @@ const PdfExport = (function () {
       try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
       return;
     }
-    await exportNativePdf(resolvedHtml, filename);
+    // En-tête/pied de page : uniquement le chemin vectoriel natif pour cet
+    // incrément (2.2), ni l'impression navigateur ni les qualités raster
+    // ci-dessus (qui réutilisent respectivement les vraies feuilles de style
+    // et html2canvas, aucun des deux mécanismes n'a de notion de header/
+    // footer natif de page - hors scope de cet incrément, cf. le plan).
+    const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
+    await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
   return { exportCurrentRecord, getNativePdfBlob };
