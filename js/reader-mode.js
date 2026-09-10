@@ -15,8 +15,139 @@ const ReaderMode = (function () {
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
+  // === Aperçu paginé réel - mode Lecture (incrément 2.4) ===
+  // Même principe que v2/js/editor.js:renderPaginationOverlay (incrément
+  // 2.3), dupliqué plutôt qu'importé - ce fichier est partagé V1/V2, sans
+  // mécanisme de module avec v2/js/editor.js/pdf-export.js (même tolérance à
+  // la duplication que le reste de ce projet pour ce genre de petites
+  // constantes/fonctions, cf. la numérotation des titres). Plus simple ici :
+  // contenu statique déjà résolu (vrai enregistrement Grist), pas de
+  // débounce nécessaire - calculé une seule fois par rendu.
+  const PT_TO_PX = 96 / 72;
+  const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
+  const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .reader-content en Aperçu A4 (css/editor-v2.css)
+  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, v2/js/pdf-export.js
+  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, v2/js/pdf-export.js
+
+  function measureHtmlHeightPx(html) {
+    if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
+    const host = document.createElement('div');
+    host.className = 'reader-content';
+    host.innerHTML = html;
+    // min-height:0 : .reader-content n'a pas le min-height:200px de .tiptap
+    // (css/editor-v2.css, propre à l'éditeur VIDE) - conservé quand même par
+    // cohérence/robustesse avec la même mesure côté éditeur/export PDF.
+    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    document.body.appendChild(host);
+    const h = host.getBoundingClientRect().height;
+    document.body.removeChild(host);
+    return h;
+  }
+  function computePageBreakOffsets(rootEl, pageContentHeightPx) {
+    const rootRect = rootEl.getBoundingClientRect();
+    const offsets = [];
+    let consumed = 0;
+    Array.from(rootEl.children).forEach(child => {
+      const rect = child.getBoundingClientRect();
+      const top = rect.top - rootRect.top;
+      const height = rect.height;
+      if (child.classList.contains('page-break-marker')) { offsets.push(top + height); consumed = 0; return; }
+      if (consumed > 0 && consumed + height > pageContentHeightPx) { offsets.push(top); consumed = height; }
+      else { consumed += height; }
+    });
+    return offsets;
+  }
+  function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
+    const host = document.createElement('div');
+    host.innerHTML = html || '';
+    host.querySelectorAll('.page-number-badge').forEach(badge => {
+      const format = badge.getAttribute('data-format') || 'n';
+      badge.textContent = format === 'page-n' ? ('Page ' + pageNum) : format === 'n-slash-total' ? (pageNum + '/' + totalPages) : String(pageNum);
+    });
+    return host.innerHTML;
+  }
+  // #Variable d'un fragment d'en-tête/pied - même résolution que le corps
+  // (badges .var-badge remplacés par leur valeur réelle), avec le VRAI
+  // enregistrement Grist affiché en mode Lecture.
+  async function resolveHeaderFooterZone(html, tableId, record) {
+    if (!html) return html;
+    const wrapper = document.createElement('div'); wrapper.innerHTML = html;
+    const badges = wrapper.querySelectorAll('.var-badge');
+    await Promise.all(Array.from(badges).map(async badge => {
+      const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
+      const format = parseBadgeFormat(badge);
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
+    }));
+    return wrapper.innerHTML;
+  }
+  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux
+  // normal - jamais de recouvrement de texte réel pour l'en-tête de la page
+  // 1/le pied de la dernière page) et les bandes "couture" aux limites
+  // intermédiaires (position:absolute, PEUVENT recouvrir un peu de texte
+  // pile à la limite - résidu assumé, même principe que v2/js/editor.js).
+  async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
+    if (!headerFooterData || !headerFooterData.enabled) return;
+    if (!container.classList.contains('a4-preview')) return;
+    const differentFirstPage = !!headerFooterData.differentFirstPage;
+    const headerDefault = await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record);
+    const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record) : null;
+    const footerDefault = await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record);
+    const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
+    const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
+    const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
+
+    const headerHeightPx = Math.max(measureHtmlHeightPx(headerDefault), measureHtmlHeightPx(headerFirst));
+    const footerHeightPx = Math.max(measureHtmlHeightPx(footerDefault), measureHtmlHeightPx(footerFirst));
+    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
+    const totalPages = offsets.length + 1;
+
+    // Les résolutions #Variable ci-dessus sont asynchrones - un rendu PLUS
+    // RÉCENT (nouvel enregistrement Grist sélectionné entre-temps) peut avoir
+    // déjà repeint `container` (render() vide `container.innerHTML` à chaque
+    // appel) pendant l'attente : `wrapper` ne serait alors plus attaché du
+    // tout, et `container.insertBefore(edgeTop, wrapper)` lèverait une
+    // exception (référence absente du DOM) - filet de sécurité générique,
+    // moins fragile qu'un simple comparateur de génération ici.
+    if (!wrapper.isConnected) return;
+
+    const edgeTop = document.createElement('div');
+    edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
+    edgeTop.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
+    container.insertBefore(edgeTop, wrapper);
+    const edgeBottom = document.createElement('div');
+    edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
+    edgeBottom.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
+    container.appendChild(edgeBottom);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'v2-pagination-overlay';
+    container.appendChild(overlay);
+    const wrapperOffsetTop = wrapper.offsetTop;
+    const wrapperOffsetLeft = wrapper.offsetLeft;
+    const wrapperWidth = wrapper.getBoundingClientRect().width;
+    offsets.forEach((offsetPx, i) => {
+      const pageEnding = i + 1; const pageStarting = i + 2;
+      const footerText = footerForPage(pageEnding);
+      const headerText = headerForPage(pageStarting);
+      if (!footerText && !headerText) return;
+      const seam = document.createElement('div');
+      seam.className = 'v2-page-band v2-page-seam';
+      if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages); seam.appendChild(f); }
+      const divider = document.createElement('div'); divider.className = 'v2-page-seam-divider'; seam.appendChild(divider);
+      if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages); seam.appendChild(h); }
+      overlay.appendChild(seam);
+      seam.style.left = wrapperOffsetLeft + 'px';
+      seam.style.width = wrapperWidth + 'px';
+      const seamHeight = seam.getBoundingClientRect().height;
+      seam.style.top = (wrapperOffsetTop + offsetPx - seamHeight) + 'px';
+    });
+  }
+
   let renderGeneration = 0;
-  async function render(htmlContent, tableId, record) {
+  async function render(htmlContent, tableId, record, headerFooterData) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
     if (!record) { container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
@@ -44,6 +175,7 @@ const ReaderMode = (function () {
     container.innerHTML = '';
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.'; container.appendChild(warn); }
     container.appendChild(wrapper);
+    await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
   }
   // Remplace chaque placeholder .toc-marker (posé par l'éditeur) par la
   // vraie liste des titres de premier niveau - numérotée avec le même schéma

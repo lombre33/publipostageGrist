@@ -151,7 +151,7 @@
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
-    await ReaderMode.render(html, tableId, record);
+    await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
   async function onExportPdf() {

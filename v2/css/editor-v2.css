@@ -353,14 +353,17 @@
    lui-même (fond blanc + liseré 1px) pour rester visuellement cohérentes.
    `position: relative` déjà posée sur la règle de base de #editor-container
    plus haut dans ce fichier - nécessaire pour ancrer `.v2-pagination-overlay`
-   en position:absolute. */
-#editor-container.a4-preview .v2-page-edge-spacer {
+   en position:absolute. Même mécanisme réutilisé en mode Lecture (incrément
+   2.4, cf. js/reader-mode.js) - #reader-container a déjà `position:relative`
+   (css/style.css, partagé V1), d'où les sélecteurs ci-dessous couvrant les
+   DEUX conteneurs. */
+#editor-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-edge-spacer {
   box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 0 37.33px;
   background: #fff; box-shadow: 0 0 0 1px #d7dde3; font-size: 10.5px; line-height: 1.42; color: #1b2430;
 }
-#editor-container.a4-preview .v2-page-edge-spacer:empty { display: none; }
-#editor-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
-#editor-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
+#editor-container.a4-preview .v2-page-edge-spacer:empty, #reader-container.a4-preview .v2-page-edge-spacer:empty { display: none; }
+#editor-container.a4-preview .v2-page-edge-top, #reader-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
+#editor-container.a4-preview .v2-page-edge-bottom, #reader-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
 .v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; pointer-events: none; z-index: 4; }
 .v2-page-band { position: absolute; box-sizing: border-box; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 2px 10px rgba(20, 28, 46, .12); font-size: 10.5px; line-height: 1.42; color: #1b2430; }
 .v2-page-band-header, .v2-page-band-footer { padding: 6px 37.33px; }
