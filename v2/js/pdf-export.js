@@ -237,6 +237,21 @@ const PdfExport = (function () {
     const host = node.closest('.pdf-measure-host');
     if (!host) return 0;
     const hostLeft = host.getBoundingClientRect().left;
+    // Neutralise une contamination par un flottement CSS (image "au coeur du
+    // texte" à gauche/droite, cf. floatedImageParagraphFrom) qui déborde
+    // depuis un FRÈRE PRÉCÉDENT : sans `clear`, ce bloc démarre visuellement
+    // décalé (poussé par le flottement, habillage normal du navigateur) -
+    // mesuré ici à tort comme un retrait sémantique (liste/citation), ce qui
+    // pose un retrait FIXE sur tout le paragraphe (marge pdfmake, pas par
+    // ligne) au lieu de laisser chaque ligne s'enrouler séparément - le
+    // paragraphe entier reste alors décalé même une fois réellement passé
+    // sous l'image, comme un bloc rigide plutôt que ligne à ligne (signalé
+    // par l'utilisateur). L'habillage réel du texte à côté de l'image reste
+    // géré à part par floatedImageParagraphFrom, pour le seul paragraphe qui
+    // CONTIENT l'image - `clear` ici ne touche que la mesure des paragraphes
+    // SUIVANTS, sans affecter leur rendu réel (retiré aussitôt après).
+    const previousClear = node.style.clear;
+    node.style.clear = 'both';
     let leftPx;
     if (mode === 'box') {
       leftPx = node.getBoundingClientRect().left;
@@ -245,7 +260,7 @@ const PdfExport = (function () {
         acceptNode: n => (n.nodeValue && n.nodeValue.trim()) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
       });
       const textNode = walker.nextNode();
-      if (!textNode) return 0;
+      if (!textNode) { node.style.clear = previousClear; return 0; }
       // Neutralise temporairement l'alignement du bloc pendant la mesure -
       // un bloc centré/aligné à droite pousse son texte loin du bord gauche
       // du large hôte de mesure, ce qui n'est PAS un retrait réel.
@@ -257,6 +272,7 @@ const PdfExport = (function () {
       leftPx = range.getBoundingClientRect().left;
       node.style.textAlign = previousAlign;
     }
+    node.style.clear = previousClear;
     return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
   }
 
