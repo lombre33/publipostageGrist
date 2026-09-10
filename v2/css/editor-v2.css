@@ -223,6 +223,15 @@
    visuel, la V1 n'avait pas cet aperçu en direct dans l'éditeur lui-même. */
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Petit repère visuel (point plein en haut à droite de la bulle) quand un
+   format nombre/date a été choisi via la barre flottante dédiée (cf.
+   v2/js/editor.js:wireVariableFloatingToolbar) - sans lui, rien ne
+   distingue une bulle formatée d'une bulle par défaut tant qu'on ne l'a
+   pas cliquée. `.var-badge` lui-même reste dans css/style.css (partagé
+   V1), scopé ici à .tiptap pour ne toucher que l'éditeur V2. */
+.tiptap .var-badge { position: relative; }
+.tiptap .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
+
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 /* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle
    générique `#toolbar-top button::before` de css/style.css (posée pour les

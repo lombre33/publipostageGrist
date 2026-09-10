@@ -68,19 +68,30 @@ const Editor = (function () {
         // un doublon constaté en conditions réelles. Ces attributs ne
         // doivent exister QUE dans le JSON interne du nœud ProseMirror.
         const noBareRender = { default: null, renderHTML: () => ({}) };
-        return { table: noBareRender, column: noBareRender, key: noBareRender };
+        // `format` : { type:'number', style, decimals, currency, words } ou
+        // { type:'date', preset } - choisi via la barre flottante (cf.
+        // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a
+        // rien réglé (comportement historique, String(val) brut).
+        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender };
       },
       parseHTML() {
         return [{
           tag: 'span.var-badge',
-          getAttrs: el => ({ table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key') }),
+          getAttrs: el => {
+            let format = null;
+            const raw = el.getAttribute('data-format');
+            if (raw) { try { format = JSON.parse(raw); } catch (e) { format = null; } }
+            return { table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'), format };
+          },
         }];
       },
       renderHTML({ HTMLAttributes, node }) {
-        return ['span', mergeAttributes(HTMLAttributes, {
+        const attrs = mergeAttributes(HTMLAttributes, {
           class: 'var-badge', contenteditable: 'false',
           'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
-        }), '#' + node.attrs.key];
+        });
+        if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+        return ['span', attrs, '#' + node.attrs.key];
       },
     });
   }
@@ -929,8 +940,11 @@ const Editor = (function () {
     // Un <input type=range> (curseur d'opacité de la toolbar image) a besoin
     // de son évènement 'input' propre - un simple mousedown suffit aux
     // boutons mais volerait la valeur en cours de glissement du curseur.
+    // `[data-role]` (pas `input[data-role]`) : un <select>/<input type=text>
+    // (barre de formatage nombre/date, cf. wireVariableFloatingToolbar) émet
+    // aussi 'input' - restreindre au tag <input> les excluait silencieusement.
     if (onInput) el.addEventListener('input', (event) => {
-      const input = event.target.closest('input[data-role]');
+      const input = event.target.closest('[data-role]');
       if (input) onInput(input.dataset.role, input.value);
     });
     document.body.appendChild(el);
@@ -1332,6 +1346,103 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
+  // Barre flottante de formatage nombre/date d'une bulle #Variable, sur le
+  // même modèle que celle de l'image (createFloatingPanel, sélection réelle
+  // du nœud - cf. commentaire de selectedImageNode ci-dessus sur le piège
+  // instanceof/duck-typing, même prudence ici). Le TYPE de colonne Grist
+  // (GristAPI.getColumnType) détermine lequel des 2 sous-panneaux (nombre/
+  // date) s'affiche - une colonne Texte/Référence n'a rien à formater, la
+  // barre reste cachée. Rien n'est stocké sur le nœud tant que l'utilisateur
+  // n'a rien choisi (`format: null` par défaut, cf. createVarBadgeNode) :
+  // formatValue() garde alors son comportement historique (String(val) brut).
+  function wireVariableFloatingToolbar() {
+    const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${p.label}</option>`).join('');
+    const html = [
+      '<div data-var-panel="number">',
+      '<span class="v2-varfmt-seg">',
+      '<button data-action="num-style:fr" title="Français : 1 234,56">FR</button>',
+      '<button data-action="num-style:us" title="Anglo-saxon : 1,234.56">US</button>',
+      '<button data-action="num-style:none" title="Sans séparateur de milliers">—</button>',
+      '</span>',
+      '<select data-role="num-decimals" title="Décimales"><option value="">Auto</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>',
+      '<input type="text" data-role="num-currency" placeholder="Devise" title="Devise (€, $, personnalisé…)" maxlength="6">',
+      '<span class="v2-floating-sep"></span>',
+      '<button data-action="num-words" title="Écriture en toutes lettres (nombres entiers)">Lettres</button>',
+      '</div>',
+      '<div data-var-panel="date" hidden>',
+      `<select data-role="date-preset" title="Format de date">${dateOptions}</select>`,
+      '</div>',
+    ].join('');
+    const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
+
+    function selectedVarBadgeNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'varBadge') ? node : null;
+    }
+    function updateSelectedBadge(patch) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      const { state, view } = editor;
+      const pos = state.selection.from;
+      const format = Object.assign({}, node.attrs.format, patch);
+      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { format }));
+      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+      view.dispatch(tr);
+    }
+    function onAction(action) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
+      if (action === 'num-words') {
+        const current = node.attrs.format || {};
+        updateSelectedBadge({ type: 'number', words: !current.words });
+      }
+    }
+    function onInput(role, value) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
+      if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
+      if (role === 'date-preset') { updateSelectedBadge({ type: 'date', preset: value }); return; }
+    }
+
+    function syncState() {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      const format = node.attrs.format || {};
+      const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
+      const style = format.type === 'number' ? (format.style || 'fr') : 'fr';
+      setActive('num-style:fr', style === 'fr');
+      setActive('num-style:us', style === 'us');
+      setActive('num-style:none', style === 'none');
+      setActive('num-words', format.type === 'number' && !!format.words);
+      panel.el.querySelector('[data-var-panel="number"]').classList.toggle('v2-varfmt-words-active', format.type === 'number' && !!format.words);
+      const decimalsSelect = panel.el.querySelector('select[data-role="num-decimals"]');
+      if (decimalsSelect && document.activeElement !== decimalsSelect) decimalsSelect.value = (format.type === 'number' && format.decimals != null) ? String(format.decimals) : '';
+      const currencyInput = panel.el.querySelector('input[data-role="num-currency"]');
+      if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
+      const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
+      if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
+    }
+
+    const check = () => {
+      const node = selectedVarBadgeNode();
+      if (!node) { panel.hide(); return; }
+      const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
+      const isNumber = type === 'Numeric' || type === 'Int';
+      const isDate = type === 'Date' || type === 'DateTime';
+      if (!isNumber && !isDate) { panel.hide(); return; }
+      panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
+      panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      if (!dom) { panel.hide(); return; }
+      syncState();
+      panel.show(dom);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
+  }
+
   // Même vérification qu'en V1 (js/editor.js:436-445) : un fetch() sur la
   // même URL que pdf-export.js utilisera pour inliner l'image en base64 à
   // l'export - si ça échoue (serveur sans en-tête CORS permissif), l'export
@@ -1462,6 +1573,7 @@ const Editor = (function () {
     wireColorPickers();
     wireTableFloatingToolbar();
     wireImageFloatingToolbar();
+    wireVariableFloatingToolbar();
     editor.on('selectionUpdate', syncToolbarState);
     editor.on('transaction', syncToolbarState);
     return editor;

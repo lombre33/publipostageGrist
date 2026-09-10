@@ -254,15 +254,27 @@ const Variables = (function () {
   // configurées (règle singleton/correspondance, cf. GristAPI.getLinkRule) -
   // y compris leur CONFIGURATION à l'insertion, cf. ensureLinkConfigured/
   // showLinkConfigModal plus bas (portées de la V1 juste après ce bloc).
-  function formatValue(val) { if (val === null || val === undefined) return ''; if (Array.isArray(val)) return val.join(', '); return String(val); }
+  // `format` (optionnel) = attribut `format` du nœud varBadge (cf.
+  // v2/js/editor.js:createVarBadgeNode), déjà désérialisé par l'appelant
+  // (ReaderMode, cf. js/reader-mode.js:parseBadgeFormat) - { type:'number',
+  // style, decimals, currency, words } ou { type:'date', preset }. `null`/
+  // absent = comportement historique (String(val) brut), aucun changement
+  // pour une bulle jamais passée par la barre flottante de formatage.
+  function formatValue(val, format) {
+    if (val === null || val === undefined) return '';
+    if (Array.isArray(val)) return val.join(', ');
+    if (format && format.type === 'number') return VariableFormat.formatNumber(val, format);
+    if (format && format.type === 'date') return VariableFormat.formatDate(val, format.preset);
+    return String(val);
+  }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
-  async function resolveWithRule(varTable, varColumn, rule, record) {
+  async function resolveWithRule(varTable, varColumn, rule, record, format) {
     if (rule.mode === 'singleton') {
       const rows = await GristAPI.fetchTableRows(varTable);
       if (!rows.length) return '';
       const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-      return formatValue(first[varColumn]);
+      return formatValue(first[varColumn], format);
     }
     const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
     if (sourceVal === undefined || sourceVal === null) return '';
@@ -272,16 +284,16 @@ const Variables = (function () {
       return sameValue(cibleVal, sourceVal);
     });
     if (!matches.length) return '';
-    return formatValue(matches.map(r => r[varColumn]));
+    return formatValue(matches.map(r => r[varColumn]), format);
   }
-  async function resolveVariable(varTable, varColumn, currentTableId, record) {
+  async function resolveVariable(varTable, varColumn, currentTableId, record, format) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     try {
       if (!record) return '';
       if (!resolvedTableId) return '[ERREUR: table courante indisponible]';
-      if (varTable === resolvedTableId) return formatValue(record[varColumn]);
+      if (varTable === resolvedTableId) return formatValue(record[varColumn], format);
       const rule = GristAPI.getLinkRule(varTable);
-      if (rule) return await resolveWithRule(varTable, varColumn, rule, record);
+      if (rule) return await resolveWithRule(varTable, varColumn, rule, record, format);
       const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
       if (refCols.length === 0) return `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]`;
       const refId = record[refCols[0]];
@@ -289,7 +301,7 @@ const Variables = (function () {
       const rowId = unwrapRefValue(refId);
       const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
       if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
-      return formatValue(linkedRow[varColumn]);
+      return formatValue(linkedRow[varColumn], format);
     } catch (e) {
       console.error('[variables] échec résolution', e);
       return `[ERREUR: résolution de ${varTable}.${varColumn} impossible]`;

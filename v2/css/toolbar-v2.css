@@ -123,3 +123,28 @@
 .link-rule-btn-delete:hover { background: var(--danger-soft, #fbe9e9); border-color: var(--danger, #d84343); color: var(--danger, #d84343); }
 .link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
+
+/* === Barre flottante de formatage nombre/date d'une bulle #Variable (cf.
+   v2/js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
+   .v2-floating-toolbar (même positionnement/ombre que les barres image/
+   tableau) ; ce qui suit ne couvre que le CONTENU propre à cette barre
+   (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages
+   de date) - ses boutons ont besoin d'une largeur variable (libellés
+   texte), contrairement aux boutons icône-seule des autres barres
+   flottantes (d'où des sélecteurs plus spécifiques plutôt que de rouvrir
+   la règle générique). */
+.v2-varfmt-toolbar { align-items: center; }
+.v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; }
+.v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
+.v2-varfmt-seg { display: inline-flex; border: 1px solid var(--border, #d7dde3); border-radius: 4px; overflow: hidden; }
+.v2-varfmt-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
+.v2-varfmt-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
+.v2-varfmt-toolbar select, .v2-varfmt-toolbar input[type="text"] { height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12px; padding: 0 6px; background: #fff; color: #3a4452; }
+.v2-varfmt-toolbar input[data-role="num-currency"] { width: 56px; }
+.v2-varfmt-toolbar select[data-role="date-preset"] { width: 190px; }
+.v2-varfmt-toolbar button[data-action="num-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+/* Écriture en lettres active : séparateurs/décimales n'ont plus de sens
+   (cf. numberToWordsFr, limité aux entiers) - grisés, pas retirés (la
+   devise reste utilisable : "mille euros"). */
+[data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg,
+[data-var-panel="number"].v2-varfmt-words-active select[data-role="num-decimals"] { opacity: .4; pointer-events: none; }

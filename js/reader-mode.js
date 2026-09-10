@@ -1,6 +1,20 @@
 // Publipostage Grist — reader mode v1.1.2 — 2026-09-04
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
+  // Format nombre/date choisi via la barre flottante d'une bulle #Variable
+  // (v2 uniquement, cf. v2/js/editor.js:wireVariableFloatingToolbar) -
+  // sérialisé en JSON dans data-format par le nœud varBadge
+  // (v2/js/editor.js:createVarBadgeNode). Transmis en 5e argument à
+  // Variables.resolveVariable, qui l'ignore silencieusement côté V1 (sa
+  // propre resolveVariable ne déclare que 4 paramètres) - un seul point de
+  // lecture ici, partagé par render()/preview() ci-dessous, qui alimentent
+  // respectivement le mode Lecture et l'export PDF (PdfExport ne voit jamais
+  // les bulles brutes, preview() les a déjà toutes résolues avant).
+  function parseBadgeFormat(badge) {
+    const raw = badge.getAttribute('data-format');
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
   let renderGeneration = 0;
   async function render(htmlContent, tableId, record) {
     const renderId = ++renderGeneration;
@@ -17,7 +31,8 @@ const ReaderMode = (function () {
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
-      try { const value = await Variables.resolveVariable(table, column, tableId, record); return { badge, value, error: null }; }
+      const format = parseBadgeFormat(badge);
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format); return { badge, value, error: null }; }
       catch (e) { return { badge, value: '[ERREUR: ' + e.message + ']', error: e }; }
     }));
     for (const r of results) { const span = document.createElement('span'); span.textContent = r.value; span.className = 'resolved-var' + (r.error ? ' error-msg' : ''); if (r.error) hasError = true; r.badge.replaceWith(span); }
@@ -94,7 +109,7 @@ const ReaderMode = (function () {
   }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');
-    await Promise.all(Array.from(badges).map(async badge => { const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column'); try { const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {} }));
+    await Promise.all(Array.from(badges).map(async badge => { const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column'); const format = parseBadgeFormat(badge); try { const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {} }));
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
