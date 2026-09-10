@@ -5,6 +5,7 @@
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="../js/pdf-fonts.js?v=0.67"></script>
 <script src="../js/pdf-fonts-extra.js?v=0.67"></script>
 <!-- Import map : necessaire pour charger TipTap/ProseMirror sans bundler
@@ -74,7 +75,8 @@
       </label>
       <span class="bar-sep"></span>
       <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" style="min-width:220px;">
-      <button id="btn-export-pdf" title="Exporter en PDF (vectoriel)"><span class="btn-text">Exporter PDF</span></button>
+      <select id="v2-pdf-quality" class="compact-select" title="Qualité PDF" aria-label="Qualité d’export PDF"><option value="native" selected>Vectoriel (par défaut)</option><option value="browser-print">Impr. navigateur</option><option value="low">Basse qualité (compressé)</option><option value="ultra">Ultra HD (impression)</option></select>
+      <button id="btn-export-pdf" title="Exporter en PDF"><span class="btn-text">Exporter PDF</span></button>
       <span id="status-msg"></span>
     </div>
     <div id="v2-toolbar">
@@ -169,7 +171,7 @@
 <script src="js/variables.js?v=0.3"></script>
 <script src="js/icons.js?v=0.4"></script>
 <script src="js/editor.js?v=0.40"></script>
-<script src="js/pdf-export.js?v=0.56"></script>
-<script src="js/main.js?v=0.7"></script>
+<script src="js/pdf-export.js?v=0.57"></script>
+<script src="js/main.js?v=0.8"></script>
 </body>
 </html>

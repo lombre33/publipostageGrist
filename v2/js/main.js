@@ -109,7 +109,9 @@
     if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
     setStatus('Génération du PDF en cours...');
     try {
-      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate());
+      const qualitySelect = document.getElementById('v2-pdf-quality');
+      const quality = qualitySelect ? qualitySelect.value : 'native';
+      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality);
       setStatus('PDF généré.');
     } catch (e) {
       console.error(e);
