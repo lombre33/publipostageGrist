@@ -1472,7 +1472,8 @@ const Editor = (function () {
     set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
     set('v2-btn-align-right', 'alignRight'); set('v2-btn-align-justify', 'alignJustify');
     set('v2-btn-bullet', 'bulletList'); set('v2-btn-ordered', 'orderedList');
-    set('v2-btn-blockquote', 'blockquote'); set('v2-btn-table', 'table');
+    set('v2-btn-blockquote', 'blockquote'); set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
+    set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
@@ -1499,6 +1500,9 @@ const Editor = (function () {
     setActive('v2-btn-bullet', editor.isActive('bulletList'));
     setActive('v2-btn-ordered', editor.isActive('orderedList'));
     setActive('v2-btn-blockquote', editor.isActive('blockquote'));
+    const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
+    setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
+    setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -1508,6 +1512,16 @@ const Editor = (function () {
     const textStyleAttrs = editor.getAttributes('textStyle');
     setColorBar('v2-color-text-bar', textStyleAttrs.color || '#000000');
     setColorBar('v2-color-highlight-bar', textStyleAttrs.backgroundColor || null);
+    // Polices/tailles : les swatches de couleur ci-dessus étaient déjà
+    // synchronisés sur le curseur, mais PAS ces deux <select> (signalé par
+    // l'utilisateur - ex. curseur en Arial 15pt sans que la toolbar ne le
+    // montre). Valeur vide si aucun réglage explicite à cet endroit (retombe
+    // sur les placeholders "Police"/"Taille"), plutôt que de mentir en
+    // affichant une valeur par défaut arbitraire.
+    const fontSelect = document.getElementById('v2-font-select');
+    if (fontSelect) { const value = textStyleAttrs.fontFamily || ''; if (fontSelect.value !== value) fontSelect.value = value; }
+    const sizeSelect = document.getElementById('v2-size-select');
+    if (sizeSelect) { const value = textStyleAttrs.fontSize || ''; if (sizeSelect.value !== value) sizeSelect.value = value; }
   }
 
   async function init() {
@@ -1597,6 +1611,12 @@ const Editor = (function () {
     bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
     bind('v2-btn-ordered', () => editor.chain().focus().toggleOrderedList().run());
     bind('v2-btn-blockquote', () => editor.chain().focus().toggleBlockquote().run());
+    // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
+    // liste (cf. createTabNavigationExtension) - sans effet (no-op, jamais
+    // d'erreur) hors d'une liste, d'où l'état désactivé posé dans
+    // syncToolbarState plutôt qu'un masquage complet du bouton.
+    bind('v2-btn-outdent', () => editor.chain().focus().liftListItem('listItem').run());
+    bind('v2-btn-indent', () => editor.chain().focus().sinkListItem('listItem').run());
     // withHeaderRow: false - un tableau inséré n'a pas de style de première
     // ligne différent des autres (signalé par l'utilisateur : gras + fond
     // coloré inattendus par défaut, cf. aussi css/editor-v2.css).

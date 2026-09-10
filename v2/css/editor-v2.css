@@ -265,6 +265,13 @@
 /* État actif (ex. gras appliqué là où est le curseur) - absent jusqu'ici,
    cf. Editor.syncToolbarState dans v2/js/editor.js. */
 #v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
+/* Indenter/désindenter : sans effet hors d'une liste (cf. wireToolbar), donc
+   grisés plutôt que masqués quand inapplicables (Editor.syncToolbarState) -
+   discrets par défaut (bordure transparente, un peu plus petits) pour ne pas
+   concurrencer visuellement gras/italique/etc., comme demandé. */
+#v2-toolbar button.v2-btn-discreet { width: 26px; height: 26px; border-color: transparent; background: transparent; color: #6b7684; }
+#v2-toolbar button.v2-btn-discreet:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
+#v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
 #v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
 /* Bouton "split" couleur de police/surlignage/fond de cellule - icône +

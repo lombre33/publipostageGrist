@@ -32,6 +32,8 @@ const Icons = (function () {
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>',
     pageBreak: '<path d="M4 4h16v16H4z M4 10h16M10 4v16"/>',
     toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
+    indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
+    outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
     rowBefore: '<path d="M4 9h16M4 15h16M12 4v4"/>',
     rowAfter: '<path d="M4 9h16M4 15h16M12 16v4"/>',
     rowDel: '<path d="M4 9h16M4 15h16"/>',
