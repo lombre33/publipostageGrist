@@ -255,9 +255,9 @@ const PdfExport = (function () {
   // .tiptap : cf. css/editor-v2.css, volontairement scopé à la seule classe
   // pour que cette mesure fonctionne sans dépendre de l'ID du conteneur
   // éditeur réel) et la largeur de contenu du PDF.
-  function attachMeasureHost(root) {
+  function attachMeasureHost(root, widthPx) {
     root.classList.add('pdf-measure-host', 'tiptap');
-    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + CONTENT_WIDTH_PX + 'px; padding:0; margin:0; box-sizing:border-box;';
+    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + (widthPx || CONTENT_WIDTH_PX) + 'px; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(root);
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }
@@ -440,7 +440,7 @@ const PdfExport = (function () {
   // pour le flux principal) - sans ce paramètre, inlineRuns() les ignore
   // purement et simplement (une image dans une cellule de tableau disparaissait
   // donc silencieusement de l'export, signalé par l'utilisateur).
-  function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images) {
+  function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt) {
     if (line.inline) {
       let runs = [];
       line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle, images)); });
@@ -450,6 +450,24 @@ const PdfExport = (function () {
       return obj;
     }
     const node = line;
+    // Image "au coeur du texte" (flux normal, alignée gauche/droite) dans un
+    // <p>/<div> de cellule - même détection et même chemin que blockFrom
+    // pour le flux principal (floatedImageParagraphFrom), avec la largeur
+    // RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine page : sans
+    // cette branche, cellContentFrom n'avait AUCUN support d'habillage,
+    // l'image atterrissait systématiquement après tout le texte de la
+    // cellule (signalé cassé par l'utilisateur).
+    if (/^(P|DIV)$/.test(node.tagName)) {
+      const floatImgEl = Array.from(node.querySelectorAll('img.editor-image')).find(img => {
+        const align = img.getAttribute('data-align');
+        const layer = img.getAttribute('data-layer') || 'normal';
+        return layer === 'normal' && (align === 'left' || align === 'right');
+      });
+      if (floatImgEl) {
+        const floated = floatedImageParagraphFrom(node, false, cellWidthPt);
+        if (floated) return floated;
+      }
+    }
     const isLi = node.tagName === 'LI';
     const marker = isLi ? listMarkerFor(node) : '';
     const runs = trimEdgeWhitespace(isLi
@@ -469,7 +487,7 @@ const PdfExport = (function () {
   // pdfmake n'accepte pas d'image au milieu d'un tableau de `text`, donc une
   // image au milieu d'une phrase atterrit après tout le texte de la cellule,
   // pas exactement à sa place).
-  function cellContentFrom(cell) {
+  function cellContentFrom(cell, cellWidthPt) {
     const lines = [];
     collectCellLines(cell, lines);
     const images = [];
@@ -481,7 +499,11 @@ const PdfExport = (function () {
     }
     const cellAlign = alignment(cell);
     const cellBaseStyle = inheritedStyle(cell, { fontSize: DEFAULT_FONT_SIZE });
-    const stack = lines.map(line => cellLineToPdfObject(line, cellAlign, cellBaseStyle, images));
+    const stack = [];
+    lines.forEach(line => {
+      const obj = cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt);
+      if (Array.isArray(obj)) obj.forEach(o => stack.push(o)); else stack.push(obj);
+    });
     return { stack: stack.concat(images) };
   }
 
@@ -557,32 +579,6 @@ const PdfExport = (function () {
     const cellPadRightPt = cellCs ? (parseFloat(cellCs.paddingRight) || 0) * PX_TO_PT : 4.5;
     const cellPadTopPt = cellCs ? (parseFloat(cellCs.paddingTop) || 0) * PX_TO_PT : 3;
     const cellPadBottomPt = cellCs ? (parseFloat(cellCs.paddingBottom) || 0) * PX_TO_PT : 3;
-    const body = rawRows.map(row => {
-      const output = [];
-      cellsOf(row).forEach(cell => {
-        const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
-        let content;
-        try { content = cellContentFrom(cell); }
-        catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
-        // Pas de `margin` propre à la cellule : le seul inset appliqué est
-        // `layout.paddingLeft/Right/Top/Bottom` ci-dessous (le budget de
-        // largeur, cf. usableForColumnsPt, est déjà calculé en fonction de
-        // CE padding précisément - un margin en plus double-compterait un
-        // inset déjà pris en compte).
-        const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
-        if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
-        // Fond de cellule (TableCell/TableHeader.backgroundColor, cf.
-        // editor.js:withCellBackground) - pdfmake accepte `fillColor`
-        // directement sur l'objet cellule, symétrique à `color`/`background`
-        // sur un run de texte (inheritedStyle).
-        if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
-        if (colSpan > 1) pdfCell.colSpan = colSpan;
-        output.push(pdfCell);
-        for (let i = 1; i < colSpan; i += 1) output.push({});
-      });
-      while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
-      return output.slice(0, columnCount);
-    });
     const availableWidthPt = 595.28 - 56;
     const minColWidthPt = 12;
     // pdfmake ajoute paddingLeft+paddingRight (cf. `layout` plus bas) À CHAQUE
@@ -625,6 +621,39 @@ const PdfExport = (function () {
     // théorique au plus juste, quitte à couper très légèrement plus tôt que
     // strictement nécessaire.
     widths = widths.map(w => Math.max(minColWidthPt, w - spaceWidthPt() * 1.5));
+    // Construit APRÈS `widths` (pas avant) : une cellule contenant une image
+    // "au coeur du texte" a besoin de la largeur RÉELLE de sa colonne (voire
+    // la somme de plusieurs colonnes pour un colspan) pour habiller le texte
+    // correctement, cf. cellContentFrom/floatedImageParagraphFrom - sans
+    // cette largeur, ce calcul se basait sur la pleine largeur de page,
+    // signalé cassé par l'utilisateur.
+    const body = rawRows.map(row => {
+      const output = [];
+      cellsOf(row).forEach(cell => {
+        const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
+        const cellWidthPt = widths.slice(output.length, output.length + colSpan).reduce((sum, w) => sum + w, 0) || null;
+        let content;
+        try { content = cellContentFrom(cell, cellWidthPt); }
+        catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
+        // Pas de `margin` propre à la cellule : le seul inset appliqué est
+        // `layout.paddingLeft/Right/Top/Bottom` ci-dessous (le budget de
+        // largeur, cf. usableForColumnsPt, est déjà calculé en fonction de
+        // CE padding précisément - un margin en plus double-compterait un
+        // inset déjà pris en compte).
+        const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
+        if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
+        // Fond de cellule (TableCell/TableHeader.backgroundColor, cf.
+        // editor.js:withCellBackground) - pdfmake accepte `fillColor`
+        // directement sur l'objet cellule, symétrique à `color`/`background`
+        // sur un run de texte (inheritedStyle).
+        if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
+        if (colSpan > 1) pdfCell.colSpan = colSpan;
+        output.push(pdfCell);
+        for (let i = 1; i < colSpan; i += 1) output.push({});
+      });
+      while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
+      return output.slice(0, columnCount);
+    });
     const table = {
       table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] },
       layout: {
@@ -687,10 +716,19 @@ const PdfExport = (function () {
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
     ];
     document.body.removeChild(measureHost);
-    const columns = await Promise.all(colNodes.map(async col => {
+    const columns = await Promise.all(colNodes.map(async (col, colIdx) => {
       const colAlign = alignment(col);
+      // Largeur RÉELLE de cette colonne (mesurée ci-dessus sur le vrai
+      // rendu de la zone) - passée à htmlToPdfContent pour que son hôte de
+      // mesure interne (un sous-arbre séparé, reconstruit à partir du seul
+      // innerHTML de la colonne) mesure une image flottante/son habillage à
+      // la largeur RÉELLE de la colonne plutôt qu'à la pleine largeur de
+      // page (bug signalé par l'utilisateur : le texte autour d'une image
+      // "au coeur du texte" dans une colonne 2-colonnes ne s'enroulait pas
+      // à la bonne largeur).
+      const colWidthPt = colIdx === 0 ? leftWidth : rightWidth;
       let blocks;
-      try { blocks = await htmlToPdfContent(col.innerHTML, false); }
+      try { blocks = await htmlToPdfContent(col.innerHTML, false, colWidthPt); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       const alignSources = [];
       const collect = n => {
@@ -927,7 +965,7 @@ const PdfExport = (function () {
   // project_v2_tiptap_migration). `null` si le paragraphe ne contient QUE
   // l'image (aucun texte à habiller) - l'appelant retombe alors sur le rendu
   // normal (image seule).
-  function floatedImageParagraphFrom(node, pageBreakBefore) {
+  function floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt) {
     const images = [];
     const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images));
     const floatImg = images.find(img => img._floatAlign);
@@ -945,7 +983,13 @@ const PdfExport = (function () {
     const imgNode = floatImg._sourceImgNode;
     delete floatImg._floatAlign;
     delete floatImg._sourceImgNode;
-    const pageWidthPt = 595.28 - 2 * PAGE_MARGIN_PT;
+    // Largeur disponible : celle de la page par défaut (flux principal), mais
+    // OVERRIDABLE par l'appelant (blockFrom pour une cellule de tableau,
+    // twoColumnsFrom pour une colonne) - sans ça, une image flottante nichée
+    // dans une cellule/colonne bien plus étroite que la page calculait son
+    // habillage/justify comme si elle disposait de la pleine largeur de page,
+    // signalé cassé par l'utilisateur.
+    const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
     const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
@@ -1085,7 +1129,7 @@ const PdfExport = (function () {
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
   // paragraphe contenant une image produit un bloc de texte ET un bloc image
   // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
-  function blockFrom(node, pageBreakBefore, headingMarkers) {
+  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
@@ -1096,7 +1140,7 @@ const PdfExport = (function () {
         return layer === 'normal' && (align === 'left' || align === 'right');
       });
       if (floatImgEl) {
-        const floated = floatedImageParagraphFrom(node, pageBreakBefore);
+        const floated = floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt);
         if (floated) return Array.isArray(floated) ? floated : [floated];
       }
     }
@@ -1151,13 +1195,13 @@ const PdfExport = (function () {
     images.forEach(img => blocks.push(img));
     nestedLists.forEach(list => {
       Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
-        blockFrom(li, false, headingMarkers).forEach(b => blocks.push(b));
+        blockFrom(li, false, headingMarkers, availableWidthPt).forEach(b => blocks.push(b));
       });
     });
     return blocks;
   }
 
-  async function buildPdfContentFromRoot(root, headingMarkers) {
+  async function buildPdfContentFromRoot(root, headingMarkers, availableWidthPt) {
     const blocks = [];
     // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée -
     // sert uniquement à mesurer la position RENDUE réelle des blocs voisins
@@ -1194,7 +1238,7 @@ const PdfExport = (function () {
       }
       if (isBlock(node)) {
         let produced;
-        try { produced = blockFrom(node, pendingPageBreak, headingMarkers); }
+        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
         produced.forEach(b => { push(b, node); if (b && b._isHeading) headingBlocks.push(b); });
         pendingPageBreak = false;
@@ -1317,7 +1361,15 @@ const PdfExport = (function () {
   // dans une colonne n'est ni numéroté ni inclus dans le sommaire, même
   // exclusion que css/editor-v2.css (compteurs scopés aux enfants DIRECTS de
   // .tiptap).
-  async function htmlToPdfContent(html, isTopLevel) {
+  // `availableWidthPt` : largeur réellement disponible pour CE contenu, si
+  // différente de la pleine largeur de page - cas d'une colonne de zone
+  // 2-colonnes (cf. twoColumnsFrom), dont le contenu est reconstruit dans un
+  // hôte de mesure SÉPARÉ (pas le même sous-arbre que la zone réelle) : sans
+  // cette largeur, ce second hôte mesurait tout en pleine largeur de page,
+  // faussant l'habillage/justify d'une image flottante nichée dans la
+  // colonne (bug signalé par l'utilisateur - le calcul se basait sur une
+  // largeur bien plus grande que la colonne réelle).
+  async function htmlToPdfContent(html, isTopLevel, availableWidthPt) {
     const root = document.createElement('div'); root.innerHTML = html || '';
     let headingMarkers = null;
     if (isTopLevel) {
@@ -1328,7 +1380,8 @@ const PdfExport = (function () {
       const markers = HeadingNumbering.markersFor(headingEls, style);
       headingMarkers = new Map(headingEls.map((el, i) => [el, markers[i]]));
     }
-    const detachMeasureHost = attachMeasureHost(root);
+    const widthPx = availableWidthPt != null ? availableWidthPt / PX_TO_PT : null;
+    const detachMeasureHost = attachMeasureHost(root, widthPx);
     try {
       // Attend le décodage de CHAQUE <img> de CE root précis (pas un
       // pré-chauffage sur un élément séparé, cf. inlineEditorImagesAsDataUri
@@ -1340,7 +1393,7 @@ const PdfExport = (function () {
       // floatedImageParagraphFrom) - la seule garantie robuste est d'attendre
       // le décodage des images DE CE ROOT MESURÉ lui-même.
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
-      return await buildPdfContentFromRoot(root, headingMarkers);
+      return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt);
     } finally {
       detachMeasureHost();
     }
@@ -1528,7 +1581,37 @@ const PdfExport = (function () {
         content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
       });
     }
+    // Une image en calque IMBRIQUÉE (cellule de tableau, colonne d'une zone
+    // 2-colonnes) reçoit elle aussi `_pendingImgNode`/`absolutePosition` de
+    // secours (cf. pdfImageFromNode, contexte-agnostique - il ne sait pas où
+    // il est appelé) mais `content._pendingImages` (résolu ci-dessus) ne
+    // recense QUE les images de premier niveau : `resolvePendingImageAnchors`
+    // n'est appelé que sur les blocs top-level de buildPdfContentFromRoot, pas
+    // sur le contenu d'une cellule/colonne, qui n'a pas de blocs-ancre de
+    // premier niveau à offrir. Sans ce balayage, une telle image gardait
+    // l'`absolutePosition` PLACEHOLDER ({x:0,y:0}, ajoutée pour éviter de
+    // gonfler la mesure du flux, cf. plus haut) indéfiniment - littéralement
+    // coincée au coin supérieur gauche de la PAGE entière plutôt que dans sa
+    // cellule/colonne, régression constatée par l'utilisateur. Repli : aucune
+    // position absolue du tout, rendue en flux normal à sa place dans sa
+    // cellule/colonne - pas positionnée au pixel près, mais au moins visible
+    // au bon endroit (limitation connue et acceptée, cf. commentaire plus haut
+    // sur la portée de cet incrément).
+    stripUnresolvedPendingImages(content);
     return content;
+  }
+  function stripUnresolvedPendingImages(node) {
+    if (!node) return;
+    if (Array.isArray(node)) { node.forEach(stripUnresolvedPendingImages); return; }
+    if (typeof node !== 'object') return;
+    if (node._pendingImgNode) {
+      delete node._pendingImgNode;
+      delete node._pendingLayer;
+      delete node.absolutePosition;
+    }
+    if (node.stack) stripUnresolvedPendingImages(node.stack);
+    if (node.columns) stripUnresolvedPendingImages(node.columns);
+    if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
   async function buildNativePdfDocDefinition(resolvedHtml, filename) {
