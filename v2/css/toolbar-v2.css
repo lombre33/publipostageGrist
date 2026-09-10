@@ -143,8 +143,10 @@
 .v2-varfmt-toolbar input[data-role="num-currency"] { width: 56px; }
 .v2-varfmt-toolbar select[data-role="date-preset"] { width: 190px; }
 .v2-varfmt-toolbar button[data-action="num-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
-/* Écriture en lettres active : séparateurs/décimales n'ont plus de sens
-   (cf. numberToWordsFr, limité aux entiers) - grisés, pas retirés (la
-   devise reste utilisable : "mille euros"). */
-[data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg,
-[data-var-panel="number"].v2-varfmt-words-active select[data-role="num-decimals"] { opacity: .4; pointer-events: none; }
+/* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a
+   plus de sens (cf. numberToWordsFr) - grisé, pas retiré. Les décimales
+   RESTENT actives (demandé explicitement) : la partie décimale s'écrit
+   elle aussi en toutes lettres ("virgule cinquante-six"), pas d'arrondi
+   silencieux à l'entier - la devise reste utilisable elle aussi ("mille
+   euros"). */
+[data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg { opacity: .4; pointer-events: none; }

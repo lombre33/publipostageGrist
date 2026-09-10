@@ -100,9 +100,10 @@ const VariableFormat = (function () {
   }
   // "mille" toujours invariable (jamais "milles"), jamais précédé de "un"
   // ("mille", pas "un mille") - contrairement à "million"/"milliard", de
-  // vrais noms qui prennent "un" et un 's' au pluriel normalement.
-  function numberToWordsFr(n) {
-    const rounded = Math.round(Math.abs(n));
+  // vrais noms qui prennent "un" et un 's' au pluriel normalement. N'écrit
+  // QUE la partie entière (n déjà un entier positif ou nul) - la partie
+  // décimale, le cas échéant, est gérée à part par numberToWordsFr ci-dessous.
+  function integerToWordsFr(rounded) {
     if (rounded === 0) return 'zéro';
     const scales = [
       { divisor: 1e9, singular: 'milliard', plural: 'milliards' },
@@ -134,8 +135,27 @@ const VariableFormat = (function () {
       else parts.push(threeDigitsToWords(g.count, hasFollowing) + ' ' + (g.count > 1 ? g.plural : g.singular));
     });
     if (unitsCount > 0 || groups.length === 0) parts.push(threeDigitsToWords(unitsCount, false));
-    const words = parts.join(' ').replace(/\s+/g, ' ').trim();
-    return (n < 0 ? 'moins ' : '') + words;
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+  // Écriture en toutes lettres, partie décimale INCLUSE si `decimals` est
+  // renseigné (0-3, choisi via la même barre de formatage que pour l'écriture
+  // chiffrée - PAS d'arrondi silencieux à l'entier le plus proche : demandé
+  // explicitement par l'utilisateur, un montant "1234,56" doit pouvoir
+  // s'écrire "mille deux cent trente-quatre virgule cinquante-six", pas être
+  // tronqué à "mille deux cent trente-quatre"). `decimals` absent/`null` =
+  // comportement historique (entier le plus proche, aucune virgule) - un
+  // choix EXPLICITE dans la barre de formatage est nécessaire pour activer
+  // l'écriture de la partie décimale.
+  function numberToWordsFr(n, decimals) {
+    const isNegative = n < 0;
+    const d = decimals == null ? 0 : decimals;
+    const factor = Math.pow(10, d);
+    const roundedTotal = Math.round(Math.abs(n) * factor);
+    const intPart = Math.floor(roundedTotal / factor);
+    const fracPart = roundedTotal - intPart * factor;
+    let words = integerToWordsFr(intPart);
+    if (d > 0) words += ' virgule ' + integerToWordsFr(fracPart);
+    return (isNegative && roundedTotal > 0 ? 'moins ' : '') + words;
   }
   // Forme en toutes lettres d'une devise, pour l'accoler au nombre en
   // lettres ("mille euros", pas "mille €") - repli sur le symbole/texte tel
@@ -154,7 +174,7 @@ const VariableFormat = (function () {
     if (!Number.isFinite(n)) return String(val);
     opts = opts || {};
     if (opts.words) {
-      const words = numberToWordsFr(n);
+      const words = numberToWordsFr(n, opts.decimals);
       return opts.currency ? `${words} ${currencyWords(opts.currency, Math.round(n))}` : words;
     }
     const locale = opts.style === 'us' ? 'en-US' : 'fr-FR';
