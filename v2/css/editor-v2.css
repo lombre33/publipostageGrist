@@ -186,6 +186,18 @@
 #editor-container.a4-preview .tiptap .tableWrapper { overflow-x: visible; }
 #editor-container.a4-preview .tiptap table col { min-width: 0 !important; }
 
+/* Même aperçu A4, en mode Lecture (#reader-container/.reader-content, cf.
+   js/reader-mode.js) - la case #v2-toggle-a4-preview ne posait jusqu'ici la
+   classe `a4-preview` que sur #editor-container (cf. v2/js/main.js), jamais
+   sur #reader-container : le mode Lecture ignorait donc totalement l'aperçu
+   A4, quel que soit l'état de la case - signalé cassé par l'utilisateur.
+   Mêmes valeurs que .tiptap ci-dessus (même largeur de contenu réelle de
+   page PDF) ; pas de règle .tableWrapper/col équivalente ici, propres au
+   mécanisme de redimensionnement de tableau de l'éditeur TipTap (absent en
+   lecture, simple HTML résolu sans extension de tableau). */
+#reader-container.a4-preview { background: #eef1f5; }
+#reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
 

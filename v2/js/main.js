@@ -164,7 +164,15 @@
   function wireA4PreviewToggle() {
     const toggle = document.getElementById('v2-toggle-a4-preview');
     if (!toggle) return;
-    const sync = () => editorContainer.classList.toggle('a4-preview', toggle.checked);
+    // Posée sur les DEUX conteneurs (édition ET lecture) : la case ne
+    // touchait jusqu'ici que #editor-container, donc rester fidèle à la
+    // largeur réelle d'une page PDF (cf. commentaire CSS) ne marchait
+    // jamais en mode Lecture, quel que soit l'état de la case - signalé
+    // cassé par l'utilisateur.
+    const sync = () => {
+      editorContainer.classList.toggle('a4-preview', toggle.checked);
+      readerContainer.classList.toggle('a4-preview', toggle.checked);
+    };
     toggle.addEventListener('change', sync);
     sync();
   }
