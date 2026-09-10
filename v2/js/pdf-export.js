@@ -405,6 +405,20 @@ const PdfExport = (function () {
   // getComputedStyle, cf. v2/js/heading-numbering.js), donc pas besoin de
   // lire quoi que ce soit en CSS : puce fixe pour <ul>, numéro par position
   // pour <ol> (respecte l'attribut start éventuel).
+  // Reflète data-bullet-style, posé par la toolbar (bouton "Liste à puces",
+  // révélé au survol - cf. Editor.js createBulletStyleExtension) sur le <ul>
+  // lui-même, jamais sur chaque <li>. 'circle'/'square' n'utilisent PAS les
+  // vrais glyphes Unicode ○/▪ (U+25CB/U+25AA) : vérifié empiriquement (décodage
+  // du PDF réel via pdf.js) que pdfmake/PDFKit n'embarque ces polices TTF
+  // (pourtant complètes, Roboto/Arimo/etc.) qu'en encodage WinAnsi - tout
+  // caractère au-delà de U+00FF ressort en glyphe .notdef (invisible), y
+  // compris ○/●/■/□/♦ testés un par un. '°' (degré) reste dans cette plage et
+  // se lit comme un petit cercle creux ; aucun caractère WinAnsi ne lit comme
+  // un carré, d'où '*' (universel, cf. convention Markdown) plutôt qu'un '#'
+  // qui entrerait en collision visuelle avec les badges #Variable. L'éditeur
+  // lui-même affiche les vrais disque/cercle/carré (CSS list-style-type, sans
+  // cette contrainte) - seul l'export PDF est concerné.
+  const BULLET_MARKERS = { disc: '• ', circle: '° ', square: '* ' };
   function listMarkerFor(node) {
     const parent = node.parentElement;
     if (parent && parent.tagName === 'OL') {
@@ -413,7 +427,8 @@ const PdfExport = (function () {
       const idx = items.indexOf(node);
       return (start + (idx === -1 ? 0 : idx)) + '. ';
     }
-    return '• ';
+    const bulletStyle = parent && parent.getAttribute('data-bullet-style');
+    return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
   }
 
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR|IMG)$/i.test(node.tagName)); }

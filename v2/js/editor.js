@@ -40,6 +40,10 @@ const Editor = (function () {
   // remplacement - elle retombe sur un simple curseur texte, ce qui referme
   // aussitôt la toolbar flottante (vérifié en conditions réelles).
   let NodeSelectionClass = null;
+  // Alignement actuellement affiché par le bouton principal du groupe survol
+  // "Alignement" (#v2-btn-align-main) - mis à jour par syncToolbarState,
+  // relu par son propre clic pour réappliquer exactement ce qu'il montre.
+  let currentAlign = 'left';
   // Rempli aux côtés de NodeSelectionClass ci-dessus (même import
   // prosemirror-state) - utilisé par createTabNavigationExtension pour
   // placer le curseur à un endroit précis (colonne suivante, paragraphe
@@ -175,6 +179,30 @@ const Editor = (function () {
           setHighlight: backgroundColor => ({ chain }) => chain().setMark('textStyle', { backgroundColor }).run(),
           unsetHighlight: () => ({ chain }) => chain().setMark('textStyle', { backgroundColor: null }).run(),
         };
+      },
+    });
+  }
+
+  // Style de puce (disque/cercle/carré) - même schéma que FontSize/TextColor
+  // ci-dessus, mais augmente 'bulletList' (le nœud officiel de StarterKit,
+  // jamais remplacé) plutôt que 'textStyle' : pas besoin d'importer/épingler
+  // un package @tiptap/extension-bullet-list séparé juste pour un attribut.
+  // `updateAttributes('bulletList', ...)` est une commande CORE de TipTap,
+  // pas besoin d'en déclarer une dédiée ici (cf. wireToolbar).
+  function createBulletStyleExtension(Extension) {
+    return Extension.create({
+      name: 'bulletStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['bulletList'],
+          attributes: {
+            bulletStyle: {
+              default: 'disc',
+              parseHTML: el => el.getAttribute('data-bullet-style') || 'disc',
+              renderHTML: attrs => (attrs.bulletStyle && attrs.bulletStyle !== 'disc' ? { 'data-bullet-style': attrs.bulletStyle } : {}),
+            },
+          },
+        }];
       },
     });
   }
@@ -1471,7 +1499,11 @@ const Editor = (function () {
     set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
     set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
     set('v2-btn-align-right', 'alignRight'); set('v2-btn-align-justify', 'alignJustify');
+    // v2-btn-align-main : icône initiale, resynchronisée dès le premier appel
+    // de syncToolbarState avec l'alignement réel du curseur.
+    set('v2-btn-align-main', 'alignLeft');
     set('v2-btn-bullet', 'bulletList'); set('v2-btn-ordered', 'orderedList');
+    set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
     set('v2-btn-blockquote', 'blockquote'); set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
@@ -1497,7 +1529,19 @@ const Editor = (function () {
     setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
     setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
     setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
+    // Bouton principal du groupe survol "Alignement" (maquette "Options au
+    // survol") : montre TOUJOURS l'alignement réel du curseur (gauche par
+    // défaut, valeur par défaut de l'extension TextAlign) - currentAlign est
+    // relu par son propre gestionnaire de clic pour le réappliquer tel quel.
+    const aligns = ['left', 'center', 'right', 'justify'];
+    currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
+    const alignMain = document.getElementById('v2-btn-align-main');
+    if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
     setActive('v2-btn-bullet', editor.isActive('bulletList'));
+    const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
+    setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
+    setActive('v2-btn-bullet-circle', bulletStyle === 'circle');
+    setActive('v2-btn-bullet-square', bulletStyle === 'square');
     setActive('v2-btn-ordered', editor.isActive('orderedList'));
     setActive('v2-btn-blockquote', editor.isActive('blockquote'));
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
@@ -1515,13 +1559,17 @@ const Editor = (function () {
     // Polices/tailles : les swatches de couleur ci-dessus étaient déjà
     // synchronisés sur le curseur, mais PAS ces deux <select> (signalé par
     // l'utilisateur - ex. curseur en Arial 15pt sans que la toolbar ne le
-    // montre). Valeur vide si aucun réglage explicite à cet endroit (retombe
-    // sur les placeholders "Police"/"Taille"), plutôt que de mentir en
-    // affichant une valeur par défaut arbitraire.
+    // montre). Repli sur la police/taille RÉELLEMENT rendue en l'absence de
+    // marque explicite (Roboto/10.5pt, cf. `.tiptap` dans editor-v2.css et
+    // DEFAULT_FONT_SIZE dans pdf-export.js - les deux valeurs concordent
+    // déjà, 14px = 10.5pt à 96dpi) plutôt qu'un vide "Police"/"Taille" qui
+    // n'affichait jamais rien tant que l'utilisateur n'avait pas cliqué
+    // explicitement un réglage (signalé par l'utilisateur : les valeurs par
+    // défaut au clavier ne s'affichaient jamais).
     const fontSelect = document.getElementById('v2-font-select');
-    if (fontSelect) { const value = textStyleAttrs.fontFamily || ''; if (fontSelect.value !== value) fontSelect.value = value; }
+    if (fontSelect) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontSelect.value !== value) fontSelect.value = value; }
     const sizeSelect = document.getElementById('v2-size-select');
-    if (sizeSelect) { const value = textStyleAttrs.fontSize || ''; if (sizeSelect.value !== value) sizeSelect.value = value; }
+    if (sizeSelect) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeSelect.value !== value) sizeSelect.value = value; }
   }
 
   async function init() {
@@ -1543,6 +1591,7 @@ const Editor = (function () {
     const FontSize = createFontSizeExtension(Extension);
     const TextColor = createTextColorExtension(Extension);
     const HighlightColor = createHighlightExtension(Extension);
+    const BulletStyle = createBulletStyleExtension(Extension);
     const TableHeaderWithBg = withCellBackground(TableHeader);
     const TableCellWithBg = withCellBackground(TableCell);
     const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
@@ -1562,6 +1611,7 @@ const Editor = (function () {
         FontSize,
         TextColor,
         HighlightColor,
+        BulletStyle,
         VarBadge,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
@@ -1608,7 +1658,23 @@ const Editor = (function () {
     bind('v2-btn-align-center', () => editor.chain().focus().setTextAlign('center').run());
     bind('v2-btn-align-right', () => editor.chain().focus().setTextAlign('right').run());
     bind('v2-btn-align-justify', () => editor.chain().focus().setTextAlign('justify').run());
+    // Bouton principal du groupe survol - réapplique l'alignement qu'il
+    // montre actuellement (currentAlign, tenu à jour par syncToolbarState) ;
+    // les 4 boutons ci-dessus vivent maintenant dans le panneau révélé au
+    // survol (cf. v2/index.html .v2-hover-flyout), inchangés sinon.
+    bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
     bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
+    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette
+    // "Options au survol") - crée la liste si le curseur n'y est pas encore,
+    // sinon change juste le style de la liste existante à cet endroit.
+    const applyBulletStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('bulletList')) chain.toggleBulletList();
+      chain.updateAttributes('bulletList', { bulletStyle: style }).run();
+    };
+    bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
+    bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
+    bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
     bind('v2-btn-ordered', () => editor.chain().focus().toggleOrderedList().run());
     bind('v2-btn-blockquote', () => editor.chain().focus().toggleBlockquote().run());
     // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
@@ -1653,6 +1719,27 @@ const Editor = (function () {
       editor.view.dom.dataset.headingStyle = select.value;
       editor.chain().setHeadingNumberingStyle(select.value).focus().run();
     });
+    // Le <select> reste dans le DOM (masqué, cf. css/toolbar-v2.css) mais
+    // n'est plus visible : le choix du style se fait désormais dans le
+    // panneau révélé au survol du bouton (maquette "Options au survol").
+    // Chaque ligne pose juste la valeur puis redéclenche 'change' - réutilise
+    // le handler ci-dessus tel quel plutôt que de dupliquer la commande.
+    const flyout = document.getElementById('v2-numbering-flyout');
+    if (!flyout) return;
+    const rows = flyout.querySelectorAll('.v2-hover-row');
+    const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.num === select.value));
+    rows.forEach(row => row.addEventListener('click', () => {
+      if (select.value === row.dataset.num) return;
+      select.value = row.dataset.num;
+      select.dispatchEvent(new Event('change'));
+      syncActiveRow();
+    }));
+    // Lu à la volée à chaque survol plutôt que poussé en continu : la valeur
+    // peut aussi changer sans passer par ici (chargement d'un modèle, cf.
+    // v2/js/main.js:loadTemplateIntoEditor qui pose select.value directement).
+    const group = flyout.closest('.numbering-pill');
+    if (group) group.addEventListener('mouseenter', syncActiveRow);
+    syncActiveRow();
   }
 
   // Un <select> de mise en forme (titre/taille/police), contrairement à un

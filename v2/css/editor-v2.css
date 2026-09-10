@@ -274,6 +274,33 @@
 #v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
 #v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
+/* Groupe "bouton principal + variantes au survol" (alignement/puces/
+   numérotation) - maquette validée par l'utilisateur ("options au survol").
+   Le bouton principal reste l'action rapide par défaut (identique à avant) ;
+   le survol du groupe révèle .v2-hover-flyout SANS écart de hitbox car il
+   touche directement le bas du bouton (top:100%, aucune marge) - :hover reste
+   actif tant que le curseur est sur un DESCENDANT du groupe, flyout compris,
+   même positionné en absolu. */
+.v2-hover-group { position: relative; display: inline-flex; }
+.v2-hover-flyout {
+  position: absolute; top: 100%; left: 0; display: flex; gap: 3px; padding: 4px;
+  background: #fff; border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 15;
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity .12s ease, transform .12s ease;
+}
+.v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { opacity: 1; visibility: visible; transform: translateY(2px); }
+.v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
+.v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
+.v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
+.v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
+/* Petit point discret sur le bouton principal, seul indice visuel qu'un
+   survol révèle plus d'options (découvrabilité, cf. maquette "Options au
+   survol" - point d'attention explicitement noté dans cette maquette). */
+.v2-hover-group > button::after {
+  content: ''; position: absolute; right: 2px; bottom: 2px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent, #2f6fed); opacity: .55; pointer-events: none;
+}
 /* Bouton "split" couleur de police/surlignage/fond de cellule - icône +
    pastille (couleur courante) + chevron, un seul clic ouvre le menu
    déroulant de nuances (.v2-color-dropdown ci-dessous) plutôt que le
