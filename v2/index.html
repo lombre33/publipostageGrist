@@ -53,7 +53,7 @@
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.66">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.23">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.2">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.4">
 </head>
 <body>
 <div id="app">
@@ -160,24 +160,22 @@
   </div></div>
   <div id="link-config-modal" style="display:none;"><div class="modal-content link-config-modal-content">
     <h3 id="link-config-title"></h3>
-    <div class="link-config-mode">
-      <label><input type="radio" name="link-config-mode" value="match"> Retrouver la ligne qui correspond à la ligne courante<span class="link-config-hint">Cas normal : la table cible contient plusieurs lignes (une par élément), il faut retrouver la bonne à chaque fois.</span></label>
-      <label><input type="radio" name="link-config-mode" value="singleton"> Toujours utiliser la même ligne, quelle que soit la ligne courante<span class="link-config-hint">Cas particulier : la table cible n'a qu'une seule ligne utile pour tout le document (ex. une table de paramètres).</span></label>
-    </div>
-    <div id="link-config-match-fields" class="link-config-match-fields" hidden>
-      <div class="toolbar-panel-field"><label>Colonne dans <span id="link-config-table-cible-name"></span></label><select id="link-config-col-cible"></select></div>
-      <div class="toolbar-panel-field"><label>Colonne correspondante dans <span id="link-config-table-source-name"></span></label><select id="link-config-col-source"></select></div>
-      <p class="link-config-explain">La ligne retenue sera celle où ces deux colonnes ont la même valeur.</p>
+    <div id="link-config-match-fields" class="link-config-bridge" hidden>
+      <div class="link-config-bridge-col"><label id="link-config-table-source-name"></label><select id="link-config-col-source"></select></div>
+      <span class="link-config-eq">=</span>
+      <div class="link-config-bridge-col"><label id="link-config-table-cible-name"></label><select id="link-config-col-cible"></select></div>
     </div>
     <div id="link-config-preview" class="link-config-preview" aria-live="polite"></div>
-    <div class="modal-actions"><button id="link-config-confirm">Valider</button><button id="link-config-cancel">Annuler</button></div>
+    <button type="button" id="link-config-toggle-singleton" class="link-config-toggle-link">Utiliser plutôt toujours la même ligne</button>
+    <button type="button" id="link-config-toggle-match" class="link-config-toggle-link" hidden>Changer de correspondance</button>
+    <div class="modal-actions"><button id="link-config-cancel">Annuler</button><button id="link-config-confirm" class="link-config-btn-primary">Valider</button></div>
   </div></div>
 </div>
 <script src="../js/grist-api.js?v=0.66"></script>
 <script src="../js/templates.js?v=0.66"></script>
 <script src="../js/reader-mode.js?v=0.67"></script>
 <script src="js/heading-numbering.js?v=0.1"></script>
-<script src="js/variables.js?v=0.3"></script>
+<script src="js/variables.js?v=0.4"></script>
 <script src="js/icons.js?v=0.4"></script>
 <script src="js/editor.js?v=0.40"></script>
 <script src="js/pdf-export.js?v=0.57"></script>

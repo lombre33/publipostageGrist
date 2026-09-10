@@ -70,3 +70,33 @@
 .numbering-pill svg { width: 15px; height: 15px; color: #3a4452; flex: none; }
 .numbering-pill select { border: none; background: transparent; height: 26px; padding: 0 4px 0 0; font-size: 12.5px; }
 .numbering-pill select:focus-visible { outline: none; }
+
+/* === Modale "Correspondance de tables" (#link-config-modal, cf.
+   v2/js/variables.js:showLinkConfigModal) === Remplacée par une maquette plus
+   sobre après audit UI/UX : les 2 radios + astuce (cas normal/cas particulier
+   traités à égalité) laissent place au cas normal ("Ligne correspondante",
+   toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien
+   texte, sur le modèle de la carte option la moins probable qu'on ne
+   présente pas au même niveau que l'option par défaut. Les deux <select>
+   portent chacun leur propre étiquette JUSTE AU-DESSUS (association
+   select ↔ table sans ambiguïté - la 1ère maquette les avait en bulles aux
+   deux extrémités de la ligne, association peu claire, corrigé avant
+   implémentation). */
+.link-config-modal-content { font-family: var(--font-ui); width: 360px; }
+.link-config-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 14px; color: var(--text); }
+.link-config-bridge { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
+.link-config-bridge[hidden] { display: none; }
+.link-config-bridge-col { flex: 1; min-width: 0; }
+.link-config-bridge-col label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-config-bridge-col select { width: 100%; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12.5px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.link-config-eq { flex: none; padding-bottom: 6px; color: var(--text-faint); font-weight: 700; font-size: 13px; }
+.link-config-preview { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 7px 10px; border-radius: 6px; margin-bottom: 10px; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); min-height: 1.2em; }
+.link-config-preview.is-good { background: var(--good-soft, #e5f6ee); color: var(--good, #1a8f5e); border-color: var(--good-soft-border, #bfe6d3); }
+.link-config-toggle-link { font-size: 12px; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; font-family: var(--font-ui); font-weight: 600; display: block; margin-bottom: 4px; }
+.link-config-toggle-link:hover { color: var(--accent-hover); text-decoration: underline; }
+.link-config-toggle-link[hidden] { display: none; }
+.link-config-modal-content .modal-actions { margin-top: 16px; }
+.link-config-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.link-config-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
+.link-config-modal-content .modal-actions .link-config-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.link-config-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }

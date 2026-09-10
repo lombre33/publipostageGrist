@@ -314,17 +314,18 @@ const Variables = (function () {
     const modal = document.getElementById('link-config-modal');
     if (!modal) return null;
     const title = document.getElementById('link-config-title');
-    const radios = modal.querySelectorAll('input[name="link-config-mode"]');
     const matchFields = document.getElementById('link-config-match-fields');
     const cibleLabel = document.getElementById('link-config-table-cible-name');
     const sourceLabel = document.getElementById('link-config-table-source-name');
     const selectCible = document.getElementById('link-config-col-cible');
     const selectSource = document.getElementById('link-config-col-source');
     const preview = document.getElementById('link-config-preview');
+    const toggleSingletonBtn = document.getElementById('link-config-toggle-singleton');
+    const toggleMatchBtn = document.getElementById('link-config-toggle-match');
     const btnOk = document.getElementById('link-config-confirm');
     const btnCancel = document.getElementById('link-config-cancel');
 
-    title.textContent = `Comment trouver la bonne ligne dans « ${targetTable} » ?`;
+    title.textContent = `${currentTableId} → ${targetTable}`;
     cibleLabel.textContent = targetTable;
     sourceLabel.textContent = currentTableId;
     // Un placeholder désactivé en 1ère position force un choix explicite -
@@ -356,15 +357,21 @@ const Variables = (function () {
         if (reverseCandidates.length === 1) { initialCible = reverseCandidates[0]; initialSource = 'id'; }
       }
     }
-    radios.forEach(r => { r.checked = r.value === initialMode; });
     if (initialCible) selectCible.value = initialCible;
     if (initialSource) selectSource.value = initialSource;
-    matchFields.hidden = initialMode !== 'match';
+    // Le cas rare ("ligne fixe") est un lien texte plutôt qu'un choix à
+    // égalité avec le cas normal (cf. mémoire project_link_config_modal_redesign)
+    // - `currentMode` remplace les radios, togglé par les 2 boutons-liens.
+    let currentMode = initialMode;
+    function applyModeVisibility() {
+      matchFields.hidden = currentMode !== 'match';
+      toggleSingletonBtn.hidden = currentMode !== 'match';
+      toggleMatchBtn.hidden = currentMode === 'match';
+    }
+    applyModeVisibility();
 
     function currentRuleFromForm() {
-      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
-      if (!checked) return null;
-      if (checked.value === 'singleton') return { mode: 'singleton' };
+      if (currentMode === 'singleton') return { mode: 'singleton' };
       if (!selectCible.value || !selectSource.value) return null;
       return { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
     }
@@ -372,9 +379,12 @@ const Variables = (function () {
     // saisie donnerait pour la ligne Grist actuellement sélectionnée -
     // permet de vérifier immédiatement que la correspondance est la bonne,
     // et que "singleton" est bien statique alors que "match" varie selon la
-    // ligne courante.
+    // ligne courante. La classe .is-good (bulle verte) ne marque que les
+    // issues positives (correspondance trouvée) - tout le reste (attente de
+    // saisie, aucune ligne, erreur) reste neutre.
     async function updatePreview() {
       if (!preview) return;
+      preview.classList.remove('is-good');
       const rule = currentRuleFromForm();
       if (!rule) { preview.textContent = 'Choisissez les deux colonnes pour voir un aperçu.'; return; }
       const record = GristAPI.getCurrentRecord();
@@ -383,27 +393,29 @@ const Variables = (function () {
       try {
         const rows = await GristAPI.fetchTableRows(targetTable);
         if (rule.mode === 'singleton') {
-          if (!rows.length) { preview.textContent = `Aperçu : « ${targetTable} » est vide.`; return; }
+          if (!rows.length) { preview.textContent = `« ${targetTable} » est vide.`; return; }
           const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-          preview.textContent = `Aperçu : toujours la ligne n°${first.id} de « ${targetTable} », quelle que soit la ligne courante.`;
+          preview.textContent = `Toujours la ligne n°${first.id} de « ${targetTable} », quelle que soit la ligne courante.`;
+          preview.classList.add('is-good');
           return;
         }
         const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
         const matches = rows.filter(r => sameValue(rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]), sourceVal));
-        preview.textContent = matches.length
-          ? `Aperçu : ${matches.length} ligne(s) trouvée(s) dans « ${targetTable} » pour la ligne courante (n° ${matches.map(r => r.id).join(', ')}).`
-          : `Aperçu : aucune ligne de « ${targetTable} » ne correspond à la ligne courante (valeur recherchée : ${sourceVal}).`;
+        if (matches.length) {
+          preview.textContent = `${matches.length} ligne(s) trouvée(s) dans « ${targetTable} » (n° ${matches.map(r => r.id).join(', ')}).`;
+          preview.classList.add('is-good');
+        } else {
+          preview.textContent = `Aucune ligne de « ${targetTable} » ne correspond à la ligne courante (valeur recherchée : ${sourceVal}).`;
+        }
       } catch (e) {
         console.warn('[variables] showLinkConfigModal: échec aperçu', e);
         preview.textContent = 'Aperçu indisponible.';
       }
     }
-    function onFormChange() {
-      const checked = modal.querySelector('input[name="link-config-mode"]:checked');
-      matchFields.hidden = !checked || checked.value !== 'match';
-      updatePreview();
-    }
-    radios.forEach(r => r.addEventListener('change', onFormChange));
+    function onToggleSingleton() { currentMode = 'singleton'; applyModeVisibility(); updatePreview(); }
+    function onToggleMatch() { currentMode = 'match'; applyModeVisibility(); updatePreview(); }
+    toggleSingletonBtn.addEventListener('click', onToggleSingleton);
+    toggleMatchBtn.addEventListener('click', onToggleMatch);
     selectCible.addEventListener('change', updatePreview);
     selectSource.addEventListener('change', updatePreview);
     modal.style.display = 'flex';
@@ -412,7 +424,8 @@ const Variables = (function () {
     return new Promise((resolve) => {
       function cleanup() {
         modal.style.display = 'none';
-        radios.forEach(r => r.removeEventListener('change', onFormChange));
+        toggleSingletonBtn.removeEventListener('click', onToggleSingleton);
+        toggleMatchBtn.removeEventListener('click', onToggleMatch);
         selectCible.removeEventListener('change', updatePreview);
         selectSource.removeEventListener('change', updatePreview);
         btnOk.removeEventListener('click', onOk);
