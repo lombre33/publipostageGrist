@@ -19,20 +19,33 @@ const VariableFormat = (function () {
     { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
 
-  // Grist représente une colonne Date/DateTime comme un timestamp Unix en
-  // SECONDES. Une colonne Date pure est ancrée à MINUIT UTC pour le jour
-  // civil qu'elle représente - la lire en heure LOCALE ferait dériver d'un
-  // jour entier pour tout fuseau à l'ouest de l'UTC (ex. 18:00 la veille en
-  // heure de Paris -1, ou carrément la veille pour un fuseau américain) :
-  // chaque composant est donc lu en UTC ci-dessous, jamais en heure locale.
+  // Une colonne Date/DateTime Grist peut arriver ici sous deux formes selon
+  // le point d'entrée de l'API utilisé en amont : un timestamp Unix en
+  // SECONDES (nombre, ex. via docApi.fetchTable) OU une chaîne de date déjà
+  // formatée (ex. "2026-09-12", vu en conditions réelles via grist.onRecord -
+  // repéré à cause d'un bug précis : `parseFloat("2026-09-12")` ne lit QUE
+  // "2026" en s'arrêtant au premier tiret, confondu avec un timestamp Unix -
+  // `new Date(2026 * 1000)` retombe le 1er janvier 1970 à 00h33, exactement
+  // le symptôme "1/1/1970" signalé par l'utilisateur). Une chaîne est donc
+  // désormais confiée telle quelle au constructeur Date natif (qui sait lire
+  // "AAAA-MM-JJ" et ses variantes avec heure), JAMAIS parseFloat/multipliée
+  // par 1000 - seul un NOMBRE est traité comme un timestamp Unix.
+  // Une colonne Date pure est ancrée à MINUIT UTC pour le jour civil qu'elle
+  // représente - la lire en heure LOCALE ferait dériver d'un jour entier
+  // pour tout fuseau à l'ouest de l'UTC (ex. 18:00 la veille en heure de
+  // Paris -1, ou carrément la veille pour un fuseau américain) : chaque
+  // composant est donc lu en UTC partout dans ce fichier, jamais en heure
+  // locale - `new Date("2026-09-12")` (sans heure) est déjà interprétée en
+  // UTC par le moteur JS lui-même (comportement standard ES2015+ pour une
+  // chaîne ISO "date seule"), cohérent avec cette lecture UTC systématique.
   // Simplification acceptée pour cet incrément : une colonne DateTime avec
   // un fuseau d'affichage Grist non-UTC explicitement configuré n'est pas
   // traitée différemment (pas encore rencontré en pratique).
   function gristDateToJsDate(val) {
     if (val == null || val === '') return null;
-    const n = typeof val === 'number' ? val : parseFloat(val);
-    if (!Number.isFinite(n)) return null;
-    return new Date(n * 1000);
+    if (typeof val === 'number') return Number.isFinite(val) ? new Date(val * 1000) : null;
+    const parsed = new Date(val);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   function formatDate(val, presetKey) {

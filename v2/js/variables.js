@@ -257,14 +257,27 @@ const Variables = (function () {
   // `format` (optionnel) = attribut `format` du nœud varBadge (cf.
   // v2/js/editor.js:createVarBadgeNode), déjà désérialisé par l'appelant
   // (ReaderMode, cf. js/reader-mode.js:parseBadgeFormat) - { type:'number',
-  // style, decimals, currency, words } ou { type:'date', preset }. `null`/
-  // absent = comportement historique (String(val) brut), aucun changement
-  // pour une bulle jamais passée par la barre flottante de formatage.
-  function formatValue(val, format) {
+  // style, decimals, currency, words } ou { type:'date', preset }. Si AUCUN
+  // format explicite n'a jamais été choisi (`format` absent/`null`) ET que
+  // la colonne est un type Date/DateTime Grist natif (détecté via
+  // GristAPI.getColumnType, d'où varTable/varColumn ici), un préréglage de
+  // date par défaut s'applique quand même - sans ça, une bulle #Variable de
+  // date jamais configurée affichait la valeur brute Grist telle quelle
+  // (une chaîne "2026-09-12" ou un timestamp, illisible/confus - signalé par
+  // l'utilisateur, qui avait l'impression que la barre de formatage ne
+  // servait à rien tant qu'on n'avait pas explicitement cliqué un
+  // préréglage). Un nombre sans format explicite reste en revanche
+  // `String(val)` brut (déjà lisible tel quel, aucun changement là).
+  function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
     if (Array.isArray(val)) return val.join(', ');
-    if (format && format.type === 'number') return VariableFormat.formatNumber(val, format);
-    if (format && format.type === 'date') return VariableFormat.formatDate(val, format.preset);
+    let effectiveFormat = format;
+    if (!effectiveFormat && varTable && varColumn) {
+      const colType = GristAPI.getColumnType(varTable, varColumn);
+      if (colType === 'Date' || colType === 'DateTime') effectiveFormat = { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key };
+    }
+    if (effectiveFormat && effectiveFormat.type === 'number') return VariableFormat.formatNumber(val, effectiveFormat);
+    if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat.preset);
     return String(val);
   }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
@@ -274,7 +287,7 @@ const Variables = (function () {
       const rows = await GristAPI.fetchTableRows(varTable);
       if (!rows.length) return '';
       const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-      return formatValue(first[varColumn], format);
+      return formatValue(first[varColumn], format, varTable, varColumn);
     }
     const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
     if (sourceVal === undefined || sourceVal === null) return '';
@@ -284,14 +297,14 @@ const Variables = (function () {
       return sameValue(cibleVal, sourceVal);
     });
     if (!matches.length) return '';
-    return formatValue(matches.map(r => r[varColumn]), format);
+    return formatValue(matches.map(r => r[varColumn]), format, varTable, varColumn);
   }
   async function resolveVariable(varTable, varColumn, currentTableId, record, format) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     try {
       if (!record) return '';
       if (!resolvedTableId) return '[ERREUR: table courante indisponible]';
-      if (varTable === resolvedTableId) return formatValue(record[varColumn], format);
+      if (varTable === resolvedTableId) return formatValue(record[varColumn], format, varTable, varColumn);
       const rule = GristAPI.getLinkRule(varTable);
       if (rule) return await resolveWithRule(varTable, varColumn, rule, record, format);
       const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
@@ -301,7 +314,7 @@ const Variables = (function () {
       const rowId = unwrapRefValue(refId);
       const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
       if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
-      return formatValue(linkedRow[varColumn], format);
+      return formatValue(linkedRow[varColumn], format, varTable, varColumn);
     } catch (e) {
       console.error('[variables] échec résolution', e);
       return `[ERREUR: résolution de ${varTable}.${varColumn} impossible]`;
