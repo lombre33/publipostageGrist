@@ -77,8 +77,31 @@
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { width: 15px; height: 15px; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"],
 .reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"] { accent-color: var(--accent, #2f6fed); }
+/* "classic" NE PEUT PAS se contenter de `accent-color: auto` : ce mode
+   laisse le NAVIGATEUR choisir sa propre couleur de remplissage, or Chrome
+   récent thème par défaut une case cochée en un bleu très proche de l'accent
+   du thème - "classic" ressortait donc visuellement IDENTIQUE aux 2 autres
+   styles (repéré par l'utilisateur : "les 3 modes ont le même comportement,
+   fond bleu"), alors que le but explicite de ce style est justement l'absence
+   de tout remplissage (case blanche + tick NOIR, cf. maquette d'origine).
+   `accent-color` ne sachant colorer QUE le remplissage (jamais "pas de
+   remplissage du tout"), la case est ici entièrement redessinée à la main
+   (`appearance: none` + un tick tracé en ::after via un coin de bordure
+   pivoté, technique CSS classique) - seul style des 3 à avoir besoin de ce
+   traitement, les deux autres restent la vraie case native (accent-color
+   suffit à leur cas). */
 .tiptap ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"],
-.reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"] { accent-color: auto; }
+.reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; margin: 0; position: relative;
+  border: 1.5px solid #6b7684; border-radius: 2px; background: #fff;
+}
+.tiptap ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked,
+.reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked { border-color: #222; }
+.tiptap ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked::after,
+.reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; left: 3px; top: -1px; width: 4px; height: 8px;
+  border: solid #222; border-width: 0 2px 2px 0; transform: rotate(40deg);
+}
 /* Mode Lecture = aperçu figé du contenu résolu, pas un formulaire - une case
    cliquable là ne sauvegarderait jamais rien nulle part (source de
    confusion), désactivée à l'affichage plutôt que retirée du HTML. */
