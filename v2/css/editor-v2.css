@@ -57,6 +57,55 @@
    l'export PDF (cf. pdf-export.js:listMarkerFor). */
 .tiptap ol[data-number-style="alpha"], .reader-content ol[data-number-style="alpha"] { list-style-type: lower-alpha; }
 .tiptap ol[data-number-style="roman"], .reader-content ol[data-number-style="roman"] { list-style-type: lower-roman; }
+/* Parité stricte mode Lecture (#reader-container/.reader-content) avec
+   .tiptap - AU-DELÀ des puces/numéros ci-dessus. #reader-container est un
+   sélecteur générique partagé avec la V1 (../css/style.css, jamais mis à
+   jour pour les valeurs propres à V2 : taille de police absente du tout
+   là-bas - donc taille par défaut du navigateur, 16px, contre 14px ici -,
+   marge de paragraphe 6px contre 0, tableau/2-colonnes avec d'autres
+   bordures/espacements que .tiptap) - signalé par l'utilisateur comme
+   plusieurs symptômes disparates (police différente, marges qui "bougent",
+   zone 2 colonnes qui ressemble à un tableau ET dont le texte ne coupe pas
+   aux mêmes endroits qu'en édition) qui partagent tous cette seule et même
+   cause. Mêmes valeurs EXACTES que .tiptap partout ci-dessous (pas une
+   simple approximation) : un écart, même d'un px de gap/padding, suffit à
+   faire dévier la coupure de ligne (déjà vu sur ce projet côté export PDF,
+   cf. mémoire white-space:break-spaces). #reader-container/#reader-container
+   X (pas juste .reader-content) reprend l'ID pour battre à coup sûr les
+   règles partagées correspondantes, elles aussi posées sur cet ID. */
+/* white-space:break-spaces - ProseMirror l'impose lui-même à .tiptap (pas ce
+   fichier - comportement interne de la librairie, nécessaire à son modèle
+   d'édition), jamais présent nulle part dans le HTML résolu de #reader-
+   container (browser en `normal` par défaut) : compte l'espace de fin de
+   ligne dans la largeur au lieu de le laisser dépasser, donc un mot entier
+   peut basculer de ligne par rapport à l'éditeur sans ce correctif - même
+   classe de bug déjà rencontrée et corrigée côté export PDF (mémoire), ici
+   entre éditeur et mode Lecture. */
+#reader-container .reader-content { font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; white-space: break-spaces; }
+#reader-container p { margin: 0; }
+#reader-container .reader-content h1, #reader-container .reader-content h2, #reader-container .reader-content h3,
+#reader-container .reader-content h4, #reader-container .reader-content h5, #reader-container .reader-content h6 { margin: 0; font-weight: 700; }
+#reader-container .reader-content h1 { font-size: 24pt; } #reader-container .reader-content h2 { font-size: 20pt; }
+#reader-container .reader-content h3 { font-size: 16pt; } #reader-container .reader-content h4 { font-size: 14pt; }
+#reader-container .reader-content h5 { font-size: 13pt; } #reader-container .reader-content h6 { font-size: 12pt; }
+#reader-container .reader-content blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
+#reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
+#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; vertical-align: top; text-align: left; font-weight: normal; }
+/* La zone 2 colonnes en lecture héritait des règles génériques .two-columns-zone/
+   .two-columns-column de ../css/style.css (pensées pour l'éditeur V1 -
+   bordure pleine visible sur CHAQUE colonne, d'où l'effet "tableau" signalé
+   par l'utilisateur - gap 18px et non 16, padding de colonne 6px et non 4px,
+   d'où le texte qui ne coupe pas au même endroit qu'en édition). */
+#reader-container .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; padding: 0; }
+/* border:1px dashed TRANSPARENT, pas `border:none` : .tiptap réserve cette
+   largeur de bordure même invisible au repos (elle ne devient visible qu'au
+   survol EN ÉDITION, cf. .tiptap .two-columns-zone:hover ci-dessus) -
+   `none` retire carrément 1px de large à la boîte, assez pour décaler la
+   coupure de ligne par rapport à l'éditeur (constaté : un mot entier
+   basculait de ligne entre les deux). Jamais survolable en lecture, donc
+   cette bordure reste transparente pour de bon ici, mais la largeur qu'elle
+   réserve doit rester identique. */
+#reader-container .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }

@@ -54,6 +54,12 @@
     Templates.setCurrentId(tpl ? tpl.id : null);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
+    // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en
+    // mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant
+    // qu'on ne repassait pas explicitement par le bouton "Mode édition" puis
+    // "Mode lecture" (signalé cassé par l'utilisateur : le changement de
+    // modèle "ne change rien" en mode Lecture).
+    if (currentMode === 'read') renderReader();
   }
 
   // Cluster "modèle" (cf. v2/index.html #v2-title-cluster) : le select
