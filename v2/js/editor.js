@@ -1448,7 +1448,14 @@ const Editor = (function () {
       '<button data-action="num-words" title="Écriture en toutes lettres (nombres entiers)">Lettres</button>',
       '</div>',
       '<div data-var-panel="date" hidden>',
+      '<span class="v2-varfmt-seg">',
+      '<button data-action="date-part:day" title="Afficher/masquer le jour">J</button>',
+      '<button data-action="date-part:month" title="Afficher/masquer le mois">M</button>',
+      '<button data-action="date-part:year" title="Afficher/masquer l\'année">A</button>',
+      '</span>',
       `<select data-role="date-preset" title="Format de date">${dateOptions}</select>`,
+      '<span class="v2-floating-sep"></span>',
+      '<button data-action="date-words" title="Écriture en toutes lettres">Lettres</button>',
       '</div>',
     ].join('');
     const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
@@ -1474,6 +1481,22 @@ const Editor = (function () {
       if (action === 'num-words') {
         const current = node.attrs.format || {};
         updateSelectedBadge({ type: 'number', words: !current.words });
+        return;
+      }
+      // J/M/A : bascule un composant de la date (vrai par défaut, cf.
+      // VariableFormat.formatDate) - le dernier composant encore actif ne
+      // peut pas être désactivé (éviterait une date vide "").
+      if (action.indexOf('date-part:') === 0) {
+        const part = action.slice(10);
+        const current = node.attrs.format || {};
+        const activeParts = ['day', 'month', 'year'].filter(p => current[p] !== false);
+        if (activeParts.length === 1 && activeParts[0] === part) return;
+        updateSelectedBadge({ type: 'date', [part]: current[part] === false });
+        return;
+      }
+      if (action === 'date-words') {
+        const current = node.attrs.format || {};
+        updateSelectedBadge({ type: 'date', words: !current.words });
       }
     }
     function onInput(role, value) {
@@ -1501,6 +1524,13 @@ const Editor = (function () {
       if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
       const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
       if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
+      // J/M/A vrais par défaut (format.day/month/year absent = affiché),
+      // cohérent avec VariableFormat.formatDate.
+      const isDate = format.type === 'date';
+      setActive('date-part:day', !isDate || format.day !== false);
+      setActive('date-part:month', !isDate || format.month !== false);
+      setActive('date-part:year', !isDate || format.year !== false);
+      setActive('date-words', isDate && !!format.words);
     }
 
     const check = () => {

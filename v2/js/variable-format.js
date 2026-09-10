@@ -48,24 +48,73 @@ const VariableFormat = (function () {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  function formatDate(val, presetKey) {
+  // Assemble une chaîne à partir d'un tableau de "parts" (même forme que
+  // Intl.DateTimeFormat#formatToParts : {type, value}, type ∈ 'day'/'month'/
+  // 'year'/'weekday'/'literal'/...) en ne gardant que les composants
+  // jour/mois/année demandés (boutons J/M/A de la barre de formatage,
+  // cf. Editor.js:wireVariableFloatingToolbar) - un séparateur ('literal')
+  // n'est conservé QUE s'il se trouve entre deux composants effectivement
+  // gardés, jamais en tête/fin ni collé à un composant retiré (sinon
+  // "M A" laisserait un "/" fantôme en tête, ex. "/12/2026"). weekday (et
+  // tout type hors jour/mois/année) reste toujours affiché, non couvert
+  // par ces 3 boutons.
+  function buildDateStringFromParts(parts, keep) {
+    let result = '';
+    let pendingLiteral = '';
+    let wroteAny = false;
+    parts.forEach(part => {
+      if (part.type === 'literal') { pendingLiteral += part.value; return; }
+      const shouldKeep = Object.prototype.hasOwnProperty.call(keep, part.type) ? keep[part.type] : true;
+      if (!shouldKeep) { pendingLiteral = ''; return; }
+      if (wroteAny) result += pendingLiteral;
+      result += part.value;
+      pendingLiteral = '';
+      wroteAny = true;
+    });
+    return result;
+  }
+  // Convertit en toutes lettres (numberToWordsFr, déjà utilisé pour les
+  // nombres) chaque composant encore purement numérique après filtrage - un
+  // nom de mois déjà écrit en toutes lettres (préréglage "12 septembre
+  // 2026") reste tel quel, seuls jour/année (et un mois numérique éventuel,
+  // ex. préréglage AAAA-MM-JJ) sont convertis. Génère naturellement la forme
+  // classique d'un acte ("quinze décembre mille neuf cent quatre-vingt-
+  // dix-sept") sans traiter ce préréglage à part.
+  function wordifyDateParts(parts) {
+    return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWordsFr(parseInt(part.value, 10)) }) : part));
+  }
+
+  function formatDate(val, format) {
     const date = gristDateToJsDate(val);
     if (!date) return '';
-    const preset = DATE_PRESETS.find(p => p.key === presetKey) || DATE_PRESETS[0];
+    format = format || {};
+    const preset = DATE_PRESETS.find(p => p.key === format.preset) || DATE_PRESETS[0];
+    const keep = {
+      day: format.day !== false,
+      month: format.month !== false,
+      year: format.year !== false,
+    };
+    let parts;
     if (preset.iso) {
-      const y = date.getUTCFullYear();
+      const y = String(date.getUTCFullYear());
       const m = String(date.getUTCMonth() + 1).padStart(2, '0');
       const d = String(date.getUTCDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-    if (preset.shortNoPad) {
+      parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: d }];
+    } else if (preset.shortNoPad) {
       // Construit à la main plutôt que via Intl.DateTimeFormat : la locale
       // fr-FR zéro-remplit jour/mois même avec `numeric` (vérifié - aucune
       // option Intl ne produit "12/9/26" non complété), ce préréglage existe
       // justement pour s'en distinguer de dmy_slash_full.
-      return `${date.getUTCDate()}/${date.getUTCMonth() + 1}/${String(date.getUTCFullYear()).slice(-2)}`;
+      parts = [
+        { type: 'day', value: String(date.getUTCDate()) }, { type: 'literal', value: '/' },
+        { type: 'month', value: String(date.getUTCMonth() + 1) }, { type: 'literal', value: '/' },
+        { type: 'year', value: String(date.getUTCFullYear()).slice(-2) },
+      ];
+    } else {
+      parts = new Intl.DateTimeFormat('fr-FR', Object.assign({ timeZone: 'UTC' }, preset.options)).formatToParts(date);
     }
-    return new Intl.DateTimeFormat('fr-FR', Object.assign({ timeZone: 'UTC' }, preset.options)).format(date);
+    if (format.words) parts = wordifyDateParts(parts);
+    return buildDateStringFromParts(parts, keep);
   }
 
   // --- Nombre en toutes lettres (français, orthographe classique) ---

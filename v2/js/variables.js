@@ -277,7 +277,7 @@ const Variables = (function () {
       if (colType === 'Date' || colType === 'DateTime') effectiveFormat = { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key };
     }
     if (effectiveFormat && effectiveFormat.type === 'number') return VariableFormat.formatNumber(val, effectiveFormat);
-    if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat.preset);
+    if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat);
     return String(val);
   }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
