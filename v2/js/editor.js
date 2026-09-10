@@ -509,6 +509,23 @@ const Editor = (function () {
             h.addEventListener('mousedown', event => startResize(event, corner));
           });
           moveHandle.addEventListener('mousedown', startMove);
+          // Une fois l'image DÉJÀ sélectionnée (2e interaction), permet de la
+          // glisser directement au clic sur l'image elle-même, sans devoir
+          // viser précisément la poignée de déplacement (petite bulle) - cf.
+          // retour utilisateur : difficile de la déplacer sans cliquer
+          // spécifiquement sur la bulle, qui n'est là que pour amorcer la
+          // toute première sélection (indispensable pour une image "derrière
+          // le texte" couverte par du texte, cf. commentaire CSS sur
+          // .editor-image-move-handle - la poignée reste inchangée, toujours
+          // affichée pour ce cas). Le TOUT PREMIER clic (pas encore
+          // sélectionnée) continue de suivre le chemin normal de ProseMirror
+          // (sélection du nœud) - ne déclenche PAS de déplacement immédiat,
+          // qui surprendrait sur un simple clic de sélection.
+          img.addEventListener('mousedown', event => {
+            if (!wrap.classList.contains('editor-image-layered')) return;
+            if (!wrap.classList.contains('editor-image-selected')) return;
+            startMove(event);
+          });
 
           // NodeView vivante : structure DIFFÉRENTE du HTML sérialisé
           // (renderHTML ci-dessus, qui pose position/left/top/z-index
@@ -542,8 +559,24 @@ const Editor = (function () {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
               wrap.style.top = (attrs.top || 0) + 'px';
+              // Largeur EXPLICITE (pas de "shrink-to-fit" implicite, le
+              // comportement par défaut d'un position:absolute sans largeur
+              // posée) : dans une cellule de tableau (bloc englobant CSS
+              // étroit, cf. pdf-export.js/attributeNestedPendingImages), un
+              // glisser qui approche/dépasse la largeur de CE bloc englobant
+              // (pas besoin d'un glisser extrême - une cellule fait souvent
+              // deux/trois cents pixels) fait s'effondrer la largeur calculée
+              // en mode shrink-to-fit à 0 (vérifié en conditions réelles :
+              // l'image entière, poignées comprises, devient un rectangle
+              // 0×0 - donc invisible - alors que `left`/`top` restent des
+              // nombres parfaitement valides) : l'image "disparaît dans le
+              // vide" en sortant du tableau plutôt que de simplement en
+              // sortir visuellement, signalé cassé par l'utilisateur. Poser
+              // ici la même largeur que l'<img> lui-même retire toute
+              // dépendance à ce calcul de largeur implicite.
+              wrap.style.width = attrs.width || '';
             } else {
-              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = '';
+              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.width = '';
             }
             moveHandle.style.display = layered ? '' : 'none';
             if (attrs.align) wrap.setAttribute('data-align', attrs.align); else wrap.removeAttribute('data-align');
@@ -1117,11 +1150,39 @@ const Editor = (function () {
       `<button data-action="delete" title="Supprimer">${Icons.svg('trash')}</button>`,
     ].join('');
 
+    // `editor.isActive('editorImage')` renvoie vrai dès qu'une SÉLECTION DE
+    // TEXTE (pas juste un clic direct sur l'image) traverse la position DOM
+    // de l'image - y compris une image en calque, déplacée visuellement
+    // loin de cette position (son emplacement DOM reste celui où elle a été
+    // insérée à l'origine, seul son rendu CSS left/top bouge). Sélectionner
+    // un paragraphe où une image "flottait" auparavant activait donc à tort
+    // la toolbar/le surlignage sur cette image, signalé cassé par
+    // l'utilisateur. `selectedImageNode()` exige une VRAIE NodeSelection
+    // ciblant précisément ce nœud (ce qu'un clic direct - ou la poignée de
+    // déplacement - produit déjà, cf. NodeSelectionClass.create ailleurs
+    // dans ce fichier) - une sélection de texte qui la traverse simplement
+    // ne qualifie plus.
+    // PAS de `instanceof NodeSelectionClass` ici (piège découvert en le
+    // testant) : la sélection qu'un clic RÉEL sur l'image produit (créée en
+    // interne par prosemirror-view, pas par ce fichier) échoue cet
+    // `instanceof`, alors même que `.node` est bien présent et correct -
+    // signe d'un second exemplaire du module `prosemirror-state` distinct de
+    // celui importé ici (l'un des deux ne passe peut-être pas par le même
+    // chemin de résolution que l'entrée `prosemirror-state` de l'importmap),
+    // malgré le soin déjà pris ailleurs dans le projet pour éviter ce piège.
+    // Duck-typing sur `.node` à la place : seule NodeSelection (quel que
+    // soit l'exemplaire du module qui l'a construite) expose cette
+    // propriété - une TextSelection, y compris une couvrant exactement la
+    // position de l'image, ne l'a jamais.
+    function selectedImageNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'editorImage') ? node : null;
+    }
+
     function updateSelectedImage(patch) {
-      if (!editor.isActive('editorImage')) return;
-      const { state, view } = editor;
-      const node = state.selection.node;
+      const node = selectedImageNode();
       if (!node) return;
+      const { state, view } = editor;
       const pos = state.selection.from;
       const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
       // Restaure explicitement la NodeSelection - cf. commentaire sur
@@ -1138,10 +1199,9 @@ const Editor = (function () {
     // conteneur (margin:auto n'a aucun effet sur un élément position:absolute,
     // même limitation que la V1 - cf. snapFloatingImageHorizontal).
     function alignOrSnap(align) {
-      if (!editor.isActive('editorImage')) return;
-      const { state } = editor;
-      const node = state.selection.node;
+      const node = selectedImageNode();
       if (!node) return;
+      const { state } = editor;
       if (node.attrs.layer === 'normal') { updateSelectedImage({ align }); return; }
       const dom = editor.view.nodeDOM(state.selection.from);
       const img = dom && dom.querySelector && dom.querySelector('img');
@@ -1171,10 +1231,9 @@ const Editor = (function () {
     // moins celui de la racine éditeur) pour qu'elle ne saute pas
     // visuellement au passage en position:absolute.
     function setLayer(target) {
-      if (!editor.isActive('editorImage')) return;
-      const { state, view } = editor;
-      const node = state.selection.node;
+      const node = selectedImageNode();
       if (!node) return;
+      const { state, view } = editor;
       const pos = state.selection.from;
       if (node.attrs.layer === target) return;
       const patch = { layer: target };
@@ -1212,10 +1271,7 @@ const Editor = (function () {
     }
 
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
-      // isActive('editorImage') peut être vrai sans que la sélection soit
-      // réellement une NodeSelection sur cette image (curseur texte juste à
-      // côté) - .node est alors undefined, vérifié en conditions réelles.
-      const selNode = editor.isActive('editorImage') && editor.state.selection.node;
+      const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
       const commands = {
@@ -1240,11 +1296,7 @@ const Editor = (function () {
     });
 
     function syncState() {
-      // editor.isActive('editorImage') peut renvoyer true alors même que la
-      // sélection n'est PAS une NodeSelection sur cette image (ex. curseur
-      // texte juste avant/après elle) - .node n'existe alors pas, vérifié en
-      // conditions réelles (TypeError sans ce garde-fou).
-      const node = editor.isActive('editorImage') && editor.state.selection.node;
+      const node = selectedImageNode();
       if (!node) return;
       const attrs = node.attrs;
       const opacityInput = panel.el.querySelector('input[data-role="opacity"]');
@@ -1268,7 +1320,7 @@ const Editor = (function () {
     // été recréée entre-temps.
     const check = () => {
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
-      if (!editor.isActive('editorImage')) { panel.hide(); return; }
+      if (!selectedImageNode()) { panel.hide(); return; }
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       const img = dom && dom.querySelector && dom.querySelector('img');
       if (!img) { panel.hide(); return; }

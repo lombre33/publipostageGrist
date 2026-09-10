@@ -112,11 +112,18 @@
    seule, cf. applyAttrs) n'est plus cliquable une fois du texte dessus - sans
    un point d'accroche TOUJOURS visible, impossible de la resélectionner une
    fois désélectionnée (problème d'œuf-et-poule, même raison que l'ancre de
-   la V1, cf. mémoire project_v2_tiptap_migration). Sert à la fois de bouton
-   de sélection et de poignée de déplacement (un simple clic sans glisser
-   sélectionne quand même, cf. onMoveUp qui appelle updateAttrs même à
-   distance nulle). */
-.tiptap .editor-image-view.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: -12px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
+   la V1, cf. mémoire project_v2_tiptap_migration). Sert de bouton de
+   sélection (indispensable pour amorcer la toute première sélection d'une
+   image "derrière le texte") - le glisser lui-même, une fois l'image
+   sélectionnée, se fait plus simplement directement sur l'image (cf.
+   addNodeView, écouteur mousedown sur `img`), signalé plus pratique par
+   l'utilisateur que de devoir viser cette petite poignée à chaque fois.
+   Repositionnée à GAUCHE (pas au-dessus, comme avant) : la toolbar flottante
+   apparaît par défaut au-dessus de l'image (placement:'top', cf.
+   createFloatingPanel) - une poignée également au-dessus s'y superposait,
+   rendant les deux difficiles à distinguer/cliquer précisément, signalé
+   cassé par l'utilisateur. */
+.tiptap .editor-image-view.editor-image-layered .editor-image-move-handle { display: flex; align-items: center; justify-content: center; top: 50%; left: -12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--accent, #2f6fed); cursor: move; z-index: 10; }
 
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 
@@ -160,8 +167,23 @@
    trop chargé ne rentre plus, plutôt que de prétendre à un ajustement
    pixel-parfait qu'un CSS seul ne peut pas garantir dès qu'une colonne à
    largeur explicite et une colonne sans largeur coexistent (vérifié en
-   conditions réelles - cas limite, pas la situation courante). */
-#editor-container.a4-preview .tiptap .tableWrapper { overflow-x: hidden; }
+   conditions réelles - cas limite, pas la situation courante).
+   MIS À JOUR depuis `hidden` : `clampOverflowingTables` (v2/js/editor.js,
+   ajouté après ce correctif) empêche maintenant activement un tableau de
+   dépasser réellement le conteneur dans le cas courant, rendant ce filet de
+   sécurité largement redondant - et `hidden` avait un effet de bord non
+   voulu, découvert plus tard : une image en calque glissée à l'intérieur
+   d'une cellule (position:absolute ancrée sur la cellule, cf.
+   attributeNestedPendingImages dans pdf-export.js) reste un descendant DOM
+   de .tableWrapper, donc SE FAISAIT DÉCOUPER (invisible) dès que le
+   glisser dépassait le bord du tableau, au lieu de simplement en sortir
+   visuellement comme n'importe quel élément position:absolute devrait
+   pouvoir le faire - signalé cassé par l'utilisateur ("disparaît dans le
+   vide"). `visible` laisse un tel dépassement (image OU, cas résiduel rare,
+   tableau encore trop large) réellement se voir plutôt que de le cacher -
+   cohérent avec la motivation d'origine de ce bloc (préférer un signal
+   honnête à un défilement/découpage caché). */
+#editor-container.a4-preview .tiptap .tableWrapper { overflow-x: visible; }
 #editor-container.a4-preview .tiptap table col { min-width: 0 !important; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
