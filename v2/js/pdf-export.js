@@ -1283,10 +1283,74 @@ const PdfExport = (function () {
     return blocks;
   }
 
+  // Poursuite de l'habillage sur un paragraphe SUIVANT qui n'a lui-même
+  // AUCUNE image, mais dont le flottement d'une image d'un FRÈRE PRÉCÉDENT
+  // continue de déborder verticalement dans son espace - même mesure "mots
+  // réels vs bord de l'image" que floatedImageParagraphFrom, mais un simple
+  // décalage de marge suffit ici (pas de `columns` : il n'y a pas de second
+  // contenu - l'image, déjà posée par le paragraphe d'origine - à replacer
+  // à côté sur CE bloc, seulement le texte qui doit rester dans la largeur
+  // réduite tant que le flottement dure). `carry` = { imgBottom (px, même
+  // repère getBoundingClientRect que words[].top), align, imageWidthPt,
+  // remainingWidthPt, gapPt }, préparé par blockFrom au moment où le
+  // paragraphe hôte de l'image est traité. Retourne { blocks, stillActive }
+  // - stillActive=true si TOUT le paragraphe est resté dans la hauteur de
+  // l'image (le frère SUIVANT doit alors être vérifié à son tour) ; ou
+  // `null` si ce paragraphe est en fait déjà entièrement sous l'image
+  // (marge de tolérance de l'appelant trop généreuse - traité normalement).
+  function wrapParagraphBesideCarriedFloat(node, carry) {
+    const words = collectWords(node);
+    if (!words.length) return null;
+    const textAlign = alignment(node);
+    const BOUNDARY_TOLERANCE_PX = 4;
+    let besideEnd = words.length;
+    for (let w = 0; w < words.length; w += 1) { if (words[w].top >= carry.imgBottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
+    if (besideEnd === 0) return null;
+    const marginLeft = carry.align === 'left' ? carry.imageWidthPt + carry.gapPt : 0;
+    const marginRight = carry.align === 'right' ? carry.imageWidthPt + carry.gapPt : 0;
+    const hasAfter = besideEnd < words.length;
+    const blocks = [];
+    if (textAlign === 'justify') {
+      const groupIntoLines = wordsSlice => {
+        const lines = [];
+        wordsSlice.forEach(w => {
+          const last = lines[lines.length - 1];
+          if (last && Math.abs(last[0].top - w.top) < 2) last.push(w); else lines.push([w]);
+        });
+        return lines;
+      };
+      const besideLines = groupIntoLines(words.slice(0, besideEnd));
+      let cursor = null;
+      besideLines.forEach((line, li) => {
+        const isLastLine = li === besideLines.length - 1;
+        const endCut = isLastLine ? (hasAfter ? { textNode: words[besideEnd].textNode, offset: words[besideEnd].start } : null) : { textNode: besideLines[li + 1][0].textNode, offset: besideLines[li + 1][0].start };
+        const isTrueLastLine = isLastLine && !hasAfter;
+        const lineRuns = isTrueLastLine
+          ? extractRunsBetween(node, cursor, endCut)
+          : buildJustifiedLine(node, line, cursor, endCut, carry.remainingWidthPt);
+        blocks.push({ text: lineRuns.length ? lineRuns : ' ', margin: [marginLeft, 0, marginRight, 0], lineHeight: LINE_HEIGHT_RATIO, alignment: textAlign });
+        cursor = endCut;
+      });
+    } else {
+      const besideLastWord = words[besideEnd - 1];
+      const besideRuns = extractRunsBetween(node, null, { textNode: besideLastWord.textNode, offset: besideLastWord.end });
+      const besideBlock = { text: besideRuns.length ? besideRuns : ' ', margin: [marginLeft, 0, marginRight, 0], lineHeight: LINE_HEIGHT_RATIO };
+      if (textAlign) besideBlock.alignment = textAlign;
+      blocks.push(besideBlock);
+    }
+    if (hasAfter) {
+      const afterRuns = extractRunsBetween(node, { textNode: words[besideEnd].textNode, offset: words[besideEnd].start }, null);
+      const afterBlock = { text: afterRuns.length ? afterRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+      if (textAlign) afterBlock.alignment = textAlign;
+      blocks.push(afterBlock);
+    }
+    return { blocks, stillActive: !hasAfter };
+  }
+
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
   // paragraphe contenant une image produit un bloc de texte ET un bloc image
   // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
-  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect) {
+  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
@@ -1298,7 +1362,40 @@ const PdfExport = (function () {
       });
       if (floatImgEl) {
         const floated = floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt);
-        if (floated) return Array.isArray(floated) ? floated : [floated];
+        if (floated) {
+          const arr = Array.isArray(floated) ? floated : [floated];
+          // Le flottement doit-il se poursuivre sur le(s) frère(s) SUIVANT(s)
+          // (cf. wrapParagraphBesideCarriedFloat) ? Mesuré depuis le <img> RÉEL
+          // (encore attaché à l'hôte de mesure, indépendamment de ce que
+          // floatedImageParagraphFrom a déjà consommé en interne) plutôt que
+          // de changer sa signature de retour. Si le dernier bloc produit n'a
+          // PAS de `columns` (c'est un `afterBlock` texte plein, cf.
+          // floatedImageParagraphFrom), du texte est déjà revenu sous l'image
+          // DANS ce même paragraphe - le flottement est épuisé ici, rien à
+          // reporter.
+          const lastBlock = arr[arr.length - 1];
+          if (lastBlock && !lastBlock.columns) {
+            arr._floatCarry = null;
+          } else {
+            const align = floatImgEl.getAttribute('data-align');
+            const imgRect = floatImgEl.getBoundingClientRect();
+            const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
+            const gapPt = 12 * PX_TO_PT;
+            const imageWidthPt = Math.max(15, imgRect.width * PX_TO_PT);
+            arr._floatCarry = { imgBottom: imgRect.bottom, align, imageWidthPt, remainingWidthPt: Math.max(40, pageWidthPt - imageWidthPt - gapPt), gapPt };
+          }
+          return arr;
+        }
+      } else if (floatCarry) {
+        const nodeRect = node.getBoundingClientRect();
+        if (nodeRect.top < floatCarry.imgBottom) {
+          const cont = wrapParagraphBesideCarriedFloat(node, floatCarry);
+          if (cont) {
+            if (pageBreakBefore && cont.blocks[0]) cont.blocks[0].pageBreak = 'before';
+            cont.blocks._floatCarry = cont.stillActive ? floatCarry : null;
+            return cont.blocks;
+          }
+        }
       }
     }
     const images = [];
@@ -1349,7 +1446,21 @@ const PdfExport = (function () {
     } else if (pageBreakBefore && images[0]) {
       images[0].pageBreak = 'before';
     }
-    images.forEach(img => blocks.push(img));
+    images.forEach(img => {
+      blocks.push(img);
+      // Image flottante SEULE dans son paragraphe (aucun texte à côté,
+      // `floatImgEl` plus haut n'a alors rien trouvé à traiter puisque
+      // `runs.length` valait 0 - cf. floatedImageParagraphFrom, qui bâcle
+      // avant de calculer quoi que ce soit dans ce cas précis) - le
+      // flottement doit quand même pouvoir se reporter sur le(s) frère(s)
+      // SUIVANT(s), cf. wrapParagraphBesideCarriedFloat.
+      if (img._floatAlign) {
+        const imgRect = img._sourceImgNode.getBoundingClientRect();
+        const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
+        const gapPt = 12 * PX_TO_PT;
+        blocks._floatCarry = { imgBottom: imgRect.bottom, align: img._floatAlign, imageWidthPt: img.width, remainingWidthPt: Math.max(40, pageWidthPt - img.width - gapPt), gapPt };
+      }
+    });
     nestedLists.forEach(list => {
       Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
         blockFrom(li, false, headingMarkers, availableWidthPt, rootRect).forEach(b => blocks.push(b));
@@ -1375,15 +1486,24 @@ const PdfExport = (function () {
     const nestedPendingAll = [];
     const rootRect = root.getBoundingClientRect();
     let pendingPageBreak = false;
+    // Habillage d'une image "au coeur du texte" (float CSS) qui déborde
+    // encore verticalement une fois son paragraphe hôte terminé - transmis
+    // au(x) frère(s) SUIVANT(s) via blockFrom (cf. son paramètre floatCarry
+    // et wrapParagraphBesideCarriedFloat) tant qu'ils restent des <p>/<div>
+    // simples. Remis à `null` dès que le prochain contenu n'est PAS un tel
+    // bloc (tableau, titre, liste, zone 2-colonnes, saut de page forcé...) -
+    // volontairement pas de tentative d'habiller ces structures plus
+    // complexes, seule la continuation entre paragraphes simples est gérée.
+    let floatCarry = null;
     const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
     const visit = async node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; return; }
+      if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; floatCarry = null; return; }
       if (node.classList.contains('heading-numbering-config')) return;
       if (node.classList.contains('toc-marker')) {
         const tocBlock = { stack: [{ text: 'Sommaire', bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
-        push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false;
+        push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false; floatCarry = null;
         return;
       }
       // Pas de branche dédiée pour un <table> : @tiptap/extension-table
@@ -1399,13 +1519,14 @@ const PdfExport = (function () {
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
         if (zoneBlock && zoneBlock._nestedPending) { nestedPendingAll.push(...zoneBlock._nestedPending); delete zoneBlock._nestedPending; }
         push(zoneBlock, node);
-        pendingPageBreak = false;
+        pendingPageBreak = false; floatCarry = null;
         return;
       }
       if (isBlock(node)) {
         let produced;
-        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect); }
+        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect, floatCarry); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
+        floatCarry = (produced && produced._floatCarry) || null;
         produced.forEach(b => {
           if (b && b._nestedPending) { nestedPendingAll.push(...b._nestedPending); delete b._nestedPending; }
           push(b, node); if (b && b._isHeading) headingBlocks.push(b);
