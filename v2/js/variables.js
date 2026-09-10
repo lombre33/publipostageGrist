@@ -138,6 +138,81 @@ const Variables = (function () {
     });
   }
 
+  // Champ "Nom de fichier PDF" (#pdf-filename-template, cf. v2/index.html) :
+  // un <input> HTML plein texte, jamais géré par TipTap/ProseMirror (aucun
+  // @tiptap/suggestion possible dedans - ce n'est pas un contenteditable) -
+  // porté quasi tel quel de la V1 (js/variables.js:checkForFilenameTrigger/
+  // insertFilenameVariable/initFilenameInput), qui affrontait déjà exactement
+  // ce même problème. Réutilise le MÊME acBox/currentItems/selectedIndex que
+  // l'éditeur (jamais actifs en même temps - on ne tape jamais dans les deux
+  // champs à la fois) plutôt que dupliquer tout l'appareil de rendu/position.
+  // `filenameInputState` distingue "la popup vient de ce champ" (par
+  // opposition à l'éditeur) - nécessaire ici puisque `latestCommand` est
+  // partagé : sans lui, confirmer un item déclenché depuis l'éditeur
+  // pourrait par erreur retomber sur la dernière commande posée par ce
+  // champ (ou l'inverse) si un flux d'évènements imprévu les entrelaçait.
+  let filenameInputState = null;
+  function checkForFilenameTrigger(el) {
+    const caret = el.selectionStart;
+    if (caret == null) { hide(); filenameInputState = null; return; }
+    const text = el.value.slice(0, caret);
+    const match = text.match(/#([A-Za-z0-9_]*)$/);
+    if (!match) { hide(); filenameInputState = null; return; }
+    const query = match[1].toLowerCase();
+    const all = GristAPI.getAllVariables();
+    const items = all.filter(v => v.key.toLowerCase().includes(query)).slice(0, 50);
+    if (!items.length) { hide(); filenameInputState = null; return; }
+    filenameInputState = { el, start: caret - match[0].length, end: caret };
+    currentItems = items;
+    selectedIndex = 0;
+    latestCommand = item => insertFilenameVariable(item);
+    render(currentItems, latestCommand);
+    position(() => el.getBoundingClientRect());
+    ensureBox().style.display = 'block';
+  }
+  // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut
+  // "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ,
+  // logique partagée avec la V1) - insérer directement "#Cle" en texte,
+  // sans badge (un <input> ne peut de toute façon pas contenir de HTML), est
+  // donc suffisant et cohérent avec ce mécanisme déjà en place.
+  function insertFilenameVariable(item) {
+    const state = filenameInputState;
+    if (!state) return;
+    const { el, start, end } = state;
+    const value = el.value;
+    const insertion = '#' + item.key;
+    el.value = value.slice(0, start) + insertion + value.slice(end);
+    const newCaret = start + insertion.length;
+    hide();
+    filenameInputState = null;
+    el.focus();
+    el.setSelectionRange(newCaret, newCaret);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  // À appeler depuis main.js une fois le champ de nom de fichier PDF présent
+  // dans le DOM (indépendant de createExtension, qui ne concerne que
+  // l'éditeur).
+  function initFilenameInput(el) {
+    if (!el) return;
+    el.addEventListener('input', () => checkForFilenameTrigger(el));
+    el.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') checkForFilenameTrigger(el); });
+    // Un <input> ne passe jamais par @tiptap/suggestion (aucun onKeyDown
+    // fourni) - navigation clavier gérée ici à la main, même logique que
+    // suggestionRender() ci-dessus.
+    el.addEventListener('keydown', e => {
+      if (!filenameInputState || !acBox || acBox.style.display !== 'block') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, latestCommand); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = (selectedIndex - 1 + currentItems.length) % currentItems.length; render(currentItems, latestCommand); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); latestCommand(currentItems[selectedIndex]); }
+      else if (e.key === 'Escape') { e.preventDefault(); hide(); filenameInputState = null; }
+    });
+    // Un clic sur un item de la popup (mousedown, déjà en preventDefault()
+    // dans render() ci-dessus) s'exécute avant le blur du champ - ce filet de
+    // sécurité (délai court) couvre les cas où le focus partirait quand même
+    // (ex. Échap ailleurs), même prudence que la V1.
+    el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
+  }
+
   // Résolution des variables (mode Lecture, cf. ../js/reader-mode.js réutilisé
   // tel quel - il appelle Variables.resolveVariable(varTable, varColumn,
   // currentTableId, record), qui doit donc exister ici aussi). Portée telle
@@ -398,5 +473,5 @@ const Variables = (function () {
     });
   }
 
-  return { createExtension, resolveVariable, refreshLinkRulesPanel };
+  return { createExtension, resolveVariable, refreshLinkRulesPanel, initFilenameInput };
 })();

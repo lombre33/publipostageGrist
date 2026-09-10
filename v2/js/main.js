@@ -169,6 +169,7 @@
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
     wireLinkRulesModal();
+    Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
     setStatus('Widget V2 prêt.');
   }
