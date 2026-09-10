@@ -1014,7 +1014,7 @@ const Editor = (function () {
     if (!openDropdownPanel) return;
     if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')
       || event.target.closest('.v2-format-panel') || event.target.closest('.v2-format-chip')
-      || event.target.closest('.v2-stepper')) return;
+      || event.target.closest('.v2-stepper') || event.target.closest('.v2-fill-chip')) return;
     openDropdownPanel.hide();
     openDropdownPanel = null;
   });
@@ -1069,11 +1069,21 @@ const Editor = (function () {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';
   }
+  // Teinte l'icône elle-même (couleur de police "A"/pinceau de surlignage)
+  // plutôt qu'une pastille séparée - remplace le "trait horizontal" jugé
+  // trop lourd par l'utilisateur, tout en gardant le même retour visuel
+  // dynamique (cf. syncToolbarState) sur la position du curseur.
+  function setColorIcon(id, color) {
+    const el = document.getElementById(id);
+    if (el) el.style.color = color || '';
+  }
 
-  // Couleur de police / surlignage (bandeau principal) - bouton + pastille
-  // (couleur courante) + menu déroulant, plutôt que le <input type=color> +
-  // bouton "retirer" séparés d'origine (signalé peu sobre/pas assez
-  // standard par l'utilisateur).
+  // Couleur de police / surlignage (bandeau principal) - bouton "appliquer"
+  // (icône, clic = réapplique la DERNIÈRE couleur choisie) + bouton chevron
+  // séparé (ouvre le menu déroulant de nuances) - même geste que Word/Google
+  // Docs, remplace le clic unique d'origine qui n'ouvrait que le menu (signalé
+  // par l'utilisateur : il faut mémoriser le dernier choix ET pouvoir
+  // l'appliquer d'un clic direct sans repasser par le menu).
   function wireColorPickers() {
     let savedSelection = null;
     const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
@@ -1083,20 +1093,33 @@ const Editor = (function () {
       fn(chain);
       chain.run();
     };
+    // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix"
+    // - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
+    let lastTextColor = TEXT_COLOR_PRESETS[0];
+    let lastHighlightColor = FILL_COLOR_PRESETS[0];
+    const wireQuickApply = (id, fn) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('mousedown', (event) => { event.preventDefault(); captureSelection(); withSavedSelection(fn); });
+    };
+
     const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
       noneLabel: 'Par défaut',
       withSavedSelection,
-      onPick: (chain, color) => { chain.setTextColor(color); setColorBar('v2-color-text-bar', color); },
-      onNone: (chain) => { chain.unsetTextColor(); setColorBar('v2-color-text-bar', null); },
+      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); setColorIcon('v2-text-color-icon', color); },
+      onNone: (chain) => { chain.unsetTextColor(); setColorIcon('v2-text-color-icon', null); },
     });
-    wireDropdownButton(document.getElementById('v2-btn-text-color'), textColorPanel, captureSelection);
+    wireQuickApply('v2-btn-text-color', chain => chain.setTextColor(lastTextColor));
+    wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
+
     const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: 'Aucun',
       withSavedSelection,
-      onPick: (chain, color) => { chain.setHighlight(color); setColorBar('v2-color-highlight-bar', color); },
-      onNone: (chain) => { chain.unsetHighlight(); setColorBar('v2-color-highlight-bar', null); },
+      onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); setColorIcon('v2-highlight-icon', color); },
+      onNone: (chain) => { chain.unsetHighlight(); setColorIcon('v2-highlight-icon', null); },
     });
-    wireDropdownButton(document.getElementById('v2-btn-highlight'), highlightPanel, captureSelection);
+    wireQuickApply('v2-btn-highlight', chain => chain.setHighlight(lastHighlightColor));
+    wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
   }
 
   // Toolbar de gestion de tableau (ajout/suppr ligne/colonne, suppr tableau) -
@@ -1118,8 +1141,8 @@ const Editor = (function () {
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
       + '<span class="v2-floating-sep"></span>'
-      + '<button data-action="fill-open" class="v2-color-split" id="v2-table-fill-btn" title="Fond de cellule (remplir)">'
-      + Icons.svg('fill') + '<span class="v2-color-split-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
+      + '<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="Fond de cellule (remplir)">'
+      + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
       + '</button>';
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const commands = {
@@ -1559,8 +1582,8 @@ const Editor = (function () {
       if (headerSelect.value !== value) headerSelect.value = value;
     }
     const textStyleAttrs = editor.getAttributes('textStyle');
-    setColorBar('v2-color-text-bar', textStyleAttrs.color || '#000000');
-    setColorBar('v2-color-highlight-bar', textStyleAttrs.backgroundColor || null);
+    setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
+    setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Polices/tailles : les swatches de couleur ci-dessus étaient déjà
     // synchronisés sur le curseur, mais PAS ces deux <select> (signalé par
     // l'utilisateur - ex. curseur en Arial 15pt sans que la toolbar ne le

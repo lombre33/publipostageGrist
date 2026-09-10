@@ -34,7 +34,13 @@ const Icons = (function () {
     toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
-    font: '<path d="M5 20 10 6h4l5 14M7 14h10"/>',
+    // "Aa" (grande + petite casse, tailles différentes) plutôt qu'un simple
+    // "A" - trop proche visuellement du bouton couleur de police juste à
+    // côté (signalé confus par l'utilisateur) ; convention universellement
+    // reconnue pour "choix de police" (Google Fonts, sélecteurs Office/
+    // LibreOffice). <text> plutôt qu'un tracé - même procédé déjà utilisé
+    // dans ce fichier pour orderedList/numbering-pill.
+    font: '<text x="2" y="17.5" font-size="14" font-family="Georgia, \'Times New Roman\', serif" font-weight="700" fill="currentColor" stroke="none">A</text><text x="13.5" y="17.5" font-size="10" font-family="Georgia, \'Times New Roman\', serif" font-weight="700" fill="currentColor" stroke="none">a</text>',
     bulletDisc: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>',
     bulletCircle: '<circle cx="12" cy="12" r="4.2"/>',
     bulletSquare: '<rect x="7.8" y="7.8" width="8.4" height="8.4" fill="currentColor" stroke="none"/>',
