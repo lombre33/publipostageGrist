@@ -1624,6 +1624,7 @@ const Editor = (function () {
     set('v2-btn-bullet', 'bulletList');
     set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
     set('v2-btn-ordered-numeric', 'orderedList'); set('v2-btn-ordered-alpha', 'orderedAlpha'); set('v2-btn-ordered-roman', 'orderedRoman');
+    set('v2-btn-checklist', 'checklist');
     set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
@@ -1658,9 +1659,9 @@ const Editor = (function () {
     currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
     const alignMain = document.getElementById('v2-btn-align-main');
     if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
-    // Bouton "Liste" fusionné (puces + numéros, cf. maquette de
-    // simplification demandée) : actif dès qu'UN des deux types l'est.
-    setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList'));
+    // Bouton "Liste" fusionné (puces + numéros + cases à cocher, cf. maquette
+    // de simplification demandée) : actif dès qu'UN des trois types l'est.
+    setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList'));
     const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
     setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
     setActive('v2-btn-bullet-circle', bulletStyle === 'circle');
@@ -1669,6 +1670,7 @@ const Editor = (function () {
     setActive('v2-btn-ordered-numeric', orderedStyle === 'decimal');
     setActive('v2-btn-ordered-alpha', orderedStyle === 'alpha');
     setActive('v2-btn-ordered-roman', orderedStyle === 'roman');
+    setActive('v2-btn-checklist', editor.isActive('taskList'));
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
@@ -1708,6 +1710,8 @@ const Editor = (function () {
     const { TableRow } = await import('@tiptap/extension-table-row');
     const { TableCell } = await import('@tiptap/extension-table-cell');
     const { TableHeader } = await import('@tiptap/extension-table-header');
+    const { TaskList } = await import('@tiptap/extension-task-list');
+    const { TaskItem } = await import('@tiptap/extension-task-item');
     const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
     floatingUi = { computePosition, offset, flip, shift, autoUpdate };
     ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass } = await import('prosemirror-state'));
@@ -1739,6 +1743,11 @@ const Editor = (function () {
         HighlightColor,
         BulletStyle,
         OrderedListStyle,
+        // Case à cocher : extension officielle plutôt qu'un nœud maison (même
+        // logique que Table/TwoColumns) - nested:false, pas besoin d'imbriquer
+        // une case dans une autre pour ce besoin.
+        TaskList,
+        TaskItem.configure({ nested: false }),
         VarBadge,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
@@ -1813,6 +1822,7 @@ const Editor = (function () {
     bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
     bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
     bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
+    bind('v2-btn-checklist', () => editor.chain().focus().toggleTaskList().run());
     // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
     // liste (cf. createTabNavigationExtension) - sans effet (no-op, jamais
     // d'erreur) hors d'une liste, d'où l'état désactivé posé dans

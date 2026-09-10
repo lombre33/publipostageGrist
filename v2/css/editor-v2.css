@@ -57,6 +57,23 @@
    l'export PDF (cf. pdf-export.js:listMarkerFor). */
 .tiptap ol[data-number-style="alpha"], .reader-content ol[data-number-style="alpha"] { list-style-type: lower-alpha; }
 .tiptap ol[data-number-style="roman"], .reader-content ol[data-number-style="roman"] { list-style-type: lower-roman; }
+/* Case à cocher (extension officielle @tiptap/extension-task-list/-item) -
+   option "accent + barré" retenue par l'utilisateur parmi 3 maquettes : la
+   case cochée passe en bleu accent (pas le noir par défaut du navigateur)
+   ET le texte de l'item coché passe en barré/grisé, pour repérer d'un coup
+   d'œil ce qui est fait (convention "liste de tâches" classique). */
+.tiptap ul[data-type="taskList"], .reader-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.tiptap ul[data-type="taskList"] li, .reader-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 6px; }
+.tiptap ul[data-type="taskList"] li > label, .reader-content ul[data-type="taskList"] li > label { flex: none; margin-top: .2em; }
+.tiptap ul[data-type="taskList"] li > div, .reader-content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.tiptap ul[data-type="taskList"] input[type="checkbox"],
+.reader-content ul[data-type="taskList"] input[type="checkbox"] { accent-color: var(--accent, #2f6fed); width: 15px; height: 15px; }
+/* Mode Lecture = aperçu figé du contenu résolu, pas un formulaire - une case
+   cliquable là ne sauvegarderait jamais rien nulle part (source de
+   confusion), désactivée à l'affichage plutôt que retirée du HTML. */
+.reader-content ul[data-type="taskList"] input[type="checkbox"] { pointer-events: none; }
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div,
+.reader-content ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: var(--text-faint, #98a2b3); }
 /* Parité stricte mode Lecture (#reader-container/.reader-content) avec
    .tiptap - AU-DELÀ des puces/numéros ci-dessus. #reader-container est un
    sélecteur générique partagé avec la V1 (../css/style.css, jamais mis à

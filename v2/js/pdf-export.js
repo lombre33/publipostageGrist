@@ -434,6 +434,14 @@ const PdfExport = (function () {
       if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
       return n + '. ';
     }
+    // Case à cocher (extension officielle @tiptap/extension-task-list/-item) :
+    // un <ul data-type="taskList"> spécifique, à traiter AVANT le repli puce
+    // générique ci-dessous. '[x] '/'[ ] ' plutôt que ☑/☐ (hors WinAnsi, même
+    // contrainte que les puces rondes/carrées ci-dessus - non vérifié inutile
+    // de le re-tester, le motif est déjà connu).
+    if (parent && parent.getAttribute('data-type') === 'taskList') {
+      return node.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ';
+    }
     const bulletStyle = parent && parent.getAttribute('data-bullet-style');
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
   }

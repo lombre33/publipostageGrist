@@ -40,6 +40,7 @@ const Icons = (function () {
     toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
+    checklist: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
     bulletDisc: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>',
     bulletCircle: '<circle cx="12" cy="12" r="4.2"/>',
     bulletSquare: '<rect x="7.8" y="7.8" width="8.4" height="8.4" fill="currentColor" stroke="none"/>',
