@@ -1219,6 +1219,15 @@ const Editor = (function () {
     });
     floatingContextPanels.push(panel);
     const check = () => {
+      // La sélection ProseMirror (donc editor.isActive(...)) NE change PAS
+      // toute seule quand le focus quitte l'éditeur (ex. clic sur "Mode
+      // lecture") - un clic hors de l'éditeur déclenche bien un blur RÉEL,
+      // qui redéclenche souvent une 'transaction' (cf. mémoire) : sans cette
+      // garde, check() re-affiche alors le panneau juste après que le filet
+      // de sécurité mousedown ci-dessus l'ait fermé (constaté en conditions
+      // réelles - le panneau restait affiché, ancré à un endroit devenu
+      // invalide, après un clic sur "Mode lecture").
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
       if (!editor.isActive('table')) { panel.hide(); return; }
       const { $from } = editor.state.selection;
       let tableDepth = -1;
@@ -1433,6 +1442,11 @@ const Editor = (function () {
     // été recréée entre-temps.
     floatingContextPanels.push(panel);
     const check = () => {
+      // Cf. commentaire équivalent dans wireTableFloatingToolbar - un blur
+      // réel (clic hors de l'éditeur) ne change pas la sélection ProseMirror
+      // à lui seul, donc sans cette garde une 'transaction' qui suit peut
+      // rouvrir le panneau juste après sa fermeture.
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
       const dom = editor.view.nodeDOM(editor.state.selection.from);
@@ -1557,6 +1571,8 @@ const Editor = (function () {
     }
 
     const check = () => {
+      // Cf. commentaire équivalent dans wireTableFloatingToolbar.
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
       const node = selectedVarBadgeNode();
       if (!node) { panel.hide(); return; }
       const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
