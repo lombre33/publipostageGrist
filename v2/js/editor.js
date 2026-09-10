@@ -285,6 +285,29 @@ const Editor = (function () {
     });
   }
 
+  // Style de case à cocher (accentStrike/classic/accentPlain) - même schéma
+  // que BulletStyle/OrderedListStyle ci-dessus, augmente 'taskList' (extension
+  // officielle @tiptap/extension-task-list). Le rendu réel de chaque style
+  // vit en CSS (data-tasklist-style, cf. css/editor-v2.css) - cette extension
+  // ne fait que porter/sérialiser le choix sur le <ul>.
+  function createTaskListStyleExtension(Extension) {
+    return Extension.create({
+      name: 'taskListStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['taskList'],
+          attributes: {
+            taskListStyle: {
+              default: 'accentStrike',
+              parseHTML: el => el.getAttribute('data-tasklist-style') || 'accentStrike',
+              renderHTML: attrs => (attrs.taskListStyle && attrs.taskListStyle !== 'accentStrike' ? { 'data-tasklist-style': attrs.taskListStyle } : {}),
+            },
+          },
+        }];
+      },
+    });
+  }
+
   // Fond de cellule (remplir) - augmente TableCell/TableHeader (extensions
   // officielles) du même `backgroundColor` que le surlignage de texte
   // ci-dessus, MÊME NOM d'attribut/style CSS que par coïncidence utile (pas
@@ -1818,7 +1841,9 @@ const Editor = (function () {
     set('v2-btn-bullet', 'bulletList');
     set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
     set('v2-btn-ordered-numeric', 'orderedList'); set('v2-btn-ordered-alpha', 'orderedAlpha'); set('v2-btn-ordered-roman', 'orderedRoman');
-    set('v2-btn-checklist', 'checklist');
+    set('v2-btn-checklist-accent-strike', 'checklistAccentStrike');
+    set('v2-btn-checklist-classic', 'checklistClassic');
+    set('v2-btn-checklist-accent-plain', 'checklistAccentPlain');
     set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
@@ -1865,7 +1890,10 @@ const Editor = (function () {
     setActive('v2-btn-ordered-numeric', orderedStyle === 'decimal');
     setActive('v2-btn-ordered-alpha', orderedStyle === 'alpha');
     setActive('v2-btn-ordered-roman', orderedStyle === 'roman');
-    setActive('v2-btn-checklist', editor.isActive('taskList'));
+    const taskListStyle = editor.isActive('taskList') ? (editor.getAttributes('taskList').taskListStyle || 'accentStrike') : null;
+    setActive('v2-btn-checklist-accent-strike', taskListStyle === 'accentStrike');
+    setActive('v2-btn-checklist-classic', taskListStyle === 'classic');
+    setActive('v2-btn-checklist-accent-plain', taskListStyle === 'accentPlain');
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
@@ -1933,6 +1961,7 @@ const Editor = (function () {
     const HighlightColor = createHighlightExtension(Extension);
     const BulletStyle = createBulletStyleExtension(Extension);
     const OrderedListStyle = createOrderedListStyleExtension(Extension);
+    const TaskListStyle = createTaskListStyleExtension(Extension);
     const TableHeaderWithBg = withCellBackground(TableHeader);
     const TableCellWithBg = withCellBackground(TableCell);
     const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
@@ -1959,6 +1988,7 @@ const Editor = (function () {
         // une case dans une autre pour ce besoin.
         TaskList,
         TaskItem.configure({ nested: false }),
+        TaskListStyle,
         VarBadge,
         PageNumberBadge,
         Variables.createExtension(Extension, Suggestion),
@@ -2035,7 +2065,18 @@ const Editor = (function () {
     bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
     bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
     bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
-    bind('v2-btn-checklist', () => editor.chain().focus().toggleTaskList().run());
+    // Styles de case à cocher, mêmes trois maquettes que celles proposées à
+    // l'utilisateur (accent+barré/classique/accent sans barré) - crée la
+    // liste si besoin, sinon change juste le style de la liste existante à
+    // cet endroit (même logique que applyBulletStyle/applyOrderedStyle).
+    const applyTaskListStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('taskList')) chain.toggleTaskList();
+      chain.updateAttributes('taskList', { taskListStyle: style }).run();
+    };
+    bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
+    bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
+    bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
     // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
     // liste (cf. createTabNavigationExtension) - sans effet (no-op, jamais
     // d'erreur) hors d'une liste, d'où l'état désactivé posé dans

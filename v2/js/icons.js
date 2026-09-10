@@ -40,7 +40,15 @@ const Icons = (function () {
     toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
-    checklist: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
+    // 3 styles de case à cocher (survol du bouton "Liste", 3ᵉ ligne du
+    // panneau) - différenciés par la FORME (le trait/la case), le vrai
+    // libellé de chacun vit dans son data-tip (v2/index.html) : le rendu réel
+    // dans le document dépend de data-tasklist-style (CSS, cf. editor-v2.css,
+    // et taskCheckboxCanvas côté export PDF, v2/js/pdf-export.js), pas de ces
+    // icônes elles-mêmes.
+    checklistAccentStrike: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
+    checklistClassic: '<rect x="3" y="9" width="7" height="7"/><path d="M4.5 12.5l1.3 1.3L9 11"/>',
+    checklistAccentPlain: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h5"/>',
     // Page avec bandeaux haut/bas ombrés (zones en-tête/pied de page) séparés
     // du corps par un trait - cohérent avec le style "page" de pageBreak.
     headerFooter: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><rect x="4" y="3" width="16" height="4" fill="currentColor" fill-opacity="0.2" stroke="none"/><rect x="4" y="17" width="16" height="4" fill="currentColor" fill-opacity="0.2" stroke="none"/><path d="M4 7h16M4 17h16"/>',

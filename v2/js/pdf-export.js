@@ -434,16 +434,77 @@ const PdfExport = (function () {
       if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
       return n + '. ';
     }
-    // Case à cocher (extension officielle @tiptap/extension-task-list/-item) :
-    // un <ul data-type="taskList"> spécifique, à traiter AVANT le repli puce
-    // générique ci-dessous. '[x] '/'[ ] ' plutôt que ☑/☐ (hors WinAnsi, même
-    // contrainte que les puces rondes/carrées ci-dessus - non vérifié inutile
-    // de le re-tester, le motif est déjà connu).
-    if (parent && parent.getAttribute('data-type') === 'taskList') {
-      return node.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ';
-    }
     const bulletStyle = parent && parent.getAttribute('data-bullet-style');
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
+  }
+
+  // Case à cocher (extension officielle @tiptap/extension-task-list/-item) :
+  // un <ul data-type="taskList"> spécifique, PAS géré par listMarkerFor
+  // ci-dessus (☑/☐ hors WinAnsi, même contrainte que les puces rondes/
+  // carrées - '[x] '/'[ ] ' testé en premier, jugé "tout moche" par
+  // l'utilisateur) - dessinée en VECTORIEL via `canvas` (déjà utilisé par ce
+  // fichier pour le filet <hr>, cf. plus haut) plutôt qu'en glyphe de police,
+  // ce qui contourne entièrement la limitation d'encodage : un rectangle +
+  // une coche ne dépendent d'aucune police embarquée. Coordonnées locales à
+  // une boîte ~8×8pt, translatée par le `margin` de la colonne qui la
+  // contient (cf. taskListColumns) plutôt que codée ici en absolu.
+  const TASK_BOX_PT = 8;
+  function taskCheckboxCanvas(checked, style) {
+    const rect = { type: 'rect', x: 0, y: 0, w: TASK_BOX_PT, h: TASK_BOX_PT, r: style === 'classic' ? 0.5 : 1.6, lineWidth: 1 };
+    if (style === 'classic') {
+      // Case "classique" : jamais de remplissage (même à cochée), tick noir
+      // fin - reflète l'apparence NATIVE du navigateur (accent-color: auto,
+      // cf. css/editor-v2.css) plutôt que la couleur accent du thème.
+      const shapes = [Object.assign({}, rect, { lineColor: '#555' })];
+      if (checked) shapes.push({ type: 'polyline', lineWidth: 1.3, lineColor: '#222', points: [{ x: 1.6, y: 4.6 }, { x: 3.3, y: 6.6 }, { x: 6.6, y: 2 }] });
+      return shapes;
+    }
+    // "accentStrike"/"accentPlain" : même case bleue accent (#2f6fed, valeur
+    // de repli déjà utilisée partout ailleurs pour --accent) que cochée dans
+    // l'éditeur - la différence entre ces deux styles (texte barré ou non)
+    // se joue dans taskListRuns ci-dessous, pas dans le dessin de la case.
+    if (checked) return [Object.assign({}, rect, { color: '#2f6fed', lineColor: '#2f6fed' }), { type: 'polyline', lineWidth: 1.4, lineColor: '#ffffff', points: [{ x: 1.6, y: 4.6 }, { x: 3.3, y: 6.6 }, { x: 6.6, y: 2 }] }];
+    return [Object.assign({}, rect, { lineColor: '#98a2b3' })];
+  }
+
+  // Barré/grisé du texte quand coché - reflète la règle CSS
+  // `li[data-checked="true"] > div { text-decoration: line-through }`, qui ne
+  // s'applique QUE si le style n'est ni "classic" ni "accentPlain" (cf.
+  // css/editor-v2.css) - inheritedStyle (plus haut dans ce fichier) ne lit
+  // que le style INLINE d'un nœud, jamais une règle de feuille de style
+  // externe comme celle-ci, d'où ce traitement dédié plutôt qu'un repli sur
+  // le mécanisme générique.
+  function taskListRuns(node, runs) {
+    const parent = node.parentElement;
+    const checked = node.getAttribute('data-checked') === 'true';
+    const style = (parent && parent.getAttribute('data-tasklist-style')) || 'accentStrike';
+    const base = runs.length ? runs : [{ text: ' ' }];
+    if (!checked || style === 'classic' || style === 'accentPlain') return base;
+    return base.map(r => Object.assign({}, r, {
+      decoration: Array.isArray(r.decoration) ? r.decoration.concat('lineThrough') : (r.decoration ? [r.decoration, 'lineThrough'] : ['lineThrough']),
+      color: r.color || '#98a2b3',
+    }));
+  }
+
+  function isTaskListItem(node) {
+    const parent = node.parentElement;
+    return !!(parent && parent.getAttribute('data-type') === 'taskList');
+  }
+
+  // Structure `columns` commune aux deux points d'insertion d'un item de
+  // liste de tâches (flux principal - blockFrom - ET cellule de tableau/
+  // colonne 2-colonnes - cellLineToPdfObject) : case dessinée dans une
+  // colonne étroite, texte (déjà éventuellement barré par taskListRuns) dans
+  // le reste de la largeur disponible.
+  function taskListColumns(node, runs, align) {
+    const checked = node.getAttribute('data-checked') === 'true';
+    const style = (node.parentElement && node.parentElement.getAttribute('data-tasklist-style')) || 'accentStrike';
+    const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO };
+    if (align) textCol.alignment = align;
+    return [
+      { width: TASK_BOX_PT + 5, margin: [0, 3, 0, 0], canvas: taskCheckboxCanvas(checked, style) },
+      textCol,
+    ];
   }
 
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR|IMG)$/i.test(node.tagName)); }
@@ -570,14 +631,20 @@ const PdfExport = (function () {
       }
     }
     const isLi = node.tagName === 'LI';
-    const marker = isLi ? listMarkerFor(node) : '';
     const before = images.length;
     const runs = trimEdgeWhitespace(isLi
       ? inlineRunsExcludingNestedLists(node, cellBaseStyle, images)
       : inlineRuns(node, cellBaseStyle, images));
-    const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
-    const obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
-    const align = alignment(node) || cellAlign; if (align) obj.alignment = align;
+    const align = alignment(node) || cellAlign;
+    let obj;
+    if (isLi && isTaskListItem(node)) {
+      obj = { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
+    } else {
+      const marker = isLi ? listMarkerFor(node) : '';
+      const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
+      obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
+      if (align) obj.alignment = align;
+    }
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
@@ -1459,7 +1526,15 @@ const PdfExport = (function () {
       block._headingLevel = parseInt(tag.slice(1), 10);
       block._headingText = (marker + (node.textContent || '')).replace(/\s+/g, ' ').trim();
     }
-    if (tag === 'LI') { block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' '; }
+    if (tag === 'LI') {
+      if (isTaskListItem(node)) {
+        delete block.text;
+        delete block.alignment; // porté sur la colonne de texte, cf. taskListColumns
+        block.columns = taskListColumns(node, taskListRuns(node, runs), align);
+      } else {
+        block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' ';
+      }
+    }
     if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
     // Un paragraphe SANS AUCUN texte (ex. ne contenant qu'une image) n'a pas
     // besoin de ce bloc-texte de repli (`text: ' '`, prévu pour préserver la
