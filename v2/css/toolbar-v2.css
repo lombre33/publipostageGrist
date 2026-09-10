@@ -100,7 +100,12 @@
    styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un
    <select> toujours affiché - v2/js/main.js:onExportPdf lit encore
    v2-pdf-quality.value directement, inchangé. */
-#v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 18v-4M11 18v-8M17 18v-12'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 18v-4M11 18v-8M17 18v-12'/%3E%3C/svg%3E"); }
+/* Page (coin plié, même silhouette que l'icône "saut de page" de v2/js/
+   icons.js - ancre visuellement ce bouton comme "propre au PDF/document")
+   + petites barres ascendantes à l'intérieur (niveaux de qualité) - retenu
+   parmi plusieurs maquettes proposées (option "J") après plusieurs essais
+   moins concluants (jauge à aiguille, trame de points, curseurs). */
+#v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); }
 #v2-pdf-quality[hidden] { display: none; }
 
 /* === Modale "Correspondance de tables" (#link-config-modal, cf.
