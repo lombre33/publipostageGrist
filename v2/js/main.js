@@ -42,12 +42,45 @@
   }
 
   function loadTemplateIntoEditor(tpl) {
+    closeTemplateRenameEditor();
     Editor.setHTML(tpl ? tpl.contenu : '');
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     if (pdfFilenameInput) pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
     Templates.setCurrentId(tpl ? tpl.id : null);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
+  }
+
+  // Cluster "modèle" (cf. v2/index.html #v2-title-cluster) : le select
+  // choisit/affiche le modèle courant, le crayon fait apparaître l'input
+  // (déjà existant, seulement masqué par défaut) À SA PLACE pour le
+  // renommer - remplace les deux champs en permanence visibles de l'ancienne
+  // UI. Le renommage ne touche que l'affichage local (libellé de l'option
+  // sélectionnée) : la persistance réelle reste celle d'avant, au prochain
+  // clic sur Enregistrer (onSave lit templateNameInput.value).
+  function closeTemplateRenameEditor() {
+    if (!templateNameInput || !templateSelect) return;
+    templateNameInput.hidden = true;
+    templateSelect.hidden = false;
+  }
+
+  function wireTemplateRename() {
+    const renameBtn = document.getElementById('btn-rename-template');
+    if (!renameBtn || !templateNameInput || !templateSelect) return;
+    function openEditor() {
+      templateNameInput.hidden = false;
+      templateSelect.hidden = true;
+      templateNameInput.focus();
+      templateNameInput.select();
+    }
+    function commitAndClose() {
+      const opt = templateSelect.options[templateSelect.selectedIndex];
+      if (opt && templateNameInput.value.trim()) opt.textContent = templateNameInput.value.trim();
+      closeTemplateRenameEditor();
+    }
+    renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
+    templateNameInput.addEventListener('blur', commitAndClose);
+    templateNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') templateNameInput.blur(); });
   }
 
   async function onTemplateSelectChange() {
@@ -171,6 +204,7 @@
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
     wireLinkRulesModal();
+    wireTemplateRename();
     Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
     setStatus('Widget V2 prêt.');

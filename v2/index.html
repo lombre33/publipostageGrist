@@ -53,30 +53,36 @@
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.66">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.23">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.2">
 </head>
 <body>
 <div id="app">
   <div id="toolbar-top">
     <div class="bar-row">
-      <select id="template-select" class="template-select" title="Modèle"><option value="">-- Nouveau modèle --</option></select>
-      <button id="btn-new" title="Nouveau modèle"><span class="btn-text">Nouveau</span></button>
-      <button id="btn-save" title="Enregistrer"><span class="btn-text">Enregistrer</span></button>
-      <button id="btn-save-as" title="Enregistrer sous (copie)"><span class="btn-text">Enregistrer sous</span></button>
-      <button id="btn-delete" title="Supprimer"><span class="btn-text">Supprimer</span></button>
-      <input id="template-name" type="text" placeholder="Nom du modèle" style="margin-left:8px; min-width:160px;">
-      <button id="btn-link-rules" title="Tables liées (correspondance pour #Variable d'une autre table)"><span class="btn-text">Tables liées</span></button>
+      <div class="title-cluster" id="v2-title-cluster">
+        <select id="template-select" class="template-select" aria-label="Modèle"><option value="">-- Nouveau modèle --</option></select>
+        <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du modèle" hidden>
+        <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le modèle" data-tip="Renommer"></button>
+      </div>
+      <div class="action-cluster">
+        <button id="btn-new" aria-label="Nouveau modèle" data-tip="Nouveau modèle"></button>
+        <button id="btn-save" aria-label="Enregistrer" data-tip="Enregistrer"></button>
+        <button id="btn-save-as" aria-label="Enregistrer sous (copie)" data-tip="Enregistrer sous (copie)"></button>
+        <button id="btn-delete" aria-label="Supprimer" data-tip="Supprimer"></button>
+        <button id="btn-link-rules" aria-label="Tables liées (correspondance pour #Variable d'une autre table)" data-tip="Tables liées (correspondance #Variable)"></button>
+      </div>
       <span class="bar-sep"></span>
       <div class="mode-toggle">
-        <button id="btn-mode-edit" class="active" title="Mode édition"><span class="btn-text">Édition</span></button>
-        <button id="btn-mode-read" title="Mode lecture"><span class="btn-text">Lecture</span></button>
+        <button id="btn-mode-edit" class="active" aria-label="Mode édition" data-tip="Mode édition"></button>
+        <button id="btn-mode-read" aria-label="Mode lecture" data-tip="Mode lecture"></button>
       </div>
-      <label id="v2-a4-toggle" title="Limite la largeur de l'éditeur à celle du contenu d'une page A4, pour que le texte se répartisse comme dans le PDF.">
+      <label id="v2-a4-toggle" data-tip="Limite la largeur de l'éditeur à celle du contenu d'une page A4, pour que le texte se répartisse comme dans le PDF.">
         <input type="checkbox" id="v2-toggle-a4-preview" checked> Aperçu A4
       </label>
       <span class="bar-sep"></span>
       <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" style="min-width:220px;">
-      <select id="v2-pdf-quality" class="compact-select" title="Qualité PDF" aria-label="Qualité d’export PDF"><option value="native" selected>Vectoriel (par défaut)</option><option value="browser-print">Impr. navigateur</option><option value="low">Basse qualité (compressé)</option><option value="ultra">Ultra HD (impression)</option></select>
-      <button id="btn-export-pdf" title="Exporter en PDF"><span class="btn-text">Exporter PDF</span></button>
+      <select id="v2-pdf-quality" class="compact-select" aria-label="Qualité d’export PDF" data-tip="Qualité PDF"><option value="native" selected>Vectoriel (par défaut)</option><option value="browser-print">Impr. navigateur</option><option value="low">Basse qualité (compressé)</option><option value="ultra">Ultra HD (impression)</option></select>
+      <button id="btn-export-pdf" aria-label="Exporter en PDF" data-tip="Exporter en PDF"></button>
       <span id="status-msg"></span>
     </div>
     <div id="v2-toolbar">
@@ -131,12 +137,15 @@
       <button id="v2-btn-page-break" title="Insérer un saut de page (forcé à l'export PDF)"></button>
       <button id="v2-btn-toc" title="Insérer un sommaire (généré à partir des titres)"></button>
       <span class="v2-sep"></span>
-      <select id="v2-heading-numbering-select" title="Numérotation des titres — ne s'applique qu'aux titres du flux principal (pas ceux d'un tableau ou d'une zone 2 colonnes)">
-        <option value="none">Numérotation : aucune</option>
-        <option value="numeric">1), 2), 3)…</option>
-        <option value="alpha">a), b), c)…</option>
-        <option value="roman">I), II), III)…</option>
-      </select>
+      <div class="numbering-pill" title="Numérotation des titres — ne s'applique qu'aux titres du flux principal (pas ceux d'un tableau ou d'une zone 2 colonnes)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6v12M4 12h6M10 6v12"/><text x="15.5" y="10.5" font-size="7.5" fill="currentColor" stroke="none" font-family="Manrope, sans-serif" font-weight="700">1.</text><text x="15.5" y="19" font-size="7.5" fill="currentColor" stroke="none" font-family="Manrope, sans-serif" font-weight="700">2.</text></svg>
+        <select id="v2-heading-numbering-select" aria-label="Numérotation des titres">
+          <option value="none">Aucune</option>
+          <option value="numeric">1), 2), 3)…</option>
+          <option value="alpha">a), b), c)…</option>
+          <option value="roman">I), II), III)…</option>
+        </select>
+      </div>
       <span class="v2-sep"></span>
       <button id="v2-btn-undo" title="Annuler"></button>
       <button id="v2-btn-redo" title="Rétablir"></button>
@@ -172,6 +181,6 @@
 <script src="js/icons.js?v=0.4"></script>
 <script src="js/editor.js?v=0.40"></script>
 <script src="js/pdf-export.js?v=0.57"></script>
-<script src="js/main.js?v=0.8"></script>
+<script src="js/main.js?v=0.9"></script>
 </body>
 </html>

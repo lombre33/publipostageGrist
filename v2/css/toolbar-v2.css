@@ -1,0 +1,72 @@
+/* Refonte UI/UX de la ligne "modèle/export" (.bar-row) et de la ligne de mise
+   en forme (#v2-toolbar), demandée après audit comparatif avec les standards
+   actuels (Google Docs/Notion). Fichier séparé de editor-v2.css (qui ne
+   couvre que .tiptap, cf. son en-tête) : ce qui suit touche le CHROME de
+   l'app (barre du haut), pas l'éditeur lui-même.
+
+   Volontairement PAS dans ../css/style.css (partagé avec la V1) : les
+   sélecteurs ci-dessous (.title-cluster/.action-cluster/[data-tip]/
+   #btn-link-rules/#btn-rename-template/.numbering-pill) n'existent que dans
+   le HTML de v2/index.html - la V1 garde son propre mécanisme (icône seule +
+   libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
+
+/* === Cluster "modèle courant" (sélecteur + renommage) ===
+   Remplace les deux champs séparés (select de la V1 + input#template-name
+   toujours visible) par UN seul contrôle : le select affiche/choisit le
+   modèle, un petit crayon juste à côté fait apparaître l'input à SA place
+   pour le renommer (logique posée/togglée par v2/js/main.js:wireTemplateRename)
+   - même geste que renommer le titre d'un document Google Docs/Notion. */
+.title-cluster { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+.title-cluster select { border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; border-radius: 0; }
+.title-cluster select:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
+.title-cluster .title-cluster-input { border: none; height: 26px; background: var(--accent-soft); padding: 0 8px; width: 160px; outline: none; }
+.title-cluster button.rename-btn { border: none; border-left: 1px solid var(--border); border-radius: 0; height: 26px; width: 26px; padding: 0; background: transparent; color: var(--text-faint); }
+.title-cluster button.rename-btn:hover, .title-cluster button.rename-btn:focus-visible { color: var(--text); background: var(--surface-sunken); }
+/* Crayon de renommage : délibérément plus petit/discret que celui du mode
+   Édition (#btn-mode-edit, même ligne, quelques contrôles plus loin) pour ne
+   pas laisser croire aux deux boutons la même fonction. */
+#toolbar-top #btn-rename-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
+
+/* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/
+   Tables liées) === Regroupement visuel discret (fond légèrement enfoncé)
+   pour lire d'un coup d'œil "ce sont des actions sur le document", plutôt
+   que des boutons isolés qui se confondent avec des réglages. Les règles
+   #toolbar-top #btn-save/#btn-delete/#btn-export-pdf (css/style.css, plus
+   spécifiques par ID) continuent de s'appliquer par-dessus - Enregistrer
+   reste en accent plein, Supprimer reste en rouge. */
+.action-cluster { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: calc(var(--radius-sm) + 3px); background: var(--surface-sunken); border: 1px solid var(--border); }
+.action-cluster button { border-color: transparent; background: var(--surface); }
+.action-cluster button:hover { border-color: var(--border-strong); }
+
+/* Icône "Tables liées" : deux mini-tableaux reliés par un trait - distincte
+   du bouton "Insérer un tableau" de la ligne de mise en forme (un seul
+   tableau), qui n'a pas la même fonction. Remplace le carré plein qui
+   résultait de l'absence totale de règle ::before pour ce bouton. */
+#btn-link-rules::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); }
+
+/* === Infobulle classique (bulle sombre sous le bouton), remplace le
+   mécanisme "libellé révélé au survol" de la V1 (css/style.css `.btn-text`,
+   qui élargit le bouton et pousse les éléments suivants). Déclenchée par
+   [data-tip] plutôt que par `title` : les deux natifs ne cohabitent pas bien
+   (l'infobulle native du navigateur finirait par apparaître par-dessus après
+   un survol prolongé) - l'accessibilité passe par aria-label sur ces mêmes
+   boutons, posé dans le HTML. Pas de flèche/pointeur (les icônes ::before
+   occupent déjà le seul autre pseudo-élément disponible sur ces boutons). */
+.bar-row [data-tip] { position: relative; }
+.bar-row [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
+  background: var(--text); color: #fff; font-family: var(--font-ui); font-weight: 600; font-size: 11.5px;
+  padding: 5px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .12s ease .35s, transform .12s ease .35s; z-index: 50;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, .25);
+}
+.bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* === Numérotation des titres : icône + select dans une pastille, même
+   motif que les boutons couleur de police/surlignage (#v2-toolbar) - harmonise
+   ce contrôle avec le reste de la ligne, qui est entièrement icône-seule. */
+.numbering-pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: #fff; }
+.numbering-pill svg { width: 15px; height: 15px; color: #3a4452; flex: none; }
+.numbering-pill select { border: none; background: transparent; height: 26px; padding: 0 4px 0 0; font-size: 12.5px; }
+.numbering-pill select:focus-visible { outline: none; }
