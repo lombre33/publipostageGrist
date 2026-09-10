@@ -684,6 +684,53 @@ const Editor = (function () {
     return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
   }
 
+  // Tant qu'UNE SEULE colonne d'un tableau reste "auto" (pas de `colwidth`
+  // propre), `<table>` lui-même ne porte qu'un `min-width` (jamais un
+  // `width` exact) - `.tiptap table { width: 100% }` (css/editor-v2.css)
+  // s'applique donc TOUJOURS tel quel, quelle que soit la largeur demandée
+  // pour une colonne explicitement redimensionnée : agrandir une colonne ne
+  // fait alors que voler de la place aux colonnes "auto" voisines, le
+  // tableau entier restant coincé à 100% du conteneur - la poignée extérieure
+  // droite (qui n'a PAS de colonne voisine à qui prendre de la place de
+  // l'autre côté) ne peut alors jamais faire grandir le tableau du tout,
+  // signalé cassé par l'utilisateur ("redimensionne les autres mais ne bouge
+  // pas"). Dès que TOUTES les colonnes ont un `colwidth` explicite en
+  // revanche, `<table>` porte un `width` exact (constaté en conditions
+  // réelles) qui l'affranchit du `width:100%` - le tableau peut alors
+  // dépasser 100% (jusqu'à ce que clampOverflowingTables le retienne dans la
+  // page). Fixé en gelant, dès le premier redimensionnement d'UNE colonne
+  // d'un tableau, la largeur RENDUE actuelle de chaque colonne encore "auto"
+  // du même tableau comme son propre `colwidth` explicite - même mécanisme
+  // (tourne sur chaque mise à jour, une seule colonne de référence -
+  // première ligne - pour la détection) que clampOverflowingTables ci-
+  // dessous, appelé juste après pour rattraper un éventuel dépassement.
+  function backfillAutoColumnWidths(currentEditor) {
+    const { state, view } = currentEditor;
+    let tr = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'table') return true;
+      const firstRow = node.firstChild;
+      if (!firstRow) return false;
+      let hasExplicit = false; let hasAuto = false;
+      firstRow.forEach(cellNode => { if (cellNode.attrs.colwidth) hasExplicit = true; else hasAuto = true; });
+      if (!hasExplicit || !hasAuto) return false;
+      node.forEach((rowNode, rowOffset) => {
+        rowNode.forEach((cellNode, cellOffset) => {
+          if (cellNode.attrs.colwidth) return;
+          const cellPos = pos + 1 + rowOffset + 1 + cellOffset;
+          const dom = view.nodeDOM(cellPos);
+          if (!dom || !dom.getBoundingClientRect) return;
+          const span = cellNode.attrs.colspan || 1;
+          const widthPx = Math.max(DEFAULT_COL_PX, Math.round(dom.getBoundingClientRect().width / span));
+          if (!tr) tr = state.tr;
+          tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: Array(span).fill(widthPx) }));
+        });
+      });
+      return false;
+    });
+    if (tr) currentEditor.view.dispatch(tr);
+  }
+
   const DEFAULT_COL_PX = 25;
   function clampOverflowingTables(currentEditor) {
     const editorContainer = document.getElementById('editor-container');
@@ -1233,7 +1280,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor }) => clampOverflowingTables(updatedEditor),
+      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); },
       extensions: [
         StarterKit,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -1383,6 +1430,7 @@ const Editor = (function () {
     // déclenche PAS onUpdate (transaction sans changement réel), donc
     // clampOverflowingTables ne tourne jamais tout seul pour ce cas précis ;
     // appelé explicitement ici pour le couvrir aussi.
+    backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
   }
 

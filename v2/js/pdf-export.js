@@ -650,9 +650,19 @@ const PdfExport = (function () {
     const measuredPx = measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
+    // Cible de répartition : la largeur RÉELLE du tableau (measuredSum) si elle
+    // tient dans la page, PAS systématiquement `usableForColumnsPt` (la pleine
+    // largeur de page) - un tableau volontairement rétréci par l'utilisateur
+    // (poignée du milieu tirée vers la gauche, `<table style="width:...px">`
+    // plus petit que le conteneur) redevenait pleine largeur à l'export,
+    // signalé cassé par l'utilisateur ("je voudrais garder la position réelle
+    // des colonnes"). `usableForColumnsPt` reste la limite AU-DELÀ de laquelle
+    // on doit quand même réduire (un tableau plus large que la page ne peut
+    // physiquement pas garder sa largeur réelle).
+    const targetTotalPt = measuredSum > 0 ? Math.min(measuredSum, usableForColumnsPt) : usableForColumnsPt;
     let widths;
     if (measuredPt && measuredSum > 0) {
-      widths = measuredPt.map(w => (w / measuredSum) * usableForColumnsPt);
+      widths = measuredPt.map(w => (w / measuredSum) * targetTotalPt);
       const flooredTotal = widths.reduce((sum, w) => sum + Math.max(minColWidthPt, w), 0);
       if (flooredTotal > usableForColumnsPt) {
         const deficit = flooredTotal - usableForColumnsPt;
