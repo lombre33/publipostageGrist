@@ -52,7 +52,7 @@
 </script>
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.66">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.27">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.28">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.9">
 </head>
 <body>
@@ -119,18 +119,16 @@
       <button id="v2-btn-outdent" class="v2-btn-discreet" title="Diminuer le retrait"></button>
       <button id="v2-btn-indent" class="v2-btn-discreet" title="Augmenter le retrait"></button>
       <span class="v2-sep"></span>
-      <select id="v2-size-select" title="Taille de police">
-        <option value="8pt">8pt</option><option value="9pt">9pt</option><option value="10pt">10pt</option>
-        <option value="10.5pt" selected>10.5pt</option><option value="11pt">11pt</option><option value="12pt">12pt</option>
-        <option value="14pt">14pt</option><option value="16pt">16pt</option><option value="18pt">18pt</option>
-        <option value="20pt">20pt</option><option value="24pt">24pt</option><option value="28pt">28pt</option>
-        <option value="32pt">32pt</option><option value="36pt">36pt</option><option value="48pt">48pt</option><option value="72pt">72pt</option>
-      </select>
-      <select id="v2-font-select" title="Police">
-        <option value="Roboto">Roboto (par défaut)</option>
-        <option value="Arial">Arial</option><option value="Times New Roman">Times New Roman</option>
-        <option value="Georgia">Georgia</option><option value="Courier New">Courier New</option><option value="Calibri">Calibri</option>
-      </select>
+      <span class="v2-stepper" title="Taille de police">
+        <button type="button" id="v2-size-minus" aria-label="Diminuer la taille">–</button>
+        <button type="button" class="v2-stepper-val" id="v2-size-chip-val">10.5pt</button>
+        <button type="button" id="v2-size-plus" aria-label="Augmenter la taille">+</button>
+      </span>
+      <button type="button" class="v2-format-chip" id="v2-font-chip" title="Police">
+        <span class="v2-format-chip-icon" id="v2-font-chip-icon"></span>
+        <span class="v2-format-chip-val" id="v2-font-chip-val">Roboto</span>
+        <span class="v2-format-chip-caret" id="v2-font-chip-caret"></span>
+      </button>
       <span class="v2-sep"></span>
       <button id="v2-btn-text-color" class="v2-color-split" title="Couleur de police">
         <span class="v2-color-split-icon">A</span>
@@ -198,8 +196,8 @@
 <script src="js/heading-numbering.js?v=0.1"></script>
 <script src="js/variable-format.js?v=0.3"></script>
 <script src="js/variables.js?v=0.9"></script>
-<script src="js/icons.js?v=0.6"></script>
-<script src="js/editor.js?v=0.44"></script>
+<script src="js/icons.js?v=0.7"></script>
+<script src="js/editor.js?v=0.45"></script>
 <script src="js/pdf-export.js?v=0.60"></script>
 <script src="js/main.js?v=0.10"></script>
 </body>

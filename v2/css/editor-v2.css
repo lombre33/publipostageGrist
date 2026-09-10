@@ -35,6 +35,22 @@
 .tiptap h3 { font-size: 16pt; } .tiptap h4 { font-size: 14pt; }
 .tiptap h5 { font-size: 13pt; } .tiptap h6 { font-size: 12pt; }
 .tiptap ul, .tiptap ol { margin: 0; padding-left: 1.4em; }
+/* Puces = les MÊMES caractères que l'export PDF (v2/js/pdf-export.js
+   BULLET_MARKERS), pas le rendu natif ○/■ du navigateur (list-style-type:
+   circle/square) : demandé explicitement par l'utilisateur après le
+   correctif PDF précédent ('°'/'*' au lieu de '○'/'▪', seule plage de
+   caractères que les polices embarquées peuvent réellement afficher en PDF,
+   cf. mémoire) - "le PDF doit montrer exactement ce que montre l'éditeur, à
+   défaut c'est l'éditeur qui s'adapte à la limite du PDF". ::marker accepte
+   un `content` littéral (CSS Lists L3) qui prend le pas sur list-style-type,
+   donc pas besoin d'y toucher. Ces 3 valeurs DOIVENT rester identiques à
+   BULLET_MARKERS - si l'un des deux fichiers change, l'autre doit suivre. */
+.tiptap ul li::marker,
+.reader-content ul li::marker { content: '• '; }
+.tiptap ul[data-bullet-style="circle"] li::marker,
+.reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
+.tiptap ul[data-bullet-style="square"] li::marker,
+.reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
@@ -315,6 +331,31 @@
 .v2-color-split-caret { display: inline-flex; color: #8a94a3; }
 .v2-color-split-caret svg { width: 10px; height: 10px; }
 .v2-floating-toolbar .v2-color-split { width: auto; height: 26px; }
+
+/* Police/taille compactes ("Toolbar compacte", option A choisie par
+   l'utilisateur) - remplacent les <select> natifs (police en particulier
+   imposait sa largeur de texte complet, ex. "Times New Roman", à toute la
+   barre) par une pastille icône+valeur (même esprit que .v2-color-split
+   ci-dessus) et un stepper -/valeur/+ , tous deux ouvrant .v2-format-panel
+   au clic sur leur valeur (même mécanisme flottant que le menu de couleur,
+   cf. Editor.js createFloatingPanel/openDropdownPanel). */
+.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 7px 0 6px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: #fff; cursor: pointer; color: #3a4452; font-family: inherit; }
+.v2-format-chip:hover { background: var(--surface-sunken, #f2f4f7); }
+.v2-format-chip-icon { display: inline-flex; }
+.v2-format-chip-icon svg { width: 14px; height: 14px; }
+.v2-format-chip-val { font-size: 12px; font-weight: 700; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-format-chip-caret { display: inline-flex; color: #8a94a3; }
+.v2-format-chip-caret svg { width: 10px; height: 10px; }
+.v2-stepper { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; overflow: hidden; }
+.v2-stepper button { border: none; border-radius: 0; background: #fff; cursor: pointer; color: #3a4452; padding: 0; }
+.v2-stepper button:hover { background: var(--surface-sunken, #f2f4f7); }
+#v2-size-minus, #v2-size-plus { width: 20px; font-size: 15px; font-weight: 700; line-height: 1; }
+.v2-stepper-val { width: 46px; font-size: 11.5px; font-weight: 700; border-left: 1px solid var(--border, #d7dde3); border-right: 1px solid var(--border, #d7dde3); }
+.v2-format-panel { display: none; position: absolute; top: 0; left: 0; z-index: 2000; background: #fff; border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px; min-width: 168px; max-height: 260px; overflow-y: auto; }
+.v2-format-panel.visible { display: block; }
+.v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: 5px; background: none; cursor: pointer; font-size: 12.5px; color: #3a4452; font-family: inherit; }
+.v2-format-panel button:hover { background: var(--surface-sunken, #f2f4f7); }
+.v2-format-panel button.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 
 /* Menu déroulant de nuances (bouton couleur ci-dessus) - grille de
    pastilles + case "personnalisé" (ouvre le sélecteur natif, cf.

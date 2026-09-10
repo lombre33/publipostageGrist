@@ -1004,15 +1004,19 @@ const Editor = (function () {
   const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
   const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
 
-  // Un seul menu déroulant de couleur ouvert à la fois - fermé par un clic
-  // n'importe où ailleurs (hors du bouton qui l'a ouvert ou du panneau
-  // lui-même).
-  let openColorPanel = null;
+  // Un seul menu déroulant à la fois (couleur/police/taille) - fermé par un
+  // clic n'importe où ailleurs (hors du bouton qui l'a ouvert ou du panneau
+  // lui-même). Générisé (initialement couleur seulement) pour la maquette
+  // "Toolbar compacte" - police/taille rejoignent le même mécanisme plutôt
+  // que d'en dupliquer un second.
+  let openDropdownPanel = null;
   document.addEventListener('mousedown', (event) => {
-    if (!openColorPanel) return;
-    if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')) return;
-    openColorPanel.hide();
-    openColorPanel = null;
+    if (!openDropdownPanel) return;
+    if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')
+      || event.target.closest('.v2-format-panel') || event.target.closest('.v2-format-chip')
+      || event.target.closest('.v2-stepper')) return;
+    openDropdownPanel.hide();
+    openDropdownPanel = null;
   });
 
   // Menu déroulant de couleur générique (grille de nuances + case
@@ -1034,31 +1038,31 @@ const Editor = (function () {
       + '<input type="color" class="v2-color-dropdown-native">';
     const panel = createFloatingPanel('v2-color-dropdown', html, (action) => {
       if (action === 'custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
-      if (action === 'none') { withSavedSelection(chain => onNone(chain)); closeColorPanel(); return; }
-      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); closeColorPanel(); }
+      if (action === 'none') { withSavedSelection(chain => onNone(chain)); closeDropdownPanel(); return; }
+      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); closeDropdownPanel(); }
     });
     panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', (event) => {
       withSavedSelection(chain => onPick(chain, event.target.value));
-      closeColorPanel();
+      closeDropdownPanel();
     });
     return panel;
   }
-  function closeColorPanel() { if (openColorPanel) { openColorPanel.hide(); openColorPanel = null; } }
+  function closeDropdownPanel() { if (openDropdownPanel) { openDropdownPanel.hide(); openDropdownPanel = null; } }
   // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas
   // click) : même raison que la toolbar de tableau/image, éviter de perdre
   // la sélection ProseMirror avant que le panneau ne s'ouvre. `getSelection`
   // capture la sélection AU MOMENT du clic (avant que le panneau ne vole le
   // focus) - restaurée par `withSavedSelection` quand une couleur est
   // effectivement choisie, potentiellement bien après ce clic initial.
-  function wireColorButton(btn, panel, captureSelection) {
+  function wireDropdownButton(btn, panel, captureSelection) {
     if (!btn) return;
     btn.addEventListener('mousedown', (event) => {
       event.preventDefault();
       captureSelection();
-      if (openColorPanel === panel) { closeColorPanel(); return; }
-      closeColorPanel();
+      if (openDropdownPanel === panel) { closeDropdownPanel(); return; }
+      closeDropdownPanel();
       panel.show(btn);
-      openColorPanel = panel;
+      openDropdownPanel = panel;
     });
   }
   function setColorBar(id, color) {
@@ -1085,14 +1089,14 @@ const Editor = (function () {
       onPick: (chain, color) => { chain.setTextColor(color); setColorBar('v2-color-text-bar', color); },
       onNone: (chain) => { chain.unsetTextColor(); setColorBar('v2-color-text-bar', null); },
     });
-    wireColorButton(document.getElementById('v2-btn-text-color'), textColorPanel, captureSelection);
+    wireDropdownButton(document.getElementById('v2-btn-text-color'), textColorPanel, captureSelection);
     const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: 'Aucun',
       withSavedSelection,
       onPick: (chain, color) => { chain.setHighlight(color); setColorBar('v2-color-highlight-bar', color); },
       onNone: (chain) => { chain.unsetHighlight(); setColorBar('v2-color-highlight-bar', null); },
     });
-    wireColorButton(document.getElementById('v2-btn-highlight'), highlightPanel, captureSelection);
+    wireDropdownButton(document.getElementById('v2-btn-highlight'), highlightPanel, captureSelection);
   }
 
   // Toolbar de gestion de tableau (ajout/suppr ligne/colonne, suppr tableau) -
@@ -1128,10 +1132,10 @@ const Editor = (function () {
         'table-del': () => editor.chain().focus().deleteTable().run(),
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
-          if (openColorPanel === fillPanel) { closeColorPanel(); return; }
-          closeColorPanel();
+          if (openDropdownPanel === fillPanel) { closeDropdownPanel(); return; }
+          closeDropdownPanel();
           fillPanel.show(btn);
-          openColorPanel = fillPanel;
+          openDropdownPanel = fillPanel;
         },
       };
       (commands[action] || (() => {}))();
@@ -1511,6 +1515,7 @@ const Editor = (function () {
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
+    set('v2-font-chip-icon', 'font'); set('v2-font-chip-caret', 'caretDown');
   }
 
   // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
@@ -1566,10 +1571,10 @@ const Editor = (function () {
     // n'affichait jamais rien tant que l'utilisateur n'avait pas cliqué
     // explicitement un réglage (signalé par l'utilisateur : les valeurs par
     // défaut au clavier ne s'affichaient jamais).
-    const fontSelect = document.getElementById('v2-font-select');
-    if (fontSelect) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontSelect.value !== value) fontSelect.value = value; }
-    const sizeSelect = document.getElementById('v2-size-select');
-    if (sizeSelect) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeSelect.value !== value) sizeSelect.value = value; }
+    const fontChipVal = document.getElementById('v2-font-chip-val');
+    if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
+    const sizeChipVal = document.getElementById('v2-size-chip-val');
+    if (sizeChipVal) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeChipVal.textContent !== value) sizeChipVal.textContent = value; }
   }
 
   async function init() {
@@ -1703,6 +1708,7 @@ const Editor = (function () {
 
     wireHeadingNumberingSelect();
     wireSelectionDependentSelects();
+    wireCompactFontSizeControls();
   }
 
   // Réglage de DOCUMENT (numérotation des titres), pas une mise en forme de
@@ -1768,8 +1774,61 @@ const Editor = (function () {
     bindSelect('v2-header-select', value => withSavedSelection(chain => {
       if (value === 'p') chain.setParagraph(); else chain.toggleHeading({ level: parseInt(value, 10) });
     }));
-    bindSelect('v2-size-select', value => { if (value) withSavedSelection(chain => chain.setFontSize(value)); });
-    bindSelect('v2-font-select', value => { if (value) withSavedSelection(chain => chain.setFontFamily(value)); });
+  }
+
+  // Liste UNIQUE des tailles proposées, partagée par le stepper (-/+ passe au
+  // preset voisin) et le panneau flottant (choix direct) - "Toolbar compacte"
+  // option A, remplace l'ancien <select> natif dont "Times New Roman" imposait
+  // sa largeur à toute la barre.
+  const FONT_SIZE_PRESETS = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
+  const FONT_FAMILY_PRESETS = [
+    { value: 'Roboto', label: 'Roboto (par défaut)' },
+    { value: 'Arial', label: 'Arial' },
+    { value: 'Times New Roman', label: 'Times New Roman' },
+    { value: 'Georgia', label: 'Georgia' },
+    { value: 'Courier New', label: 'Courier New' },
+    { value: 'Calibri', label: 'Calibri' },
+  ];
+
+  function wireCompactFontSizeControls() {
+    let savedSelection = null;
+    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
+    const withSavedSelection = (fn) => {
+      const chain = editor.chain().focus();
+      if (savedSelection) chain.setTextSelection(savedSelection);
+      fn(chain);
+      chain.run();
+    };
+
+    // Police : pastille icône+valeur, ouvre un panneau flottant (même
+    // mécanisme que le menu de couleur) listant les polices supportées.
+    const fontHtml = FONT_FAMILY_PRESETS.map(o => `<button data-action="${o.value}">${o.label}</button>`).join('');
+    const fontPanel = createFloatingPanel('v2-format-panel', fontHtml, (value) => {
+      withSavedSelection(chain => chain.setFontFamily(value));
+      closeDropdownPanel();
+    });
+    wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
+
+    // Taille : stepper -/+ (passe au preset voisin dans FONT_SIZE_PRESETS) +
+    // clic sur la valeur pour ouvrir le panneau (choix direct, comme police).
+    const sizeHtml = FONT_SIZE_PRESETS.map(s => `<button data-action="${s}">${s}</button>`).join('');
+    const sizePanel = createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
+      withSavedSelection(chain => chain.setFontSize(value));
+      closeDropdownPanel();
+    });
+    const sizeValBtn = document.getElementById('v2-size-chip-val');
+    wireDropdownButton(sizeValBtn, sizePanel, captureSelection);
+    const stepSize = (delta) => {
+      captureSelection();
+      const current = sizeValBtn.textContent.trim();
+      const idx = FONT_SIZE_PRESETS.indexOf(current);
+      const nextIdx = idx === -1 ? (delta > 0 ? 0 : FONT_SIZE_PRESETS.length - 1) : Math.min(FONT_SIZE_PRESETS.length - 1, Math.max(0, idx + delta));
+      withSavedSelection(chain => chain.setFontSize(FONT_SIZE_PRESETS[nextIdx]));
+    };
+    const minusBtn = document.getElementById('v2-size-minus');
+    const plusBtn = document.getElementById('v2-size-plus');
+    if (minusBtn) minusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(-1); });
+    if (plusBtn) plusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(1); });
   }
 
   function getHTML() { return editor ? editor.getHTML() : ''; }
