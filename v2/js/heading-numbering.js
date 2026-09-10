@@ -68,5 +68,5 @@ const HeadingNumbering = (function () {
     });
   }
 
-  return { markersFor, entriesFor };
+  return { markersFor, entriesFor, formatCounterValue };
 })();

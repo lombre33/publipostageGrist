@@ -45,7 +45,12 @@
     closeTemplateRenameEditor();
     Editor.setHTML(tpl ? tpl.contenu : '');
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
-    if (pdfFilenameInput) pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+    if (pdfFilenameInput) {
+      pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
+      // Reste visible si un nom est déjà configuré - éviter de cacher un
+      // réglage actif derrière le crayon (cf. wirePdfFilenameToggle).
+      pdfFilenameInput.hidden = !pdfFilenameInput.value.trim();
+    }
     Templates.setCurrentId(tpl ? tpl.id : null);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
@@ -169,12 +174,51 @@
     // largeur réelle d'une page PDF (cf. commentaire CSS) ne marchait
     // jamais en mode Lecture, quel que soit l'état de la case - signalé
     // cassé par l'utilisateur.
+    // .checked sur le <label> lui-même (classe partagée .a4-toggle, cf.
+    // css/style.css - même mécanisme que la V1) : fait rester l'icône en
+    // accent/bleu tant que la case est cochée, plutôt qu'un simple texte de
+    // case à cocher (demandé par l'utilisateur).
+    const label = toggle.closest('.a4-toggle');
     const sync = () => {
       editorContainer.classList.toggle('a4-preview', toggle.checked);
       readerContainer.classList.toggle('a4-preview', toggle.checked);
+      if (label) label.classList.toggle('checked', toggle.checked);
     };
     toggle.addEventListener('change', sync);
     sync();
+  }
+
+  // Nom de fichier PDF masqué par défaut derrière un crayon - même geste que
+  // le renommage de modèle (wireTemplateRename ci-dessous) : réglage
+  // secondaire, pas besoin d'occuper en permanence une zone large de la
+  // barre du haut. Reste visible si déjà configuré (cf.
+  // loadTemplateIntoEditor) plutôt que de se refermer tout seul.
+  function wirePdfFilenameToggle() {
+    const btn = document.getElementById('btn-toggle-pdf-filename');
+    if (!btn || !pdfFilenameInput) return;
+    const close = () => { if (!pdfFilenameInput.value.trim()) pdfFilenameInput.hidden = true; };
+    btn.addEventListener('click', () => {
+      if (pdfFilenameInput.hidden) { pdfFilenameInput.hidden = false; pdfFilenameInput.focus(); } else close();
+    });
+    pdfFilenameInput.addEventListener('blur', close);
+    pdfFilenameInput.addEventListener('keydown', e => { if (e.key === 'Enter') pdfFilenameInput.blur(); });
+  }
+
+  // Qualité PDF : bouton + panneau au survol (même mécanisme que les styles
+  // de puce/numérotation de la ligne de mise en forme, cf. v2/js/editor.js)
+  // plutôt qu'un <select> toujours affiché - onExportPdf lit encore
+  // v2-pdf-quality.value directement, inchangé.
+  function wireQualityDropdown() {
+    const select = document.getElementById('v2-pdf-quality');
+    const flyout = document.getElementById('v2-quality-flyout');
+    const trigger = document.getElementById('v2-btn-quality');
+    if (!select || !flyout || !trigger) return;
+    const rows = flyout.querySelectorAll('.v2-hover-row');
+    const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
+    rows.forEach(row => row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); }));
+    const group = trigger.closest('.v2-hover-group');
+    if (group) group.addEventListener('mouseenter', syncActiveRow);
+    syncActiveRow();
   }
 
   // "Tables liées" (v2/js/variables.js) : modale séparée plutôt que le volet
@@ -213,6 +257,8 @@
     wireA4PreviewToggle();
     wireLinkRulesModal();
     wireTemplateRename();
+    wirePdfFilenameToggle();
+    wireQualityDropdown();
     Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
     setStatus('Widget V2 prêt.');

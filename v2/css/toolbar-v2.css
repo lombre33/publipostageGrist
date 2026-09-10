@@ -52,8 +52,8 @@
    un survol prolongé) - l'accessibilité passe par aria-label sur ces mêmes
    boutons, posé dans le HTML. Pas de flèche/pointeur (les icônes ::before
    occupent déjà le seul autre pseudo-élément disponible sur ces boutons). */
-.bar-row [data-tip] { position: relative; }
-.bar-row [data-tip]::after {
+.bar-row [data-tip], #v2-toolbar [data-tip] { position: relative; }
+.bar-row [data-tip]::after, #v2-toolbar [data-tip]::after {
   content: attr(data-tip);
   position: absolute; left: 50%; top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
   background: var(--text); color: #fff; font-family: var(--font-ui); font-weight: 600; font-size: 11.5px;
@@ -61,7 +61,8 @@
   opacity: 0; transition: opacity .12s ease .35s, transform .12s ease .35s; z-index: 50;
   box-shadow: 0 4px 10px rgba(15, 23, 42, .25);
 }
-.bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+.bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after,
+#v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* === Numérotation des titres : icône seule (bouton standard #v2-toolbar,
    même chrome que gras/italique/etc.), le style se choisit désormais au
@@ -73,6 +74,34 @@
    côté sauvegarde/chargement. */
 .numbering-pill { display: inline-flex; align-items: center; }
 #v2-heading-numbering-select[hidden] { display: none; }
+
+/* === Contours retirés sur la ligne du haut aussi (même traitement que la
+   ligne de mise en forme) - transparent au repos, révélé au survol
+   seulement. Override V2-only (spécificité égale à la règle partagée
+   #toolbar-top button de css/style.css, gagne car chargé après) : les
+   boutons deja distingués par couleur (Enregistrer/Supprimer/Exporter) ou
+   par état (.active du mode Édition/Lecture) restent inchangés, leurs
+   propres règles sont plus spécifiques. */
+#toolbar-top button { border-color: transparent; }
+#toolbar-top button:hover { border-color: var(--border-strong); }
+.title-cluster { border-color: transparent; }
+.a4-toggle { border-color: transparent; background: transparent; }
+.a4-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
+
+/* === Nom de fichier PDF masqué derrière un crayon (même geste que le
+   renommage de modèle ci-dessus) - reste visible si un nom est déjà
+   configuré (cf. v2/js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor),
+   pour ne pas cacher un réglage actif derrière une icône anodine. */
+.v2-pdf-filename-cluster { display: inline-flex; align-items: center; gap: 4px; }
+#pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
+#btn-toggle-pdf-filename::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
+
+/* === Qualité PDF : bouton + panneau au survol (même mécanisme que les
+   styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un
+   <select> toujours affiché - v2/js/main.js:onExportPdf lit encore
+   v2-pdf-quality.value directement, inchangé. */
+#v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 18v-4M11 18v-8M17 18v-12'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 18v-4M11 18v-8M17 18v-12'/%3E%3C/svg%3E"); }
+#v2-pdf-quality[hidden] { display: none; }
 
 /* === Modale "Correspondance de tables" (#link-config-modal, cf.
    v2/js/variables.js:showLinkConfigModal) === Remplacée par une maquette plus

@@ -207,6 +207,29 @@ const Editor = (function () {
     });
   }
 
+  // Style de numérotation (numérique/lettres/romain) - même schéma que
+  // BulletStyle ci-dessus, augmente 'orderedList' (StarterKit). Les marqueurs
+  // alpha/romain de l'export PDF réutilisent HeadingNumbering.
+  // formatCounterValue (mémoire commune de conversion, cf. heading-numbering.js)
+  // plutôt que de réinventer une conversion chiffre→lettre/romain.
+  function createOrderedListStyleExtension(Extension) {
+    return Extension.create({
+      name: 'orderedListStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['orderedList'],
+          attributes: {
+            numberStyle: {
+              default: 'decimal',
+              parseHTML: el => el.getAttribute('data-number-style') || 'decimal',
+              renderHTML: attrs => (attrs.numberStyle && attrs.numberStyle !== 'decimal' ? { 'data-number-style': attrs.numberStyle } : {}),
+            },
+          },
+        }];
+      },
+    });
+  }
+
   // Fond de cellule (remplir) - augmente TableCell/TableHeader (extensions
   // officielles) du même `backgroundColor` que le surlignage de texte
   // ci-dessus, MÊME NOM d'attribut/style CSS que par coïncidence utile (pas
@@ -1529,16 +1552,17 @@ const Editor = (function () {
     // v2-btn-align-main : icône initiale, resynchronisée dès le premier appel
     // de syncToolbarState avec l'alignement réel du curseur.
     set('v2-btn-align-main', 'alignLeft');
-    set('v2-btn-bullet', 'bulletList'); set('v2-btn-ordered', 'orderedList');
+    set('v2-btn-bullet', 'bulletList');
     set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
-    set('v2-btn-blockquote', 'blockquote'); set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
+    set('v2-btn-ordered-numeric', 'orderedList'); set('v2-btn-ordered-alpha', 'orderedAlpha'); set('v2-btn-ordered-roman', 'orderedRoman');
+    set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
-    set('v2-font-chip-icon', 'font'); set('v2-font-chip-caret', 'caretDown');
+    set('v2-font-chip-caret', 'caretDown');
   }
 
   // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
@@ -1565,13 +1589,17 @@ const Editor = (function () {
     currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
     const alignMain = document.getElementById('v2-btn-align-main');
     if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
-    setActive('v2-btn-bullet', editor.isActive('bulletList'));
+    // Bouton "Liste" fusionné (puces + numéros, cf. maquette de
+    // simplification demandée) : actif dès qu'UN des deux types l'est.
+    setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList'));
     const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
     setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
     setActive('v2-btn-bullet-circle', bulletStyle === 'circle');
     setActive('v2-btn-bullet-square', bulletStyle === 'square');
-    setActive('v2-btn-ordered', editor.isActive('orderedList'));
-    setActive('v2-btn-blockquote', editor.isActive('blockquote'));
+    const orderedStyle = editor.isActive('orderedList') ? (editor.getAttributes('orderedList').numberStyle || 'decimal') : null;
+    setActive('v2-btn-ordered-numeric', orderedStyle === 'decimal');
+    setActive('v2-btn-ordered-alpha', orderedStyle === 'alpha');
+    setActive('v2-btn-ordered-roman', orderedStyle === 'roman');
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
@@ -1620,6 +1648,7 @@ const Editor = (function () {
     const TextColor = createTextColorExtension(Extension);
     const HighlightColor = createHighlightExtension(Extension);
     const BulletStyle = createBulletStyleExtension(Extension);
+    const OrderedListStyle = createOrderedListStyleExtension(Extension);
     const TableHeaderWithBg = withCellBackground(TableHeader);
     const TableCellWithBg = withCellBackground(TableCell);
     const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
@@ -1640,6 +1669,7 @@ const Editor = (function () {
         TextColor,
         HighlightColor,
         BulletStyle,
+        OrderedListStyle,
         VarBadge,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
@@ -1703,8 +1733,17 @@ const Editor = (function () {
     bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
     bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
     bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
-    bind('v2-btn-ordered', () => editor.chain().focus().toggleOrderedList().run());
-    bind('v2-btn-blockquote', () => editor.chain().focus().toggleBlockquote().run());
+    // Styles de numérotation, révélés dans le même panneau au survol (liste
+    // "fusionnée" puces+numéros demandée) - même logique que les styles de
+    // puce ci-dessus (crée la liste si besoin, sinon change juste le style).
+    const applyOrderedStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('orderedList')) chain.toggleOrderedList();
+      chain.updateAttributes('orderedList', { numberStyle: style }).run();
+    };
+    bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
+    bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
+    bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
     // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
     // liste (cf. createTabNavigationExtension) - sans effet (no-op, jamais
     // d'erreur) hors d'une liste, d'où l'état désactivé posé dans

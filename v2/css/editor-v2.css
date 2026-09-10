@@ -51,6 +51,12 @@
 .reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
 .tiptap ul[data-bullet-style="square"] li::marker,
 .reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
+/* Styles de numérotation (bouton "Liste" fusionné puces+numéros) - lettres/
+   romain sont de l'ASCII pur (aucune contrainte WinAnsi contrairement aux
+   puces ci-dessus), un simple list-style-type suffit à rester identique à
+   l'export PDF (cf. pdf-export.js:listMarkerFor). */
+.tiptap ol[data-number-style="alpha"], .reader-content ol[data-number-style="alpha"] { list-style-type: lower-alpha; }
+.tiptap ol[data-number-style="roman"], .reader-content ol[data-number-style="roman"] { list-style-type: lower-roman; }
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
@@ -292,7 +298,8 @@
    ci-dessus, plus besoin de le répéter ici). */
 #v2-toolbar button.v2-btn-discreet { width: 26px; height: 26px; color: #6b7684; }
 #v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
-#v2-toolbar select { border: 1px solid var(--border, #d7dde3); border-radius: 4px; padding: 3px 6px; font-size: 12.5px; }
+#v2-toolbar select { border: 1px solid transparent; border-radius: 4px; padding: 3px 6px; font-size: 12.5px; background: transparent; }
+#v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: #fff; }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
 /* Groupe "bouton principal + variantes au survol" (alignement/puces/
    numérotation) - maquette validée par l'utilisateur ("options au survol").
@@ -311,6 +318,8 @@
 }
 .v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { opacity: 1; visibility: visible; transform: translateY(2px); }
 .v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
+/* Séparateur entre puces et numéros dans le panneau "Liste" fusionné. */
+.v2-hover-vsep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 2px; }
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }

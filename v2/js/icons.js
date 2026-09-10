@@ -26,6 +26,8 @@ const Icons = (function () {
     alignJustify: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     bulletList: '<circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/>',
     orderedList: '<path d="M9 6h11M9 12h11M9 18h11"/><text x="1.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">1</text><text x="1.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">2</text><text x="1.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">3</text>',
+    orderedAlpha: '<path d="M9 6h11M9 12h11M9 18h11"/><text x="1.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">a</text><text x="1.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">b</text><text x="1.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">c</text>',
+    orderedRoman: '<path d="M9 6h11M9 12h11M9 18h11"/><text x="0.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">i</text><text x="0.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">ii</text><text x="0.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">iii</text>',
     blockquote: '<path d="M7 8a3 3 0 0 0-3 3v2a2 2 0 0 0 2 2h1v-4H6a1 1 0 0 1 1-1z"/><path d="M16 8a3 3 0 0 0-3 3v2a2 2 0 0 0 2 2h1v-4h-1a1 1 0 0 1 1-1z"/>',
     table: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/>',
     twoColumns: '<rect x="3" y="5" width="8" height="14" rx="1"/><rect x="13" y="5" width="8" height="14" rx="1"/>',
@@ -34,13 +36,6 @@ const Icons = (function () {
     toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
-    // "Aa" (grande + petite casse, tailles différentes) plutôt qu'un simple
-    // "A" - trop proche visuellement du bouton couleur de police juste à
-    // côté (signalé confus par l'utilisateur) ; convention universellement
-    // reconnue pour "choix de police" (Google Fonts, sélecteurs Office/
-    // LibreOffice). <text> plutôt qu'un tracé - même procédé déjà utilisé
-    // dans ce fichier pour orderedList/numbering-pill.
-    font: '<text x="2" y="17.5" font-size="14" font-family="Georgia, \'Times New Roman\', serif" font-weight="700" fill="currentColor" stroke="none">A</text><text x="13.5" y="17.5" font-size="10" font-family="Georgia, \'Times New Roman\', serif" font-weight="700" fill="currentColor" stroke="none">a</text>',
     bulletDisc: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>',
     bulletCircle: '<circle cx="12" cy="12" r="4.2"/>',
     bulletSquare: '<rect x="7.8" y="7.8" width="8.4" height="8.4" fill="currentColor" stroke="none"/>',

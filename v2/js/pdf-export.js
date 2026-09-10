@@ -424,8 +424,15 @@ const PdfExport = (function () {
     if (parent && parent.tagName === 'OL') {
       const items = Array.from(parent.children).filter(c => c.tagName === 'LI');
       const start = parseInt(parent.getAttribute('start') || '1', 10) || 1;
-      const idx = items.indexOf(node);
-      return (start + (idx === -1 ? 0 : idx)) + '. ';
+      const n = start + (items.indexOf(node) === -1 ? 0 : items.indexOf(node));
+      // Reflète data-number-style (bouton "Liste" fusionné, révélé au survol -
+      // cf. Editor.js createOrderedListStyleExtension) ; réutilise la même
+      // conversion chiffre→lettre/romain que la numérotation des titres
+      // (HeadingNumbering.formatCounterValue) plutôt que d'en réécrire une.
+      const numberStyle = parent.getAttribute('data-number-style');
+      if (numberStyle === 'alpha') return HeadingNumbering.formatCounterValue(n, 'lower-alpha') + '. ';
+      if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
+      return n + '. ';
     }
     const bulletStyle = parent && parent.getAttribute('data-bullet-style');
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
