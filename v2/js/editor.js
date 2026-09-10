@@ -217,20 +217,35 @@ const Editor = (function () {
   // backspace/suppr en bord de colonne de fusionner la zone avec le
   // paragraphe voisin (comportement par défaut de ProseMirror sans ça,
   // vérifié en conditions réelles).
-  // Tab personnalisé : AVANT toute autre chose, préserve le comportement
-  // natif d'indentation de liste (sinkListItem) - sans ce court-circuit
-  // explicite, l'extension Table (dont le propre Tab - goToNextCell -
-  // l'emporte en pratique sur celui de StarterKit pour une liste nichée
-  // dans une cellule, vérifié en conditions réelles, l'ordre exact de
-  // préséance entre extensions pour une MÊME touche n'étant pas fiable à
-  // deviner) changeait de cellule au lieu d'indenter, signalé cassé par
-  // l'utilisateur. Hors liste, Tab dans une colonne de zone 2-colonnes
-  // (aucun comportement par défaut avant ce correctif - signalé cassé,
-  // "il ne se passe rien") déplace le curseur vers la colonne de droite,
-  // ou - déjà dans la colonne de droite - vers le paragraphe suivant après
-  // la zone (nouveau paragraphe vide créé s'il n'y en a pas déjà un).
-  // Enregistrée en DERNIER dans `extensions` (cf. init()) : conditionne
-  // empiriquement quelle extension gagne la main sur une touche partagée.
+  // Tab/Shift-Tab personnalisés : AVANT toute autre chose, préserve le
+  // comportement natif d'indentation de liste (sinkListItem/liftListItem) -
+  // sans ce court-circuit explicite, l'extension Table (dont le propre
+  // Tab/Shift-Tab - goToNextCell/goToPreviousCell - l'emporte en pratique
+  // sur celui de StarterKit pour une liste nichée dans une cellule, vérifié
+  // en conditions réelles, l'ordre exact de préséance entre extensions pour
+  // une MÊME touche n'étant pas fiable à deviner) changeait de cellule au
+  // lieu d'indenter/désindenter, signalé cassé par l'utilisateur. Hors
+  // liste, Tab/Shift-Tab dans une colonne de zone 2-colonnes (aucun
+  // comportement par défaut avant ce correctif - signalé cassé, "il ne se
+  // passe rien") déplace le curseur d'une colonne à l'autre, ou en sort
+  // (paragraphe suivant/précédent la zone - nouveau paragraphe vide créé en
+  // sortie avant s'il n'y en a pas déjà un ; en sortie arrière, sans effet
+  // s'il n'y a rien avant). Enregistrée en DERNIER dans `extensions` (cf.
+  // init()) : conditionne empiriquement quelle extension gagne la main sur
+  // une touche partagée.
+  // Résout la zone/colonne englobant `$from`, si applicable - factorisé
+  // entre Tab et Shift-Tab (même détection, direction de navigation
+  // opposée seulement).
+  function findTwoColumnsContext($from) {
+    let columnDepth = -1;
+    for (let d = $from.depth; d > 0; d -= 1) {
+      if ($from.node(d).type.name === 'twoColumnsColumn') { columnDepth = d; break; }
+    }
+    if (columnDepth === -1) return null;
+    const zoneDepth = columnDepth - 1;
+    if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return null;
+    return { columnDepth, zoneDepth, colIndex: $from.index(zoneDepth) };
+  }
   function createTabNavigationExtension(Extension) {
     return Extension.create({
       name: 'tabNavigation',
@@ -246,14 +261,9 @@ const Editor = (function () {
               return true;
             }
             const { $from } = ed.state.selection;
-            let columnDepth = -1;
-            for (let d = $from.depth; d > 0; d -= 1) {
-              if ($from.node(d).type.name === 'twoColumnsColumn') { columnDepth = d; break; }
-            }
-            if (columnDepth === -1) return false;
-            const zoneDepth = columnDepth - 1;
-            if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return false;
-            const colIndex = $from.index(zoneDepth);
+            const ctx = findTwoColumnsContext($from);
+            if (!ctx) return false;
+            const { columnDepth, zoneDepth, colIndex } = ctx;
             if (colIndex === 0) {
               const afterLeftCol = $from.after(columnDepth);
               const target = ed.state.doc.resolve(Math.min(afterLeftCol + 1, ed.state.doc.content.size));
@@ -266,6 +276,29 @@ const Editor = (function () {
               return true;
             }
             ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(afterZone), 1)).run();
+            return true;
+          },
+          'Shift-Tab': ({ editor: ed }) => {
+            if (ed.isActive('listItem')) {
+              // Même logique de consommation systématique que Tab ci-dessus
+              // (un lift déjà au premier niveau reste sans effet, ne retombe
+              // jamais sur un changement de cellule/colonne).
+              ed.commands.liftListItem('listItem');
+              return true;
+            }
+            const { $from } = ed.state.selection;
+            const ctx = findTwoColumnsContext($from);
+            if (!ctx) return false;
+            const { columnDepth, zoneDepth, colIndex } = ctx;
+            if (colIndex === 1) {
+              const beforeRightCol = $from.before(columnDepth);
+              const target = ed.state.doc.resolve(Math.max(beforeRightCol - 1, 0));
+              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, -1)).run();
+              return true;
+            }
+            const beforeZone = $from.before(zoneDepth);
+            if (beforeZone <= 0) return true; // rien avant la zone - sans effet
+            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(beforeZone - 1), -1)).run();
             return true;
           },
         };
