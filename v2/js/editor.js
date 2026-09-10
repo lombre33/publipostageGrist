@@ -1020,6 +1020,26 @@ const Editor = (function () {
     };
   }
 
+  // Toolbars flottantes CONTEXTUELLES (tableau/image/variable - chacune
+  // s'enregistre elle-même ci-dessous, cf. wireTableFloatingToolbar/
+  // wireImageFloatingToolbar/wireVariableFloatingToolbar) : ne se
+  // referment normalement que via editor.on('selectionUpdate'/'transaction'),
+  // donc uniquement quand la sélection ProseMirror change RÉELLEMENT - un
+  // clic entièrement hors de l'éditeur (barre du haut, ligne de mise en
+  // forme, bouton "Mode lecture"...) ne déclenche aucun de ces deux
+  // évènements, donc aucune ne se refermait (signalé par l'utilisateur :
+  // reste affichée, ancrée à un endroit devenu invalide, après un clic sur
+  // "Mode lecture"). Filet de sécurité générique : un clic hors de
+  // `.tiptap` (les clics DEDANS restent gérés normalement par les handlers
+  // ci-dessus) ET hors de `.v2-floating-toolbar` (sinon un clic sur le
+  // panneau lui-même le refermerait avant même d'agir) referme les trois.
+  const floatingContextPanels = [];
+  function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
+  document.addEventListener('mousedown', (event) => {
+    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar')) return;
+    hideFloatingContextToolbars();
+  });
+
   // Palettes courtes, sobres (inspirées des standards actuels - Google Docs/
   // Notion) : couleurs de police plus saturées (lisibles en texte fin),
   // couleurs de surlignage/fond de cellule en teintes pastel (le texte
@@ -1197,6 +1217,7 @@ const Editor = (function () {
       onPick: (chain, color) => { setCellsBackground(editor, color); setColorBar('v2-table-fill-bar', color); },
       onNone: () => { setCellsBackground(editor, null); setColorBar('v2-table-fill-bar', null); },
     });
+    floatingContextPanels.push(panel);
     const check = () => {
       if (!editor.isActive('table')) { panel.hide(); return; }
       const { $from } = editor.state.selection;
@@ -1410,6 +1431,7 @@ const Editor = (function () {
     // résiduelle, puis on ne la repose que sur l'image RÉELLEMENT
     // sélectionnée. Source de vérité unique, correcte même si une NodeView a
     // été recréée entre-temps.
+    floatingContextPanels.push(panel);
     const check = () => {
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
@@ -1459,6 +1481,7 @@ const Editor = (function () {
       '</div>',
     ].join('');
     const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
+    floatingContextPanels.push(panel);
 
     function selectedVarBadgeNode() {
       const node = editor.state.selection.node;
