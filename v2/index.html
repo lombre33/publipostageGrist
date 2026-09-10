@@ -54,8 +54,8 @@
 </script>
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.66">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.32">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.12">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.33">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.13">
 </head>
 <body>
 <div id="app">
@@ -175,6 +175,7 @@
       <button id="v2-btn-image" data-tip="Ajouter une image" aria-label="Insérer une image (URL)"></button>
       <button id="v2-btn-page-break" data-tip="Saut de page" aria-label="Insérer un saut de page (forcé à l'export PDF)"></button>
       <button id="v2-btn-toc" data-tip="Insérer un sommaire" aria-label="Insérer un sommaire (généré à partir des titres)"></button>
+      <button id="v2-btn-header-footer" data-tip="En-tête / pied de page" aria-label="Activer l'édition de l'en-tête et du pied de page"></button>
       <span class="v2-sep"></span>
       <span class="numbering-pill v2-hover-group">
         <button id="v2-btn-numbering-trigger" data-tip="Numérotation des titres" aria-label="Numérotation des titres — ne s'applique qu'aux titres du flux principal">
@@ -196,6 +197,32 @@
       <span class="v2-sep"></span>
       <button id="v2-btn-undo" data-tip="Annuler" aria-label="Annuler"></button>
       <button id="v2-btn-redo" data-tip="Rétablir" aria-label="Rétablir"></button>
+    </div>
+    <div id="v2-hf-context-bar" class="v2-hf-context-bar" hidden>
+      <span class="v2-hf-context-label">Édition de l'en-tête / pied de page</span>
+      <span class="v2-segmented" id="v2-hf-zone-segment">
+        <button type="button" class="v2-segmented-btn active" id="v2-hf-zone-header" data-zone="header">En-tête</button>
+        <button type="button" class="v2-segmented-btn" id="v2-hf-zone-footer" data-zone="footer">Pied de page</button>
+      </span>
+      <label class="v2-hf-checkbox">
+        <input type="checkbox" id="v2-hf-different-first">
+        Première page différente
+      </label>
+      <span class="v2-segmented" id="v2-hf-variant-segment" hidden>
+        <button type="button" class="v2-segmented-btn active" id="v2-hf-variant-default" data-variant="default">Pages normales</button>
+        <button type="button" class="v2-segmented-btn" id="v2-hf-variant-first" data-variant="first">Page 1</button>
+      </span>
+      <span class="v2-hover-group" id="v2-hf-pagenum-group">
+        <button type="button" id="v2-hf-btn-pagenum" data-tip="Insérer le numéro de page" aria-label="Insérer le numéro de page">
+          <span class="v2-hf-pagenum-icon" aria-hidden="true">#</span>
+        </button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-hf-pagenum-flyout">
+          <span class="v2-hover-row" data-pagenum-format="n">Numéro simple (3)</span>
+          <span class="v2-hover-row" data-pagenum-format="page-n">Page 3</span>
+          <span class="v2-hover-row" data-pagenum-format="n-slash-total">3 / 12</span>
+        </span>
+      </span>
+      <button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">Terminer</button>
     </div>
   </div>
   <div id="editor-container"></div>
@@ -219,14 +246,14 @@
   </div></div>
 </div>
 <script src="../js/grist-api.js?v=0.67"></script>
-<script src="../js/templates.js?v=0.66"></script>
+<script src="../js/templates.js?v=0.67"></script>
 <script src="../js/reader-mode.js?v=0.68"></script>
 <script src="js/heading-numbering.js?v=0.2"></script>
 <script src="js/variable-format.js?v=0.4"></script>
 <script src="js/variables.js?v=0.10"></script>
-<script src="js/icons.js?v=0.11"></script>
-<script src="js/editor.js?v=0.51"></script>
+<script src="js/icons.js?v=0.12"></script>
+<script src="js/editor.js?v=0.52"></script>
 <script src="js/pdf-export.js?v=0.62"></script>
-<script src="js/main.js?v=0.12"></script>
+<script src="js/main.js?v=0.13"></script>
 </body>
 </html>

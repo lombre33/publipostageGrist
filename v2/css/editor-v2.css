@@ -215,6 +215,26 @@
 
 #editor-container { flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 
+/* === Mode d'édition en-tête/pied de page (.hf-editing, posée par
+   v2/js/editor.js:enterHeaderFooterMode sur #editor-container) === Le contenu
+   affiché dans .tiptap n'est alors PLUS le document principal (échangé via
+   editor.commands.setContent, cf. le plan) - cadre en pointillés accent +
+   bandeau explicite pour qu'il soit impossible de croire par erreur qu'on
+   édite encore le corps du document. Le bandeau (::before sur .tiptap lui-
+   même, pas un élément séparé - .tiptap est remplacé/reflowé par TipTap à
+   chaque frappe, un vrai enfant DOM ajouté à la main y serait fragile) lit
+   son libellé depuis --hf-banner-text, posée en JS (contenu dynamique selon
+   zone/variante en cours). */
+#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; }
+#editor-container.hf-editing { position: relative; }
+#editor-container.hf-editing::before {
+  content: var(--hf-banner-text, "Édition de l'en-tête / pied de page");
+  position: sticky; top: 0; left: 0; z-index: 20; display: inline-block;
+  margin-bottom: 10px; padding: 5px 12px; border-radius: 0 0 6px 6px;
+  background: var(--accent, #2f6fed); color: #fff; font-family: var(--font-ui);
+  font-size: 12px; font-weight: 700;
+}
+
 /* Aperçu format A4 (case #v2-toggle-a4-preview, cf. v2/js/main.js) : contraint
    .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
    de marge = 539.28pt, converti en px standard 96/72 = 719.04px), pour que le
@@ -331,6 +351,15 @@
    V1), scopé ici à .tiptap pour ne toucher que l'éditeur V2. */
 .tiptap .var-badge { position: relative; }
 .tiptap .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
+
+/* Badge de numéro de page (v2/js/editor.js:createPageNumberBadgeNode,
+   incrément 2.1) - même gabarit que .var-badge ci-dessus mais teinte propre
+   (vert plutôt que bleu) pour rester visuellement distinct d'une bulle
+   #Variable au premier coup d'œil, les deux pouvant cohabiter dans un même
+   en-tête/pied de page. Résolu en vrai numéro seulement à partir de
+   l'incrément 2.2 (export PDF)/2.3-2.4 (aperçus paginés) - le libellé ici
+   n'est qu'un espace réservé visuel du format choisi. */
+.tiptap .page-number-badge, .reader-content .page-number-badge { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 /* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle

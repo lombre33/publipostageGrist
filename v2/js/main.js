@@ -43,7 +43,12 @@
 
   function loadTemplateIntoEditor(tpl) {
     closeTemplateRenameEditor();
+    // Changer de modèle en pleine édition d'en-tête/pied de page laisserait
+    // sinon le contenu d'en-tête chargé à la place du document principal
+    // qu'on s'apprête à écraser - même garde que Save/Export/Mode Lecture.
+    Editor.exitHeaderFooterModeIfActive();
     Editor.setHTML(tpl ? tpl.contenu : '');
+    Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     if (pdfFilenameInput) {
       pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
@@ -108,10 +113,11 @@
   }
 
   async function onSave() {
+    Editor.exitHeaderFooterModeIfActive();
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) { setStatus('Nom du modèle requis.', true); return; }
-    const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate());
+    const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData());
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -149,6 +155,7 @@
   }
 
   async function onExportPdf() {
+    Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
     if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
     setStatus('Génération du PDF en cours...');
@@ -164,6 +171,7 @@
   }
 
   async function switchMode(mode) {
+    if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
     btnEdit.classList.toggle('active', mode === 'edit');
     btnRead.classList.toggle('active', mode === 'read');

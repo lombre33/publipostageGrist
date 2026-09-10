@@ -52,6 +52,27 @@ const Editor = (function () {
   // valide à partir d'une position candidate, cf. son usage plus bas).
   let TextSelectionClass = null;
 
+  // Mode d'édition en-tête/pied de page (incrément 2.1 du plan headers/
+  // footers) - un seul éditeur, un seul schéma ProseMirror partagé : entrer
+  // dans ce mode ÉCHANGE simplement le contenu AFFICHÉ (editor.commands.
+  // setContent), plutôt que d'instancier un second éditeur - évite le piège
+  // réel trouvé en validation de la première mouture du plan
+  // (wireTableFloatingToolbar/wireImageFloatingToolbar/syncToolbarState sont
+  // câblés via .on(...) UNE SEULE FOIS sur l'instance existante à l'appel de
+  // init(), non transférable à une seconde instance créée plus tard).
+  // `null` = édition normale du document principal.
+  let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
+  // HTML du document principal, sauvegardé au moment d'ENTRER dans le mode
+  // (avant tout échange), restauré tel quel à la sortie.
+  let mainDocSnapshot = null;
+  // Brouillon en mémoire des 4 fragments (en-tête/pied × pages normales/page
+  // 1) - lu/écrit par getHeaderFooterData/setHeaderFooterData, persisté par
+  // js/templates.js dans la colonne Grist HeaderFooter (JSON), cf. le plan.
+  function emptyHeaderFooterData() {
+    return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  }
+  let headerFooterDraft = emptyHeaderFooterData();
+
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
   // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
@@ -96,6 +117,40 @@ const Editor = (function () {
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
         return ['span', attrs, '#' + node.attrs.key];
+      },
+    });
+  }
+
+  // Badge de numéro de page — même schéma que VarBadge ci-dessus (nœud atome
+  // en ligne, non éditable), pour l'en-tête/pied de page (incrément 2.1).
+  // Un seul attribut `format` (n / page-n / n-slash-total) : pas de système
+  // de position gauche/droite dédié, l'alignement de paragraphe déjà présent
+  // dans la toolbar réutilisée couvre déjà "à gauche"/"à droite"/"centré".
+  // Contrairement à VarBadge, aucune vraie valeur n'existe encore à ce stade
+  // (2.1 ne construit ni l'export PDF natif ni l'aperçu paginé réel, cf. le
+  // plan) - le libellé rendu ici n'est qu'un espace réservé visuel indiquant
+  // le FORMAT choisi, résolu en un vrai numéro seulement à l'incrément 2.2
+  // (export PDF)/2.3-2.4 (aperçus paginés).
+  function createPageNumberBadgeNode(Node, mergeAttributes) {
+    const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
+    return Node.create({
+      name: 'pageNumberBadge',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return { format: { default: 'n', renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{ tag: 'span.page-number-badge', getAttrs: el => ({ format: el.getAttribute('data-format') || 'n' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({ class: 'page-number-badge', contenteditable: 'false', 'data-format': node.attrs.format });
+        return ['span', attrs, LABELS[node.attrs.format] || LABELS.n];
+      },
+      addCommands() {
+        return { insertPageNumberBadge: format => ({ chain }) => chain().insertContent({ type: this.name, attrs: { format } }).run() };
       },
     });
   }
@@ -1608,6 +1663,145 @@ const Editor = (function () {
     }
   }
 
+  // === Mode d'édition en-tête/pied de page (incrément 2.1) ===
+  // Entre dans le mode (ou change de zone/variante si déjà actif) : sauvegarde
+  // d'abord le contenu qu'on quitte (brouillon si on change de zone/variante,
+  // snapshot du document principal si c'est la toute première entrée), puis
+  // charge le fragment demandé dans l'éditeur UNIQUE via setContent.
+  function enterHeaderFooterMode(zone, variant) {
+    if (!editor) return;
+    if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    else mainDocSnapshot = editor.getHTML();
+    // Le simple fait d'ouvrir ce mode vaut activation : il n'y a pas de case
+    // "activer" séparée dans la sous-barre (cf. maquette du plan), seulement
+    // "Première page différente" - une fois qu'un en-tête/pied a été
+    // configuré, il doit s'afficher partout (éditeur/lecture/PDF, à partir
+    // des incréments suivants).
+    headerFooterDraft.enabled = true;
+    hfMode = { zone, variant };
+    editor.commands.setContent(headerFooterDraft[zone][variant] || '');
+    const container = document.getElementById('editor-container');
+    if (container) {
+      container.classList.add('hf-editing');
+      const zoneLabel = zone === 'header' ? "l'en-tête" : 'le pied de page';
+      const variantLabel = variant === 'first' ? 'page 1 uniquement' : 'pages normales';
+      container.style.setProperty('--hf-banner-text', JSON.stringify(`Édition de ${zoneLabel} — ${variantLabel}`));
+    }
+    syncToolbarState();
+  }
+
+  // Sauvegarde le contenu courant dans le brouillon, restaure le document
+  // principal, retire l'habillage visuel. Sans effet si le mode n'est déjà
+  // pas actif (`null`).
+  function exitHeaderFooterMode() {
+    if (!hfMode || !editor) return;
+    headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    hfMode = null;
+    editor.commands.setContent(mainDocSnapshot || '');
+    mainDocSnapshot = null;
+    const container = document.getElementById('editor-container');
+    if (container) { container.classList.remove('hf-editing'); container.style.removeProperty('--hf-banner-text'); }
+    const contextBar = document.getElementById('v2-hf-context-bar');
+    const toggleBtn = document.getElementById('v2-btn-header-footer');
+    if (contextBar) contextBar.hidden = true;
+    if (toggleBtn) toggleBtn.classList.remove('active');
+    syncToolbarState();
+  }
+
+  // Filet de sécurité appelé par v2/js/main.js AVANT Save/Enregistrer sous/
+  // Export PDF/passage en Mode Lecture - sans ça, l'une de ces actions
+  // lirait/enverrait le contenu d'un en-tête/pied de page chargé À LA PLACE
+  // du document principal (editor.getHTML() ne sait pas dans quel mode on
+  // est, il renvoie toujours ce qui est actuellement affiché).
+  function exitHeaderFooterModeIfActive() {
+    if (hfMode) exitHeaderFooterMode();
+  }
+
+  // Reflète le brouillon EN COURS (zone/variante actuellement affichée
+  // comprise) sans devoir sortir du mode - les appelants réels (Save/Export)
+  // appellent de toute façon exitHeaderFooterModeIfActive() juste avant,
+  // mais un appel pendant que le mode est encore actif reste cohérent.
+  function getHeaderFooterData() {
+    if (hfMode && editor) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    return headerFooterDraft;
+  }
+
+  // Chargement d'un modèle (cf. v2/js/main.js:loadTemplateIntoEditor) - le
+  // mode est déjà garanti inactif à cet instant (exitHeaderFooterModeIfActive
+  // appelée juste avant côté main.js), remplace donc directement le
+  // brouillon en mémoire.
+  function setHeaderFooterData(data) {
+    const empty = emptyHeaderFooterData();
+    headerFooterDraft = data && typeof data === 'object'
+      ? Object.assign(empty, data, {
+          header: Object.assign({}, empty.header, data.header),
+          footer: Object.assign({}, empty.footer, data.footer),
+        })
+      : empty;
+  }
+
+  // Bouton bascule (#v2-btn-header-footer) + sous-barre contextuelle
+  // (#v2-hf-context-bar, cf. v2/index.html) : segment zone (en-tête/pied),
+  // case "Première page différente" (révèle un second segment
+  // pages-normales/page-1), menu d'insertion du numéro de page, bouton
+  // "Terminer". Câblée une seule fois dans init(), comme le reste de la
+  // toolbar - ne dépend d'aucune seconde instance d'éditeur.
+  function wireHeaderFooterBar() {
+    const toggleBtn = document.getElementById('v2-btn-header-footer');
+    const contextBar = document.getElementById('v2-hf-context-bar');
+    const zoneHeaderBtn = document.getElementById('v2-hf-zone-header');
+    const zoneFooterBtn = document.getElementById('v2-hf-zone-footer');
+    const differentFirstCheckbox = document.getElementById('v2-hf-different-first');
+    const variantSegment = document.getElementById('v2-hf-variant-segment');
+    const variantDefaultBtn = document.getElementById('v2-hf-variant-default');
+    const variantFirstBtn = document.getElementById('v2-hf-variant-first');
+    const doneBtn = document.getElementById('v2-hf-btn-done');
+    const pagenumFlyout = document.getElementById('v2-hf-pagenum-flyout');
+    if (!toggleBtn || !contextBar) return;
+
+    const syncZoneButtons = () => {
+      if (!hfMode) return;
+      zoneHeaderBtn.classList.toggle('active', hfMode.zone === 'header');
+      zoneFooterBtn.classList.toggle('active', hfMode.zone === 'footer');
+      variantDefaultBtn.classList.toggle('active', hfMode.variant === 'default');
+      variantFirstBtn.classList.toggle('active', hfMode.variant === 'first');
+    };
+
+    toggleBtn.addEventListener('click', () => {
+      if (hfMode) { exitHeaderFooterMode(); return; } // exitHeaderFooterMode gère déjà contextBar/toggleBtn/.active
+      contextBar.hidden = false;
+      differentFirstCheckbox.checked = headerFooterDraft.differentFirstPage;
+      variantSegment.hidden = !headerFooterDraft.differentFirstPage;
+      enterHeaderFooterMode('header', 'default'); // syncToolbarState() (appelée dedans) pose .active
+      syncZoneButtons();
+    });
+
+    const switchZone = (zone) => { if (hfMode && hfMode.zone !== zone) { enterHeaderFooterMode(zone, hfMode.variant); syncZoneButtons(); } };
+    zoneHeaderBtn.addEventListener('click', () => switchZone('header'));
+    zoneFooterBtn.addEventListener('click', () => switchZone('footer'));
+
+    const switchVariant = (variant) => { if (hfMode && hfMode.variant !== variant) { enterHeaderFooterMode(hfMode.zone, variant); syncZoneButtons(); } };
+    variantDefaultBtn.addEventListener('click', () => switchVariant('default'));
+    variantFirstBtn.addEventListener('click', () => switchVariant('first'));
+
+    differentFirstCheckbox.addEventListener('change', () => {
+      headerFooterDraft.differentFirstPage = differentFirstCheckbox.checked;
+      variantSegment.hidden = !differentFirstCheckbox.checked;
+      if (!differentFirstCheckbox.checked) switchVariant('default');
+    });
+
+    doneBtn.addEventListener('click', () => exitHeaderFooterMode());
+
+    if (pagenumFlyout) {
+      pagenumFlyout.querySelectorAll('.v2-hover-row').forEach(row => {
+        row.addEventListener('click', () => {
+          if (!hfMode) return;
+          editor.chain().focus().insertPageNumberBadge(row.dataset.pagenumFormat).run();
+        });
+      });
+    }
+  }
+
   // Icônes de la toolbar statique (posées en JS plutôt que dans le HTML : une
   // seule source de vérité pour les tracés SVG, partagée avec les toolbars
   // flottantes ci-dessus/ci-dessous qui doivent de toute façon construire
@@ -1629,6 +1823,7 @@ const Editor = (function () {
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
+    set('v2-btn-header-footer', 'headerFooter');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -1674,6 +1869,21 @@ const Editor = (function () {
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
+    // Mode en-tête/pied de page (incrément 2.1) : grise (pointer-events, cf.
+    // .v2-hf-locked dans css/toolbar-v2.css) tableau/2-colonnes/image/saut de
+    // page/sommaire/numérotation des titres - aucun sens dans ce contexte
+    // (cf. calibration utilisateur du plan). Le schéma ProseMirror reste
+    // UNIQUE et partagé (compromis assumé) : seuls les BOUTONS sont bloqués.
+    const inHfMode = !!hfMode;
+    const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
+    setLocked('v2-btn-table', inHfMode);
+    setLocked('v2-btn-two-columns', inHfMode);
+    setLocked('v2-btn-image', inHfMode);
+    setLocked('v2-btn-page-break', inHfMode);
+    setLocked('v2-btn-toc', inHfMode);
+    const numberingPill = document.querySelector('.numbering-pill');
+    if (numberingPill) numberingPill.classList.toggle('v2-hf-locked', inHfMode);
+    setActive('v2-btn-header-footer', inHfMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -1717,6 +1927,7 @@ const Editor = (function () {
     ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass } = await import('prosemirror-state'));
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
+    const PageNumberBadge = createPageNumberBadgeNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
     const TextColor = createTextColorExtension(Extension);
     const HighlightColor = createHighlightExtension(Extension);
@@ -1749,6 +1960,7 @@ const Editor = (function () {
         TaskList,
         TaskItem.configure({ nested: false }),
         VarBadge,
+        PageNumberBadge,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
         // comportement de poignée que la V1, cf. mémoire
@@ -1770,6 +1982,7 @@ const Editor = (function () {
     });
 
     wireToolbar();
+    wireHeaderFooterBar();
     wireColorPickers();
     wireTableFloatingToolbar();
     wireImageFloatingToolbar();
@@ -2002,5 +2215,8 @@ const Editor = (function () {
     clampOverflowingTables(editor);
   }
 
-  return { init, getHTML, setHTML, getHeadingNumberingStyle };
+  return {
+    init, getHTML, setHTML, getHeadingNumberingStyle,
+    getHeaderFooterData, setHeaderFooterData, exitHeaderFooterModeIfActive,
+  };
 })();

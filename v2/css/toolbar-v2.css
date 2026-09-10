@@ -187,3 +187,37 @@
    silencieux à l'entier - la devise reste utilisable elle aussi ("mille
    euros"). */
 [data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg { opacity: .4; pointer-events: none; }
+
+/* === Bouton "En-tête / pied de page" (#v2-btn-header-footer, #v2-toolbar) ===
+   Icône dédiée (Icons.headerFooter, v2/js/icons.js) posée via applyToolbarIcons
+   comme les autres boutons ::before de cette barre - .active signale le mode
+   en cours (même convention que #btn-mode-edit/#btn-mode-read). */
+#v2-btn-header-footer.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft-border); }
+
+/* Boutons/groupes sans aucun sens pendant l'édition d'en-tête/pied de page
+   (posée dynamiquement par v2/js/editor.js:syncToolbarState) - pointer-events
+   (pas juste disabled, la numérotation des titres est un GROUPE au survol,
+   pas un simple <button>) hérite vers tous les descendants, bloquant aussi
+   le panneau flottant révélé au survol, pas seulement le déclencheur. */
+#v2-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
+
+/* === Sous-barre contextuelle d'édition en-tête/pied de page
+   (#v2-hf-context-bar) === Masquée par défaut ([hidden] natif, pas de
+   display:flex qui l'annulerait - même piège déjà rencontré 2 fois cette
+   session), révélée par v2/js/editor.js en entrant dans le mode. Positionnée
+   juste sous #v2-toolbar, fond légèrement teinté accent pour signaler "hors
+   du document principal" sans reprendre le cadre en pointillés déjà utilisé
+   pour la zone éditable elle-même (cf. .hf-editing, editor-v2.css). */
+.v2-hf-context-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--accent-soft); border-top: 1px solid var(--accent-soft-border); font-family: var(--font-ui); }
+.v2-hf-context-bar[hidden] { display: none; }
+.v2-hf-context-label { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.v2-segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.v2-segmented[hidden] { display: none; }
+.v2-segmented-btn { width: auto; height: 26px; padding: 0 10px; font-size: 12px; font-weight: 600; border: none; border-radius: 0; border-left: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); cursor: pointer; }
+.v2-segmented-btn:first-child { border-left: none; }
+.v2-segmented-btn:hover { background: var(--surface-sunken); }
+.v2-segmented-btn.active { background: var(--accent); color: #fff; }
+.v2-hf-checkbox { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; cursor: pointer; }
+.v2-hf-pagenum-icon { font-family: var(--font-ui); font-weight: 800; font-size: 14px; }
+.v2-hf-btn-done { margin-left: auto; width: auto; height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 700; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.v2-hf-btn-done:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
