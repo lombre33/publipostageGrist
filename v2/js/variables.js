@@ -16,6 +16,17 @@ const Variables = (function () {
   let acBox = null;
   let currentItems = [];
   let selectedIndex = 0;
+  // Une colonne Grist ajoutée après le chargement du widget n'apparaissait
+  // jamais dans #Variable : GristAPI.refreshSchema() n'est appelé qu'une
+  // fois, à GristAPI.init(). Ce flag déclenche UN SEUL rafraîchissement par
+  // session de saisie (posé à `true` au 1er appel après l'ouverture du
+  // déclencheur #, remis à `false` à la fermeture) plutôt qu'à chaque
+  // frappe - un doc à plusieurs tables ne doit pas repayer un aller-retour
+  // Grist par caractère tapé. Partagé entre le déclencheur de l'éditeur
+  // (createExtension) et celui du champ Nom de fichier PDF
+  // (checkForFilenameTrigger) : jamais actifs en même temps (mémoire
+  // filenameInputState ci-dessous).
+  let schemaRefreshedForSession = false;
 
   function ensureBox() {
     if (acBox) return acBox;
@@ -89,7 +100,7 @@ const Variables = (function () {
         if (props.event.key === 'Escape') { hide(); return true; }
         return false;
       },
-      onExit() { hide(); },
+      onExit() { hide(); schemaRefreshedForSession = false; },
     };
   }
 
@@ -112,6 +123,16 @@ const Variables = (function () {
             // l'objet global, cf. mémoire projet_html_source_tab sur ce même
             // piège rencontré dans dev-tests/custom-html-export.js).
             items: ({ query }) => {
+              // Rafraîchit le schéma UNE FOIS par session (pas à chaque
+              // frappe, cf. déclaration de schemaRefreshedForSession) - en
+              // tâche de fond, sans bloquer ce rendu : la frappe suivante de
+              // l'utilisateur (onUpdate rappelle items()) profitera du
+              // schéma à jour dès qu'il est arrivé, sans latence perçue à
+              // l'ouverture du popup.
+              if (!schemaRefreshedForSession) {
+                schemaRefreshedForSession = true;
+                GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
+              }
               const all = GristAPI.getAllVariables();
               return all.filter(v => v.key.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
             },
@@ -154,10 +175,21 @@ const Variables = (function () {
   let filenameInputState = null;
   function checkForFilenameTrigger(el) {
     const caret = el.selectionStart;
-    if (caret == null) { hide(); filenameInputState = null; return; }
+    if (caret == null) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     const text = el.value.slice(0, caret);
     const match = text.match(/#([A-Za-z0-9_]*)$/);
-    if (!match) { hide(); filenameInputState = null; return; }
+    if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
+    // Même rafraîchissement "une fois par session" que le déclencheur de
+    // l'éditeur (cf. createExtension/items ci-dessus) - déclenché dès le 1er
+    // caractère tapé après #, PAS seulement si des résultats existent déjà :
+    // sans ça, chercher une colonne toute juste ajoutée ("#" + son nom
+    // exact) ne trouverait jamais rien puisque la branche !items.length
+    // ci-dessous ferme le popup avant même d'avoir eu la chance de
+    // rafraîchir.
+    if (!schemaRefreshedForSession) {
+      schemaRefreshedForSession = true;
+      GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
+    }
     const query = match[1].toLowerCase();
     const all = GristAPI.getAllVariables();
     const items = all.filter(v => v.key.toLowerCase().includes(query)).slice(0, 50);

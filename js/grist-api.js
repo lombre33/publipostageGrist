@@ -191,17 +191,32 @@ const GristAPI = (function () {
       const tables = await grist.docApi.listTables();
       _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
-      _columnsByTable = {};
-      for (const t of _tables) {
+      // Un fetchTable par table, EN PARALLÈLE (indépendants) plutôt qu'en
+      // séquence - la latence totale devient celle du plus lent des appels,
+      // pas leur somme. Déterminant depuis que Variables.js
+      // (v2/js/variables.js:createExtension) appelle refreshSchema() à
+      // chaque nouvelle session de saisie de #Variable (pour voir les
+      // colonnes ajoutées depuis le lancement du widget) - un doc à N
+      // tables ne doit pas payer N aller-retours séquentiels à chaque fois.
+      // Écrit dans un objet TEMPORAIRE, remplacé d'un coup à la fin plutôt
+      // que vidé puis repeuplé sur _columnsByTable directement : sinon,
+      // toute lecture de getAllVariables()/getColumns() qui tombe pendant
+      // les allers-retours réseau (précisément ce qui arrive maintenant,
+      // rafraîchissement déclenché à CHAQUE frappe de # par l'utilisateur)
+      // verrait un schéma vidé mais pas encore repeuplé - la popup #Variable
+      // clignoterait à vide pendant le rafraîchissement.
+      const nextColumnsByTable = {};
+      await Promise.all(_tables.map(async t => {
         try {
           const data = await grist.docApi.fetchTable(t);
           const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
-          _columnsByTable[t] = cols;
+          nextColumnsByTable[t] = cols;
         } catch (e) {
           console.warn('[GristAPI] refreshSchema: échec fetchTable(' + t + ') —', e);
-          _columnsByTable[t] = [];
+          nextColumnsByTable[t] = [];
         }
-      }
+      }));
+      _columnsByTable = nextColumnsByTable;
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
     }
