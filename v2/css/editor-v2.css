@@ -225,6 +225,11 @@
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
 .tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
+/* Taille verrouillée en mode en-tête/pied (cf. v2/js/editor.js:startResize) :
+   masque les poignées de coin pour ne pas suggérer un redimensionnement
+   possible - `!important` nécessaire, la règle ci-dessus (plus spécifique,
+   `.editor-image-selected .editor-image-handle`) l'emporterait sinon. */
+#editor-container.hf-editing .editor-image-handle { display: none !important; }
 .tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
 .tiptap .editor-image-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
@@ -416,6 +421,27 @@
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent, #2f6fed); font-weight: 600; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
 .v2-hf-zone-body { color: var(--text-faint, #6b7684); }
+/* Cette zone n'est PAS un descendant de `.tiptap` (elle vit dans
+   `.v2-page-sheet`, frère de `.tiptap` - cf. plus haut) : le contenu
+   d'en-tête/pied résolu qu'on y dépose retombe donc sur la marge PAR DÉFAUT
+   du navigateur pour <p>/<h1-6>/<ul>/<ol> (jamais nulle contrairement à
+   `.tiptap p{margin:0}` etc.) - invisible mais bien réelle, elle gonflait la
+   zone visuellement bien au-delà du contenu réel (une image y semblait
+   "flotter" loin du bord de la zone) - signalé par l'utilisateur. Pas de
+   décalage de mise en page réel pour autant : measureHtmlHeightPx (marge de
+   page réservée) mesure lui déjà avec la classe `tiptap` posée, donc sans
+   cette marge - seul l'AFFICHAGE de cette zone était trop généreux, jamais
+   l'espace réellement réservé sur la page. */
+.v2-hf-zone-body p, .v2-hf-zone-body h1, .v2-hf-zone-body h2, .v2-hf-zone-body h3,
+.v2-hf-zone-body h4, .v2-hf-zone-body h5, .v2-hf-zone-body h6,
+.v2-hf-zone-body ul, .v2-hf-zone-body ol { margin: 0; }
+/* Même raison que `.tiptap img.editor-image{vertical-align:bottom}` (jamais
+   appliqué ici, hors de `.tiptap`) : un <img> reste "inline" par défaut,
+   aligné sur la ligne de base du texte - laisse un petit espace résiduel
+   sous l'image (place réservée aux descentes de lettres) qui, ajouté à la
+   marge déjà retirée ci-dessus, faisait paraître la zone plus haute que
+   l'image elle-même. */
+.v2-hf-zone-body img { vertical-align: bottom; }
 .v2-hf-zone-pencil { display: none; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 5px; background: #fff; box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 .v2-hf-zone-pencil::before { content: ''; position: absolute; inset: 5px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-pencil { display: block; }

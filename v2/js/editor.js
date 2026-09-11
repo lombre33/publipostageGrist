@@ -748,7 +748,16 @@ const Editor = (function () {
           }
 
           let resizeState = null;
+          // Taille verrouillée en mode en-tête/pied (demande utilisateur) :
+          // une image plus grande y agrandit d'autant la marge de page
+          // réservée pour l'en-tête/pied (cf. buildHeaderFooterPdfChunks/
+          // renderPaginationOverlay, qui mesurent le contenu réel) - une
+          // zone censée rester compacte ne doit pas pouvoir grossir "à
+          // l'infini" au gré d'un redimensionnement. Garde-fou en plus du
+          // CSS qui masque déjà les poignées (cf. .hf-editing
+          // .editor-image-handle), au cas où.
           function startResize(event, corner) {
+            if (hfMode) return;
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
             resizeState = { startX: event.clientX, startWidth: rect.width, sign: corner.includes('w') ? -1 : 1 };
@@ -1474,10 +1483,16 @@ const Editor = (function () {
       const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
+      // Taille verrouillée en mode en-tête/pied (cf. commentaire sur
+      // startResize plus haut, même raison - une image plus grande y
+      // agrandirait d'autant la marge de page réservée) : les 3 actions qui
+      // changent la largeur sont ignorées pendant ce mode (grisées aussi,
+      // cf. syncState ci-dessous).
+      const sizeLocked = () => !!hfMode;
       const commands = {
-        'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
-        'zoom-in': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }),
-        reset: () => updateSelectedImage({ width: '320px', align: null }),
+        'zoom-out': () => { if (!sizeLocked()) updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }); },
+        'zoom-in': () => { if (!sizeLocked()) updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }); },
+        reset: () => { if (!sizeLocked()) updateSelectedImage({ width: '320px', align: null }); },
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
@@ -1521,6 +1536,12 @@ const Editor = (function () {
       const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
       setLockedBtn('layer-front', !!hfMode);
       setLockedBtn('layer-behind', !!hfMode);
+      // Cf. commentaire sur `sizeLocked`/startResize ci-dessus : la taille
+      // (zoom avant/arrière/réinitialiser) est verrouillée pendant tout le
+      // mode en-tête/pied, même mécanisme visuel.
+      setLockedBtn('zoom-out', !!hfMode);
+      setLockedBtn('zoom-in', !!hfMode);
+      setLockedBtn('reset', !!hfMode);
     }
 
     // Retour visuel de sélection (classe .editor-image-selected) recalculé
@@ -1865,7 +1886,11 @@ const Editor = (function () {
   // css/editor-v2.css - sans ce correctif un en-tête d'une seule ligne
   // mesurerait 200px, bug déjà rencontré et corrigé côté export PDF).
   function measureHtmlHeightPx(html) {
-    if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
+    // `<img` en plus du texte : cf. le même correctif dans updateHfZone -
+    // sans lui, un en-tête/pied ne contenant qu'une image mesurait une
+    // hauteur de 0, réservant AUCUNE marge pour elle (le corps du document
+    // aurait alors chevauché l'image dans l'aperçu de pagination).
+    if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
     const host = document.createElement('div');
     host.className = 'tiptap';
     host.innerHTML = html;
@@ -2017,7 +2042,13 @@ const Editor = (function () {
   }
   function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
     const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
-    const hasContent = !!resolved.replace(/<[^>]*>/g, '').trim();
+    // `<img` en plus du texte : un en-tête/pied ne contenant QU'une image
+    // (aucun texte autour) avait tout son HTML dépouillé de balises par ce
+    // test, chaîne vide restante - traité à tort comme "zone vide", affichant
+    // l'accroche fantôme "+ Ajouter..." à la place de l'image réellement
+    // configurée (même bug, même correctif que resolveZone dans
+    // pdf-export.js, trouvé en ajoutant la prise en charge des images ici).
+    const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
     el.innerHTML = hasContent
