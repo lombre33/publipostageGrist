@@ -357,13 +357,24 @@
       previewModal.style.display = 'none';
     }
 
-    function useEmpty() {
+    // Charger le template ne suffit pas : sans un Templates.save() explicite,
+    // il ne reste qu'un tampon d'édition non enregistré (exactement comme
+    // "Modèle vierge"/onNew), invisible dans #template-select tant que
+    // l'utilisateur ne clique pas lui-même sur Enregistrer - signalé par
+    // l'utilisateur après un test réel ("ça n'a pas créé le modèle... dans sa
+    // liste de modèle"), alors que le cahier des charges parlait bien d'un
+    // modèle "stocké". Réutilise onSave() tel quel (mêmes garanties déjà en
+    // place : lit templateNameInput.value, id courant null ⇒ AddRecord neuf,
+    // rafraîchit #template-select et le sélectionne) plutôt que dupliquer
+    // l'appel à Templates.save().
+    async function useEmpty() {
       if (!currentEntry || !currentHtml) return;
       const html = TemplateGallery.stripVariableBadges(currentHtml);
       templateSelect.value = '';
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      await onSave();
       closeAll();
-      setStatus('Template « ' + currentEntry.name + ' » chargé.');
+      setStatus('Template « ' + currentEntry.name + ' » enregistré comme nouveau modèle.');
     }
 
     async function useWithData() {
@@ -388,8 +399,9 @@
       }
       templateSelect.value = '';
       loadTemplateIntoEditor({ id: null, contenu: currentHtml, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      await onSave();
       closeAll();
-      setStatus('Table « ' + tableName + ' » créée avec ' + schema.columns.length + ' colonne(s). Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
+      setStatus('Table « ' + tableName + ' » créée avec ' + schema.columns.length + ' colonne(s), modèle « ' + currentEntry.name + ' » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
     }
 
     openLink.addEventListener('click', openGallery);
