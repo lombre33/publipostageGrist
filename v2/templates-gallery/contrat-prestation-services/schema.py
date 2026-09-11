@@ -1,0 +1,16 @@
+@grist.UserTable
+class Contrat_Prestation:
+  PrestataireNom = grist.Text()
+  PrestataireAdresse = grist.Text()
+  PrestataireSiret = grist.Text()
+  ClientNom = grist.Text()
+  ClientAdresse = grist.Text()
+  ClientSiret = grist.Text()
+  ObjetPrestation = grist.Text()
+  DateDebut = grist.Date()
+  DateFin = grist.Date()
+  MontantPrestation = grist.Numeric()
+  ModalitesPaiement = grist.Text()
+  LieuSignature = grist.Text()
+  DateSignature = grist.Date()
+  TribunalCompetent = grist.Text()

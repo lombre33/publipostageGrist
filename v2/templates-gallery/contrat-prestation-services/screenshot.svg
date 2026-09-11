@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+  <rect width="300" height="400" fill="#ffffff" stroke="#c3cad6" stroke-width="2"/>
+  <text x="150" y="34" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#1c2430" text-anchor="middle">CONTRAT DE PRESTATION</text>
+  <text x="150" y="50" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#1c2430" text-anchor="middle">DE SERVICES</text>
+  <rect x="24" y="68" width="252" height="7" rx="2" fill="#c3cad6"/>
+  <rect x="24" y="80" width="220" height="7" rx="2" fill="#c3cad6"/>
+  <rect x="24" y="92" width="200" height="7" rx="2" fill="#c3cad6"/>
+  <rect x="24" y="112" width="90" height="9" rx="2" fill="#1c2430"/>
+  <rect x="24" y="128" width="252" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="140" width="230" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="158" width="90" height="9" rx="2" fill="#1c2430"/>
+  <rect x="24" y="174" width="252" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="186" width="180" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="204" width="90" height="9" rx="2" fill="#1c2430"/>
+  <rect x="24" y="220" width="252" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="232" width="252" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="244" width="150" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="264" width="90" height="9" rx="2" fill="#1c2430"/>
+  <rect x="24" y="280" width="252" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="292" width="200" height="7" rx="2" fill="#d7dde3"/>
+  <rect x="24" y="330" width="110" height="7" rx="2" fill="#8a94a3"/>
+  <rect x="166" y="330" width="110" height="7" rx="2" fill="#8a94a3"/>
+  <rect x="24" y="350" width="110" height="1" fill="#c3cad6"/>
+  <rect x="166" y="350" width="110" height="1" fill="#c3cad6"/>
+</svg>

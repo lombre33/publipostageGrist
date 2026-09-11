@@ -1,17 +1,18 @@
 [
   {
-    "id": "facture-simple",
-    "name": "Facture simple",
+    "id": "facture",
+    "name": "Facture",
     "tags": ["facture", "vente"],
-    "screenshot": "facture-simple/screenshot.svg",
-    "html": "facture-simple/template.html",
-    "schema": "facture-simple/schema.py"
+    "screenshot": "facture/screenshot.svg",
+    "html": "facture/template.html",
+    "schema": "facture/schema.py"
   },
   {
-    "id": "lettre-type",
-    "name": "Lettre type",
-    "tags": ["courrier"],
-    "screenshot": "lettre-type/screenshot.svg",
-    "html": "lettre-type/template.html"
+    "id": "contrat-prestation-services",
+    "name": "Contrat de prestation de services",
+    "tags": ["contrat", "juridique"],
+    "screenshot": "contrat-prestation-services/screenshot.svg",
+    "html": "contrat-prestation-services/template.html",
+    "schema": "contrat-prestation-services/schema.py"
   }
 ]
