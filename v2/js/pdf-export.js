@@ -1947,7 +1947,23 @@ const PdfExport = (function () {
   // tout résolue) en a besoin ; les autres branches se basent sur des
   // positions déjà mesurées par pdfmake lui-même (aboveTop/belowTop/
   // containerTop), qui reflètent déjà la vraie marge sans calcul manuel.
-  function resolveImageAbsolutePosition(a, topMarginPt) {
+  // `layer` : détermine, quand au-dessus/en-dessous tombent sur des pages
+  // DIFFÉRENTES (image proche d'une coupure de page - cas explicitement
+  // signalé "rare en pratique" à l'origine, en réalité déclenché par tout
+  // document assez long, cf. le rapport utilisateur "l'image se décale vers
+  // la droite et le bas à l'export"), QUELLE ancre sert de référence pour Y -
+  // doit être EXACTEMENT la même que celle utilisée par resolveNativePdfContent
+  // pour la RELOCATION (placement dans content[], donc la page RÉELLEMENT
+  // peinte) : "devant" préfère l'ancre du dessous, "derrière" celle du dessus
+  // (même priorité que la relocation ci-dessous). Avant ce correctif, cette
+  // fonction préférait TOUJOURS l'ancre du dessus pour Y, indépendamment de
+  // celle choisie pour la page - une image replacée à côté de l'ancre du
+  // dessous (page suivante) gardait un Y calculé depuis l'ancre du dessus
+  // (page précédente, presque pleine) : sur la nouvelle page, encore presque
+  // vide, ce Y bien plus grand que nécessaire poussait l'image loin plus bas
+  // que sa position réelle dans l'éditeur - confirmé par un test dédié
+  // (document long, image proche d'une coupure de page).
+  function resolveImageAbsolutePosition(a, topMarginPt, layer) {
     const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
     // `imgLeftPx` est page-relative (bloc englobant CSS = `.tiptap`) pour le
     // flux principal ET une colonne de zone 2-colonnes (aucune des deux ne
@@ -1975,8 +1991,26 @@ const PdfExport = (function () {
       const fraction = (a.imgTopPx - a.aboveTopPx) / (a.belowTopPx - a.aboveTopPx);
       return { x: xPt, y: a.aboveTop + fraction * (a.belowTop - a.aboveTop) };
     }
-    if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT };
-    if (a.belowTop != null) return { x: xPt, y: a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT };
+    // Au-dessus/en-dessous existent tous les deux mais sur des pages
+    // DIFFÉRENTES (image proche d'une coupure de page) : le delta en px entre
+    // l'image et l'une OU l'autre ancre traverse alors la coupure - il
+    // mélange deux pages distinctes dont pdfmake réinitialise l'origine Y à
+    // chaque fois, rendant toute extrapolation linéaire de cette distance
+    // dénuée de sens (constaté : delta négatif de plusieurs dizaines de pt,
+    // image projetée au-dessus du haut de page). Repli DÉLIBÉRÉMENT sans
+    // extrapolation ici (delta 0, juste au ras de l'ancre choisie) plutôt que
+    // risquer une valeur aberrante - même ordre de préférence que la
+    // relocation ci-dessous (resolveNativePdfContent) : "devant" ancre de
+    // préférence sur le dessous (page où l'image est RÉELLEMENT repeinte),
+    // "derrière" sur le dessus.
+    const crossesPage = a.aboveTop != null && a.belowTop != null && a.abovePage !== a.belowPage;
+    if (layer === 'front') {
+      if (a.belowTop != null) return { x: xPt, y: a.belowTop + (crossesPage ? 0 : (a.imgTopPx - a.belowTopPx) * PX_TO_PT) };
+      if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT };
+    } else {
+      if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (crossesPage ? 0 : (a.imgTopPx - a.aboveTopPx) * PX_TO_PT) };
+      if (a.belowTop != null) return { x: xPt, y: a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT };
+    }
     return { x: xPt, y: effectiveTopMarginPt + a.imgTopPx * PX_TO_PT };
   }
 
@@ -2040,9 +2074,9 @@ const PdfExport = (function () {
       });
       (content._pendingImages || []).forEach((p, i) => {
         const a = resolvedAnchors[i];
-        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt);
-        delete p.image._pendingImgNode;
         const layer = p.image._pendingLayer;
+        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, layer);
+        delete p.image._pendingImgNode;
         delete p.image._pendingLayer;
         // Choix du bloc-ancre pour la RELOCATION dans content[] - distinct du
         // calcul de position ci-dessus. pdfmake peint content[] dans l'ordre
