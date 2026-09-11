@@ -160,15 +160,15 @@
 
   cases.push({
     id: 'pdffid_inline_image_position_in_paragraph',
-    // BUG CONFIRMÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte" SANS
-    // alignement gauche/droite (par défaut, ou centrée) est toujours
+    // Anciennement CASSÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte"
+    // SANS alignement gauche/droite (par défaut, ou centrée) était toujours
     // repoussée en fin de texte de son paragraphe dans le PDF, quelle que
     // soit sa position réelle dans le HTML source (début/milieu/fin de
-    // phrase) - `blockFrom` (v2/js/pdf-export.js) ne fait passer par le
-    // mécanisme d'habillage `columns` QUE align==='left'/'right' ; dans tous
-    // les autres cas le texte est concaténé en un seul bloc et les images
-    // poussées après, sans mémoriser l'ordre réel.
-    description: 'CAS CONNU CASSÉ : une image sans alignement gauche/droite au MILIEU d\'un paragraphe (texte avant ET après) doit apparaître ENTRE les deux dans le PDF, pas après tout le texte concaténé',
+    // phrase). Corrigé : `blockFrom` (v2/js/pdf-export.js) découpe
+    // maintenant le paragraphe en plusieurs blocs pdfmake successifs
+    // (texte, image, texte...) qui respectent l'ordre réel, au lieu de
+    // concaténer tout le texte en un seul bloc suivi des images.
+    description: 'Une image sans alignement gauche/droite au MILIEU d\'un paragraphe (texte avant ET après) apparaît ENTRE les deux dans le PDF, pas après tout le texte concaténé',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();

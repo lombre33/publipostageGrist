@@ -126,9 +126,14 @@ balises `<script>`/`<link>` de `v2/index.html`.
   officielle). Testé par
   `scenarios-formatting.js:fmt_undo_history_not_cleared_by_sethtml`.
 - Une image "au cœur du texte" sans alignement gauche/droite (par défaut ou
-  centrée) est toujours repoussée en fin de texte de son paragraphe dans
+  centrée) était toujours repoussée en fin de texte de son paragraphe dans
   l'export PDF, quelle que soit sa position réelle dans le document -
-  **pas encore corrigé**, en attente de confirmation en conditions réelles.
-  Testé par
+  **corrigé** (l'utilisateur avait confirmé rencontrer souvent ce type de
+  souci, pas encore revérifié en conditions réelles après ce correctif
+  précis). `blockFrom` (`v2/js/pdf-export.js`) découpe maintenant un tel
+  paragraphe en plusieurs
+  blocs pdfmake successifs respectant l'ordre réel texte/image, au lieu de
+  concaténer tout le texte puis pousser les images après. Testé par
   `scenarios-pdf-fidelity.js:pdffid_inline_image_position_in_paragraph` - voir
-  `BUGS.md` (Bug 3) pour le repro exact.
+  `BUGS.md` (Bug 3) pour le détail. Non couvert : une telle image DANS une
+  cellule de tableau garde l'ancien comportement (chemin de code séparé).

@@ -506,6 +506,13 @@ const PdfExport = (function () {
     if (node.tagName === 'IMG') {
       if (images && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) {
         images.push(pdfImageFromNode(node));
+        // Marqueur de position (jamais un run pdfmake valide, jamais laissé
+        // dans un `text:` final) : permet à l'appelant (cf. blockFrom) de
+        // reconstituer l'ORDRE réel texte/image d'origine plutôt que de
+        // devoir deviner depuis `images` seul, accumulé à part - cf. Bug 3,
+        // dev-tests/BUGS.md, une image "au coeur du texte" sautait toujours
+        // en fin de texte de son paragraphe sans ce marqueur.
+        return [{ _imageMarker: true }];
       }
       return [];
     }
@@ -1641,9 +1648,64 @@ const PdfExport = (function () {
     // raccourci) - exclue du texte de CE <li>, traitée plus bas comme ses
     // propres blocs.
     const nestedLists = tag === 'LI' ? Array.from(node.children).filter(c => /^(UL|OL)$/.test(c.tagName)) : [];
-    const runs = trimEdgeWhitespace(nestedLists.length
+    const rawRuns = nestedLists.length
       ? inlineRunsExcludingNestedLists(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images)
-      : inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images));
+      : inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images);
+    // Paragraphe/div SIMPLE contenant à la fois du texte ET au moins une
+    // image "au coeur du texte" SANS alignement gauche/droite (ces images-là
+    // sont déjà sorties plus haut via floatImgEl/floatedImageParagraphFrom,
+    // sauf cas de repli si celle-ci échoue - géré ci-dessous aussi) :
+    // reconstituer plusieurs blocs pdfmake successifs (texte, image, texte,
+    // image...) dans l'ORDRE RÉEL du document plutôt que de tout concaténer
+    // en un seul bloc-texte suivi de TOUTES les images (bug confirmé, cf.
+    // dev-tests/BUGS.md Bug 3). pdfmake ne sait de toute façon pas faire une
+    // image réellement EN LIGNE au milieu d'une ligne de texte (cf.
+    // commentaire de floatedImageParagraphFrom plus haut) - préserver
+    // l'ordre "texte avant / image / texte après" en blocs séparés est le
+    // maximum fidèle réalisable sans ce support.
+    if ((tag === 'P' || tag === 'DIV') && rawRuns.some(r => r._imageMarker)) {
+      const indentPtInline = measureIndentPt(node, 'text');
+      const alignInline = alignment(node);
+      const segments = [];
+      let currentTextRuns = [];
+      let imgIdx = 0;
+      rawRuns.forEach(r => {
+        if (r._imageMarker) {
+          segments.push({ textRuns: currentTextRuns });
+          currentTextRuns = [];
+          segments.push({ image: images[imgIdx++] });
+        } else {
+          currentTextRuns.push(r);
+        }
+      });
+      segments.push({ textRuns: currentTextRuns });
+      const blocks = [];
+      segments.forEach(seg => {
+        if (seg.image) {
+          blocks.push(seg.image);
+          // Cf. commentaire équivalent plus bas (repli si
+          // floatedImageParagraphFrom a échoué) : une image gauche/droite
+          // qui atterrit malgré tout ici doit pouvoir reporter son
+          // habillage sur le(s) frère(s) suivant(s).
+          if (seg.image._floatAlign) {
+            const imgRect = seg.image._sourceImgNode.getBoundingClientRect();
+            const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
+            const gapPt = 12 * PX_TO_PT;
+            blocks._floatCarry = { imgBottom: imgRect.bottom, align: seg.image._floatAlign, imageWidthPt: seg.image.width, remainingWidthPt: Math.max(40, pageWidthPt - seg.image.width - gapPt), gapPt };
+          }
+          return;
+        }
+        const runs = trimEdgeWhitespace(seg.textRuns);
+        if (!runs.length) return; // segment vide (ex. deux images consécutives, ou espace pur entre deux images)
+        const textBlock = { text: runs, margin: [indentPtInline, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+        if (alignInline) textBlock.alignment = alignInline;
+        blocks.push(textBlock);
+      });
+      if (!blocks.length) blocks.push({ text: ' ', margin: [indentPtInline, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
+      if (pageBreakBefore && blocks[0]) blocks[0].pageBreak = 'before';
+      return blocks;
+    }
+    const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
     const blocks = [];
     const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
     // Marge verticale nulle entre blocs consécutifs (mesuré : .tiptap p/h1-6/

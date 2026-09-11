@@ -65,12 +65,11 @@ fonctionner sans régression. Suite de tests `formatting` (15/15) et `tables`
 
 ---
 
-## Bug 3 — Une image "au cœur du texte" SANS alignement gauche/droite saute toujours en fin de texte de son paragraphe dans le PDF
+## Bug 3 — Une image "au cœur du texte" SANS alignement gauche/droite sautait toujours en fin de texte de son paragraphe dans le PDF : **CORRIGÉ**
 
-**Sévérité : élevée.** C'est très probablement la cause des problèmes de
-position d'image rapportés ("j'avais plein de bug moi" sur les exports).
-**Pas encore corrigé** — voici la liste de repro pour confirmation en
-conditions réelles avant correction, comme demandé.
+**Sévérité : élevée.** C'était très probablement la cause des problèmes de
+position d'image rapportés ("j'avais plein de bug moi" sur les exports,
+confirmé par l'utilisateur).
 
 ### Ce qui fonctionne (pas de bug)
 
@@ -112,31 +111,62 @@ Constaté aussi dans le cas extrême "image en tout début de paragraphe, texte
 seulement après" : le texte apparaît quand même EN PREMIER dans le PDF, et
 l'image APRÈS — un renversement complet de l'ordre réel du document.
 
-### Pour confirmer en conditions réelles
+### Ce qui était cassé (repro historique)
 
-Reproduire les 4 étapes ci-dessus dans un vrai document Grist, avec un texte
-et une image représentatifs de votre usage réel (ex. une image de logo/
-schéma insérée au milieu d'un paragraphe explicatif). Si dans le PDF exporté
-l'image se retrouve après tout le texte du paragraphe au lieu de rester à sa
-place réelle, le bug est confirmé.
+1. Taper un texte, par exemple "AAA ".
+2. Insérer une image (bouton "Ajouter une image") juste après ce texte,
+   SANS cliquer aucun bouton d'alignement gauche/droite sur sa barre d'outils
+   flottante (laisser l'alignement par défaut, ou cliquer "Centrer").
+3. Continuer à taper juste après l'image, dans le MÊME paragraphe, par
+   exemple " BBB".
+4. Exporter en PDF (qualité vectorielle).
 
-### Piste technique (pour corriger une fois confirmé)
+Le texte apparaissait regroupé EN UN SEUL BLOC ("AAA BBB", concaténé), et
+l'image apparaissait ENSUITE, en dessous de TOUT le texte du paragraphe —
+peu importe qu'elle ait été insérée au début, au milieu ou à la fin du texte
+réel.
 
-`v2/js/pdf-export.js:blockFrom()` (fonction qui convertit un `<p>`/`<div>`
-en bloc(s) pdfmake) : seul le cas `layer==='normal' && (align==='left' ||
-align==='right')` passe par le mécanisme d'habillage `columns`
-(`floatedImageParagraphFrom`, ligne ~1599). Dans TOUS les autres cas (pas
-d'alignement, ou `align==='center'`), le code retombe sur le chemin générique
-plus bas (ligne ~1637+) : `inlineRuns()` collecte le TEXTE de tout le nœud
-dans un tableau `runs` d'un côté, et les images rencontrées dans un tableau
-`images` séparé (sans jamais mémoriser leur position relative au texte) ;
-un seul bloc-texte est poussé avec TOUT `runs` concaténé (ligne 1658/1689),
-PUIS chaque image de `images` est poussée en bloc séparé JUSTE APRÈS (ligne
-1693-1694) — d'où l'image systématiquement "après" le texte, peu importe sa
-vraie position dans le HTML source. pdfmake n'a de toute façon aucun support
-d'image réellement en ligne (cf. commentaire existant en tête de
-`blockFrom`), donc une vraie image "au milieu d'une ligne de texte" restera
-toujours une approximation — mais le strict minimum attendu serait de
-préserver l'ORDRE (texte-avant, puis image, puis texte-après comme 3 blocs
-séparés plutôt qu'un seul bloc-texte fusionné suivi de l'image), ce qui
-n'est actuellement pas le cas.
+### Correction appliquée
+
+`v2/js/pdf-export.js` : seul le cas `layer==='normal' && (align==='left' ||
+align==='right')` passait déjà par le mécanisme d'habillage `columns`
+(`floatedImageParagraphFrom`). Dans TOUS les autres cas (pas d'alignement,
+ou `align==='center'`), `blockFrom()` retombait sur le chemin générique où
+`inlineRuns()` collectait TOUT le texte dans un tableau `runs` d'un côté, et
+les images dans un tableau `images` séparé — sans jamais mémoriser leur
+position relative au texte — d'où l'image systématiquement repoussée après
+tout le texte.
+
+Corrigé en deux temps :
+1. `inlineRuns()` insère désormais un marqueur de position (`_imageMarker`)
+   dans le flux de `runs`, exactement à l'endroit où l'image a été
+   rencontrée pendant le parcours du DOM, en plus de continuer à pousser
+   l'image elle-même dans le tableau `images` séparé (inchangé).
+2. `blockFrom()`, pour un `<p>`/`<div>` simple contenant à la fois du texte
+   ET une telle image, découpe maintenant le paragraphe en PLUSIEURS blocs
+   pdfmake successifs (texte-avant, image, texte-après...) à la place d'un
+   bloc unique — reconstituant l'ordre réel du document. Les autres cas
+   (titre, élément de liste, citation, sous-liste imbriquée) gardent
+   l'ancien comportement inchangé (images toujours poussées après le texte)
+   pour ne rien casser là où ce n'était pas signalé.
+
+pdfmake n'a de toute façon aucun support d'image réellement EN LIGNE (elle
+ne peut jamais apparaître au milieu d'une même ligne de texte, cf.
+commentaire existant en tête de `blockFrom`) — mais l'ORDRE réel
+(texte-avant / image / texte-après, en blocs séparés plutôt qu'un bloc-texte
+fusionné suivi de l'image) est maintenant respecté, ce qui est le maximum
+fidèle réalisable sans un vrai support d'image inline dans pdfmake.
+
+Une zone 2-colonnes réutilise ce même `blockFrom()` pour le contenu de
+chaque colonne (via `htmlToPdfContent`) — corrigé automatiquement aussi.
+**Non couvert par cette correction** : une image "au cœur du texte" à
+l'intérieur d'une CELLULE de tableau garde l'ancien comportement (chemin de
+code séparé, `cellContentFrom`/`cellLineToPdfObject`, déjà documenté comme
+une limitation connue dans son propre commentaire) — pas signalé par
+l'utilisateur pour l'instant, à traiter séparément si besoin.
+
+Vérifié par un nouveau test de régression
+(`scenarios-pdf-fidelity.js:pdffid_inline_image_position_in_paragraph`,
+maintenant vert) et par une passe complète de la suite (images, tableaux,
+2-colonnes, imbrications, sauts de page/sommaire, en-têtes/pieds de page,
+fidélité PDF - aucune régression).
