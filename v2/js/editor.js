@@ -949,21 +949,55 @@ const Editor = (function () {
             view.dispatch(tr);
           }
 
+          // Attributs COURANTS du nœud - jamais `node.attrs` directement : ce
+          // paramètre de closure ne reflète que le TOUT PREMIER rendu de
+          // cette NodeView et ne se met JAMAIS à jour lui-même ensuite (seul
+          // `update(updatedNode)` reçoit le nœud frais, cf. commentaire sur
+          // startMove plus bas - le même piège, jusqu'ici seulement évité par
+          // startMove/updateAttrs, pas par startResize). Vérifié en
+          // conditions réelles : `node.attrs.layer` d'une image insérée déjà
+          // en calque (donc dont la toute première NodeView est créée avec
+          // layer≠'normal') pouvait quand même valoir 'normal' ici selon le
+          // moment exact du montage - resizeState.isLayered en devenait
+          // fantaisiste (parfois vrai, parfois faux pour la MÊME image),
+          // d'où des redimensionnements de calque incohérents signalés par
+          // l'utilisateur ("plein de soucis" sur les deux modes).
+          function currentAttrs() {
+            const pos = getPos();
+            const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
+            return (current && current.attrs) || node.attrs;
+          }
+
           let resizeState = null;
           function startResize(event, corner) {
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
+            const attrsNow = currentAttrs();
             resizeState = {
               startX: event.clientX, startY: event.clientY,
               startWidth: rect.width, startHeight: rect.height,
               signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
-              // Capturé ici (pas relu en direct pendant le drag) : un
-              // placeholder lié à une #Variable a une hauteur EXPLICITE et
+              // Un placeholder lié à une #Variable a une hauteur EXPLICITE et
               // indépendante (boîte fixe dans laquelle la vraie image de
               // chaque ligne devra "rentrer", cf. plan) - contrairement à une
               // image normale, dont la hauteur reste toujours `auto` (suit le
               // ratio intrinsèque de l'image insérée), jamais stockée.
-              isVarBox: !!node.attrs.varTable,
+              isVarBox: !!attrsNow.varTable,
+              // Bug trouvé en testant le positionnement (signalé par
+              // l'utilisateur) : en calque (devant/derrière), applyAttrs pose
+              // `wrap.style.width` EXPLICITEMENT (cf. plus haut, nécessaire
+              // contre l'effondrement shrink-to-fit dans un tableau/2-colonnes) -
+              // mais ne le mettait à jour QU'À LA FIN du redimensionnement
+              // (updateAttrs → applyAttrs), jamais PENDANT le glisser. Or
+              // `.editor-image { max-width:100% }` (css/style.css, générique)
+              // plafonne l'<img> à la largeur de SON conteneur : agrandir
+              // au-delà de la largeur de départ du wrap n'avait donc AUCUN
+              // effet visible tant qu'on ne relâchait pas (et la valeur relue
+              // à ce moment via getBoundingClientRect() était déjà plafonnée
+              // par le wrap resté à l'ancienne taille - le glisser semblait
+              // simplement ne rien faire passé la taille initiale). Il faut
+              // donc aussi faire grandir `wrap` en direct, pas seulement `img`.
+              isLayered: attrsNow.layer !== 'normal',
             };
             document.addEventListener('mousemove', onResizeMove);
             document.addEventListener('mouseup', onResizeUp, { once: true });
@@ -980,6 +1014,9 @@ const Editor = (function () {
             // clampWidthForHfMaxSize se neutralise déjà d'elle-même).
             width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
+            // cf. resizeState.isLayered ci-dessus : sans ceci, `img` reste
+            // plafonné par le `wrap` resté à l'ancienne largeur (max-width:100%).
+            if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
             if (resizeState.isVarBox) {
               const height = Math.max(30, resizeState.startHeight + (event.clientY - resizeState.startY) * resizeState.signY);
               img.style.height = Math.round(height) + 'px';
