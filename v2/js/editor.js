@@ -122,6 +122,53 @@ const Editor = (function () {
       probe.src = url;
     });
   }
+  // Insertion PARTAGÉE par le bouton toolbar (bind('v2-btn-image', ...)) ET
+  // le collage d'image depuis le presse-papiers (handlePaste ci-dessous) -
+  // même repli/plafond en mode en-tête/pied dans les deux cas, pour ne pas
+  // dupliquer cette logique. `src` peut être une URL distante (bouton) OU
+  // une data URI déjà décodée (presse-papiers, cf. probeImageDimensions qui
+  // fonctionne identiquement pour les deux, aucun réseau nécessaire pour une
+  // data URI).
+  async function insertImageAtDefaultSize(src) {
+    let width = 320;
+    if (hfMode) {
+      try {
+        const dims = await probeImageDimensions(src);
+        width = clampWidthForHfMaxSize(width, dims.naturalWidth, dims.naturalHeight);
+      } catch (e) { /* repli sur 320px */ }
+    }
+    editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
+  }
+  // Colle une image directement depuis le presse-papiers (Ctrl+V après un
+  // "Copier l'image" dans une autre appli/le navigateur) - demandé par
+  // l'utilisateur en alternative à une URL externe : la restriction CORS
+  // qui empêche parfois l'export PDF d'une image par URL (cf.
+  // warnIfImageUrlNotExportable) ne s'applique JAMAIS ici, il n'y a AUCUNE
+  // requête réseau - le presse-papiers fournit déjà les octets bruts de
+  // l'image. Convertie en data URI (déjà la forme que pdf-export.js exige
+  // pour embarquer une image, cf. inlineRuns) avant insertion : contrairement
+  // à une image collée par une extension officielle @tiptap/extension-image
+  // (qui garderait un simple blob: URL, invalide pour l'export et perdu à la
+  // fermeture de l'onglet), aucune conversion supplémentaire n'est donc
+  // nécessaire à l'export.
+  function readFileAsDataUri(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
+      reader.readAsDataURL(file);
+    });
+  }
+  async function pasteImageFile(file) {
+    let dataUri;
+    try {
+      dataUri = await readFileAsDataUri(file);
+    } catch (e) {
+      console.warn('[Editor] image collée illisible :', e);
+      return;
+    }
+    await insertImageAtDefaultSize(dataUri);
+  }
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
@@ -2393,6 +2440,23 @@ const Editor = (function () {
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); },
+      // Collage d'image depuis le presse-papiers (cf. pasteImageFile plus
+      // haut) : ne consomme QUE si le presse-papiers contient réellement une
+      // image (`item.type` préfixé "image/") - un collage de texte normal,
+      // bien plus fréquent, doit continuer de suivre le traitement natif de
+      // ProseMirror (return false), jamais intercepté ici.
+      editorProps: {
+        handlePaste(view, event) {
+          const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
+          const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
+          if (!imageItem) return false;
+          const file = imageItem.getAsFile();
+          if (!file) return false;
+          event.preventDefault();
+          pasteImageFile(file);
+          return true;
+        },
+      },
       extensions: [
         StarterKit,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -2528,21 +2592,7 @@ const Editor = (function () {
     bind('v2-btn-image', async () => {
       const url = window.prompt('URL de l\'image :');
       if (!url) return;
-      // Redimensionnée dès l'import si trop grande pour l'en-tête/pied
-      // (demande utilisateur) - plutôt qu'insérer à 320px puis compter sur
-      // l'utilisateur pour la rétrécir : sonde les dimensions RÉELLES pour
-      // calculer, si besoin, la largeur qui tient dans la boîte max (cf.
-      // clampWidthForHfMaxSize). Repli silencieux sur 320px si le
-      // sondage échoue (réseau...) - warnIfImageUrlNotExportable juste après
-      // avertit déjà l'utilisateur d'un souci sur cette URL de toute façon.
-      let width = 320;
-      if (hfMode) {
-        try {
-          const dims = await probeImageDimensions(url);
-          width = clampWidthForHfMaxSize(width, dims.naturalWidth, dims.naturalHeight);
-        } catch (e) { /* repli sur 320px */ }
-      }
-      editor.chain().focus().insertImage({ src: url, alt: 'Image', width: Math.round(width) + 'px' }).run();
+      await insertImageAtDefaultSize(url);
       warnIfImageUrlNotExportable(url);
     });
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
