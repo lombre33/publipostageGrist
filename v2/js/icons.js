@@ -37,7 +37,14 @@ const Icons = (function () {
     // signalé par l'utilisateur ; option "D" retenue parmi plusieurs
     // maquettes proposées.
     pageBreak: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16" stroke-dasharray="2 2"/><path d="M2.5 12h1.5M20 12h1.5"/>',
-    toc: '<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>',
+    // Pointillés + folios (option retenue parmi plusieurs propositions,
+    // maquette "Sommaire & titres") : évoque le sommaire imprimé classique
+    // (lignes de texte, points de suite, numéros de page) - l'ancienne icône
+    // (lignes puces + texte) était trop proche visuellement du bouton
+    // "Liste" juste à côté, signalé par l'utilisateur. Les "points de suite"
+    // sont des tracés de longueur nulle (h.01) : avec stroke-linecap="round"
+    // (WRAP_OPEN ci-dessus), un tracé nul se peint comme un simple point.
+    toc: '<path d="M4 6h5M4 12h5M4 18h5"/><path d="M11.5 6h.01M14 6h.01M16.5 6h.01M11.5 12h.01M14 12h.01M11.5 18h.01"/><text x="18.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">1</text><text x="18.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">2</text><text x="18.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">3</text>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
     // 3 styles de case à cocher (survol du bouton "Liste", 3ᵉ ligne du

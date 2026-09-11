@@ -638,6 +638,15 @@
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
+/* Bloc "Numérotation des titres" fusionné dans le flyout Titre (cf.
+   v2/index.html #v2-heading-flyout, demande utilisateur de regrouper les
+   deux réglages) - même .v2-segmented/.v2-segmented-btn que la pastille
+   en-tête/pied (cf. plus bas), pour ne pas réinventer un 2ᵉ style de
+   segmenté dans ce fichier. */
+.v2-numbering-block { padding: 6px 9px 4px; }
+.v2-numbering-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-faint, #98a2b3); margin-bottom: 6px; }
+.v2-numbering-block .v2-segmented { width: 100%; }
+.v2-numbering-block .v2-segmented-btn { flex: 1; }
 /* Petit point discret sur le bouton principal, seul indice visuel qu'un
    survol révèle plus d'options (découvrabilité, cf. maquette "Options au
    survol" - point d'attention explicitement noté dans cette maquette). */

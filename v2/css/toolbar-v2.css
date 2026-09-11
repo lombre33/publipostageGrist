@@ -6,9 +6,9 @@
 
    Volontairement PAS dans ../css/style.css (partagé avec la V1) : les
    sélecteurs ci-dessous (.title-cluster/.action-cluster/[data-tip]/
-   #btn-link-rules/#btn-rename-template/.numbering-pill) n'existent que dans
-   le HTML de v2/index.html - la V1 garde son propre mécanisme (icône seule +
-   libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
+   #btn-link-rules/#btn-rename-template/#v2-heading-group) n'existent que
+   dans le HTML de v2/index.html - la V1 garde son propre mécanisme (icône
+   seule + libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
 
 /* === Cluster "modèle courant" (sélecteur + renommage) ===
    Remplace les deux champs séparés (select de la V1 + input#template-name
@@ -64,16 +64,20 @@
 .bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after,
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* === Numérotation des titres : icône seule (bouton standard #v2-toolbar,
-   même chrome que gras/italique/etc.), le style se choisit désormais au
-   survol (.v2-hover-flyout-v ci-dessus, editor-v2.css) plutôt que via un
-   <select> toujours visible - repris de la maquette "Options au survol"
-   validée par l'utilisateur. Le <select> reste dans le DOM (masqué) : v2/js/
-   main.js s'appuie encore dessus pour lire/poser la valeur au chargement
-   d'un modèle (cf. loadTemplateIntoEditor), inchangé pour ne rien casser
-   côté sauvegarde/chargement. */
-.numbering-pill { display: inline-flex; align-items: center; }
-#v2-heading-numbering-select[hidden] { display: none; }
+/* === Menu "Titre" fusionné (niveau de titre + numérotation des titres,
+   #v2-heading-group/#v2-heading-flyout, v2/index.html) === Remplace deux
+   contrôles jusqu'ici séparés (un <select> natif "Normal/Titre 1-6" en tout
+   début de barre, et une pastille de numérotation isolée bien plus loin) -
+   demandé par l'utilisateur pour regrouper les deux réglages, qui portent
+   tous les deux sur les titres. Un seul chip (.v2-format-chip, même style
+   que Police) déclenche un flyout listant les niveaux PUIS, séparé par un
+   filet, le style de numérotation (.v2-segmented, même chrome que la
+   pastille en-tête/pied). Les DEUX <select> natifs (v2-header-select/
+   v2-heading-numbering-select) restent dans le DOM (masqués) : v2/js/main.js
+   s'appuie encore dessus pour lire/poser la valeur au chargement d'un modèle
+   (cf. loadTemplateIntoEditor), inchangé pour ne rien casser côté
+   sauvegarde/chargement. */
+#v2-header-select[hidden], #v2-heading-numbering-select[hidden] { display: none; }
 
 /* === Contours retirés sur la ligne du haut aussi (même traitement que la
    ligne de mise en forme) - transparent au repos, révélé au survol

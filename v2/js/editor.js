@@ -2319,13 +2319,24 @@ const Editor = (function () {
     setLocked('v2-btn-two-columns', inHfMode);
     setLocked('v2-btn-page-break', inHfMode);
     setLocked('v2-btn-toc', inHfMode);
-    const numberingPill = document.querySelector('.numbering-pill');
-    if (numberingPill) numberingPill.classList.toggle('v2-hf-locked', inHfMode);
+    // Numérotation seule verrouillée (pas tout le menu Titre fusionné, cf.
+    // v2/index.html #v2-heading-flyout) : un niveau de titre garde un sens
+    // dans un en-tête/pied, la numérotation (qui ne compte que les titres du
+    // flux principal) non - même raison que l'ancienne pastille séparée.
+    setLocked('v2-numbering-seg', inHfMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
       for (let level = 1; level <= 6; level++) { if (editor.isActive('heading', { level })) value = String(level); }
       if (headerSelect.value !== value) headerSelect.value = value;
+      const chipVal = document.getElementById('v2-heading-chip-val');
+      if (chipVal) chipVal.textContent = value === 'p' ? 'Normal' : 'Titre ' + value;
+      const headingFlyout = document.getElementById('v2-heading-flyout');
+      if (headingFlyout) {
+        headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
+          row.classList.toggle('is-active', row.dataset.level === value);
+        });
+      }
     }
     const textStyleAttrs = editor.getAttributes('textStyle');
     setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
@@ -2539,46 +2550,65 @@ const Editor = (function () {
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
 
-    wireHeadingNumberingSelect();
+    wireHeadingMenu();
     wireSelectionDependentSelects();
     wireCompactFontSizeControls();
   }
 
-  // Réglage de DOCUMENT (numérotation des titres), pas une mise en forme de
-  // sélection : contrairement aux <select> ci-dessous, pas besoin de
-  // capturer/restaurer la sélection texte, seul le focus est rendu à
-  // l'éditeur par confort. Le data-attribute est posé AVANT de dispatcher la
-  // commande (qui déclenche elle-même, synchronement, le rafraîchissement du
-  // sommaire via son NodeView) afin que ce rafraîchissement lise déjà la
-  // bonne valeur.
-  function wireHeadingNumberingSelect() {
+  // Menu "Titre" fusionné (niveau de titre + numérotation des titres, cf.
+  // v2/index.html #v2-heading-flyout - demande utilisateur de regrouper les
+  // deux réglages jusqu'ici séparés : un <select> natif en tout début de
+  // barre, et une pastille de numérotation isolée bien plus loin). Les DEUX
+  // réglages restent portés par un <select> caché comme source de vérité
+  // (v2-header-select/v2-heading-numbering-select, cf. css/toolbar-v2.css) -
+  // les lignes/boutons visibles du flyout ne font que poser sa valeur puis
+  // redéclencher 'change', réutilisant tel quel le câblage déjà en place
+  // ailleurs (bindSelect('v2-header-select', ...) dans
+  // wireSelectionDependentSelects pour le niveau de titre) plutôt que de le
+  // dupliquer. Aucune capture/restauration de sélection nécessaire ici
+  // (contrairement à un vrai <select> natif) : un <span>/<button> cliqué
+  // dans ce flyout ne vole jamais le focus de l'éditeur au survol/clic comme
+  // le ferait l'ouverture d'un <select>, la sélection ProseMirror reste donc
+  // intacte au moment où la commande s'applique.
+  function wireHeadingMenu() {
+    const headerSelect = document.getElementById('v2-header-select');
+    const flyout = document.getElementById('v2-heading-flyout');
+    if (headerSelect && flyout) {
+      flyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
+        row.addEventListener('click', () => {
+          if (headerSelect.value === row.dataset.level) return;
+          headerSelect.value = row.dataset.level;
+          headerSelect.dispatchEvent(new Event('change'));
+        });
+      });
+    }
+    // Réglage de DOCUMENT (numérotation des titres), pas une mise en forme de
+    // sélection : pas besoin de capturer/restaurer la sélection texte, seul
+    // le focus est rendu à l'éditeur par confort. Le data-attribute est posé
+    // AVANT de dispatcher la commande (qui déclenche elle-même, synchronement,
+    // le rafraîchissement du sommaire via son NodeView) afin que ce
+    // rafraîchissement lise déjà la bonne valeur.
     const select = document.getElementById('v2-heading-numbering-select');
     if (!select) return;
     select.addEventListener('change', () => {
       editor.view.dom.dataset.headingStyle = select.value;
       editor.chain().setHeadingNumberingStyle(select.value).focus().run();
     });
-    // Le <select> reste dans le DOM (masqué, cf. css/toolbar-v2.css) mais
-    // n'est plus visible : le choix du style se fait désormais dans le
-    // panneau révélé au survol du bouton (maquette "Options au survol").
-    // Chaque ligne pose juste la valeur puis redéclenche 'change' - réutilise
-    // le handler ci-dessus tel quel plutôt que de dupliquer la commande.
-    const flyout = document.getElementById('v2-numbering-flyout');
     if (!flyout) return;
-    const rows = flyout.querySelectorAll('.v2-hover-row');
-    const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.num === select.value));
-    rows.forEach(row => row.addEventListener('click', () => {
-      if (select.value === row.dataset.num) return;
-      select.value = row.dataset.num;
+    const numButtons = flyout.querySelectorAll('#v2-numbering-seg [data-num]');
+    const syncActiveNum = () => numButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.num === select.value));
+    numButtons.forEach(btn => btn.addEventListener('click', () => {
+      if (select.value === btn.dataset.num) return;
+      select.value = btn.dataset.num;
       select.dispatchEvent(new Event('change'));
-      syncActiveRow();
+      syncActiveNum();
     }));
     // Lu à la volée à chaque survol plutôt que poussé en continu : la valeur
     // peut aussi changer sans passer par ici (chargement d'un modèle, cf.
     // v2/js/main.js:loadTemplateIntoEditor qui pose select.value directement).
-    const group = flyout.closest('.numbering-pill');
-    if (group) group.addEventListener('mouseenter', syncActiveRow);
-    syncActiveRow();
+    const group = document.getElementById('v2-heading-group');
+    if (group) group.addEventListener('mouseenter', syncActiveNum);
+    syncActiveNum();
   }
 
   // Un <select> de mise en forme (titre/taille/police), contrairement à un
