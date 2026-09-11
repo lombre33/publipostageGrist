@@ -281,3 +281,12 @@
 .v2-hf-pagenum-icon { font-family: var(--font-ui); font-weight: 800; font-size: 14px; }
 .v2-hf-btn-done { margin-left: auto; width: auto; height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
 .v2-hf-btn-done:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* Menu "Image depuis une variable" (v2/js/editor.js:openImageVariablePicker) -
+   même langage visuel que #autocomplete-box (../css/style.css, #Variable en
+   texte), instance DOM séparée (id différent) pour ne rien partager entre
+   les deux fichiers. */
+#v2-image-var-picker { position: absolute; z-index: 1000; min-width: 200px; max-width: 320px; max-height: 240px; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; font-family: var(--font-ui); font-size: 12.5px; }
+.v2-image-var-picker-item { padding: 6px 10px; cursor: pointer; color: var(--text); }
+.v2-image-var-picker-item:hover { background: var(--surface-sunken); }
+.v2-image-var-picker-empty { padding: 8px 10px; color: var(--text-faint); }

@@ -139,6 +139,64 @@ const Editor = (function () {
     }
     editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
   }
+
+  // Petit menu listant les colonnes Attachments du document (même famille
+  // visuelle que #autocomplete-box de v2/js/variables.js, mais une instance
+  // dédiée - pas de dépendance croisée entre les deux fichiers) : clic sur
+  // une entrée insère un placeholder lié à cette #Variable plutôt qu'une
+  // image fixe (cf. createEditorImageNode, attributs varTable/varColumn/
+  // varKey - résolu en vraie image seulement en mode Lecture/export PDF,
+  // cf. js/reader-mode.js:resolveVariableImages).
+  let imageVarPickerBox = null;
+  function ensureImageVarPickerBox() {
+    if (imageVarPickerBox) return imageVarPickerBox;
+    imageVarPickerBox = document.createElement('div');
+    imageVarPickerBox.id = 'v2-image-var-picker';
+    imageVarPickerBox.style.display = 'none';
+    document.body.appendChild(imageVarPickerBox);
+    document.addEventListener('mousedown', event => {
+      if (imageVarPickerBox.style.display !== 'none' && !imageVarPickerBox.contains(event.target)) {
+        imageVarPickerBox.style.display = 'none';
+      }
+    });
+    return imageVarPickerBox;
+  }
+  async function openImageVariablePicker(anchorEl) {
+    const box = ensureImageVarPickerBox();
+    // Schéma à jour avant de filtrer par type - même précaution que
+    // resolveBadgeNode (js/reader-mode.js) pour une colonne Attachments
+    // ajoutée après l'ouverture du widget.
+    await GristAPI.refreshSchema().catch(() => {});
+    const candidates = GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments');
+    box.innerHTML = '';
+    if (!candidates.length) {
+      const empty = document.createElement('div');
+      empty.className = 'v2-image-var-picker-empty';
+      empty.textContent = 'Aucune colonne Pièce jointe trouvée dans ce document.';
+      box.appendChild(empty);
+    } else {
+      candidates.forEach(v => {
+        const item = document.createElement('div');
+        item.className = 'v2-image-var-picker-item';
+        item.textContent = v.key;
+        // mousedown (pas click) + preventDefault : évite que le blur du
+        // focus éditeur en cours (déclenché par ce clic) ne referme/perturbe
+        // la sélection avant que insertImage n'ait pu s'exécuter - même
+        // précaution que ac-item (variables.js:render, mousedown+preventDefault).
+        item.addEventListener('mousedown', event => {
+          event.preventDefault();
+          editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
+          box.style.display = 'none';
+        });
+        box.appendChild(item);
+      });
+    }
+    const rect = anchorEl.getBoundingClientRect();
+    box.style.position = 'absolute';
+    box.style.left = (rect.left + window.scrollX) + 'px';
+    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    box.style.display = 'block';
+  }
   // Colle une image directement depuis le presse-papiers (Ctrl+V après un
   // "Copier l'image" dans une autre appli/le navigateur) - demandé par
   // l'utilisateur en alternative à une URL externe : la restriction CORS
@@ -683,9 +741,19 @@ const Editor = (function () {
   // écriraient chacun dans `style` indépendamment.
   function createEditorImageNode(Node) {
     const noBareRender = () => ({});
+    // `height` n'est posé/lu QUE pour une image liée à une variable
+    // (`varTable` non nul, cf. plus bas) : une image normale garde sa
+    // hauteur `auto` historique (dépend du ratio intrinsèque de l'image
+    // insérée) - le concept même de hauteur EXPLICITE, indépendante du
+    // ratio, n'existait pas avant cette feature (chaque ligne Grist ayant sa
+    // propre image, de ratio différent, un placeholder de taille FIXE dans
+    // lequel la vraie image doit "rentrer" sans être déformée - cf.
+    // js/reader-mode.js:resolveVariableImages et
+    // pdf-export.js:pdfImageFromNode pour le mode "contain" côté rendu).
     function styleFor(a) {
       const parts = [];
       if (a.width) parts.push(`width: ${a.width}`);
+      if (a.varTable && a.height) parts.push(`height: ${a.height}`);
       if (a.layer !== 'normal') {
         parts.push('position: absolute', `left: ${a.left || 0}px`, `top: ${a.top || 0}px`, `z-index: ${a.layer === 'front' ? 5 : -1}`);
       }
@@ -703,19 +771,38 @@ const Editor = (function () {
           src: { default: null },
           alt: { default: 'Image' },
           width: { default: '320px', parseHTML: el => el.style.width || null, renderHTML: noBareRender },
+          height: { default: null, parseHTML: el => el.style.height || null, renderHTML: noBareRender },
           layer: { default: 'normal', parseHTML: el => el.getAttribute('data-layer') || 'normal', renderHTML: noBareRender },
           left: { default: null, parseHTML: el => (el.style.left ? parseFloat(el.style.left) : null), renderHTML: noBareRender },
           top: { default: null, parseHTML: el => (el.style.top ? parseFloat(el.style.top) : null), renderHTML: noBareRender },
           opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
           align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
           wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
+          // Image liée à une #Variable de colonne Attachments (cf. plan) :
+          // ces 3 attributs, posés ensemble, transforment ce nœud en
+          // "placeholder" (jamais de vraie image dans l'éditeur, cf.
+          // renderHTML/NodeView ci-dessous) - même convention de noms que
+          // varBadge (createVarBadgeNode) pour la cohérence.
+          varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
+          varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
+          varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
         };
       },
       parseHTML() { return [{ tag: 'img.editor-image' }]; },
       renderHTML({ node }) {
         const a = node.attrs;
-        const attrs = { class: 'editor-image', draggable: 'false', src: a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
+        // Placeholder lié à une variable : `src` reste VIDE dans le HTML
+        // sérialisé (jamais de vraie image tant que la ligne n'est pas
+        // résolue, cf. js/reader-mode.js:resolveVariableImages qui pose le
+        // vrai src au moment du rendu/export) - seuls les attributs
+        // data-var-* identifient QUEL #Variable résoudre à cet endroit.
+        const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
         if (a.align) attrs['data-align'] = a.align;
+        if (a.varTable) {
+          attrs['data-var-table'] = a.varTable;
+          attrs['data-var-column'] = a.varColumn;
+          attrs['data-var-key'] = a.varKey;
+        }
         return ['img', attrs];
       },
       addCommands() {
@@ -734,6 +821,20 @@ const Editor = (function () {
           img.className = 'editor-image';
           img.draggable = false;
           wrap.appendChild(img);
+
+          // Placeholder d'une image liée à une #Variable (jamais de vraie
+          // image dans l'éditeur, cf. renderHTML plus haut) : un <span>
+          // superposé (icône + "#Table.Colonne"), au lieu de compter sur le
+          // rendu natif du navigateur pour un <img src=""> (comportement peu
+          // fiable selon navigateur - rien, ou une icône "image cassée"). Le
+          // <img> lui-même reste dans le DOM, invisible (cf. CSS
+          // .editor-image-var-placeholder), pour continuer à porter
+          // width/height (poignées de redimensionnement, toolbar flottante -
+          // tout le reste de ce fichier suppose déjà "l'image sélectionnée"
+          // = ce <img>, cf. selectedImageDom()).
+          const varLabel = document.createElement('span');
+          varLabel.className = 'editor-image-var-label';
+          wrap.appendChild(varLabel);
 
           const moveHandle = document.createElement('span');
           moveHandle.className = 'editor-image-move-handle';
@@ -783,13 +884,17 @@ const Editor = (function () {
           // prosemirror-tables : un artefact d'édition en direct, absent de
           // la sérialisation (cf. mémoire project_v2_tiptap_migration).
           function applyAttrs(attrs) {
-            img.src = attrs.src || '';
+            const isVarBox = !!attrs.varTable;
+            img.src = isVarBox ? '' : (attrs.src || '');
             img.alt = attrs.alt || '';
             const imgStyle = [];
             if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
+            if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
             if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
             if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
             img.setAttribute('style', imgStyle.join('; '));
+            wrap.classList.toggle('editor-image-var-placeholder', isVarBox);
+            varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : '';
             const layered = attrs.layer !== 'normal';
             wrap.classList.toggle('editor-image-layered', layered);
             if (layered) {
@@ -848,24 +953,45 @@ const Editor = (function () {
           function startResize(event, corner) {
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
-            resizeState = { startX: event.clientX, startWidth: rect.width, sign: corner.includes('w') ? -1 : 1 };
+            resizeState = {
+              startX: event.clientX, startY: event.clientY,
+              startWidth: rect.width, startHeight: rect.height,
+              signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
+              // Capturé ici (pas relu en direct pendant le drag) : un
+              // placeholder lié à une #Variable a une hauteur EXPLICITE et
+              // indépendante (boîte fixe dans laquelle la vraie image de
+              // chaque ligne devra "rentrer", cf. plan) - contrairement à une
+              // image normale, dont la hauteur reste toujours `auto` (suit le
+              // ratio intrinsèque de l'image insérée), jamais stockée.
+              isVarBox: !!node.attrs.varTable,
+            };
             document.addEventListener('mousemove', onResizeMove);
             document.addEventListener('mouseup', onResizeUp, { once: true });
           }
           function onResizeMove(event) {
             if (!resizeState) return;
-            let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.sign);
+            let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.signX);
             // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en
             // tête de fichier) : les poignées restent utilisables (demande
             // utilisateur, contrairement au premier essai qui les masquait
             // entièrement) - le glisser va simplement buter sans dépasser la
             // taille max, jamais bloqué en dessous (rétrécir reste libre).
+            // Sans effet pour un placeholder (naturalWidth/Height valent 0,
+            // clampWidthForHfMaxSize se neutralise déjà d'elle-même).
             width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
+            if (resizeState.isVarBox) {
+              const height = Math.max(30, resizeState.startHeight + (event.clientY - resizeState.startY) * resizeState.signY);
+              img.style.height = Math.round(height) + 'px';
+            }
           }
           function onResizeUp() {
             document.removeEventListener('mousemove', onResizeMove);
-            if (resizeState) updateAttrs({ width: Math.round(img.getBoundingClientRect().width) + 'px' });
+            if (resizeState) {
+              const patch = { width: Math.round(img.getBoundingClientRect().width) + 'px' };
+              if (resizeState.isVarBox) patch.height = Math.round(img.getBoundingClientRect().height) + 'px';
+              updateAttrs(patch);
+            }
             resizeState = null;
           }
 
@@ -2595,6 +2721,7 @@ const Editor = (function () {
       await insertImageAtDefaultSize(url);
       warnIfImageUrlNotExportable(url);
     });
+    bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());

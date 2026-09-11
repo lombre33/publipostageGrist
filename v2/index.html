@@ -55,8 +55,8 @@
 </script>
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.68">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.47">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.17">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.48">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.18">
 </head>
 <body>
 <div id="app">
@@ -223,7 +223,12 @@
       <button id="v2-btn-table" data-tip="Insérer un tableau" aria-label="Insérer un tableau"></button>
       <span class="v2-sep"></span>
       <button id="v2-btn-two-columns" data-tip="Insérer 2 colonnes" aria-label="Insérer 2 colonnes"></button>
-      <button id="v2-btn-image" data-tip="Ajouter une image" aria-label="Insérer une image (URL)"></button>
+      <span class="v2-hover-group" id="v2-image-group">
+        <button id="v2-btn-image" data-tip="Ajouter une image" aria-label="Insérer une image (URL)"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-image-flyout">
+          <span class="v2-hover-row" id="v2-btn-image-from-variable">Image depuis une variable (colonne PJ)…</span>
+        </span>
+      </span>
       <button id="v2-btn-page-break" data-tip="Saut de page" aria-label="Insérer un saut de page (forcé à l'export PDF)"></button>
       <button id="v2-btn-toc" data-tip="Insérer un sommaire" aria-label="Insérer un sommaire (généré à partir des titres)"></button>
       <span class="v2-sep"></span>
@@ -273,13 +278,13 @@
 </div>
 <script src="../js/grist-api.js?v=0.67"></script>
 <script src="../js/templates.js?v=0.67"></script>
-<script src="../js/reader-mode.js?v=0.71"></script>
+<script src="../js/reader-mode.js?v=0.72"></script>
 <script src="js/heading-numbering.js?v=0.2"></script>
 <script src="js/variable-format.js?v=0.4"></script>
 <script src="js/variables.js?v=0.12"></script>
 <script src="js/icons.js?v=0.15"></script>
-<script src="js/editor.js?v=0.68"></script>
-<script src="js/pdf-export.js?v=0.71"></script>
+<script src="js/editor.js?v=0.69"></script>
+<script src="js/pdf-export.js?v=0.72"></script>
 <script src="js/template-gallery.js?v=0.3"></script>
 <script src="js/main.js?v=0.21"></script>
 </body>

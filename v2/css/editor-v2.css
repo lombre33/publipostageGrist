@@ -252,6 +252,32 @@
 .tiptap p:has(> .editor-image-view[data-wrap="block"]:not([data-align])) { line-height: 0; }
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
+/* Placeholder d'une image liée à une #Variable de colonne Attachments (cf.
+   v2/js/editor.js:createEditorImageNode, attribut varTable) : jamais de
+   vraie image dans l'éditeur (aucune ligne "courante" garantie tant qu'on
+   édite le modèle, même limite que #Variable en texte) - un simple encadré
+   neutre + icône + libellé "#Table.Colonne" à la place, dans la même boîte
+   width×height que la vraie image aura au rendu (mode Lecture/PDF, cf.
+   js/reader-mode.js:resolveVariableImages). L'<img> réel reste dans le DOM
+   (masqué, `src` toujours vide) plutôt que retiré : il continue de porter
+   width/height, donc tout le reste de ce fichier (poignées, toolbar
+   flottante, sélection) fonctionne sans changement, comme pour une image
+   normale. */
+.tiptap .editor-image-view.editor-image-var-placeholder .editor-image { visibility: hidden; }
+.tiptap .editor-image-view.editor-image-var-placeholder {
+  background: var(--surface-sunken, #f2f4f7); border: 1.5px dashed var(--border-strong, #c3cad6); border-radius: 4px;
+}
+.editor-image-var-label {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 6px; color: var(--text-faint, #8a94a3); font-family: var(--font-ui); font-size: 11px;
+  font-weight: 600; text-align: center; overflow: hidden; pointer-events: none;
+}
+.editor-image-var-label::before {
+  content: ""; width: 22px; height: 22px; flex: none; background-color: currentColor;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='9' cy='10' r='1.5' fill='%23000' stroke='none'/%3E%3Cpath d='m21 16-5-5-4 4-3-3-6 6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='9' cy='10' r='1.5' fill='%23000' stroke='none'/%3E%3Cpath d='m21 16-5-5-4 4-3-3-6 6'/%3E%3C/svg%3E");
+}
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
 .tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
 .tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }

@@ -359,7 +359,29 @@ const PdfExport = (function () {
   // de re-belier sa position à un repère mesuré sur la page PDF réelle.
   function pdfImageFromNode(node) {
     const widthPx = parseFloat(node.style.width) || 320;
-    const image = { image: node.getAttribute('src'), width: Math.max(15, widthPx * PX_TO_PT) };
+    const image = { image: node.getAttribute('src') };
+    // Image liée à une #Variable de colonne Attachments (v2/js/editor.js:
+    // createEditorImageNode, marqueur data-var-table posé par renderHTML et
+    // volontairement conservé par js/reader-mode.js:resolveVariableImages) :
+    // la boîte width×height est FIXE (choisie dans l'éditeur), mais chaque
+    // ligne Grist y insère une image de ratio différent - `fit` (pdfmake)
+    // la met à l'échelle pour tenir dans cette boîte SANS la déformer,
+    // contrairement à `width` seul qui étire proportionnellement à partir
+    // d'une seule dimension (comportement normal d'une image simple,
+    // conservé tel quel ci-dessous pour ce cas). Vérifié en conditions
+    // réelles (PDF décodé via pdf.js) avant d'écrire ce code : `fit` marche
+    // avec la version de pdfmake épinglée dans ce projet (0.2.7), et prime
+    // silencieusement sur `width` quand les deux sont posés ensemble (vérifié
+    // aussi) - `width` est donc TOUJOURS posé en plus (jamais lu par pdfmake
+    // dans ce cas, mais lu par CE fichier plus loin : la bractage/interpolation
+    // de position d'une image en calque, ~ligne 1660, a besoin de `img.width`
+    // même pour une image liée à une variable, si jamais mise en calque
+    // devant/derrière le texte - sans lui, ce calcul deviendrait NaN).
+    image.width = Math.max(15, widthPx * PX_TO_PT);
+    if (node.hasAttribute('data-var-table')) {
+      const heightPx = parseFloat(node.style.height) || 240;
+      image.fit = [image.width, Math.max(15, heightPx * PX_TO_PT)];
+    }
     const opacity = parseFloat(node.style.opacity);
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     const layer = node.getAttribute('data-layer') || 'normal';

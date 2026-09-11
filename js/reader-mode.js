@@ -173,6 +173,7 @@ const ReaderMode = (function () {
       return { badge, node, isError };
     }));
     for (const r of results) { if (r.isError) hasError = true; r.badge.replaceWith(r.node); }
+    await resolveVariableImages(wrapper, tableId, record);
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Variables déjà résolues (texte des titres définitif) : peut construire
     // le sommaire maintenant, avant le swap DOM final ci-dessous.
@@ -245,6 +246,42 @@ const ReaderMode = (function () {
       return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
+  // Résout un placeholder d'image lié à une #Variable (v2/js/editor.js:
+  // createEditorImageNode, attributs data-var-table/data-var-column posés
+  // par renderHTML quand varTable est présent) - contrairement à un badge
+  // .var-badge en texte, ce nœud EST déjà un <img class="editor-image">
+  // (avec width/height fixés dans l'éditeur), il ne s'agit que de le
+  // rattacher à la bonne pièce jointe pour que GristAPI.hydrateAttachmentImages
+  // (déjà appelé juste après, dans render()/preview()) lui pose un vrai src.
+  // `object-fit: contain` (posé ici en style inline) fait le reste à l'écran
+  // nativement : chaque ligne a une image de ratio différent, mais la boîte
+  // width×height reste celle configurée dans l'éditeur - jamais déformée,
+  // jamais rognée. Retire le nœud entièrement si la ligne courante n'a
+  // aucune pièce jointe dans cette colonne (pas de placeholder dans le rendu
+  // final, qui n'a de sens que côté édition). `Variables.resolveAttachmentIds`
+  // n'existe que côté V2 (même garde que resolveBadgeNode ci-dessous, pour la
+  // compatibilité V1 qui n'a pas ce nœud).
+  async function resolveVariableImages(wrapper, tableId, record) {
+    if (typeof Variables.resolveAttachmentIds !== 'function') return;
+    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]'));
+    await Promise.all(nodes.map(async img => {
+      const table = img.getAttribute('data-var-table');
+      const column = img.getAttribute('data-var-column');
+      let ids = [];
+      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
+      catch (e) { ids = []; }
+      if (!ids.length) { img.remove(); return; }
+      // data-var-table/-column/-key restent posés (pas retirés) : c'est le
+      // marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit`
+      // (boîte fixe, image mise à l'échelle SANS déformation) plutôt que
+      // `width` seul (échelle proportionnelle libre, comme une image
+      // normale) - les retirer ici casserait ce chemin, puisque cette
+      // fonction tourne AVANT que le HTML resolu n'atteigne pdf-export.js.
+      img.dataset.source = 'attachment';
+      img.dataset.attachmentId = String(ids[0]);
+      img.style.objectFit = 'contain';
+    }));
+  }
   // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
   // (comportement historique) OU une ou plusieurs <img> si la colonne
   // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds,
@@ -314,6 +351,7 @@ const ReaderMode = (function () {
       const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format);
       badge.replaceWith(node);
     }));
+    await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
