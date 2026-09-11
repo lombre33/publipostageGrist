@@ -2247,6 +2247,20 @@ const PdfExport = (function () {
       measureRoot.innerHTML = html;
       insertTrailingBreaksForEmptyBlocks(measureRoot);
       const detach = attachMeasureHost(measureRoot, CONTENT_WIDTH_PX);
+      // Attend le décodage de CHAQUE <img> de CE root précis avant de
+      // mesurer sa hauteur - même nécessité et même technique que
+      // htmlToPdfContent (cf. son propre commentaire) - MAIS ce `measureRoot`
+      // est un arbre DOM totalement séparé (reparsing indépendant de la même
+      // chaîne HTML), le décodage déjà attendu côté `content` (htmlToPdfContent
+      // ci-dessus, sur SON PROPRE root) ne s'applique pas à celui-ci. Sans
+      // cet await, une image d'en-tête/pied non encore décodée mesure une
+      // hauteur proche de 0 (largeur posée, hauteur "auto" encore inconnue) -
+      // la marge de page réservée (topExtraPt/bottomExtraPt) se retrouvait
+      // alors bien plus petite que la hauteur RÉELLEMENT peinte par pdfmake
+      // (qui, lui, dispose déjà de l'image décodée au moment de peindre),
+      // et le corps du document chevauchait visiblement le bas de l'image
+      // d'en-tête - signalé cassé par l'utilisateur avec un export PDF réel.
+      await Promise.all(Array.from(measureRoot.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
       const heightPt = measureRoot.getBoundingClientRect().height * PX_TO_PT;
       detach();
       return { content, heightPt };
