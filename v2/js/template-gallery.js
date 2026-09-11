@@ -16,15 +16,23 @@ const TemplateGallery = (function () {
 
   function resolveUrl(relPath) { return BASE + relPath; }
 
+  // {cache:'no-store'} sur le manifeste/le HTML/le schéma d'un template :
+  // ce sont des fichiers de contenu (pas de ?v=X.Y comme les .js/.css de
+  // v2/index.html, cf. mémoire project_browser_cache_trap), donc rien ne
+  // force autrement un navigateur/CDN GitHub Pages à en récupérer une
+  // version fraîche - vécu en conditions réelles : un push corrigeant
+  // template.html serait resté invisible à qui l'avait déjà chargé une fois.
+  async function fetchNoStore(url) { return fetch(url, { cache: 'no-store' }); }
+
   async function loadManifest() {
     if (manifestCache) return manifestCache;
-    const res = await fetch(BASE + 'manifest.json');
+    const res = await fetchNoStore(BASE + 'manifest.json');
     manifestCache = await res.json();
     return manifestCache;
   }
 
   async function fetchHtml(entry) {
-    return (await fetch(resolveUrl(entry.html))).text();
+    return (await fetchNoStore(resolveUrl(entry.html))).text();
   }
 
   // Le badge #Variable (<span class="var-badge" data-key="...">#key</span>,
@@ -79,9 +87,35 @@ const TemplateGallery = (function () {
 
   async function fetchSchema(entry) {
     if (!entry.schema) return null;
-    const text = await (await fetch(resolveUrl(entry.schema))).text();
+    const text = await (await fetchNoStore(resolveUrl(entry.schema))).text();
     return parseGristSchema(text);
   }
 
-  return { loadManifest, fetchHtml, fetchSchema, stripVariableBadges, parseGristSchema, resolveUrl };
+  // Les badges #Variable d'un template "+ data" portent en dur le nom de
+  // table tiré du schema.py au moment où le template a été authoré
+  // (ex. data-table="Facture_Simple"). Mais la table RÉELLEMENT créée par
+  // useWithData() (v2/js/main.js) peut porter un autre nom : l'utilisateur
+  // peut le modifier dans le prompt, ou Grist peut le renommer lui-même en
+  // cas de collision avec une table existante - sans ce réalignement, les
+  // variables pointeraient vers une table qui n'existe pas (marquées
+  // "cassées" par refreshVariableBadgeValidity dès le premier chargement,
+  // alors que la table existe bel et bien, juste sous un autre nom). No-op
+  // si les deux noms sont déjà identiques.
+  function rebindVariableTable(html, fromTable, toTable) {
+    if (!fromTable || !toTable || fromTable === toTable) return html;
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    root.querySelectorAll('span.var-badge[data-table="' + fromTable + '"]').forEach(el => {
+      el.setAttribute('data-table', toTable);
+      const key = el.getAttribute('data-key') || '';
+      if (key.indexOf(fromTable + '.') === 0) {
+        const newKey = toTable + key.slice(fromTable.length);
+        el.setAttribute('data-key', newKey);
+        el.textContent = '#' + newKey;
+      }
+    });
+    return root.innerHTML;
+  }
+
+  return { loadManifest, fetchHtml, fetchSchema, stripVariableBadges, parseGristSchema, rebindVariableTable, resolveUrl };
 })();

@@ -390,18 +390,30 @@
       const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
       const tableName = window.prompt('Nom de la nouvelle table Grist :', defaultName);
       if (!tableName) return;
+      // Les badges #Variable du HTML statique pointent vers schema.tableName
+      // (le nom de classe tel qu'authoré dans schema.py) - si Grist crée la
+      // table sous un autre nom (l'utilisateur l'a renommée dans le prompt
+      // ci-dessus, ou Grist a dû dédupliquer un nom déjà pris), il faut
+      // réaligner ces références AVANT de charger le HTML dans l'éditeur, ou
+      // les variables pointeraient vers une table inexistante malgré une
+      // vraie table fraîchement créée (cf. TemplateGallery.rebindVariableTable).
+      let actualTableId = tableName;
       try {
-        await grist.docApi.applyUserActions([['AddTable', tableName, schema.columns]]);
+        const result = await grist.docApi.applyUserActions([['AddTable', tableName, schema.columns]]);
+        if (result && result.retValues && result.retValues[0] && result.retValues[0].tableId) {
+          actualTableId = result.retValues[0].tableId;
+        }
       } catch (e) {
         console.error('[main] galerie de templates : échec de la création de la table', e);
         setStatus('Échec de la création de la table « ' + tableName + ' ».', true);
         return;
       }
+      const html = TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId);
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, contenu: currentHtml, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
-      setStatus('Table « ' + tableName + ' » créée avec ' + schema.columns.length + ' colonne(s), modèle « ' + currentEntry.name + ' » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
+      setStatus('Table « ' + actualTableId + ' » créée avec ' + schema.columns.length + ' colonne(s), modèle « ' + currentEntry.name + ' » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
     }
 
     openLink.addEventListener('click', openGallery);
