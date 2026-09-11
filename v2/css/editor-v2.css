@@ -285,7 +285,22 @@
    Purement visuel : ne change ni le HTML enregistré, ni aucun comportement
    de l'éditeur. */
 #editor-container.a4-preview { background: #eef1f5; }
-#editor-container.a4-preview .tiptap { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+/* `.v2-page-sheet` (frère de nom, enfant réel - cf. v2/js/editor.js:init(),
+   qui l'enveloppe UNE SEULE FOIS autour de `.tiptap` à la création de
+   l'éditeur) porte maintenant le fond/liseré "papier" au lieu de `.tiptap`
+   lui-même - retour utilisateur : les zones d'en-tête/pied (cf.
+   .v2-hf-zone plus bas), `.tiptap` et le pied de page apparaissaient comme
+   3 cartes SÉPARÉES (chacune son propre liseré/ombre + un espace entre
+   elles), alors qu'à l'export ce sera UNE SEULE page continue - en-tête,
+   corps et pied "collés" avec juste un filet en pointillé pour marquer la
+   frontière. `.tiptap` garde son padding (marge de page simulée) mais perd
+   son fond/liseré propres - il devient un simple bloc transparent qui
+   laisse voir le fond blanc du sheet parent. Hors Aperçu A4, `.v2-page-sheet`
+   reste totalement neutre (aucune règle sans le `.a4-preview` du parent) -
+   l'édition "classique" (pleine largeur, sans mise en page A4) est
+   inchangée. */
+#editor-container.a4-preview .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+#editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: 37.33px; background: transparent; box-shadow: none; }
 /* Un tableau avec beaucoup de colonnes (ou une colonne ajoutée qui ne
    trouve plus de place) peut dépasser la largeur disponible - chaque <col>
    porte un `min-width` (TipTap) qui reste une contrainte dure même sous
@@ -354,18 +369,27 @@
    (css/style.css, partagé V1), d'où les sélecteurs ci-dessous couvrant les
    DEUX conteneurs. */
 #editor-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-edge-spacer {
-  box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 8px 37.33px;
+  box-sizing: border-box; padding: 8px 37.33px;
   font-size: 10.5px; line-height: 1.42; color: #1b2430; min-height: 1.6em;
   transition: background .12s ease, box-shadow .12s ease;
 }
-#editor-container.a4-preview .v2-page-edge-top, #reader-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
-#editor-container.a4-preview .v2-page-edge-bottom, #reader-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
 /* Mode Lecture (#reader-container) : jamais interactif, ne connaît pas la
    distinction vide/rempli de l'éditeur (js/reader-mode.js ne crée une zone
-   QUE si elle a du contenu) - fond "page" toujours affiché, aucune des
-   règles :hover/curseur ci-dessous (scopées à #editor-container) ne s'y
-   applique. */
-#reader-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-band { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+   QUE si elle a du contenu) - garde sa PROPRE carte (fond + liseré + espace),
+   inchangée, aucune des règles :hover/curseur ci-dessous (scopées à
+   #editor-container) ne s'y applique. */
+#reader-container.a4-preview .v2-page-edge-spacer { width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+#reader-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
+#reader-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
+#reader-container.a4-preview .v2-page-band { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+/* Éditeur : les zones sont maintenant DANS `.v2-page-sheet` (cf. plus haut),
+   collées à `.tiptap` (aucune marge, aucun fond/liseré propre - elles
+   laissent voir le fond blanc du sheet parent) - seule une frontière en
+   pointillé, posée UNIQUEMENT quand la zone a du contenu (vide = aucune
+   ligne, rien à marquer), signale où s'arrête l'en-tête/où commence le
+   pied, au plus près de ce que sera la vraie page exportée. */
+#editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-top { border-bottom: 1px dashed #c3cad6; }
+#editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-bottom { border-top: 1px dashed #c3cad6; }
 
 /* === Zones cliquables d'en-tête/pied de page (.v2-hf-zone, éditeur
    uniquement - cf. v2/js/editor.js:updateHfZone/renderPaginationOverlay) ===
@@ -380,6 +404,15 @@
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover { background: var(--accent-soft, #e8f0fe); }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); }
+/* Les zones de BORD (dans `.v2-page-sheet`, collées à `.tiptap`) n'ont PAS
+   leur propre carte - `.v2-page-sheet` porte déjà le fond/liseré "page"
+   (cf. plus haut) ; seules les COUTURES intermédiaires (mid-document,
+   `.v2-page-band` dans `.v2-pagination-overlay` - PAS dans `.v2-page-sheet`)
+   gardent la règle générique ci-dessus, puisqu'elles représentent le VRAI
+   saut entre deux pages physiques et doivent au contraire rester visibles
+   comme un élément distinct. */
+#editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled { background: transparent; box-shadow: none; }
+#editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: none; }
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent, #2f6fed); font-weight: 600; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
 .v2-hf-zone-body { color: var(--text-faint, #6b7684); }
@@ -392,6 +425,13 @@
 .v2-page-band-header, .v2-page-band-footer { padding: 8px 37.33px; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
 .v2-page-seam-divider { height: 0; border-top: 1px dashed #c3cad6; margin: 0 14px; }
+/* Coupure de page automatique SANS en-tête/pied configuré (retour
+   utilisateur : rester visible dès "beaucoup de lignes", pas seulement avec
+   un en-tête/pied ou un saut de page forcé) - simple repère "— Page N —",
+   pas de carte "page" (rien à afficher qui justifierait un fond blanc). */
+.v2-page-break-line { display: flex; align-items: center; gap: 10px; height: 20px; padding: 0 37.33px; }
+.v2-page-break-line::before, .v2-page-break-line::after { content: ''; flex: 1; border-top: 1px dashed #c3cad6; }
+.v2-page-break-label { font-size: 10px; font-weight: 600; color: #9aa2ad; white-space: nowrap; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }

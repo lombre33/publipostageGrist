@@ -1942,27 +1942,34 @@ const Editor = (function () {
   // pixel-parfait généralisé : le tout début (en-tête de la page 1) et la
   // toute fin (pied de la dernière page) du document ont un vrai espace
   // libre disponible avant/après `.tiptap` - ce sont donc de VRAIS éléments
-  // DOM en flux normal (`.v2-page-edge-spacer`, frères de `.tiptap`, JAMAIS
-  // enfants - un enfant inattendu dans `.tiptap` serait la même trappe que la
-  // V1 avec Quill, cf. mémoire project_quill_mutation_observer), qui ne
-  // recouvrent donc jamais de texte réel. Les limites INTERMÉDIAIRES (pied
-  // d'une page + en-tête de la suivante, seulement une fois un en-tête/pied
-  // déjà configuré - pas de point d'entrée à mi-document, comme Docs/Word)
-  // n'ont PAS cet espace - le contenu continue de défiler sans interruption
-  // réelle - ces bandes-là restent de purs overlays en position:absolute qui
-  // PEUVENT recouvrir un peu de texte exactement à la limite, résidu assumé
-  // (même classe que les écarts de rendu police déjà acceptés ailleurs dans
-  // ce projet).
-  function ensureEdgeZone(container, tiptapEl, pos) {
+  // DOM en flux normal (`.v2-page-edge-spacer`, DANS `.v2-page-sheet`, JAMAIS
+  // enfants de `.tiptap` lui-même - un enfant inattendu dans `.tiptap` serait
+  // la même trappe que la V1 avec Quill, cf. mémoire
+  // project_quill_mutation_observer), qui ne recouvrent donc jamais de texte
+  // réel - collées à `.tiptap` (aucun espace, juste un filet en pointillé
+  // quand elles ont du contenu), pour ressembler le plus possible à la vraie
+  // page exportée (retour utilisateur, cf. css/editor-v2.css:.v2-page-sheet).
+  // Les limites INTERMÉDIAIRES (frontière RÉELLE entre deux pages physiques)
+  // n'ont PAS cet espace disponible - le contenu continue de défiler sans
+  // interruption réelle - ces bandes-là restent de purs overlays en
+  // position:absolute qui PEUVENT recouvrir un peu de texte exactement à la
+  // limite, résidu assumé (même classe que les écarts de rendu police déjà
+  // acceptés ailleurs dans ce projet). Elles s'affichent maintenant dès que
+  // le document dépasse une page, MÊME sans aucun en-tête/pied configuré
+  // (retour utilisateur : la pagination automatique doit rester visible dès
+  // "beaucoup de lignes", pas seulement quand un en-tête/pied existe ou
+  // qu'un saut de page est forcé) - un simple repère "Page N" remplace alors
+  // le contenu en-tête/pied absent.
+  function ensureEdgeZone(pageSheet, tiptapEl, pos) {
     if (pos === 'top' && !paginationEdgeTopEl) {
       paginationEdgeTopEl = document.createElement('div');
       paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top v2-hf-zone';
-      container.insertBefore(paginationEdgeTopEl, tiptapEl);
+      pageSheet.insertBefore(paginationEdgeTopEl, tiptapEl);
     }
     if (pos === 'bottom' && !paginationEdgeBottomEl) {
       paginationEdgeBottomEl = document.createElement('div');
       paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom v2-hf-zone';
-      container.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
+      pageSheet.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
     }
   }
   function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
@@ -2005,45 +2012,60 @@ const Editor = (function () {
     const offsets = computePageBreakOffsets(tiptapEl, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
-    ensureEdgeZone(container, tiptapEl, 'top');
-    ensureEdgeZone(container, tiptapEl, 'bottom');
+    // `.v2-page-sheet` : enveloppe permanente posée UNE SEULE FOIS autour de
+    // `.tiptap` à la création de l'éditeur (cf. init()) - les zones de bord
+    // vivent DEDANS (collées à `.tiptap`, cf. css/editor-v2.css), plus en
+    // frères directs de #editor-container.
+    const pageSheet = tiptapEl.parentElement;
+    ensureEdgeZone(pageSheet, tiptapEl, 'top');
+    ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
     updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', 'Ajouter un en-tête');
     updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', 'Ajouter un pied de page');
-
-    if (!enabled) return; // pas de "couture" à mi-document tant que rien n'est configuré (cf. commentaire ci-dessus)
 
     const tiptapOffsetTop = tiptapEl.offsetTop;
     const tiptapOffsetLeft = tiptapEl.offsetLeft;
     const tiptapWidth = tiptapEl.getBoundingClientRect().width;
 
-    // Limites intermédiaires - une bande "couture" (pied + en-tête empilés)
-    // par frontière entre 2 pages, positionnée APRÈS insertion (nécessite sa
-    // propre hauteur rendue) pour que son BAS tombe exactement où le contenu
-    // de la page suivante commence réellement dans le flux continu.
+    // Limites intermédiaires - une bande par frontière entre 2 pages,
+    // positionnée APRÈS insertion (nécessite sa propre hauteur rendue) pour
+    // que son BAS tombe exactement où le contenu de la page suivante
+    // commence réellement dans le flux continu. Toujours affichées dès que
+    // le document dépasse une page - même sans aucun en-tête/pied configuré
+    // (retour utilisateur : la pagination automatique doit se voir dès
+    // "beaucoup de lignes", pas seulement via un saut de page forcé) : à
+    // défaut de contenu à afficher, un simple trait "— Page N —" marque
+    // quand même la coupure automatique. Ces coutures représentent le VRAI
+    // saut entre deux pages PHYSIQUES (contrairement aux zones de bord
+    // ci-dessus, qui vivent SUR la même page que le corps) - restent donc
+    // volontairement une carte distincte, jamais "collées" au texte.
     offsets.forEach((offsetPx, i) => {
       const pageEnding = i + 1;
       const pageStarting = i + 2;
-      const footerText = footerForPage(pageEnding);
-      const headerText = headerForPage(pageStarting);
-      if (!footerText && !headerText) return;
+      const footerText = enabled ? footerForPage(pageEnding) : null;
+      const headerText = enabled ? headerForPage(pageStarting) : null;
       const seam = document.createElement('div');
-      seam.className = 'v2-page-band v2-page-seam';
-      if (footerText) {
-        const f = document.createElement('div');
-        f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled';
-        f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
-        f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
-        seam.appendChild(f);
-      }
-      const divider = document.createElement('div');
-      divider.className = 'v2-page-seam-divider';
-      seam.appendChild(divider);
-      if (headerText) {
-        const h = document.createElement('div');
-        h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
-        h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
-        h.onclick = () => enterHeaderFooterMode('header', 'default'); // pageStarting >= 2 toujours dans une couture
-        seam.appendChild(h);
+      if (!footerText && !headerText) {
+        seam.className = 'v2-page-band v2-page-break-line';
+        seam.innerHTML = '<span class="v2-page-break-label">Page ' + pageStarting + '</span>';
+      } else {
+        seam.className = 'v2-page-band v2-page-seam';
+        if (footerText) {
+          const f = document.createElement('div');
+          f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled';
+          f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
+          f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
+          seam.appendChild(f);
+        }
+        const divider = document.createElement('div');
+        divider.className = 'v2-page-seam-divider';
+        seam.appendChild(divider);
+        if (headerText) {
+          const h = document.createElement('div');
+          h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
+          h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
+          h.onclick = () => enterHeaderFooterMode('header', 'default'); // pageStarting >= 2 toujours dans une couture
+          seam.appendChild(h);
+        }
       }
       paginationOverlayEl.appendChild(seam);
       seam.style.left = tiptapOffsetLeft + 'px';
@@ -2236,6 +2258,21 @@ const Editor = (function () {
       ],
       content: '',
     });
+
+    // Enveloppe UNE SEULE FOIS, à la création - jamais re-enveloppé/déplacé
+    // ensuite (cf. renderPaginationOverlay, qui lit juste tiptapEl.parentElement
+    // à chaque appel). Porte le fond/liseré "page" en Aperçu A4 à la place de
+    // `.tiptap` lui-même (cf. css/editor-v2.css:.v2-page-sheet) pour que les
+    // zones d'en-tête/pied de page (posées DEDANS, cf. ensureEdgeZone) restent
+    // visuellement COLLÉES au corps - une seule "feuille" continue plutôt que
+    // 3 cartes séparées par un espace, au plus près de ce que sera la vraie
+    // page exportée (retour utilisateur). `.tiptap` lui-même n'est JAMAIS
+    // déplacé/recréé par cette opération, seul son parent change - sans
+    // risque pour ProseMirror (qui ne connaît que ses propres descendants).
+    const pageSheet = document.createElement('div');
+    pageSheet.className = 'v2-page-sheet';
+    editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
+    pageSheet.appendChild(editor.view.dom);
 
     wireToolbar();
     wireColorPickers();
