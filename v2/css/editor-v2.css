@@ -262,8 +262,15 @@
    v2/js/editor.js:renderHfPill) - retour utilisateur : point d'entrée par
    bouton de toolbar + sous-barre dockée jugé "pas beau", remplacé par un
    clic direct sur la marge de page (cf. .v2-hf-zone plus bas) façon Google
-   Docs/Word. */
-#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 80px; }
+   Docs/Word. `min-height` réduit une seconde fois (80px → 60px) - signalé
+   disproportionné par l'utilisateur une fois le plafond de taille d'image
+   lui-même réduit (HF_MAX_IMAGE_HEIGHT_PX, v2/js/editor.js, 120px → 60px) :
+   une image tenant pile dans ce plafond se retrouvait avec un vide visible
+   nettement plus grand qu'elle en dessous, la case "zone cliquable
+   confortable" étant restée à son ancien réglage plus généreux - alignée
+   ici sur ce même plafond pour qu'un en-tête typique (texte seul OU une
+   image à sa taille max) remplisse la zone sans marge résiduelle visible. */
+#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; }
 
 /* Aperçu format A4 (case #v2-toggle-a4-preview, cf. v2/js/main.js) : contraint
    .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
@@ -301,6 +308,20 @@
    inchangée. */
 #editor-container.a4-preview .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 #editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: 37.33px; background: transparent; box-shadow: none; }
+/* En mode édition d'en-tête/pied (.hf-editing), ce même `.tiptap` affiche
+   temporairement le contenu de l'en-tête/pied (échange de contenu, cf. plus
+   haut) - le padding vertical de 37.33px ci-dessus simule la marge de PAGE
+   pour le document PRINCIPAL, mais n'a aucun sens ici : ce n'est pas "le
+   début de la page après sa marge", c'est déjà le contenu de la marge
+   elle-même. Signalé disproportionné par l'utilisateur (une image tenant
+   pile dans son plafond de taille se retrouvait avec ~75px de vide vertical
+   autour - 37.33px en haut ET en bas - sans rapport avec ce plafond).
+   Padding vertical ramené à 8px, IDENTIQUE à celui de la zone de prévisualisation
+   en lecture seule (`.v2-page-edge-spacer`, plus bas) pour que l'édition
+   active corresponde à ce qu'on voit une fois "Terminer" cliqué - le padding
+   horizontal (37.33px) reste lui pertinent : il aligne le contenu sur les
+   VRAIES marges gauche/droite de la page, cf. la même zone en lecture seule. */
+#editor-container.a4-preview.hf-editing .tiptap { padding: 8px 37.33px; }
 /* Un tableau avec beaucoup de colonnes (ou une colonne ajoutée qui ne
    trouve plus de place) peut dépasser la largeur disponible - chaque <col>
    porte un `min-width` (TipTap) qui reste une contrainte dure même sous
