@@ -645,8 +645,22 @@
    segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }
 .v2-numbering-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-faint, #98a2b3); margin-bottom: 6px; }
-.v2-numbering-block .v2-segmented { width: 100%; }
-.v2-numbering-block .v2-segmented-btn { flex: 1; }
+/* PAS de largeur forcée à 100%/flex:1 sur les boutons (essayé, puis retiré :
+   "Aucune" dépassait de son bouton, forcé à la même largeur que "I.") - la
+   pastille en-tête/pied (v2/js/editor.js:renderHfPill), seul autre usage de
+   .v2-segmented dans ce projet, ne le fait pas non plus : chaque bouton
+   garde sa largeur naturelle (`width: auto`, déjà la valeur par défaut de
+   .v2-segmented-btn, cf. css/toolbar-v2.css).
+   CE `width: auto` de .v2-segmented-btn perdait pourtant la bataille de
+   spécificité face à `#v2-toolbar button` (règle générique plus haut,
+   1 ID + 1 type - width:30px) dès que ce contrôle vit DANS #v2-toolbar (cf.
+   flyout Titre ci-dessus) : la pastille en-tête/pied y échappe (elle est
+   ajoutée comme enfant de #editor-container, pas de #v2-toolbar), mais ce
+   nouveau flyout, si. Constaté : "Aucune" tronqué à 30px malgré son
+   `width: auto` d'origine. Re-déclaré ici avec un sélecteur plus spécifique
+   (1 ID + 1 classe, gagne sur classe même à ID égal) pour rétablir la
+   largeur naturelle. */
+#v2-toolbar .v2-segmented-btn { width: auto; flex-shrink: 0; }
 /* Petit point discret sur le bouton principal, seul indice visuel qu'un
    survol révèle plus d'options (découvrabilité, cf. maquette "Options au
    survol" - point d'attention explicitement noté dans cette maquette). */
@@ -689,7 +703,19 @@
    que le menu de couleur, cf. Editor.js createFloatingPanel/
    openDropdownPanel). Pas de bordure permanente, même logique que le reste
    de la barre. */
-.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: #3a4452; font-family: inherit; }
+/* `width: auto` + `flex-shrink: 0` - bug PRÉEXISTANT retrouvé en creusant le
+   signalement utilisateur sur le nouveau chip "Titre" fusionné, mais qui
+   touchait tout autant l'ancien chip "Police" (jamais remarqué avant, sans
+   doute jamais testé dans un contexte aussi étroit) : `#v2-toolbar button`
+   (règle générique plus haut dans ce fichier) pose `width: 30px` - un chip
+   n'a JAMAIS redéfini `width`, seule propriété qui compte ici (le cascade
+   CSS s'applique par PROPRIÉTÉ, la spécificité plus élevée de ce sélecteur
+   ne sert à rien pour une propriété qu'il ne redéclare pas). Résultat
+   constaté : chip ET valeur écrasés à quelques pixels ("Roboto"/"Normal"
+   totalement illisibles) dès que la barre n'a plus assez de place - flex-
+   shrink:0 seul ne suffisait pas (rétrécissement empêché, mais depuis une
+   base de 30px déjà fausse). */
+.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: #3a4452; font-family: inherit; flex-shrink: 0; }
 .v2-format-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-format-chip-icon { display: inline-flex; }
 .v2-format-chip-icon svg { width: 14px; height: 14px; }
