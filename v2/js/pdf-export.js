@@ -100,6 +100,25 @@ const PdfExport = (function () {
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
+  // Notes de bas de page (chips intelligents) : numéro/texte collectés par
+  // inlineRuns au fil de sa récursion, quelle que soit sa profondeur d'appel
+  // (cellule de tableau, colonne 2-colonnes, corps principal) - variables de
+  // MODULE plutôt qu'un paramètre à faire traverser tableFrom/twoColumnsFrom/
+  // cellLineToPdfObject (cf. inlineRuns). Remises à zéro au début de chaque
+  // appel à buildPdfContentFromRoot (une fois par PASSE de mesure/rendu final,
+  // cf. resolveNativePdfContent) - jamais au niveau module une seule fois.
+  let footnoteCounter = 0;
+  let footnoteEntries = [];
+  // Bande réservée en pied de page pour le texte des notes, UNIQUEMENT si le
+  // document en contient au moins une (cf. buildNativeDocDefinition) - fixe
+  // pour tout le document plutôt que dynamique par page : pdfmake ne permet
+  // pas des marges différentes par page, et une bande dimensionnée d'après la
+  // passe de mesure invaliderait les numéros de page qu'elle vient de mesurer
+  // (même marge exigée aux deux passes, comme topExtraPt/bottomExtraPt déjà).
+  // Dimensionnée pour ~4 lignes de note à 8pt - limite v1 assumée : un
+  // empilement extrême de notes très longues sur une seule page peut déborder
+  // cette bande fixe (cf. plan, affinable plus tard si l'usage réel le justifie).
+  const FOOTNOTE_BAND_PT = 4 * 8 * 1.15 + 8; // ≈ 4 lignes à 8pt + le filet séparateur
   // left/top d'une image en calque (editor.js:setLayer/moveState) sont captures
   // relatifs au bord de la boite de PADDING de `.tiptap` (position:absolute
   // standard) - en mode Apercu A4 (coche par defaut, cf. #editor-container.
@@ -462,6 +481,27 @@ const PdfExport = (function () {
     // sommaire/les images en calque).
     if (node.classList.contains('page-number-badge')) {
       return [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }];
+    }
+    // Chip intelligent (date/heure/email) : ne devrait jamais être rencontré
+    // ici (même garde défensive que .var-badge ci-dessus - ReaderMode.preview
+    // a déjà tout résolu en texte simple avant que ce module ne voie le HTML).
+    if (node.classList.contains('smart-chip')) return [{ text: node.textContent || '', ...style }];
+    // Marqueur de note de bas de page : contrairement à .page-number-badge,
+    // le NUMÉRO n'a aucune dépendance à la pagination (numérotation continue
+    // sur tout le document, choix confirmé) - assigné immédiatement ici, via
+    // un compteur de MODULE (footnoteCounter, remis à 0 une fois par passe
+    // dans buildPdfContentFromRoot) plutôt qu'un paramètre à faire traverser
+    // tableFrom/twoColumnsFrom/cellLineToPdfObject : ce compteur reste
+    // correct quelle que soit la profondeur d'imbrication (cellule de
+    // tableau, colonne 2-colonnes, corps principal), sans toucher la
+    // signature d'aucune de ces fonctions. Le TEXTE de la note est collecté
+    // à part (footnoteEntries, même raisonnement) pour un placement en pied
+    // de la bonne page - cf. buildPdfContentFromRoot pour comment chaque
+    // entrée est ensuite rattachée au bloc top-level englobant.
+    if (node.classList.contains('footnote-ref-marker')) {
+      footnoteCounter += 1;
+      footnoteEntries.push({ number: footnoteCounter, text: node.getAttribute('data-note-text') || '' });
+      return [{ text: String(footnoteCounter), ...style, sup: true, fontSize: (style.fontSize || DEFAULT_FONT_SIZE) * 0.7 }];
     }
     if (node.tagName === 'IMG') {
       if (images && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) {
@@ -1680,7 +1720,19 @@ const PdfExport = (function () {
     // d'une image en calque (cf. résolution d'ancrage plus bas), pas besoin
     // ailleurs.
     const sourceNodes = [];
-    const headingBlocks = []; const tocBlocks = [];
+    const headingBlocks = []; const tocBlocks = []; const footnoteBlocks = [];
+    // Remis à zéro ICI (pas au niveau module, jamais initialisé qu'une fois) :
+    // buildPdfContentFromRoot est appelé une fois par PASSE (cf.
+    // resolveNativePdfContent, mesure puis rendu final) - htmlToPdfContent
+    // rejouant le même HTML dans le même ordre les deux fois, ce reset donne
+    // la MÊME numérotation aux deux passes (numérotation continue sur tout
+    // le document, choix confirmé - jamais de reset par page). footnoteCounter/
+    // footnoteEntries sont des variables de MODULE (déclarées plus haut dans
+    // ce fichier) plutôt que des paramètres à faire traverser tableFrom/
+    // twoColumnsFrom/cellLineToPdfObject : inlineRuns (cf. plus haut) les
+    // incrémente/alimente directement, quelle que soit sa profondeur d'appel.
+    footnoteCounter = 0;
+    footnoteEntries = [];
     // Images en calque IMBRIQUÉES (cellule de tableau, colonne de zone
     // 2-colonnes) - accumulées ici à part de `resolvePendingImageAnchors`
     // (qui ne voit que les blocs TOP-LEVEL) : tableFrom/twoColumnsFrom
@@ -1718,22 +1770,37 @@ const PdfExport = (function () {
       // toujours un enfant direct, déjà couvert par isBlock()/blockFrom()
       // ci-dessous comme n'importe quel autre bloc.
       if (node.classList.contains('two-columns-zone')) {
+        const footnoteCheckpoint = footnoteEntries.length;
         let zoneBlock;
         try { zoneBlock = await twoColumnsFrom(node, pendingPageBreak, rootRect); }
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
         if (zoneBlock && zoneBlock._nestedPending) { nestedPendingAll.push(...zoneBlock._nestedPending); delete zoneBlock._nestedPending; }
+        // Note(s) de bas de page trouvée(s) N'IMPORTE OÙ dans cette zone
+        // (colonne de gauche/droite) : rattachées à `zoneBlock` lui-même (le
+        // bloc top-level englobant), même précision que pour un tableau -
+        // suffisant pour savoir sur quelle PAGE placer le texte de la note,
+        // cf. commentaire de footnoteBlocks/content._footnoteBlocks plus bas.
+        if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: zoneBlock, number: fe.number, text: fe.text })));
         push(zoneBlock, node);
         pendingPageBreak = false; floatCarry = null;
         return;
       }
       if (isBlock(node)) {
+        const footnoteCheckpoint = footnoteEntries.length;
         let produced;
         try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect, floatCarry); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
         floatCarry = (produced && produced._floatCarry) || null;
-        produced.forEach(b => {
+        // Attache toute note trouvée dans CE nœud (paragraphe, titre, liste,
+        // tableau - un <table> passe aussi par cette branche, cf. commentaire
+        // isBlock()/blockFrom() ci-dessus) au PREMIER bloc produit : plusieurs
+        // blocs pour un seul nœud source (rare) atterrissent de toute façon
+        // presque toujours sur la même page, précision suffisante ici.
+        const newFootnotes = footnoteEntries.length > footnoteCheckpoint ? footnoteEntries.slice(footnoteCheckpoint) : null;
+        produced.forEach((b, i) => {
           if (b && b._nestedPending) { nestedPendingAll.push(...b._nestedPending); delete b._nestedPending; }
           push(b, node); if (b && b._isHeading) headingBlocks.push(b);
+          if (i === 0 && newFootnotes) footnoteBlocks.push(...newFootnotes.map(fe => ({ block: b, number: fe.number, text: fe.text })));
         });
         pendingPageBreak = false;
         return;
@@ -1749,6 +1816,7 @@ const PdfExport = (function () {
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
+    content._footnoteBlocks = footnoteBlocks;
     content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll);
     return content;
   }
@@ -2011,8 +2079,15 @@ const PdfExport = (function () {
   // page différente entre la mesure et le rendu réel.
   function buildNativeDocDefinition(content, filename, headerFooterChunks) {
     const hf = headerFooterChunks || { enabled: false, topExtraPt: 0, bottomExtraPt: 0 };
+    // `content._footnoteBlocks` est posé par buildPdfContentFromRoot à CHAQUE
+    // appel (passe de mesure ET passe finale, cf. resolveNativePdfContent) -
+    // cette condition est donc IDENTIQUE aux deux appels de cette fonction
+    // pour un même document, invariant déjà exigé par topExtraPt/bottomExtraPt
+    // (même marge aux deux passes, sans quoi la pagination mesurée ne
+    // correspondrait plus au document final).
+    const hasFootnotes = (content._footnoteBlocks || []).length > 0;
     const topMarginPt = PAGE_MARGIN_PT + (hf.topExtraPt || 0);
-    const bottomMarginPt = PAGE_MARGIN_PT + (hf.bottomExtraPt || 0);
+    const bottomMarginPt = PAGE_MARGIN_PT + (hf.bottomExtraPt || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     const doc = {
       pageSize: 'A4', pageOrientation: 'portrait',
       pageMargins: [PAGE_MARGIN_PT, topMarginPt, PAGE_MARGIN_PT, bottomMarginPt],
@@ -2030,11 +2105,30 @@ const PdfExport = (function () {
         return { margin: [PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5, PAGE_MARGIN_PT, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
       };
     }
-    if (hf.enabled && (hf.footer.default || hf.footer.first)) {
+    // Le pied de page doit maintenant exister MÊME SANS en-tête/pied
+    // configuré par l'utilisateur (hf.enabled false) dès qu'il y a au moins
+    // une note de bas de page - le texte des notes (footnoteByPage, posé par
+    // resolveNativePdfContent) est ajouté APRÈS le contenu utilisateur
+    // éventuel dans le même `stack`, plutôt qu'un second mécanisme de
+    // placement séparé (cf. plan : réutilise le callback natif déjà appelé
+    // une fois par page avec currentPage connu, pas de nouvelle passe).
+    if ((hf.enabled && (hf.footer.default || hf.footer.first)) || hasFootnotes) {
+      const footnoteByPage = content._footnoteByPage || {};
       doc.footer = (currentPage, pageCount) => {
-        const chunk = (currentPage === 1 && hf.differentFirstPage) ? hf.footer.first : hf.footer.default;
-        if (!chunk) return null;
-        return { margin: [PAGE_MARGIN_PT, 0, PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
+        const stackParts = [];
+        if (hf.enabled) {
+          const chunk = (currentPage === 1 && hf.differentFirstPage) ? hf.footer.first : hf.footer.default;
+          if (chunk) stackParts.push(...resolvePageNumberPlaceholders(chunk, currentPage, pageCount));
+        }
+        const notesForPage = footnoteByPage[currentPage];
+        if (notesForPage && notesForPage.length) {
+          stackParts.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 0.5, lineColor: '#999999' }], margin: [0, 2, 0, 2] });
+          notesForPage.forEach(fn => {
+            stackParts.push({ text: [{ text: fn.number + '. ', bold: true, fontSize: 8 }, { text: fn.text, fontSize: 8 }], margin: [0, 0, 0, 1] });
+          });
+        }
+        if (!stackParts.length) return null;
+        return { margin: [PAGE_MARGIN_PT, 0, PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5], stack: stackParts };
       };
     }
     return doc;
@@ -2150,14 +2244,22 @@ const PdfExport = (function () {
     let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
     const hasPendingImages = (content._pendingImages || []).length > 0;
+    const hasFootnotes = (content._footnoteBlocks || []).length > 0;
     // Marge haute réelle de CETTE passe - doit être identique à celle de la
     // passe réelle (buildNativePdfDocDefinition, même headerFooterChunks
     // threadé aux deux endroits) pour que la pagination mesurée ici (sommaire/
     // ancres d'image) corresponde exactement au document final.
     const topMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
-    if (hasToc || hasPendingImages) {
+    if (hasToc || hasPendingImages || hasFootnotes) {
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename, headerFooterChunks)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
+      // Capturé AVANT de reconstruire (même contrainte que headingPageNumbers/
+      // resolvedAnchors ci-dessous) : `fb.block.positions` devient obsolète
+      // dès que htmlToPdfContent recrée des objets neufs. Le NUMÉRO de chaque
+      // note (fb.number) est en revanche déjà définitif dès la 1ère passe
+      // (numérotation continue, aucune dépendance à la pagination) - seule sa
+      // PAGE avait besoin d'être mesurée.
+      const footnotePageNumbers = (content._footnoteBlocks || []).map(fb => (fb.block.positions && fb.block.positions[0] && fb.block.positions[0].pageNumber) || null);
       // Capturé AVANT de reconstruire : htmlToPdfContent recrée des objets
       // neufs, ces références deviendraient obsolètes ensuite.
       const resolvedAnchors = (content._pendingImages || []).map(p => {
@@ -2181,6 +2283,18 @@ const PdfExport = (function () {
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
       });
+      // Regroupe chaque note par la page RÉELLE de son appel (mesurée
+      // ci-dessus) - consommé par buildNativeDocDefinition (callback
+      // doc.footer natif de pdfmake) pour placer le texte de chaque note au
+      // pied de LA BONNE page, sans mécanisme de positionnement absolu
+      // séparé (cf. plan).
+      const footnoteByPage = {};
+      (content._footnoteBlocks || []).forEach((fb, i) => {
+        const pageNum = footnotePageNumbers[i];
+        if (pageNum == null) return;
+        (footnoteByPage[pageNum] = footnoteByPage[pageNum] || []).push({ number: fb.number, text: fb.text });
+      });
+      content._footnoteByPage = footnoteByPage;
       (content._pendingImages || []).forEach((p, i) => {
         const a = resolvedAnchors[i];
         const layer = p.image._pendingLayer;

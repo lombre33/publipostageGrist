@@ -78,6 +78,13 @@ const ReaderMode = (function () {
       const format = parseBadgeFormat(badge);
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
     }));
+    // Date/heure/email ont un sens en en-tête/pied (ex. « Généré le #Date à
+    // #Heure ») - la note de bas de page n'y est volontairement PAS
+    // insérable (cf. v2/js/variables.js: aucun repère de page n'a de sens
+    // dans une zone répétée sur chaque page), donc rien à exclure ici :
+    // resolveSmartChips ne trouve simplement jamais de .footnote-ref-marker
+    // dans cette zone.
+    await resolveSmartChips(wrapper);
     return wrapper.innerHTML;
   }
   // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux
@@ -174,6 +181,7 @@ const ReaderMode = (function () {
     }));
     for (const r of results) { if (r.isError) hasError = true; r.badge.replaceWith(r.node); }
     await resolveVariableImages(wrapper, tableId, record);
+    await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Variables déjà résolues (texte des titres définitif) : peut construire
     // le sommaire maintenant, avant le swap DOM final ci-dessous.
@@ -282,6 +290,46 @@ const ReaderMode = (function () {
       img.style.objectFit = 'contain';
     }));
   }
+  // Chips intelligents (v2/js/editor.js:createSmartChipNode) - date du jour/
+  // heure actuelle/email utilisateur, valeurs CALCULÉES (jamais liées à une
+  // colonne Grist, contrairement à .var-badge) donc résolues à chaque rendu
+  // sans recherche de ligne/table liée. `.footnote-ref-marker` (note de bas
+  // de page) n'a PAS besoin d'être résolu ici : son numéro vient uniquement
+  // du compteur CSS `footnote-ref` (cf. v2/css/editor-v2.css), déjà correct
+  // à l'écran sans aucun JS - seul le TEXTE de la note doit encore être
+  // placé au bon endroit dans le PDF exporté (cf. v2/js/pdf-export.js).
+  function formatTodayDate() {
+    const d = new Date();
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+  function formatNowTime() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  async function resolveSmartChips(wrapper) {
+    const chips = Array.from(wrapper.querySelectorAll('.smart-chip'));
+    await Promise.all(chips.map(async chip => {
+      const kind = chip.getAttribute('data-chip-kind');
+      let text = ''; let isError = false;
+      if (kind === 'date') text = formatTodayDate();
+      else if (kind === 'time') text = formatNowTime();
+      else if (kind === 'email') {
+        // GristAPI.getCurrentUserEmail() n'est vérifiable qu'en conditions
+        // réelles (aucune instance Grist locale, cf. restriction de test de
+        // ce projet) - repli visuel identique à une #Variable cassée en cas
+        // d'échec (réseau, portée du jeton d'accès insuffisante...), jamais
+        // un blocage du reste du rendu.
+        try {
+          text = await GristAPI.getCurrentUserEmail();
+          if (!text) { text = '[Email indisponible]'; isError = true; }
+        } catch (e) { text = '[Email indisponible]'; isError = true; }
+      }
+      const span = document.createElement('span');
+      span.textContent = text;
+      span.className = 'resolved-var' + (isError ? ' error-msg' : '');
+      chip.replaceWith(span);
+    }));
+  }
   // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
   // (comportement historique) OU une ou plusieurs <img> si la colonne
   // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds,
@@ -352,6 +400,7 @@ const ReaderMode = (function () {
       badge.replaceWith(node);
     }));
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
+    await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }

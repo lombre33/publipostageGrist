@@ -603,6 +603,42 @@
    n'est qu'un espace réservé visuel du format choisi. */
 .tiptap .page-number-badge, .reader-content .page-number-badge { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 
+/* Chips intelligents (v2/js/editor.js:createSmartChipNode/createFootnoteRefNode,
+   v2/js/variables.js: onglet "Chips" du panneau #) - même palette verte que
+   .page-number-badge ci-dessus, langage visuel déjà établi pour "valeur
+   calculée, pas une #Variable". Le marqueur de note reste volontairement SANS
+   pastille/fond (juste un chiffre vert en exposant, cf. compteur CSS
+   ci-dessous) : un vrai numéro de note imprimée n'a jamais l'air d'un badge. */
+.tiptap .smart-chip, .reader-content .smart-chip { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
+/* Numérotation CONTINUE sur tout le document (choix confirmé - pas de reset
+   par page) : un seul compteur racine suffit, incrémenté dans l'ordre du
+   document par CSS pur, jamais recalculé en JS pour l'affichage écran (cf.
+   commentaire de createFootnoteRefNode). */
+.tiptap, .reader-content { counter-reset: footnote-ref; }
+.tiptap .footnote-ref-marker, .reader-content .footnote-ref-marker { counter-increment: footnote-ref; color: #146c43; font-weight: 600; cursor: pointer; }
+.tiptap .footnote-ref-marker::before, .reader-content .footnote-ref-marker::before { content: counter(footnote-ref); }
+
+/* Popup d'édition du texte d'une note (v2/js/editor.js:ensureFootnotePopupBox) -
+   même gabarit que #v2-image-var-picker (bordure/ombre légère, cf. plus bas). */
+#v2-footnote-popup { position: absolute; z-index: 1000; background: #fff; border: 1px solid #b8e6cc; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 6px; width: 240px; }
+#v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .92em; resize: vertical; }
+#v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+#v2-footnote-popup .v2-footnote-popup-actions button { font-size: .85em; padding: 2px 10px; }
+
+/* Onglets du panneau `#` (v2/js/variables.js:ensureBox) - Variables (par
+   défaut) / Chips. #autocomplete-box lui-même reste défini dans
+   css/style.css (partagé V1, qui n'a pas ces onglets) - restructuré ici en
+   colonne flex (JS bascule son display en 'flex', jamais 'block', cf.
+   variables.js) pour que .ac-tabs reste fixe pendant que .ac-items défile
+   seul (max-height/overflow déplacés depuis la règle #autocomplete-box de
+   css/style.css, sans impact V1 qui ne crée jamais .ac-items). */
+#autocomplete-box { display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; }
+#autocomplete-box .ac-items { overflow: auto; }
+.ac-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid #d7dde3; }
+.ac-tab { flex: 1; text-align: center; padding: 4px 8px; font-size: .85em; color: #6b7280; cursor: pointer; }
+.ac-tab:hover { background: #f4f6f8; }
+.ac-tab.active { color: #146c43; font-weight: 600; box-shadow: inset 0 -2px 0 #146c43; }
+
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 /* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle
    générique `#toolbar-top button::before` de css/style.css (posée pour les

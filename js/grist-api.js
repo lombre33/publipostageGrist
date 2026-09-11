@@ -535,6 +535,38 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
+  // Email de l'utilisateur courant (chip intelligent #Variable, cf.
+  // v2/js/editor.js:createSmartChipNode) - aucune méthode dédiée dans
+  // l'API Plugin Grist officielle pour ça, mais la vraie REST API expose
+  // GET /api/profile/user (profil de l'utilisateur authentifié, email
+  // compris). `info.baseUrl` (cf. getAccessTokenCached ci-dessus) est
+  // scopé au DOCUMENT (".../api/docs/{docId}") - il faut en retirer ce
+  // suffixe pour retrouver la racine "/api" où vit /profile/user, sibling
+  // de /docs, jamais en dessous. Même convention d'authentification que
+  // getAttachmentDownloadUrl (paramètre ?auth=, pas un en-tête
+  // Authorization) pour rester cohérent avec le reste de ce fichier.
+  //
+  // Incertitude assumée (non vérifiable sans instance Grist réelle, cf.
+  // restriction de test de ce projet) : rien ne garantit qu'un jeton scopé
+  // au document soit accepté par un endpoint de PROFIL utilisateur (portée
+  // d'autorisation potentiellement différente côté serveur) - d'où le
+  // try/catch englobant qui laisse l'appelant retomber sur son propre
+  // repli d'erreur (cf. js/reader-mode.js:resolveSmartChips) plutôt que de
+  // faire planter tout le rendu.
+  let _userEmailCache = null;
+  async function getCurrentUserEmail() {
+    if (_userEmailCache) return _userEmailCache;
+    const info = await getAccessTokenCached();
+    const apiRoot = info.baseUrl.replace(/\/docs\/[^/]+$/, '');
+    const res = await fetch(`${apiRoot}/profile/user?auth=${info.token}`);
+    if (!res.ok) throw new Error('GET /profile/user a échoué (' + res.status + ')');
+    const data = await res.json();
+    const email = data && (data.email || (data.user && data.user.email));
+    if (!email) throw new Error('/profile/user n’a renvoyé aucun email');
+    _userEmailCache = email;
+    return email;
+  }
+
   // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de
   // mappage de droite - cf. columns: [...] dans grist.ready() plus haut.
   function getPdfAttachmentColumnId() {
@@ -584,5 +616,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();

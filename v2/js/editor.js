@@ -197,6 +197,82 @@ const Editor = (function () {
     box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
     box.style.display = 'block';
   }
+
+  // Popup d'édition du texte d'une note de bas de page (nœud footnoteRef,
+  // cf. createFootnoteRefNode) - même famille de pattern que
+  // ensureImageVarPickerBox ci-dessus (un seul <div> réutilisé, positionné
+  // près de l'élément visé). Une seule popup active à la fois : ouvrir une
+  // note en ayant déjà une AUTRE ouverte valide d'abord le texte en attente
+  // (commitFootnotePopup), jamais deux popups simultanées.
+  let footnotePopupBox = null;
+  let footnotePopupPos = null;
+  function ensureFootnotePopupBox() {
+    if (footnotePopupBox) return footnotePopupBox;
+    footnotePopupBox = document.createElement('div');
+    footnotePopupBox.id = 'v2-footnote-popup';
+    footnotePopupBox.style.display = 'none';
+    const textarea = document.createElement('textarea');
+    textarea.rows = 3;
+    textarea.placeholder = 'Texte de la note…';
+    footnotePopupBox.appendChild(textarea);
+    const actions = document.createElement('div');
+    actions.className = 'v2-footnote-popup-actions';
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.textContent = 'OK';
+    okBtn.addEventListener('mousedown', event => { event.preventDefault(); commitFootnotePopup(); });
+    actions.appendChild(okBtn);
+    footnotePopupBox.appendChild(actions);
+    footnotePopupBox._textarea = textarea;
+    document.body.appendChild(footnotePopupBox);
+    // Cliquer ailleurs = valider (pas d'annulation séparée dans ce premier
+    // incrément - même choix de simplicité que le reste de ce fichier pour
+    // un popup d'édition ponctuelle). IMPORTANT : openFootnoteEditorAt est
+    // TOUJOURS déclenché depuis un mousedown (item "Note de bas de page" du
+    // panneau #, cf. v2/js/variables.js, ou clic sur un marqueur existant,
+    // cf. addNodeView plus bas) - SANS stopPropagation() sur ces deux
+    // déclencheurs, ce même évènement continuerait de remonter jusqu'à
+    // document APRÈS avoir affiché la popup (display déjà 'block' à ce
+    // moment), et ce listener la refermerait AUSSITÔT puisque sa cible -
+    // l'item/le marqueur cliqué - n'est jamais un descendant de
+    // footnotePopupBox (constaté en conditions réelles : la popup s'ouvrait
+    // puis se refermait dans le même geste, jamais visible). D'où
+    // stopPropagation() aux deux endroits qui appellent openFootnoteEditorAt,
+    // plutôt qu'une logique de délai/drapeau ici.
+    document.addEventListener('mousedown', event => {
+      if (footnotePopupBox.style.display !== 'none' && !footnotePopupBox.contains(event.target)) commitFootnotePopup();
+    });
+    return footnotePopupBox;
+  }
+  function commitFootnotePopup() {
+    const box = footnotePopupBox;
+    if (!box || box.style.display === 'none') return;
+    const pos = footnotePopupPos;
+    footnotePopupPos = null;
+    box.style.display = 'none';
+    if (pos == null) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (!current || current.type.name !== 'footnoteRef') return;
+    const tr = editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { text: box._textarea.value }));
+    editor.view.dispatch(tr);
+  }
+  function openFootnoteEditorAt(pos) {
+    const box = ensureFootnotePopupBox();
+    if (footnotePopupPos != null && footnotePopupPos !== pos) commitFootnotePopup();
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== 'footnoteRef') return;
+    footnotePopupPos = pos;
+    box._textarea.value = node.attrs.text || '';
+    const dom = editor.view.nodeDOM(pos);
+    const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
+    const rect = anchor.getBoundingClientRect();
+    box.style.position = 'absolute';
+    box.style.left = (rect.left + window.scrollX) + 'px';
+    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    box.style.display = 'block';
+    box._textarea.focus();
+  }
+
   // Colle une image directement depuis le presse-papiers (Ctrl+V après un
   // "Copier l'image" dans une autre appli/le navigateur) - demandé par
   // l'utilisateur en alternative à une URL externe : la restriction CORS
@@ -306,6 +382,97 @@ const Editor = (function () {
       },
       addCommands() {
         return { insertPageNumberBadge: format => ({ chain }) => chain().insertContent({ type: this.name, attrs: { format } }).run() };
+      },
+    });
+  }
+
+  // Chip intelligent — date du jour / heure actuelle / email de
+  // l'utilisateur (incrément "chips intelligents") : même schéma que
+  // VarBadge/PageNumberBadge (nœud atome en ligne, non éditable), un seul
+  // attribut `kind`. Comme PageNumberBadge, jamais de vraie valeur dans
+  // l'éditeur (résolue uniquement en mode Lecture/export, cf.
+  // js/reader-mode.js:resolveSmartChips) - seul un libellé fixe indique CE
+  // QUE ce chip représente. Vert (`.smart-chip`, cf. editor-v2.css) plutôt
+  // que bleu (`.var-badge`) : signale visuellement "valeur calculée, pas une
+  // colonne Grist" - même palette que `.page-number-badge`, qui a déjà établi
+  // ce langage visuel en en-tête/pied de page.
+  function createSmartChipNode(Node, mergeAttributes) {
+    const LABELS = { date: 'Date du jour', time: 'Heure actuelle', email: 'Email de l’utilisateur' };
+    return Node.create({
+      name: 'smartChip',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return { kind: { default: 'date', renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{ tag: 'span.smart-chip', getAttrs: el => ({ kind: el.getAttribute('data-chip-kind') || 'date' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': node.attrs.kind });
+        return ['span', attrs, LABELS[node.attrs.kind] || '?'];
+      },
+    });
+  }
+
+  // Note de bas de page — nœud atome en ligne portant le TEXTE de la note en
+  // attribut (`text`, texte brut - pas de mise en forme riche, hors de
+  // portée de ce premier incrément). `id` (généré à l'insertion, cf.
+  // v2/js/variables.js:command) n'est utile qu'en cas de sérialisation/
+  // parsing (retrouver le nœud correspondant), jamais lu ailleurs pour
+  // l'instant. Numérotation CONTINUE sur tout le document (choix confirmé) :
+  // aucun JS de comptage ici, le numéro affiché à l'écran vient uniquement
+  // du compteur CSS `footnote-ref` (cf. editor-v2.css) - un seul
+  // `counter-reset` à la racine de `.tiptap`/`.reader-content` suffit donc,
+  // même technique que la numérotation des titres.
+  function createFootnoteRefNode(Node, mergeAttributes) {
+    return Node.create({
+      name: 'footnoteRef',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          id: { default: null, renderHTML: () => ({}) },
+          text: { default: '', renderHTML: () => ({}) },
+        };
+      },
+      parseHTML() {
+        return [{ tag: 'sup.footnote-ref-marker', getAttrs: el => ({ id: el.getAttribute('data-note-id'), text: el.getAttribute('data-note-text') || '' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({
+          class: 'footnote-ref-marker', contenteditable: 'false',
+          'data-note-id': node.attrs.id, 'data-note-text': node.attrs.text,
+        });
+        // Contenu textuel vide à dessein : le chiffre visible vient
+        // uniquement de `::before { content: counter(footnote-ref) }` (cf.
+        // editor-v2.css) - jamais recalculé/dupliqué ici.
+        return ['sup', attrs];
+      },
+      // Clic pour éditer le texte de la note (cf. openFootnoteEditor plus
+      // bas) - même schéma NodeView que EditorImage (getPos() à l'ouverture
+      // du popup, jamais un `node` de closure figé au premier rendu).
+      addNodeView() {
+        return ({ getPos }) => {
+          const marker = document.createElement('sup');
+          marker.className = 'footnote-ref-marker';
+          marker.addEventListener('mousedown', event => {
+            event.preventDefault();
+            // stopPropagation évite que CE mousedown, en continuant de
+            // remonter jusqu'à document, ne soit vu par le listener
+            // "cliquer ailleurs ferme la popup" de ensureFootnotePopupBox
+            // (qui ouvrirait puis refermerait aussitôt la popup dans le même
+            // geste, cf. son commentaire).
+            event.stopPropagation();
+            const pos = getPos();
+            if (typeof pos === 'number') openFootnoteEditorAt(pos);
+          });
+          return { dom: marker };
+        };
       },
     });
   }
@@ -2030,6 +2197,16 @@ const Editor = (function () {
   function exitHeaderFooterModeIfActive() {
     if (hfMode) exitHeaderFooterMode();
   }
+  // v2/js/variables.js: onglet "Chips" du panneau # - une note de bas de
+  // page n'a pas de sens dans une zone d'en-tête/pied (répétée sur chaque
+  // page, aucun repère de page physique auquel l'ancrer), contrairement à
+  // date/heure/email (cf. js/reader-mode.js:resolveHeaderFooterZone qui les
+  // résout bien dans cette zone). Masquée à l'insertion plutôt que
+  // silencieusement ignorée à l'export, pour ne pas laisser l'utilisateur
+  // insérer une note qui ne produirait jamais aucun texte nulle part (le
+  // pipeline PDF ne parcourt que le contenu du corps principal, jamais
+  // l'en-tête/pied, pour construire content._footnoteBlocks).
+  function isEditingHeaderFooter() { return !!hfMode; }
 
   // Reflète le brouillon EN COURS (zone/variante actuellement affichée
   // comprise) sans devoir sortir du mode - les appelants réels (Save/Export)
@@ -2586,6 +2763,8 @@ const Editor = (function () {
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const PageNumberBadge = createPageNumberBadgeNode(Node, mergeAttributes);
+    const SmartChip = createSmartChipNode(Node, mergeAttributes);
+    const FootnoteRef = createFootnoteRefNode(Node, mergeAttributes);
     const FontSize = createFontSizeExtension(Extension);
     const TextColor = createTextColorExtension(Extension);
     const HighlightColor = createHighlightExtension(Extension);
@@ -2638,6 +2817,8 @@ const Editor = (function () {
         TaskListStyle,
         VarBadge,
         PageNumberBadge,
+        SmartChip,
+        FootnoteRef,
         Variables.createExtension(Extension, Suggestion),
         // Tableau : extensions officielles, colonnes redimensionnables (même
         // comportement de poignée que la V1, cf. mémoire
@@ -2977,5 +3158,6 @@ const Editor = (function () {
     init, getHTML, setHTML, getHeadingNumberingStyle,
     getHeaderFooterData, setHeaderFooterData, exitHeaderFooterModeIfActive,
     refreshPaginationPreview: renderPaginationOverlay,
+    openFootnoteEditorAt, isEditingHeaderFooter,
   };
 })();

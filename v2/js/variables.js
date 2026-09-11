@@ -14,6 +14,7 @@
 // incrément.
 const Variables = (function () {
   let acBox = null;
+  let acItemsBox = null;
   let currentItems = [];
   let selectedIndex = 0;
   // Une colonne Grist ajoutée après le chargement du widget n'apparaissait
@@ -28,13 +29,98 @@ const Variables = (function () {
   // filenameInputState ci-dessous).
   let schemaRefreshedForSession = false;
 
+  // Onglet actif du panneau `#` (éditeur uniquement - le champ "Nom de
+  // fichier PDF" n'a pas cet onglet, cf. checkForFilenameTrigger plus bas qui
+  // continue de lire directement GristAPI.getAllVariables()). Toujours
+  // 'variables' par défaut à l'ouverture (remis à cette valeur dans onExit),
+  // conformément à la demande explicite de l'utilisateur.
+  let activeTab = 'variables';
+  // 4 chips fixes, jamais issues de GristAPI - `kind:'chip'` distingue ces
+  // entrées d'une #Variable dans le `command` de createExtension ci-dessous
+  // (ni ensureLinkConfigured, ni table/column, ne s'appliquent à ces items).
+  const SMART_CHIP_ITEMS = [
+    { key: 'Note de bas de page', kind: 'chip', chipKind: 'footnote' },
+    { key: 'Date du jour', kind: 'chip', chipKind: 'date' },
+    { key: 'Heure actuelle', kind: 'chip', chipKind: 'time' },
+    { key: 'Email de l’utilisateur', kind: 'chip', chipKind: 'email' },
+  ];
+  // Dernières props reçues de @tiptap/suggestion (onStart/onUpdate) - permet
+  // de rejouer updateItems() depuis un clic sur un onglet, qui n'est PAS un
+  // évènement du plugin Suggestion et ne fournit donc pas ces props lui-même
+  // (même contrainte que latestCommand ci-dessous, qui existe déjà pour la
+  // même raison côté clavier/souris).
+  let latestProps = null;
+
   function ensureBox() {
     if (acBox) return acBox;
     acBox = document.createElement('div');
     acBox.id = 'autocomplete-box';
     acBox.style.display = 'none';
+    const tabs = document.createElement('div');
+    tabs.className = 'ac-tabs';
+    const tabVariables = document.createElement('div');
+    tabVariables.className = 'ac-tab';
+    tabVariables.textContent = 'Variables';
+    tabVariables.dataset.tab = 'variables';
+    const tabChips = document.createElement('div');
+    tabChips.className = 'ac-tab';
+    tabChips.textContent = 'Chips';
+    tabChips.dataset.tab = 'chips';
+    [tabVariables, tabChips].forEach(tab => {
+      // mousedown+preventDefault (pas click) : même précaution que .ac-item
+      // ci-dessous, évite qu'un blur du focus éditeur en cours ne perturbe
+      // quoi que ce soit avant que le changement d'onglet ne s'applique.
+      tab.addEventListener('mousedown', e => {
+        e.preventDefault();
+        if (activeTab === tab.dataset.tab) return;
+        activeTab = tab.dataset.tab;
+        if (latestProps) updateItems(Object.assign({}, latestProps, { items: computeItems(latestProps.query) }));
+      });
+    });
+    tabs.appendChild(tabVariables); tabs.appendChild(tabChips);
+    acBox.appendChild(tabs);
+    acItemsBox = document.createElement('div');
+    acItemsBox.className = 'ac-items';
+    acBox.appendChild(acItemsBox);
     document.body.appendChild(acBox);
     return acBox;
+  }
+
+  // Source des items selon l'onglet actif - GristAPI.getAllVariables()
+  // (comportement historique, inchangé) pour 'variables', la liste fixe de
+  // chips pour 'chips'. Centralisé ici pour être appelé à la fois par
+  // l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur un
+  // onglet (même filtre par texte tapé dans les deux cas).
+  function computeItems(query) {
+    const q = (query || '').toLowerCase();
+    if (activeTab === 'chips') {
+      // Note de bas de page exclue en édition d'en-tête/pied de page (cf.
+      // Editor.isEditingHeaderFooter) : cette zone est répétée sur chaque
+      // page, sans repère de page physique auquel ancrer une note - jamais
+      // découverte par le pipeline PDF (content._footnoteBlocks ne parcourt
+      // que le corps principal).
+      const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
+      return items.filter(v => v.key.toLowerCase().includes(q));
+    }
+    if (!schemaRefreshedForSession) {
+      schemaRefreshedForSession = true;
+      GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
+    }
+    const all = GristAPI.getAllVariables();
+    return all.filter(v => v.key.toLowerCase().includes(q)).slice(0, 50);
+  }
+
+  function currentTabEl(tabName) {
+    return acBox && acBox.querySelector('.ac-tab[data-tab="' + tabName + '"]');
+  }
+  // Le champ "Nom de fichier PDF" (texte brut, cf. checkForFilenameTrigger
+  // plus bas) réutilise ce même acBox mais n'a PAS l'onglet Chips (aucun
+  // nœud ProseMirror à y insérer, hors sujet de cette feature) - masqué
+  // plutôt que retiré du DOM, pour ne pas avoir à le reconstruire à chaque
+  // ouverture.
+  function setTabsVisible(visible) {
+    const tabs = ensureBox().querySelector('.ac-tabs');
+    if (tabs) tabs.style.display = visible ? '' : 'none';
   }
 
   // Un survol à la souris met aussi à jour la sélection (pas seulement les
@@ -42,15 +128,22 @@ const Variables = (function () {
   // l'éditeur V1 (feedback : le survol donnait l'impression trompeuse d'une
   // sélection sans que Entrée ne suive réellement l'item survolé).
   function render(items, onPick) {
-    const box = ensureBox();
-    box.innerHTML = '';
+    ensureBox();
+    ['variables', 'chips'].forEach(t => { const el = currentTabEl(t); if (el) el.classList.toggle('active', t === activeTab); });
+    acItemsBox.innerHTML = '';
     items.forEach((item, idx) => {
       const div = document.createElement('div');
       div.className = 'ac-item' + (idx === selectedIndex ? ' selected' : '');
       div.textContent = item.key;
       div.addEventListener('mouseenter', () => { if (selectedIndex !== idx) { selectedIndex = idx; render(items, onPick); } });
-      div.addEventListener('mousedown', (e) => { e.preventDefault(); onPick(item); });
-      box.appendChild(div);
+      // stopPropagation : évite que ce mousedown, en continuant de remonter
+      // jusqu'à document, ne soit vu par le listener "cliquer ailleurs ferme
+      // la popup" de v2/js/editor.js:ensureFootnotePopupBox quand l'item
+      // choisi est "Note de bas de page" (qui ouvre cette popup depuis CE
+      // MÊME évènement) - sans ça, la popup s'ouvrait puis se refermait
+      // aussitôt dans le même geste (constaté en conditions réelles).
+      div.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); onPick(item); });
+      acItemsBox.appendChild(div);
     });
   }
 
@@ -73,12 +166,14 @@ const Variables = (function () {
   let latestCommand = null;
 
   function updateItems(props) {
+    latestProps = props;
     currentItems = props.items || [];
     selectedIndex = 0;
     latestCommand = props.command;
+    setTabsVisible(true);
     render(currentItems, item => latestCommand(item));
     position(props.clientRect);
-    ensureBox().style.display = currentItems.length ? 'block' : 'none';
+    ensureBox().style.display = currentItems.length ? 'flex' : 'none';
   }
 
   function hide() { if (acBox) acBox.style.display = 'none'; }
@@ -100,7 +195,7 @@ const Variables = (function () {
         if (props.event.key === 'Escape') { hide(); return true; }
         return false;
       },
-      onExit() { hide(); schemaRefreshedForSession = false; },
+      onExit() { hide(); schemaRefreshedForSession = false; activeTab = 'variables'; },
     };
   }
 
@@ -122,20 +217,7 @@ const Variables = (function () {
             // window.GristAPI (un `const` classique ne s'attache jamais à
             // l'objet global, cf. mémoire projet_html_source_tab sur ce même
             // piège rencontré dans dev-tests/custom-html-export.js).
-            items: ({ query }) => {
-              // Rafraîchit le schéma UNE FOIS par session (pas à chaque
-              // frappe, cf. déclaration de schemaRefreshedForSession) - en
-              // tâche de fond, sans bloquer ce rendu : la frappe suivante de
-              // l'utilisateur (onUpdate rappelle items()) profitera du
-              // schéma à jour dès qu'il est arrivé, sans latence perçue à
-              // l'ouverture du popup.
-              if (!schemaRefreshedForSession) {
-                schemaRefreshedForSession = true;
-                GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
-              }
-              const all = GristAPI.getAllVariables();
-              return all.filter(v => v.key.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
-            },
+            items: ({ query }) => computeItems(query),
             // Async : une variable venant d'une AUTRE table que la table
             // courante peut nécessiter de configurer (ou de faire configurer
             // à l'utilisateur, via une modale) une règle de correspondance
@@ -146,6 +228,28 @@ const Variables = (function () {
             // temps, exactement comme en V1 (confirmSelection y capture aussi
             // `range` avant d'attendre la modale).
             command: ({ editor, range, props }) => {
+              // Chip (note de bas de page / date / heure / email) : jamais de
+              // colonne/table à lier, aucun besoin d'ensureLinkConfigured -
+              // insertion synchrone directe, contrairement à la branche
+              // #Variable ci-dessous. La note de bas de page ouvre en plus
+              // immédiatement son popup d'édition de texte (cf. editor.js:
+              // openFootnoteEditor), pour pouvoir taper la note tout de suite
+              // après l'avoir insérée.
+              if (props.kind === 'chip') {
+                if (props.chipKind === 'footnote') {
+                  editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id: 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), text: '' } }).run();
+                  // `Editor` (v2/js/editor.js, chargé APRÈS ce fichier - cf.
+                  // v2/index.html) n'est résolu qu'à l'EXÉCUTION de ce callback
+                  // (déclenché par une frappe utilisateur, donc bien après que
+                  // tous les scripts classiques aient fini de s'exécuter), pas
+                  // à l'analyse de ce fichier - même sens de dépendance
+                  // inversé que Editor.js appelant Variables.createExtension.
+                  Editor.openFootnoteEditorAt(range.from);
+                } else {
+                  editor.chain().focus().insertContentAt(range, { type: 'smartChip', attrs: { kind: props.chipKind } }).run();
+                }
+                return;
+              }
               (async () => {
                 const ok = await ensureLinkConfigured(props);
                 if (!ok) return;
@@ -198,9 +302,10 @@ const Variables = (function () {
     currentItems = items;
     selectedIndex = 0;
     latestCommand = item => insertFilenameVariable(item);
+    setTabsVisible(false);
     render(currentItems, latestCommand);
     position(() => el.getBoundingClientRect());
-    ensureBox().style.display = 'block';
+    ensureBox().style.display = 'flex';
   }
   // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut
   // "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ,
