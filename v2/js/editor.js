@@ -1815,7 +1815,7 @@ const Editor = (function () {
       await resp.blob();
     } catch (e) {
       console.warn('[Editor] image probablement non exportable en PDF (CORS) :', src, e);
-      window.alert('Cette image ne pourra probablement pas être incluse dans le PDF exporté : le serveur qui l\'héberge ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS). Elle continuera de s\'afficher normalement ici et en mode lecture, mais l\'export PDF devra l\'ignorer.');
+      window.alert('Cette image ne pourra probablement pas être incluse dans le PDF exporté : le serveur qui l\'héberge ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS). Elle continuera de s\'afficher normalement ici et en mode lecture, mais l\'export PDF devra l\'ignorer.\n\nPour éviter ce problème, copiez l\'image (Ctrl+C depuis son emplacement d\'origine) puis collez-la directement ici (Ctrl+V) plutôt que d\'insérer son URL : une image collée n\'est jamais concernée par cette restriction.');
     }
   }
 

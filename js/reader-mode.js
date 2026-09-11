@@ -161,12 +161,11 @@ const ReaderMode = (function () {
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
-      const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format); return { badge, value, error: null }; }
-      catch (e) { return { badge, value: '[ERREUR: ' + e.message + ']', error: e }; }
+      const { node, isError } = await resolveBadgeNode(badge, tableId, record, format);
+      return { badge, node, isError };
     }));
-    for (const r of results) { const span = document.createElement('span'); span.textContent = r.value; span.className = 'resolved-var' + (r.error ? ' error-msg' : ''); if (r.error) hasError = true; r.badge.replaceWith(span); }
+    for (const r of results) { if (r.isError) hasError = true; r.badge.replaceWith(r.node); }
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Variables déjà résolues (texte des titres définitif) : peut construire
     // le sommaire maintenant, avant le swap DOM final ci-dessous.
@@ -239,9 +238,72 @@ const ReaderMode = (function () {
       return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
+  // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
+  // (comportement historique) OU une ou plusieurs <img> si la colonne
+  // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds,
+  // v2/js/variables.js) : une colonne PJ contenant une image (logo
+  // partenaire, etc.) affichait jusqu'ici la valeur de cellule brute passée
+  // telle quelle dans formatValue (un texte du genre "L, 5", jamais l'image)
+  // aussi bien en aperçu qu'à l'export PDF - signalé par l'utilisateur.
+  // `Variables.resolveAttachmentIds` n'existe que côté V2 (v2/js/variables.js) :
+  // ce fichier est partagé avec la V1 (js/variables.js, non modifié), d'où
+  // la vérification `typeof ... === 'function'` avant d'emprunter ce chemin -
+  // la V1 retombe sur le comportement texte historique, inchangé. Les <img>
+  // produites réutilisent exactement les classes/attributs déjà lus par
+  // GristAPI.hydrateAttachmentImages (img.editor-image[data-source="attachment"]
+  // [data-attachment-id]), déjà appelé juste après par preview()/render() -
+  // aucun nouveau code de résolution d'URL de pièce jointe à écrire ici.
+  async function resolveBadgeNode(badge, tableId, record, format) {
+    const table = badge.getAttribute('data-table');
+    const column = badge.getAttribute('data-column');
+    const isAttachments = typeof Variables.resolveAttachmentIds === 'function'
+      && GristAPI.getColumnType(table, column) === 'Attachments';
+    if (isAttachments) {
+      let ids = [];
+      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
+      catch (e) { return { node: document.createTextNode(''), isError: true }; }
+      if (!ids.length) return { node: document.createTextNode(''), isError: false };
+      const frag = document.createDocumentFragment();
+      ids.forEach(id => {
+        const img = document.createElement('img');
+        img.className = 'editor-image';
+        img.dataset.source = 'attachment';
+        img.dataset.attachmentId = String(id);
+        // Largeur par défaut explicite (même valeur que l'insertion d'image
+        // "normale", cf. v2/js/editor.js:insertImageAtDefaultSize) : cette
+        // image n'a jamais été redimensionnée dans l'éditeur (elle n'existe
+        // qu'au moment de la résolution, jamais comme un vrai noeud éditable)
+        // donc aucun style de largeur ne lui est attaché. La classe
+        // .editor-image porte déjà `max-width:100%` de façon générique
+        // (css/style.css, non scopée à .tiptap) - jamais de débordement -
+        // mais sans cette valeur explicite, une vraie photo haute résolution
+        // s'afficherait quand même à sa pleine largeur intrinsèque (jusqu'à
+        // 100% du conteneur), plus grande qu'un logo n'a probablement besoin
+        // de l'être. pdfImageFromNode (cf. pdf-export.js) a déjà son propre
+        // repli à 320 si `style.width` est absent - le poser explicitement
+        // ici couvre aussi le rendu écran (mode Lecture) avec la même valeur.
+        img.style.width = '320px';
+        frag.appendChild(img);
+      });
+      return { node: frag, isError: false };
+    }
+    try {
+      const value = await Variables.resolveVariable(table, column, tableId, record, format);
+      const isError = typeof value === 'string' && value.indexOf('[ERREUR') === 0;
+      const span = document.createElement('span'); span.textContent = value; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
+      return { node: span, isError };
+    } catch (e) {
+      const span = document.createElement('span'); span.textContent = '[ERREUR: ' + e.message + ']'; span.className = 'resolved-var error-msg';
+      return { node: span, isError: true };
+    }
+  }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');
-    await Promise.all(Array.from(badges).map(async badge => { const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column'); const format = parseBadgeFormat(badge); try { const value = await Variables.resolveVariable(table, column, tableId || lastCurrentTableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {} }));
+    await Promise.all(Array.from(badges).map(async badge => {
+      const format = parseBadgeFormat(badge);
+      const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format);
+      badge.replaceWith(node);
+    }));
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }

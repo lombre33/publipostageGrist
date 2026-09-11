@@ -282,42 +282,89 @@ const Variables = (function () {
   }
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
-  async function resolveWithRule(varTable, varColumn, rule, record, format) {
+
+  // Trouve la LIGNE/valeur brute référencée par une #Variable (même table,
+  // table liée via règle singleton/correspondance, ou colonne Référence),
+  // AVANT tout formatage en texte - extrait de resolveVariable ci-dessous
+  // pour être réutilisable par resolveAttachmentIds (une colonne Attachments
+  // ne doit jamais passer par formatValue/String(val), cf. plus bas) sans
+  // dupliquer cette logique de recherche de ligne. Retourne soit
+  // { value } (valeur brute de cellule Grist, peut être null/undefined),
+  // soit { error } (message déjà formaté "[ERREUR: ...]", comportement
+  // inchangé pour resolveVariable qui le renvoie tel quel).
+  async function resolveRawValueWithRule(varTable, varColumn, rule, record) {
     if (rule.mode === 'singleton') {
       const rows = await GristAPI.fetchTableRows(varTable);
-      if (!rows.length) return '';
+      if (!rows.length) return { value: null };
       const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-      return formatValue(first[varColumn], format, varTable, varColumn);
+      return { value: first[varColumn] };
     }
     const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
-    if (sourceVal === undefined || sourceVal === null) return '';
+    if (sourceVal === undefined || sourceVal === null) return { value: null };
     const rows = await GristAPI.fetchTableRows(varTable);
     const matches = rows.filter(r => {
       const cibleVal = rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]);
       return sameValue(cibleVal, sourceVal);
     });
-    if (!matches.length) return '';
-    return formatValue(matches.map(r => r[varColumn]), format, varTable, varColumn);
+    if (!matches.length) return { value: null };
+    return { value: matches.map(r => r[varColumn]) };
+  }
+  async function resolveRawValue(varTable, varColumn, currentTableId, record) {
+    const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
+    if (!record) return { value: null };
+    if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
+    if (varTable === resolvedTableId) return { value: record[varColumn] };
+    const rule = GristAPI.getLinkRule(varTable);
+    if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record);
+    const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
+    if (refCols.length === 0) return { error: `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]` };
+    const refId = record[refCols[0]];
+    if (!refId) return { value: null };
+    const rowId = unwrapRefValue(refId);
+    const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
+    if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
+    return { value: linkedRow[varColumn] };
   }
   async function resolveVariable(varTable, varColumn, currentTableId, record, format) {
-    const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     try {
-      if (!record) return '';
-      if (!resolvedTableId) return '[ERREUR: table courante indisponible]';
-      if (varTable === resolvedTableId) return formatValue(record[varColumn], format, varTable, varColumn);
-      const rule = GristAPI.getLinkRule(varTable);
-      if (rule) return await resolveWithRule(varTable, varColumn, rule, record, format);
-      const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
-      if (refCols.length === 0) return `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]`;
-      const refId = record[refCols[0]];
-      if (!refId) return '';
-      const rowId = unwrapRefValue(refId);
-      const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
-      if (!linkedRow) return `[ERREUR: ligne introuvable dans ${varTable}]`;
-      return formatValue(linkedRow[varColumn], format, varTable, varColumn);
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record);
+      if (error) return error;
+      return formatValue(value, format, varTable, varColumn);
     } catch (e) {
       console.error('[variables] échec résolution', e);
       return `[ERREUR: résolution de ${varTable}.${varColumn} impossible]`;
+    }
+  }
+
+  // Extrait les identifiants de pièce jointe d'une colonne Attachments
+  // référencée par #Variable (cas d'usage : logo partenaire, image stockée
+  // en PJ sur une autre ligne/table) - AUPARAVANT, une telle variable passait
+  // par resolveVariable/formatValue comme n'importe quelle colonne, qui ne
+  // sait que transformer une valeur en TEXTE (`Array.isArray(val) ?
+  // val.join(', ') : String(val)`) : la valeur brute d'une cellule
+  // Attachments est une liste encodée façon Grist (['L', id1, id2, ...]),
+  // donc au mieux transformée en texte du genre "L, 5" - jamais une image,
+  // ni dans l'aperçu ni dans le PDF - signalé par l'utilisateur. Réutilise
+  // resolveRawValue (même recherche de ligne que le texte : même table,
+  // règle singleton/correspondance, colonne Référence) plutôt que
+  // formatValue, puis aplatit récursivement le résultat pour n'en garder que
+  // les nombres (les ids) - le marqueur 'L' et toute imbrication (le cas
+  // "correspondance" avec plusieurs lignes trouvées renvoie un TABLEAU de
+  // valeurs de cellule, chacune elle-même une liste encodée) disparaissent
+  // naturellement, sans code dédié à chaque forme.
+  function flattenToNumbers(value) {
+    if (value == null) return [];
+    if (Array.isArray(value)) return value.flatMap(flattenToNumbers);
+    return typeof value === 'number' ? [value] : [];
+  }
+  async function resolveAttachmentIds(varTable, varColumn, currentTableId, record) {
+    try {
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record);
+      if (error) return [];
+      return flattenToNumbers(value);
+    } catch (e) {
+      console.error('[variables] échec résolution pièce jointe', e);
+      return [];
     }
   }
 
@@ -562,5 +609,5 @@ const Variables = (function () {
     });
   }
 
-  return { createExtension, resolveVariable, refreshLinkRulesPanel, initFilenameInput };
+  return { createExtension, resolveVariable, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput };
 })();
