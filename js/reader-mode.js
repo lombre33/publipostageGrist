@@ -159,6 +159,13 @@ const ReaderMode = (function () {
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = htmlContent;
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
+    // Rafraîchit le schéma (types de colonnes) UNE FOIS avant de résoudre les
+    // badges de cette passe - resolveBadgeNode a besoin de GristAPI.getColumnType
+    // à jour pour détecter une colonne Attachments ; une colonne ajoutée après
+    // le chargement initial du widget resterait sinon vue comme "type inconnu"
+    // (repli sur le texte, jamais l'image) tant qu'aucun autre déclencheur
+    // (ex. ouverture du # d'autocomplétion) ne l'aurait rafraîchi entre-temps.
+    await GristAPI.refreshSchema().catch(() => {});
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
@@ -299,6 +306,9 @@ const ReaderMode = (function () {
   }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');
+    // Cf. commentaire équivalent dans render() : schéma à jour nécessaire
+    // pour que resolveBadgeNode détecte correctement une colonne Attachments.
+    await GristAPI.refreshSchema().catch(() => {});
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
       const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format);

@@ -309,11 +309,32 @@ const Variables = (function () {
     if (!matches.length) return { value: null };
     return { value: matches.map(r => r[varColumn]) };
   }
-  async function resolveRawValue(varTable, varColumn, currentTableId, record) {
+  async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     if (!record) return { value: null };
     if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
-    if (varTable === resolvedTableId) return { value: record[varColumn] };
+    if (varTable === resolvedTableId) {
+      // Cas "même table" : les 3 AUTRES branches ci-dessous (table liée/
+      // colonne Référence) lisent toutes via GristAPI.fetchTableRows/
+      // fetchRowById - une lecture brute docApi, dont l'encodage d'une
+      // colonne liste (Attachments/RefList, ex. ['L', id1, id2]) est connu
+      // et déjà exploité par unwrapRefValue ailleurs dans ce fichier. `record`
+      // ici vient en revanche de grist.onRecord (l'API "widget", pas docApi) -
+      // dont l'encodage exact d'une colonne liste n'est pas garanti identique
+      // (jamais vérifié en conditions réelles pour Attachments spécifiquement,
+      // seulement pour du texte/nombre simple). resolveAttachmentIds passe
+      // donc `opts.forceRawFetch` pour repasser par fetchRowById (même lecture
+      // garantie que les 3 autres branches) plutôt que de faire confiance à
+      // `record` tel quel - sans incidence sur resolveVariable (texte simple),
+      // qui n'active jamais cette option et garde son comportement d'origine.
+      if (opts && opts.forceRawFetch && record.id != null) {
+        try {
+          const row = await GristAPI.fetchRowById(varTable, record.id);
+          if (row) return { value: row[varColumn] };
+        } catch (e) { /* repli sur record[varColumn] ci-dessous */ }
+      }
+      return { value: record[varColumn] };
+    }
     const rule = GristAPI.getLinkRule(varTable);
     if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record);
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
@@ -355,11 +376,17 @@ const Variables = (function () {
   function flattenToNumbers(value) {
     if (value == null) return [];
     if (Array.isArray(value)) return value.flatMap(flattenToNumbers);
-    return typeof value === 'number' ? [value] : [];
+    if (typeof value === 'number') return [value];
+    // Filet de sécurité : au cas où une forme différente de l'encodage liste
+    // brut (ex. objet métadonnée {id, fileName, ...}) apparaisse un jour côté
+    // lecture - jamais rencontré en conditions réelles pour l'instant, mais
+    // sans coût pour les formes déjà gérées ci-dessus.
+    if (value && typeof value === 'object' && typeof value.id === 'number') return [value.id];
+    return [];
   }
   async function resolveAttachmentIds(varTable, varColumn, currentTableId, record) {
     try {
-      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record);
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, { forceRawFetch: true });
       if (error) return [];
       return flattenToNumbers(value);
     } catch (e) {
