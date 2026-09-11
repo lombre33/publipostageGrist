@@ -136,13 +136,7 @@ const Variables = (function () {
       div.className = 'ac-item' + (idx === selectedIndex ? ' selected' : '');
       div.textContent = item.key;
       div.addEventListener('mouseenter', () => { if (selectedIndex !== idx) { selectedIndex = idx; render(items, onPick); } });
-      // stopPropagation : évite que ce mousedown, en continuant de remonter
-      // jusqu'à document, ne soit vu par le listener "cliquer ailleurs ferme
-      // la popup" de v2/js/editor.js:ensureFootnotePopupBox quand l'item
-      // choisi est "Note de bas de page" (qui ouvre cette popup depuis CE
-      // MÊME évènement) - sans ça, la popup s'ouvrait puis se refermait
-      // aussitôt dans le même geste (constaté en conditions réelles).
-      div.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); onPick(item); });
+      div.addEventListener('mousedown', (e) => { e.preventDefault(); onPick(item); });
       acItemsBox.appendChild(div);
     });
   }

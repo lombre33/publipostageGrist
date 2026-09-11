@@ -622,8 +622,11 @@
    même gabarit que #v2-image-var-picker (bordure/ombre légère, cf. plus bas). */
 #v2-footnote-popup { position: absolute; z-index: 1000; background: #fff; border: 1px solid #b8e6cc; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 6px; width: 240px; }
 #v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .92em; resize: vertical; }
-#v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+#v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: space-between; margin-top: 4px; }
 #v2-footnote-popup .v2-footnote-popup-actions button { font-size: .85em; padding: 2px 10px; }
+/* Même rouge que .var-badge-broken (css/style.css) - langage "action destructive"
+   déjà établi dans ce projet, réutilisé ici plutôt qu'inventé. */
+#v2-footnote-popup .v2-footnote-popup-delete { color: #a4231c; border-color: #f0b3b3; }
 
 /* Onglets du panneau `#` (v2/js/variables.js:ensureBox) - Variables (par
    défaut) / Chips. #autocomplete-box lui-même reste défini dans

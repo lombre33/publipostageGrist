@@ -7,8 +7,17 @@ const GristAPI = (function () {
   // exclues de _tables/getAllVariables/tout sélecteur de table présenté à
   // l'utilisateur (sans quoi elles polluaient la liste d'autocomplétion #
   // et les sélecteurs de table cible du panneau de liaison).
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
+  // Table interne pour GristAPI.getCurrentUserEmail() ci-dessous (chip
+  // intelligent "Email de l'utilisateur") - une seule colonne à FORMULE
+  // DÉCLENCHÉE (pas une formule normale, toujours recalculée pour tout le
+  // monde pareil - une formule déclenchée capture QUI a réellement déclenché
+  // le calcul, ex. `user.Email`, l'identité de la vraie session Grist qui a
+  // fait l'action). Table vidée après chaque lecture (cf. getCurrentUserEmail),
+  // jamais montrée à l'utilisateur (exclue ci-dessus comme les autres tables
+  // internes de ce fichier).
+  const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
   let _tables = [];
   let _columnsByTable = {};
   let _columnTypesByTable = {};
@@ -536,35 +545,62 @@ const GristAPI = (function () {
   }
 
   // Email de l'utilisateur courant (chip intelligent #Variable, cf.
-  // v2/js/editor.js:createSmartChipNode) - aucune méthode dédiée dans
-  // l'API Plugin Grist officielle pour ça, mais la vraie REST API expose
-  // GET /api/profile/user (profil de l'utilisateur authentifié, email
-  // compris). `info.baseUrl` (cf. getAccessTokenCached ci-dessus) est
-  // scopé au DOCUMENT (".../api/docs/{docId}") - il faut en retirer ce
-  // suffixe pour retrouver la racine "/api" où vit /profile/user, sibling
-  // de /docs, jamais en dessous. Même convention d'authentification que
-  // getAttachmentDownloadUrl (paramètre ?auth=, pas un en-tête
-  // Authorization) pour rester cohérent avec le reste de ce fichier.
+  // v2/js/editor.js:createSmartChipNode).
   //
-  // Incertitude assumée (non vérifiable sans instance Grist réelle, cf.
-  // restriction de test de ce projet) : rien ne garantit qu'un jeton scopé
-  // au document soit accepté par un endpoint de PROFIL utilisateur (portée
-  // d'autorisation potentiellement différente côté serveur) - d'où le
-  // try/catch englobant qui laisse l'appelant retomber sur son propre
-  // repli d'erreur (cf. js/reader-mode.js:resolveSmartChips) plutôt que de
-  // faire planter tout le rendu.
+  // PREMIÈRE VERSION (abandonnée) : GET /api/profile/user via le jeton de
+  // getAccessTokenCached() - signalé cassé par l'utilisateur, renvoyait
+  // systématiquement "anon@getgrist.com" au lieu du vrai email. Confirmé par
+  // recherche (communauté Grist officielle) : ce jeton d'accès "hors-bande"
+  // représente une identité scopée au DOCUMENT, PAS la vraie session
+  // navigateur de l'utilisateur - /profile/user y répond donc pour un
+  // utilisateur anonyme/générique, jamais la bonne personne.
+  //
+  // VRAIE TECHNIQUE (celle que la communauté Grist utilise réellement pour
+  // ce besoin, aucune méthode dédiée n'existe dans l'API Plugin officielle) :
+  // une FORMULE DÉCLENCHÉE (trigger formula, PAS une formule normale - une
+  // formule normale est recalculée pour TOUT LE MONDE pareil, elle ne peut
+  // structurellement pas capturer "qui regarde CE viewer précis") sur une
+  // colonne, réglée sur `user.Email` - Grist attribue alors CETTE valeur à
+  // QUI A RÉELLEMENT DÉCLENCHÉ le calcul (ici : la création d'une ligne via
+  // grist.docApi.applyUserActions, qui passe par le pont RPC du plugin -
+  // donc bien la VRAIE session navigateur de l'utilisateur, contrairement au
+  // jeton REST hors-bande ci-dessus). Table interne dédiée
+  // (USER_PROBE_TABLE_NAME, créée au premier besoin comme LINKS_TABLE_NAME) :
+  // une ligne y est ajoutée (déclenche le calcul), relue pour récupérer
+  // l'email résolu, puis retirée aussitôt - cette table reste donc vide en
+  // régime permanent, aucune trace laissée.
+  async function ensureUserProbeTable() {
+    const tables = await grist.docApi.listTables();
+    if (tables.includes(USER_PROBE_TABLE_NAME)) return;
+    await grist.docApi.applyUserActions([
+      ['AddTable', USER_PROBE_TABLE_NAME, [
+        // recalcWhen:0 = RecalcWhen.DEFAULT ("calculer sur les nouvelles
+        // lignes, ou quand un champ de recalcDeps change") - recalcDeps:null
+        // car aucune dépendance à un autre champ n'est nécessaire ici, seule
+        // la création de ligne doit déclencher le calcul.
+        { id: 'Email', type: 'Text', isFormula: false, formula: 'user.Email', recalcWhen: 0, recalcDeps: null },
+      ]],
+    ]);
+  }
   let _userEmailCache = null;
   async function getCurrentUserEmail() {
     if (_userEmailCache) return _userEmailCache;
-    const info = await getAccessTokenCached();
-    const apiRoot = info.baseUrl.replace(/\/docs\/[^/]+$/, '');
-    const res = await fetch(`${apiRoot}/profile/user?auth=${info.token}`);
-    if (!res.ok) throw new Error('GET /profile/user a échoué (' + res.status + ')');
-    const data = await res.json();
-    const email = data && (data.email || (data.user && data.user.email));
-    if (!email) throw new Error('/profile/user n’a renvoyé aucun email');
-    _userEmailCache = email;
-    return email;
+    await ensureUserProbeTable();
+    const addResult = await grist.docApi.applyUserActions([['AddRecord', USER_PROBE_TABLE_NAME, null, {}]]);
+    const rowId = addResult && addResult.retValues && addResult.retValues[0];
+    if (rowId == null) throw new Error('AddRecord sur ' + USER_PROBE_TABLE_NAME + ' n’a renvoyé aucun id de ligne');
+    try {
+      const row = await fetchRowById(USER_PROBE_TABLE_NAME, rowId);
+      const email = row && row.Email;
+      if (!email) throw new Error('la formule déclenchée user.Email n’a renvoyé aucune valeur');
+      _userEmailCache = email;
+      return email;
+    } finally {
+      // Nettoyage best-effort - une ligne orpheline ici n'est pas grave (la
+      // table reste de toute façon interne/invisible), mais mieux vaut ne
+      // rien laisser trainer à chaque appel.
+      grist.docApi.applyUserActions([['RemoveRecord', USER_PROBE_TABLE_NAME, rowId]]).catch(() => {});
+    }
   }
 
   // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de

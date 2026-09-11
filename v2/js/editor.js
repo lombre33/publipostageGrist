@@ -206,6 +206,12 @@ const Editor = (function () {
   // (commitFootnotePopup), jamais deux popups simultanées.
   let footnotePopupBox = null;
   let footnotePopupPos = null;
+  // Consommé une seule fois par ouverture (cf. openFootnoteEditorAt) - voir
+  // son commentaire pour pourquoi ce drapeau existe plutôt qu'un
+  // stopPropagation() sur les déclencheurs (1ère version de cette popup,
+  // qui cassait la sélection ProseMirror normale du marqueur, cf. bug
+  // "la suppression ne marche pas" signalé par l'utilisateur).
+  let suppressNextFootnoteOutsideCheck = false;
   function ensureFootnotePopupBox() {
     if (footnotePopupBox) return footnotePopupBox;
     footnotePopupBox = document.createElement('div');
@@ -217,6 +223,20 @@ const Editor = (function () {
     footnotePopupBox.appendChild(textarea);
     const actions = document.createElement('div');
     actions.className = 'v2-footnote-popup-actions';
+    // Bouton "Supprimer" explicite - ne pas compter SEULEMENT sur
+    // sélection+Suppr/Retour arrière au clavier après un clic sur le
+    // marqueur : un utilisateur peut légitimement rater cette mécanique
+    // (sélectionner un nœud atome puis le supprimer est parfois 2 frappes
+    // successives selon le raccourci, cf. comportement ProseMirror par
+    // défaut), et c'est justement de là que venait le rapport de bug "la
+    // note ne disparaît pas vraiment". Un vrai bouton dédié retire le nœud
+    // de façon garantie, sans dépendre d'aucune mécanique de sélection.
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'v2-footnote-popup-delete';
+    delBtn.textContent = 'Supprimer';
+    delBtn.addEventListener('mousedown', event => { event.preventDefault(); deleteFootnotePopupNode(); });
+    actions.appendChild(delBtn);
     const okBtn = document.createElement('button');
     okBtn.type = 'button';
     okBtn.textContent = 'OK';
@@ -227,19 +247,14 @@ const Editor = (function () {
     document.body.appendChild(footnotePopupBox);
     // Cliquer ailleurs = valider (pas d'annulation séparée dans ce premier
     // incrément - même choix de simplicité que le reste de ce fichier pour
-    // un popup d'édition ponctuelle). IMPORTANT : openFootnoteEditorAt est
-    // TOUJOURS déclenché depuis un mousedown (item "Note de bas de page" du
-    // panneau #, cf. v2/js/variables.js, ou clic sur un marqueur existant,
-    // cf. addNodeView plus bas) - SANS stopPropagation() sur ces deux
-    // déclencheurs, ce même évènement continuerait de remonter jusqu'à
-    // document APRÈS avoir affiché la popup (display déjà 'block' à ce
-    // moment), et ce listener la refermerait AUSSITÔT puisque sa cible -
-    // l'item/le marqueur cliqué - n'est jamais un descendant de
-    // footnotePopupBox (constaté en conditions réelles : la popup s'ouvrait
-    // puis se refermait dans le même geste, jamais visible). D'où
-    // stopPropagation() aux deux endroits qui appellent openFootnoteEditorAt,
-    // plutôt qu'une logique de délai/drapeau ici.
+    // un popup d'édition ponctuelle). `suppressNextFootnoteOutsideCheck`
+    // (posé par openFootnoteEditorAt, jamais un stopPropagation() sur le
+    // déclencheur lui-même) évite que CE MÊME mousedown déclencheur
+    // (item Chips, ou clic sur un marqueur existant), en continuant de
+    // remonter jusqu'à document après affichage de la popup, ne soit vu
+    // ici comme "un clic extérieur" et ne la referme aussitôt.
     document.addEventListener('mousedown', event => {
+      if (suppressNextFootnoteOutsideCheck) return;
       if (footnotePopupBox.style.display !== 'none' && !footnotePopupBox.contains(event.target)) commitFootnotePopup();
     });
     return footnotePopupBox;
@@ -256,6 +271,20 @@ const Editor = (function () {
     const tr = editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { text: box._textarea.value }));
     editor.view.dispatch(tr);
   }
+  // Retire le nœud footnoteRef lui-même (pas seulement son texte) - lu via
+  // getPos()-équivalent au moment du clic (footnotePopupPos), jamais une
+  // position mise en cache d'avant : le document a pu changer entre
+  // l'ouverture et ce clic (texte tapé ailleurs, etc.).
+  function deleteFootnotePopupNode() {
+    const box = footnotePopupBox;
+    const pos = footnotePopupPos;
+    footnotePopupPos = null;
+    if (box) box.style.display = 'none';
+    if (pos == null) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (!current || current.type.name !== 'footnoteRef') return;
+    editor.view.dispatch(editor.state.tr.delete(pos, pos + current.nodeSize));
+  }
   function openFootnoteEditorAt(pos) {
     const box = ensureFootnotePopupBox();
     if (footnotePopupPos != null && footnotePopupPos !== pos) commitFootnotePopup();
@@ -269,6 +298,13 @@ const Editor = (function () {
     box.style.position = 'absolute';
     box.style.left = (rect.left + window.scrollX) + 'px';
     box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    // cf. déclaration de suppressNextFootnoteOutsideCheck : posé
+    // SYNCHRONEMENT ici, donc AVANT que le mousedown en cours (qui a mené à
+    // cet appel) n'atteigne le listener document ci-dessus, et relevé au
+    // micro-tick suivant - un clic réellement extérieur ultérieur reste
+    // détecté normalement.
+    suppressNextFootnoteOutsideCheck = true;
+    Promise.resolve().then(() => { suppressNextFootnoteOutsideCheck = false; });
     box.style.display = 'block';
     box._textarea.focus();
   }
@@ -462,12 +498,18 @@ const Editor = (function () {
           marker.className = 'footnote-ref-marker';
           marker.addEventListener('mousedown', event => {
             event.preventDefault();
-            // stopPropagation évite que CE mousedown, en continuant de
-            // remonter jusqu'à document, ne soit vu par le listener
-            // "cliquer ailleurs ferme la popup" de ensureFootnotePopupBox
-            // (qui ouvrirait puis refermerait aussitôt la popup dans le même
-            // geste, cf. son commentaire).
-            event.stopPropagation();
+            // PAS de stopPropagation() ici (contrairement à une 1ère version) :
+            // ça empêcherait aussi ProseMirror lui-même de voir ce mousedown
+            // et de sélectionner normalement ce nœud (son propre gestionnaire
+            // de clic-pour-sélectionner est posé sur la racine .tiptap, un
+            // ANCÊTRE de ce marqueur - stopPropagation l'aurait empêché de
+            // recevoir l'évènement), cassant la sélection au clic donc la
+            // suppression au clavier (Suppr/Retour arrière) après un clic sur
+            // le marqueur - exactement le bug "la note ne disparaît pas
+            // vraiment" signalé par l'utilisateur. openFootnoteEditorAt gère
+            // déjà la même contrainte "ne pas refermer la popup qu'on vient
+            // d'ouvrir" via un drapeau (suppressNextFootnoteOutsideCheck),
+            // sans bloquer la propagation.
             const pos = getPos();
             if (typeof pos === 'number') openFootnoteEditorAt(pos);
           });
