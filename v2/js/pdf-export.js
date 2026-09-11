@@ -2232,6 +2232,16 @@ const PdfExport = (function () {
       // htmlToPdfContent - découvert en ajoutant la prise en charge des
       // images dans l'en-tête/pied (jusqu'ici seul le texte y était permis).
       if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return { content: null, heightPt: 0 };
+      // Une image d'en-tête/pied dont le `src` est une URL externe (upload
+      // Grist, image distante...), PAS déjà une data URI, n'apparaissait
+      // JAMAIS dans le PDF (aucune erreur, silencieux) : inlineRuns()
+      // n'embarque un <img> que si son `src` commence par "data:" - le corps
+      // du document passe déjà par inlineEditorImagesAsDataUri avant
+      // resolveNativePdfContent (cf. buildNativePdfDocDefinition), mais ce
+      // même traitement n'était jamais appliqué au HTML de l'en-tête/pied,
+      // resté tel quel depuis resolveHeaderFooterVariables. Signalé cassé
+      // par l'utilisateur avec une vraie image Wikimedia dans l'en-tête.
+      html = await inlineEditorImagesAsDataUri(html);
       const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
       // Filet de sécurité : une image en calque (devant/derrière le texte)
       // n'a PAS de résolution de position dans un en-tête/pied (pas de passe

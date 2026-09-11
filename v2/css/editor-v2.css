@@ -221,6 +221,35 @@
 .tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; }
 .tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
+/* Un paragraphe qui ne contient qu'une image CENTRÉE (jamais de texte à
+   côté - "centre reste bloc centré SANS habillage", cf. plus haut) se
+   retrouvait quand même ~20px plus haut que l'image elle-même, signalé
+   "agrandit significativement la hauteur du header" par l'utilisateur.
+   Cause isolée par mesure directe (pas une supposition) : une fois l'image
+   passée en display:block, le paragraphe réserve encore une ligne complète
+   à la propre taille de police/interligne du PARAGRAPHE (~19.88px ici) -
+   un "strut" CSS classique pour un contexte en ligne resté implicitement
+   présent, MÊME quand ce contexte ne contient plus rien de visible.
+   Écarté en premier lieu : les nœuds internes de ProseMirror
+   (<img class="ProseMirror-separator">/<br class="ProseMirror-trailingBreak">,
+   posés juste après CE nœud atome pour garder une position de curseur
+   valide après un bloc - même famille que .tableWrapper, cf. mémoire
+   project_v2_tiptap_migration) - les déplacer hors du flux (position:
+   absolute) ou même les retirer entièrement du DOM n'a PAS changé la
+   hauteur mesurée (vérifié précisément, à deux reprises) : ProseMirror
+   les gère lui-même et neutralise ces essais, mais même quand la mesure
+   semblait indiquer un effet, un test définitif (les repousser à
+   top:9999px, bien loin) a confirmé qu'ils n'étaient PAS la cause réelle.
+   Le vrai correctif : `line-height:0` directement sur CE paragraphe précis
+   (`:has()`, Chrome uniquement mais déjà la cible de ce projet) - supprime
+   le "strut" sans toucher à la hauteur propre de l'image (qui ne dépend
+   jamais de l'interligne hérité pour sa propre boîte). Restreint aux
+   paragraphes ne contenant QUE ce type de bloc (centre, ou "bloc" sans
+   habillage réel) : gauche/droite restent de vrais flottants avec
+   habillage de texte réel à côté, où l'interligne du texte voisin doit
+   rester intact - non concernés ici. */
+.tiptap p:has(> .editor-image-view[data-align="center"]),
+.tiptap p:has(> .editor-image-view[data-wrap="block"]:not([data-align])) { line-height: 0; }
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
