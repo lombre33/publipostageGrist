@@ -206,12 +206,17 @@ const Editor = (function () {
   // (commitFootnotePopup), jamais deux popups simultanées.
   let footnotePopupBox = null;
   let footnotePopupPos = null;
-  // Consommé une seule fois par ouverture (cf. openFootnoteEditorAt) - voir
-  // son commentaire pour pourquoi ce drapeau existe plutôt qu'un
-  // stopPropagation() sur les déclencheurs (1ère version de cette popup,
-  // qui cassait la sélection ProseMirror normale du marqueur, cf. bug
-  // "la suppression ne marche pas" signalé par l'utilisateur).
-  let suppressNextFootnoteOutsideCheck = false;
+  // PAS de fermeture "au clic ailleurs" (contrairement à ensureImageVarPickerBox
+  // ci-dessus) - 3 régressions successives sont venues de là (stopPropagation
+  // cassant la sélection ProseMirror du marqueur ; le drapeau de suppression
+  // qui a remplacé stopPropagation, toujours sujet à un cas d'insertion
+  // encore signalé cassé sans jamais avoir pu être reproduit ni expliqué
+  // localement). La popup ne se ferme donc plus que par une action EXPLICITE :
+  // bouton OK, bouton Supprimer, Échap dans le textarea, ou l'ouverture d'une
+  // AUTRE note (valide alors la première au passage, cf. openFootnoteEditorAt) -
+  // plus robuste qu'un mécanisme de détection de clic extérieur, au prix
+  // (accepté) de devoir cliquer explicitement OK plutôt que n'importe où
+  // ailleurs.
   function ensureFootnotePopupBox() {
     if (footnotePopupBox) return footnotePopupBox;
     footnotePopupBox = document.createElement('div');
@@ -220,6 +225,9 @@ const Editor = (function () {
     const textarea = document.createElement('textarea');
     textarea.rows = 3;
     textarea.placeholder = 'Texte de la note…';
+    textarea.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); commitFootnotePopup(); }
+    });
     footnotePopupBox.appendChild(textarea);
     const actions = document.createElement('div');
     actions.className = 'v2-footnote-popup-actions';
@@ -245,18 +253,6 @@ const Editor = (function () {
     footnotePopupBox.appendChild(actions);
     footnotePopupBox._textarea = textarea;
     document.body.appendChild(footnotePopupBox);
-    // Cliquer ailleurs = valider (pas d'annulation séparée dans ce premier
-    // incrément - même choix de simplicité que le reste de ce fichier pour
-    // un popup d'édition ponctuelle). `suppressNextFootnoteOutsideCheck`
-    // (posé par openFootnoteEditorAt, jamais un stopPropagation() sur le
-    // déclencheur lui-même) évite que CE MÊME mousedown déclencheur
-    // (item Chips, ou clic sur un marqueur existant), en continuant de
-    // remonter jusqu'à document après affichage de la popup, ne soit vu
-    // ici comme "un clic extérieur" et ne la referme aussitôt.
-    document.addEventListener('mousedown', event => {
-      if (suppressNextFootnoteOutsideCheck) return;
-      if (footnotePopupBox.style.display !== 'none' && !footnotePopupBox.contains(event.target)) commitFootnotePopup();
-    });
     return footnotePopupBox;
   }
   function commitFootnotePopup() {
@@ -302,27 +298,43 @@ const Editor = (function () {
     box._textarea.value = node.attrs.text || '';
     // Positionnement au mieux - une erreur de mesure (DOM pas encore monté,
     // etc.) ne doit JAMAIS empêcher la popup de s'afficher (mieux vaut mal
-    // positionnée que totalement invisible).
+    // positionnée que totalement invisible). Bornée à la zone visible :
+    // une note tapée en bas/à droite d'un document long ancrait sinon la
+    // popup hors du champ visible (JAMAIS d'erreur, JAMAIS de trace console -
+    // rendue mais invisible, indiscernable d'un bug pour l'utilisateur -
+    // signalé cassé sans jamais avoir pu être reproduit localement).
     try {
       const dom = editor.view.nodeDOM(pos);
       const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
       const rect = anchor.getBoundingClientRect();
+      const boxWidth = 240; // cf. #v2-footnote-popup { width: 240px } (editor-v2.css)
+      const boxHeightEstimate = 130;
+      let left = rect.left + window.scrollX;
+      let top = rect.bottom + window.scrollY + 4;
+      // minLeft/minTop d'abord, maxLeft/maxTop AU MOINS égaux à ceux-ci
+      // (Math.max) : dans un panneau de widget étroit/court (innerWidth/
+      // innerHeight petits - un widget Grist peut être une colonne étroite),
+      // `scrollX/Y + innerWidth/Height - boxWidth/HeightEstimate` peut tomber
+      // EN DESSOUS du minimum, ce qui - sans ce garde-fou - clampait la
+      // popup à une position ENCORE PLUS hors champ que sa position
+      // d'origine nue (pire que pas de bornage du tout). Avec ce garde-fou,
+      // le pire cas devient "épinglée au coin visible le plus proche",
+      // jamais négatif/hors zone visible.
+      const minLeft = window.scrollX + 4;
+      const minTop = window.scrollY + 4;
+      const maxLeft = Math.max(minLeft, window.scrollX + window.innerWidth - boxWidth - 8);
+      const maxTop = Math.max(minTop, window.scrollY + window.innerHeight - boxHeightEstimate - 8);
+      left = Math.min(Math.max(left, minLeft), maxLeft);
+      top = Math.min(Math.max(top, minTop), maxTop);
       box.style.position = 'absolute';
-      box.style.left = (rect.left + window.scrollX) + 'px';
-      box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+      box.style.left = left + 'px';
+      box.style.top = top + 'px';
     } catch (e) {
       console.warn('[Editor] positionnement du popup de note échoué, repli générique :', e);
       box.style.position = 'fixed';
       box.style.left = '40%';
       box.style.top = '30%';
     }
-    // cf. déclaration de suppressNextFootnoteOutsideCheck : posé
-    // SYNCHRONEMENT ici, donc AVANT que le mousedown en cours (qui a mené à
-    // cet appel) n'atteigne le listener document ci-dessus, et relevé au
-    // micro-tick suivant - un clic réellement extérieur ultérieur reste
-    // détecté normalement.
-    suppressNextFootnoteOutsideCheck = true;
-    Promise.resolve().then(() => { suppressNextFootnoteOutsideCheck = false; });
     box.style.display = 'block';
     // Différé (setTimeout, pas un simple appel synchrone ni une microtâche) :
     // le mousedown qui a mené ici (clic sur le marqueur, ou clic sur l'item
