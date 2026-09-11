@@ -35,6 +35,55 @@
 // derrière/repositionnement - cf. mémoire feedback_v2_defer_complexity_to_pdf_phase
 // - donc pas de système d'ancrage/bracketing à porter pour l'instant).
 const PdfExport = (function () {
+  // Chargement PARESSEUX des bibliothèques PDF (pdfmake + polices embarquées
+  // + html2pdf + JSZip) : ces 6 scripts pèsent plusieurs Mo au total
+  // (pdf-fonts-extra.js à lui seul ~1.6 Mo de polices en base64) et étaient
+  // jusqu'ici chargés en <script> bloquant dans le <head> de v2/index.html,
+  // AVANT même l'import map TipTap/ProseMirror - payé sur CHAQUE ouverture du
+  // widget, y compris quand l'utilisateur n'exporte jamais de PDF pendant la
+  // session (signalé par l'utilisateur : 1-2s d'attente à l'ouverture).
+  // Aucun autre fichier de ce projet ne touche window.pdfMake/window.html2pdf/
+  // JSZip en dehors des fonctions d'export ci-dessous (pdf-fonts.js/
+  // pdf-fonts-extra.js eux-mêmes se protègent déjà d'un chargement avant
+  // pdfmake via `if (!window.pdfMake) return;`) : différer leur chargement au
+  // premier clic d'export réel (au lieu du chargement de la page) ne change
+  // rien au comportement, juste QUAND ce coût est payé. Mémorisé dans une
+  // promesse partagée pour ne charger qu'une seule fois par session, quel que
+  // soit le nombre d'exports déclenchés ensuite.
+  const PDF_LIB_URLS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    // Chemins relatifs à v2/index.html (la page qui charge ce module), pas à
+    // ce fichier lui-même - mêmes chemins que les anciennes balises <script>
+    // statiques qu'ils remplacent.
+    '../js/pdf-fonts.js?v=0.67',
+    '../js/pdf-fonts-extra.js?v=0.67',
+  ];
+  let pdfLibsPromise = null;
+  function loadScriptOnce(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Échec de chargement du script : ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  // Séquentiel (pas Promise.all) : pdf-fonts.js/pdf-fonts-extra.js lisent
+  // window.pdfMake.vfs à l'exécution, donc doivent s'exécuter APRÈS
+  // pdfmake.min.js/vfs_fonts.min.js - un chargement en parallèle ne garantit
+  // pas cet ordre d'exécution même avec les <script> ajoutés dans cet ordre.
+  async function ensurePdfLibsLoaded() {
+    if (!pdfLibsPromise) {
+      pdfLibsPromise = (async () => {
+        for (const url of PDF_LIB_URLS) await loadScriptOnce(url);
+      })().catch(e => { pdfLibsPromise = null; throw e; });
+    }
+    return pdfLibsPromise;
+  }
+
   const PX_TO_PT = 72 / 96;
   // Doit correspondre à .tiptap { font-size: 14px } (css/editor-v2.css) :
   // 14 × 0.75 = 10.5pt, la taille de tout texte sans taille inline explicite.
@@ -2456,6 +2505,7 @@ const PdfExport = (function () {
 
   async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData) {
     if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
+    await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
     if (quality === 'browser-print') { await exportViaBrowserPrint(resolvedHtml, filename); return; }
@@ -2485,6 +2535,7 @@ const PdfExport = (function () {
   // ce chemin (utilisé par exportCurrentRecord côté V1... non, ici seul ce
   // fichier), donc le seul praticable pour un export non surveillé de N lignes.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
+    await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
     const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, tableId, record);
@@ -2492,5 +2543,5 @@ const PdfExport = (function () {
     return { blob, filename };
   }
 
-  return { exportCurrentRecord, getNativePdfBlob, getNativePdfBlobForRecord };
+  return { exportCurrentRecord, getNativePdfBlob, getNativePdfBlobForRecord, ensurePdfLibsLoaded };
 })();

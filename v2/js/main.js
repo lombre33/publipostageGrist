@@ -211,7 +211,6 @@
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus('Table courante introuvable.', true); return; }
-    if (typeof JSZip === 'undefined') { setStatus('Bibliothèque ZIP indisponible.', true); return; }
     let rows;
     try { rows = await GristAPI.fetchTableRows(tableId); }
     catch (e) {
@@ -222,6 +221,18 @@
     if (!rows.length) { setStatus('Aucune ligne dans la table « ' + tableId + ' ».', true); return; }
     const proceed = window.confirm('Générer un PDF pour chacune des ' + rows.length + ' lignes de « ' + tableId + ' » et les regrouper dans une archive ZIP ?');
     if (!proceed) return;
+
+    // JSZip fait partie du même lot de bibliothèques PDF chargées à la
+    // demande (cf. v2/js/pdf-export.js:ensurePdfLibsLoaded) - plus chargé
+    // d'office au démarrage du widget, donc `JSZip` n'existe pas encore tant
+    // que ceci n'a pas été attendu au moins une fois.
+    setStatus('Chargement des bibliothèques PDF...');
+    try { await PdfExport.ensurePdfLibsLoaded(); }
+    catch (e) {
+      console.error('[main] export PDF en lot : échec de chargement des bibliothèques PDF', e);
+      setStatus('Échec de chargement des bibliothèques PDF.', true);
+      return;
+    }
 
     const html = Editor.getHTML();
     const filenameTemplate = getPdfFilenameTemplate();
