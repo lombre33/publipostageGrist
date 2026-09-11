@@ -1870,27 +1870,31 @@ const Editor = (function () {
   // BLOC, jamais de la ligne/du pixel comme pdfmake (limite assumée et
   // annoncée, cf. le plan) - un bloc entier bascule à la page suivante dès
   // qu'il ne rentre plus, jamais coupé en deux visuellement ici.
-  function computePageBreakOffsets(tiptapEl, pageContentHeightPx) {
-    const tiptapRect = tiptapEl.getBoundingClientRect();
-    const offsets = [];
+  // Retourne le bloc APRÈS lequel insérer la coupure (`afterEl`), pas un
+  // simple décalage en pixels - cf. le mécanisme de réservation d'espace
+  // réel ci-dessous (renderPaginationOverlay), qui a besoin d'un vrai
+  // élément DOM sur lequel poser un `margin-bottom`.
+  function computePageBreaks(tiptapEl, pageContentHeightPx) {
+    const breaks = [];
     let consumed = 0;
+    let lastBlock = null;
     Array.from(tiptapEl.children).forEach(child => {
-      const rect = child.getBoundingClientRect();
-      const top = rect.top - tiptapRect.top;
-      const height = rect.height;
+      const height = child.getBoundingClientRect().height;
       if (child.classList.contains('page-break-marker')) {
-        offsets.push(top + height);
+        breaks.push({ afterEl: child, forced: true });
         consumed = 0;
+        lastBlock = child;
         return;
       }
       if (consumed > 0 && consumed + height > pageContentHeightPx) {
-        offsets.push(top);
+        breaks.push({ afterEl: lastBlock, forced: false });
         consumed = height;
       } else {
         consumed += height;
       }
+      lastBlock = child;
     });
-    return offsets;
+    return breaks;
   }
 
   // Résout chaque badge .page-number-badge (posé tel quel dans le HTML
@@ -1911,6 +1915,31 @@ const Editor = (function () {
   let paginationEdgeTopEl = null;
   let paginationEdgeBottomEl = null;
   let paginationRecomputeTimer = null;
+  // Réserve un vrai espace vide sous le dernier bloc d'une page (cf.
+  // renderPaginationOverlay) via une FEUILLE DE STYLE dédiée (règles
+  // `:nth-child`), PAS un style inline posé directement sur le bloc : un
+  // style inline sur un nœud géré par ProseMirror s'est avéré silencieusement
+  // ANNULÉ peu après (constaté en conditions réelles - présent juste après
+  // l'appel, disparu à la vérification suivante) - ProseMirror surveille les
+  // mutations DOM sur les nœuds qu'il gère et "répare" tout ce qu'il n'a pas
+  // lui-même produit via une transaction, y compris un simple attribut style
+  // (même famille de piège que project_quill_mutation_observer, qui ne
+  // concernait jusqu'ici que des enfants DOM ajoutés à la main). Une feuille
+  // de style EXTERNE ciblant les blocs par POSITION (`:nth-child`) ne modifie
+  // en revanche RIEN sur les nœuds eux-mêmes (ni attribut, ni enfant) - hors
+  // de portée de cette surveillance, donc jamais annulée.
+  let paginationMarginStyleEl = null;
+  function ensurePaginationMarginStyle() {
+    if (!paginationMarginStyleEl) {
+      paginationMarginStyleEl = document.createElement('style');
+      paginationMarginStyleEl.id = 'v2-pagination-margins-style';
+      document.head.appendChild(paginationMarginStyleEl);
+    }
+    return paginationMarginStyleEl;
+  }
+  function clearPageBreakMargins() {
+    if (paginationMarginStyleEl) paginationMarginStyleEl.textContent = '';
+  }
   function schedulePaginationRecompute() {
     if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
     paginationRecomputeTimer = setTimeout(renderPaginationOverlay, 200);
@@ -1920,6 +1949,7 @@ const Editor = (function () {
     if (paginationEdgeTopEl && paginationEdgeTopEl.parentNode) paginationEdgeTopEl.parentNode.removeChild(paginationEdgeTopEl);
     if (paginationEdgeBottomEl && paginationEdgeBottomEl.parentNode) paginationEdgeBottomEl.parentNode.removeChild(paginationEdgeBottomEl);
     paginationEdgeTopEl = null; paginationEdgeBottomEl = null;
+    clearPageBreakMargins();
   }
 
   // Zones de marge CLIQUABLES (façon Google Docs/Word - retour utilisateur :
@@ -1950,16 +1980,17 @@ const Editor = (function () {
   // quand elles ont du contenu), pour ressembler le plus possible à la vraie
   // page exportée (retour utilisateur, cf. css/editor-v2.css:.v2-page-sheet).
   // Les limites INTERMÉDIAIRES (frontière RÉELLE entre deux pages physiques)
-  // n'ont PAS cet espace disponible - le contenu continue de défiler sans
-  // interruption réelle - ces bandes-là restent de purs overlays en
-  // position:absolute qui PEUVENT recouvrir un peu de texte exactement à la
-  // limite, résidu assumé (même classe que les écarts de rendu police déjà
-  // acceptés ailleurs dans ce projet). Elles s'affichent maintenant dès que
-  // le document dépasse une page, MÊME sans aucun en-tête/pied configuré
-  // (retour utilisateur : la pagination automatique doit rester visible dès
-  // "beaucoup de lignes", pas seulement quand un en-tête/pied existe ou
-  // qu'un saut de page est forcé) - un simple repère "Page N" remplace alors
-  // le contenu en-tête/pied absent.
+  // n'ont PAS d'espace disponible NATURELLEMENT - le contenu continue de
+  // défiler sans interruption - mais restent de purs overlays en
+  // position:absolute posés dans un espace RÉSERVÉ EXPRÈS (`margin-bottom`
+  // posé sur le dernier bloc de la page qui se termine, cf.
+  // pageBreakMarginEls plus bas) : signalé par l'utilisateur, du texte se
+  // retrouvait sinon visuellement recouvert par ces bandes. Elles s'affichent
+  // maintenant dès que le document dépasse une page, MÊME sans aucun
+  // en-tête/pied configuré (retour utilisateur : la pagination automatique
+  // doit rester visible dès "beaucoup de lignes", pas seulement quand un
+  // en-tête/pied existe ou qu'un saut de page est forcé) - un simple repère
+  // "Page N" remplace alors le contenu en-tête/pied absent.
   function ensureEdgeZone(pageSheet, tiptapEl, pos) {
     if (pos === 'top' && !paginationEdgeTopEl) {
       paginationEdgeTopEl = document.createElement('div');
@@ -2009,8 +2040,12 @@ const Editor = (function () {
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
-    const offsets = computePageBreakOffsets(tiptapEl, pageContentHeightPx);
-    const totalPages = offsets.length + 1;
+    // Nettoie AVANT de recalculer (cf. sa propre doc) - le bloc "dernier de
+    // la page" à une frontière donnée peut changer d'une frappe à l'autre,
+    // laisser une ancienne marge orpheline gonflerait le document à tort.
+    clearPageBreakMargins();
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    const totalPages = breaks.length + 1;
 
     // `.v2-page-sheet` : enveloppe permanente posée UNE SEULE FOIS autour de
     // `.tiptap` à la création de l'éditeur (cf. init()) - les zones de bord
@@ -2022,23 +2057,36 @@ const Editor = (function () {
     updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', 'Ajouter un en-tête');
     updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', 'Ajouter un pied de page');
 
-    const tiptapOffsetTop = tiptapEl.offsetTop;
     const tiptapOffsetLeft = tiptapEl.offsetLeft;
     const tiptapWidth = tiptapEl.getBoundingClientRect().width;
+    const tiptapRect = tiptapEl.getBoundingClientRect();
 
-    // Limites intermédiaires - une bande par frontière entre 2 pages,
-    // positionnée APRÈS insertion (nécessite sa propre hauteur rendue) pour
-    // que son BAS tombe exactement où le contenu de la page suivante
-    // commence réellement dans le flux continu. Toujours affichées dès que
-    // le document dépasse une page - même sans aucun en-tête/pied configuré
-    // (retour utilisateur : la pagination automatique doit se voir dès
-    // "beaucoup de lignes", pas seulement via un saut de page forcé) : à
-    // défaut de contenu à afficher, un simple trait "— Page N —" marque
-    // quand même la coupure automatique. Ces coutures représentent le VRAI
-    // saut entre deux pages PHYSIQUES (contrairement aux zones de bord
-    // ci-dessus, qui vivent SUR la même page que le corps) - restent donc
-    // volontairement une carte distincte, jamais "collées" au texte.
-    offsets.forEach((offsetPx, i) => {
+    // Limites intermédiaires - une bande par frontière entre 2 pages.
+    // Toujours affichées dès que le document dépasse une page - même sans
+    // aucun en-tête/pied configuré (retour utilisateur : la pagination
+    // automatique doit se voir dès "beaucoup de lignes", pas seulement via
+    // un saut de page forcé) : à défaut de contenu à afficher, un simple
+    // trait "— Page N —" marque quand même la coupure automatique. Ces
+    // coutures représentent le VRAI saut entre deux pages PHYSIQUES
+    // (contrairement aux zones de bord ci-dessus, qui vivent SUR la même
+    // page que le corps) - restent donc volontairement une carte distincte,
+    // jamais "collées" au texte.
+    //
+    // Un VRAI espace vide est réservé sous `afterEl` plutôt que de superposer
+    // la bande en `position:absolute` par-dessus le texte qui continuerait de
+    // défiler sans interruption - signalé par l'utilisateur : du texte se
+    // retrouvait visuellement SOUS les bandes d'en-tête/pied entre deux
+    // pages. Réservé via une règle CSS `:nth-child` dans une feuille de style
+    // dédiée (cf. ensurePaginationMarginStyle) plutôt qu'un style inline posé
+    // directement sur `afterEl` : un style inline sur un nœud géré par
+    // ProseMirror s'est avéré silencieusement ANNULÉ peu après (ProseMirror
+    // "répare" toute mutation DOM qu'il n'a pas lui-même produite via une
+    // transaction, même un simple attribut style - constaté en conditions
+    // réelles). Une règle CSS externe ciblant par POSITION ne modifie RIEN
+    // sur le nœud lui-même, hors de portée de cette surveillance.
+    const marginRules = [];
+    const tiptapChildren = Array.from(tiptapEl.children);
+    breaks.forEach((brk, i) => {
       const pageEnding = i + 1;
       const pageStarting = i + 2;
       const footerText = enabled ? footerForPage(pageEnding) : null;
@@ -2071,7 +2119,18 @@ const Editor = (function () {
       seam.style.left = tiptapOffsetLeft + 'px';
       seam.style.width = tiptapWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
-      seam.style.top = (tiptapOffsetTop + offsetPx - seamHeight) + 'px';
+      // Réserve l'espace AVANT de positionner : `afterEl` ne bouge pas à
+      // cause de sa PROPRE marge (une marge est hors de la boîte de bordure
+      // de l'élément), donc son rect mesuré juste après reste correct pour
+      // placer la bande exactement dans le vide ainsi ouvert. Écrit la
+      // feuille de style à CHAQUE itération (pas une seule fois à la fin) :
+      // la coupure suivante doit voir l'effet des marges déjà posées avant
+      // de mesurer sa propre position (elles se cumulent dans le flux réel).
+      const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
+      marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + seamHeight + 'px; }');
+      ensurePaginationMarginStyle().textContent = marginRules.join('\n');
+      const afterRect = brk.afterEl.getBoundingClientRect();
+      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top)) + 'px';
     });
   }
 
