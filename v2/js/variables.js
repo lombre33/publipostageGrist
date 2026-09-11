@@ -231,14 +231,35 @@ const Variables = (function () {
               // après l'avoir insérée.
               if (props.kind === 'chip') {
                 if (props.chipKind === 'footnote') {
-                  editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id: 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), text: '' } }).run();
+                  const id = 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                  editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id, text: '' } }).run();
+                  // Retrouve la position RÉELLE du nœud fraîchement inséré par
+                  // son id (unique, généré juste au-dessus) plutôt que de
+                  // faire confiance à `range.from` après coup - `range` est
+                  // une position ProseMirror capturée AVANT la transaction ;
+                  // en théorie stable après une transaction qui remplace
+                  // exactement ce range (cf. commentaire plus haut), mais un
+                  // utilisateur a signalé la note bien insérée SANS jamais
+                  // voir la popup d'édition s'ouvrir - jamais reproduit
+                  // localement. Ce nouveau balayage retire complètement la
+                  // dépendance suspectée (au lieu d'essayer de la corriger à
+                  // l'aveugle sans pouvoir reproduire le bug), et fonctionne
+                  // quelle que soit la correspondance exacte de `range.from`
+                  // après coup.
+                  let insertedPos = null;
+                  editor.state.doc.descendants((node, pos) => {
+                    if (insertedPos != null) return false;
+                    if (node.type.name === 'footnoteRef' && node.attrs.id === id) { insertedPos = pos; return false; }
+                    return true;
+                  });
                   // `Editor` (v2/js/editor.js, chargé APRÈS ce fichier - cf.
                   // v2/index.html) n'est résolu qu'à l'EXÉCUTION de ce callback
                   // (déclenché par une frappe utilisateur, donc bien après que
                   // tous les scripts classiques aient fini de s'exécuter), pas
                   // à l'analyse de ce fichier - même sens de dépendance
                   // inversé que Editor.js appelant Variables.createExtension.
-                  Editor.openFootnoteEditorAt(range.from);
+                  if (insertedPos != null) Editor.openFootnoteEditorAt(insertedPos);
+                  else console.warn('[variables] note de bas de page insérée mais introuvable ensuite (id=' + id + ') - popup non ouverte.');
                 } else {
                   editor.chain().focus().insertContentAt(range, { type: 'smartChip', attrs: { kind: props.chipKind } }).run();
                 }

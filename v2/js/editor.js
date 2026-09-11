@@ -289,15 +289,33 @@ const Editor = (function () {
     const box = ensureFootnotePopupBox();
     if (footnotePopupPos != null && footnotePopupPos !== pos) commitFootnotePopup();
     const node = editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'footnoteRef') return;
+    if (!node || node.type.name !== 'footnoteRef') {
+      // Ne devrait normalement jamais arriver (appelant toujours une
+      // position tout juste vérifiée) - un utilisateur a pourtant signalé
+      // "la note s'ajoute mais la popup ne s'ouvre jamais", jamais reproduit
+      // localement : ce log laisse au moins une trace exploitable si ça se
+      // reproduit (F12 → Console), plutôt qu'un échec totalement silencieux.
+      console.warn('[Editor] openFootnoteEditorAt(' + pos + ') : aucun nœud footnoteRef à cette position (trouvé : ' + (node && node.type && node.type.name) + ') - popup non ouverte.');
+      return;
+    }
     footnotePopupPos = pos;
     box._textarea.value = node.attrs.text || '';
-    const dom = editor.view.nodeDOM(pos);
-    const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
-    const rect = anchor.getBoundingClientRect();
-    box.style.position = 'absolute';
-    box.style.left = (rect.left + window.scrollX) + 'px';
-    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    // Positionnement au mieux - une erreur de mesure (DOM pas encore monté,
+    // etc.) ne doit JAMAIS empêcher la popup de s'afficher (mieux vaut mal
+    // positionnée que totalement invisible).
+    try {
+      const dom = editor.view.nodeDOM(pos);
+      const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
+      const rect = anchor.getBoundingClientRect();
+      box.style.position = 'absolute';
+      box.style.left = (rect.left + window.scrollX) + 'px';
+      box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    } catch (e) {
+      console.warn('[Editor] positionnement du popup de note échoué, repli générique :', e);
+      box.style.position = 'fixed';
+      box.style.left = '40%';
+      box.style.top = '30%';
+    }
     // cf. déclaration de suppressNextFootnoteOutsideCheck : posé
     // SYNCHRONEMENT ici, donc AVANT que le mousedown en cours (qui a mené à
     // cet appel) n'atteigne le listener document ci-dessus, et relevé au
