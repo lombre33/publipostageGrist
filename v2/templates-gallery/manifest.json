@@ -1,0 +1,17 @@
+[
+  {
+    "id": "facture-simple",
+    "name": "Facture simple",
+    "tags": ["facture", "vente"],
+    "screenshot": "facture-simple/screenshot.svg",
+    "html": "facture-simple/template.html",
+    "schema": "facture-simple/schema.py"
+  },
+  {
+    "id": "lettre-type",
+    "name": "Lettre type",
+    "tags": ["courrier"],
+    "screenshot": "lettre-type/screenshot.svg",
+    "html": "lettre-type/template.html"
+  }
+]

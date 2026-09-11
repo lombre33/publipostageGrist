@@ -54,8 +54,8 @@
 </script>
 <link rel="stylesheet" href="../css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="../css/style.css?v=0.66">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.46">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.16">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.47">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.17">
 </head>
 <body>
 <div id="app">
@@ -67,7 +67,12 @@
         <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le modèle" data-tip="Renommer"></button>
       </div>
       <div class="action-cluster">
-        <button id="btn-new" aria-label="Nouveau modèle" data-tip="Nouveau modèle"></button>
+        <span class="v2-hover-group" id="v2-new-template-group">
+          <button id="btn-new" aria-label="Nouveau modèle" data-tip="Nouveau modèle"></button>
+          <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-new-template-flyout">
+            <span class="v2-hover-row" id="v2-btn-new-from-template">Créer à partir d'un template…</span>
+          </span>
+        </span>
         <button id="btn-save" aria-label="Enregistrer" data-tip="Enregistrer"></button>
         <button id="btn-save-as" aria-label="Enregistrer sous (copie)" data-tip="Enregistrer sous (copie)"></button>
         <button id="btn-delete" aria-label="Supprimer" data-tip="Supprimer"></button>
@@ -239,6 +244,26 @@
     <button type="button" id="link-config-toggle-match" class="link-config-toggle-link" hidden>Changer de correspondance</button>
     <div class="modal-actions"><button id="link-config-cancel">Annuler</button><button id="link-config-confirm" class="link-config-btn-primary">Valider</button></div>
   </div></div>
+  <div id="template-gallery-modal" style="display:none;"><div class="modal-content template-gallery-modal-content">
+    <h3>Créer à partir d'un template</h3>
+    <div class="tpl-gallery-filters">
+      <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…">
+      <div class="tpl-gallery-tags" id="tpl-gallery-tags"></div>
+    </div>
+    <div class="tpl-gallery-grid" id="tpl-gallery-grid"></div>
+    <div class="modal-actions"><button id="tpl-gallery-close">Fermer</button></div>
+  </div></div>
+  <div id="template-preview-modal" style="display:none;"><div class="modal-content template-preview-modal-content">
+    <div class="tpl-preview-header">
+      <h3 id="tpl-preview-name"></h3>
+      <div class="tpl-preview-actions">
+        <button type="button" id="tpl-preview-use-empty">Utiliser ce template</button>
+        <button type="button" id="tpl-preview-use-data" hidden>Utiliser avec une nouvelle table de données</button>
+      </div>
+    </div>
+    <div class="tpl-preview-body" id="tpl-preview-body"><div class="v2-page-sheet a4-preview"><div class="tiptap" id="tpl-preview-tiptap"></div></div></div>
+    <div class="modal-actions"><button id="tpl-preview-back">Retour à la galerie</button><button id="tpl-preview-close">Fermer</button></div>
+  </div></div>
 </div>
 <script src="../js/grist-api.js?v=0.67"></script>
 <script src="../js/templates.js?v=0.67"></script>
@@ -249,6 +274,7 @@
 <script src="js/icons.js?v=0.15"></script>
 <script src="js/editor.js?v=0.66"></script>
 <script src="js/pdf-export.js?v=0.69"></script>
-<script src="js/main.js?v=0.16"></script>
+<script src="js/template-gallery.js?v=0.1"></script>
+<script src="js/main.js?v=0.17"></script>
 </body>
 </html>

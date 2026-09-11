@@ -165,6 +165,54 @@
 .link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
 
+/* === Galerie de templates (#template-gallery-modal/#template-preview-modal,
+   cf. v2/js/main.js wireTemplateGalleryModal) === Même overlay que
+   #link-rules-modal (v2/css/editor-v2.css), mais un contenu bien plus large
+   (mosaïque) : .modal-content de css/style.css plafonne à 440px, ne convient
+   pas ici - élargi + repassé en colonne (en-tête fixe, grille scrollable,
+   actions en bas) plutôt qu'un contenu qui grandit sans limite. */
+.template-gallery-modal-content, .template-preview-modal-content {
+  font-family: var(--font-ui); width: min(920px, 92vw); max-width: none;
+  max-height: 85vh; display: flex; flex-direction: column;
+}
+.template-gallery-modal-content h3, .template-preview-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+.tpl-gallery-filters { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.tpl-gallery-filters input[type="search"] { flex: 1; min-width: 180px; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-size: 12.5px; background: var(--surface); color: var(--text); }
+.tpl-gallery-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tpl-gallery-tag { font-family: var(--font-ui); font-size: 12px; font-weight: 600; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.tpl-gallery-tag:hover { background: var(--surface-sunken); }
+.tpl-gallery-tag.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tpl-gallery-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; padding: 2px; }
+.tpl-gallery-card { font-family: var(--font-ui); display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; text-align: left; }
+.tpl-gallery-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(20, 28, 46, .08); }
+.tpl-gallery-card img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-sunken); }
+.tpl-gallery-card-name { font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-gallery-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.tpl-gallery-card-tags span { font-size: 10.5px; font-weight: 600; color: var(--text-faint); background: var(--surface-sunken); border-radius: 8px; padding: 1px 7px; }
+.tpl-gallery-empty { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 30px 0; }
+
+.tpl-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.tpl-preview-actions { display: flex; gap: 8px; flex: none; }
+.tpl-preview-actions button, .template-gallery-modal-content .modal-actions button, .template-preview-modal-content .modal-actions button {
+  font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer;
+}
+.tpl-preview-actions button:hover, .template-gallery-modal-content .modal-actions button:hover, .template-preview-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
+.tpl-preview-actions #tpl-preview-use-empty, .tpl-preview-actions #tpl-preview-use-data { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tpl-preview-actions #tpl-preview-use-empty:hover, .tpl-preview-actions #tpl-preview-use-data:hover { background: var(--accent-hover); }
+.tpl-preview-body { flex: 1; overflow: auto; background: var(--surface-sunken); padding: 16px; border-radius: 6px; }
+/* Le "look page A4" (largeur/padding) de .v2-page-sheet/.tiptap est normalement
+   posé par des règles SCOPÉES à #editor-container.a4-preview (v2/css/editor-v2.css) -
+   cette prévisualisation vit dans une modale, pas dans #editor-container, donc
+   aucune de ces règles ne s'applique ici. Reprend seulement les 2 constantes
+   nécessaires (mêmes valeurs que editor-v2.css, tolérance à la duplication déjà
+   établie dans ce projet pour ce genre de petite constante partagée) - tout le
+   reste (styles des titres/listes/tableaux/badges #Variable dans .tiptap) est
+   bien générique, non scopé à #editor-container, donc déjà actif ici tel quel. */
+.tpl-preview-body .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
+.tpl-preview-body .tiptap { box-sizing: border-box; padding: 37.33px; background: transparent; }
+.template-gallery-modal-content .modal-actions, .template-preview-modal-content .modal-actions { margin-top: 14px; }
+
 /* === Barre flottante de formatage nombre/date d'une bulle #Variable (cf.
    v2/js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
    .v2-floating-toolbar (même positionnement/ombre que les barres image/

@@ -250,6 +250,157 @@
     btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
   }
 
+  // Galerie de templates ("Créer à partir d'un template", cf. flyout au
+  // survol de #btn-new + v2/js/template-gallery.js pour le catalogue/parsing).
+  // Aperçu en lecture seule = simple reconstruction DOM passive (innerHTML
+  // dans un conteneur .tiptap, MÊME technique que resolveZone's measureRoot
+  // dans pdf-export.js) - pas une seconde instance TipTap, donc aucun risque
+  // sur l'état/l'historique du document réellement en cours d'édition.
+  function wireTemplateGalleryModal() {
+    const openLink = document.getElementById('v2-btn-new-from-template');
+    const galleryModal = document.getElementById('template-gallery-modal');
+    const galleryClose = document.getElementById('tpl-gallery-close');
+    const grid = document.getElementById('tpl-gallery-grid');
+    const tagsBar = document.getElementById('tpl-gallery-tags');
+    const searchInput = document.getElementById('tpl-gallery-search');
+    const previewModal = document.getElementById('template-preview-modal');
+    const previewName = document.getElementById('tpl-preview-name');
+    const previewTiptap = document.getElementById('tpl-preview-tiptap');
+    const previewUseEmpty = document.getElementById('tpl-preview-use-empty');
+    const previewUseData = document.getElementById('tpl-preview-use-data');
+    const previewBack = document.getElementById('tpl-preview-back');
+    const previewCloseBtn = document.getElementById('tpl-preview-close');
+    if (!openLink || !galleryModal || !grid || !previewModal) return;
+
+    let manifest = [];
+    let activeTag = '';
+    let currentEntry = null;
+    let currentHtml = '';
+
+    function renderGrid() {
+      const term = (searchInput.value || '').trim().toLowerCase();
+      const filtered = manifest.filter(entry => {
+        const matchesTerm = !term || entry.name.toLowerCase().includes(term);
+        const matchesTag = !activeTag || (entry.tags || []).includes(activeTag);
+        return matchesTerm && matchesTag;
+      });
+      grid.innerHTML = '';
+      if (!filtered.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tpl-gallery-empty';
+        empty.textContent = 'Aucun template ne correspond à ce filtre.';
+        grid.appendChild(empty);
+        return;
+      }
+      filtered.forEach(entry => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'tpl-gallery-card';
+        const tagsHtml = (entry.tags || []).map(t => `<span>${t}</span>`).join('');
+        card.innerHTML = `<img src="${TemplateGallery.resolveUrl(entry.screenshot)}" alt="${entry.name}"><span class="tpl-gallery-card-name">${entry.name}</span><span class="tpl-gallery-card-tags">${tagsHtml}</span>`;
+        card.addEventListener('click', () => openPreview(entry));
+        grid.appendChild(card);
+      });
+    }
+
+    function renderTags() {
+      const allTags = Array.from(new Set(manifest.flatMap(entry => entry.tags || [])));
+      tagsBar.innerHTML = '';
+      const allChip = document.createElement('button');
+      allChip.type = 'button';
+      allChip.className = 'tpl-gallery-tag' + (activeTag ? '' : ' is-active');
+      allChip.textContent = 'Tous';
+      allChip.addEventListener('click', () => { activeTag = ''; renderTags(); renderGrid(); });
+      tagsBar.appendChild(allChip);
+      allTags.forEach(tag => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'tpl-gallery-tag' + (activeTag === tag ? ' is-active' : '');
+        chip.textContent = tag;
+        chip.addEventListener('click', () => { activeTag = tag; renderTags(); renderGrid(); });
+        tagsBar.appendChild(chip);
+      });
+    }
+
+    async function openGallery() {
+      galleryModal.style.display = 'flex';
+      if (!manifest.length) {
+        try { manifest = await TemplateGallery.loadManifest(); }
+        catch (e) {
+          console.error('[main] galerie de templates : échec du chargement du manifeste', e);
+          setStatus('Impossible de charger la galerie de templates.', true);
+        }
+      }
+      renderTags();
+      renderGrid();
+    }
+
+    async function openPreview(entry) {
+      currentEntry = entry;
+      currentHtml = '';
+      galleryModal.style.display = 'none';
+      previewModal.style.display = 'flex';
+      previewName.textContent = entry.name;
+      previewTiptap.innerHTML = '';
+      previewUseData.hidden = !entry.schema;
+      try {
+        currentHtml = await TemplateGallery.fetchHtml(entry);
+        previewTiptap.innerHTML = currentHtml;
+      } catch (e) {
+        console.error('[main] galerie de templates : échec du chargement du template', e);
+        setStatus('Impossible de charger ce template.', true);
+      }
+    }
+
+    function closeAll() {
+      galleryModal.style.display = 'none';
+      previewModal.style.display = 'none';
+    }
+
+    function useEmpty() {
+      if (!currentEntry || !currentHtml) return;
+      const html = TemplateGallery.stripVariableBadges(currentHtml);
+      templateSelect.value = '';
+      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      closeAll();
+      setStatus('Template « ' + currentEntry.name + ' » chargé.');
+    }
+
+    async function useWithData() {
+      if (!currentEntry || !currentHtml) return;
+      let schema;
+      try { schema = await TemplateGallery.fetchSchema(currentEntry); }
+      catch (e) {
+        console.error('[main] galerie de templates : échec du chargement du schéma', e);
+        setStatus('Impossible de charger le schéma de colonnes de ce template.', true);
+        return;
+      }
+      if (!schema || !schema.columns.length) { setStatus('Ce template ne définit aucune colonne.', true); return; }
+      const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
+      const tableName = window.prompt('Nom de la nouvelle table Grist :', defaultName);
+      if (!tableName) return;
+      try {
+        await grist.docApi.applyUserActions([['AddTable', tableName, schema.columns]]);
+      } catch (e) {
+        console.error('[main] galerie de templates : échec de la création de la table', e);
+        setStatus('Échec de la création de la table « ' + tableName + ' ».', true);
+        return;
+      }
+      templateSelect.value = '';
+      loadTemplateIntoEditor({ id: null, contenu: currentHtml, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      closeAll();
+      setStatus('Table « ' + tableName + ' » créée avec ' + schema.columns.length + ' colonne(s). Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
+    }
+
+    openLink.addEventListener('click', openGallery);
+    if (galleryClose) galleryClose.addEventListener('click', closeAll);
+    if (previewCloseBtn) previewCloseBtn.addEventListener('click', closeAll);
+    if (previewBack) previewBack.addEventListener('click', () => { previewModal.style.display = 'none'; galleryModal.style.display = 'flex'; });
+    if (searchInput) searchInput.addEventListener('input', renderGrid);
+    previewUseEmpty.addEventListener('click', useEmpty);
+    previewUseData.addEventListener('click', useWithData);
+  }
+
   async function init() {
     try { await GristAPI.init(); } catch (e) { setStatus('Erreur init API Grist.', true); }
     await Editor.init();
@@ -271,6 +422,7 @@
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
     wireLinkRulesModal();
+    wireTemplateGalleryModal();
     wireTemplateRename();
     wirePdfFilenameToggle();
     wireQualityDropdown();
