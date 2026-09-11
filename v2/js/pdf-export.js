@@ -2473,5 +2473,24 @@ const PdfExport = (function () {
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
-  return { exportCurrentRecord, getNativePdfBlob };
+  // Export PDF EN LOT (une ligne Grist -> un blob PDF, cf. v2/js/main.js
+  // onExportPdfBatch) - factorisé à partir du chemin "natif" ci-dessus
+  // (résolution #Variable + en-tête/pied de page, puis pdfmake) plutôt que
+  // dupliqué : c'est la même paire ReaderMode.preview/resolveHeaderFooterVariables,
+  // juste appelée une fois par ligne au lieu d'une seule fois pour la ligne
+  // sélectionnée. Volontairement limité au vectoriel (getNativePdfBlob) :
+  // 'browser-print' ouvre une boîte de dialogue d'impression par ligne
+  // (inutilisable sans surveillance) et les qualités raster (html2canvas)
+  // n'ont pas de variante "retourne un blob" - seul le vectoriel expose déjà
+  // ce chemin (utilisé par exportCurrentRecord côté V1... non, ici seul ce
+  // fichier), donc le seul praticable pour un export non surveillé de N lignes.
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
+    const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
+    const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
+    const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, tableId, record);
+    const blob = await getNativePdfBlob(resolvedHtml, filename, resolvedHeaderFooterData);
+    return { blob, filename };
+  }
+
+  return { exportCurrentRecord, getNativePdfBlob, getNativePdfBlobForRecord };
 })();

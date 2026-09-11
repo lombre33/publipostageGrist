@@ -170,6 +170,95 @@
     }
   }
 
+  // Caractères invalides dans un nom de fichier ZIP/Windows - une valeur de
+  // cellule Grist (nom de client, etc.) peut en contenir sans qu'on le
+  // maîtrise, contrairement à l'export d'une seule ligne où ce risque existe
+  // déjà mais n'avait jamais été signalé (un seul fichier, l'utilisateur
+  // renomme si besoin) - ici, N fichiers générés sans supervision, une
+  // valeur du type "Dupont/Fils" casserait silencieusement l'arborescence du
+  // ZIP si non filtrée.
+  function sanitizeFilenamePart(name) {
+    return String(name || '').replace(/[\\/:*?"<>|]+/g, '_').trim();
+  }
+
+  // Ajoute un suffixe " (2)", " (3)"... si ce nom a déjà été utilisé dans ce
+  // lot - deux lignes peuvent tout à fait résoudre au même nom de fichier
+  // (gabarit de nom sans variable, ou variable identique sur 2 lignes),
+  // sinon la 2e écraserait silencieusement la 1re dans le ZIP.
+  function uniqueZipFilename(baseName, usedNames) {
+    let name = baseName;
+    let n = 2;
+    while (usedNames.has(name)) { name = baseName + ' (' + n + ')'; n++; }
+    usedNames.add(name);
+    return name;
+  }
+
+  // Export PDF EN LOT : une ligne Grist de la table courante = un PDF, tous
+  // regroupés dans une seule archive ZIP téléchargée (JSZip, chargé via CDN
+  // dans v2/index.html) - demandé par l'utilisateur pour ne pas avoir à
+  // exporter ligne par ligne. Lit TOUTES les lignes de la table
+  // (GristAPI.fetchTableRows, lecture directe docApi - ignore un éventuel
+  // filtre de vue posé sur la section Grist du widget, cohérent avec la
+  // formulation "toutes les lignes de la table" plutôt que "les lignes
+  // actuellement affichées"), pas seulement la ligne sélectionnée.
+  // Volontairement limité à la qualité vectorielle (PdfExport.getNativePdfBlobForRecord) :
+  // 'Impr. navigateur' ouvrirait une boîte de dialogue d'impression par
+  // ligne (inutilisable sans surveillance) et les qualités raster
+  // (html2canvas) n'ont pas de variante "retourne un blob" - aucune des deux
+  // n'est praticable pour un export non surveillé de N lignes, quel que soit
+  // le réglage actuellement choisi dans le sélecteur de qualité.
+  async function onExportPdfBatch() {
+    Editor.exitHeaderFooterModeIfActive();
+    const tableId = currentTableId || GristAPI.getCurrentTableId();
+    if (!tableId) { setStatus('Table courante introuvable.', true); return; }
+    if (typeof JSZip === 'undefined') { setStatus('Bibliothèque ZIP indisponible.', true); return; }
+    let rows;
+    try { rows = await GristAPI.fetchTableRows(tableId); }
+    catch (e) {
+      console.error('[main] export PDF en lot : échec de lecture de la table', e);
+      setStatus('Impossible de lire les lignes de la table.', true);
+      return;
+    }
+    if (!rows.length) { setStatus('Aucune ligne dans la table « ' + tableId + ' ».', true); return; }
+    const proceed = window.confirm('Générer un PDF pour chacune des ' + rows.length + ' lignes de « ' + tableId + ' » et les regrouper dans une archive ZIP ?');
+    if (!proceed) return;
+
+    const html = Editor.getHTML();
+    const filenameTemplate = getPdfFilenameTemplate();
+    const headerFooterData = Editor.getHeaderFooterData();
+    const zip = new JSZip();
+    const usedNames = new Set();
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      setStatus('Export PDF en lot : ' + (i + 1) + '/' + rows.length + '...');
+      try {
+        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
+        const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
+        zip.file(uniqueZipFilename(base, usedNames) + '.pdf', blob);
+        ok++;
+      } catch (e) {
+        console.error('[main] export PDF en lot : échec pour la ligne', rows[i].id, e);
+        failed++;
+      }
+    }
+    if (!ok) { setStatus('Échec de l’export : aucun PDF généré.', true); return; }
+
+    setStatus('Compression de l’archive ZIP...');
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilenamePart(tableId) + '-export-pdf.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus(failed
+      ? ok + ' PDF générés, ' + failed + ' échec(s) (voir la console) — archive ZIP téléchargée.'
+      : ok + ' PDF générés — archive ZIP téléchargée.');
+  }
+
   async function switchMode(mode) {
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
@@ -442,6 +531,7 @@
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
+    document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', onExportPdfBatch);
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
