@@ -49,9 +49,6 @@ const Icons = (function () {
     checklistAccentStrike: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
     checklistClassic: '<rect x="3" y="9" width="7" height="7"/><path d="M4.5 12.5l1.3 1.3L9 11"/>',
     checklistAccentPlain: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h5"/>',
-    // Page avec bandeaux haut/bas ombrés (zones en-tête/pied de page) séparés
-    // du corps par un trait - cohérent avec le style "page" de pageBreak.
-    headerFooter: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><rect x="4" y="3" width="16" height="4" fill="currentColor" fill-opacity="0.2" stroke="none"/><rect x="4" y="17" width="16" height="4" fill="currentColor" fill-opacity="0.2" stroke="none"/><path d="M4 7h16M4 17h16"/>',
     bulletDisc: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>',
     bulletCircle: '<circle cx="12" cy="12" r="4.2"/>',
     bulletSquare: '<rect x="7.8" y="7.8" width="8.4" height="8.4" fill="currentColor" stroke="none"/>',

@@ -1704,13 +1704,9 @@ const Editor = (function () {
     hfMode = { zone, variant };
     editor.commands.setContent(headerFooterDraft[zone][variant] || '');
     const container = document.getElementById('editor-container');
-    if (container) {
-      container.classList.add('hf-editing');
-      const zoneLabel = zone === 'header' ? "l'en-tête" : 'le pied de page';
-      const variantLabel = variant === 'first' ? 'page 1 uniquement' : 'pages normales';
-      container.style.setProperty('--hf-banner-text', JSON.stringify(`Édition de ${zoneLabel} — ${variantLabel}`));
-    }
+    if (container) container.classList.add('hf-editing');
     syncToolbarState();
+    renderHfPill();
     renderPaginationOverlay(); // masqué pendant hfMode (cf. sa propre garde) - fait disparaître l'aperçu le temps de l'édition
   }
 
@@ -1724,13 +1720,10 @@ const Editor = (function () {
     editor.commands.setContent(mainDocSnapshot || '');
     mainDocSnapshot = null;
     const container = document.getElementById('editor-container');
-    if (container) { container.classList.remove('hf-editing'); container.style.removeProperty('--hf-banner-text'); }
-    const contextBar = document.getElementById('v2-hf-context-bar');
-    const toggleBtn = document.getElementById('v2-btn-header-footer');
-    if (contextBar) contextBar.hidden = true;
-    if (toggleBtn) toggleBtn.classList.remove('active');
+    if (container) container.classList.remove('hf-editing');
     syncToolbarState();
-    renderPaginationOverlay(); // ré-affiche l'aperçu (hfMode redevenu null)
+    renderHfPill(); // hfMode redevenu null - retire la pastille (cf. sa propre garde)
+    renderPaginationOverlay(); // ré-affiche l'aperçu
   }
 
   // Filet de sécurité appelé par v2/js/main.js AVANT Save/Enregistrer sous/
@@ -1766,66 +1759,77 @@ const Editor = (function () {
     renderPaginationOverlay();
   }
 
-  // Bouton bascule (#v2-btn-header-footer) + sous-barre contextuelle
-  // (#v2-hf-context-bar, cf. v2/index.html) : segment zone (en-tête/pied),
-  // case "Première page différente" (révèle un second segment
-  // pages-normales/page-1), menu d'insertion du numéro de page, bouton
-  // "Terminer". Câblée une seule fois dans init(), comme le reste de la
-  // toolbar - ne dépend d'aucune seconde instance d'éditeur.
-  function wireHeaderFooterBar() {
-    const toggleBtn = document.getElementById('v2-btn-header-footer');
-    const contextBar = document.getElementById('v2-hf-context-bar');
-    const zoneHeaderBtn = document.getElementById('v2-hf-zone-header');
-    const zoneFooterBtn = document.getElementById('v2-hf-zone-footer');
-    const differentFirstCheckbox = document.getElementById('v2-hf-different-first');
-    const variantSegment = document.getElementById('v2-hf-variant-segment');
-    const variantDefaultBtn = document.getElementById('v2-hf-variant-default');
-    const variantFirstBtn = document.getElementById('v2-hf-variant-first');
-    const doneBtn = document.getElementById('v2-hf-btn-done');
-    const pagenumFlyout = document.getElementById('v2-hf-pagenum-flyout');
-    if (!toggleBtn || !contextBar) return;
+  // Pastille flottante d'édition d'en-tête/pied - remplace l'ancien bouton de
+  // bascule + sous-barre dockée sous la toolbar (retour utilisateur : "pas
+  // beau", voulait quelque chose façon Google Docs/Word). Plus de point
+  // d'entrée dédié dans la toolbar : on entre en mode édition en cliquant
+  // directement une zone de marge (haut/bas de page, ou une "couture" entre
+  // deux pages) posée par renderPaginationOverlay ci-dessous - la pastille
+  // n'apparaît QUE pendant l'édition elle-même (hfMode actif), sticky en
+  // haut de #editor-container pour rester visible en scrollant. Reconstruite
+  // paresseusement (une seule fois par session d'édition continue), puis
+  // resynchronisée à chaque appel - cf. tous les appels dans
+  // enterHeaderFooterMode/exitHeaderFooterMode.
+  function renderHfPill() {
+    const container = document.getElementById('editor-container');
+    if (!container) return;
+    let pill = document.getElementById('v2-hf-pill');
+    if (!hfMode) { if (pill) pill.remove(); return; }
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'v2-hf-pill';
+      pill.className = 'v2-hf-pill';
+      pill.innerHTML =
+        '<span class="v2-segmented" id="v2-hf-zone-segment">'
+        + '<button type="button" class="v2-segmented-btn" data-zone="header">En-tête</button>'
+        + '<button type="button" class="v2-segmented-btn" data-zone="footer">Pied de page</button>'
+        + '</span>'
+        + '<label class="v2-hf-checkbox"><input type="checkbox" id="v2-hf-different-first">Première page différente</label>'
+        + '<span class="v2-segmented" id="v2-hf-variant-segment" hidden>'
+        + '<button type="button" class="v2-segmented-btn" data-variant="default">Pages normales</button>'
+        + '<button type="button" class="v2-segmented-btn" data-variant="first">Page 1</button>'
+        + '</span>'
+        + '<span class="v2-hover-group" id="v2-hf-pagenum-group">'
+        + '<button type="button" id="v2-hf-btn-pagenum" data-tip="Insérer le numéro de page" aria-label="Insérer le numéro de page"><span class="v2-hf-pagenum-icon" aria-hidden="true">#</span></button>'
+        + '<span class="v2-hover-flyout v2-hover-flyout-v" id="v2-hf-pagenum-flyout">'
+        + '<span class="v2-hover-row" data-pagenum-format="n">Numéro simple (3)</span>'
+        + '<span class="v2-hover-row" data-pagenum-format="page-n">Page 3</span>'
+        + '<span class="v2-hover-row" data-pagenum-format="n-slash-total">3 / 12</span>'
+        + '</span>'
+        + '</span>'
+        + '<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">Terminer</button>';
+      container.insertBefore(pill, container.firstChild);
 
-    const syncZoneButtons = () => {
-      if (!hfMode) return;
-      zoneHeaderBtn.classList.toggle('active', hfMode.zone === 'header');
-      zoneFooterBtn.classList.toggle('active', hfMode.zone === 'footer');
-      variantDefaultBtn.classList.toggle('active', hfMode.variant === 'default');
-      variantFirstBtn.classList.toggle('active', hfMode.variant === 'first');
-    };
-
-    toggleBtn.addEventListener('click', () => {
-      if (hfMode) { exitHeaderFooterMode(); return; } // exitHeaderFooterMode gère déjà contextBar/toggleBtn/.active
-      contextBar.hidden = false;
-      differentFirstCheckbox.checked = headerFooterDraft.differentFirstPage;
-      variantSegment.hidden = !headerFooterDraft.differentFirstPage;
-      enterHeaderFooterMode('header', 'default'); // syncToolbarState() (appelée dedans) pose .active
-      syncZoneButtons();
-    });
-
-    const switchZone = (zone) => { if (hfMode && hfMode.zone !== zone) { enterHeaderFooterMode(zone, hfMode.variant); syncZoneButtons(); } };
-    zoneHeaderBtn.addEventListener('click', () => switchZone('header'));
-    zoneFooterBtn.addEventListener('click', () => switchZone('footer'));
-
-    const switchVariant = (variant) => { if (hfMode && hfMode.variant !== variant) { enterHeaderFooterMode(hfMode.zone, variant); syncZoneButtons(); } };
-    variantDefaultBtn.addEventListener('click', () => switchVariant('default'));
-    variantFirstBtn.addEventListener('click', () => switchVariant('first'));
-
-    differentFirstCheckbox.addEventListener('change', () => {
-      headerFooterDraft.differentFirstPage = differentFirstCheckbox.checked;
-      variantSegment.hidden = !differentFirstCheckbox.checked;
-      if (!differentFirstCheckbox.checked) switchVariant('default');
-    });
-
-    doneBtn.addEventListener('click', () => exitHeaderFooterMode());
-
-    if (pagenumFlyout) {
-      pagenumFlyout.querySelectorAll('.v2-hover-row').forEach(row => {
-        row.addEventListener('click', () => {
-          if (!hfMode) return;
+      pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => {
+        btn.addEventListener('click', () => { if (hfMode && hfMode.zone !== btn.dataset.zone) enterHeaderFooterMode(btn.dataset.zone, hfMode.variant); });
+      });
+      pill.querySelectorAll('#v2-hf-variant-segment button').forEach(btn => {
+        btn.addEventListener('click', () => { if (hfMode && hfMode.variant !== btn.dataset.variant) enterHeaderFooterMode(hfMode.zone, btn.dataset.variant); });
+      });
+      pill.querySelector('#v2-hf-different-first').addEventListener('change', (event) => {
+        headerFooterDraft.differentFirstPage = event.target.checked;
+        if (!event.target.checked && hfMode && hfMode.variant === 'first') enterHeaderFooterMode(hfMode.zone, 'default');
+        else renderHfPill();
+      });
+      pill.querySelector('#v2-hf-btn-done').addEventListener('click', () => exitHeaderFooterMode());
+      // mousedown+preventDefault (pas click) : même piège que les autres
+      // menus déroulants de ce fichier (cf. createFloatingPanel/
+      // wireDropdownButton) - un simple 'click' laisserait d'abord le
+      // mousedown faire perdre le focus/la sélection ProseMirror de
+      // l'en-tête/pied en cours d'édition avant que la commande ne s'exécute,
+      // qui retomberait alors sur une sélection obsolète ou absente
+      // (constaté : le badge ne s'insérait nulle part).
+      pill.querySelectorAll('#v2-hf-pagenum-flyout .v2-hover-row').forEach(row => {
+        row.addEventListener('mousedown', (event) => {
+          event.preventDefault();
           editor.chain().focus().insertPageNumberBadge(row.dataset.pagenumFormat).run();
         });
       });
     }
+    pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => btn.classList.toggle('active', btn.dataset.zone === hfMode.zone));
+    pill.querySelectorAll('#v2-hf-variant-segment button').forEach(btn => btn.classList.toggle('active', btn.dataset.variant === hfMode.variant));
+    pill.querySelector('#v2-hf-different-first').checked = !!headerFooterDraft.differentFirstPage;
+    pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
   }
 
   // === Aperçu paginé réel - éditeur (incrément 2.3) ===
@@ -1918,15 +1922,23 @@ const Editor = (function () {
     paginationEdgeTopEl = null; paginationEdgeBottomEl = null;
   }
 
-  // Bandes décoratives (PAS du contenu réel du document, cf. le plan) montrant
-  // où l'export PDF romprait approximativement les pages, avec l'en-tête/
-  // pied résolu à cette position - recalculées au fil de la frappe (débounce,
-  // cf. schedulePaginationRecompute) et du redimensionnement. Masquées dès
-  // que : Aperçu A4 désactivé, en-tête/pied pas actif, ou édition d'en-tête/
-  // pied en cours (le document affiché n'est alors plus le document
-  // principal, cf. hfMode - rien de pertinent à prévisualiser).
+  // Zones de marge CLIQUABLES (façon Google Docs/Word - retour utilisateur :
+  // l'ancien bouton de toolbar + sous-barre dockée était moche et coupait la
+  // continuité de la page). Toujours présentes en Aperçu A4 - même sans
+  // aucun en-tête/pied encore configuré - pour servir de point d'ENTRÉE :
+  // une accroche fantôme apparaît au survol tant que la zone est vide
+  // ("+ Ajouter un en-tête"/"+ Ajouter un pied de page"), un simple
+  // survol-teinté + crayon une fois du contenu présent. Un clic (zone vide OU
+  // déjà remplie) appelle directement enterHeaderFooterMode(zone, variant) -
+  // AUCUN bouton de toolbar dédié n'existe plus, cf. renderHfPill (pastille
+  // flottante, visible seulement PENDANT l'édition elle-même).
   //
-  // Deux natures de bandes, pour un résultat honnête plutôt qu'un faux
+  // Recalculées au fil de la frappe (débounce, cf. schedulePaginationRecompute)
+  // et du redimensionnement. Masquées dès que : Aperçu A4 désactivé, ou
+  // édition d'en-tête/pied déjà en cours (hfMode - le document affiché n'est
+  // alors plus le document principal, rien de pertinent à cliquer/prévisualiser).
+  //
+  // Deux natures de zones, pour un résultat honnête plutôt qu'un faux
   // pixel-parfait généralisé : le tout début (en-tête de la page 1) et la
   // toute fin (pied de la dernière page) du document ont un vrai espace
   // libre disponible avant/après `.tiptap` - ce sont donc de VRAIS éléments
@@ -1934,16 +1946,40 @@ const Editor = (function () {
   // enfants - un enfant inattendu dans `.tiptap` serait la même trappe que la
   // V1 avec Quill, cf. mémoire project_quill_mutation_observer), qui ne
   // recouvrent donc jamais de texte réel. Les limites INTERMÉDIAIRES (pied
-  // d'une page + en-tête de la suivante) n'ont PAS cet espace - le contenu
-  // continue de défiler sans interruption réelle - ces bandes-là restent de
-  // purs overlays en position:absolute qui PEUVENT recouvrir un peu de texte
-  // exactement à la limite, résidu assumé (même classe que les écarts de
-  // rendu police déjà acceptés ailleurs dans ce projet).
+  // d'une page + en-tête de la suivante, seulement une fois un en-tête/pied
+  // déjà configuré - pas de point d'entrée à mi-document, comme Docs/Word)
+  // n'ont PAS cet espace - le contenu continue de défiler sans interruption
+  // réelle - ces bandes-là restent de purs overlays en position:absolute qui
+  // PEUVENT recouvrir un peu de texte exactement à la limite, résidu assumé
+  // (même classe que les écarts de rendu police déjà acceptés ailleurs dans
+  // ce projet).
+  function ensureEdgeZone(container, tiptapEl, pos) {
+    if (pos === 'top' && !paginationEdgeTopEl) {
+      paginationEdgeTopEl = document.createElement('div');
+      paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top v2-hf-zone';
+      container.insertBefore(paginationEdgeTopEl, tiptapEl);
+    }
+    if (pos === 'bottom' && !paginationEdgeBottomEl) {
+      paginationEdgeBottomEl = document.createElement('div');
+      paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom v2-hf-zone';
+      container.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
+    }
+  }
+  function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
+    const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
+    const hasContent = !!resolved.replace(/<[^>]*>/g, '').trim();
+    el.classList.toggle('v2-hf-zone-empty', !hasContent);
+    el.classList.toggle('v2-hf-zone-filled', hasContent);
+    el.innerHTML = hasContent
+      ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
+      : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
+    el.onclick = () => enterHeaderFooterMode(zone, variant);
+  }
   function renderPaginationOverlay() {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
-    if (hfMode || !headerFooterDraft.enabled || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
+    if (hfMode || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
 
     if (!paginationOverlayEl) {
       paginationOverlayEl = document.createElement('div');
@@ -1952,36 +1988,29 @@ const Editor = (function () {
     }
     paginationOverlayEl.innerHTML = '';
 
-    const differentFirstPage = !!headerFooterDraft.differentFirstPage;
-    const headerHtml = headerFooterDraft.header.default;
+    const enabled = !!headerFooterDraft.enabled;
+    const differentFirstPage = enabled && !!headerFooterDraft.differentFirstPage;
+    const headerHtml = enabled ? headerFooterDraft.header.default : null;
     const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
-    const footerHtml = headerFooterDraft.footer.default;
+    const footerHtml = enabled ? headerFooterDraft.footer.default : null;
     const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml;
 
-    const headerHeightPx = Math.max(measureHtmlHeightPx(headerHtml), measureHtmlHeightPx(headerFirstHtml));
-    const footerHeightPx = Math.max(measureHtmlHeightPx(footerHtml), measureHtmlHeightPx(footerFirstHtml));
+    const headerHeightPx = enabled ? Math.max(measureHtmlHeightPx(headerHtml), measureHtmlHeightPx(headerFirstHtml)) : 0;
+    const footerHeightPx = enabled ? Math.max(measureHtmlHeightPx(footerHtml), measureHtmlHeightPx(footerFirstHtml)) : 0;
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
     const offsets = computePageBreakOffsets(tiptapEl, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
-    // Espaceurs de bord (vrais éléments en flux, cf. commentaire ci-dessus) -
-    // insérés en frères de `.tiptap`, jamais dedans.
-    if (!paginationEdgeTopEl) {
-      paginationEdgeTopEl = document.createElement('div');
-      paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top';
-      container.insertBefore(paginationEdgeTopEl, tiptapEl);
-    }
-    if (!paginationEdgeBottomEl) {
-      paginationEdgeBottomEl = document.createElement('div');
-      paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-      container.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
-    }
-    paginationEdgeTopEl.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
-    paginationEdgeBottomEl.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
+    ensureEdgeZone(container, tiptapEl, 'top');
+    ensureEdgeZone(container, tiptapEl, 'bottom');
+    updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', 'Ajouter un en-tête');
+    updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', 'Ajouter un pied de page');
+
+    if (!enabled) return; // pas de "couture" à mi-document tant que rien n'est configuré (cf. commentaire ci-dessus)
 
     const tiptapOffsetTop = tiptapEl.offsetTop;
     const tiptapOffsetLeft = tiptapEl.offsetLeft;
@@ -2001,8 +2030,9 @@ const Editor = (function () {
       seam.className = 'v2-page-band v2-page-seam';
       if (footerText) {
         const f = document.createElement('div');
-        f.className = 'v2-page-band-footer';
+        f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled';
         f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
+        f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
         seam.appendChild(f);
       }
       const divider = document.createElement('div');
@@ -2010,8 +2040,9 @@ const Editor = (function () {
       seam.appendChild(divider);
       if (headerText) {
         const h = document.createElement('div');
-        h.className = 'v2-page-band-header';
+        h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
         h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
+        h.onclick = () => enterHeaderFooterMode('header', 'default'); // pageStarting >= 2 toujours dans une couture
         seam.appendChild(h);
       }
       paginationOverlayEl.appendChild(seam);
@@ -2045,7 +2076,6 @@ const Editor = (function () {
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
-    set('v2-btn-header-footer', 'headerFooter');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -2108,7 +2138,6 @@ const Editor = (function () {
     setLocked('v2-btn-toc', inHfMode);
     const numberingPill = document.querySelector('.numbering-pill');
     if (numberingPill) numberingPill.classList.toggle('v2-hf-locked', inHfMode);
-    setActive('v2-btn-header-footer', inHfMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -2209,7 +2238,6 @@ const Editor = (function () {
     });
 
     wireToolbar();
-    wireHeaderFooterBar();
     wireColorPickers();
     wireTableFloatingToolbar();
     wireImageFloatingToolbar();

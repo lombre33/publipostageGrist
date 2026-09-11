@@ -252,22 +252,18 @@
 /* === Mode d'édition en-tête/pied de page (.hf-editing, posée par
    v2/js/editor.js:enterHeaderFooterMode sur #editor-container) === Le contenu
    affiché dans .tiptap n'est alors PLUS le document principal (échangé via
-   editor.commands.setContent, cf. le plan) - cadre en pointillés accent +
-   bandeau explicite pour qu'il soit impossible de croire par erreur qu'on
-   édite encore le corps du document. Le bandeau (::before sur .tiptap lui-
-   même, pas un élément séparé - .tiptap est remplacé/reflowé par TipTap à
-   chaque frappe, un vrai enfant DOM ajouté à la main y serait fragile) lit
-   son libellé depuis --hf-banner-text, posée en JS (contenu dynamique selon
-   zone/variante en cours). */
-#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; }
-#editor-container.hf-editing { position: relative; }
-#editor-container.hf-editing::before {
-  content: var(--hf-banner-text, "Édition de l'en-tête / pied de page");
-  position: sticky; top: 0; left: 0; z-index: 20; display: inline-block;
-  margin-bottom: 10px; padding: 5px 12px; border-radius: 0 0 6px 6px;
-  background: var(--accent, #2f6fed); color: #fff; font-family: var(--font-ui);
-  font-size: 12px; font-weight: 700;
-}
+   editor.commands.setContent, cf. le plan) - cadre en pointillés accent pour
+   qu'il soit impossible de croire par erreur qu'on édite encore le corps du
+   document. `min-height` réduit (au lieu des 200px habituels, pensés pour un
+   DOCUMENT vide) : un en-tête d'une seule ligne ne doit pas ouvrir une grande
+   zone blanche vide, ça casserait justement l'effet "on édite juste ce petit
+   bout de page" recherché. Le bandeau texte fixe (::before) d'origine a été
+   remplacé par une vraie pastille interactive (#v2-hf-pill, cf.
+   v2/js/editor.js:renderHfPill) - retour utilisateur : point d'entrée par
+   bouton de toolbar + sous-barre dockée jugé "pas beau", remplacé par un
+   clic direct sur la marge de page (cf. .v2-hf-zone plus bas) façon Google
+   Docs/Word. */
+#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 80px; }
 
 /* Aperçu format A4 (case #v2-toggle-a4-preview, cf. v2/js/main.js) : contraint
    .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
@@ -358,15 +354,42 @@
    (css/style.css, partagé V1), d'où les sélecteurs ci-dessous couvrant les
    DEUX conteneurs. */
 #editor-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-edge-spacer {
-  box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 0 37.33px;
-  background: #fff; box-shadow: 0 0 0 1px #d7dde3; font-size: 10.5px; line-height: 1.42; color: #1b2430;
+  box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 8px 37.33px;
+  font-size: 10.5px; line-height: 1.42; color: #1b2430; min-height: 1.6em;
+  transition: background .12s ease, box-shadow .12s ease;
 }
-#editor-container.a4-preview .v2-page-edge-spacer:empty, #reader-container.a4-preview .v2-page-edge-spacer:empty { display: none; }
 #editor-container.a4-preview .v2-page-edge-top, #reader-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
 #editor-container.a4-preview .v2-page-edge-bottom, #reader-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
-.v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; pointer-events: none; z-index: 4; }
-.v2-page-band { position: absolute; box-sizing: border-box; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 2px 10px rgba(20, 28, 46, .12); font-size: 10.5px; line-height: 1.42; color: #1b2430; }
-.v2-page-band-header, .v2-page-band-footer { padding: 6px 37.33px; }
+/* Mode Lecture (#reader-container) : jamais interactif, ne connaît pas la
+   distinction vide/rempli de l'éditeur (js/reader-mode.js ne crée une zone
+   QUE si elle a du contenu) - fond "page" toujours affiché, aucune des
+   règles :hover/curseur ci-dessous (scopées à #editor-container) ne s'y
+   applique. */
+#reader-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-band { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+
+/* === Zones cliquables d'en-tête/pied de page (.v2-hf-zone, éditeur
+   uniquement - cf. v2/js/editor.js:updateHfZone/renderPaginationOverlay) ===
+   Point d'ENTRÉE façon Google Docs/Word : une zone VIDE reste invisible au
+   repos (pas de cadre blanc vide qui "pollue" une page sans en-tête/pied,
+   cf. la demande initiale) et ne révèle son accroche fantôme qu'au survol ;
+   une zone déjà REMPLIE garde son fond "page" en permanence (contenu visible
+   sans avoir à survoler) mais teinte accent + crayon au survol pour signaler
+   qu'elle est éditable. */
+#editor-container.a4-preview .v2-hf-zone { cursor: pointer; position: relative; }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty { background: transparent; }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover { background: var(--accent-soft, #e8f0fe); }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); }
+.v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent, #2f6fed); font-weight: 600; }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
+.v2-hf-zone-body { color: var(--text-faint, #6b7684); }
+.v2-hf-zone-pencil { display: none; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 5px; background: #fff; box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
+.v2-hf-zone-pencil::before { content: ''; position: absolute; inset: 5px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
+#editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-pencil { display: block; }
+
+.v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 4; }
+.v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
+.v2-page-band-header, .v2-page-band-footer { padding: 8px 37.33px; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
 .v2-page-seam-divider { height: 0; border-top: 1px dashed #c3cad6; margin: 0 14px; }
 
