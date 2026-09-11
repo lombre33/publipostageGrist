@@ -73,22 +73,32 @@ const Editor = (function () {
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
-  // Hauteur max d'une image dans l'en-tête/pied de page (demande utilisateur) :
-  // aucune limite technique dure n'existe réellement ici (la marge de page
-  // réservée s'adapte simplement à la hauteur mesurée du contenu, cf.
-  // buildHeaderFooterPdfChunks/renderPaginationOverlay) - une convention de ce
-  // projet pour garder un en-tête/pied raisonnable (typiquement un logo),
-  // pas une image qui grandit sans limite au gré d'un glisser malencontreux.
-  // Ajustable si besoin, aucun autre code n'en dépend.
+  // Taille max (boîte largeur×hauteur) d'une image dans l'en-tête/pied de
+  // page (demande utilisateur) : aucune limite technique dure n'existe
+  // réellement ici (la marge de page réservée s'adapte simplement à la
+  // hauteur mesurée du contenu, cf. buildHeaderFooterPdfChunks/
+  // renderPaginationOverlay) - une convention de ce projet pour garder un
+  // en-tête/pied raisonnable (typiquement un logo), pas une image qui
+  // grandit sans limite au gré d'un glisser malencontreux. LES DEUX
+  // dimensions comptent (pas juste la hauteur, cf. version précédente) :
+  // un logo large et bas (large bannière, ratio ~3:1 - cas réel signalé par
+  // l'utilisateur) peut avoir une hauteur minuscule à 320px de large sans
+  // jamais dépasser un plafond de hauteur seul, alors que sa LARGEUR est
+  // déjà largement excessive pour un en-tête. Ajustable si besoin, aucun
+  // autre code n'en dépend.
   const HF_MAX_IMAGE_HEIGHT_PX = 120;
-  // Ramène `widthPx` à la plus grande valeur qui garde la hauteur (dérivée du
-  // ratio intrinsèque naturalWidth/naturalHeight) sous ce plafond - SEULEMENT
-  // en mode en-tête/pied (`hfMode`, cf. plus haut) ; ne réduit JAMAIS en
-  // dessous de la valeur demandée (Math.min), donc ne bloque jamais un
-  // rétrécissement, seulement un agrandissement au-delà du plafond.
-  function clampWidthForHfMaxHeight(widthPx, naturalWidth, naturalHeight) {
+  const HF_MAX_IMAGE_WIDTH_PX = 300;
+  // Ramène `widthPx` à la plus grande valeur qui garde l'image DANS la boîte
+  // HF_MAX_IMAGE_WIDTH_PX × HF_MAX_IMAGE_HEIGHT_PX (comme un "contain" CSS -
+  // le ratio intrinsèque naturalWidth/naturalHeight décide laquelle des deux
+  // dimensions est la plus contraignante) - SEULEMENT en mode en-tête/pied
+  // (`hfMode`, cf. plus haut) ; ne réduit JAMAIS en dessous de la valeur
+  // demandée (Math.min), donc ne bloque jamais un rétrécissement, seulement
+  // un agrandissement au-delà du plafond.
+  function clampWidthForHfMaxSize(widthPx, naturalWidth, naturalHeight) {
     if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
-    const maxWidthPx = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
+    const maxWidthFromHeight = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
+    const maxWidthPx = Math.min(HF_MAX_IMAGE_WIDTH_PX, maxWidthFromHeight);
     return Math.min(widthPx, maxWidthPx);
   }
   // Dimensions intrinsèques d'une image distante, nécessaires pour choisir sa
@@ -791,12 +801,12 @@ const Editor = (function () {
           function onResizeMove(event) {
             if (!resizeState) return;
             let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.sign);
-            // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxHeight, en
+            // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en
             // tête de fichier) : les poignées restent utilisables (demande
             // utilisateur, contrairement au premier essai qui les masquait
             // entièrement) - le glisser va simplement buter sans dépasser la
-            // hauteur max, jamais bloqué en dessous (rétrécir reste libre).
-            width = clampWidthForHfMaxHeight(width, img.naturalWidth, img.naturalHeight);
+            // taille max, jamais bloqué en dessous (rétrécir reste libre).
+            width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
           }
           function onResizeUp() {
@@ -1420,7 +1430,7 @@ const Editor = (function () {
 
     // Élément <img> RÉEL de l'image sélectionnée - nécessaire pour lire ses
     // dimensions intrinsèques (naturalWidth/naturalHeight), utilisées par
-    // clampWidthForHfMaxHeight (zoom/reset ci-dessous) : `selectedImageNode()`
+    // clampWidthForHfMaxSize (zoom/reset ci-dessous) : `selectedImageNode()`
     // ne donne que les attributs ProseMirror (width demandé), jamais le
     // ratio intrinsèque réel de l'image.
     function selectedImageDom() {
@@ -1523,13 +1533,13 @@ const Editor = (function () {
       const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
-      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxHeight, en tête
+      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en tête
       // de fichier) : zoom avant/reset restent utilisables (poignées aussi,
-      // cf. startResize) - juste bornés à la hauteur max, jamais bloqués.
+      // cf. startResize) - juste bornés à la taille max, jamais bloqués.
       // zoom-out n'a besoin d'aucun plafond (il ne fait que rétrécir).
       const clampedWidth = widthPx => {
         const dom = selectedImageDom();
-        return dom ? clampWidthForHfMaxHeight(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
+        return dom ? clampWidthForHfMaxSize(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
       };
       const commands = {
         'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
@@ -2503,15 +2513,15 @@ const Editor = (function () {
       // Redimensionnée dès l'import si trop grande pour l'en-tête/pied
       // (demande utilisateur) - plutôt qu'insérer à 320px puis compter sur
       // l'utilisateur pour la rétrécir : sonde les dimensions RÉELLES pour
-      // calculer, si besoin, la largeur qui tient sous HF_MAX_IMAGE_HEIGHT_PX
-      // (cf. clampWidthForHfMaxHeight). Repli silencieux sur 320px si le
+      // calculer, si besoin, la largeur qui tient dans la boîte max (cf.
+      // clampWidthForHfMaxSize). Repli silencieux sur 320px si le
       // sondage échoue (réseau...) - warnIfImageUrlNotExportable juste après
       // avertit déjà l'utilisateur d'un souci sur cette URL de toute façon.
       let width = 320;
       if (hfMode) {
         try {
           const dims = await probeImageDimensions(url);
-          width = clampWidthForHfMaxHeight(width, dims.naturalWidth, dims.naturalHeight);
+          width = clampWidthForHfMaxSize(width, dims.naturalWidth, dims.naturalHeight);
         } catch (e) { /* repli sur 320px */ }
       }
       editor.chain().focus().insertImage({ src: url, alt: 'Image', width: Math.round(width) + 'px' }).run();
