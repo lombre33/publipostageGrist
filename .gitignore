@@ -1,2 +1,6 @@
 .claude/
 test-output/
+# Régénéré à la demande par v2/dev-tests/generate-harness.sh (jamais commité,
+# pour ne jamais risquer qu'une version périmée dérive silencieusement de
+# v2/index.html - cf. v2/dev-tests/README.md).
+v2/_test-harness.html
