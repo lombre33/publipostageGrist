@@ -225,11 +225,6 @@
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
 .tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
-/* Taille verrouillée en mode en-tête/pied (cf. v2/js/editor.js:startResize) :
-   masque les poignées de coin pour ne pas suggérer un redimensionnement
-   possible - `!important` nécessaire, la règle ci-dessus (plus spécifique,
-   `.editor-image-selected .editor-image-handle`) l'emporterait sinon. */
-#editor-container.hf-editing .editor-image-handle { display: none !important; }
 .tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
 .tiptap .editor-image-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
 .tiptap .editor-image-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }

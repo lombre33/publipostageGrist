@@ -73,6 +73,39 @@ const Editor = (function () {
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
+  // Hauteur max d'une image dans l'en-tête/pied de page (demande utilisateur) :
+  // aucune limite technique dure n'existe réellement ici (la marge de page
+  // réservée s'adapte simplement à la hauteur mesurée du contenu, cf.
+  // buildHeaderFooterPdfChunks/renderPaginationOverlay) - une convention de ce
+  // projet pour garder un en-tête/pied raisonnable (typiquement un logo),
+  // pas une image qui grandit sans limite au gré d'un glisser malencontreux.
+  // Ajustable si besoin, aucun autre code n'en dépend.
+  const HF_MAX_IMAGE_HEIGHT_PX = 120;
+  // Ramène `widthPx` à la plus grande valeur qui garde la hauteur (dérivée du
+  // ratio intrinsèque naturalWidth/naturalHeight) sous ce plafond - SEULEMENT
+  // en mode en-tête/pied (`hfMode`, cf. plus haut) ; ne réduit JAMAIS en
+  // dessous de la valeur demandée (Math.min), donc ne bloque jamais un
+  // rétrécissement, seulement un agrandissement au-delà du plafond.
+  function clampWidthForHfMaxHeight(widthPx, naturalWidth, naturalHeight) {
+    if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
+    const maxWidthPx = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
+    return Math.min(widthPx, maxWidthPx);
+  }
+  // Dimensions intrinsèques d'une image distante, nécessaires pour choisir sa
+  // largeur d'INSERTION dans un en-tête/pied (cf. bind('v2-btn-image', ...)
+  // plus bas) - naturalWidth/naturalHeight restent lisibles même sur une
+  // image "tainted" CORS (seul l'accès aux pixels serait bloqué), donc
+  // aucune précaution particulière nécessaire ici au-delà du repli sur échec
+  // de chargement (URL invalide, réseau...).
+  function probeImageDimensions(url) {
+    return new Promise((resolve, reject) => {
+      const probe = new Image();
+      probe.onload = () => resolve({ naturalWidth: probe.naturalWidth, naturalHeight: probe.naturalHeight });
+      probe.onerror = reject;
+      probe.src = url;
+    });
+  }
+
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
   // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
@@ -748,16 +781,7 @@ const Editor = (function () {
           }
 
           let resizeState = null;
-          // Taille verrouillée en mode en-tête/pied (demande utilisateur) :
-          // une image plus grande y agrandit d'autant la marge de page
-          // réservée pour l'en-tête/pied (cf. buildHeaderFooterPdfChunks/
-          // renderPaginationOverlay, qui mesurent le contenu réel) - une
-          // zone censée rester compacte ne doit pas pouvoir grossir "à
-          // l'infini" au gré d'un redimensionnement. Garde-fou en plus du
-          // CSS qui masque déjà les poignées (cf. .hf-editing
-          // .editor-image-handle), au cas où.
           function startResize(event, corner) {
-            if (hfMode) return;
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
             resizeState = { startX: event.clientX, startWidth: rect.width, sign: corner.includes('w') ? -1 : 1 };
@@ -766,7 +790,13 @@ const Editor = (function () {
           }
           function onResizeMove(event) {
             if (!resizeState) return;
-            const width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.sign);
+            let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.sign);
+            // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxHeight, en
+            // tête de fichier) : les poignées restent utilisables (demande
+            // utilisateur, contrairement au premier essai qui les masquait
+            // entièrement) - le glisser va simplement buter sans dépasser la
+            // hauteur max, jamais bloqué en dessous (rétrécir reste libre).
+            width = clampWidthForHfMaxHeight(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
           }
           function onResizeUp() {
@@ -1388,6 +1418,16 @@ const Editor = (function () {
       return (node && node.type && node.type.name === 'editorImage') ? node : null;
     }
 
+    // Élément <img> RÉEL de l'image sélectionnée - nécessaire pour lire ses
+    // dimensions intrinsèques (naturalWidth/naturalHeight), utilisées par
+    // clampWidthForHfMaxHeight (zoom/reset ci-dessous) : `selectedImageNode()`
+    // ne donne que les attributs ProseMirror (width demandé), jamais le
+    // ratio intrinsèque réel de l'image.
+    function selectedImageDom() {
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      return (dom && dom.querySelector) ? dom.querySelector('img') : null;
+    }
+
     function updateSelectedImage(patch) {
       const node = selectedImageNode();
       if (!node) return;
@@ -1483,16 +1523,18 @@ const Editor = (function () {
       const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
-      // Taille verrouillée en mode en-tête/pied (cf. commentaire sur
-      // startResize plus haut, même raison - une image plus grande y
-      // agrandirait d'autant la marge de page réservée) : les 3 actions qui
-      // changent la largeur sont ignorées pendant ce mode (grisées aussi,
-      // cf. syncState ci-dessous).
-      const sizeLocked = () => !!hfMode;
+      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxHeight, en tête
+      // de fichier) : zoom avant/reset restent utilisables (poignées aussi,
+      // cf. startResize) - juste bornés à la hauteur max, jamais bloqués.
+      // zoom-out n'a besoin d'aucun plafond (il ne fait que rétrécir).
+      const clampedWidth = widthPx => {
+        const dom = selectedImageDom();
+        return dom ? clampWidthForHfMaxHeight(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
+      };
       const commands = {
-        'zoom-out': () => { if (!sizeLocked()) updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }); },
-        'zoom-in': () => { if (!sizeLocked()) updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }); },
-        reset: () => { if (!sizeLocked()) updateSelectedImage({ width: '320px', align: null }); },
+        'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
+        'zoom-in': () => updateSelectedImage({ width: Math.round(clampedWidth((parseFloat(attrs.width) || 320) * 1.25)) + 'px' }),
+        reset: () => updateSelectedImage({ width: Math.round(clampedWidth(320)) + 'px', align: null }),
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
@@ -1536,12 +1578,6 @@ const Editor = (function () {
       const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
       setLockedBtn('layer-front', !!hfMode);
       setLockedBtn('layer-behind', !!hfMode);
-      // Cf. commentaire sur `sizeLocked`/startResize ci-dessus : la taille
-      // (zoom avant/arrière/réinitialiser) est verrouillée pendant tout le
-      // mode en-tête/pied, même mécanisme visuel.
-      setLockedBtn('zoom-out', !!hfMode);
-      setLockedBtn('zoom-in', !!hfMode);
-      setLockedBtn('reset', !!hfMode);
     }
 
     // Retour visuel de sélection (classe .editor-image-selected) recalculé
@@ -2461,10 +2497,24 @@ const Editor = (function () {
     // Gestion ligne/colonne/suppression de tableau : déplacée vers la
     // toolbar flottante contextuelle, cf. wireTableFloatingToolbar.
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
-    bind('v2-btn-image', () => {
+    bind('v2-btn-image', async () => {
       const url = window.prompt('URL de l\'image :');
       if (!url) return;
-      editor.chain().focus().insertImage({ src: url, alt: 'Image', width: '320px' }).run();
+      // Redimensionnée dès l'import si trop grande pour l'en-tête/pied
+      // (demande utilisateur) - plutôt qu'insérer à 320px puis compter sur
+      // l'utilisateur pour la rétrécir : sonde les dimensions RÉELLES pour
+      // calculer, si besoin, la largeur qui tient sous HF_MAX_IMAGE_HEIGHT_PX
+      // (cf. clampWidthForHfMaxHeight). Repli silencieux sur 320px si le
+      // sondage échoue (réseau...) - warnIfImageUrlNotExportable juste après
+      // avertit déjà l'utilisateur d'un souci sur cette URL de toute façon.
+      let width = 320;
+      if (hfMode) {
+        try {
+          const dims = await probeImageDimensions(url);
+          width = clampWidthForHfMaxHeight(width, dims.naturalWidth, dims.naturalHeight);
+        } catch (e) { /* repli sur 320px */ }
+      }
+      editor.chain().focus().insertImage({ src: url, alt: 'Image', width: Math.round(width) + 'px' }).run();
       warnIfImageUrlNotExportable(url);
     });
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
