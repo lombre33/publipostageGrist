@@ -170,3 +170,22 @@ Vérifié par un nouveau test de régression
 maintenant vert) et par une passe complète de la suite (images, tableaux,
 2-colonnes, imbrications, sauts de page/sommaire, en-têtes/pieds de page,
 fidélité PDF - aucune régression).
+
+**Régression corrigée le jour même** : le premier correctif posait le
+marqueur `_imageMarker` dans TOUT appel à `inlineRuns()`/
+`inlineRunsExcludingNestedLists()`, mais seul `blockFrom()` (flux principal)
+savait le retirer avant de construire un `text:` pdfmake. Les 5 AUTRES
+appelants (cellule de tableau via `cellContentFrom`/`cellLineToPdfObject`,
+extraction de texte pour l'habillage gauche/droite via
+`extractRunsBetweenRaw`/`floatedImageParagraphFrom`) laissaient ce marqueur
+fuiter tel quel dans un tableau `text:` - pdfmake plantait alors
+silencieusement sur N'IMPORTE QUEL document contenant une image (même une
+déjà habillée gauche/droite, qui marchait très bien avant ce correctif),
+avec `Unrecognized document structure: {"_imageMarker":true}` dans la
+console, et le bouton "Export PDF" (qualité vectorielle) ne déclenchait plus
+rien. Signalé par l'utilisateur immédiatement après déploiement. Corrigé en
+ajoutant un filtrage explicite (`stripImageMarkers()`, nouvelle fonction
+utilitaire) à ces 5 points d'appel. Revérifié : suite complète (~85 tests)
++ génération d'un vrai blob PDF (`PdfExport.getNativePdfBlobForRecord`) sur
+un document combinant image "au cœur du texte", image habillée gauche, ET
+image dans une cellule de tableau - sans erreur.

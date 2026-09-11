@@ -544,6 +544,18 @@ const PdfExport = (function () {
     });
     return runs;
   }
+  // `inlineRuns`/`inlineRunsExcludingNestedLists` glissent un marqueur
+  // `{_imageMarker:true}` dans le flux de runs à l'endroit exact où une
+  // image a été rencontrée (en plus de la pousser, comme avant, dans le
+  // tableau `images` séparé) - SEUL `blockFrom()` (flux principal) sait
+  // s'en servir pour reconstituer l'ordre réel texte/image (cf. Bug 3,
+  // dev-tests/BUGS.md). Tout AUTRE appelant de inlineRuns/
+  // inlineRunsExcludingNestedLists (cellule de tableau, extraction de texte
+  // pour l'habillage gauche/droite...) doit filtrer ce marqueur avant de
+  // construire un `text:` pdfmake - un objet sans `text` ni `image` glissé
+  // dans un tableau `text:` fait planter pdfmake ("Unrecognized document
+  // structure", constaté en conditions réelles).
+  function stripImageMarkers(runs) { return runs.filter(r => !r._imageMarker); }
 
   // Marqueur (puce/numéro) d'un <li> : TOUJOURS une vraie liste HTML ici
   // (<ul>/<ol> réels, cf. StarterKit) - contrairement à la V1 (listes Quill
@@ -751,7 +763,7 @@ const PdfExport = (function () {
       const before = images.length;
       let runs = [];
       line.inline.forEach(n => { runs = runs.concat(inlineRuns(n, cellBaseStyle, images)); });
-      runs = trimEdgeWhitespace(runs);
+      runs = trimEdgeWhitespace(stripImageMarkers(runs));
       const obj = { text: runs.length ? runs : ' ' };
       if (cellAlign) obj.alignment = cellAlign;
       attributeNestedPendingImages(images, before, obj, line.inline[0].parentElement || line.inline[0], rootRect, nestedPending);
@@ -778,9 +790,9 @@ const PdfExport = (function () {
     }
     const isLi = node.tagName === 'LI';
     const before = images.length;
-    const runs = trimEdgeWhitespace(isLi
+    const runs = trimEdgeWhitespace(stripImageMarkers(isLi
       ? inlineRunsExcludingNestedLists(node, cellBaseStyle, images)
-      : inlineRuns(node, cellBaseStyle, images));
+      : inlineRuns(node, cellBaseStyle, images)));
     const align = alignment(node) || cellAlign;
     let obj;
     if (isLi && isTaskListItem(node)) {
@@ -810,7 +822,7 @@ const PdfExport = (function () {
     const nestedPending = [];
     if (!lines.length) return { text: ' ' };
     if (lines.length === 1 && lines[0].inline) {
-      const runs = trimEdgeWhitespace(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }, images));
+      const runs = trimEdgeWhitespace(stripImageMarkers(inlineRuns(cell, { fontSize: DEFAULT_FONT_SIZE }, images)));
       const textObj = { text: runs.length ? runs : ' ' };
       if (!images.length) return textObj;
       const finalStack = [textObj].concat(images);
@@ -1258,7 +1270,7 @@ const PdfExport = (function () {
       target.nodeValue = target.nodeValue.slice(startCut.offset);
       removeBefore(clone, target);
     }
-    return inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []);
+    return stripImageMarkers(inlineRuns(clone, { fontSize: DEFAULT_FONT_SIZE }, []));
   }
   function extractRunsBetween(node, startCut, endCut) {
     return trimEdgeWhitespace(extractRunsBetweenRaw(node, startCut, endCut));
@@ -1367,7 +1379,7 @@ const PdfExport = (function () {
   // normal (image seule).
   function floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt) {
     const images = [];
-    const runs = trimEdgeWhitespace(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images));
+    const runs = trimEdgeWhitespace(stripImageMarkers(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images)));
     const floatImg = images.find(img => img._floatAlign);
     if (!floatImg || !runs.length) return null;
     const align = floatImg._floatAlign;
