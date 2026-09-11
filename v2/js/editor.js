@@ -84,9 +84,16 @@ const Editor = (function () {
   // un logo large et bas (large bannière, ratio ~3:1 - cas réel signalé par
   // l'utilisateur) peut avoir une hauteur minuscule à 320px de large sans
   // jamais dépasser un plafond de hauteur seul, alors que sa LARGEUR est
-  // déjà largement excessive pour un en-tête. Ajustable si besoin, aucun
-  // autre code n'en dépend.
-  const HF_MAX_IMAGE_HEIGHT_PX = 120;
+  // déjà largement excessive pour un en-tête.
+  // Hauteur revue à la baisse (120 → 60px, demande utilisateur : la zone
+  // d'en-tête paraissait occuper "presque 1/6 de la page") - 60px + le
+  // padding vertical de la zone (8px×2, cf. .v2-page-edge-spacer dans
+  // css/editor-v2.css) + l'écart avant le corps (HEADER_FOOTER_GAP_PX, cf.
+  // plus bas) totalisent ~89px sur les ~1122px d'une page A4 (PT_TO_PX ci-
+  // dessous), soit ~8% - une proportion standard de type "papier à en-tête"
+  // (logo/bandeau discret), pas un bandeau qui mange le tiers de la page.
+  // Ajustable si besoin, aucun autre code n'en dépend.
+  const HF_MAX_IMAGE_HEIGHT_PX = 60;
   const HF_MAX_IMAGE_WIDTH_PX = 300;
   // Ramène `widthPx` à la plus grande valeur qui garde l'image DANS la boîte
   // HF_MAX_IMAGE_WIDTH_PX × HF_MAX_IMAGE_HEIGHT_PX (comme un "contain" CSS -
