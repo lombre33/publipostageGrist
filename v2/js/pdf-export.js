@@ -398,7 +398,12 @@ const PdfExport = (function () {
       }
       return [];
     }
-    if (node.tagName === 'BR') return [{ text: '\n', ...style }];
+    // `data-pdf-measure-filler` : <br> injecté par insertTrailingBreaksForEmptyBlocks
+    // (cf. plus bas) juste pour donner une hauteur réelle à un bloc VRAIMENT
+    // vide dans l'hôte de mesure hors-écran - jamais un vrai retour à la
+    // ligne saisi par l'utilisateur, ne doit produire AUCUN run (le repli
+    // `text: ' '` existant plus loin s'occupe déjà de la ligne vide).
+    if (node.tagName === 'BR') return node.hasAttribute('data-pdf-measure-filler') ? [] : [{ text: '\n', ...style }];
     let runs = [];
     let sawLineBlock = false;
     node.childNodes.forEach(child => {
@@ -1793,8 +1798,41 @@ const PdfExport = (function () {
   // faussant l'habillage/justify d'une image flottante nichée dans la
   // colonne (bug signalé par l'utilisateur - le calcul se basait sur une
   // largeur bien plus grande que la colonne réelle).
+  // Un <p>/<h1-6>/<li>/<blockquote>/<td>/<th> COMPLÈTEMENT vide (une ligne
+  // vide volontaire dans l'éditeur - Entrée sans rien taper d'autre) s'effondre
+  // à hauteur NULLE une fois reconstruit ici, dans un hôte de mesure hors-écran
+  // (aucun enfant du tout = aucune "ligne" CSS à afficher) - alors que dans
+  // l'éditeur RÉEL, ProseMirror insère lui-même un
+  // <br class="ProseMirror-trailingBreak"> purement décoratif (jamais présent
+  // dans `Editor.getHTML()`) qui lui donne sa hauteur de ligne normale.
+  // Signalé cassé par l'utilisateur : une image en calque placée après
+  // plusieurs lignes vides atterrissait au même niveau que le DÉBUT du
+  // document - les blocs voisins utilisés comme ancres (cf.
+  // resolvePendingImageAnchors) se retrouvaient tous mesurés à la MÊME
+  // position (juste après le dernier bloc réel, ces lignes vides collées
+  // les unes aux autres à hauteur 0) au lieu de leurs vraies positions
+  // espacées, biaisant tout calcul de bracketing/interpolation qui s'appuie
+  // dessus. Sans effet sur le texte final du PDF lui-même (les blocs
+  // `{text:' '}` de repli, cf. blockFrom, ont leur propre hauteur pdfmake
+  // indépendante de cette mesure DOM) - uniquement cette mesure hors-écran
+  // auxiliaire. Corrigé en reproduisant ici le même artifice visuel que
+  // ProseMirror : un <br> injecté (marqué `data-pdf-measure-filler` pour ne
+  // produire AUCUN run textuel, cf. inlineRuns) dans tout bloc-texte
+  // totalement vide avant toute mesure - un bloc contenant SEULEMENT une
+  // image (aucun texte à côté) garde lui son enfant <img> et n'est donc PAS
+  // concerné (juste sans rapport, `hasChildNodes()` est déjà vrai).
+  function insertTrailingBreaksForEmptyBlocks(root) {
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => {
+      if (!el.hasChildNodes()) {
+        const br = document.createElement('br');
+        br.setAttribute('data-pdf-measure-filler', '1');
+        el.appendChild(br);
+      }
+    });
+  }
   async function htmlToPdfContent(html, isTopLevel, availableWidthPt) {
     const root = document.createElement('div'); root.innerHTML = html || '';
+    insertTrailingBreaksForEmptyBlocks(root);
     let headingMarkers = null;
     if (isTopLevel) {
       const config = root.querySelector(':scope > .heading-numbering-config');
@@ -2191,6 +2229,7 @@ const PdfExport = (function () {
       const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
+      insertTrailingBreaksForEmptyBlocks(measureRoot);
       const detach = attachMeasureHost(measureRoot, CONTENT_WIDTH_PX);
       const heightPt = measureRoot.getBoundingClientRect().height * PX_TO_PT;
       detach();
