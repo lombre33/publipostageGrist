@@ -884,6 +884,29 @@ const Editor = (function () {
     });
   }
 
+  // TipTap v3 a remplacé l'ancienne extension-history dédiée par un simple
+  // "undoRedo" (cf. @tiptap/extensions) qui ne fournit plus AUCUNE commande
+  // pour vider la pile prosemirror-history sous-jacente (seulement undo/redo)
+  // - vérifié en inspectant le paquet publié, pas de clearHistory nulle part.
+  // Reconstruire l'EditorState avec les MÊMES plugins réinitialise l'état de
+  // chacun d'eux (dont l'historique) sans recréer la vue ni perdre le
+  // document courant - seul moyen fiable trouvé, cf. BUGS.md pour le bug que
+  // ça corrige (Editor.setHTML() qui ne vidait jamais l'historique).
+  function createClearHistoryExtension(Extension, EditorState) {
+    return Extension.create({
+      name: 'clearHistory',
+      addCommands() {
+        return {
+          clearHistory: () => ({ editor: ed }) => {
+            const { view } = ed;
+            view.updateState(EditorState.create({ schema: view.state.schema, doc: view.state.doc, selection: view.state.selection, plugins: view.state.plugins }));
+            return true;
+          },
+        };
+      },
+    });
+  }
+
   function createTwoColumnsNodes(Node, mergeAttributes) {
     const TwoColumnsColumn = Node.create({
       name: 'twoColumnsColumn',
@@ -2880,7 +2903,8 @@ const Editor = (function () {
     const { TaskItem } = await import('@tiptap/extension-task-item');
     const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
     floatingUi = { computePosition, offset, flip, shift, autoUpdate };
-    ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass } = await import('prosemirror-state'));
+    let EditorStateClass;
+    ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass, EditorState: EditorStateClass } = await import('prosemirror-state'));
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const PageNumberBadge = createPageNumberBadgeNode(Node, mergeAttributes);
@@ -2956,6 +2980,7 @@ const Editor = (function () {
         HeadingNumberingConfig,
         Toc,
         createTabNavigationExtension(Extension),
+        createClearHistoryExtension(Extension, EditorStateClass),
       ],
       content: '',
     });
@@ -3249,6 +3274,13 @@ const Editor = (function () {
   function setHTML(html) {
     if (!editor) return;
     editor.commands.setContent(html || '', { emitUpdate: false });
+    // Vide l'historique Annuler/Rétablir : sans ça, il s'accumule sur toute
+    // la durée de vie de l'éditeur, y compris à travers plusieurs changements
+    // de modèle successifs - un Annuler après un chargement peut alors faire
+    // réapparaître le contenu d'un modèle précédent (bug confirmé, cf.
+    // dev-tests/BUGS.md). Seul appelant de setHTML : main.js au chargement
+    // d'un modèle - aucun usage interne ne compte sur un historique préservé.
+    editor.commands.clearHistory();
     editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
     // Un modèle chargé peut déjà porter une numérotation configurée : la
     // valeur ci-dessus vient d'être posée mais le NodeView du sommaire a déjà

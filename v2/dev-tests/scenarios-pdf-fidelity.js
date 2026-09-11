@@ -158,6 +158,52 @@
     },
   });
 
+  cases.push({
+    id: 'pdffid_inline_image_position_in_paragraph',
+    // BUG CONFIRMÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte" SANS
+    // alignement gauche/droite (par défaut, ou centrée) est toujours
+    // repoussée en fin de texte de son paragraphe dans le PDF, quelle que
+    // soit sa position réelle dans le HTML source (début/milieu/fin de
+    // phrase) - `blockFrom` (v2/js/pdf-export.js) ne fait passer par le
+    // mécanisme d'habillage `columns` QUE align==='left'/'right' ; dans tous
+    // les autres cas le texte est concaténé en un seul bloc et les images
+    // poussées après, sans mémoriser l'ordre réel.
+    description: 'CAS CONNU CASSÉ : une image sans alignement gauche/droite au MILIEU d\'un paragraphe (texte avant ET après) doit apparaître ENTRE les deux dans le PDF, pas après tout le texte concaténé',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.typeText('AAA ');
+      const origPrompt = window.prompt;
+      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      await h.clickButton('v2-btn-image');
+      window.prompt = origPrompt;
+      await h.sleep(80);
+      const img = h.tiptap().querySelector('img.editor-image');
+      const parentP = img.closest('p');
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(parentP);
+      range.collapse(false);
+      sel.removeAllRanges(); sel.addRange(range);
+      await h.sleep(40);
+      await h.typeText(' BBB');
+      await h.sleep(60);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const blocks = h.flattenPdfContent(result.content);
+      const textBeforeImage = blocks.some((b, i) => h.blockPlainText(b).includes('AAA') && blocks.slice(0, i).every(bb => !bb.image));
+      // Attendu (cassé actuellement) : le texte "AAA" arrive AVANT l'image
+      // ET le texte "BBB" arrive APRÈS - jamais les deux fusionnés dans un
+      // seul bloc suivi de l'image.
+      const order = blocks.map(b => (b.image ? '[image]' : h.blockPlainText(b)));
+      const aaaIdx = order.findIndex(t => typeof t === 'string' && t.includes('AAA'));
+      const imgIdx = order.findIndex(t => t === '[image]');
+      const bbbIdx = order.findIndex(t => typeof t === 'string' && t.includes('BBB'));
+      const orderPreserved = aaaIdx >= 0 && imgIdx >= 0 && bbbIdx >= 0 && aaaIdx < imgIdx && imgIdx < bbbIdx;
+      return { pass: orderPreserved, notes: 'html=' + html + ' order=' + JSON.stringify(order) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFidelity = cases;
 })();

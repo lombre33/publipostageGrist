@@ -134,24 +134,40 @@
 
   cases.push({
     id: 'img_reset_size',
-    // BUG CONFIRMÉ (cf. BUGS.md) : le clic met bien à jour le MODÈLE stocké
-    // (Editor.getHTML() montre "320px" après coup) mais PAS l'affichage
-    // visuel de l'<img> à l'écran (reste à son ancienne largeur) - vérifié
-    // à plusieurs reprises, y compris en re-cliquant, sans erreur console.
-    description: 'Bouton "taille d\'origine" ramène l\'image à 320px (largeur par défaut, pas la taille intrinsèque du fichier)',
+    // NOTE : la version précédente de ce test simulait un "redimensionnement"
+    // en mutant `img.style.width` DIRECTEMENT en JS, sans jamais passer par
+    // ProseMirror - le modèle gardait donc sa largeur d'origine (déjà
+    // 320px), si bien que le clic "Taille d'origine" appliquait un patch
+    // IDENTIQUE aux attributs déjà en place. ProseMirror considère alors le
+    // nœud remplacé comme inchangé (`Node.eq()`) et n'appelle jamais le
+    // callback `update()` de la NodeView - le <img> gardait donc son style
+    // muté "à la main", en dehors de tout mécanisme réel de l'éditeur. Un
+    // VRAI redimensionnement utilisateur (glisser une poignée, ou les boutons
+    // zoom avant/arrière testés ici) commite toujours la largeur dans le
+    // modèle AVANT le clic sur reset - dans ce cas, vérifié manuellement puis
+    // ici, l'affichage ET le modèle se mettent bien à jour ensemble. Anomalie
+    // invalidée (cf. BUGS.md) - c'était un artefact du harnais de test, pas
+    // un bug de l'application.
+    description: 'Bouton "taille d\'origine" ramène l\'image à 320px (largeur par défaut, pas la taille intrinsèque du fichier) après un VRAI redimensionnement (zoom avant répété)',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
       const img = await insertImageViaToolbar(h);
-      img.style.width = '500px';
-      await h.sleep(30);
       await h.selectAtomNode(img);
+      for (let i = 0; i < 3; i++) {
+        const zoomBtn = document.querySelector('.v2-floating-toolbar button[data-action="zoom-in"]');
+        if (!zoomBtn) return { pass: false, notes: 'toolbar image non trouvée (zoom-in)' };
+        zoomBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(50);
+      }
+      const widthAfterZoom = parseFloat(h.tiptap().querySelector('img.editor-image').style.width);
       const resetBtn = document.querySelector('.v2-floating-toolbar button[data-action="reset"]');
-      if (!resetBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+      if (!resetBtn) return { pass: false, notes: 'toolbar image non trouvée (reset)' };
       resetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       await h.sleep(60);
       const widthAfter = parseFloat(h.tiptap().querySelector('img.editor-image').style.width);
-      return { pass: widthAfter < 500, notes: 'widthAfter=' + widthAfter };
+      const html = Editor.getHTML();
+      return { pass: widthAfterZoom > 320 && widthAfter === 320 && /width:\s*320px/.test(html), notes: JSON.stringify({ widthAfterZoom, widthAfter, html }) };
     },
   });
 

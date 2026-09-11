@@ -118,13 +118,17 @@ balises `<script>`/`<link>` de `v2/index.html`.
   d'un éventuel mode d'édition en-tête/pied resté actif, spécifiquement pour
   ça.
 
-## Bug de fond découvert en construisant cette suite (indépendant de tout scénario précis)
+## Bugs de fond découverts en construisant/étendant cette suite
 
-`Editor.setHTML()` ne vide JAMAIS l'historique annuler/rétablir de TipTap.
-Cette pile s'accumule sur toute la durée de vie de l'éditeur, y compris à
-travers plusieurs changements de modèle successifs - un utilisateur qui
-change de modèle puis appuie sur Annuler peut voir réapparaître le contenu
-d'un modèle précédent (voire, constaté en conditions de test prolongées, un
-contenu bien plus ancien). Testé par
-`scenarios-formatting.js:fmt_undo_history_not_cleared_by_sethtml` - voir
-`BUGS.md` pour le repro exact à valider en conditions réelles.
+- `Editor.setHTML()` ne vidait JAMAIS l'historique annuler/rétablir de TipTap
+  - **corrigé** (nouvelle extension `createClearHistoryExtension`,
+  `v2/js/editor.js`, TipTap v3 n'exposant plus de commande `clearHistory`
+  officielle). Testé par
+  `scenarios-formatting.js:fmt_undo_history_not_cleared_by_sethtml`.
+- Une image "au cœur du texte" sans alignement gauche/droite (par défaut ou
+  centrée) est toujours repoussée en fin de texte de son paragraphe dans
+  l'export PDF, quelle que soit sa position réelle dans le document -
+  **pas encore corrigé**, en attente de confirmation en conditions réelles.
+  Testé par
+  `scenarios-pdf-fidelity.js:pdffid_inline_image_position_in_paragraph` - voir
+  `BUGS.md` (Bug 3) pour le repro exact.
