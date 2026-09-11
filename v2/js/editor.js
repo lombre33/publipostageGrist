@@ -247,6 +247,7 @@ const Editor = (function () {
     actions.appendChild(delBtn);
     const okBtn = document.createElement('button');
     okBtn.type = 'button';
+    okBtn.className = 'v2-footnote-popup-ok';
     okBtn.textContent = 'OK';
     okBtn.addEventListener('mousedown', event => { event.preventDefault(); commitFootnotePopup(); });
     actions.appendChild(okBtn);

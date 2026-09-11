@@ -619,14 +619,32 @@
 .tiptap .footnote-ref-marker::before, .reader-content .footnote-ref-marker::before { content: counter(footnote-ref); }
 
 /* Popup d'édition du texte d'une note (v2/js/editor.js:ensureFootnotePopupBox) -
-   même gabarit que #v2-image-var-picker (bordure/ombre légère, cf. plus bas). */
-#v2-footnote-popup { position: absolute; z-index: 1000; background: #fff; border: 1px solid #b8e6cc; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 6px; width: 240px; }
-#v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .92em; resize: vertical; }
-#v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: space-between; margin-top: 4px; }
-#v2-footnote-popup .v2-footnote-popup-actions button { font-size: .85em; padding: 2px 10px; }
-/* Même rouge que .var-badge-broken (css/style.css) - langage "action destructive"
-   déjà établi dans ce projet, réutilisé ici plutôt qu'inventé. */
-#v2-footnote-popup .v2-footnote-popup-delete { color: #a4231c; border-color: #f0b3b3; }
+   harmonisé avec le reste du chrome V2 (retour utilisateur : détonnait avec
+   le reste de l'UI) plutôt que des couleurs/police ad hoc - mêmes jetons que
+   #v2-image-var-picker ci-dessous (même famille de popup ponctuel) :
+   var(--surface)/var(--border-strong)/var(--font-ui), jamais de teinte
+   propre au vert des chips (réservée au CONTENU des bulles, pas au chrome
+   du popup qui l'édite). */
+#v2-footnote-popup { position: absolute; z-index: 2000; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 8px; width: 240px; font-family: var(--font-ui); }
+#v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 5px 6px; resize: vertical; }
+#v2-footnote-popup textarea:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
+#v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; }
+/* Mêmes boutons que .link-rules-modal-content .modal-actions (toolbar-v2.css) -
+   OK en primaire (accent plein), Supprimer en secondaire teinté danger :
+   même vocabulaire "action destructive" que le reste de l'app (--danger),
+   plus le rouge ad hoc utilisé au tout premier jet. */
+#v2-footnote-popup .v2-footnote-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+#v2-footnote-popup .v2-footnote-popup-actions button:hover { background: var(--surface-sunken); }
+/* `button.xxx` (pas juste `.xxx`) - sans l'élément en plus dans le
+   sélecteur, ces 2 règles avaient EXACTEMENT la même spécificité que la
+   règle générique juste au-dessus (1 ID + 1 classe) mais perdaient contre
+   elle une fois l'élément `button` ajouté à CELLE-ci (1 ID + 1 classe + 1
+   élément, plus spécifique) - constaté en conditions réelles : OK/Supprimer
+   restaient blancs/gris malgré cette tentative de les colorer. */
+#v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
+#v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
+#v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+#v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-hover); }
 
 /* Onglets du panneau `#` (v2/js/variables.js:ensureBox) - Variables (par
    défaut) / Chips. #autocomplete-box lui-même reste défini dans
@@ -634,13 +652,21 @@
    colonne flex (JS bascule son display en 'flex', jamais 'block', cf.
    variables.js) pour que .ac-tabs reste fixe pendant que .ac-items défile
    seul (max-height/overflow déplacés depuis la règle #autocomplete-box de
-   css/style.css, sans impact V1 qui ne crée jamais .ac-items). */
-#autocomplete-box { display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; }
+   css/style.css, sans impact V1 qui ne crée jamais .ac-items). Chrome
+   entièrement réharmonisé avec le reste du V2 (retour utilisateur) - mêmes
+   jetons que #v2-image-var-picker (bordure/police/couleurs), le bleu
+   --accent des onglets actifs comme PARTOUT ailleurs dans ce fichier
+   (.v2-hover-row.is-active, .v2-segmented-btn.active...) plutôt que le vert
+   des chips - ce vert reste réservé au CONTENU (bulles smart-chip/numéro de
+   note), jamais à la navigation/au chrome qui les entoure. */
+#autocomplete-box { display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; }
 #autocomplete-box .ac-items { overflow: auto; }
-.ac-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid #d7dde3; }
-.ac-tab { flex: 1; text-align: center; padding: 4px 8px; font-size: .85em; color: #6b7280; cursor: pointer; }
-.ac-tab:hover { background: #f4f6f8; }
-.ac-tab.active { color: #146c43; font-weight: 600; box-shadow: inset 0 -2px 0 #146c43; }
+#autocomplete-box .ac-item { color: var(--text); }
+#autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background: var(--surface-sunken); }
+.ac-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.ac-tab { flex: 1; text-align: center; padding: 5px 8px; font-size: 12px; font-weight: 600; color: var(--text-faint); cursor: pointer; }
+.ac-tab:hover { background: var(--surface-sunken); }
+.ac-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 /* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle
@@ -732,6 +758,21 @@
    (1 ID + 1 classe, gagne sur classe même à ID égal) pour rétablir la
    largeur naturelle. */
 #v2-toolbar .v2-segmented-btn { width: auto; flex-shrink: 0; }
+/* Élargi spécifiquement pour CE flyout (retour utilisateur, capture d'écran
+   à l'appui) : le bloc "Numérotation des titres" y était compressé, les
+   168px génériques de .v2-hover-flyout-v suffisant à peine à la rangée de
+   titres (Normal/Titre 1-6, libellés courts) mais serrant le contrôle
+   segmenté 4 boutons juste en dessous. Les AUTRES flyouts partageant
+   .v2-hover-flyout-v (qualité PDF, image-variable, etc.) n'ont pas ce
+   besoin, gardent leur largeur d'origine - ciblé par ID, pas par classe.
+   Les boutons du segmenté gardent leur largeur naturelle (PAS de flex:1,
+   cf. commentaire juste au-dessus sur cette tentative déjà essayée puis
+   retirée) - seul l'espace autour est augmenté ici, plus respirant avec la
+   largeur supplémentaire. */
+#v2-heading-flyout { min-width: 224px; }
+#v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
+#v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
+#v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; }
 /* Petit point discret sur le bouton principal, seul indice visuel qu'un
    survol révèle plus d'options (découvrabilité, cf. maquette "Options au
    survol" - point d'attention explicitement noté dans cette maquette). */
