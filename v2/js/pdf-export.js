@@ -2225,8 +2225,24 @@ const PdfExport = (function () {
     const empty = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
     if (!headerFooterData || !headerFooterData.enabled) return empty;
     async function resolveZone(html) {
-      if (!html || !html.replace(/<[^>]*>/g, '').trim()) return { content: null, heightPt: 0 };
+      // `<img>` en plus du texte : un en-tête/pied contenant SEULEMENT une
+      // image (aucun texte autour) avait tout son HTML dépouillé de balises
+      // par ce test - chaîne vide restante, traité à tort comme "zone vide"
+      // et silencieusement abandonné (image incluse) avant même d'atteindre
+      // htmlToPdfContent - découvert en ajoutant la prise en charge des
+      // images dans l'en-tête/pied (jusqu'ici seul le texte y était permis).
+      if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return { content: null, heightPt: 0 };
       const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
+      // Filet de sécurité : une image en calque (devant/derrière le texte)
+      // n'a PAS de résolution de position dans un en-tête/pied (pas de passe
+      // de mesure pdfmake dédiée à cette zone, contrairement au flux
+      // principal, cf. resolveNativePdfContent) - l'UI verrouille déjà cette
+      // option pendant l'édition d'un en-tête/pied (cf. wireImageFloatingToolbar),
+      // mais un gabarit existant ou modifié hors de cette UI pourrait quand
+      // même en contenir une : sans ce filet, elle resterait bloquée à son
+      // placeholder (0,0), visible au coin de la page plutôt que dans le
+      // texte - repli en flux normal, comme pour le corps du document.
+      stripUnresolvedPendingImages(content);
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
       insertTrailingBreaksForEmptyBlocks(measureRoot);

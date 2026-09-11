@@ -192,8 +192,14 @@
    (posée dynamiquement par v2/js/editor.js:syncToolbarState) - pointer-events
    (pas juste disabled, la numérotation des titres est un GROUPE au survol,
    pas un simple <button>) hérite vers tous les descendants, bloquant aussi
-   le panneau flottant révélé au survol, pas seulement le déclencheur. */
-#v2-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
+   le panneau flottant révélé au survol, pas seulement le déclencheur.
+   `.v2-floating-toolbar .v2-hf-locked` en plus (pas juste #v2-toolbar) :
+   les boutons "devant/derrière le texte" de la barre flottante d'image (cf.
+   wireImageFloatingToolbar) vivent dans document.body, hors de #v2-toolbar -
+   verrouillés en mode en-tête/pied car pdf-export.js ne résout pas la
+   position d'une image en calque dans cette zone (image "au cœur du texte"
+   seule prise en charge là-bas). */
+#v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
 
 /* === Pastille flottante d'édition d'en-tête/pied de page (#v2-hf-pill, cf.
    v2/js/editor.js:renderHfPill) === Remplace l'ancien bouton de toolbar +

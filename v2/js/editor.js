@@ -1483,8 +1483,13 @@ const Editor = (function () {
         'align-right': () => alignOrSnap('right'),
         wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
         'layer-normal': () => setLayer('normal'),
-        'layer-front': () => setLayer('front'),
-        'layer-behind': () => setLayer('behind'),
+        // Verrouillé en mode en-tête/pied (cf. syncState ci-dessous pour le
+        // grisage visuel) - garde-fou en plus du CSS pointer-events:none, au
+        // cas où : pdf-export.js ne résout pas encore la position d'une
+        // image en calque à l'intérieur d'un en-tête/pied (pas de mesure en
+        // 2 passes pour cette zone, contrairement au flux principal).
+        'layer-front': () => { if (!hfMode) setLayer('front'); },
+        'layer-behind': () => { if (!hfMode) setLayer('behind'); },
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -1509,6 +1514,13 @@ const Editor = (function () {
       setActive('layer-normal', !attrs.layer || attrs.layer === 'normal');
       setActive('layer-front', attrs.layer === 'front');
       setActive('layer-behind', attrs.layer === 'behind');
+      // Cf. commentaire sur 'layer-front'/'layer-behind' dans onAction
+      // ci-dessus : calque non résolu par pdf-export.js à l'intérieur d'un
+      // en-tête/pied, grisé pendant tout le mode (même classe/mécanisme que
+      // le reste de la toolbar, cf. .v2-hf-locked dans css/toolbar-v2.css).
+      const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
+      setLockedBtn('layer-front', !!hfMode);
+      setLockedBtn('layer-behind', !!hfMode);
     }
 
     // Retour visuel de sélection (classe .editor-image-selected) recalculé
@@ -2206,15 +2218,21 @@ const Editor = (function () {
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
     // Mode en-tête/pied de page (incrément 2.1) : grise (pointer-events, cf.
-    // .v2-hf-locked dans css/toolbar-v2.css) tableau/2-colonnes/image/saut de
+    // .v2-hf-locked dans css/toolbar-v2.css) tableau/2-colonnes/saut de
     // page/sommaire/numérotation des titres - aucun sens dans ce contexte
     // (cf. calibration utilisateur du plan). Le schéma ProseMirror reste
     // UNIQUE et partagé (compromis assumé) : seuls les BOUTONS sont bloqués.
+    // Image RETIRÉE de cette liste (demande utilisateur ultérieure) : une
+    // image "au cœur du texte" (flux normal) s'exporte très bien dans un
+    // en-tête/pied (htmlToPdfContent est générique, aucun câblage
+    // supplémentaire nécessaire) - seul le calque devant/derrière reste
+    // verrouillé (cf. wireImageFloatingToolbar), faute de résolution de
+    // position pour ce cas dans pdf-export.js (pas de pagination à l'intérieur
+    // d'un en-tête/pied, mais pas non plus câblé pour l'instant).
     const inHfMode = !!hfMode;
     const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
     setLocked('v2-btn-table', inHfMode);
     setLocked('v2-btn-two-columns', inHfMode);
-    setLocked('v2-btn-image', inHfMode);
     setLocked('v2-btn-page-break', inHfMode);
     setLocked('v2-btn-toc', inHfMode);
     const numberingPill = document.querySelector('.numbering-pill');
