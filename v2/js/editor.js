@@ -306,7 +306,21 @@ const Editor = (function () {
     suppressNextFootnoteOutsideCheck = true;
     Promise.resolve().then(() => { suppressNextFootnoteOutsideCheck = false; });
     box.style.display = 'block';
-    box._textarea.focus();
+    // Différé (setTimeout, pas un simple appel synchrone ni une microtâche) :
+    // le mousedown qui a mené ici (clic sur le marqueur, ou clic sur l'item
+    // "Note de bas de page" du panneau #) continue sa propre gestion NATIVE
+    // après le retour de cette fonction - notamment ProseMirror lui-même,
+    // qui reprend le focus sur .tiptap pour que la frappe suivante aille
+    // dans le document (comportement natif indispensable au clic normal,
+    // maintenant que ce mousedown n'est plus intercepté via stopPropagation,
+    // cf. correctif de la suppression). Un focus() synchrone ici serait
+    // écrasé par cette reprise de focus juste après - constaté en conditions
+    // réelles (retour utilisateur : la popup s'affichait mais taper au
+    // clavier n'écrivait plus rien dedans, ça partait dans l'éditeur). Un
+    // setTimeout(...,0) s'exécute après TOUTE cette gestion native (et toute
+    // micro-tâche que ProseMirror aurait pu programmer), donc ce focus()-ci
+    // est bien le DERNIER à s'appliquer.
+    setTimeout(() => { box._textarea.focus(); }, 0);
   }
 
   // Colle une image directement depuis le presse-papiers (Ctrl+V après un
