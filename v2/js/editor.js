@@ -2439,7 +2439,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); },
+      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
       // Collage d'image depuis le presse-papiers (cf. pasteImageFile plus
       // haut) : ne consomme QUE si le presse-papiers contient réellement une
       // image (`item.type` préfixé "image/") - un collage de texte normal,
@@ -2753,6 +2753,33 @@ const Editor = (function () {
     return style;
   }
 
+  // Signale les badges #Variable dont la table/colonne référencée n'existe
+  // plus (table supprimée, colonne supprimée/renommée depuis Grist) - un
+  // simple ajout de classe + `title` natif sur le <span> déjà rendu, PAS un
+  // attribut du nœud ProseMirror lui-même : la validité dépend d'un état
+  // externe (le schéma Grist courant), pas du contenu du document, donc rien
+  // à persister dans le HTML enregistré. Comme pour la manipulation DOM
+  // directe déjà rencontrée ailleurs dans ce fichier, ProseMirror peut
+  // reconstruire ce span à tout moment et perdre cet ajout - on ne compte
+  // donc jamais sur "ça tient", on rejoue cette passe à chaque déclencheur
+  // pertinent (setHTML ci-dessous ET onUpdate, cf. plus bas) plutôt que de
+  // la poser une seule fois.
+  function refreshVariableBadgeValidity() {
+    if (!editor) return;
+    editor.view.dom.querySelectorAll('span.var-badge').forEach(el => {
+      const table = el.dataset.table;
+      const column = el.dataset.column;
+      let reason = '';
+      if (table && GristAPI.getTables().indexOf(table) === -1) {
+        reason = `La table « ${table} » n'existe plus dans ce document.`;
+      } else if (table && column && GristAPI.getColumns(table).indexOf(column) === -1) {
+        reason = `La colonne « ${column} » n'existe plus dans la table « ${table} ».`;
+      }
+      el.classList.toggle('var-badge-broken', !!reason);
+      if (reason) el.title = reason; else el.removeAttribute('title');
+    });
+  }
+
   function setHTML(html) {
     if (!editor) return;
     editor.commands.setContent(html || '', { emitUpdate: false });
@@ -2773,6 +2800,13 @@ const Editor = (function () {
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     renderPaginationOverlay();
+    // Vérification immédiate (schéma déjà en cache, peut être légèrement
+    // périmé) PUIS après un rafraîchissement explicite du schéma (couvre le
+    // cas "table/colonne supprimée depuis la dernière ouverture du widget") -
+    // même schéma "immédiat + arrière-plan" que variables.js pour l'autocomplétion.
+    refreshVariableBadgeValidity();
+    GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
+      .catch(e => console.warn('[editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
   return {

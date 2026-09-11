@@ -28,17 +28,18 @@ const TemplateGallery = (function () {
   }
 
   // Le badge #Variable (<span class="var-badge" data-key="...">#key</span>,
-  // posé par createVarBadgeNode dans v2/js/editor.js) devient du texte brut
-  // "#key" — utilisé pour le mode "Modèle vierge" : un template unique sert
-  // aux deux modes (vide / + data), pas deux fichiers HTML à maintenir en
-  // double pour un même visuel (cf. plan). No-op si le template n'a aucune
-  // variable.
+  // posé par createVarBadgeNode dans v2/js/editor.js) est entièrement retiré
+  // (pas de texte de substitution) — utilisé pour le mode "Modèle vierge" :
+  // un template unique sert aux deux modes (vide / + data), pas deux
+  // fichiers HTML à maintenir en double pour un même visuel (cf. plan).
+  // Retiré au complet plutôt que converti en texte "#key" (essayé d'abord,
+  // rejeté par l'utilisateur : sans table de données derrière, ce texte ne
+  // représente plus rien et ne doit laisser AUCUNE trace visible). No-op si
+  // le template n'a aucune variable.
   function stripVariableBadges(html) {
     const root = document.createElement('div');
     root.innerHTML = html;
-    root.querySelectorAll('span.var-badge').forEach(el => {
-      el.replaceWith(document.createTextNode('#' + (el.dataset.key || '')));
-    });
+    root.querySelectorAll('span.var-badge').forEach(el => el.remove());
     return root.innerHTML;
   }
 

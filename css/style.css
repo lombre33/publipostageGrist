@@ -161,6 +161,21 @@ body { display:flex; flex-direction:column; }
 .toolbar-panel-field input { width:100%; box-sizing:border-box; }
 .field-hint { font-size:10.5px; color: var(--text-faint); line-height:1.35; }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
+/* Variable #Variable dont la table/colonne référencée n'existe plus (table
+   supprimée, colonne supprimée/renommée depuis Grist) - posé/retiré par
+   v2/js/editor.js:refreshVariableBadgeValidity() à chaque chargement de
+   modèle et à chaque mise à jour de l'éditeur (purement visuel, rien de
+   persisté dans le HTML). Le message d'erreur vit dans l'attribut `title`
+   natif posé par ce même code (infobulle système au survol, sans JS de
+   popup dédié à écrire). */
+.var-badge.var-badge-broken { background:#fbe9e9; color:#a4231c; border-color:#f0b3b3; padding-right:16px; position:relative; cursor:help; }
+.var-badge.var-badge-broken::after {
+  content:""; position:absolute; top:50%; right:3px; transform:translateY(-50%);
+  width:10px; height:10px; background-color:currentColor;
+  -webkit-mask-size:contain; mask-size:contain; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
+}
 #autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
 #autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
