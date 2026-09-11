@@ -172,7 +172,7 @@ const Editor = (function () {
     if (!candidates.length) {
       const empty = document.createElement('div');
       empty.className = 'v2-image-var-picker-empty';
-      empty.textContent = 'Aucune colonne Pièce jointe trouvée dans ce document.';
+      empty.textContent = I18n.t('imageVarPicker.empty');
       box.appendChild(empty);
     } else {
       candidates.forEach(v => {
@@ -224,7 +224,7 @@ const Editor = (function () {
     footnotePopupBox.style.display = 'none';
     const textarea = document.createElement('textarea');
     textarea.rows = 3;
-    textarea.placeholder = 'Texte de la note…';
+    textarea.placeholder = I18n.t('footnotePopup.placeholder');
     textarea.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); commitFootnotePopup(); }
     });
@@ -242,13 +242,13 @@ const Editor = (function () {
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'v2-footnote-popup-delete';
-    delBtn.textContent = 'Supprimer';
+    delBtn.textContent = I18n.t('footnotePopup.delete');
     delBtn.addEventListener('mousedown', event => { event.preventDefault(); deleteFootnotePopupNode(); });
     actions.appendChild(delBtn);
     const okBtn = document.createElement('button');
     okBtn.type = 'button';
     okBtn.className = 'v2-footnote-popup-ok';
-    okBtn.textContent = 'OK';
+    okBtn.textContent = I18n.t('footnotePopup.ok');
     okBtn.addEventListener('mousedown', event => { event.preventDefault(); commitFootnotePopup(); });
     actions.appendChild(okBtn);
     footnotePopupBox.appendChild(actions);
@@ -385,6 +385,16 @@ const Editor = (function () {
     await insertImageAtDefaultSize(dataUri);
   }
 
+  // Touche de déclenchement configurable (panneau Réglages) - lue
+  // directement depuis localStorage, même clé que v2/js/variables.js (pas de
+  // dépendance de module croisée pour une simple lecture, cf. son en-tête).
+  function varBadgeTriggerChar() {
+    try {
+      const v = localStorage.getItem('pp_trigger_char');
+      return (v && v.length === 1) ? v : '#';
+    } catch (e) { return '#'; }
+  }
+
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
   // caractère près (contenteditable="false"), même forme HTML que l'éditeur
   // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
@@ -428,7 +438,13 @@ const Editor = (function () {
           'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        return ['span', attrs, '#' + node.attrs.key];
+        // Préfixe purement décoratif, régénéré à CHAQUE rendu depuis les
+        // attributs du nœud (jamais stocké/reparsé ailleurs - la résolution
+        // en mode Lecture/export lit data-table/data-column, jamais ce
+        // texte) - suit donc la touche de déclenchement configurée (panneau
+        // Réglages), rétroactif sur tout document existant sans migration :
+        // au prochain rendu, une bulle déjà créée affiche le nouveau symbole.
+        return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
       },
     });
   }
@@ -478,7 +494,20 @@ const Editor = (function () {
   // colonne Grist" - même palette que `.page-number-badge`, qui a déjà établi
   // ce langage visuel en en-tête/pied de page.
   function createSmartChipNode(Node, mergeAttributes) {
-    const LABELS = { date: 'Date du jour', time: 'Heure actuelle', email: 'Email de l’utilisateur' };
+    // Résolu à CHAQUE rendu (jamais figé une fois pour toutes) - réactif à
+    // un changement de langue en cours de session, mêmes clés i18n que
+    // v2/js/variables.js:displayKey pour ces mêmes 3 chips dans le panneau
+    // `#`. Ce libellé n'est qu'un espace réservé visuel (non résolu tant que
+    // le mode Lecture/export n'a pas remplacé le nœud par la vraie valeur) -
+    // un changement de langue en cours de session peut laisser une bulle
+    // DÉJÀ insérée affichée dans l'ancienne langue jusqu'au prochain rendu
+    // ProseMirror du nœud (compromis accepté, mineur et cohérent avec la
+    // nature "espace réservé" de ce libellé).
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email' };
+    function labelFor(kind) {
+      const key = KIND_I18N_KEYS[kind];
+      return key ? I18n.t(key) : '?';
+    }
     return Node.create({
       name: 'smartChip',
       group: 'inline',
@@ -493,7 +522,7 @@ const Editor = (function () {
       },
       renderHTML({ node }) {
         const attrs = mergeAttributes({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': node.attrs.kind });
-        return ['span', attrs, LABELS[node.attrs.kind] || '?'];
+        return ['span', attrs, labelFor(node.attrs.kind)];
       },
     });
   }
@@ -920,7 +949,7 @@ const Editor = (function () {
           wrap.appendChild(contentDOM);
           const grip = document.createElement('div');
           grip.className = 'two-columns-resize-grip';
-          grip.title = 'Redimensionner les colonnes';
+          grip.title = I18n.t('twoColumns.resizeGrip');
           wrap.appendChild(grip);
 
           const applyLayout = attrs => wrap.style.setProperty('--layout-left', (attrs.layoutLeft || 50) + '%');
@@ -1092,7 +1121,7 @@ const Editor = (function () {
 
           const moveHandle = document.createElement('span');
           moveHandle.className = 'editor-image-move-handle';
-          moveHandle.title = 'Déplacer';
+          moveHandle.title = I18n.t('image.moveHandle');
           wrap.appendChild(moveHandle);
           ['nw', 'ne', 'sw', 'se'].forEach(corner => {
             const h = document.createElement('span');
@@ -1428,7 +1457,7 @@ const Editor = (function () {
           const refresh = () => {
             const headingEls = Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
             dom.innerHTML = '';
-            if (!headingEls.length) { dom.textContent = 'Sommaire (généré automatiquement à partir des titres)'; return; }
+            if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
             const style = nodeViewEditor.view.dom.dataset.headingStyle || 'none';
             HeadingNumbering.entriesFor(headingEls, style).forEach(entry => {
               const line = document.createElement('div');
@@ -1673,7 +1702,7 @@ const Editor = (function () {
     const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
     const html = '<div class="v2-color-grid">' + swatches + '</div>'
       + '<div class="v2-color-dropdown-footer">'
-      + `<button data-action="custom" title="Couleur personnalisée">${Icons.svg('fill')}<span>Personnalisé…</span></button>`
+      + `<button data-action="custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
       + (onNone ? `<button data-action="none" title="${noneLabel}">${Icons.svg('noColor')}<span>${noneLabel}</span></button>` : '')
       + '</div>'
       + '<input type="color" class="v2-color-dropdown-native">';
@@ -1745,7 +1774,7 @@ const Editor = (function () {
     };
 
     const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
-      noneLabel: 'Par défaut',
+      noneLabel: I18n.t('colorDropdown.noneDefault'),
       withSavedSelection,
       onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); setColorIcon('v2-text-color-icon', color); },
       onNone: (chain) => { chain.unsetTextColor(); setColorIcon('v2-text-color-icon', null); },
@@ -1754,7 +1783,7 @@ const Editor = (function () {
     wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
 
     const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
-      noneLabel: 'Aucun',
+      noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection,
       onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); setColorIcon('v2-highlight-icon', color); },
       onNone: (chain) => { chain.unsetHighlight(); setColorIcon('v2-highlight-icon', null); },
@@ -1771,18 +1800,18 @@ const Editor = (function () {
   // tableau déjà présent a besoin d'un contexte "curseur dans une cellule".
   function wireTableFloatingToolbar() {
     const buttons = [
-      ['row-before', 'rowBefore', 'Ligne avant'],
-      ['row-after', 'rowAfter', 'Ligne après'],
-      ['row-del', 'rowDel', 'Supprimer la ligne'],
-      ['col-before', 'colBefore', 'Colonne avant'],
-      ['col-after', 'colAfter', 'Colonne après'],
-      ['col-del', 'colDel', 'Supprimer la colonne'],
-      ['table-del', 'trash', 'Supprimer le tableau'],
+      ['row-before', 'rowBefore', I18n.t('table.rowBefore')],
+      ['row-after', 'rowAfter', I18n.t('table.rowAfter')],
+      ['row-del', 'rowDel', I18n.t('table.rowDel')],
+      ['col-before', 'colBefore', I18n.t('table.colBefore')],
+      ['col-after', 'colAfter', I18n.t('table.colAfter')],
+      ['col-del', 'colDel', I18n.t('table.colDel')],
+      ['table-del', 'trash', I18n.t('table.tableDel')],
     ];
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
       + '<span class="v2-floating-sep"></span>'
-      + '<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="Fond de cellule (remplir)">'
+      + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
       + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
       + '</button>';
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
@@ -1810,7 +1839,7 @@ const Editor = (function () {
     // donc qu'un simple passe-plat (le paramètre `chain` de
     // createColorDropdown ne sert à rien pour une cellule).
     const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
-      noneLabel: 'Aucun',
+      noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection: fn => fn(null),
       onPick: (chain, color) => { setCellsBackground(editor, color); setColorBar('v2-table-fill-bar', color); },
       onNone: () => { setCellsBackground(editor, null); setColorBar('v2-table-fill-bar', null); },
@@ -1852,22 +1881,22 @@ const Editor = (function () {
   // (même helper que la toolbar de tableau, Incrément 1).
   function wireImageFloatingToolbar() {
     const html = [
-      `<button data-action="zoom-out" title="Réduire">${Icons.svg('zoomOut')}</button>`,
-      `<button data-action="zoom-in" title="Agrandir">${Icons.svg('zoomIn')}</button>`,
-      `<button data-action="reset" title="Taille d'origine">${Icons.svg('resetSize')}</button>`,
+      `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
+      `<button data-action="zoom-in" title="${I18n.t('imgToolbar.grow')}">${Icons.svg('zoomIn')}</button>`,
+      `<button data-action="reset" title="${I18n.t('imgToolbar.originalSize')}">${Icons.svg('resetSize')}</button>`,
       '<span class="v2-floating-sep"></span>',
-      `<button data-action="align-left" title="Aligner à gauche">${Icons.svg('alignLeft')}</button>`,
-      `<button data-action="align-center" title="Centrer">${Icons.svg('alignCenter')}</button>`,
-      `<button data-action="align-right" title="Aligner à droite">${Icons.svg('alignRight')}</button>`,
-      `<button data-action="wrap" title="Basculer en ligne / bloc">${Icons.svg('wrapToggle')}</button>`,
+      `<button data-action="align-left" title="${I18n.t('align.left')}">${Icons.svg('alignLeft')}</button>`,
+      `<button data-action="align-center" title="${I18n.t('align.center')}">${Icons.svg('alignCenter')}</button>`,
+      `<button data-action="align-right" title="${I18n.t('align.right')}">${Icons.svg('alignRight')}</button>`,
+      `<button data-action="wrap" title="${I18n.t('imgToolbar.inlineToggle')}">${Icons.svg('wrapToggle')}</button>`,
       '<span class="v2-floating-sep"></span>',
-      '<input type="range" data-role="opacity" min="10" max="100" value="100" title="Opacité">',
+      `<input type="range" data-role="opacity" min="10" max="100" value="100" title="${I18n.t('imgToolbar.opacity')}">`,
       '<span class="v2-floating-sep"></span>',
-      `<button data-action="layer-normal" title="Au cœur du texte">${Icons.svg('layerNormal')}</button>`,
-      `<button data-action="layer-front" title="Devant le texte">${Icons.svg('layerFront')}</button>`,
-      `<button data-action="layer-behind" title="Derrière le texte">${Icons.svg('layerBehind')}</button>`,
+      `<button data-action="layer-normal" title="${I18n.t('imgToolbar.inText')}">${Icons.svg('layerNormal')}</button>`,
+      `<button data-action="layer-front" title="${I18n.t('imgToolbar.front')}">${Icons.svg('layerFront')}</button>`,
+      `<button data-action="layer-behind" title="${I18n.t('imgToolbar.behind')}">${Icons.svg('layerBehind')}</button>`,
       '<span class="v2-floating-sep"></span>',
-      `<button data-action="delete" title="Supprimer">${Icons.svg('trash')}</button>`,
+      `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
     ].join('');
 
     // `editor.isActive('editorImage')` renvoie vrai dès qu'une SÉLECTION DE
@@ -2098,28 +2127,28 @@ const Editor = (function () {
   // n'a rien choisi (`format: null` par défaut, cf. createVarBadgeNode) :
   // formatValue() garde alors son comportement historique (String(val) brut).
   function wireVariableFloatingToolbar() {
-    const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${p.label}</option>`).join('');
+    const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
       '<div data-var-panel="number">',
       '<span class="v2-varfmt-seg">',
-      '<button data-action="num-style:fr" title="Français : 1 234,56">FR</button>',
-      '<button data-action="num-style:us" title="Anglo-saxon : 1,234.56">US</button>',
-      '<button data-action="num-style:none" title="Sans séparateur de milliers">—</button>',
+      `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
+      `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
+      `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
       '</span>',
-      '<select data-role="num-decimals" title="Décimales"><option value="">Auto</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>',
-      '<input type="text" data-role="num-currency" placeholder="Devise" title="Devise (€, $, personnalisé…)" maxlength="6">',
+      `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>`,
+      `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
       '<span class="v2-floating-sep"></span>',
-      '<button data-action="num-words" title="Écriture en toutes lettres (nombres entiers)">Lettres</button>',
+      `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
       '</div>',
       '<div data-var-panel="date" hidden>',
       '<span class="v2-varfmt-seg">',
-      '<button data-action="date-part:day" title="Afficher/masquer le jour">J</button>',
-      '<button data-action="date-part:month" title="Afficher/masquer le mois">M</button>',
-      '<button data-action="date-part:year" title="Afficher/masquer l\'année">A</button>',
+      `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">J</button>`,
+      `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">M</button>`,
+      `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">A</button>`,
       '</span>',
-      `<select data-role="date-preset" title="Format de date">${dateOptions}</select>`,
+      `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
       '<span class="v2-floating-sep"></span>',
-      '<button data-action="date-words" title="Écriture en toutes lettres">Lettres</button>',
+      `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
       '</div>',
     ].join('');
     const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
@@ -2177,7 +2206,12 @@ const Editor = (function () {
       if (!node) return;
       const format = node.attrs.format || {};
       const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
-      const style = format.type === 'number' ? (format.style || 'fr') : 'fr';
+      // Repli par défaut aligné sur la langue de l'interface (Réglages >
+      // Langue) plutôt que toujours 'fr' - seulement quand la variable elle-
+      // même n'a AUCUN style explicitement choisi (format.style posé =
+      // override assumé, jamais réécrit ici).
+      const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
+      const style = format.type === 'number' ? (format.style || defaultStyle) : defaultStyle;
       setActive('num-style:fr', style === 'fr');
       setActive('num-style:us', style === 'us');
       setActive('num-style:none', style === 'none');
@@ -2232,7 +2266,7 @@ const Editor = (function () {
       await resp.blob();
     } catch (e) {
       console.warn('[Editor] image probablement non exportable en PDF (CORS) :', src, e);
-      window.alert('Cette image ne pourra probablement pas être incluse dans le PDF exporté : le serveur qui l\'héberge ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS). Elle continuera de s\'afficher normalement ici et en mode lecture, mais l\'export PDF devra l\'ignorer.\n\nPour éviter ce problème, copiez l\'image (Ctrl+C depuis son emplacement d\'origine) puis collez-la directement ici (Ctrl+V) plutôt que d\'insérer son URL : une image collée n\'est jamais concernée par cette restriction.');
+      window.alert(I18n.t('image.corsWarning'));
     }
   }
 
@@ -2341,23 +2375,23 @@ const Editor = (function () {
       pill.className = 'v2-hf-pill';
       pill.innerHTML =
         '<span class="v2-segmented" id="v2-hf-zone-segment">'
-        + '<button type="button" class="v2-segmented-btn" data-zone="header">En-tête</button>'
-        + '<button type="button" class="v2-segmented-btn" data-zone="footer">Pied de page</button>'
+        + `<button type="button" class="v2-segmented-btn" data-zone="header">${I18n.t('hf.zoneHeader')}</button>`
+        + `<button type="button" class="v2-segmented-btn" data-zone="footer">${I18n.t('hf.zoneFooter')}</button>`
         + '</span>'
-        + '<label class="v2-hf-checkbox"><input type="checkbox" id="v2-hf-different-first">Première page différente</label>'
+        + `<label class="v2-hf-checkbox"><input type="checkbox" id="v2-hf-different-first">${I18n.t('hf.differentFirstPage')}</label>`
         + '<span class="v2-segmented" id="v2-hf-variant-segment" hidden>'
-        + '<button type="button" class="v2-segmented-btn" data-variant="default">Pages normales</button>'
-        + '<button type="button" class="v2-segmented-btn" data-variant="first">Page 1</button>'
+        + `<button type="button" class="v2-segmented-btn" data-variant="default">${I18n.t('hf.variantDefault')}</button>`
+        + `<button type="button" class="v2-segmented-btn" data-variant="first">${I18n.t('hf.variantFirst')}</button>`
         + '</span>'
         + '<span class="v2-hover-group" id="v2-hf-pagenum-group">'
-        + '<button type="button" id="v2-hf-btn-pagenum" data-tip="Insérer le numéro de page" aria-label="Insérer le numéro de page"><span class="v2-hf-pagenum-icon" aria-hidden="true">#</span></button>'
+        + `<button type="button" id="v2-hf-btn-pagenum" data-tip="${I18n.t('hf.insertPageNumber')}" aria-label="${I18n.t('hf.insertPageNumber')}"><span class="v2-hf-pagenum-icon" aria-hidden="true">#</span></button>`
         + '<span class="v2-hover-flyout v2-hover-flyout-v" id="v2-hf-pagenum-flyout">'
-        + '<span class="v2-hover-row" data-pagenum-format="n">Numéro simple (3)</span>'
-        + '<span class="v2-hover-row" data-pagenum-format="page-n">Page 3</span>'
-        + '<span class="v2-hover-row" data-pagenum-format="n-slash-total">3 / 12</span>'
+        + `<span class="v2-hover-row" data-pagenum-format="n">${I18n.t('hf.pagenumSimple')}</span>`
+        + `<span class="v2-hover-row" data-pagenum-format="page-n">${I18n.t('hf.pagenumPageN')}</span>`
+        + `<span class="v2-hover-row" data-pagenum-format="n-slash-total">${I18n.t('hf.pagenumSlash')}</span>`
         + '</span>'
         + '</span>'
-        + '<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">Terminer</button>';
+        + `<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">${I18n.t('hf.done')}</button>`;
       container.insertBefore(pill, container.firstChild);
 
       pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => {
@@ -3021,7 +3055,7 @@ const Editor = (function () {
     // toolbar flottante contextuelle, cf. wireTableFloatingToolbar.
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
-      const url = window.prompt('URL de l\'image :');
+      const url = window.prompt(I18n.t('image.urlPrompt'));
       if (!url) return;
       await insertImageAtDefaultSize(url);
       warnIfImageUrlNotExportable(url);

@@ -270,9 +270,9 @@ const PdfExport = (function () {
   // resolveNativePdfContent) : chaque entrée réserve sa propre cellule vide,
   // patchée après coup.
   function buildTocStack(headingBlocks) {
-    const title = { text: 'Sommaire', bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
+    const title = { text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
     if (!headingBlocks.length) {
-      return { stack: [title, { text: 'Aucun titre trouvé.', italics: true, color: '#6b7280' }], pageNumberCells: [] };
+      return { stack: [title, { text: I18n.t('pdf.tocEmpty'), italics: true, color: '#6b7280' }], pageNumberCells: [] };
     }
     const pageNumberCells = [];
     const lines = headingBlocks.map(hb => {
@@ -2640,7 +2640,7 @@ const PdfExport = (function () {
   }
 
   async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData) {
-    if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
+    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);

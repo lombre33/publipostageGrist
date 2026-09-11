@@ -13,6 +13,19 @@
 // dans v2/index.html, pour ne rien avoir à changer côté HTML pour cet
 // incrément.
 const Variables = (function () {
+  // Touche de déclenchement configurable (panneau Réglages > Touche de
+  // déclenchement, v2/js/settings.js) - lue directement depuis localStorage
+  // (pas de dépendance de module pour une simple lecture, même choix que
+  // v2/js/editor.js pour le préfixe affiché d'une bulle #Variable). Un seul
+  // caractère imprimable attendu (contrôlé par le <select> du panneau, pas
+  // un champ libre) - tout le reste (longueur ≠ 1, valeur absente) retombe
+  // sur '#' par défaut.
+  function triggerChar() {
+    try {
+      const v = localStorage.getItem('pp_trigger_char');
+      return (v && v.length === 1) ? v : '#';
+    } catch (e) { return '#'; }
+  }
   let acBox = null;
   let acItemsBox = null;
   let currentItems = [];
@@ -38,12 +51,18 @@ const Variables = (function () {
   // 4 chips fixes, jamais issues de GristAPI - `kind:'chip'` distingue ces
   // entrées d'une #Variable dans le `command` de createExtension ci-dessous
   // (ni ensureLinkConfigured, ni table/column, ne s'appliquent à ces items).
+  // `key` reste le texte français (jamais affiché directement pour un chip -
+  // uniquement un identifiant de repli si `i18n.js` n'était pas chargé) ;
+  // `i18nKey`, résolu à l'AFFICHAGE (cf. displayKey ci-dessous, jamais figé
+  // une fois pour toutes ici) pour rester réactif à un changement de langue
+  // en cours de session (panneau Réglages), sans recharger la page.
   const SMART_CHIP_ITEMS = [
-    { key: 'Note de bas de page', kind: 'chip', chipKind: 'footnote' },
-    { key: 'Date du jour', kind: 'chip', chipKind: 'date' },
-    { key: 'Heure actuelle', kind: 'chip', chipKind: 'time' },
-    { key: 'Email de l’utilisateur', kind: 'chip', chipKind: 'email' },
+    { key: 'Note de bas de page', i18nKey: 'chips.footnote', kind: 'chip', chipKind: 'footnote' },
+    { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
+    { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time' },
+    { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
   ];
+  function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
   // Dernières props reçues de @tiptap/suggestion (onStart/onUpdate) - permet
   // de rejouer updateItems() depuis un clic sur un onglet, qui n'est PAS un
   // évènement du plugin Suggestion et ne fournit donc pas ces props lui-même
@@ -60,11 +79,11 @@ const Variables = (function () {
     tabs.className = 'ac-tabs';
     const tabVariables = document.createElement('div');
     tabVariables.className = 'ac-tab';
-    tabVariables.textContent = 'Variables';
+    tabVariables.textContent = I18n.t('panel.tabVariables');
     tabVariables.dataset.tab = 'variables';
     const tabChips = document.createElement('div');
     tabChips.className = 'ac-tab';
-    tabChips.textContent = 'Chips';
+    tabChips.textContent = I18n.t('panel.tabChips');
     tabChips.dataset.tab = 'chips';
     [tabVariables, tabChips].forEach(tab => {
       // mousedown+preventDefault (pas click) : même précaution que .ac-item
@@ -100,7 +119,7 @@ const Variables = (function () {
       // découverte par le pipeline PDF (content._footnoteBlocks ne parcourt
       // que le corps principal).
       const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
-      return items.filter(v => v.key.toLowerCase().includes(q));
+      return items.filter(v => displayKey(v).toLowerCase().includes(q));
     }
     if (!schemaRefreshedForSession) {
       schemaRefreshedForSession = true;
@@ -134,7 +153,7 @@ const Variables = (function () {
     items.forEach((item, idx) => {
       const div = document.createElement('div');
       div.className = 'ac-item' + (idx === selectedIndex ? ' selected' : '');
-      div.textContent = item.key;
+      div.textContent = displayKey(item);
       div.addEventListener('mouseenter', () => { if (selectedIndex !== idx) { selectedIndex = idx; render(items, onPick); } });
       div.addEventListener('mousedown', (e) => { e.preventDefault(); onPick(item); });
       acItemsBox.appendChild(div);
@@ -204,7 +223,11 @@ const Variables = (function () {
         return [
           Suggestion({
             editor: this.editor,
-            char: '#',
+            // Redéfinissable dans le panneau Réglages ; un changement n'a
+            // effet qu'après rechargement de la page (ce `char` est un
+            // littéral capturé une seule fois ici, à la construction de
+            // l'éditeur - cf. triggerChar() ci-dessus).
+            char: triggerChar(),
             // GristAPI (const de niveau racine d'un script classique, chargé
             // avant celui-ci) est visible par simple identifiant nu, comme
             // Editor/Templates/ReaderMode ailleurs dans le projet - JAMAIS via
@@ -296,7 +319,7 @@ const Variables = (function () {
     const caret = el.selectionStart;
     if (caret == null) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     const text = el.value.slice(0, caret);
-    const match = text.match(/#([A-Za-z0-9_]*)$/);
+    const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_]*)$'));
     if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     // Même rafraîchissement "une fois par session" que le déclencheur de
     // l'éditeur (cf. createExtension/items ci-dessus) - déclenché dès le 1er
@@ -332,7 +355,7 @@ const Variables = (function () {
     if (!state) return;
     const { el, start, end } = state;
     const value = el.value;
-    const insertion = '#' + item.key;
+    const insertion = triggerChar() + item.key;
     el.value = value.slice(0, start) + insertion + value.slice(end);
     const newCaret = start + insertion.length;
     hide();
@@ -529,14 +552,15 @@ const Variables = (function () {
   // en V1, cf. mémoire project_cross_table_variable_links).
   function describeColumnOption(tableId, colId) {
     const type = GristAPI.getColumnType(tableId, colId);
-    if (type && type.indexOf('Ref:') === 0) return `${colId} (Référence → ${type.slice(4)})`;
-    if (type && type.indexOf('RefList:') === 0) return `${colId} (Références → ${type.slice(8)})`;
+    if (type && type.indexOf('Ref:') === 0) return I18n.t('linkConfig.reference', { col: colId, table: type.slice(4) });
+    if (type && type.indexOf('RefList:') === 0) return I18n.t('linkConfig.referenceList', { col: colId, table: type.slice(8) });
     return colId;
   }
   function describeRule(rule) {
-    if (rule.mode === 'singleton') return 'une seule ligne (paramètres)';
-    const cible = rule.colonneCible === 'id' ? 'identifiant de ligne' : rule.colonneCible;
-    const source = rule.colonneSource === 'id' ? 'identifiant de ligne' : rule.colonneSource;
+    if (rule.mode === 'singleton') return I18n.t('linkConfig.describeSingleton');
+    const rowIdLabel = I18n.t('linkConfig.describeRowId');
+    const cible = rule.colonneCible === 'id' ? rowIdLabel : rule.colonneCible;
+    const source = rule.colonneSource === 'id' ? rowIdLabel : rule.colonneSource;
     return `${cible} = ${source}`;
   }
   // Appelée avant toute insertion de variable (cf. le `command` de
@@ -583,9 +607,10 @@ const Variables = (function () {
     // sans lui, un <select> non touché par l'utilisateur reste silencieusement
     // sur "Identifiant de ligne" (1ère option), ce qui peut produire une règle
     // qui a l'air valide mais compare deux identifiants de ligne sans rapport.
-    const placeholder = '<option value="" disabled selected>— Choisissez une colonne —</option>';
-    selectCible.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join('');
-    selectSource.innerHTML = placeholder + '<option value="id">Identifiant de ligne</option>' + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join('');
+    const placeholder = `<option value="" disabled selected>${I18n.t('linkConfig.columnPlaceholder')}</option>`;
+    const rowIdOption = `<option value="id">${I18n.t('linkConfig.rowId')}</option>`;
+    selectCible.innerHTML = placeholder + rowIdOption + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join('');
+    selectSource.innerHTML = placeholder + rowIdOption + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join('');
 
     // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
     // choix actif, pas un état par défaut dans lequel on tombe sans le
@@ -637,30 +662,30 @@ const Variables = (function () {
       if (!preview) return;
       preview.classList.remove('is-good');
       const rule = currentRuleFromForm();
-      if (!rule) { preview.textContent = 'Choisissez les deux colonnes pour voir un aperçu.'; return; }
+      if (!rule) { preview.textContent = I18n.t('linkConfig.previewChooseColumns'); return; }
       const record = GristAPI.getCurrentRecord();
-      if (!record) { preview.textContent = 'Aucune ligne sélectionnée dans Grist pour prévisualiser.'; return; }
-      preview.textContent = 'Calcul de l’aperçu…';
+      if (!record) { preview.textContent = I18n.t('linkConfig.previewNoRecord'); return; }
+      preview.textContent = I18n.t('linkConfig.previewComputing');
       try {
         const rows = await GristAPI.fetchTableRows(targetTable);
         if (rule.mode === 'singleton') {
-          if (!rows.length) { preview.textContent = `« ${targetTable} » est vide.`; return; }
+          if (!rows.length) { preview.textContent = I18n.t('linkConfig.previewTableEmpty', { table: targetTable }); return; }
           const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-          preview.textContent = `Toujours la ligne n°${first.id} de « ${targetTable} », quelle que soit la ligne courante.`;
+          preview.textContent = I18n.t('linkConfig.previewSingleton', { id: first.id, table: targetTable });
           preview.classList.add('is-good');
           return;
         }
         const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
         const matches = rows.filter(r => sameValue(rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]), sourceVal));
         if (matches.length) {
-          preview.textContent = `${matches.length} ligne(s) trouvée(s) dans « ${targetTable} » (n° ${matches.map(r => r.id).join(', ')}).`;
+          preview.textContent = I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') });
           preview.classList.add('is-good');
         } else {
-          preview.textContent = `Aucune ligne de « ${targetTable} » ne correspond à la ligne courante (valeur recherchée : ${sourceVal}).`;
+          preview.textContent = I18n.t('linkConfig.previewNoMatch', { table: targetTable, value: sourceVal });
         }
       } catch (e) {
         console.warn('[variables] showLinkConfigModal: échec aperçu', e);
-        preview.textContent = 'Aperçu indisponible.';
+        preview.textContent = I18n.t('linkConfig.previewUnavailable');
       }
     }
     function onToggleSingleton() { currentMode = 'singleton'; applyModeVisibility(); updatePreview(); }
@@ -684,7 +709,7 @@ const Variables = (function () {
       }
       function onOk() {
         const rule = currentRuleFromForm();
-        if (!rule) { preview.textContent = 'Choisissez les deux colonnes avant de valider.'; return; }
+        if (!rule) { preview.textContent = I18n.t('linkConfig.chooseBeforeConfirm'); return; }
         cleanup();
         resolve(rule);
       }
@@ -716,7 +741,7 @@ const Variables = (function () {
     if (!rules.length) {
       const empty = document.createElement('p');
       empty.className = 'link-rules-empty';
-      empty.textContent = 'Aucune table liée pour l’instant.';
+      empty.textContent = I18n.t('linkRules.empty');
       list.appendChild(empty);
       return;
     }
@@ -728,7 +753,7 @@ const Variables = (function () {
       label.textContent = `${rule.tableCible} : ${describeRule(rule)}`;
       const btnEdit = document.createElement('button');
       btnEdit.type = 'button'; btnEdit.className = 'link-rule-btn link-rule-btn-edit';
-      btnEdit.setAttribute('aria-label', 'Modifier'); btnEdit.title = 'Modifier';
+      btnEdit.setAttribute('aria-label', I18n.t('linkRules.edit')); btnEdit.title = I18n.t('linkRules.edit');
       btnEdit.addEventListener('click', async () => {
         const currentTableId = GristAPI.getCurrentTableId();
         if (!currentTableId) return;
@@ -739,13 +764,15 @@ const Variables = (function () {
       });
       const btnDelete = document.createElement('button');
       btnDelete.type = 'button'; btnDelete.className = 'link-rule-btn link-rule-btn-delete';
-      btnDelete.setAttribute('aria-label', 'Supprimer'); btnDelete.title = 'Supprimer';
+      btnDelete.setAttribute('aria-label', I18n.t('linkRules.delete')); btnDelete.title = I18n.t('linkRules.delete');
       btnDelete.addEventListener('click', async () => {
         const affected = findTemplatesUsingTable(rule.tableCible);
-        let message = `Supprimer la correspondance configurée pour « ${rule.tableCible} » ?`;
+        let message = I18n.t('linkRules.confirmDelete', { table: rule.tableCible });
         if (affected.length) {
-          message += `\n\nUtilisée dans : ${affected.map(t => t.nom || '(sans nom)').join(', ')}.\n`
-            + `Les #Variable de ${affected.length > 1 ? 'ces modèles' : 'ce modèle'} ne pourront plus être résolues tant qu'une nouvelle correspondance n'aura pas été configurée.`;
+          message += I18n.t('linkRules.confirmDeleteAffected', {
+            names: affected.map(t => t.nom || I18n.t('linkRules.unnamed')).join(', '),
+            plural: affected.length > 1 ? I18n.t('linkRules.theseTemplates') : I18n.t('linkRules.thisTemplate'),
+          });
         }
         if (!confirm(message)) return;
         await GristAPI.deleteLinkRule(rule.tableCible);

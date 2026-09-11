@@ -32,7 +32,11 @@
 
   async function refreshTemplateList() {
     const templates = await Templates.loadAll();
-    templateSelect.innerHTML = '-- Nouveau modèle --';
+    templateSelect.innerHTML = '';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = I18n.t('template.newOption');
+    templateSelect.appendChild(emptyOpt);
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
@@ -109,23 +113,23 @@
   async function onNew() {
     templateSelect.value = '';
     loadTemplateIntoEditor(null);
-    setStatus('Nouveau modèle prêt.');
+    setStatus(I18n.t('status.newTemplateReady'));
   }
 
   async function onSave() {
     Editor.exitHeaderFooterModeIfActive();
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
-    if (!nom) { setStatus('Nom du modèle requis.', true); return; }
+    if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData());
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
-    setStatus('Modèle enregistré.');
+    setStatus(I18n.t('status.templateSaved'));
   }
 
   async function onSaveAs() {
-    const nom = prompt('Nom du nouveau modèle :');
+    const nom = prompt(I18n.t('prompt.newTemplateName'));
     if (!nom) return;
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
@@ -134,12 +138,12 @@
 
   async function onDelete() {
     const id = Templates.getCurrentId();
-    if (!id) { setStatus('Aucun modèle sélectionné.', true); return; }
-    if (!confirm('Supprimer ce modèle ?')) return;
+    if (!id) { setStatus(I18n.t('status.noTemplateSelected'), true); return; }
+    if (!confirm(I18n.t('confirm.deleteTemplate'))) return;
     await Templates.remove(id);
     await refreshTemplateList();
     onNew();
-    setStatus('Modèle supprimé.');
+    setStatus(I18n.t('status.templateDeleted'));
   }
 
   async function renderReader(record, recordTableId) {
@@ -157,16 +161,16 @@
   async function onExportPdf() {
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
-    if (!record) { alert("Aucune ligne sélectionnée : impossible d'exporter en PDF."); return; }
-    setStatus('Génération du PDF en cours...');
+    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    setStatus(I18n.t('status.pdfGenerating'));
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
       await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData());
-      setStatus('PDF généré.');
+      setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       console.error(e);
-      setStatus('Erreur génération PDF.', true);
+      setStatus(I18n.t('status.pdfGenerationError'), true);
     }
   }
 
@@ -210,27 +214,27 @@
   async function onExportPdfBatch() {
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
-    if (!tableId) { setStatus('Table courante introuvable.', true); return; }
+    if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
     let rows;
     try { rows = await GristAPI.fetchTableRows(tableId); }
     catch (e) {
       console.error('[main] export PDF en lot : échec de lecture de la table', e);
-      setStatus('Impossible de lire les lignes de la table.', true);
+      setStatus(I18n.t('status.cannotReadRows'), true);
       return;
     }
-    if (!rows.length) { setStatus('Aucune ligne dans la table « ' + tableId + ' ».', true); return; }
-    const proceed = window.confirm('Générer un PDF pour chacune des ' + rows.length + ' lignes de « ' + tableId + ' » et les regrouper dans une archive ZIP ?');
+    if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
+    const proceed = window.confirm(I18n.t('confirm.batchExport', { count: rows.length, table: tableId }));
     if (!proceed) return;
 
     // JSZip fait partie du même lot de bibliothèques PDF chargées à la
     // demande (cf. v2/js/pdf-export.js:ensurePdfLibsLoaded) - plus chargé
     // d'office au démarrage du widget, donc `JSZip` n'existe pas encore tant
     // que ceci n'a pas été attendu au moins une fois.
-    setStatus('Chargement des bibliothèques PDF...');
+    setStatus(I18n.t('status.loadingPdfLibs'));
     try { await PdfExport.ensurePdfLibsLoaded(); }
     catch (e) {
       console.error('[main] export PDF en lot : échec de chargement des bibliothèques PDF', e);
-      setStatus('Échec de chargement des bibliothèques PDF.', true);
+      setStatus(I18n.t('status.pdfLibsLoadError'), true);
       return;
     }
 
@@ -242,7 +246,7 @@
     let ok = 0;
     let failed = 0;
     for (let i = 0; i < rows.length; i++) {
-      setStatus('Export PDF en lot : ' + (i + 1) + '/' + rows.length + '...');
+      setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
         const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
@@ -253,9 +257,9 @@
         failed++;
       }
     }
-    if (!ok) { setStatus('Échec de l’export : aucun PDF généré.', true); return; }
+    if (!ok) { setStatus(I18n.t('status.exportError'), true); return; }
 
-    setStatus('Compression de l’archive ZIP...');
+    setStatus(I18n.t('status.zipCompressing'));
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(zipBlob);
     const a = document.createElement('a');
@@ -266,8 +270,8 @@
     a.remove();
     URL.revokeObjectURL(url);
     setStatus(failed
-      ? ok + ' PDF générés, ' + failed + ' échec(s) (voir la console) — archive ZIP téléchargée.'
-      : ok + ' PDF générés — archive ZIP téléchargée.');
+      ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
+      : I18n.t('status.batchExportDone', { ok }));
   }
 
   async function switchMode(mode) {
@@ -388,7 +392,7 @@
       if (!filtered.length) {
         const empty = document.createElement('div');
         empty.className = 'tpl-gallery-empty';
-        empty.textContent = 'Aucun template ne correspond à ce filtre.';
+        empty.textContent = I18n.t('gallery.noMatch');
         grid.appendChild(empty);
         return;
       }
@@ -409,7 +413,7 @@
       const allChip = document.createElement('button');
       allChip.type = 'button';
       allChip.className = 'tpl-gallery-tag' + (activeTag ? '' : ' is-active');
-      allChip.textContent = 'Tous';
+      allChip.textContent = I18n.t('gallery.allTag');
       allChip.addEventListener('click', () => { activeTag = ''; renderTags(); renderGrid(); });
       tagsBar.appendChild(allChip);
       allTags.forEach(tag => {
@@ -428,7 +432,7 @@
         try { manifest = await TemplateGallery.loadManifest(); }
         catch (e) {
           console.error('[main] galerie de templates : échec du chargement du manifeste', e);
-          setStatus('Impossible de charger la galerie de templates.', true);
+          setStatus(I18n.t('status.galleryLoadError'), true);
         }
       }
       renderTags();
@@ -448,7 +452,7 @@
         previewTiptap.innerHTML = currentHtml;
       } catch (e) {
         console.error('[main] galerie de templates : échec du chargement du template', e);
-        setStatus('Impossible de charger ce template.', true);
+        setStatus(I18n.t('status.templateLoadError'), true);
       }
     }
 
@@ -474,7 +478,7 @@
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
-      setStatus('Template « ' + currentEntry.name + ' » enregistré comme nouveau modèle.');
+      setStatus(I18n.t('status.templateSavedAsNew', { name: currentEntry.name }));
     }
 
     async function useWithData() {
@@ -483,12 +487,12 @@
       try { schema = await TemplateGallery.fetchSchema(currentEntry); }
       catch (e) {
         console.error('[main] galerie de templates : échec du chargement du schéma', e);
-        setStatus('Impossible de charger le schéma de colonnes de ce template.', true);
+        setStatus(I18n.t('status.schemaLoadError'), true);
         return;
       }
-      if (!schema || !schema.columns.length) { setStatus('Ce template ne définit aucune colonne.', true); return; }
+      if (!schema || !schema.columns.length) { setStatus(I18n.t('status.noColumnsDefined'), true); return; }
       const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
-      const tableName = window.prompt('Nom de la nouvelle table Grist :', defaultName);
+      const tableName = window.prompt(I18n.t('prompt.newTableName'), defaultName);
       if (!tableName) return;
       // Les badges #Variable du HTML statique pointent vers schema.tableName
       // (le nom de classe tel qu'authoré dans schema.py) - si Grist crée la
@@ -505,7 +509,7 @@
         }
       } catch (e) {
         console.error('[main] galerie de templates : échec de la création de la table', e);
-        setStatus('Échec de la création de la table « ' + tableName + ' ».', true);
+        setStatus(I18n.t('status.tableCreationError', { table: tableName }), true);
         return;
       }
       const html = TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId);
@@ -513,7 +517,7 @@
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
-      setStatus('Table « ' + actualTableId + ' » créée avec ' + schema.columns.length + ' colonne(s), modèle « ' + currentEntry.name + ' » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.');
+      setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: currentEntry.name }));
     }
 
     openLink.addEventListener('click', openGallery);
@@ -526,7 +530,7 @@
   }
 
   async function init() {
-    try { await GristAPI.init(); } catch (e) { setStatus('Erreur init API Grist.', true); }
+    try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     await Editor.init();
     GristAPI.onRecord(async function (record, tableId) {
       latestRecord = record;
@@ -551,9 +555,10 @@
     wireTemplateRename();
     wirePdfFilenameToggle();
     wireQualityDropdown();
+    Settings.wireSettingsModal();
     Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
-    setStatus('Widget V2 prêt.');
+    setStatus(I18n.t('status.ready'));
   }
 
   init();

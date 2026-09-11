@@ -897,3 +897,7 @@
    pour la même raison (deux modales séparées : mosaïque de choix vs aperçu
    d'un template précis), réutilisant .modal-content de css/style.css. */
 #template-gallery-modal, #template-preview-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+
+/* Panneau Réglages (v2/js/settings.js) - même overlay plein écran, même
+   raison de le garder sur un ID distinct (encore une modale séparée). */
+#settings-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }

@@ -419,10 +419,15 @@ const ReaderMode = (function () {
     if (!filenameTemplate) return 'publipostage';
     const allVars = GristAPI.getAllVariables();
     const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
+    // Touche de déclenchement configurable (V2 uniquement, cf. v2/js/settings.js) -
+    // lue directement en localStorage, jamais posée par la V1 (qui n'a pas
+    // ce réglage) donc toujours '#' pour elle, comportement inchangé.
+    let triggerChar = '#';
+    try { const v = localStorage.getItem('pp_trigger_char'); if (v && v.length === 1) triggerChar = v; } catch (e) { /* repli '#' */ }
     const matches = [];
     let i = 0;
     while (i < filenameTemplate.length) {
-      if (filenameTemplate[i] === '#') {
+      if (filenameTemplate[i] === triggerChar) {
         const rest = filenameTemplate.slice(i + 1);
         const key = sortedKeys.find(k => rest.startsWith(k));
         if (key) { matches.push({ start: i, key, end: i + 1 + key.length }); i += 1 + key.length; continue; }

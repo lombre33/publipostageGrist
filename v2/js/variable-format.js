@@ -9,15 +9,37 @@ const VariableFormat = (function () {
   // (une liste de préréglages classiques) plutôt qu'un compositeur totalement
   // libre - cf. mémoire projet : une option "format personnalisé" est prévue
   // pour plus tard, pas construite ici.
+  // `labelEn` : pas une simple traduction du texte français, mais ce que CE
+  // MÊME préréglage produit réellement une fois `dateLocale()` (cf. plus bas)
+  // basculée sur 'en-US' - l'ORDRE jour/mois de dmy_slash_full change lui-même
+  // avec la locale passée à Intl.DateTimeFormat (day/month same options,
+  // locale différente ⇒ ordre différent), donc le libellé anglais doit
+  // refléter ce vrai résultat plutôt qu'une traduction littérale du FR.
   const DATE_PRESETS = [
-    { key: 'dmy_slash_full', label: '12/09/2026', options: { day: '2-digit', month: '2-digit', year: 'numeric' } },
-    { key: 'dmy_slash_short', label: '12/9/26', shortNoPad: true },
-    { key: 'iso', label: '2026-09-12', iso: true },
-    { key: 'd_mmm_yyyy', label: '12 sept. 2026', options: { day: 'numeric', month: 'short', year: 'numeric' } },
-    { key: 'd_mmmm_yyyy', label: '12 septembre 2026', options: { day: 'numeric', month: 'long', year: 'numeric' } },
-    { key: 'ddd_d_mmm_yyyy', label: 'mar. 12 sept. 2026', options: { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } },
-    { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
+    { key: 'dmy_slash_full', label: '12/09/2026', labelEn: '09/12/2026', options: { day: '2-digit', month: '2-digit', year: 'numeric' } },
+    { key: 'dmy_slash_short', label: '12/9/26', labelEn: '9/12/26', shortNoPad: true },
+    { key: 'iso', label: '2026-09-12', labelEn: '2026-09-12', iso: true },
+    { key: 'd_mmm_yyyy', label: '12 sept. 2026', labelEn: 'Sep 12, 2026', options: { day: 'numeric', month: 'short', year: 'numeric' } },
+    { key: 'd_mmmm_yyyy', label: '12 septembre 2026', labelEn: 'September 12, 2026', options: { day: 'numeric', month: 'long', year: 'numeric' } },
+    { key: 'ddd_d_mmm_yyyy', label: 'mar. 12 sept. 2026', labelEn: 'Sat, Sep 12, 2026', options: { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } },
+    { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', labelEn: 'Saturday, September 12, 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
+  // Libellé d'aperçu à afficher dans le sélecteur de préréglage (barre de
+  // formatage d'une bulle #Variable) - suit la langue de l'interface
+  // (panneau Réglages), jamais le style fr/us éventuellement déjà choisi
+  // SUR CETTE variable précise (ça resterait confus d'afficher un libellé
+  // anglais alors que l'interface est en français, ou l'inverse).
+  function presetLabel(preset) {
+    return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? (preset.labelEn || preset.label) : preset.label;
+  }
+  // Locale Intl à utiliser pour le RENDU réel d'une date (formatDate
+  // ci-dessous) - contrairement au nombre (opts.style), une date n'a pas de
+  // réglage d'override PAR VARIABLE aujourd'hui (seul le préréglage lui-même
+  // en est un, cf. DATE_PRESETS) : suit donc uniquement la langue globale de
+  // l'interface (panneau Réglages).
+  function dateLocale() {
+    return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en-US' : 'fr-FR';
+  }
 
   // Une colonne Date/DateTime Grist peut arriver ici sous deux formes selon
   // le point d'entrée de l'API utilisé en amont : un timestamp Unix en
@@ -81,7 +103,8 @@ const VariableFormat = (function () {
   // classique d'un acte ("quinze décembre mille neuf cent quatre-vingt-
   // dix-sept") sans traiter ce préréglage à part.
   function wordifyDateParts(parts) {
-    return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWordsFr(parseInt(part.value, 10)) }) : part));
+    const toWords = dateLocale() === 'en-US' ? numberToWordsEn : numberToWordsFr;
+    return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: toWords(parseInt(part.value, 10)) }) : part));
   }
 
   function formatDate(val, format) {
@@ -104,14 +127,17 @@ const VariableFormat = (function () {
       // Construit à la main plutôt que via Intl.DateTimeFormat : la locale
       // fr-FR zéro-remplit jour/mois même avec `numeric` (vérifié - aucune
       // option Intl ne produit "12/9/26" non complété), ce préréglage existe
-      // justement pour s'en distinguer de dmy_slash_full.
-      parts = [
-        { type: 'day', value: String(date.getUTCDate()) }, { type: 'literal', value: '/' },
-        { type: 'month', value: String(date.getUTCMonth() + 1) }, { type: 'literal', value: '/' },
-        { type: 'year', value: String(date.getUTCFullYear()).slice(-2) },
-      ];
+      // justement pour s'en distinguer de dmy_slash_full. Ordre ET locale
+      // suivent I18n.getLang() comme le reste de ce fichier - jour/mois
+      // d'abord en français, mois/jour d'abord en anglais (convention US).
+      const day = String(date.getUTCDate());
+      const month = String(date.getUTCMonth() + 1);
+      const year = String(date.getUTCFullYear()).slice(-2);
+      const first = dateLocale() === 'en-US' ? { type: 'month', value: month } : { type: 'day', value: day };
+      const second = dateLocale() === 'en-US' ? { type: 'day', value: day } : { type: 'month', value: month };
+      parts = [first, { type: 'literal', value: '/' }, second, { type: 'literal', value: '/' }, { type: 'year', value: year }];
     } else {
-      parts = new Intl.DateTimeFormat('fr-FR', Object.assign({ timeZone: 'UTC' }, preset.options)).formatToParts(date);
+      parts = new Intl.DateTimeFormat(dateLocale(), Object.assign({ timeZone: 'UTC' }, preset.options)).formatToParts(date);
     }
     if (format.words) parts = wordifyDateParts(parts);
     return buildDateStringFromParts(parts, keep);
@@ -219,14 +245,85 @@ const VariableFormat = (function () {
     if (d > 0) words += ' virgule ' + integerToWordsFr(fracPart);
     return (isNegative && roundedTotal > 0 ? 'moins ' : '') + words;
   }
+
+  // --- Nombre en toutes lettres (anglais, convention américaine) ---
+  // Bien plus simple que le français : "hundred"/"thousand"/"million"/
+  // "billion" restent TOUJOURS invariables en tant que multiplicateurs (pas
+  // d'accord "-s" à gérer comme cent/vingt en français), et l'anglais
+  // courant/légal omet "and" entre les centaines et le reste ("one hundred
+  // twenty-one", pas "one hundred AND twenty-one" - forme américaine,
+  // cohérente avec le choix déjà fait côté français de l'orthographe
+  // classique plutôt que la réforme de 1990 : la convention la plus
+  // attendue dans un contrat, pas la plus permissive).
+  const UNITS_EN = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  const TENS_EN = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  function twoDigitsToWordsEn(n) {
+    if (n < 20) return UNITS_EN[n];
+    const tens = Math.floor(n / 10);
+    const unit = n % 10;
+    return unit === 0 ? TENS_EN[tens] : TENS_EN[tens] + '-' + UNITS_EN[unit];
+  }
+  function threeDigitsToWordsEn(n) {
+    const h = Math.floor(n / 100);
+    const rest = n % 100;
+    let words = '';
+    if (h > 0) {
+      words = UNITS_EN[h] + ' hundred';
+      if (rest > 0) words += ' ' + twoDigitsToWordsEn(rest);
+    } else if (rest > 0) {
+      words = twoDigitsToWordsEn(rest);
+    }
+    return words;
+  }
+  function integerToWordsEn(rounded) {
+    if (rounded === 0) return 'zero';
+    const scales = [
+      { divisor: 1e9, name: 'billion' },
+      { divisor: 1e6, name: 'million' },
+      { divisor: 1e3, name: 'thousand' },
+    ];
+    let remaining = rounded;
+    const parts = [];
+    scales.forEach(s => {
+      const count = Math.floor(remaining / s.divisor);
+      remaining %= s.divisor;
+      if (count > 0) parts.push(threeDigitsToWordsEn(count) + ' ' + s.name);
+    });
+    if (remaining > 0 || parts.length === 0) parts.push(threeDigitsToWordsEn(remaining));
+    return parts.join(' ');
+  }
+  function numberToWordsEn(n, decimals) {
+    const isNegative = n < 0;
+    const d = decimals == null ? 0 : decimals;
+    const factor = Math.pow(10, d);
+    const roundedTotal = Math.round(Math.abs(n) * factor);
+    const intPart = Math.floor(roundedTotal / factor);
+    const fracPart = roundedTotal - intPart * factor;
+    let words = integerToWordsEn(intPart);
+    if (d > 0) words += ' point ' + integerToWordsEn(fracPart);
+    return (isNegative && roundedTotal > 0 ? 'minus ' : '') + words;
+  }
+
   // Forme en toutes lettres d'une devise, pour l'accoler au nombre en
-  // lettres ("mille euros", pas "mille €") - repli sur le symbole/texte tel
-  // quel pour une devise personnalisée non reconnue.
-  const CURRENCY_WORDS = { '€': 'euro', '$': 'dollar', '£': 'livre' };
-  function currencyWords(symbol, count) {
-    const base = CURRENCY_WORDS[symbol];
+  // lettres ("mille euros"/"a thousand euros", pas "mille €") - repli sur le
+  // symbole/texte tel quel pour une devise personnalisée non reconnue.
+  const CURRENCY_WORDS_FR = { '€': 'euro', '$': 'dollar', '£': 'livre' };
+  const CURRENCY_WORDS_EN = { '€': 'euro', '$': 'dollar', '£': 'pound' };
+  function currencyWords(symbol, count, lang) {
+    const base = (lang === 'en' ? CURRENCY_WORDS_EN : CURRENCY_WORDS_FR)[symbol];
     if (!base) return symbol;
     return count > 1 || count < -1 ? base + 's' : base;
+  }
+
+  // Langue effective pour l'écriture en lettres/la locale Intl d'un NOMBRE -
+  // un override explicite par variable (opts.style 'fr'/'us') prime toujours
+  // sur la langue globale de l'interface ; 'none' (pas de séparateur de
+  // milliers, orthogonal au choix de langue) et l'absence de réglage suivent
+  // tous les deux I18n.getLang().
+  function numberLang(style) {
+    if (style === 'us') return 'en';
+    if (style === 'fr') return 'fr';
+    return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
   }
 
   // opts = { style: 'fr'|'us'|'none', decimals: 0-3|null, currency: ''|'€'|'$'|texte, words: bool }
@@ -235,11 +332,12 @@ const VariableFormat = (function () {
     const n = typeof val === 'number' ? val : parseFloat(val);
     if (!Number.isFinite(n)) return String(val);
     opts = opts || {};
+    const lang = numberLang(opts.style);
     if (opts.words) {
-      const words = numberToWordsFr(n, opts.decimals);
-      return opts.currency ? `${words} ${currencyWords(opts.currency, Math.round(n))}` : words;
+      const words = lang === 'en' ? numberToWordsEn(n, opts.decimals) : numberToWordsFr(n, opts.decimals);
+      return opts.currency ? `${words} ${currencyWords(opts.currency, Math.round(n), lang)}` : words;
     }
-    const locale = opts.style === 'us' ? 'en-US' : 'fr-FR';
+    const locale = lang === 'en' ? 'en-US' : 'fr-FR';
     const intlOpts = {};
     if (opts.decimals != null) { intlOpts.minimumFractionDigits = opts.decimals; intlOpts.maximumFractionDigits = opts.decimals; }
     if (opts.style === 'none') intlOpts.useGrouping = false;
@@ -248,5 +346,5 @@ const VariableFormat = (function () {
     return formatted;
   }
 
-  return { DATE_PRESETS, formatDate, formatNumber, numberToWordsFr };
+  return { DATE_PRESETS, presetLabel, formatDate, formatNumber, numberToWordsFr, numberToWordsEn };
 })();

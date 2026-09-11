@@ -44,6 +44,14 @@
    résultait de l'absence totale de règle ::before pour ce bouton. */
 #btn-link-rules::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); }
 
+/* Icône "Réglages" (roue crantée) - même famille d'icône que .bar-row
+   (masque ::before, PAS Icons.svg()/applyToolbarIcons qui ne couvre que les
+   boutons de #v2-toolbar, la ligne du DESSOUS - #v2-btn-settings vit dans
+   .bar-row comme #btn-rename-template/#btn-link-rules ci-dessus). Poussé
+   tout à droite par #status-msg juste avant lui (margin-left:auto, cf.
+   css/style.css), sans CSS de positionnement supplémentaire nécessaire. */
+#v2-btn-settings::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); }
+
 /* === Infobulle classique (bulle sombre sous le bouton), remplace le
    mécanisme "libellé révélé au survol" de la V1 (css/style.css `.btn-text`,
    qui élargit le bouton et pousse les éléments suivants). Déclenchée par
@@ -212,6 +220,42 @@
 .tpl-preview-body .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
 .tpl-preview-body .tiptap { box-sizing: border-box; padding: 37.33px; background: transparent; }
 .template-gallery-modal-content .modal-actions, .template-preview-modal-content .modal-actions { margin-top: 14px; }
+
+/* === Panneau Réglages (langue / touche de déclenchement / crédits) ===
+   Même gabarit exact que .link-config-modal-content/.link-rules-modal-content
+   ci-dessus (largeur fixe modeste, boutons de pied identiques) - premier
+   système d'onglets du projet (aucun précédent équivalent trouvé), construit
+   simplement : une rangée de boutons + un panneau par onglet, un seul visible
+   à la fois via l'attribut `hidden` natif (pas de librairie/état complexe). */
+.settings-modal-content { font-family: var(--font-ui); width: 360px; }
+.settings-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+.settings-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.settings-tab { flex: 1; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 4px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.settings-tab:hover { background: var(--surface-sunken); }
+.settings-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.settings-panel-intro { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
+.settings-radio-row { display: flex; gap: 16px; }
+.settings-radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+#settings-trigger-char { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
+.settings-trigger-reload-notice { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 12.5px; color: var(--text-muted); }
+/* `display:flex` juste au-dessus a EXACTEMENT la même spécificité qu'une
+   feuille de style utilisateur (0,1,0) que la règle native [hidden]{display:
+   none} de la feuille UA du navigateur - à égalité de spécificité, la règle
+   AUTEUR (celle-ci) l'emporte sur la règle UA dans la cascade, quel que soit
+   l'ordre d'écriture ici : l'attribut `hidden` natif ne masquait donc plus
+   rien (constaté en conditions réelles - l'avis "Rechargez la page" restait
+   visible en permanence malgré `hidden` correctement posé/retiré en JS).
+   Re-déclaré ici avec [hidden] en plus dans le sélecteur (0,2,0, gagne sans
+   ambiguïté) pour que l'attribut natif reprenne la main. */
+.settings-trigger-reload-notice[hidden] { display: none; }
+.settings-trigger-reload-notice button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.settings-trigger-reload-notice button:hover { background: var(--accent-hover); }
+.settings-credits-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+.settings-credits-list dt { font-weight: 700; color: var(--text-muted); }
+.settings-credits-list dd { margin: 0; color: var(--text); }
+.settings-modal-content .modal-actions { margin-top: 16px; }
+.settings-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
 /* === Barre flottante de formatage nombre/date d'une bulle #Variable (cf.
    v2/js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
