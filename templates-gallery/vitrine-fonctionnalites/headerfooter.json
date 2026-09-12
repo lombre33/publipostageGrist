@@ -2,11 +2,11 @@
   "enabled": true,
   "differentFirstPage": true,
   "header": {
-    "default": "<p>Vitrine des fonctionnalités — Publipostage Grist</p>",
+    "default": "<p>Rapport annuel — Aménagement urbain durable</p>",
     "first": ""
   },
   "footer": {
-    "default": "<p style=\"text-align:center\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></p>",
+    "default": "<p style=\"text-align:center\">Horizon Conseil — Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></p>",
     "first": ""
   }
 }
