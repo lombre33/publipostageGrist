@@ -1303,10 +1303,6 @@ const Editor = (function () {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';
   }
-  // Teinte l'icône elle-même (couleur de police "A"/pinceau de surlignage)
-  // plutôt qu'une pastille séparée - remplace le "trait horizontal" jugé
-  // trop lourd par l'utilisateur, tout en gardant le même retour visuel
-  // dynamique (cf. syncToolbarState) sur la position du curseur.
   function setColorIcon(id, color) {
     const el = document.getElementById(id);
     if (el) el.style.color = color || '';
@@ -1360,12 +1356,8 @@ const Editor = (function () {
     wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
   }
 
-  // Toolbar de gestion de tableau (ajout/suppr ligne/colonne, suppr tableau) -
-  // déplacée hors du bandeau statique (où elle restait affichée même sans
-  // aucun tableau dans le document) vers un panneau flottant qui n'apparaît
-  // que le curseur dans une cellule, ancré sur le <table> réel. `v2-btn-table`
-  // (insertion) reste dans le bandeau statique : seule la gestion d'un
-  // tableau déjà présent a besoin d'un contexte "curseur dans une cellule".
+  // Toolbar de gestion de tableau : panneau flottant, visible seulement
+  // curseur dans une cellule, ancré sur le <table> réel.
   function wireTableFloatingToolbar() {
     const buttons = [
       ['row-before', 'rowBefore', I18n.t('table.rowBefore')],
@@ -1401,11 +1393,8 @@ const Editor = (function () {
       };
       (commands[action] || (() => {}))();
     });
-    // Pas de sélection à restaurer ici (contrairement au texte) :
-    // setCellsBackground lit `editor.state.selection` directement, qui
-    // persiste indépendamment du focus DOM - `withSavedSelection` n'est
-    // donc qu'un simple passe-plat (le paramètre `chain` de
-    // createColorDropdown ne sert à rien pour une cellule).
+    // Pas de sélection à restaurer ici : setCellsBackground lit
+    // editor.state.selection directement (persiste indépendamment du focus DOM).
     const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection: fn => fn(null),
@@ -1414,23 +1403,17 @@ const Editor = (function () {
     });
     floatingContextPanels.push(panel);
     const check = () => {
-      // La sélection ProseMirror (donc editor.isActive(...)) NE change PAS
-      // toute seule quand le focus quitte l'éditeur (ex. clic sur "Mode
-      // lecture") - un clic hors de l'éditeur déclenche bien un blur RÉEL,
-      // qui redéclenche souvent une 'transaction' (cf. mémoire) : sans cette
-      // garde, check() re-affiche alors le panneau juste après que le filet
-      // de sécurité mousedown ci-dessus l'ait fermé (constaté en conditions
-      // réelles - le panneau restait affiché, ancré à un endroit devenu
-      // invalide, après un clic sur "Mode lecture").
+      // editor.isActive(...) ne change pas seul quand le focus quitte
+      // l'éditeur - vérifier hasFocus() explicitement pour fermer le
+      // panneau au clic hors de l'éditeur.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
       if (!editor.isActive('table')) { panel.hide(); return; }
       const { $from } = editor.state.selection;
       let tableDepth = -1;
       for (let d = $from.depth; d > 0; d--) { if ($from.node(d).type.name === 'table') { tableDepth = d; break; } }
       if (tableDepth === -1) { panel.hide(); return; }
-      // nodeDOM d'un nœud table renvoie le wrapper (.tableWrapper) posé par
-      // la NodeView interne de prosemirror-tables, pas le <table> lui-même -
-      // redescend dessus pour un ancrage visuel correct.
+      // nodeDOM d'une table renvoie le wrapper (.tableWrapper de
+      // prosemirror-tables), pas le <table> - redescend dessus pour l'ancrage.
       const dom = editor.view.nodeDOM($from.before(tableDepth));
       if (!dom) { panel.hide(); return; }
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
@@ -1442,11 +1425,8 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Toolbar flottante d'image - parité V1 (js/editor.js:963-1003) : zoom -/+,
-  // taille d'origine, alignement (flux normal) ou alignement-bord (calque,
-  // réplique snapFloatingImageHorizontal), bascule en ligne/bloc, opacité,
-  // calque devant/derrière/normal, suppression. Réutilise createFloatingPanel
-  // (même helper que la toolbar de tableau, Incrément 1).
+  // Toolbar flottante d'image : zoom, taille d'origine, alignement, wrap,
+  // opacité, calque, suppression.
   function wireImageFloatingToolbar() {
     const html = [
       `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
@@ -1467,40 +1447,18 @@ const Editor = (function () {
       `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
     ].join('');
 
-    // `editor.isActive('editorImage')` renvoie vrai dès qu'une SÉLECTION DE
-    // TEXTE (pas juste un clic direct sur l'image) traverse la position DOM
-    // de l'image - y compris une image en calque, déplacée visuellement
-    // loin de cette position (son emplacement DOM reste celui où elle a été
-    // insérée à l'origine, seul son rendu CSS left/top bouge). Sélectionner
-    // un paragraphe où une image "flottait" auparavant activait donc à tort
-    // la toolbar/le surlignage sur cette image, signalé cassé par
-    // l'utilisateur. `selectedImageNode()` exige une VRAIE NodeSelection
-    // ciblant précisément ce nœud (ce qu'un clic direct - ou la poignée de
-    // déplacement - produit déjà, cf. NodeSelectionClass.create ailleurs
-    // dans ce fichier) - une sélection de texte qui la traverse simplement
-    // ne qualifie plus.
-    // PAS de `instanceof NodeSelectionClass` ici (piège découvert en le
-    // testant) : la sélection qu'un clic RÉEL sur l'image produit (créée en
-    // interne par prosemirror-view, pas par ce fichier) échoue cet
-    // `instanceof`, alors même que `.node` est bien présent et correct -
-    // signe d'un second exemplaire du module `prosemirror-state` distinct de
-    // celui importé ici (l'un des deux ne passe peut-être pas par le même
-    // chemin de résolution que l'entrée `prosemirror-state` de l'importmap),
-    // malgré le soin déjà pris ailleurs dans le projet pour éviter ce piège.
-    // Duck-typing sur `.node` à la place : seule NodeSelection (quel que
-    // soit l'exemplaire du module qui l'a construite) expose cette
-    // propriété - une TextSelection, y compris une couvrant exactement la
-    // position de l'image, ne l'a jamais.
+    // Exige une VRAIE NodeSelection (`.node`), pas juste editor.isActive()
+    // qui reste vrai pour une simple sélection de texte traversant la
+    // position DOM de l'image. Duck-typing sur `.node` plutôt que
+    // `instanceof NodeSelectionClass` : un clic réel sur l'image produit une
+    // sélection créée en interne par prosemirror-view qui échoue cet
+    // instanceof (deux exemplaires distincts du module prosemirror-state).
     function selectedImageNode() {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'editorImage') ? node : null;
     }
 
-    // Élément <img> RÉEL de l'image sélectionnée - nécessaire pour lire ses
-    // dimensions intrinsèques (naturalWidth/naturalHeight), utilisées par
-    // clampWidthForHfMaxSize (zoom/reset ci-dessous) : `selectedImageNode()`
-    // ne donne que les attributs ProseMirror (width demandé), jamais le
-    // ratio intrinsèque réel de l'image.
+    // Dimensions intrinsèques (naturalWidth/Height) pour clampWidthForHfMaxSize.
     function selectedImageDom() {
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       return (dom && dom.querySelector) ? dom.querySelector('img') : null;
@@ -1512,10 +1470,8 @@ const Editor = (function () {
       patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
     }
 
-    // Aligner en flux normal (align gauche/centre/droite classique) ou, en
-    // calque devant/derrière, réaligner l'image sur le bord correspondant du
-    // conteneur (margin:auto n'a aucun effet sur un élément position:absolute,
-    // même limitation que la V1 - cf. snapFloatingImageHorizontal).
+    // En flux normal, alignement classique ; en calque, réaligne sur le
+    // bord du conteneur (margin:auto n'a aucun effet en position:absolute).
     function alignOrSnap(align) {
       const node = selectedImageNode();
       if (!node) return;
@@ -1526,33 +1482,21 @@ const Editor = (function () {
       if (!img) return;
       const imgWidthPx = img.getBoundingClientRect().width;
       const containerWidthPx = editorContentWidthPx(editor);
-      // `left` est stocké/appliqué depuis le bord de la boîte de PADDING
-      // (cf. toggleLayer ci-dessus), mais l'alignement doit lui viser le
-      // bord du TEXTE (boîte de contenu, cf. editorContentWidthPx) - d'où le
-      // décalage explicite du padding ici, dans les deux sens.
+      // `left` est stocké depuis le bord de la boîte de padding, mais
+      // l'alignement vise le bord du texte - décalage explicite du padding.
       const rootCs = getComputedStyle(editor.view.dom);
       const padLeft = parseFloat(rootCs.paddingLeft) || 0;
       const left = align === 'left' ? padLeft : align === 'center' ? padLeft + Math.max(0, (containerWidthPx - imgWidthPx) / 2) : padLeft + Math.max(0, containerWidthPx - imgWidthPx);
       updateSelectedImage({ left: Math.round(left) });
     }
 
-    // Sélecteur explicite à 3 états (normal/devant/derrière) - PAS un
-    // bouton-bascule par calque comme avant (2 boutons seulement, aucune
-    // icône dédiée pour "normal" - signalé confus par l'utilisateur : pas
-    // clair qu'il y a 3 statuts distincts, ni comment revenir à "normal" si
-    // on ne devine pas que c'est un bouton-bascule). Chaque bouton FIXE
-    // explicitement le calque visé, cliquer celui déjà actif ne fait rien
-    // (contrairement à l'ancien comportement "re-clique -> retour à
-    // normal" : la case "normal" a maintenant sa propre icône dédiée pour
-    // ça). Au premier passage en calque (devant/derrière), initialise
-    // left/top depuis la position RENDUE actuelle de l'image (son rect réel
-    // moins celui de la racine éditeur) pour qu'elle ne saute pas
-    // visuellement au passage en position:absolute.
+    // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton
+    // fixe le calque visé. Au premier passage en calque, initialise
+    // left/top depuis la position RENDUE actuelle pour éviter un saut visuel.
     function setLayer(target) {
       const node = selectedImageNode();
       if (!node) return;
-      const { state, view } = editor;
-      const pos = state.selection.from;
+      const pos = editor.state.selection.from;
       if (node.attrs.layer === target) return;
       const patch = { layer: target };
       if (target !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
@@ -1560,32 +1504,16 @@ const Editor = (function () {
         const img = dom && dom.querySelector && dom.querySelector('img');
         if (img) {
           const imgRect = img.getBoundingClientRect();
-          const rootEl = editor.view.dom;
-          const rootRect = rootEl.getBoundingClientRect();
-          // PAS de soustraction du padding ici : `left`/`top` sont ensuite
-          // appliqués tels quels en CSS `position:absolute` (styleFor(),
-          // ci-dessus) sur un wrapper dont le bloc englobant est CE MÊME
-          // `rootEl` (.tiptap, position:relative) - le CSS interprète déjà
-          // `left`/`top` depuis le bord de la boîte de PADDING (= bord de la
-          // boîte de bordure, ici sans bordure), PAS depuis le bord de la
-          // zone de contenu. Soustraire le padding ici décalait donc le
-          // stockage vers une convention "depuis le contenu" que le rendu
-          // CSS ne respecte jamais - l'image sautait visiblement de la
-          // largeur du padding dès la bascule en calque (constaté
-          // directement, sans même exporter), et ce même delta faussait
-          // ensuite la position PDF (mêmes valeurs left/top réutilisées par
-          // pdf-export.js). En ne retranchant rien, la valeur stockée
-          // correspond exactement à ce que le CSS applique, dans N'IMPORTE
-          // QUEL contexte de padding (éditeur réel à 37px, hôte de mesure PDF
-          // à 0px compris) - le bord de boîte de padding ne bouge pas avec le
-          // padding, seule la zone de contenu bouge.
+          const rootRect = editor.view.dom.getBoundingClientRect();
+          // Pas de soustraction de padding : left/top sont appliqués tels
+          // quels en CSS depuis le bord de la boîte de padding (styleFor()),
+          // qui ne bouge pas avec le padding - contrairement à la zone de
+          // contenu, seule affectée si on avait retranché le padding ici.
           patch.left = Math.round(imgRect.left - rootRect.left);
           patch.top = Math.round(imgRect.top - rootRect.top);
         }
       }
-      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
-      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
-      view.dispatch(tr);
+      patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));
     }
 
     const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
