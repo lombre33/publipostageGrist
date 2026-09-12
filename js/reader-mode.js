@@ -37,12 +37,16 @@ const ReaderMode = (function () {
     const rootRect = rootEl.getBoundingClientRect();
     const offsets = [];
     let consumed = 0;
-    Array.from(rootEl.children).forEach(child => {
+    Array.from(rootEl.children).forEach((child, index) => {
       const rect = child.getBoundingClientRect();
       const top = rect.top - rootRect.top;
       const height = rect.height;
-      if (child.classList.contains('page-break-marker')) { offsets.push(top + height); consumed = 0; return; }
-      if (consumed > 0 && consumed + height > pageContentHeightPx) { offsets.push(top); consumed = height; }
+      if (child.classList.contains('page-break-marker')) {
+        offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
+        consumed = 0;
+        return;
+      }
+      if (consumed > 0 && consumed + height > pageContentHeightPx) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = height; }
       else { consumed += height; }
     });
     return offsets;
@@ -96,6 +100,28 @@ const ReaderMode = (function () {
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
+    // Un saut de page forcé après peu de contenu doit réserver tout le reste
+    // de la page (même correctif que l'aperçu éditeur) - sans ça la couture
+    // suivante, et tout contenu positionné en absolu après elle, se retrouve
+    // décalé vers le haut par rapport à l'éditeur.
+    const wrapperChildren = Array.from(wrapper.children);
+    const marginRules = offsets
+      .filter(o => o.remainingPx > 0 && wrapperChildren[o.afterIndex])
+      .map((o, i) => '.reader-content > *:nth-child(' + (o.afterIndex + 1) + ') { margin-bottom: ' + o.remainingPx + 'px; }');
+    if (marginRules.length) {
+      const styleEl = document.createElement('style');
+      styleEl.textContent = marginRules.join('\n');
+      wrapper.appendChild(styleEl);
+    }
+    const rootRect = wrapper.getBoundingClientRect();
+    offsets.forEach(o => {
+      const el = wrapperChildren[o.afterIndex];
+      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément
+      // (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut
+      // donc rajouter remainingPx à la main pour retrouver la vraie frontière.
+      o.top = el ? (el.getBoundingClientRect().bottom - rootRect.top + o.remainingPx) : o.top;
+    });
+
     // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus
     // récent peut avoir déjà repeint `container` pendant l'attente, `wrapper`
     // ne serait alors plus attaché et insertBefore lèverait une exception.
@@ -116,7 +142,7 @@ const ReaderMode = (function () {
     const wrapperOffsetTop = wrapper.offsetTop;
     const wrapperOffsetLeft = wrapper.offsetLeft;
     const wrapperWidth = wrapper.getBoundingClientRect().width;
-    offsets.forEach((offsetPx, i) => {
+    offsets.forEach((offset, i) => {
       const pageEnding = i + 1; const pageStarting = i + 2;
       const footerText = footerForPage(pageEnding);
       const headerText = headerForPage(pageStarting);
@@ -130,7 +156,7 @@ const ReaderMode = (function () {
       seam.style.left = wrapperOffsetLeft + 'px';
       seam.style.width = wrapperWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
-      seam.style.top = (wrapperOffsetTop + offsetPx - seamHeight) + 'px';
+      seam.style.top = (wrapperOffsetTop + offset.top - seamHeight) + 'px';
     });
   }
 

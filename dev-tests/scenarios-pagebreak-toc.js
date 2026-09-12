@@ -60,6 +60,34 @@
   });
 
   cases.push({
+    id: 'pagebreak_readmode_gap_matches_editor',
+    description: 'En mode Lecture, un saut de page forcé après peu de contenu réserve aussi tout le reste de la page (même correctif que l\'éditeur, copie séparée dans reader-mode.js)',
+    run: async (h) => {
+      await h.resetEditor();
+      const hf = { enabled: true, differentFirstPage: false, header: { default: '<p>En-tête</p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } };
+      Editor.setHeaderFooterData(hf);
+      const html = '<p>Une seule ligne courte.</p><div class="page-break-marker">Saut de page</div><p>Page suivante.</p>';
+      // Bascule de visibilité manuelle (comme switchMode) : ReaderMode.render
+      // seul ne suffit pas, #reader-container doit être visible pour que les
+      // mesures de mise en page (getBoundingClientRect) soient réelles.
+      document.getElementById('editor-container').style.display = 'none';
+      const readerContainer = document.getElementById('reader-container');
+      readerContainer.style.display = 'block';
+      await ReaderMode.render(html, 'FakeTable', {}, hf);
+      await h.sleep(200);
+      const seam = document.querySelector('#reader-container .v2-page-band-footer');
+      const wrapper = document.querySelector('#reader-container .reader-content');
+      const pass = !!seam && !!wrapper && (seam.getBoundingClientRect().top - wrapper.getBoundingClientRect().top) > 400;
+      const gapPx = seam && wrapper ? Math.round(seam.getBoundingClientRect().top - wrapper.getBoundingClientRect().top) : null;
+      document.getElementById('editor-container').style.display = '';
+      readerContainer.style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      return { pass, notes: 'gapPx=' + gapPx + ' seamFound=' + !!seam };
+    },
+  });
+
+  cases.push({
     id: 'toc_insert_and_detect_headings',
     description: 'Le sommaire détecte les titres présents dans le document',
     run: async (h) => {
