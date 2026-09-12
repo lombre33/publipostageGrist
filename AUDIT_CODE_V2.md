@@ -24,16 +24,19 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 | **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | ~~4~~ **1** *(SRI + documentation des dépendances corrigés le 2026-09-12 ; reste : vendorisation `esm.sh`, décision produit **mise en attente à la demande de l'utilisateur**)* | 1 | 0 |
 | Sécurité applicative (XSS / RGPD) | 0 | ~~6~~ **0** *(tous corrigés le 2026-09-12)* | 2 | 0 |
 | Intégrité des données (concurrence) | 0 | ~~2~~ **0** *(corrigés le 2026-09-12)* | 0 | 0 |
-| Qualité de code (redondance, structure) | 0 | 6 | 8 | 4 |
+| Qualité de code (redondance, structure) | 0 | ~~6~~ **1** *(5 corrigées le 2026-09-12 : dédup. editor.js/pdf-export.js, robustesse, code mort ; reste : découpage structurel des 2 gros fichiers)* | 8 | 4 |
 | Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
 | Accessibilité (RGAA) | 0 | 1 | 1 | 1 |
-| **Total** | **0** | ~~22~~ **9 restants** (13 corrigés) | **16** | **5** |
+| **Total** | **0** | ~~22~~ **4 restants** (18 corrigés) | **16** | **5** |
 
-**Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§4/§6.2) : fuite RGPD en console, XSS en-tête/pied
-de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur les 4
-bibliothèques `cdnjs` (V1+V2), README.md créé (avec documentation des dépendances), **corruption
-silencieuse de la numérotation des notes de bas de page dans une zone 2-colonnes** (root cause plus
-profonde qu'un simple problème de concurrence, cf. §4). Nouveau module partagé
+**Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§4/§5/§6.2) : fuite RGPD en console, XSS
+en-tête/pied de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur
+les 4 bibliothèques `cdnjs` (V1+V2), README.md créé (avec documentation des dépendances),
+**corruption silencieuse de la numérotation des notes de bas de page dans une zone 2-colonnes**
+(root cause plus profonde qu'un simple problème de concurrence, cf. §4), `CAHIER_DES_CHARGES.md`
+régénéré à jour pour la V2, **nettoyage qualité de code** (déduplication editor.js/pdf-export.js,
+repli try/catch sur 3 fonctions critiques de pdf-export.js, retrait de code mort, élagage des
+commentaires les plus disproportionnés). Nouveau module partagé
 [`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points d'entrée
 HTML non maîtrisé. Vérifié sans régression sur ~90 scénarios de test + export PDF réel + nouveau test
 de régression permanent pour le bug de notes de bas de page.
@@ -41,11 +44,16 @@ de régression permanent pour le bug de notes de bas de page.
 **Mis en attente à la demande explicite de l'utilisateur** : la vendorisation d'`esm.sh` (§2.2) —
 décision produit délibérément reportée, pas oubliée.
 
+**Travail en cours, non terminé** : l'élagage des commentaires disproportionnés d'`editor.js`/
+`pdf-export.js` (§5) est une passe **partielle** — les blocs les plus longs ont été traités mais le
+volume total (~6000 lignes cumulées) contient encore de nombreux commentaires substantiels non
+revus un par un ; à poursuivre si une passe exhaustive est explicitement demandée.
+
 **Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
 
 1. **[RSSI — voir §2.1, non corrigé]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`) — désormais moins critique depuis la correction des XSS ci-dessus, mais reste un sujet à documenter/discuter explicitement avec la RSSI (la mitigation passe par les Règles d'accès Grist natives, pas par le code du widget — déjà expliqué dans le nouveau README).
 2. **[RSSI — voir §2.2, en attente]** Les ~23 paquets ProseMirror/TipTap restent chargés depuis `esm.sh` sans intégrité vérifiable (limitation technique des imports ES, pas juste un oubli) — vendorisation complète mise en attente, décision produit à part entière (cf. ci-dessus).
-3. **[Publication, non corrigé]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) ; `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer (le choix de licence est une décision de l'utilisateur, pas un défaut de code).
+3. **[Publication, non corrigé]** `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer (le choix de licence est une décision de l'utilisateur, pas un défaut de code).
 4. **[RSSI, non corrigé, mineur]** Le fetch automatique d'images externes à chaque export (§2.3) reste non encadré — clarification produit à faire (allowlist ou confirmation explicite).
 
 ---
@@ -176,15 +184,17 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 
 ## 5. Qualité de code — redondance et « mille-feuille »
 
-### 5.1 `v2/js/editor.js` (3316 lignes)
+### 5.1 `v2/js/editor.js` (3316 → 3211 lignes) — ✅ redondances corrigées, élagage des commentaires en cours
 
-| Constat | Lignes | Priorité |
+| Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
-| `captureSelection`/`withSavedSelection` copiées à l'identique dans 3 fonctions (`wireColorPickers`, `wireSelectionDependentSelects`, `wireCompactFontSizeControls`) | 1780-1788, 3163-3171, 3197-3205 | Important |
-| Motif « patcher les attributs d'un nœud + restaurer la NodeSelection + dispatch » réimplémenté 3 fois (`updateAttrs`, `updateSelectedImage`, `updateSelectedBadge`) | 1235-1256, 1964-1977, 2184-2193 | Important |
-| Cycle de glisser (mousedown→mousemove→mouseup) réécrit à la main 3 fois (poignée 2-colonnes, redimensionnement image, déplacement image) — chaque nettoyage est correct, mais le patron est dupliqué | 999-1004, 1308-1310, 1354-1356 | Mineur |
-| Commentaire obsolète référençant un mécanisme à drapeau (`suppressNextFootnoteOutsideCheck`) qui n'existe plus dans le code actuel (remplacé par une vérification directe, ligne 287) | 585-588 | Mineur |
-| Préfixe de log incohérent `[editor]` (minuscule) au lieu de `[Editor]` partout ailleurs | 3307 | Cosmétique |
+| `captureSelection`/`withSavedSelection` copiées à l'identique dans 3 fonctions | 1780-1788, 3163-3171, 3197-3205 | ~~Important~~ ✅ extrait dans `createSelectionPreserver()` |
+| Motif « patcher les attributs d'un nœud + restaurer la NodeSelection + dispatch » réimplémenté 3 fois | 1235-1256, 1964-1977, 2184-2193 | ~~Important~~ ✅ extrait dans `patchNodeAndReselect()` |
+| Cycle de glisser (mousedown→mousemove→mouseup) réécrit à la main 3 fois | 999-1004, 1308-1310, 1354-1356 | Mineur — **conservé tel quel** (2-3 lignes par site, l'abstraction n'aurait pas apporté de clarté réelle face au risque de régression) |
+| Commentaire obsolète référençant un mécanisme à drapeau inexistant | 585-588 | ~~Mineur~~ ✅ |
+| Préfixe de log incohérent `[editor]` au lieu de `[Editor]` | 3307 | ~~Cosmétique~~ ✅ |
+
+**Élagage des commentaires** (demande explicite de l'utilisateur, cf. guide Grist.Gouv §8.2 "watch out for verbosity") : plusieurs blocs disproportionnés (jusqu'à 39 lignes pour quelques lignes de code, souvent une narration répétitive "signalé par l'utilisateur"/"vérifié en conditions réelles") reformulés en gardant le "pourquoi" mais sans la narration autour. **Passe partielle** : les blocs les plus longs ont été traités, mais le fichier contient encore de nombreux commentaires substantiels qui n'ont pas tous été revus un par un vu le volume (~3200 lignes) — à poursuivre si une passe exhaustive est souhaitée.
 
 **Aucun code mort trouvé** (pas de fonction/variable inutilisée, pas de branche toujours vraie/fausse, pas de `TODO` oublié). **Aucune fuite de portée de variable** (pas de globale accidentelle, tout l'état reste dans l'IIFE).
 
@@ -195,16 +205,16 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 4. Barre d'outils statique principale → `main-toolbar.js`
 5. Cœur du module (`init`, `getHTML`/`setHTML`, API publique) → reste dans `editor.js`, réduit à un point d'assemblage.
 
-### 5.2 `v2/js/pdf-export.js` (2757 lignes)
+### 5.2 `v2/js/pdf-export.js` (2757 → 2807 lignes, +50 lignes de repli try/catch) — ✅ redondances et robustesse corrigées
 
-| Constat | Lignes | Priorité |
+| Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
-| Détection d'image flottante (5 lignes identiques au caractère près) dupliquée entre `cellLineToPdfObject` et `blockFrom` | 781-785, 1613-1617 | Mineur |
-| Construction de l'objet `_floatCarry` (mêmes 5 champs, même formule) refaite 3 fois dans `blockFrom` | 1636-1641, 1702-1707, 1775-1780 | Mineur |
-| Largeur de page A4 codée en dur 6 fois sous 3 formes différentes, dont 4 qui recalculent une constante déjà nommée (`CONTENT_WIDTH_PT`) | 174, 921, 1037, 1404, 1637, 1704, 1777 | Mineur |
-| `blockFrom` (~180 lignes) cumule routage par tag, 3 variantes de gestion d'image flottante, segmentation de paragraphe, cas titre/tâche/citation | 1608-1788 | Mineur |
-| 3 étapes de post-traitement (sommaire, ancrage d'images en attente, résolution des zones d'en-tête/pied) **sans** `try/catch` de repli, contrairement à toutes les conversions de bloc — une exception ici fait échouer l'export ENTIER au lieu de dégrader une seule zone | 1885-1889, 1894, 2486-2536 | **Important** |
-| Une image "au cœur du texte" non flottante, présente dans le MÊME paragraphe qu'une image flottante, est silencieusement perdue (jamais poussée en bloc) | 1380-1420 | Mineur |
+| Détection d'image flottante (5 lignes identiques) dupliquée entre `cellLineToPdfObject` et `blockFrom` | 781-785, 1613-1617 | ~~Mineur~~ ✅ extrait dans `findFloatImageIn()` |
+| Construction de l'objet `_floatCarry` (mêmes 5 champs) refaite 3 fois dans `blockFrom` | 1636-1641, 1702-1707, 1775-1780 | ~~Mineur~~ ✅ extrait dans `makeFloatCarry()` |
+| Largeur de page A4 codée en dur 6 fois sous 3 formes différentes, dont une constante déjà nommée (`CONTENT_WIDTH_PT`) jamais réutilisée | 174, 921, 1037, 1404, 1637, 1704, 1777 | ~~Mineur~~ ✅ toutes remplacées par `CONTENT_WIDTH_PT` |
+| `blockFrom` (~180 lignes) cumule routage par tag, 3 variantes de gestion d'image flottante, segmentation de paragraphe, cas titre/tâche/citation | 1608-1788 | Mineur — **non traité** (découpage structurel, risque plus élevé, cf. §5 structure) |
+| 3 étapes de post-traitement (sommaire, ancrage d'images en attente, résolution des zones d'en-tête/pied) sans `try/catch` de repli | 1885-1889, 1894, 2486-2536 | ~~Important~~ ✅ chacune enveloppée d'un repli dégradant seulement la zone concernée |
+| Une image "au cœur du texte" non flottante, présente dans le MÊME paragraphe qu'une image flottante, est silencieusement perdue | 1380-1420 | Mineur — **non traité** (cas limite rare, combinaison flottante+non-flottante dans un même paragraphe) |
 
 **Point positif à noter** : la duplication entre les 3 chemins de rendu (cellule de tableau / flux principal / zone 2-colonnes) est **largement justifiée** — ils produisent des structures pdfmake réellement différentes (stack de cellule vs contenu top-level vs colonnes), et les briques transverses (mesure d'indentation, marqueurs de liste, habillage flottant) sont déjà bien factorisées et réutilisées par les 3. Une fusion forcée serait plus risquée que la duplication résiduelle listée ci-dessus.
 
@@ -214,7 +224,8 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 
 | Fichier:ligne | Constat | Priorité |
 |---|---|---|
-| `js/templates.js:118-121` | Boucle de validation qui ne peut structurellement jamais se déclencher (`!(column in columns)` sur un objet qui vient d'être construit avec exactement ces clés) — fausse impression de garde-fou. | Mineur |
+| `js/templates.js` | ~~Boucle de validation qui ne peut structurellement jamais se déclencher~~ — **retirée**. | ~~Mineur~~ ✅ |
+| `js/grist-api.js` | ~~`getCurrentMappings`/`getCurrentOptions` exportés mais jamais appelés~~ — **retirés** (variables internes `_currentMappings`/`_currentOptions` conservées, toujours utilisées ailleurs). | ~~Mineur~~ ✅ |
 | `v2/js/variables.js:82-87` | Les libellés d'onglets du panneau `#` (singleton créé une seule fois) ne sont jamais retraduits si l'utilisateur change de langue après la première ouverture du panneau — contrairement au reste du panneau, reconstruit à chaque ouverture. | Mineur |
 | `v2/js/i18n.js:323,328` | Le paramètre `root` d'`applyTranslations(root)` n'est en pratique jamais utilisé (aucun module ne crée dynamiquement d'élément `data-i18n*` ni n'appelle la fonction avec un argument) — fonctionnalité prête mais jamais exercée, à documenter comme telle ou à retirer. | Cosmétique |
 | `v2/js/main.js:533` | `GristAPI.init()` continue même en cas d'échec (try/catch qui n'interrompt pas la suite) — probablement voulu (résilience) mais non commenté à cet endroit précis. | Mineur |
