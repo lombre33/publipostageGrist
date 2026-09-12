@@ -58,8 +58,14 @@ const GristAPI = (function () {
       grist.onRecord(function (record, mappings) {
         const receivedAt = new Date();
         const rowId = record && record.id != null ? record.id : null;
-        console.log('[GristAPI] onRecord reçu:', { rowId, receivedAt: receivedAt.toISOString(), record, mappings: mappings || null, mappingsJSON: safeJSONStringify(mappings) });
-        updateRowDebug(rowId, receivedAt);
+        // Ne JAMAIS logger `record`/`mappings` en entier : une ligne Grist de
+        // ce widget (publipostage) contient typiquement des données
+        // personnelles (nom, email, adresse...) - un log complet, même en
+        // développement, resterait actif en production et exposerait ces
+        // données à quiconque ouvre la console du navigateur. Seul l'ID de
+        // ligne (déjà visible ailleurs dans l'UI Grist elle-même) est utile
+        // au diagnostic sans rien exposer de nouveau.
+        console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
         _currentRecord = record;
         _currentMappings = mappings || null;
         if (!record) {
@@ -258,18 +264,6 @@ const GristAPI = (function () {
 
   function getColumnType(tableId, colId) {
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
-  }
-
-  function updateRowDebug(rowId, receivedAt) {
-    let debug = document.getElementById('debug-rowid');
-    if (!debug) {
-      debug = document.createElement('div');
-      debug.id = 'debug-rowid';
-      debug.style.cssText = 'font-size:11px;color:#777;margin:4px 0;text-align:right;';
-      (document.getElementById('app') || document.body).appendChild(debug);
-    }
-    debug.textContent = 'Ligne courante: ' + (rowId == null ? '—' : rowId)
-      + ' — reçu à ' + receivedAt.toLocaleTimeString();
   }
 
   function getTables() { return _tables; }

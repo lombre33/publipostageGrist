@@ -163,7 +163,7 @@ const ReaderMode = (function () {
     // resolveTocMarkers ci-dessous et css/style.css : #reader-container lui-
     // même ne peut pas jouer ce rôle, il n'est jamais le parent direct des
     // titres puisque ce <div> s'intercale toujours entre les deux).
-    const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = htmlContent;
+    const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     // Rafraîchit le schéma (types de colonnes) UNE FOIS avant de résoudre les
@@ -390,7 +390,7 @@ const ReaderMode = (function () {
     }
   }
   async function preview(htmlContent, tableId, record) {
-    const wrapper = document.createElement('div'); wrapper.innerHTML = htmlContent; const badges = wrapper.querySelectorAll('.var-badge');
+    const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent); const badges = wrapper.querySelectorAll('.var-badge');
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire
     // pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});

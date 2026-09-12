@@ -2373,6 +2373,18 @@ const Editor = (function () {
           footer: Object.assign({}, empty.footer, data.footer),
         })
       : empty;
+    // Assaini ICI, au seul point d'entrée d'un en-tête/pied venant de
+    // l'extérieur de l'éditeur (colonne Grist HeaderFooter, potentiellement
+    // modifiable par un autre collaborateur du document sans jamais ouvrir
+    // ce widget) - tout le reste de ce module (aperçu de pagination,
+    // mesure, export PDF via Editor.getHeaderFooterData()) consomme
+    // ensuite `headerFooterDraft` déjà propre. La saisie normale PENDANT
+    // l'édition (ligne ~2360, via editor.getHTML()) reste, elle, hors de
+    // portée : son HTML est déjà contraint par le schéma ProseMirror.
+    headerFooterDraft.header.default = HtmlSanitize.clean(headerFooterDraft.header.default);
+    headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
+    headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
+    headerFooterDraft.footer.first = HtmlSanitize.clean(headerFooterDraft.footer.first);
     renderPaginationOverlay();
   }
 

@@ -1,8 +1,8 @@
 # Audit de code — Publipostage Grist V2 (préparation publication + audit DINUM)
 
-**Date** : 2026-09-12 (mis à jour le même jour avec le guide de contribution Grist.Gouv et l'enjeu RSSI)
-**Périmètre** : tous les fichiers chargés en production par `v2/index.html`, y compris les fichiers V1 partagés (`js/grist-api.js`, `js/templates.js`, `js/reader-mode.js`, `css/style.css`, `css/roboto-fonts.css`), plus l'inventaire du dossier `v2/` et de la racine du dépôt. La V1 « pure » (`index.html` racine, `js/editor.js`, `js/main.js`, `js/pdf-export.js`, `js/html-source-tab.js`, `js/variables.js`, `js/pdf-fonts*.js` — jamais chargés par la V2) est **hors périmètre**.
-**Méthode** : lecture intégrale de chaque fichier (aucune modification), en 4 lots parallèles + vérifications ponctuelles manuelles. ~11 850 lignes de code auditées sur 18 fichiers de production, plus l'inventaire complet de `v2/` et de la racine.
+**Date** : 2026-09-12 (mis à jour le même jour avec le guide de contribution Grist.Gouv, l'enjeu RSSI, puis les premiers correctifs appliqués)
+**Périmètre** : tous les fichiers chargés en production par `v2/index.html`, y compris les fichiers V1 partagés (`js/grist-api.js`, `js/templates.js`, `js/reader-mode.js`, `js/html-sanitize.js`, `css/style.css`, `css/roboto-fonts.css`), plus l'inventaire du dossier `v2/` et de la racine du dépôt. La V1 « pure » (`index.html` racine, `js/editor.js`, `js/main.js`, `js/pdf-export.js`, `js/html-source-tab.js`, `js/variables.js` — jamais chargés par la V2) est **hors périmètre**. **Correction de portée** : `js/pdf-fonts.js`/`js/pdf-fonts-extra.js` avaient été classés à tort comme V1-seuls dans la version initiale de ce rapport — ils sont en réalité chargés dynamiquement par `v2/js/pdf-export.js` (`ensurePdfLibsLoaded`) pour l'export vectoriel ; ce sont des données de police pures (pas de logique métier), non ré-audités en détail pour cette raison.
+**Méthode** : lecture intégrale de chaque fichier (aucune modification lors de l'audit initial), en 4 lots parallèles + vérifications ponctuelles manuelles. ~11 850 lignes de code auditées sur 18 fichiers de production, plus l'inventaire complet de `v2/` et de la racine. Correctifs ultérieurs appliqués et testés (voir §3.1/§3.2/§6.2).
 **Référence externe** : « Contributing Guide — Grist.Gouv Widgets » (guide officiel DINUM/ANCT pour la contribution de widgets à l'instance souveraine Grist.Gouv, fourni par l'utilisateur, dernière mise à jour juillet 2026) — voir §8 pour la mise en regard détaillée.
 
 ## Comment lire ce rapport
@@ -21,22 +21,26 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 
 | Catégorie | Bloquant | Important | Mineur | Cosmétique |
 |---|---|---|---|---|
-| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | **4** | 1 | 0 |
-| Sécurité applicative (XSS / RGPD) | 0 | 6 | 2 | 0 |
+| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | **4** *(non corrigé — sujet de configuration/décision, pas un correctif de code)* | 1 | 0 |
+| Sécurité applicative (XSS / RGPD) | 0 | ~~6~~ **2** *(4 corrigés le 2026-09-12)* | 2 | 0 |
 | Intégrité des données (concurrence) | 0 | 2 | 0 | 0 |
 | Qualité de code (redondance, structure) | 0 | 6 | 8 | 4 |
-| Fichiers / publication / conformité au guide Grist.Gouv | 0 | 3 | 4 | 0 |
+| Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
 | Accessibilité (RGAA) | 0 | 1 | 1 | 1 |
-| **Total** | **0** | **22** | **16** | **5** |
+| **Total** | **0** | ~~22~~ **16 restants** (6 corrigés) | **16** | **5** |
 
-**Les 6 points à traiter en priorité absolue avant l'audit DINUM/RSSI :**
+**Corrigé le 2026-09-12** (voir détail §3.1/§3.2/§6.2) : fuite RGPD en console, XSS en-tête/pied de
+page, XSS `document.write()`, README.md créé. Nouveau module partagé
+[`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points d'entrée
+HTML non maîtrisé.
 
-1. **[RSSI — voir §2]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`), alors que trois vecteurs XSS crédibles ont été trouvés (points 3-4 ci-dessous) : en cas de compromission, l'attaquant hérite d'un accès total au document, pas seulement à la table liée. C'est le point que la RSSI va très probablement mettre en avant en premier — à traiter comme un sujet à part entière, pas seulement un « aggravant » d'un autre constat.
-2. **[RSSI — voir §2]** Le widget charge à l'exécution ~26 paquets JavaScript tiers depuis deux CDN publics non-souverains (`esm.sh`, `cdnjs.cloudflare.com`), sans aucune vérification d'intégrité (`integrity=`/SRI) ni hébergement local — un sujet de souveraineté numérique explicitement mentionné dans le guide Grist.Gouv (§8) et un vecteur de compromission de la chaîne d'approvisionnement classique.
-3. **[Sécurité]** Un log console expose l'intégralité de chaque ligne Grist sélectionnée (potentiellement des données personnelles : noms, emails, adresses) — `js/grist-api.js:61`.
-4. **[Sécurité]** Le mode en-tête/pied de page injecte du HTML stocké en base Grist via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur ayant accès au document Grist (pas forcément au widget) peut y placer un payload qui s'exécute automatiquement à la prochaine ouverture, pour n'importe quel utilisateur — `v2/js/editor.js`.
-5. **[Sécurité]** L'export « Impression navigateur » utilise `document.write()` sur le gabarit édité, ce qui **exécute réellement** tout `<script>`/gestionnaire d'événement qu'il contiendrait — `v2/js/pdf-export.js:2655-2664`.
-6. **[Publication]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) et aucun `README.md`/`LICENSE`/`CONTRIBUTING.md` n'existe à la racine — **le guide Grist.Gouv exige explicitement un README par widget** (§8), et la doctrine DINUM générale exige LICENSE/CONTRIBUTING pour un dépôt public.
+**Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
+
+1. **[RSSI — voir §2, non corrigé]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`) — désormais moins critique depuis la correction des XSS ci-dessus, mais reste un sujet à documenter/discuter explicitement avec la RSSI (la mitigation passe par les Règles d'accès Grist natives, pas par le code du widget — déjà expliqué dans le nouveau README).
+2. **[RSSI — voir §2, non corrigé]** Le widget charge à l'exécution ~26 paquets JavaScript tiers depuis deux CDN publics non-souverains (`esm.sh`, `cdnjs.cloudflare.com`), sans aucune vérification d'intégrité (`integrity=`/SRI) ni hébergement local — un sujet de souveraineté numérique explicitement mentionné dans le guide Grist.Gouv (§8).
+3. **[Sécurité, non corrigé, mineur]** Noms de colonne/table interpolés sans échappement dans la modale de liaison (`v2/js/variables.js`) — peu exploitable en pratique, correctif simple disponible.
+4. **[Publication, non corrigé]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) ; `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer.
+5. **[Intégrité des données, non corrigé]** Un export PDF d'un document contenant une zone 2-colonnes avec une note de bas de page dans chaque colonne peut produire une numérotation/texte de note corrompu silencieusement.
 
 ---
 
@@ -90,31 +94,50 @@ Déjà identifié en détail en §3.2 (S3) mais à relire sous l'angle RSSI : `v
 
 ## 3. Sécurité applicative
 
-### 3.1 Fuite de données personnelles en console (RGPD)
+### 3.1 Fuite de données personnelles en console (RGPD) — ✅ CORRIGÉ
 
 | Fichier:ligne | Constat | Priorité |
 |---|---|---|
-| `js/grist-api.js:61` | `console.log('[GristAPI] onRecord reçu:', { ..., record, ... })` affiche l'intégralité de la ligne Grist courante (nom, email, adresse... selon le contenu du document) dans la console, **sans condition**, à chaque changement de sélection. | **Important** |
-| `js/grist-api.js:263-273` | Un `<div id="debug-rowid">` affiche en permanence "Ligne courante: X — reçu à HH:MM:SS" dans l'UI de production. Résidu de développement. | Mineur |
+| `js/grist-api.js:61` | ~~`console.log('[GristAPI] onRecord reçu:', { ..., record, ... })` affiche l'intégralité de la ligne Grist courante~~ — **corrigé** : le log ne contient plus que `rowId`/horodatage, plus jamais `record`/`mappings`. | ~~Important~~ |
+| `js/grist-api.js` (`updateRowDebug`) | ~~Un `<div id="debug-rowid">` affiche en permanence "Ligne courante: X — reçu à HH:MM:SS" dans l'UI de production~~ — **corrigé** : fonction et appel retirés. | ~~Mineur~~ |
 
 **Risque** : dans un contexte secteur public (RGPD), exposer des données personnelles en clair dans les outils de développement du navigateur — accessible à quiconque ouvre la console, y compris via une extension navigateur tierce — est une non-conformité facilement identifiable en audit.
 **Suggestion** : retirer ces deux instructions, ou les conditionner à un flag de debug explicite (`localStorage.pp_debug`) absent par défaut.
 **Impact fonctionnel d'une correction** : nul (purement du logging).
 
-### 3.2 Injection HTML non assainie (XSS)
+### 3.2 Injection HTML non assainie (XSS) — ✅ CORRIGÉ (sauf le point mineur `variables.js`)
 
-| Fichier:ligne(s) | Constat | Priorité |
+**Correctif appliqué** : nouveau module partagé V1/V2 [`js/html-sanitize.js`](js/html-sanitize.js)
+(`HtmlSanitize.clean(html)`) — parse le HTML via `DOMParser` (document inerte : aucun script ni
+gestionnaire d'événement ne s'exécute pendant le parsing lui-même), retire les balises `<script>`,
+tous les attributs `on*`, et les URLs `javascript:`, puis re-sérialise. Appliqué à **2 points
+d'entrée uniques** qui couvrent l'intégralité des chemins listés ci-dessous, plutôt qu'à chaque site
+d'insertion individuellement :
+- `js/reader-mode.js` : `render()` et `preview()` — couvre l'aperçu "Lecture" ET tout export PDF
+  (vectoriel, impression navigateur, raster), puisque `PdfExport.exportCurrentRecord`/
+  `getNativePdfBlobForRecord` obtiennent systématiquement leur HTML via `ReaderMode.preview()`.
+- `v2/js/editor.js` : `setHeaderFooterData()` — seul point d'entrée d'un en-tête/pied venant de
+  l'extérieur de l'éditeur (colonne Grist `HeaderFooter`) ; couvre par ricochet tous les sites de
+  rendu qui le consomment (`measureHtmlHeightPx`, `resolvePageNumberBadgesForPreview`, `updateHfZone`,
+  `renderPaginationOverlay`) et l'export PDF de l'en-tête/pied (`pdf-export.js`, qui lit la même
+  donnée via `Editor.getHeaderFooterData()`).
+
+Vérifié par la suite de tests complète (~90 scénarios, aucune régression) et par un export PDF réel
+d'un document combinant tableau/image/gras via `PdfExport.getNativePdfBlobForRecord` après le
+correctif.
+
+| Fichier:ligne(s) (état AVANT correctif) | Constat | Priorité |
 |---|---|---|
-| `v2/js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | Le HTML des zones d'en-tête/pied de page (`headerFooterDraft`, chargé tel quel depuis une colonne Grist `HeaderFooter` via `setHeaderFooterData`, ligne 2368) est injecté via `innerHTML` sur des éléments **réellement attachés au DOM visible**, sans jamais repasser par le schéma contraint de l'éditeur (contrairement à `getHTML()`/`setHTML()` qui, eux, sont sains). Un `<img src=x onerror="...">` placé dans cette colonne par n'importe quel collaborateur du document Grist (pas nécessairement un utilisateur du widget) s'exécute **automatiquement** dès qu'un utilisateur charge ce modèle — aucune action explicite requise. | **Important** |
-| `v2/js/pdf-export.js` (7 points : lignes ~352-368, 991, 1040-1045, 2046-2047, 2515-2518, 2701-2710) | Tous les hôtes de mesure/rendu hors-écran utilisés pour construire le PDF injectent le gabarit via `innerHTML` sur du DOM **attaché** à `document.body`. `innerHTML` neutralise les `<script>`, mais **pas** les gestionnaires d'événements inline (`onerror`, `onload`) sur un nœud vivant — ils s'exécutent dès l'insertion, à chaque export. | **Important** |
-| `v2/js/pdf-export.js:2655-2664` (`exportViaBrowserPrint`) | `document.write(... + container.outerHTML + ...)` : contrairement à `innerHTML`, `document.write` **exécute réellement les balises `<script>`** présentes dans le flux. C'est le vecteur le plus net du projet (exécution de code, pas seulement de gestionnaire d'événement). | **Important** |
-| `v2/js/variables.js:610-613, 553-558` | Dans la modale de configuration de liaison entre tables, les noms de colonne/table Grist (`colId`, nom de table référencée) sont interpolés sans échappement dans une chaîne `<option>` injectée en `innerHTML`. Aujourd'hui ces identifiants sont contraints par l'UI standard de Grist, donc peu exploitables en pratique — mais rien ne le garantit si un identifiant est créé via l'API REST Grist en contournant l'éditeur. | Important |
-| `v2/js/pdf-export.js:2105-2144` (`inlineEditorImagesAsDataUri`, S3) | `fetch(src)` vers n'importe quelle URL non-`data:` présente dans le gabarit, sans validation de schéma/hôte, à **chaque export**. Cf. §2.3. | Mineur |
+| `v2/js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | En-tête/pied de page injecté via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur du document Grist pouvait y placer un payload s'exécutant automatiquement. | ~~Important~~ ✅ |
+| `v2/js/pdf-export.js` (mesure/rendu du gabarit principal, via `reader-mode.js` en amont) | Hôtes de mesure hors-écran injectant le gabarit via `innerHTML` sans assainissement. | ~~Important~~ ✅ |
+| `v2/js/pdf-export.js:2655-2664` (`exportViaBrowserPrint`) | `document.write(... + container.outerHTML + ...)` exécutait réellement les `<script>` du gabarit. | ~~Important~~ ✅ |
+| `v2/js/variables.js:610-613, 553-558` | Noms de colonne/table Grist interpolés sans échappement dans une modale — peu exploitable en pratique (identifiants contraints par l'UI Grist standard) mais non garanti si l'API REST est utilisée pour créer un identifiant hostile. | Important — **non corrigé dans ce lot**, à traiter séparément (fix ciblé : échapper `c`/le nom de table ou construire via `textContent`/`createElement`). |
+| `v2/js/pdf-export.js:2105-2144` (`inlineEditorImagesAsDataUri`, S3) | `fetch(src)` vers n'importe quelle URL non-`data:` présente dans le gabarit, sans validation, à chaque export. | Mineur — non corrigé, cf. §2.3. |
 
-**Point important à noter pour l'audit DINUM/RSSI** : `js/reader-mode.js` (qui résout les valeurs `#Table.Colonne` avec les VRAIES données Grist) a été vérifié **sain** — il utilise systématiquement `textContent`, jamais `innerHTML`, pour insérer une valeur de cellule. **Le vecteur d'attaque n'est donc pas "une donnée métier arbitraire dans une cellule Grist", mais le gabarit HTML du modèle lui-même** (et les données d'en-tête/pied de page), que n'importe quel collaborateur ayant un accès en édition au document Grist peut modifier — même sans jamais ouvrir ce widget. **Voir §2.1 pour la mise en perspective avec le niveau d'accès `'full'` du widget.**
-
-**Suggestion générale** : introduire une fonction unique d'assainissement HTML (retrait des balises `<script>`, des attributs `on*`, des URLs `javascript:`) appliquée systématiquement **avant** toute insertion DOM (`innerHTML`/`outerHTML`/`document.write`) du gabarit ou des données d'en-tête/pied — un seul point de correction plutôt que ~10 sites d'insertion à corriger un par un.
-**Impact fonctionnel** : correction non risquée pour les fonctionnalités existantes si l'assainissement est bien ciblé (retrait de scripts/handlers uniquement, pas de reformatage du HTML) ; à tester sur un gabarit riche existant (tableaux, images, 2-colonnes) pour confirmer qu'aucune balise légitime n'est perdue.
+**Point important à noter pour l'audit DINUM/RSSI** : `js/reader-mode.js` (résolution des valeurs
+`#Table.Colonne`) reste vérifié **sain** par ailleurs — il utilise systématiquement `textContent`,
+jamais `innerHTML`, pour insérer une valeur de cellule. Le vecteur corrigé ici était le gabarit HTML
+du modèle lui-même (et les données d'en-tête/pied de page), pas une donnée métier arbitraire.
 
 ### 3.3 Permissions et intégrité des tables internes Grist
 
@@ -210,7 +233,8 @@ Aucune fuite de portée trouvée dans les fichiers audités (pas de globale acci
 |---|---|---|---|
 | `CAHIER_DES_CHARGES.md` | **Confirmé corrompu** : contient le module `Variables` V1 (JavaScript brut, Quill) au lieu d'un cahier des charges. Le vrai contenu existe encore dans l'historique git (`git show 33d7784:CAHIER_DES_CHARGES.md`), écrasé par un commit ultérieur (`fd5d69c`, message générique suspect, qui modifie aussi `js/grist-api.js` dans le même commit — signe d'un écrasement accidentel lors d'un push scripté). | Régénérer le contenu depuis `33d7784`, le mettre à jour pour refléter la V2 (aujourd'hui à parité fonctionnelle), ou le supprimer si le projet préfère documenter le périmètre uniquement via un futur `README.md`/`VERSIONING.md`. **Ne pas se contenter de restaurer `33d7784` tel quel** (ne décrirait que la V1). | **Important** — un fichier nommé "cahier des charges" contenant du code sans rapport est le genre de détail qui discrédite un dépôt aux yeux d'un relecteur externe. |
 | `VERSIONING.md` | Périmé pour V2 : dernière entrée `v0.10` (2026-09-08), alors que la V2 est activement développée jusqu'au 12/09 (settings, correctifs export PDF, suite de tests — invisibles dans ce fichier). | Soit indiquer explicitement en tête que ce fichier ne couvre que la V1, soit le compléter avec les jalons V2. | Mineur |
-| `README.md`, `LICENSE`, `CONTRIBUTING.md` | **Absents** de la racine. Le guide Grist.Gouv exige explicitement un README **par widget** (objet, configuration, dépendances — cf. §8) ; la doctrine DINUM générale attend en plus LICENSE (permissive) et CONTRIBUTING.md pour un dépôt public. | À créer avant publication officielle — voir §8 pour le contenu minimal attendu du README selon le guide Grist.Gouv. | **Important** |
+| `README.md` | ~~Absent de la racine~~ — **créé le 2026-09-12** : objet, configuration, section dédiée "Sécurité et permissions" (accès `'full'` + renvoi vers les Règles d'accès Grist), dépendances, tests, état du projet. | — | ~~Important~~ ✅ |
+| `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md` | Toujours absents. La doctrine DINUM générale attend LICENSE (permissive) et CONTRIBUTING.md pour un dépôt public ; le guide Grist.Gouv attend un canal de signalement de vulnérabilité (§8.2). | Choix de licence à valider avec l'utilisateur (décision légale/organisationnelle, pas un défaut de code) avant de créer `LICENSE`. `SECURITY.md` dépend du calendrier de rattachement officiel à l'écosystème Grist.Gouv. | **Important** |
 | Nom du dépôt (`publipostageGrist`) | Le guide Grist.Gouv recommande le format `grist-widget-[nom-fonctionnel]` (ex. `grist-widget-publipostage`) pour la découvrabilité dans l'écosystème. | Envisager un renommage avant publication officielle (impact : mise à jour de l'URL GitHub Pages et de tout lien existant). | Mineur |
 | `.gitignore` | Cohérent avec l'état actuel du projet (V2 + dev-tests pris en compte), vérifié en pratique. | Rien à faire. | — |
 
@@ -246,13 +270,13 @@ Le guide décrit deux chemins : **Voie A** (l'équipe Grist.Gouv découvre et «
 
 | Exigence du guide | État actuel du projet | Écart | Priorité |
 |---|---|---|---|
-| **README.md** expliquant : ce que fait le widget, comment le configurer, ses dépendances | Absent (cf. §6.2) | À créer — contenu minimal : objet du widget (publipostage/mail-merge sur données Grist), configuration (liaison de table, règles de correspondance cross-table, réglages langue/touche `#`), dépendances (TipTap/ProseMirror, pdfmake, JSZip, avec origines CDN — cf. §2.2) | **Important** |
+| **README.md** expliquant : ce que fait le widget, comment le configurer, ses dépendances | ~~Absent~~ — **créé le 2026-09-12**, couvre objet/configuration/dépendances/sécurité-permissions/tests/état du projet. | — | ~~Important~~ ✅ |
 | **Portée fonctionnelle raisonnablement étroite** ("si votre widget semble faire plusieurs métiers différents, envisagez de le scinder") | Le widget fait : édition riche + export PDF + galerie de modèles + résolution de variables cross-table + réglages i18n. Peut se justifier comme UN seul métier cohérent ("publipostage documentaire"), mais le volume de code (~11 850 lignes) et la taille de certains fichiers (`editor.js` 3316 lignes) vont dans le sens d'une préoccupation légitime sur ce critère. | À argumenter explicitement dans le README (pourquoi ce périmètre reste un seul widget cohérent) plutôt qu'à découper en plusieurs widgets — une explication claire suffit probablement à satisfaire l'esprit du critère. | Mineur |
 | **Tests** : fonctionnalités cœur couvertes par des tests unitaires ; au moins un scénario d'intégration (création de document, interaction widget) | `v2/dev-tests/` couvre ~85 scénarios (formatage, listes, tableaux, 2-colonnes, images, export PDF vectoriel...) — un socle réel et non négligeable. **Mais** : ce sont des tests pilotés manuellement depuis la console navigateur contre un `grist-stub.js` (pas une vraie exécution Grist), pas une suite automatisée exécutable en CI/CD, et rien ne teste le scénario "création de document réel + interaction widget" avec l'API Grist réelle (résolution `#Variable` réelle explicitement documentée comme non testable en local, cf. `dev-tests/README.md`). | Documenter clairement dans le README ce que couvre/ne couvre pas la suite actuelle ; envisager, a minima, un script qui exécute la suite automatiquement (headless) plutôt qu'à la main, même sans aller jusqu'à un vrai test d'intégration Grist réel. | Important |
 | **Lisibilité/maintenabilité** : code compréhensible par un humain sans IA, noms explicites | Conforme dans l'ensemble (cf. §5 — conventions de nommage homogènes, commentaires expliquant le "pourquoi") — sous réserve des points de duplication/longueur de fichier déjà listés en §5. | Aucun écart bloquant, nettoyages recommandés en §5. | — |
 | **Concis, pas de verbosité excessive** ("Les outils IA ont tendance à générer du code plus long que nécessaire... les relecteurs devraient pouvoir lire la logique de votre widget d'une traite") | Les fichiers `editor.js` (3316 lignes) et `pdf-export.js` (2757 lignes) ne permettent PAS une lecture "d'une traite" par un relecteur — c'est le point le plus directement testé par ce critère du guide. Le code interne à chaque fonction reste cependant loin d'être verbeux artificiellement (audit §5 : peu de code mort, peu de sur-ingénierie) — la longueur vient du nombre de fonctionnalités réelles empilées dans peu de fichiers, pas de code inutilement bavard. | Le découpage en modules proposé en §5.1/§5.2 répond directement à ce critère. | Important |
 | **Pas de duplication de code inter-widgets** ("le code partagé doit vivre dans un module commun, pas être copié-collé") | Vérifié : les 3 chemins de rendu PDF (cellule/flux/2-colonnes) réutilisent déjà les briques transverses communes (cf. §5.2, point positif) ; les duplications résiduelles trouvées (§5.1, §5.2) sont internes à un même fichier, pas entre widgets distincts. | Pas d'écart sur l'esprit du critère (un seul widget dans ce dépôt), les duplications internes restent à traiter par ailleurs (§5). | — |
-| **« Safe »** : pas d'appel à des services externes non documentés, pas de stockage de données utilisateur hors de Grist | **Écart direct** : les appels aux CDN `esm.sh`/`cdnjs.cloudflare.com` (§2.2) sont des services externes — actuellement non documentés dans le dépôt (aucun fichier ne les liste comme dépendances assumées). Le fetch d'images externes à chaque export (§2.3) est un appel réseau automatique vers un tiers potentiellement non maîtrisé. **Aucune donnée utilisateur n'est stockée hors de Grist** (vérifié : seuls `pp_lang`/`pp_trigger_char`, des préférences d'interface, vivent en `localStorage` — aucune donnée métier). | Documenter explicitement les CDN comme dépendances assumées (§2.2, suggestion 3) répond en grande partie à "non documentés" ; le fetch d'image à l'export mérite une clarification produit (comportement voulu ou à encadrer). | **Important** |
+| **« Safe »** : pas d'appel à des services externes non documentés, pas de stockage de données utilisateur hors de Grist | **Partiellement résolu** : les CDN `esm.sh`/`cdnjs.cloudflare.com` (§2.2) sont désormais documentés dans le README (section Dépendances) — ne sont donc plus "non documentés", mais restent des services externes sans intégrité SRI (§2.2, non corrigé). Le fetch d'images externes à chaque export (§2.3) reste un appel réseau automatique non encadré. **Aucune donnée utilisateur n'est stockée hors de Grist** (vérifié : seuls `pp_lang`/`pp_trigger_char`, des préférences d'interface, vivent en `localStorage` — aucune donnée métier). | Le fetch d'image à l'export mérite encore une clarification produit (comportement voulu ou à encadrer) ; l'intégrité SRI/vendorisation reste à traiter (§2.2). | Mineur *(dégradé depuis Important — le point "non documenté" est traité)* |
 | **Aucune dépendance/dette inutile, pas de code mort** ("Minimal: no unnecessary dependencies, no dead code") | Aucun code mort trouvé dans les fichiers les plus audités (§5.1) ; 2 exports morts trouvés dans `grist-api.js` (`getCurrentOptions`/`getCurrentMappings`, jamais appelés) — mineur, à retirer ou documenter comme API publique volontaire. | Retirer les 2 exports inutilisés, ou expliquer pourquoi ils sont conservés (API publique du module). | Mineur |
 | **Canal de signalement de vulnérabilité** (VDP gouvernemental, jamais d'issue publique) | Aucun fichier `SECURITY.md` dans le dépôt indiquant ce canal. | Ajouter un `SECURITY.md` référençant le VDP (`https://vdp.numerique.gouv.fr/p/Policy`) ou le canal Tchap approprié, une fois le widget effectivement rattaché à l'écosystème Grist.Gouv. | Mineur (dépend du calendrier de rattachement officiel) |
 | **Convention de nommage du dépôt** : `grist-widget-[nom-fonctionnel]` | Dépôt actuellement nommé `publipostageGrist`. | Cf. §6.2 — renommage à envisager avant soumission officielle. | Mineur |
@@ -289,7 +313,8 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 
 - **Résolution des variables Grist (`reader-mode.js`)** : systématiquement via `textContent`, jamais `innerHTML` — le vecteur XSS identifié en §3.2 vient du gabarit/de l'en-tête-pied, pas d'une valeur de cellule métier.
 - **Cohérence de style remarquable** dans `editor.js`/`pdf-export.js` : conventions de nommage homogènes (`createXxx`/`wireXxx`/`ensureXxx`), gestion d'erreur `try/catch` + repli systématique, commentaires en français expliquant systématiquement le "pourquoi" (bug réel constaté) plutôt que de paraphraser le code.
-- **Suite de tests automatisés** (`v2/dev-tests/`, ~85 scénarios) déjà en place et à jour — un vrai filet de sécurité pour les corrections proposées ici, en particulier pour les refactorings de §5, et une réponse partielle (à documenter/étoffer, cf. §8.2) au critère "Tests" du guide Grist.Gouv.
+- **Suite de tests automatisés** (`v2/dev-tests/`, ~90 scénarios) déjà en place et à jour — un vrai filet de sécurité pour les corrections proposées ici, en particulier pour les refactorings de §5, et une réponse partielle (à documenter/étoffer, cf. §8.2) au critère "Tests" du guide Grist.Gouv. A servi à valider les correctifs de sécurité du 2026-09-12 (aucune régression).
+- **Correctifs de sécurité 2026-09-12** : fuite RGPD (console), XSS en-tête/pied de page, XSS `document.write()` corrigés via un point d'entrée unique par vulnérabilité plutôt qu'un correctif dispersé sur chaque site d'insertion — cf. §3.1/§3.2. README.md créé, couvrant notamment la section "Sécurité et permissions" attendue par une RSSI.
 - **Duplication déjà justifiée et documentée** entre les 3 chemins de rendu PDF (cellule/flux principal/2-colonnes) — pas un défaut, un choix assumé, conforme à l'esprit du critère anti-duplication du guide Grist.Gouv (§8.2).
 - **Versions de dépendances externes systématiquement pinnées** (jamais de `@latest`) — bon point partiel pour la chaîne d'approvisionnement (§2.2), il manque l'intégrité (SRI) et l'hébergement local pour compléter le tableau.
 - **Choix `requiredAccess: 'full'` documenté et techniquement justifié** (§2.1) — ce n'est pas une négligence de configuration, un point qui jouera en faveur du projet dans la discussion avec la RSSI même si le niveau d'accès lui-même reste un point de vigilance.
@@ -298,11 +323,16 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 
 ## 11. Prochaines étapes proposées
 
+**Fait le 2026-09-12** : README.md créé ; fuite RGPD console corrigée ; XSS en-tête/pied de page et
+`document.write()` corrigés via `js/html-sanitize.js`.
+
 1. **Décider du calendrier de rattachement à l'écosystème Grist.Gouv** (Voie A ou B, cf. §8.1) — conditionne l'urgence du `SECURITY.md`/canal VDP et du renommage du dépôt.
-2. **Traiter les 6 points de la synthèse exécutive (§1)** — enjeu RSSI (§2) et sécurité applicative (§3) d'abord, fichiers de publication en parallèle (faible risque, peut être fait indépendamment).
-3. **Préparer le dossier RSSI** (§2) : rédiger la section "Sécurité et permissions" du futur README (accès `'full'` justifié + renvoi vers les Règles d'accès Grist natives comme mitigation côté déploiement), documenter/vendoriser les dépendances CDN, clarifier le comportement de fetch d'image externe.
-4. **Rédiger le README requis par le guide Grist.Gouv** (§8.2) en couvrant explicitement : objet, configuration, dépendances (avec origines CDN), portée fonctionnelle assumée, état de la suite de tests.
-5. Une fois les points Important de sécurité traités : passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
+2. **Choisir une licence** (décision légale/organisationnelle, doctrine DINUM = permissive de préférence) pour pouvoir créer `LICENSE`.
+3. **Préparer le dossier RSSI** (§2, non corrigé) : décider d'une éventuelle réduction de la fréquence d'exposition de l'accès `'full'`, et d'une stratégie pour la chaîne d'approvisionnement (SRI immédiat sur les scripts `cdnjs`, vendorisation à plus long terme).
+4. Traiter le point XSS restant, mineur (`v2/js/variables.js`, §3.2) et le fetch d'image externe non encadré (§2.3).
+5. Une fois ces points traités : passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
 6. Prévoir séparément un audit RGAA dédié (§7) et la constitution du dossier de sécurité RGS (§9).
 
-Aucun fichier de code n'a été modifié dans le cadre de cet audit.
+Mise à jour du 2026-09-12 : ce rapport reflète les correctifs déjà appliqués (voir mentions "✅
+CORRIGÉ" ci-dessus) suite à validation explicite de l'utilisateur. Toutes les autres sections
+décrivent l'état constaté lors de l'audit initial, non encore traité.
