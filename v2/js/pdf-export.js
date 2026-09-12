@@ -1915,16 +1915,25 @@ const PdfExport = (function () {
       for (const child of Array.from(node.childNodes)) { await visit(child); }
     };
     for (const child of Array.from(root.childNodes)) { await visit(child); }
+    // Repli si structure de titres inattendue : le tocBlock garde son stack
+    // par défaut (titre "Sommaire" seul, posé à sa création) plutôt que de
+    // faire échouer tout l'export - même granularité de repli que blockFrom
+    // pour un bloc de contenu.
     tocBlocks.forEach(tocBlock => {
-      const built = buildTocStack(headingBlocks);
-      tocBlock.stack = built.stack;
-      tocBlock._pageNumberCells = built.pageNumberCells;
+      try {
+        const built = buildTocStack(headingBlocks);
+        tocBlock.stack = built.stack;
+        tocBlock._pageNumberCells = built.pageNumberCells;
+      } catch (e) { console.warn('[PdfExport] sommaire ignoré (structure de titres inattendue) :', e); }
     });
     const content = blocks.length ? blocks : [{ text: ' ', margin: [0, 2, 0, 4] }];
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
     content._footnoteBlocks = footnoteBlocks;
-    content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll);
+    // Repli : images en calque laissées à leur placeholder plutôt que de
+    // faire échouer tout l'export si l'ancrage échoue.
+    try { content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll); }
+    catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = nestedPendingAll; }
     return content;
   }
 
@@ -2626,7 +2635,15 @@ const PdfExport = (function () {
     // fichier, alors que la sensibilité aux polices y est un thème récurrent.
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* repli silencieux */ } }
     const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
-    const headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData);
+    // Repli : export sans en-tête/pied plutôt que d'échouer entièrement si
+    // leur contenu (potentiellement modifié en dehors de l'éditeur) est
+    // dans un état inattendu.
+    let headerFooterChunks;
+    try { headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData); }
+    catch (e) {
+      console.warn('[PdfExport] en-tête/pied de page ignorés (structure inattendue) :', e);
+      headerFooterChunks = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
+    }
     const content = await resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks);
     return buildNativeDocDefinition(content, filename, headerFooterChunks);
   }

@@ -294,8 +294,6 @@ const GristAPI = (function () {
 
   function getCurrentRecord() { return _currentRecord; }
   function getCurrentTableId() { return _currentTableId; }
-  function getCurrentMappings() { return _currentMappings; }
-  function getCurrentOptions() { return _currentOptions; }
 
   function safeJSONStringify(value) {
     try { return JSON.stringify(value); }
@@ -646,5 +644,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getCurrentMappings, getCurrentOptions, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();

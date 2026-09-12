@@ -116,9 +116,6 @@ const Templates = (function () {
     await ensureHeaderFooterColumn();
     const now = new Date().toISOString();
     const columns = { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now, HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)) };
-    for (const column of ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter']) {
-      if (!(column in columns)) console.warn(`[templates] Colonne attendue absente : ${column}`);
-    }
     if (id) {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]
