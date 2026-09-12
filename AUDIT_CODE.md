@@ -46,10 +46,16 @@ de régression permanent pour le bug de notes de bas de page.
 **Mis en attente à la demande explicite de l'utilisateur** : la vendorisation d'`esm.sh` (§2.2) —
 décision produit délibérément reportée, pas oubliée.
 
-**Travail en cours, non terminé** : l'élagage des commentaires disproportionnés d'`editor.js`/
-`pdf-export.js` (§5) est une passe **partielle** — les blocs les plus longs ont été traités mais le
-volume total (~6000 lignes cumulées) contient encore de nombreux commentaires substantiels non
-revus un par un ; à poursuivre si une passe exhaustive est explicitement demandée.
+**Mise à jour 2026-09-12 (nuit) — passe exhaustive de tests + élagage des commentaires terminé** :
+suite au retrait de la V1, un protocole de test exhaustif (suite automatisée 89/89 scénarios +
+parcours manuel complet de chaque contrôle d'interface) a été rejoué. Une régression réelle trouvée
+et corrigée : la navigation clavier (flèches/Entrée/Tab/Échap) de l'autocomplétion `#Variable` du
+champ "Nom de fichier PDF" était **totalement inerte** depuis l'introduction de l'onglet Chips
+(`js/variables.js` comparait `acBox.style.display` à `'block'`, valeur qu'il ne prend plus jamais
+depuis un passage à `'flex'` — seule la sélection à la souris fonctionnait). L'élagage des
+commentaires disproportionnés (§5, jugé "partiel" ci-dessus) est désormais **terminé** sur tous les
+fichiers de production : tout bloc de 5 lignes ou plus a été relu et condensé à 1-3 lignes,
+gardant le fait "pourquoi" et retirant la narration. Suite de tests toujours 89/89 après coup.
 
 **Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
 
@@ -186,7 +192,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 
 ## 5. Qualité de code — redondance et « mille-feuille »
 
-### 5.1 `js/editor.js` (3316 → 3211 lignes) — ✅ redondances corrigées, élagage des commentaires en cours
+### 5.1 `js/editor.js` (3316 → 2480 lignes) — ✅ redondances corrigées, élagage des commentaires terminé
 
 | Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
@@ -196,7 +202,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 | Commentaire obsolète référençant un mécanisme à drapeau inexistant | 585-588 | ~~Mineur~~ ✅ |
 | Préfixe de log incohérent `[editor]` au lieu de `[Editor]` | 3307 | ~~Cosmétique~~ ✅ |
 
-**Élagage des commentaires** (demande explicite de l'utilisateur, cf. guide Grist.Gouv §8.2 "watch out for verbosity") : plusieurs blocs disproportionnés (jusqu'à 39 lignes pour quelques lignes de code, souvent une narration répétitive "signalé par l'utilisateur"/"vérifié en conditions réelles") reformulés en gardant le "pourquoi" mais sans la narration autour. **Passe partielle** : les blocs les plus longs ont été traités, mais le fichier contient encore de nombreux commentaires substantiels qui n'ont pas tous été revus un par un vu le volume (~3200 lignes) — à poursuivre si une passe exhaustive est souhaitée.
+**Élagage des commentaires** (demande explicite de l'utilisateur, cf. guide Grist.Gouv §8.2 "watch out for verbosity") : deux passes successives (2026-09-12, jour puis nuit) ont ramené tout bloc de 5 lignes ou plus à 1-3 lignes dans l'ensemble du fichier, gardant le "pourquoi" et retirant la narration ("signalé par l'utilisateur", "vérifié en conditions réelles", détails déjà expliqués ailleurs). **Terminé**, plus de blocs disproportionnés restants.
 
 **Aucun code mort trouvé** (pas de fonction/variable inutilisée, pas de branche toujours vraie/fausse, pas de `TODO` oublié). **Aucune fuite de portée de variable** (pas de globale accidentelle, tout l'état reste dans l'IIFE).
 
@@ -207,7 +213,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 4. Barre d'outils statique principale → `main-toolbar.js`
 5. Cœur du module (`init`, `getHTML`/`setHTML`, API publique) → reste dans `editor.js`, réduit à un point d'assemblage.
 
-### 5.2 `js/pdf-export.js` (2757 → 2807 lignes, +50 lignes de repli try/catch) — ✅ redondances et robustesse corrigées
+### 5.2 `js/pdf-export.js` (2757 → 2011 lignes) — ✅ redondances, robustesse et commentaires corrigés
 
 | Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
