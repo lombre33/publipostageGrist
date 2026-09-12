@@ -50,6 +50,7 @@ const PdfExport = (function () {
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
+  const A4_HEIGHT_PT = 841.89;
   // Notes de bas de page : collectées par inlineRuns quelle que soit sa
   // profondeur d'appel (cellule/colonne/corps) - variables de module plutôt
   // qu'un paramètre traversant tableFrom/twoColumnsFrom/cellLineToPdfObject.
@@ -1432,7 +1433,7 @@ const PdfExport = (function () {
       // parentArray : tableau dans lequel l'image et son ancre vivent toutes
       // les deux, utilisé par resolveNativePdfContent pour relocaliser
       // l'image à côté de son ancre sans dépendre d'un tableau top-level codé en dur.
-      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, aboveTopPx, belowTopPx, container, containerTopPx, parentArray: blocks });
+      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx, aboveTopPx, belowTopPx, container, containerTopPx, parentArray: blocks });
     });
     return pending;
   }
@@ -1601,8 +1602,9 @@ const PdfExport = (function () {
   // référence pour Y quand les deux tombent sur des pages différentes -
   // doit être la même que pour la relocation dans content[] : "devant"
   // préfère l'ancre du dessous, "derrière" celle du dessus.
-  function resolveImageAbsolutePosition(a, topMarginPt, layer) {
+  function resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer) {
     const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
+    const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : PAGE_MARGIN_PT;
     // imgLeftPx est page-relative pour le flux principal et une colonne
     // 2-colonnes (aucun des deux ne pose son propre position:relative). Une
     // cellule de tableau EN a un (cf. attributeNestedPendingImages) :
@@ -1612,29 +1614,41 @@ const PdfExport = (function () {
     const xPt = a.containerLeftPx != null && a.containerLeft != null
       ? a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT
       : PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    let yPt;
     // Référence locale prioritaire sur le bracketing générique quand
     // disponible : plus précise, fondée sur le début du paragraphe qui
     // héberge l'image elle-même plutôt qu'une extrapolation depuis un bloc externe éloigné.
-    if (a.containerTop != null) return { x: xPt, y: a.containerTop + (a.imgTopPx - a.containerTopPx) * PX_TO_PT };
-    if (a.aboveTop != null && a.belowTop != null && a.abovePage === a.belowPage && a.belowTopPx !== a.aboveTopPx) {
+    if (a.containerTop != null) {
+      yPt = a.containerTop + (a.imgTopPx - a.containerTopPx) * PX_TO_PT;
+    } else if (a.aboveTop != null && a.belowTop != null && a.abovePage === a.belowPage && a.belowTopPx !== a.aboveTopPx) {
       const fraction = (a.imgTopPx - a.aboveTopPx) / (a.belowTopPx - a.aboveTopPx);
-      return { x: xPt, y: a.aboveTop + fraction * (a.belowTop - a.aboveTop) };
-    }
-    // Au-dessus/en-dessous existent mais sur des pages différentes : le delta
-    // en px entre l'image et l'une ou l'autre ancre traverserait la coupure,
-    // mélangeant deux pages dont pdfmake réinitialise l'origine Y (constaté :
-    // image projetée au-dessus du haut de page). Repli délibérément sans
-    // extrapolation (delta 0, au ras de l'ancre choisie) - même ordre de
-    // préférence que la relocation : "devant" sur le dessous, "derrière" sur le dessus.
-    const crossesPage = a.aboveTop != null && a.belowTop != null && a.abovePage !== a.belowPage;
-    if (layer === 'front') {
-      if (a.belowTop != null) return { x: xPt, y: a.belowTop + (crossesPage ? 0 : (a.imgTopPx - a.belowTopPx) * PX_TO_PT) };
-      if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT };
+      yPt = a.aboveTop + fraction * (a.belowTop - a.aboveTop);
     } else {
-      if (a.aboveTop != null) return { x: xPt, y: a.aboveTop + (crossesPage ? 0 : (a.imgTopPx - a.aboveTopPx) * PX_TO_PT) };
-      if (a.belowTop != null) return { x: xPt, y: a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT };
+      // Au-dessus/en-dessous existent mais sur des pages différentes : le delta
+      // en px entre l'image et l'une ou l'autre ancre traverserait la coupure,
+      // mélangeant deux pages dont pdfmake réinitialise l'origine Y (constaté :
+      // image projetée au-dessus du haut de page). Repli délibérément sans
+      // extrapolation (delta 0, au ras de l'ancre choisie) - même ordre de
+      // préférence que la relocation : "devant" sur le dessous, "derrière" sur le dessus.
+      const crossesPage = a.aboveTop != null && a.belowTop != null && a.abovePage !== a.belowPage;
+      if (layer === 'front' && a.belowTop != null) yPt = a.belowTop + (crossesPage ? 0 : (a.imgTopPx - a.belowTopPx) * PX_TO_PT);
+      else if (layer === 'front' && a.aboveTop != null) yPt = a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT;
+      else if (layer !== 'front' && a.aboveTop != null) yPt = a.aboveTop + (crossesPage ? 0 : (a.imgTopPx - a.aboveTopPx) * PX_TO_PT);
+      else if (layer !== 'front' && a.belowTop != null) yPt = a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT;
+      else yPt = effectiveTopMarginPt + a.imgTopPx * PX_TO_PT;
     }
-    return { x: xPt, y: effectiveTopMarginPt + a.imgTopPx * PX_TO_PT };
+    // Filet de sécurité : qu'elle vienne d'une extrapolation sur une seule
+    // ancre ou d'une ancre elle-même mal choisie (bracketing par proximité de
+    // pixels, cf. resolvePendingImageAnchors - une ancre peut être plus
+    // proche visuellement dans l'aperçu continu hors-écran tout en tombant,
+    // une fois paginée, sur une page différente de celle où l'image sera
+    // relocalisée), `yPt` peut dépasser la page réelle - image invisible.
+    // Toujours ramenée dans la zone de contenu (sous l'en-tête, au-dessus du
+    // pied de page) plutôt que perdue hors-page.
+    const imgHeightPt = Number.isFinite(a.imgHeightPx) ? Math.max(0, a.imgHeightPx) * PX_TO_PT : 0;
+    const maxYPt = A4_HEIGHT_PT - effectiveBottomMarginPt - imgHeightPt;
+    yPt = Math.min(Math.max(yPt, effectiveTopMarginPt), Math.max(effectiveTopMarginPt, maxYPt));
+    return { x: xPt, y: yPt };
   }
 
   // S'il y a un sommaire et/ou des images en calque en attente, une 1ère
@@ -1653,6 +1667,10 @@ const PdfExport = (function () {
     // passe réelle pour que la pagination mesurée ici corresponde exactement
     // au document final.
     const topMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
+    // Doit suivre exactement la même formule que buildNativeDocDefinition
+    // (bottomMarginPt) - sert de plancher au filet de sécurité anti-débordement
+    // de resolveImageAbsolutePosition, doit donc matcher la vraie marge basse rendue.
+    const bottomMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     if (hasToc || hasPendingImages || hasFootnotes) {
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename, headerFooterChunks)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
@@ -1674,7 +1692,7 @@ const PdfExport = (function () {
           // calcul de X en cellule-relatif dans resolveImageAbsolutePosition.
           containerLeft: containerResolved ? containerResolved.left : null, containerLeftPx: p.containerLeftPx,
           hadAbove: !!p.above, hadBelow: !!p.below,
-          imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
+          imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, imgHeightPx: p.imgHeightPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
         };
       });
       content = await htmlToPdfContent(inlinedHtml, true);
@@ -1694,7 +1712,7 @@ const PdfExport = (function () {
       (content._pendingImages || []).forEach((p, i) => {
         const a = resolvedAnchors[i];
         const layer = p.image._pendingLayer;
-        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, layer);
+        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer);
         delete p.image._pendingImgNode;
         delete p.image._pendingLayer;
         // pdfmake peint content[] dans l'ordre (une entrée plus tardive

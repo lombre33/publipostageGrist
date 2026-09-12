@@ -736,6 +736,13 @@
    horizontal (`.v2-hover-hsep`) plutôt qu'un séparateur vertical. */
 .v2-hover-icon-row { display: flex; gap: 3px; }
 .v2-hover-hsep { height: 1px; background: var(--border, #d7dde3); margin: 3px 1px; }
+/* Rappel non-cliquable de l'action du bouton principal du groupe, en tête du
+   flyout - remplace l'infobulle [data-tip] du bouton (retirée sur ce bouton),
+   qui se superposait à ce même flyout au survol (les deux bulles vivaient au
+   même endroit, l'infobulle sombre passant par-dessus le texte du flyout,
+   illisible). Un seul et même panneau porte maintenant les deux informations,
+   empilées et lisibles. */
+.v2-hover-flyout-label { display: block; padding: 6px 9px 3px; font-size: 11px; font-weight: 600; color: var(--text-faint, #98a2b3); white-space: nowrap; }
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }

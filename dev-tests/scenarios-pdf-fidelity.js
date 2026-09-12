@@ -192,6 +192,33 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_image_near_page_break_stays_within_page',
+    // Bug réel : une image en calque loin de tout texte proche (ex. glissée
+    // en bas de page) peut voir le bracketing par proximité de pixels
+    // (resolvePendingImageAnchors, mesuré dans l'aperçu continu hors-écran,
+    // donc AVANT pagination) retenir par erreur un bloc qui, une fois
+    // paginé, tombe sur la page SUIVANTE (ici "Après le saut", poussée par
+    // le saut de page forcé). L'extrapolation depuis cette ancre projetait
+    // alors l'image très au-delà du bas de la page réelle - invisible.
+    description: 'Une image en calque ancrée près d\'un saut de page reste dans les limites verticales de la page (pas projetée hors-page, invisible)',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Ancre avant le saut</p>'
+        + '<img class="editor-image" draggable="false" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="" data-layer="behind" data-wrap="inline" style="width:60px;position:absolute;left:20px;top:2500px;opacity:0.5">'
+        + '<div class="page-break-marker">Saut de page</div>'
+        + '<h2>Après le saut</h2><p>Texte après le saut</p>';
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF (contenu perdu) : ' + JSON.stringify(result.content) };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      const A4_HEIGHT_PT = 841.89, PAGE_MARGIN_PT = 28;
+      const pass = abs.y >= PAGE_MARGIN_PT - 1 && abs.y <= A4_HEIGHT_PT - PAGE_MARGIN_PT;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_inline_image_position_in_paragraph',
     // Anciennement CASSÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte"
     // SANS alignement gauche/droite (par défaut, ou centrée) était toujours
