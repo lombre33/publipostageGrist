@@ -1161,15 +1161,9 @@ const Editor = (function () {
       if (node.type.name !== 'table') return true;
       const firstRow = node.firstChild;
       if (!firstRow) return false;
-      // Le total/l'échelle se calculent sur la seule première ligne (les
-      // largeurs de colonne sont censées être identiques sur toutes les
-      // lignes), mais le correctif doit être appliqué à TOUTES LES LIGNES -
-      // sinon la ligne 2+ garde son ancienne largeur de colonne, et
-      // prosemirror-tables (qui exige une largeur cohérente par colonne à
-      // travers toutes les lignes) annule silencieusement la correction de
-      // la ligne 1 pour la réaligner sur cette valeur restée plus grande
-      // (vérifié en conditions réelles : un tableau à une seule ligne se
-      // corrigeait, un tableau à deux lignes non).
+      // Calculé sur la première ligne, mais appliqué à TOUTES : sinon
+      // prosemirror-tables (largeur cohérente par colonne exigée) annule la
+      // correction pour la réaligner sur les lignes non corrigées.
       let total = 0;
       firstRow.forEach(cellNode => {
         const span = cellNode.attrs.colspan || 1;
@@ -1193,34 +1187,20 @@ const Editor = (function () {
     if (tr) currentEditor.view.dispatch(tr);
   }
 
-  // Aide générique pour une toolbar contextuelle flottante, positionnée par
-  // @floating-ui/dom plutôt que par du calcul manuel de getBoundingClientRect
-  // (ce que faisait la V1 pour sa propre toolbar de tableau, js/editor.js:1122)
-  // - réutilisée ici pour le tableau, et pour l'image dans un incrément
-  // suivant. Ancrée dans document.body (pas #editor-container) : évite tout
-  // souci de contexte d'empilement/débordement avec un ancêtre (cf. mémoire
-  // project_stacking_context_trap), même principe que les overlays flottants
-  // de la V1.
+  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée
+  // dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
     el.className = className;
     el.innerHTML = innerHTML;
-    // mousedown (pas click) + preventDefault : évite qu'un clic sur un bouton
-    // du panneau ne fasse d'abord perdre le focus/la sélection ProseMirror
-    // avant que l'action ne s'exécute - même piège que les <select> de la
-    // toolbar principale (cf. wireSelectionDependentSelects).
+    // mousedown+preventDefault : évite de perdre le focus/la sélection
+    // ProseMirror avant que l'action ne s'exécute.
     el.addEventListener('mousedown', (event) => {
       const btn = event.target.closest('button[data-action]');
       if (!btn) return;
       event.preventDefault();
       onAction(btn.dataset.action);
     });
-    // Un <input type=range> (curseur d'opacité de la toolbar image) a besoin
-    // de son évènement 'input' propre - un simple mousedown suffit aux
-    // boutons mais volerait la valeur en cours de glissement du curseur.
-    // `[data-role]` (pas `input[data-role]`) : un <select>/<input type=text>
-    // (barre de formatage nombre/date, cf. wireVariableFloatingToolbar) émet
-    // aussi 'input' - restreindre au tag <input> les excluait silencieusement.
     if (onInput) el.addEventListener('input', (event) => {
       const input = event.target.closest('[data-role]');
       if (input) onInput(input.dataset.role, input.value);
@@ -1247,19 +1227,11 @@ const Editor = (function () {
     };
   }
 
-  // Toolbars flottantes CONTEXTUELLES (tableau/image/variable - chacune
-  // s'enregistre elle-même ci-dessous, cf. wireTableFloatingToolbar/
-  // wireImageFloatingToolbar/wireVariableFloatingToolbar) : ne se
-  // referment normalement que via editor.on('selectionUpdate'/'transaction'),
-  // donc uniquement quand la sélection ProseMirror change RÉELLEMENT - un
-  // clic entièrement hors de l'éditeur (barre du haut, ligne de mise en
-  // forme, bouton "Mode lecture"...) ne déclenche aucun de ces deux
-  // évènements, donc aucune ne se refermait (signalé par l'utilisateur :
-  // reste affichée, ancrée à un endroit devenu invalide, après un clic sur
-  // "Mode lecture"). Filet de sécurité générique : un clic hors de
-  // `.tiptap` (les clics DEDANS restent gérés normalement par les handlers
-  // ci-dessus) ET hors de `.v2-floating-toolbar` (sinon un clic sur le
-  // panneau lui-même le refermerait avant même d'agir) referme les trois.
+  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable)
+  // ne se ferment normalement que sur un changement RÉEL de sélection
+  // ProseMirror - un clic hors de `.tiptap` ET hors `.v2-floating-toolbar`
+  // les referme toutes, pour les cas où aucun évènement ProseMirror ne se
+  // déclenche (ex. clic sur "Mode lecture").
   const floatingContextPanels = [];
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
   document.addEventListener('mousedown', (event) => {
@@ -1267,18 +1239,10 @@ const Editor = (function () {
     hideFloatingContextToolbars();
   });
 
-  // Palettes courtes, sobres (inspirées des standards actuels - Google Docs/
-  // Notion) : couleurs de police plus saturées (lisibles en texte fin),
-  // couleurs de surlignage/fond de cellule en teintes pastel (le texte
-  // au-dessus reste lisible).
   const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
   const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
 
-  // Un seul menu déroulant à la fois (couleur/police/taille) - fermé par un
-  // clic n'importe où ailleurs (hors du bouton qui l'a ouvert ou du panneau
-  // lui-même). Générisé (initialement couleur seulement) pour la maquette
-  // "Toolbar compacte" - police/taille rejoignent le même mécanisme plutôt
-  // que d'en dupliquer un second.
+  // Un seul menu déroulant à la fois (couleur/police/taille), fermé au clic ailleurs.
   let openDropdownPanel = null;
   document.addEventListener('mousedown', (event) => {
     if (!openDropdownPanel) return;
