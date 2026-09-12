@@ -1,20 +1,12 @@
-// Formatage nombre/date d'une bulle #Variable (v2 uniquement) - aucune
-// dépendance externe : Intl.NumberFormat/Intl.DateTimeFormat (natifs du
-// navigateur) couvrent tout sauf l'écriture d'un nombre en toutes lettres,
-// qui n'a pas d'équivalent Intl et est donc écrite à la main ci-dessous
-// (orthographe classique/traditionnelle - "vingt et un", pas la réforme de
-// 1990 "vingt-et-un" - c'est la forme encore attendue dans un contrat).
+// Formatage nombre/date d'une bulle #Variable - aucune dépendance externe :
+// Intl.NumberFormat/Intl.DateTimeFormat couvrent tout sauf l'écriture d'un
+// nombre en toutes lettres (pas d'équivalent Intl), écrite à la main
+// ci-dessous (orthographe classique - "vingt et un", pas la réforme de 1990
+// "vingt-et-un" - la forme encore attendue dans un contrat).
 const VariableFormat = (function () {
-  // Préréglages de date, dans l'esprit de ce que proposent Word/Google Docs
-  // (une liste de préréglages classiques) plutôt qu'un compositeur totalement
-  // libre - cf. mémoire projet : une option "format personnalisé" est prévue
-  // pour plus tard, pas construite ici.
-  // `labelEn` : pas une simple traduction du texte français, mais ce que CE
-  // MÊME préréglage produit réellement une fois `dateLocale()` (cf. plus bas)
-  // basculée sur 'en-US' - l'ORDRE jour/mois de dmy_slash_full change lui-même
-  // avec la locale passée à Intl.DateTimeFormat (day/month same options,
-  // locale différente ⇒ ordre différent), donc le libellé anglais doit
-  // refléter ce vrai résultat plutôt qu'une traduction littérale du FR.
+  // labelEn n'est pas une traduction du texte français mais ce que ce même
+  // préréglage produit réellement une fois dateLocale() basculée sur
+  // 'en-US' - l'ordre jour/mois change lui-même avec la locale.
   const DATE_PRESETS = [
     { key: 'dmy_slash_full', label: '12/09/2026', labelEn: '09/12/2026', options: { day: '2-digit', month: '2-digit', year: 'numeric' } },
     { key: 'dmy_slash_short', label: '12/9/26', labelEn: '9/12/26', shortNoPad: true },
@@ -24,45 +16,27 @@ const VariableFormat = (function () {
     { key: 'ddd_d_mmm_yyyy', label: 'mar. 12 sept. 2026', labelEn: 'Sat, Sep 12, 2026', options: { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } },
     { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', labelEn: 'Saturday, September 12, 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
-  // Libellé d'aperçu à afficher dans le sélecteur de préréglage (barre de
-  // formatage d'une bulle #Variable) - suit la langue de l'interface
-  // (panneau Réglages), jamais le style fr/us éventuellement déjà choisi
-  // SUR CETTE variable précise (ça resterait confus d'afficher un libellé
-  // anglais alors que l'interface est en français, ou l'inverse).
+  // Suit la langue de l'interface, jamais le style fr/us éventuellement déjà
+  // choisi sur cette variable précise (resterait confus d'afficher un
+  // libellé anglais alors que l'interface est en français).
   function presetLabel(preset) {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? (preset.labelEn || preset.label) : preset.label;
   }
-  // Locale Intl à utiliser pour le RENDU réel d'une date (formatDate
-  // ci-dessous) - contrairement au nombre (opts.style), une date n'a pas de
-  // réglage d'override PAR VARIABLE aujourd'hui (seul le préréglage lui-même
-  // en est un, cf. DATE_PRESETS) : suit donc uniquement la langue globale de
-  // l'interface (panneau Réglages).
+  // Contrairement au nombre (opts.style), une date n'a pas de réglage
+  // d'override par variable - suit uniquement la langue globale de l'interface.
   function dateLocale() {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en-US' : 'fr-FR';
   }
 
-  // Une colonne Date/DateTime Grist peut arriver ici sous deux formes selon
-  // le point d'entrée de l'API utilisé en amont : un timestamp Unix en
-  // SECONDES (nombre, ex. via docApi.fetchTable) OU une chaîne de date déjà
-  // formatée (ex. "2026-09-12", vu en conditions réelles via grist.onRecord -
-  // repéré à cause d'un bug précis : `parseFloat("2026-09-12")` ne lit QUE
-  // "2026" en s'arrêtant au premier tiret, confondu avec un timestamp Unix -
-  // `new Date(2026 * 1000)` retombe le 1er janvier 1970 à 00h33, exactement
-  // le symptôme "1/1/1970" signalé par l'utilisateur). Une chaîne est donc
-  // désormais confiée telle quelle au constructeur Date natif (qui sait lire
-  // "AAAA-MM-JJ" et ses variantes avec heure), JAMAIS parseFloat/multipliée
-  // par 1000 - seul un NOMBRE est traité comme un timestamp Unix.
-  // Une colonne Date pure est ancrée à MINUIT UTC pour le jour civil qu'elle
-  // représente - la lire en heure LOCALE ferait dériver d'un jour entier
-  // pour tout fuseau à l'ouest de l'UTC (ex. 18:00 la veille en heure de
-  // Paris -1, ou carrément la veille pour un fuseau américain) : chaque
-  // composant est donc lu en UTC partout dans ce fichier, jamais en heure
-  // locale - `new Date("2026-09-12")` (sans heure) est déjà interprétée en
-  // UTC par le moteur JS lui-même (comportement standard ES2015+ pour une
-  // chaîne ISO "date seule"), cohérent avec cette lecture UTC systématique.
-  // Simplification acceptée pour cet incrément : une colonne DateTime avec
-  // un fuseau d'affichage Grist non-UTC explicitement configuré n'est pas
-  // traitée différemment (pas encore rencontré en pratique).
+  // Une colonne Date/DateTime Grist arrive ici soit en timestamp Unix en
+  // secondes (nombre), soit en chaîne déjà formatée (ex. "2026-09-12", via
+  // grist.onRecord) - une chaîne est confiée telle quelle au constructeur
+  // Date natif, jamais parseFloat/multipliée par 1000 (parseFloat("2026-09-12")
+  // ne lit que "2026", confondu avec un timestamp Unix - symptôme "1/1/1970" constaté).
+  // Chaque composant est lu en UTC partout dans ce fichier, jamais en heure
+  // locale : une colonne Date pure est ancrée à minuit UTC pour son jour
+  // civil, la lire en heure locale ferait dériver d'un jour entier pour tout
+  // fuseau à l'ouest de l'UTC.
   function gristDateToJsDate(val) {
     if (val == null || val === '') return null;
     if (typeof val === 'number') return Number.isFinite(val) ? new Date(val * 1000) : null;
@@ -70,16 +44,11 @@ const VariableFormat = (function () {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  // Assemble une chaîne à partir d'un tableau de "parts" (même forme que
-  // Intl.DateTimeFormat#formatToParts : {type, value}, type ∈ 'day'/'month'/
-  // 'year'/'weekday'/'literal'/...) en ne gardant que les composants
-  // jour/mois/année demandés (boutons J/M/A de la barre de formatage,
-  // cf. Editor.js:wireVariableFloatingToolbar) - un séparateur ('literal')
-  // n'est conservé QUE s'il se trouve entre deux composants effectivement
-  // gardés, jamais en tête/fin ni collé à un composant retiré (sinon
-  // "M A" laisserait un "/" fantôme en tête, ex. "/12/2026"). weekday (et
-  // tout type hors jour/mois/année) reste toujours affiché, non couvert
-  // par ces 3 boutons.
+  // Assemble une chaîne à partir des "parts" d'Intl.DateTimeFormat#formatToParts,
+  // en ne gardant que jour/mois/année demandés (boutons J/M/A de la barre de
+  // formatage). Un séparateur n'est conservé que s'il se trouve entre deux
+  // composants gardés, jamais en tête/fin ni collé à un composant retiré
+  // (sinon "M A" laisserait un "/" fantôme en tête).
   function buildDateStringFromParts(parts, keep) {
     let result = '';
     let pendingLiteral = '';
@@ -95,13 +64,9 @@ const VariableFormat = (function () {
     });
     return result;
   }
-  // Convertit en toutes lettres (numberToWordsFr, déjà utilisé pour les
-  // nombres) chaque composant encore purement numérique après filtrage - un
-  // nom de mois déjà écrit en toutes lettres (préréglage "12 septembre
-  // 2026") reste tel quel, seuls jour/année (et un mois numérique éventuel,
-  // ex. préréglage AAAA-MM-JJ) sont convertis. Génère naturellement la forme
-  // classique d'un acte ("quinze décembre mille neuf cent quatre-vingt-
-  // dix-sept") sans traiter ce préréglage à part.
+  // Convertit en toutes lettres chaque composant encore purement numérique
+  // après filtrage - un nom de mois déjà écrit en toutes lettres reste tel
+  // quel, seuls jour/année (et un mois numérique éventuel) sont convertis.
   function wordifyDateParts(parts) {
     const toWords = dateLocale() === 'en-US' ? numberToWordsEn : numberToWordsFr;
     return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: toWords(parseInt(part.value, 10)) }) : part));
@@ -147,13 +112,10 @@ const VariableFormat = (function () {
   const UNITS = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
   const TENS = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
 
-  // n dans [0,99]. "et" (jamais de trait d'union) pour 21/31/41/51/61/71 -
-  // MAIS PAS pour 81 (quatre-vingt-un, exception bien connue). 71/91 passent
-  // par soixante/quatre-vingt + un nombre de 10-19 (soixante-ET-onze,
-  // quatre-vingt-onze). `hasFollowing` = autre chose s'écrit APRÈS ce nombre
-  // dans le nombre entier (encore des unités, "mille", "million"...) - "vingt"
-  // perd alors son 's' (quatre-vingts SEUL, mais quatre-vingt mille/-un),
-  // même règle que pour "cent" (cf. threeDigitsToWords).
+  // n dans [0,99]. "et" pour 21/31/41/51/61/71, mais pas 81 (quatre-vingt-un).
+  // 71/91 passent par soixante/quatre-vingt + un nombre de 10-19. `hasFollowing`
+  // = autre chose s'écrit après ce nombre dans le nombre entier - "vingt"
+  // perd alors son 's' (quatre-vingts seul, mais quatre-vingt mille/-un).
   function twoDigitsToWords(n, hasFollowing) {
     if (n < 20) return UNITS[n];
     const tens = Math.floor(n / 10);
@@ -167,12 +129,10 @@ const VariableFormat = (function () {
     if (unit === 1 && tens >= 2 && tens !== 8) return TENS[tens] + ' et un';
     return TENS[tens] + '-' + UNITS[unit];
   }
-  // n dans [0,999]. "cent"/"cents" : un 's' seulement si multiplié (>1) ET
-  // rien ne suit APRÈS ce nombre dans le nombre entier (deux cents seul,
-  // mais deux cent un / deux cent mille / deux cents millions SEUL) -
-  // "vingt" et "cent" sont les deux seuls mots de nombre qui prennent la
-  // marque du pluriel, et tous deux la perdent dès qu'un autre mot de
-  // nombre les suit (règle classique de l'Académie française).
+  // n dans [0,999]. "cent"/"cents" : un 's' seulement si multiplié (>1) et
+  // rien ne suit après ce nombre - "vingt" et "cent" sont les deux seuls
+  // mots de nombre qui prennent la marque du pluriel, et la perdent dès
+  // qu'un autre mot de nombre les suit.
   function threeDigitsToWords(n, hasFollowing) {
     const h = Math.floor(n / 100);
     const rest = n % 100;
@@ -186,11 +146,9 @@ const VariableFormat = (function () {
     }
     return words;
   }
-  // "mille" toujours invariable (jamais "milles"), jamais précédé de "un"
-  // ("mille", pas "un mille") - contrairement à "million"/"milliard", de
-  // vrais noms qui prennent "un" et un 's' au pluriel normalement. N'écrit
-  // QUE la partie entière (n déjà un entier positif ou nul) - la partie
-  // décimale, le cas échéant, est gérée à part par numberToWordsFr ci-dessous.
+  // "mille" toujours invariable, jamais précédé de "un" - contrairement à
+  // "million"/"milliard", de vrais noms qui prennent "un" et un 's' au
+  // pluriel. N'écrit que la partie entière (la partie décimale est gérée à part par numberToWordsFr).
   function integerToWordsFr(rounded) {
     if (rounded === 0) return 'zéro';
     const scales = [
@@ -208,16 +166,11 @@ const VariableFormat = (function () {
     const unitsCount = remaining;
     const parts = [];
     groups.forEach((g, idx) => {
-      // Un groupe (milliards/millions/mille) a "quelque chose qui suit" dès
-      // qu'un groupe de rang inférieur existe ENCORE, ou qu'il reste des
-      // unités après - jamais du fait du nom "million"/"milliard" qui suit
-      // IMMÉDIATEMENT ce même groupe (celui-là fait partie du groupe lui-même,
-      // "quatre-vingts millions" seul garde son 's'). "mille" est différent :
-      // ce n'est PAS un nom (invariable, jamais "un mille"/"milles") mais une
-      // simple particule multiplicative qui continue le même groupe de
-      // chiffres - "vingt"/"cent" la perdent donc TOUJOURS devant "mille"
-      // ("quatre-vingt mille", "deux cent mille"), qu'autre chose suive
-      // ensuite ou non.
+      // Un groupe a "quelque chose qui suit" dès qu'un groupe de rang
+      // inférieur existe encore, ou qu'il reste des unités après. "mille"
+      // est différent : ce n'est pas un nom mais une particule
+      // multiplicative, "vingt"/"cent" la perdent donc toujours devant
+      // "mille" ("quatre-vingt mille", "deux cent mille").
       const hasFollowing = g.divisor === 1e3 ? true : (idx < groups.length - 1 || unitsCount > 0);
       if (g.divisor === 1e3) parts.push(g.count === 1 ? 'mille' : threeDigitsToWords(g.count, hasFollowing) + ' mille');
       else parts.push(threeDigitsToWords(g.count, hasFollowing) + ' ' + (g.count > 1 ? g.plural : g.singular));
@@ -225,15 +178,10 @@ const VariableFormat = (function () {
     if (unitsCount > 0 || groups.length === 0) parts.push(threeDigitsToWords(unitsCount, false));
     return parts.join(' ').replace(/\s+/g, ' ').trim();
   }
-  // Écriture en toutes lettres, partie décimale INCLUSE si `decimals` est
-  // renseigné (0-3, choisi via la même barre de formatage que pour l'écriture
-  // chiffrée - PAS d'arrondi silencieux à l'entier le plus proche : demandé
-  // explicitement par l'utilisateur, un montant "1234,56" doit pouvoir
-  // s'écrire "mille deux cent trente-quatre virgule cinquante-six", pas être
-  // tronqué à "mille deux cent trente-quatre"). `decimals` absent/`null` =
-  // comportement historique (entier le plus proche, aucune virgule) - un
-  // choix EXPLICITE dans la barre de formatage est nécessaire pour activer
-  // l'écriture de la partie décimale.
+  // Écriture en toutes lettres, partie décimale incluse si `decimals` est
+  // renseigné (0-3) - pas d'arrondi silencieux à l'entier le plus proche, un
+  // montant "1234,56" doit pouvoir s'écrire avec sa partie décimale.
+  // `decimals` absent/null = comportement historique (entier le plus proche).
   function numberToWordsFr(n, decimals) {
     const isNegative = n < 0;
     const d = decimals == null ? 0 : decimals;
@@ -248,13 +196,8 @@ const VariableFormat = (function () {
 
   // --- Nombre en toutes lettres (anglais, convention américaine) ---
   // Bien plus simple que le français : "hundred"/"thousand"/"million"/
-  // "billion" restent TOUJOURS invariables en tant que multiplicateurs (pas
-  // d'accord "-s" à gérer comme cent/vingt en français), et l'anglais
-  // courant/légal omet "and" entre les centaines et le reste ("one hundred
-  // twenty-one", pas "one hundred AND twenty-one" - forme américaine,
-  // cohérente avec le choix déjà fait côté français de l'orthographe
-  // classique plutôt que la réforme de 1990 : la convention la plus
-  // attendue dans un contrat, pas la plus permissive).
+  // "billion" restent toujours invariables, et l'anglais courant/légal omet
+  // "and" entre les centaines et le reste ("one hundred twenty-one").
   const UNITS_EN = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
   const TENS_EN = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
   function twoDigitsToWordsEn(n) {
