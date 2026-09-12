@@ -69,13 +69,9 @@
     if (currentMode === 'read') renderReader();
   }
 
-  // Cluster "modèle" (cf. index.html #v2-title-cluster) : le select
-  // choisit/affiche le modèle courant, le crayon fait apparaître l'input
-  // (déjà existant, seulement masqué par défaut) À SA PLACE pour le
-  // renommer - remplace les deux champs en permanence visibles de l'ancienne
-  // UI. Le renommage ne touche que l'affichage local (libellé de l'option
-  // sélectionnée) : la persistance réelle reste celle d'avant, au prochain
-  // clic sur Enregistrer (onSave lit templateNameInput.value).
+  // Le select choisit/affiche le modèle courant, le crayon fait apparaître
+  // l'input à sa place pour le renommer. Le renommage ne touche que
+  // l'affichage local : la persistance reste au prochain clic sur Enregistrer.
   function closeTemplateRenameEditor() {
     if (!templateNameInput || !templateSelect) return;
     templateNameInput.hidden = true;
@@ -156,15 +152,11 @@
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
-  // Verrou anti-double-export : PdfExport.pdf-export.js utilise un état de
-  // MODULE partagé (footnoteCounter/footnoteEntries, remis à zéro en entrée
-  // de chaque export) pour numéroter les notes de bas de page - deux exports
-  // lancés en parallèle (double-clic, ou export unitaire pendant qu'un
-  // export en lot tourne déjà) partageraient cet état et pourraient corrompre
-  // silencieusement la numérotation de l'un des deux (cf. AUDIT_CODE.md
-  // §4). Désactive les deux boutons pendant TOUTE opération d'export, pas
-  // seulement celui cliqué, tant que ce partage d'état existe côté
-  // pdf-export.js.
+  // Verrou anti-double-export : pdf-export.js utilise un état de module
+  // partagé pour numéroter les notes de bas de page - deux exports en
+  // parallèle corromperaient silencieusement la numérotation (cf.
+  // AUDIT_CODE.md §4). Désactive les deux boutons pendant toute opération, pas
+  // seulement celui cliqué.
   let exportOperationInProgress = false;
   // `v2-btn-export-pdf-batch` est un <span> (ligne de menu au survol), pas un
   // <button> - `.disabled` n'a aucun effet dessus (propriété réservée aux
@@ -211,12 +203,8 @@
   }
 
   // Caractères invalides dans un nom de fichier ZIP/Windows - une valeur de
-  // cellule Grist (nom de client, etc.) peut en contenir sans qu'on le
-  // maîtrise, contrairement à l'export d'une seule ligne où ce risque existe
-  // déjà mais n'avait jamais été signalé (un seul fichier, l'utilisateur
-  // renomme si besoin) - ici, N fichiers générés sans supervision, une
-  // valeur du type "Dupont/Fils" casserait silencieusement l'arborescence du
-  // ZIP si non filtrée.
+  // cellule Grist du type "Dupont/Fils" casserait silencieusement
+  // l'arborescence du ZIP si non filtrée.
   function sanitizeFilenamePart(name) {
     return String(name || '').replace(/[\\/:*?"<>|]+/g, '_').trim();
   }
@@ -233,20 +221,12 @@
     return name;
   }
 
-  // Export PDF EN LOT : une ligne Grist de la table courante = un PDF, tous
-  // regroupés dans une seule archive ZIP téléchargée (JSZip, chargé via CDN
-  // dans index.html) - demandé par l'utilisateur pour ne pas avoir à
-  // exporter ligne par ligne. Lit TOUTES les lignes de la table
-  // (GristAPI.fetchTableRows, lecture directe docApi - ignore un éventuel
-  // filtre de vue posé sur la section Grist du widget, cohérent avec la
-  // formulation "toutes les lignes de la table" plutôt que "les lignes
-  // actuellement affichées"), pas seulement la ligne sélectionnée.
-  // Volontairement limité à la qualité vectorielle (PdfExport.getNativePdfBlobForRecord) :
-  // 'Impr. navigateur' ouvrirait une boîte de dialogue d'impression par
-  // ligne (inutilisable sans surveillance) et les qualités raster
-  // (html2canvas) n'ont pas de variante "retourne un blob" - aucune des deux
-  // n'est praticable pour un export non surveillé de N lignes, quel que soit
-  // le réglage actuellement choisi dans le sélecteur de qualité.
+  // Export PDF en lot : une ligne Grist de la table courante = un PDF, tous
+  // regroupés dans une archive ZIP. Lit toutes les lignes de la table
+  // (lecture directe docApi, ignore un éventuel filtre de vue), pas
+  // seulement la ligne sélectionnée. Volontairement limité au vectoriel :
+  // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne et les
+  // qualités raster n'ont pas de variante "retourne un blob".
   async function onExportPdfBatch() {
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
@@ -323,14 +303,10 @@
   function wireA4PreviewToggle() {
     const toggle = document.getElementById('v2-toggle-a4-preview');
     if (!toggle) return;
-    // Posée sur les DEUX conteneurs (édition ET lecture) : la case ne
-    // touchait jusqu'ici que #editor-container, donc rester fidèle à la
-    // largeur réelle d'une page PDF (cf. commentaire CSS) ne marchait
-    // jamais en mode Lecture, quel que soit l'état de la case - signalé
-    // cassé par l'utilisateur.
-    // .checked sur le <label> lui-même (classe .a4-toggle, cf. css/style.css)
-    // fait rester l'icône en accent/bleu tant que la case est cochée, plutôt
-    // qu'un simple texte de case à cocher (demandé par l'utilisateur).
+    // Posée sur les deux conteneurs (édition et lecture), sinon la largeur
+    // réelle d'une page PDF ne s'appliquait jamais en mode Lecture.
+    // .checked sur le <label> lui-même fait rester l'icône en accent/bleu
+    // tant que la case est cochée, plutôt qu'un simple texte de case à cocher.
     const label = toggle.closest('.a4-toggle');
     const sync = () => {
       editorContainer.classList.toggle('a4-preview', toggle.checked);
@@ -342,11 +318,9 @@
     sync();
   }
 
-  // Nom de fichier PDF masqué par défaut derrière un crayon - même geste que
-  // le renommage de modèle (wireTemplateRename ci-dessous) : réglage
-  // secondaire, pas besoin d'occuper en permanence une zone large de la
-  // barre du haut. Reste visible si déjà configuré (cf.
-  // loadTemplateIntoEditor) plutôt que de se refermer tout seul.
+  // Nom de fichier PDF masqué par défaut derrière un crayon : réglage
+  // secondaire, pas besoin d'occuper en permanence une zone de la barre du
+  // haut. Reste visible si déjà configuré (cf. loadTemplateIntoEditor).
   function wirePdfFilenameToggle() {
     const btn = document.getElementById('btn-toggle-pdf-filename');
     if (!btn || !pdfFilenameInput) return;
@@ -358,10 +332,8 @@
     pdfFilenameInput.addEventListener('keydown', e => { if (e.key === 'Enter') pdfFilenameInput.blur(); });
   }
 
-  // Qualité PDF : bouton + panneau au survol (même mécanisme que les styles
-  // de puce/numérotation de la ligne de mise en forme, cf. js/editor.js)
-  // plutôt qu'un <select> toujours affiché - onExportPdf lit encore
-  // v2-pdf-quality.value directement, inchangé.
+  // Qualité PDF : bouton + panneau au survol plutôt qu'un <select> toujours
+  // affiché - onExportPdf lit encore v2-pdf-quality.value directement, inchangé.
   function wireQualityDropdown() {
     const select = document.getElementById('v2-pdf-quality');
     const flyout = document.getElementById('v2-quality-flyout');
@@ -375,10 +347,9 @@
     syncActiveRow();
   }
 
-  // "Tables liées" (js/variables.js) : modale séparée, pas de volet repliable
-  // pour ce seul besoin. Rafraîchit
-  // la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via
-  // l'insertion d'une variable).
+  // "Tables liées" (js/variables.js) : modale séparée, rafraîchit la liste à
+  // chaque ouverture (une règle a pu être ajoutée entre-temps via l'insertion
+  // d'une variable).
   function wireLinkRulesModal() {
     const btn = document.getElementById('btn-link-rules');
     const modal = document.getElementById('link-rules-modal');
@@ -388,12 +359,9 @@
     btnClose.addEventListener('click', () => { modal.style.display = 'none'; });
   }
 
-  // Galerie de templates ("Créer à partir d'un template", cf. flyout au
-  // survol de #btn-new + js/template-gallery.js pour le catalogue/parsing).
-  // Aperçu en lecture seule = simple reconstruction DOM passive (innerHTML
-  // dans un conteneur .tiptap, MÊME technique que resolveZone's measureRoot
-  // dans pdf-export.js) - pas une seconde instance TipTap, donc aucun risque
-  // sur l'état/l'historique du document réellement en cours d'édition.
+  // Galerie de templates : aperçu en lecture seule = simple reconstruction
+  // DOM passive (innerHTML dans un conteneur .tiptap), pas une seconde
+  // instance TipTap, donc aucun risque sur le document réellement en cours d'édition.
   function wireTemplateGalleryModal() {
     const openLink = document.getElementById('v2-btn-new-from-template');
     const galleryModal = document.getElementById('template-gallery-modal');
@@ -496,14 +464,8 @@
     }
 
     // Charger le template ne suffit pas : sans un Templates.save() explicite,
-    // il ne reste qu'un tampon d'édition non enregistré (exactement comme
-    // "Modèle vierge"/onNew), invisible dans #template-select tant que
-    // l'utilisateur ne clique pas lui-même sur Enregistrer - signalé par
-    // l'utilisateur après un test réel ("ça n'a pas créé le modèle... dans sa
-    // liste de modèle"), alors que le cahier des charges parlait bien d'un
-    // modèle "stocké". Réutilise onSave() tel quel (mêmes garanties déjà en
-    // place : lit templateNameInput.value, id courant null ⇒ AddRecord neuf,
-    // rafraîchit #template-select et le sélectionne) plutôt que dupliquer
+    // il ne reste qu'un tampon d'édition non enregistré, invisible dans
+    // #template-select. Réutilise onSave() tel quel plutôt que dupliquer
     // l'appel à Templates.save().
     async function useEmpty() {
       if (!currentEntry || !currentHtml) return;
@@ -528,13 +490,10 @@
       const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
       const tableName = window.prompt(I18n.t('prompt.newTableName'), defaultName);
       if (!tableName) return;
-      // Les badges #Variable du HTML statique pointent vers schema.tableName
-      // (le nom de classe tel qu'authoré dans schema.py) - si Grist crée la
-      // table sous un autre nom (l'utilisateur l'a renommée dans le prompt
-      // ci-dessus, ou Grist a dû dédupliquer un nom déjà pris), il faut
-      // réaligner ces références AVANT de charger le HTML dans l'éditeur, ou
-      // les variables pointeraient vers une table inexistante malgré une
-      // vraie table fraîchement créée (cf. TemplateGallery.rebindVariableTable).
+      // Les badges #Variable du HTML statique pointent vers schema.tableName -
+      // si Grist crée la table sous un autre nom (renommée dans le prompt, ou
+      // dédupliquée), il faut réaligner ces références avant de charger le
+      // HTML, ou les variables pointeraient vers une table inexistante.
       let actualTableId = tableName;
       try {
         const result = await grist.docApi.applyUserActions([['AddTable', tableName, schema.columns]]);
