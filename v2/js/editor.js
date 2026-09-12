@@ -1660,9 +1660,7 @@ const Editor = (function () {
         updateSelectedBadge({ type: 'number', words: !current.words });
         return;
       }
-      // J/M/A : bascule un composant de la date (vrai par défaut, cf.
-      // VariableFormat.formatDate) - le dernier composant encore actif ne
-      // peut pas être désactivé (éviterait une date vide "").
+      // Le dernier composant J/M/A actif ne peut pas être désactivé (date vide sinon).
       if (action.indexOf('date-part:') === 0) {
         const part = action.slice(10);
         const current = node.attrs.format || {};
@@ -1689,10 +1687,7 @@ const Editor = (function () {
       if (!node) return;
       const format = node.attrs.format || {};
       const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
-      // Repli par défaut aligné sur la langue de l'interface (Réglages >
-      // Langue) plutôt que toujours 'fr' - seulement quand la variable elle-
-      // même n'a AUCUN style explicitement choisi (format.style posé =
-      // override assumé, jamais réécrit ici).
+      // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
       const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
       const style = format.type === 'number' ? (format.style || defaultStyle) : defaultStyle;
       setActive('num-style:fr', style === 'fr');
@@ -1706,8 +1701,6 @@ const Editor = (function () {
       if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
       const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
       if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
-      // J/M/A vrais par défaut (format.day/month/year absent = affiché),
-      // cohérent avec VariableFormat.formatDate.
       const isDate = format.type === 'date';
       setActive('date-part:day', !isDate || format.day !== false);
       setActive('date-part:month', !isDate || format.month !== false);
@@ -1735,12 +1728,8 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Même vérification qu'en V1 (js/editor.js:436-445) : un fetch() sur la
-  // même URL que pdf-export.js utilisera pour inliner l'image en base64 à
-  // l'export - si ça échoue (serveur sans en-tête CORS permissif), l'export
-  // devra silencieusement ignorer l'image. Non bloquant : l'insertion a déjà
-  // eu lieu, ceci prévient juste l'utilisateur à l'avance plutôt que de le
-  // laisser découvrir l'absence de l'image seulement après un export.
+  // Teste en avance le fetch() que pdf-export.js refera à l'export (même URL) ;
+  // avertit si un CORS permissif manque, sans bloquer l'insertion déjà faite.
   async function warnIfImageUrlNotExportable(src) {
     if (!src || src.startsWith('data:')) return;
     try {
@@ -1753,20 +1742,13 @@ const Editor = (function () {
     }
   }
 
-  // === Mode d'édition en-tête/pied de page (incrément 2.1) ===
-  // Entre dans le mode (ou change de zone/variante si déjà actif) : sauvegarde
-  // d'abord le contenu qu'on quitte (brouillon si on change de zone/variante,
-  // snapshot du document principal si c'est la toute première entrée), puis
-  // charge le fragment demandé dans l'éditeur UNIQUE via setContent.
+  // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment
+  // voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du
+  // document principal à la toute première entrée).
   function enterHeaderFooterMode(zone, variant) {
     if (!editor) return;
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
-    // Le simple fait d'ouvrir ce mode vaut activation : il n'y a pas de case
-    // "activer" séparée dans la sous-barre (cf. maquette du plan), seulement
-    // "Première page différente" - une fois qu'un en-tête/pied a été
-    // configuré, il doit s'afficher partout (éditeur/lecture/PDF, à partir
-    // des incréments suivants).
     headerFooterDraft.enabled = true;
     hfMode = { zone, variant };
     editor.commands.setContent(headerFooterDraft[zone][variant] || '');
@@ -1774,12 +1756,9 @@ const Editor = (function () {
     if (container) container.classList.add('hf-editing');
     syncToolbarState();
     renderHfPill();
-    renderPaginationOverlay(); // masqué pendant hfMode (cf. sa propre garde) - fait disparaître l'aperçu le temps de l'édition
+    renderPaginationOverlay();
   }
 
-  // Sauvegarde le contenu courant dans le brouillon, restaure le document
-  // principal, retire l'habillage visuel. Sans effet si le mode n'est déjà
-  // pas actif (`null`).
   function exitHeaderFooterMode() {
     if (!hfMode || !editor) return;
     headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
@@ -1789,27 +1768,18 @@ const Editor = (function () {
     const container = document.getElementById('editor-container');
     if (container) container.classList.remove('hf-editing');
     syncToolbarState();
-    renderHfPill(); // hfMode redevenu null - retire la pastille (cf. sa propre garde)
-    renderPaginationOverlay(); // ré-affiche l'aperçu
+    renderHfPill();
+    renderPaginationOverlay();
   }
 
-  // Filet de sécurité appelé par v2/js/main.js AVANT Save/Enregistrer sous/
-  // Export PDF/passage en Mode Lecture - sans ça, l'une de ces actions
-  // lirait/enverrait le contenu d'un en-tête/pied de page chargé À LA PLACE
-  // du document principal (editor.getHTML() ne sait pas dans quel mode on
-  // est, il renvoie toujours ce qui est actuellement affiché).
+  // Appelé par main.js avant Save/Export/Lecture - sans ça editor.getHTML()
+  // renverrait le fragment d'en-tête/pied actuellement chargé, pas le document.
   function exitHeaderFooterModeIfActive() {
     if (hfMode) exitHeaderFooterMode();
   }
-  // v2/js/variables.js: onglet "Chips" du panneau # - une note de bas de
-  // page n'a pas de sens dans une zone d'en-tête/pied (répétée sur chaque
-  // page, aucun repère de page physique auquel l'ancrer), contrairement à
-  // date/heure/email (cf. js/reader-mode.js:resolveHeaderFooterZone qui les
-  // résout bien dans cette zone). Masquée à l'insertion plutôt que
-  // silencieusement ignorée à l'export, pour ne pas laisser l'utilisateur
-  // insérer une note qui ne produirait jamais aucun texte nulle part (le
-  // pipeline PDF ne parcourt que le contenu du corps principal, jamais
-  // l'en-tête/pied, pour construire content._footnoteBlocks).
+  // Note de bas de page masquée en zone en-tête/pied : répétée sur chaque page,
+  // aucune page physique à laquelle l'ancrer (le pipeline PDF ne les résout que
+  // depuis le corps principal).
   function isEditingHeaderFooter() { return !!hfMode; }
 
   // Reflète le brouillon EN COURS (zone/variante actuellement affichée
@@ -1821,10 +1791,8 @@ const Editor = (function () {
     return headerFooterDraft;
   }
 
-  // Chargement d'un modèle (cf. v2/js/main.js:loadTemplateIntoEditor) - le
-  // mode est déjà garanti inactif à cet instant (exitHeaderFooterModeIfActive
-  // appelée juste avant côté main.js), remplace donc directement le
-  // brouillon en mémoire.
+  // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js
+  // appelle exitHeaderFooterModeIfActive juste avant).
   function setHeaderFooterData(data) {
     const empty = emptyHeaderFooterData();
     headerFooterDraft = data && typeof data === 'object'
@@ -1833,14 +1801,8 @@ const Editor = (function () {
           footer: Object.assign({}, empty.footer, data.footer),
         })
       : empty;
-    // Assaini ICI, au seul point d'entrée d'un en-tête/pied venant de
-    // l'extérieur de l'éditeur (colonne Grist HeaderFooter, potentiellement
-    // modifiable par un autre collaborateur du document sans jamais ouvrir
-    // ce widget) - tout le reste de ce module (aperçu de pagination,
-    // mesure, export PDF via Editor.getHeaderFooterData()) consomme
-    // ensuite `headerFooterDraft` déjà propre. La saisie normale PENDANT
-    // l'édition (ligne ~2360, via editor.getHTML()) reste, elle, hors de
-    // portée : son HTML est déjà contraint par le schéma ProseMirror.
+    // Assaini ici : seul point d'entrée d'un en-tête/pied venant de la colonne
+    // Grist (modifiable par un autre collaborateur sans ouvrir ce widget).
     headerFooterDraft.header.default = HtmlSanitize.clean(headerFooterDraft.header.default);
     headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
     headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
@@ -1848,17 +1810,10 @@ const Editor = (function () {
     renderPaginationOverlay();
   }
 
-  // Pastille flottante d'édition d'en-tête/pied - remplace l'ancien bouton de
-  // bascule + sous-barre dockée sous la toolbar (retour utilisateur : "pas
-  // beau", voulait quelque chose façon Google Docs/Word). Plus de point
-  // d'entrée dédié dans la toolbar : on entre en mode édition en cliquant
-  // directement une zone de marge (haut/bas de page, ou une "couture" entre
-  // deux pages) posée par renderPaginationOverlay ci-dessous - la pastille
-  // n'apparaît QUE pendant l'édition elle-même (hfMode actif), sticky en
-  // haut de #editor-container pour rester visible en scrollant. Reconstruite
-  // paresseusement (une seule fois par session d'édition continue), puis
-  // resynchronisée à chaque appel - cf. tous les appels dans
-  // enterHeaderFooterMode/exitHeaderFooterMode.
+  // Pastille flottante d'édition d'en-tête/pied, sticky en haut de
+  // #editor-container, visible seulement pendant l'édition (hfMode actif).
+  // On y entre en cliquant une zone de marge posée par renderPaginationOverlay,
+  // pas via un bouton de toolbar. Construite une fois puis resynchronisée.
   function renderHfPill() {
     const container = document.getElementById('editor-container');
     if (!container) return;
@@ -1901,13 +1856,8 @@ const Editor = (function () {
         else renderHfPill();
       });
       pill.querySelector('#v2-hf-btn-done').addEventListener('click', () => exitHeaderFooterMode());
-      // mousedown+preventDefault (pas click) : même piège que les autres
-      // menus déroulants de ce fichier (cf. createFloatingPanel/
-      // wireDropdownButton) - un simple 'click' laisserait d'abord le
-      // mousedown faire perdre le focus/la sélection ProseMirror de
-      // l'en-tête/pied en cours d'édition avant que la commande ne s'exécute,
-      // qui retomberait alors sur une sélection obsolète ou absente
-      // (constaté : le badge ne s'insérait nulle part).
+      // mousedown+preventDefault (pas click) : un simple click perdrait la
+      // sélection ProseMirror avant l'exécution de la commande.
       pill.querySelectorAll('#v2-hf-pagenum-flyout .v2-hover-row').forEach(row => {
         row.addEventListener('mousedown', (event) => {
           event.preventDefault();
@@ -1921,31 +1871,20 @@ const Editor = (function () {
     pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
   }
 
-  // === Aperçu paginé réel - éditeur (incrément 2.3) ===
-  // Constantes dupliquées depuis v2/js/pdf-export.js (mêmes valeurs - A4 =
-  // 595.28×841.89pt, marge de base 28pt, 1pt = 96/72px) : aucun mécanisme de
-  // module partagé entre les deux fichiers, même tolérance à la duplication
-  // que le reste de ce projet pour ce genre de petites constantes (cf. les
-  // marqueurs de numérotation des titres, dupliqués entre reader-mode.js et
-  // heading-numbering.js).
+  // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge
+  // 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
-  // Doit matcher le padding de `.tiptap` en Aperçu A4 (css/editor-v2.css,
-  // déjà 28pt convertis en px) - PAS une nouvelle valeur.
-  const A4_BASE_MARGIN_PX = 37.33;
+  const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .tiptap en Aperçu A4
   const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
 
-  // Hauteur RENDUE d'un fragment HTML, hors écran - même mécanisme que
-  // attachMeasureHost côté pdf-export.js, MÊME correctif `min-height:0`
-  // (`.tiptap` réserve 200px pour que l'éditeur VIDE reste cliquable, cf.
-  // css/editor-v2.css - sans ce correctif un en-tête d'une seule ligne
-  // mesurerait 200px, bug déjà rencontré et corrigé côté export PDF).
+  // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le
+  // 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête
+  // d'une ligne mesurerait 200px).
   function measureHtmlHeightPx(html) {
-    // `<img` en plus du texte : cf. le même correctif dans updateHfZone -
-    // sans lui, un en-tête/pied ne contenant qu'une image mesurait une
-    // hauteur de 0, réservant AUCUNE marge pour elle (le corps du document
-    // aurait alors chevauché l'image dans l'aperçu de pagination).
+    // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte
+    // mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
     if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
     const host = document.createElement('div');
     host.className = 'tiptap';
@@ -1957,16 +1896,10 @@ const Editor = (function () {
     return h;
   }
 
-  // Limites de page : mesure les blocs de haut niveau réellement rendus dans
-  // .tiptap (même principe que clampOverflowingTables plus haut), accumule
-  // leur hauteur, respecte .page-break-marker comme coupure forcée. Grain du
-  // BLOC, jamais de la ligne/du pixel comme pdfmake (limite assumée et
-  // annoncée, cf. le plan) - un bloc entier bascule à la page suivante dès
-  // qu'il ne rentre plus, jamais coupé en deux visuellement ici.
-  // Retourne le bloc APRÈS lequel insérer la coupure (`afterEl`), pas un
-  // simple décalage en pixels - cf. le mécanisme de réservation d'espace
-  // réel ci-dessous (renderPaginationOverlay), qui a besoin d'un vrai
-  // élément DOM sur lequel poser un `margin-bottom`.
+  // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte
+  // .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en
+  // deux), pas du pixel comme pdfmake. Retourne le bloc après lequel insérer
+  // la coupure (afterEl), pour poser un margin-bottom réel dessus.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
     let consumed = 0;
@@ -1990,10 +1923,8 @@ const Editor = (function () {
     return breaks;
   }
 
-  // Résout chaque badge .page-number-badge (posé tel quel dans le HTML
-  // stocké, avec son libellé-espace-réservé - "#"/"Page #"/"#/#") en son
-  // texte réel pour LA page où cette bande tombe - même conversion que
-  // formatPageNumberText côté pdf-export.js (dupliquée, pas partagée).
+  // Résout chaque badge .page-number-badge en son texte réel pour cette page
+  // (même conversion que formatPageNumberText côté pdf-export.js, dupliquée).
   function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
     const host = document.createElement('div');
     host.innerHTML = html || '';
@@ -2045,23 +1976,12 @@ const Editor = (function () {
     clearPageBreakMargins();
   }
 
-  // Zones de marge cliquables (façon Google Docs/Word) : un clic (zone vide
-  // ou déjà remplie) appelle enterHeaderFooterMode(zone, variant) - aucun
-  // bouton de toolbar dédié, cf. renderHfPill pour la pastille flottante
-  // visible pendant l'édition. Recalculées au fil de la frappe (débounce,
-  // cf. schedulePaginationRecompute) ; masquées si Aperçu A4 désactivé ou
-  // édition d'en-tête/pied déjà en cours (hfMode).
-  //
-  // Deux natures de zones : le début/la fin du document ont un vrai espace
-  // libre avant/après `.tiptap`, donc de VRAIS éléments DOM en flux normal
-  // (`.v2-page-edge-spacer`, dans `.v2-page-sheet`, JAMAIS enfants de
-  // `.tiptap` lui-même - cf. mémoire project_quill_mutation_observer pour
-  // pourquoi). Les limites INTERMÉDIAIRES (entre deux pages) n'ont pas
-  // d'espace naturel - le contenu défile sans interruption - donc restent
-  // de purs overlays `position:absolute` posés dans un espace réservé
-  // exprès (`margin-bottom` sur le dernier bloc de la page, cf.
-  // pageBreakMarginEls plus bas), affichées dès que le document dépasse
-  // une page même sans en-tête/pied configuré (repère "Page N" par défaut).
+  // Zones de marge cliquables (façon Google Docs/Word) : un clic appelle
+  // enterHeaderFooterMode(zone, variant). Début/fin de document ont un vrai
+  // espace en flux normal (`.v2-page-edge-spacer`, jamais enfant de `.tiptap`
+  // lui-même - cf. mémoire project_quill_mutation_observer). Les limites
+  // intermédiaires n'ont pas d'espace naturel, donc restent de purs overlays
+  // `position:absolute` posés dans l'espace réservé par margin-bottom.
   function ensureEdgeZone(pageSheet, tiptapEl, pos) {
     if (pos === 'top' && !paginationEdgeTopEl) {
       paginationEdgeTopEl = document.createElement('div');
@@ -2076,12 +1996,8 @@ const Editor = (function () {
   }
   function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
     const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
-    // `<img` en plus du texte : un en-tête/pied ne contenant QU'une image
-    // (aucun texte autour) avait tout son HTML dépouillé de balises par ce
-    // test, chaîne vide restante - traité à tort comme "zone vide", affichant
-    // l'accroche fantôme "+ Ajouter..." à la place de l'image réellement
-    // configurée (même bug, même correctif que resolveZone dans
-    // pdf-export.js, trouvé en ajoutant la prise en charge des images ici).
+    // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte)
+    // serait traitée à tort comme vide (même correctif que resolveZone, pdf-export.js).
     const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
@@ -2117,17 +2033,12 @@ const Editor = (function () {
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
-    // Nettoie AVANT de recalculer (cf. sa propre doc) - le bloc "dernier de
-    // la page" à une frontière donnée peut changer d'une frappe à l'autre,
-    // laisser une ancienne marge orpheline gonflerait le document à tort.
+    // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer
+    // d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
     clearPageBreakMargins();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
     const totalPages = breaks.length + 1;
 
-    // `.v2-page-sheet` : enveloppe permanente posée UNE SEULE FOIS autour de
-    // `.tiptap` à la création de l'éditeur (cf. init()) - les zones de bord
-    // vivent DEDANS (collées à `.tiptap`, cf. css/editor-v2.css), plus en
-    // frères directs de #editor-container.
     const pageSheet = tiptapEl.parentElement;
     ensureEdgeZone(pageSheet, tiptapEl, 'top');
     ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
@@ -2138,29 +2049,15 @@ const Editor = (function () {
     const tiptapWidth = tiptapEl.getBoundingClientRect().width;
     const tiptapRect = tiptapEl.getBoundingClientRect();
 
-    // Limites intermédiaires - une bande par frontière entre 2 pages.
-    // Toujours affichées dès que le document dépasse une page - même sans
-    // aucun en-tête/pied configuré (retour utilisateur : la pagination
-    // automatique doit se voir dès "beaucoup de lignes", pas seulement via
-    // un saut de page forcé) : à défaut de contenu à afficher, un simple
-    // trait "— Page N —" marque quand même la coupure automatique. Ces
-    // coutures représentent le VRAI saut entre deux pages PHYSIQUES
-    // (contrairement aux zones de bord ci-dessus, qui vivent SUR la même
-    // page que le corps) - restent donc volontairement une carte distincte,
-    // jamais "collées" au texte.
+    // Limites intermédiaires : une bande par frontière entre 2 pages, toujours
+    // affichée dès que le document dépasse une page même sans en-tête/pied
+    // configuré (repère "— Page N —" par défaut).
     //
-    // Un VRAI espace vide est réservé sous `afterEl` plutôt que de superposer
-    // la bande en `position:absolute` par-dessus le texte qui continuerait de
-    // défiler sans interruption - signalé par l'utilisateur : du texte se
-    // retrouvait visuellement SOUS les bandes d'en-tête/pied entre deux
-    // pages. Réservé via une règle CSS `:nth-child` dans une feuille de style
-    // dédiée (cf. ensurePaginationMarginStyle) plutôt qu'un style inline posé
-    // directement sur `afterEl` : un style inline sur un nœud géré par
-    // ProseMirror s'est avéré silencieusement ANNULÉ peu après (ProseMirror
-    // "répare" toute mutation DOM qu'il n'a pas lui-même produite via une
-    // transaction, même un simple attribut style - constaté en conditions
-    // réelles). Une règle CSS externe ciblant par POSITION ne modifie RIEN
-    // sur le nœud lui-même, hors de portée de cette surveillance.
+    // L'espace est réservé sous `afterEl` via une règle CSS `:nth-child` dans
+    // une feuille dédiée, pas un style inline sur `afterEl` : ProseMirror
+    // annule silencieusement toute mutation DOM (y compris un simple style)
+    // qu'il n'a pas produite lui-même via une transaction ; une règle CSS
+    // externe ciblant par position échappe à cette surveillance.
     const marginRules = [];
     const tiptapChildren = Array.from(tiptapEl.children);
     breaks.forEach((brk, i) => {
@@ -2188,7 +2085,7 @@ const Editor = (function () {
           const h = document.createElement('div');
           h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
           h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
-          h.onclick = () => enterHeaderFooterMode('header', 'default'); // pageStarting >= 2 toujours dans une couture
+          h.onclick = () => enterHeaderFooterMode('header', 'default');
           seam.appendChild(h);
         }
       }
@@ -2196,13 +2093,8 @@ const Editor = (function () {
       seam.style.left = tiptapOffsetLeft + 'px';
       seam.style.width = tiptapWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
-      // Réserve l'espace AVANT de positionner : `afterEl` ne bouge pas à
-      // cause de sa PROPRE marge (une marge est hors de la boîte de bordure
-      // de l'élément), donc son rect mesuré juste après reste correct pour
-      // placer la bande exactement dans le vide ainsi ouvert. Écrit la
-      // feuille de style à CHAQUE itération (pas une seule fois à la fin) :
-      // la coupure suivante doit voir l'effet des marges déjà posées avant
-      // de mesurer sa propre position (elles se cumulent dans le flux réel).
+      // Écrit la feuille à chaque itération : la coupure suivante doit voir
+      // l'effet des marges déjà posées avant de mesurer sa propre position.
       const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
       marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + seamHeight + 'px; }');
       ensurePaginationMarginStyle().textContent = marginRules.join('\n');
@@ -2211,10 +2103,6 @@ const Editor = (function () {
     });
   }
 
-  // Icônes de la toolbar statique (posées en JS plutôt que dans le HTML : une
-  // seule source de vérité pour les tracés SVG, partagée avec les toolbars
-  // flottantes ci-dessus/ci-dessous qui doivent de toute façon construire
-  // leur contenu en JS - cf. v2/js/icons.js).
   function applyToolbarIcons() {
     const set = (id, icon) => { const el = document.getElementById(id); if (el) el.innerHTML = Icons.svg(icon); };
     set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
@@ -2240,12 +2128,8 @@ const Editor = (function () {
     set('v2-font-chip-caret', 'caretDown');
   }
 
-  // Retour visuel d'état actif (aucun jusqu'ici : un bouton gras ne montrait
-  // pas que le curseur est déjà dans du texte en gras). Recalculé à chaque
-  // sélection/transaction plutôt que seulement au clic, pour rester juste
-  // aussi quand la sélection change au clavier/à la souris sans passer par la
-  // toolbar. Inclut aussi `v2-header-select`, pour la même raison (montrer
-  // "Titre 2" quand le curseur est dans un H2, pas seulement "Normal" figé).
+  // Retour visuel d'état actif, recalculé à chaque sélection/transaction
+  // (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
   function syncToolbarState() {
     const setActive = (id, isActive) => { const el = document.getElementById(id); if (el) el.classList.toggle('is-active', !!isActive); };
     setActive('v2-btn-bold', editor.isActive('bold'));
@@ -2256,16 +2140,13 @@ const Editor = (function () {
     setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
     setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
     setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
-    // Bouton principal du groupe survol "Alignement" (maquette "Options au
-    // survol") : montre TOUJOURS l'alignement réel du curseur (gauche par
-    // défaut, valeur par défaut de l'extension TextAlign) - currentAlign est
-    // relu par son propre gestionnaire de clic pour le réappliquer tel quel.
+    // Bouton principal du groupe survol "Alignement" : montre toujours
+    // l'alignement réel du curseur, relu par son propre clic pour le réappliquer.
     const aligns = ['left', 'center', 'right', 'justify'];
     currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
     const alignMain = document.getElementById('v2-btn-align-main');
     if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
-    // Bouton "Liste" fusionné (puces + numéros + cases à cocher, cf. maquette
-    // de simplification demandée) : actif dès qu'UN des trois types l'est.
+    // Bouton "Liste" fusionné : actif dès qu'un des trois types l'est.
     setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList'));
     const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
     setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
@@ -2282,28 +2163,20 @@ const Editor = (function () {
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
-    // Mode en-tête/pied de page (incrément 2.1) : grise (pointer-events, cf.
-    // .v2-hf-locked dans css/toolbar-v2.css) tableau/2-colonnes/saut de
-    // page/sommaire/numérotation des titres - aucun sens dans ce contexte
-    // (cf. calibration utilisateur du plan). Le schéma ProseMirror reste
-    // UNIQUE et partagé (compromis assumé) : seuls les BOUTONS sont bloqués.
-    // Image RETIRÉE de cette liste (demande utilisateur ultérieure) : une
-    // image "au cœur du texte" (flux normal) s'exporte très bien dans un
-    // en-tête/pied (htmlToPdfContent est générique, aucun câblage
-    // supplémentaire nécessaire) - seul le calque devant/derrière reste
-    // verrouillé (cf. wireImageFloatingToolbar), faute de résolution de
-    // position pour ce cas dans pdf-export.js (pas de pagination à l'intérieur
-    // d'un en-tête/pied, mais pas non plus câblé pour l'instant).
+    // En mode en-tête/pied : grise tableau/2-colonnes/saut de page/sommaire/
+    // numérotation (aucun sens dans ce contexte) - seuls les boutons sont
+    // bloqués, le schéma ProseMirror reste unique et partagé. Image non
+    // verrouillée : au flux normal elle s'exporte très bien dans un en-tête/
+    // pied, seul le calque devant/derrière reste bloqué (pas de pagination
+    // à l'intérieur d'un en-tête/pied).
     const inHfMode = !!hfMode;
     const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
     setLocked('v2-btn-table', inHfMode);
     setLocked('v2-btn-two-columns', inHfMode);
     setLocked('v2-btn-page-break', inHfMode);
     setLocked('v2-btn-toc', inHfMode);
-    // Numérotation seule verrouillée (pas tout le menu Titre fusionné, cf.
-    // v2/index.html #v2-heading-flyout) : un niveau de titre garde un sens
-    // dans un en-tête/pied, la numérotation (qui ne compte que les titres du
-    // flux principal) non - même raison que l'ancienne pastille séparée.
+    // Numérotation seule verrouillée : un niveau de titre garde un sens dans
+    // un en-tête/pied, la numérotation (titres du flux principal seul) non.
     setLocked('v2-numbering-seg', inHfMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
@@ -2322,16 +2195,9 @@ const Editor = (function () {
     const textStyleAttrs = editor.getAttributes('textStyle');
     setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
-    // Polices/tailles : les swatches de couleur ci-dessus étaient déjà
-    // synchronisés sur le curseur, mais PAS ces deux <select> (signalé par
-    // l'utilisateur - ex. curseur en Arial 15pt sans que la toolbar ne le
-    // montre). Repli sur la police/taille RÉELLEMENT rendue en l'absence de
-    // marque explicite (Roboto/10.5pt, cf. `.tiptap` dans editor-v2.css et
-    // DEFAULT_FONT_SIZE dans pdf-export.js - les deux valeurs concordent
-    // déjà, 14px = 10.5pt à 96dpi) plutôt qu'un vide "Police"/"Taille" qui
-    // n'affichait jamais rien tant que l'utilisateur n'avait pas cliqué
-    // explicitement un réglage (signalé par l'utilisateur : les valeurs par
-    // défaut au clavier ne s'affichaient jamais).
+    // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap
+    // dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
+    // "Police"/"Taille" vide qui ne montrait jamais rien par défaut.
     const fontChipVal = document.getElementById('v2-font-chip-val');
     if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
     const sizeChipVal = document.getElementById('v2-size-chip-val');
@@ -2377,11 +2243,8 @@ const Editor = (function () {
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
-      // Collage d'image depuis le presse-papiers (cf. pasteImageFile plus
-      // haut) : ne consomme QUE si le presse-papiers contient réellement une
-      // image (`item.type` préfixé "image/") - un collage de texte normal,
-      // bien plus fréquent, doit continuer de suivre le traitement natif de
-      // ProseMirror (return false), jamais intercepté ici.
+      // Ne consomme que si le presse-papiers contient réellement une image ;
+      // un collage de texte normal suit le traitement natif de ProseMirror.
       editorProps: {
         handlePaste(view, event) {
           const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
@@ -2404,9 +2267,6 @@ const Editor = (function () {
         HighlightColor,
         BulletStyle,
         OrderedListStyle,
-        // Case à cocher : extension officielle plutôt qu'un nœud maison (même
-        // logique que Table/TwoColumns) - nested:false, pas besoin d'imbriquer
-        // une case dans une autre pour ce besoin.
         TaskList,
         TaskItem.configure({ nested: false }),
         TaskListStyle,
@@ -2415,10 +2275,6 @@ const Editor = (function () {
         SmartChip,
         FootnoteRef,
         Variables.createExtension(Extension, Suggestion),
-        // Tableau : extensions officielles, colonnes redimensionnables (même
-        // comportement de poignée que la V1, cf. mémoire
-        // project_table_resize_handle_regression) - validées dans
-        // v2/smoke-test.html avec du contenu riche réel dans une cellule.
         Table.configure({ resizable: true }),
         TableRow,
         TableHeaderWithBg,
@@ -2435,16 +2291,9 @@ const Editor = (function () {
       content: '',
     });
 
-    // Enveloppe UNE SEULE FOIS, à la création - jamais re-enveloppé/déplacé
-    // ensuite (cf. renderPaginationOverlay, qui lit juste tiptapEl.parentElement
-    // à chaque appel). Porte le fond/liseré "page" en Aperçu A4 à la place de
-    // `.tiptap` lui-même (cf. css/editor-v2.css:.v2-page-sheet) pour que les
-    // zones d'en-tête/pied de page (posées DEDANS, cf. ensureEdgeZone) restent
-    // visuellement COLLÉES au corps - une seule "feuille" continue plutôt que
-    // 3 cartes séparées par un espace, au plus près de ce que sera la vraie
-    // page exportée (retour utilisateur). `.tiptap` lui-même n'est JAMAIS
-    // déplacé/recréé par cette opération, seul son parent change - sans
-    // risque pour ProseMirror (qui ne connaît que ses propres descendants).
+    // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay
+    // relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en Aperçu A4
+    // pour que les zones d'en-tête/pied restent visuellement collées au corps.
     const pageSheet = document.createElement('div');
     pageSheet.className = 'v2-page-sheet';
     editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
@@ -2493,9 +2342,6 @@ const Editor = (function () {
     bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
     bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
     bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
-    // Styles de numérotation, révélés dans le même panneau au survol (liste
-    // "fusionnée" puces+numéros demandée) - même logique que les styles de
-    // puce ci-dessus (crée la liste si besoin, sinon change juste le style).
     const applyOrderedStyle = (style) => {
       const chain = editor.chain().focus();
       if (!editor.isActive('orderedList')) chain.toggleOrderedList();
@@ -2504,10 +2350,6 @@ const Editor = (function () {
     bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
     bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
     bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
-    // Styles de case à cocher, mêmes trois maquettes que celles proposées à
-    // l'utilisateur (accent+barré/classique/accent sans barré) - crée la
-    // liste si besoin, sinon change juste le style de la liste existante à
-    // cet endroit (même logique que applyBulletStyle/applyOrderedStyle).
     const applyTaskListStyle = (style) => {
       const chain = editor.chain().focus();
       if (!editor.isActive('taskList')) chain.toggleTaskList();
@@ -2516,18 +2358,11 @@ const Editor = (function () {
     bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
     bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
     bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
-    // Réutilisent les mêmes commandes que le Tab/Shift-Tab clavier dans une
-    // liste (cf. createTabNavigationExtension) - sans effet (no-op, jamais
-    // d'erreur) hors d'une liste, d'où l'état désactivé posé dans
-    // syncToolbarState plutôt qu'un masquage complet du bouton.
+    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState)
+    // plutôt qu'un masquage complet du bouton.
     bind('v2-btn-outdent', () => editor.chain().focus().liftListItem('listItem').run());
     bind('v2-btn-indent', () => editor.chain().focus().sinkListItem('listItem').run());
-    // withHeaderRow: false - un tableau inséré n'a pas de style de première
-    // ligne différent des autres (signalé par l'utilisateur : gras + fond
-    // coloré inattendus par défaut, cf. aussi css/editor-v2.css).
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
-    // Gestion ligne/colonne/suppression de tableau : déplacée vers la
-    // toolbar flottante contextuelle, cf. wireTableFloatingToolbar.
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
       const url = window.prompt(I18n.t('image.urlPrompt'));
@@ -2546,21 +2381,11 @@ const Editor = (function () {
     wireCompactFontSizeControls();
   }
 
-  // Menu "Titre" fusionné (niveau de titre + numérotation des titres, cf.
-  // v2/index.html #v2-heading-flyout - demande utilisateur de regrouper les
-  // deux réglages jusqu'ici séparés : un <select> natif en tout début de
-  // barre, et une pastille de numérotation isolée bien plus loin). Les DEUX
-  // réglages restent portés par un <select> caché comme source de vérité
-  // (v2-header-select/v2-heading-numbering-select, cf. css/toolbar-v2.css) -
-  // les lignes/boutons visibles du flyout ne font que poser sa valeur puis
-  // redéclencher 'change', réutilisant tel quel le câblage déjà en place
-  // ailleurs (bindSelect('v2-header-select', ...) dans
-  // wireSelectionDependentSelects pour le niveau de titre) plutôt que de le
-  // dupliquer. Aucune capture/restauration de sélection nécessaire ici
-  // (contrairement à un vrai <select> natif) : un <span>/<button> cliqué
-  // dans ce flyout ne vole jamais le focus de l'éditeur au survol/clic comme
-  // le ferait l'ouverture d'un <select>, la sélection ProseMirror reste donc
-  // intacte au moment où la commande s'applique.
+  // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent
+  // portés par un <select> caché comme source de vérité, le flyout ne fait
+  // que poser sa valeur puis redéclencher 'change' - pas de capture/
+  // restauration de sélection nécessaire (un <span>/<button> ne vole jamais
+  // le focus comme l'ouverture d'un <select> natif).
   function wireHeadingMenu() {
     const headerSelect = document.getElementById('v2-header-select');
     const flyout = document.getElementById('v2-heading-flyout');
@@ -2573,12 +2398,9 @@ const Editor = (function () {
         });
       });
     }
-    // Réglage de DOCUMENT (numérotation des titres), pas une mise en forme de
-    // sélection : pas besoin de capturer/restaurer la sélection texte, seul
-    // le focus est rendu à l'éditeur par confort. Le data-attribute est posé
-    // AVANT de dispatcher la commande (qui déclenche elle-même, synchronement,
-    // le rafraîchissement du sommaire via son NodeView) afin que ce
-    // rafraîchissement lise déjà la bonne valeur.
+    // Réglage de document, pas de sélection : le data-attribute est posé
+    // avant de dispatcher la commande pour que le rafraîchissement synchrone
+    // du sommaire (déclenché par elle) lise déjà la bonne valeur.
     const select = document.getElementById('v2-heading-numbering-select');
     if (!select) return;
     select.addEventListener('change', () => {
@@ -2594,9 +2416,8 @@ const Editor = (function () {
       select.dispatchEvent(new Event('change'));
       syncActiveNum();
     }));
-    // Lu à la volée à chaque survol plutôt que poussé en continu : la valeur
-    // peut aussi changer sans passer par ici (chargement d'un modèle, cf.
-    // v2/js/main.js:loadTemplateIntoEditor qui pose select.value directement).
+    // Lu à la volée à chaque survol : la valeur peut aussi changer sans
+    // passer par ici (chargement d'un modèle pose select.value directement).
     const group = document.getElementById('v2-heading-group');
     if (group) group.addEventListener('mouseenter', syncActiveNum);
     syncActiveNum();
@@ -2618,10 +2439,6 @@ const Editor = (function () {
     }));
   }
 
-  // Liste UNIQUE des tailles proposées, partagée par le stepper (-/+ passe au
-  // preset voisin) et le panneau flottant (choix direct) - "Toolbar compacte"
-  // option A, remplace l'ancien <select> natif dont "Times New Roman" imposait
-  // sa largeur à toute la barre.
   const FONT_SIZE_PRESETS = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
   const FONT_FAMILY_PRESETS = [
     { value: 'Roboto', label: 'Roboto (par défaut)' },
@@ -2635,8 +2452,6 @@ const Editor = (function () {
   function wireCompactFontSizeControls() {
     const { captureSelection, withSavedSelection } = createSelectionPreserver();
 
-    // Police : pastille icône+valeur, ouvre un panneau flottant (même
-    // mécanisme que le menu de couleur) listant les polices supportées.
     const fontHtml = FONT_FAMILY_PRESETS.map(o => `<button data-action="${o.value}">${o.label}</button>`).join('');
     const fontPanel = createFloatingPanel('v2-format-panel', fontHtml, (value) => {
       withSavedSelection(chain => chain.setFontFamily(value));
@@ -2644,8 +2459,6 @@ const Editor = (function () {
     });
     wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
 
-    // Taille : stepper -/+ (passe au preset voisin dans FONT_SIZE_PRESETS) +
-    // clic sur la valeur pour ouvrir le panneau (choix direct, comme police).
     const sizeHtml = FONT_SIZE_PRESETS.map(s => `<button data-action="${s}">${s}</button>`).join('');
     const sizePanel = createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
       withSavedSelection(chain => chain.setFontSize(value));
@@ -2675,17 +2488,10 @@ const Editor = (function () {
     return style;
   }
 
-  // Signale les badges #Variable dont la table/colonne référencée n'existe
-  // plus (table supprimée, colonne supprimée/renommée depuis Grist) - un
-  // simple ajout de classe + `title` natif sur le <span> déjà rendu, PAS un
-  // attribut du nœud ProseMirror lui-même : la validité dépend d'un état
-  // externe (le schéma Grist courant), pas du contenu du document, donc rien
-  // à persister dans le HTML enregistré. Comme pour la manipulation DOM
-  // directe déjà rencontrée ailleurs dans ce fichier, ProseMirror peut
-  // reconstruire ce span à tout moment et perdre cet ajout - on ne compte
-  // donc jamais sur "ça tient", on rejoue cette passe à chaque déclencheur
-  // pertinent (setHTML ci-dessous ET onUpdate, cf. plus bas) plutôt que de
-  // la poser une seule fois.
+  // Signale les badges #Variable dont la table/colonne n'existe plus : simple
+  // classe+title sur le <span> rendu, jamais un attribut du nœud (dépend d'un
+  // état externe, pas du contenu) - ProseMirror peut reconstruire ce span à
+  // tout moment, donc rejoué à chaque déclencheur pertinent plutôt que posé une fois.
   function refreshVariableBadgeValidity() {
     if (!editor) return;
     editor.view.dom.querySelectorAll('span.var-badge').forEach(el => {
@@ -2705,34 +2511,22 @@ const Editor = (function () {
   function setHTML(html) {
     if (!editor) return;
     editor.commands.setContent(html || '', { emitUpdate: false });
-    // Vide l'historique Annuler/Rétablir : sans ça, il s'accumule sur toute
-    // la durée de vie de l'éditeur, y compris à travers plusieurs changements
-    // de modèle successifs - un Annuler après un chargement peut alors faire
-    // réapparaître le contenu d'un modèle précédent (bug confirmé, cf.
-    // dev-tests/BUGS.md). Seul appelant de setHTML : main.js au chargement
-    // d'un modèle - aucun usage interne ne compte sur un historique préservé.
+    // Sans ça l'historique Annuler/Rétablir s'accumule à travers les
+    // changements de modèle : un Annuler après chargement pouvait faire
+    // réapparaître le contenu d'un modèle précédent (bug confirmé).
     editor.commands.clearHistory();
     editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
-    // Un modèle chargé peut déjà porter une numérotation configurée : la
-    // valeur ci-dessus vient d'être posée mais le NodeView du sommaire a déjà
-    // fait son premier rendu (pendant setContent, donc AVANT). On force un
-    // rafraîchissement en dispatchant une transaction sans changement de
-    // document - même idée que `quill.update(Quill.sources.SILENT)` en V1
-    // pour resynchroniser l'affichage après une modification externe au flux
-    // normal d'édition.
+    // Force un rafraîchissement du NodeView du sommaire : son premier rendu
+    // (pendant setContent) a eu lieu avant que headingStyle soit posé ci-dessus.
     editor.view.dispatch(editor.state.tr);
-    // Un modèle chargé peut aussi contenir un tableau déjà trop large (créé
-    // avant ce correctif, ou importé) - le dispatch juste au-dessus ne
-    // déclenche PAS onUpdate (transaction sans changement réel), donc
-    // clampOverflowingTables ne tourne jamais tout seul pour ce cas précis ;
-    // appelé explicitement ici pour le couvrir aussi.
+    // Le dispatch ci-dessus ne déclenche pas onUpdate (pas de changement réel),
+    // donc clampOverflowingTables ne tourne pas seul pour un tableau déjà trop
+    // large importé - appelé explicitement ici pour couvrir ce cas.
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     renderPaginationOverlay();
-    // Vérification immédiate (schéma déjà en cache, peut être légèrement
-    // périmé) PUIS après un rafraîchissement explicite du schéma (couvre le
-    // cas "table/colonne supprimée depuis la dernière ouverture du widget") -
-    // même schéma "immédiat + arrière-plan" que variables.js pour l'autocomplétion.
+    // Vérification immédiate (schéma en cache) puis après rafraîchissement
+    // explicite (couvre une table/colonne supprimée entretemps).
     refreshVariableBadgeValidity();
     GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
