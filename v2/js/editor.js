@@ -24,54 +24,48 @@
 // nommée, au lieu de gonfler `init()` lui-même.
 const Editor = (function () {
   let editor = null;
-  // Rempli dans init() après l'import dynamique de @floating-ui/dom (déjà
-  // épinglé dans l'importmap de v2/index.html mais jamais utilisé jusqu'ici) -
-  // conservé en variable de module pour que createFloatingPanel (utilisé pour
-  // la toolbar de tableau, puis celle de l'image) n'ait pas besoin de refaire
-  // l'import à chaque appel.
+  // Rempli dans init() après import dynamique - évite de réimporter à chaque appel.
   let floatingUi = null;
-  // Rempli dans init() après import de prosemirror-state (déjà partagé via
-  // l'importmap, cf. en-tête de fichier) - nécessaire pour recréer
-  // explicitement une NodeSelection après tr.setNodeMarkup() sur l'image
-  // sélectionnée (cf. updateAttrs/updateSelectedImage) : setNodeMarkup
-  // remplace le nœud (suppression+insertion) plutôt que de le muter en
-  // place, et la préservation par défaut de la sélection de ProseMirror ne
-  // reconstruit alors PAS forcément une NodeSelection sur ce nœud de
-  // remplacement - elle retombe sur un simple curseur texte, ce qui referme
-  // aussitôt la toolbar flottante (vérifié en conditions réelles).
+  // Rempli dans init() après import de prosemirror-state. Nécessaire pour
+  // recréer explicitement une NodeSelection après tr.setNodeMarkup() (qui
+  // remplace le nœud plutôt que de le muter en place) - sans ça, la sélection
+  // retombe sur un simple curseur texte et referme la toolbar flottante
+  // (cf. patchNodeAndReselect ci-dessous).
   let NodeSelectionClass = null;
-  // Alignement actuellement affiché par le bouton principal du groupe survol
-  // "Alignement" (#v2-btn-align-main) - mis à jour par syncToolbarState,
-  // relu par son propre clic pour réappliquer exactement ce qu'il montre.
+  // Alignement affiché par le bouton principal du groupe "Alignement" -
+  // mis à jour par syncToolbarState, relu par son propre clic.
   let currentAlign = 'left';
-  // Rempli aux côtés de NodeSelectionClass ci-dessus (même import
-  // prosemirror-state) - utilisé par createTabNavigationExtension pour
-  // placer le curseur à un endroit précis (colonne suivante, paragraphe
-  // après la zone) sans connaître à l'avance une position EXACTE valide
-  // (TextSelection.near cherche la plus proche position de curseur
-  // valide à partir d'une position candidate, cf. son usage plus bas).
+  // Utilisé par createTabNavigationExtension pour placer le curseur à la
+  // position de texte valide la plus proche d'une position candidate.
   let TextSelectionClass = null;
 
-  // Mode d'édition en-tête/pied de page (incrément 2.1 du plan headers/
-  // footers) - un seul éditeur, un seul schéma ProseMirror partagé : entrer
-  // dans ce mode ÉCHANGE simplement le contenu AFFICHÉ (editor.commands.
-  // setContent), plutôt que d'instancier un second éditeur - évite le piège
-  // réel trouvé en validation de la première mouture du plan
-  // (wireTableFloatingToolbar/wireImageFloatingToolbar/syncToolbarState sont
-  // câblés via .on(...) UNE SEULE FOIS sur l'instance existante à l'appel de
-  // init(), non transférable à une seconde instance créée plus tard).
-  // `null` = édition normale du document principal.
+  // Mode d'édition en-tête/pied de page : un seul éditeur/schéma partagé,
+  // entrer dans ce mode ÉCHANGE juste le contenu affiché (editor.commands.
+  // setContent) plutôt que d'instancier un second éditeur. `null` = édition
+  // normale du document principal.
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
-  // HTML du document principal, sauvegardé au moment d'ENTRER dans le mode
-  // (avant tout échange), restauré tel quel à la sortie.
+  // HTML du document principal, sauvegardé en entrant dans hfMode, restauré à la sortie.
   let mainDocSnapshot = null;
-  // Brouillon en mémoire des 4 fragments (en-tête/pied × pages normales/page
-  // 1) - lu/écrit par getHeaderFooterData/setHeaderFooterData, persisté par
-  // js/templates.js dans la colonne Grist HeaderFooter (JSON), cf. le plan.
+  // Brouillon en mémoire des 4 fragments (en-tête/pied × normal/1ère page) -
+  // lu/écrit par getHeaderFooterData/setHeaderFooterData, persisté par
+  // js/templates.js dans la colonne Grist HeaderFooter (JSON).
   function emptyHeaderFooterData() {
     return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   }
   let headerFooterDraft = emptyHeaderFooterData();
+
+  // setNodeMarkup() remplace le nœud (suppression+insertion) au lieu de le
+  // muter en place : sans recréer explicitement une NodeSelection dessus, la
+  // sélection retombe sur un simple curseur texte et ferme la toolbar
+  // flottante qui dépend de cette sélection. Partagé par les 3 endroits qui
+  // patchent les attributs d'un nœud sélectionné (image, badge de variable,
+  // NodeView de l'image).
+  function patchNodeAndReselect(ed, pos, newAttrs) {
+    const { state, view } = ed;
+    const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
+    if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+    view.dispatch(tr);
+  }
 
   // Taille max (boîte largeur×hauteur) d'une image dans l'en-tête/pied de
   // page (demande utilisateur) : aucune limite technique dure n'existe
@@ -572,18 +566,11 @@ const Editor = (function () {
           marker.className = 'footnote-ref-marker';
           marker.addEventListener('mousedown', event => {
             event.preventDefault();
-            // PAS de stopPropagation() ici (contrairement à une 1ère version) :
-            // ça empêcherait aussi ProseMirror lui-même de voir ce mousedown
-            // et de sélectionner normalement ce nœud (son propre gestionnaire
-            // de clic-pour-sélectionner est posé sur la racine .tiptap, un
-            // ANCÊTRE de ce marqueur - stopPropagation l'aurait empêché de
-            // recevoir l'évènement), cassant la sélection au clic donc la
-            // suppression au clavier (Suppr/Retour arrière) après un clic sur
-            // le marqueur - exactement le bug "la note ne disparaît pas
-            // vraiment" signalé par l'utilisateur. openFootnoteEditorAt gère
-            // déjà la même contrainte "ne pas refermer la popup qu'on vient
-            // d'ouvrir" via un drapeau (suppressNextFootnoteOutsideCheck),
-            // sans bloquer la propagation.
+            // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via
+            // un gestionnaire posé sur .tiptap (un ancêtre) - bloquer la
+            // propagation casserait la sélection au clic, donc la suppression
+            // au clavier ensuite. cf. commitFootnotePopup pour la logique qui
+            // évite de refermer la popup qu'on vient d'ouvrir.
             const pos = getPos();
             if (typeof pos === 'number') openFootnoteEditorAt(pos);
           });
@@ -1232,27 +1219,17 @@ const Editor = (function () {
           }
           applyAttrs(node.attrs);
 
+          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni
+          // via selectNode/deselectNode de la NodeView (peu fiable après un
+          // setNodeMarkup, qui remplace le nœud) : centralisé dans
+          // wireImageFloatingToolbar.check(), qui recalcule l'état à chaque
+          // transaction depuis editor.isActive('editorImage').
           function updateAttrs(patch) {
             const pos = getPos();
             if (typeof pos !== 'number') return;
-            const { state, view } = nodeEditor;
-            const current = state.doc.nodeAt(pos);
+            const current = nodeEditor.state.doc.nodeAt(pos);
             if (!current) return;
-            const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, patch));
-            // Restaure explicitement la NodeSelection sur le nœud de
-            // remplacement - cf. commentaire sur NodeSelectionClass en tête
-            // de fichier. Le retour visuel de sélection (classe CSS) n'est
-            // PAS géré ici, ni via selectNode/deselectNode de la NodeView
-            // (constaté peu fiable après un setNodeMarkup en conditions
-            // réelles - remplace le nœud, et ProseMirror n'appelle alors pas
-            // systématiquement ces callbacks sur l'instance résultante, dans
-            // AUCUN des deux sens - ni pour l'ajouter, ni pour la retirer) :
-            // centralisé dans wireImageFloatingToolbar.check(), qui recalcule
-            // l'état à chaque sélection/transaction depuis une source fiable
-            // (editor.isActive('editorImage')) plutôt que de dépendre du
-            // cycle de vie par-NodeView.
-            if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
-            view.dispatch(tr);
+            patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
           }
 
           // Attributs COURANTS du nœud - jamais `node.attrs` directement : ce
@@ -1771,13 +1748,10 @@ const Editor = (function () {
     if (el) el.style.color = color || '';
   }
 
-  // Couleur de police / surlignage (bandeau principal) - bouton "appliquer"
-  // (icône, clic = réapplique la DERNIÈRE couleur choisie) + bouton chevron
-  // séparé (ouvre le menu déroulant de nuances) - même geste que Word/Google
-  // Docs, remplace le clic unique d'origine qui n'ouvrait que le menu (signalé
-  // par l'utilisateur : il faut mémoriser le dernier choix ET pouvoir
-  // l'appliquer d'un clic direct sans repasser par le menu).
-  function wireColorPickers() {
+  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la
+  // sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la
+  // position du curseur, pas la sélection réellement visée par l'utilisateur.
+  function createSelectionPreserver() {
     let savedSelection = null;
     const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
     const withSavedSelection = (fn) => {
@@ -1786,6 +1760,13 @@ const Editor = (function () {
       fn(chain);
       chain.run();
     };
+    return { captureSelection, withSavedSelection };
+  }
+
+  // Couleur de police / surlignage : bouton "appliquer" (réapplique la
+  // dernière couleur choisie) + bouton chevron séparé (menu de nuances).
+  function wireColorPickers() {
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
     // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix"
     // - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
     let lastTextColor = TEXT_COLOR_PRESETS[0];
@@ -1964,16 +1945,7 @@ const Editor = (function () {
     function updateSelectedImage(patch) {
       const node = selectedImageNode();
       if (!node) return;
-      const { state, view } = editor;
-      const pos = state.selection.from;
-      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, patch));
-      // Restaure explicitement la NodeSelection - cf. commentaire sur
-      // NodeSelectionClass en tête de fichier : sans ça, un clic sur un
-      // bouton de CETTE toolbar referme la toolbar aussitôt après avoir
-      // appliqué l'action (setNodeMarkup remplace le nœud, la sélection par
-      // défaut ne redevient pas forcément une NodeSelection dessus).
-      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
-      view.dispatch(tr);
+      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
     }
 
     // Aligner en flux normal (align gauche/centre/droite classique) ou, en
@@ -2184,12 +2156,8 @@ const Editor = (function () {
     function updateSelectedBadge(patch) {
       const node = selectedVarBadgeNode();
       if (!node) return;
-      const { state, view } = editor;
-      const pos = state.selection.from;
       const format = Object.assign({}, node.attrs.format, patch);
-      const tr = state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { format }));
-      if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
-      view.dispatch(tr);
+      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
     }
     function onAction(action) {
       const node = selectedVarBadgeNode();
@@ -3164,23 +3132,11 @@ const Editor = (function () {
     syncActiveNum();
   }
 
-  // Un <select> de mise en forme (titre/taille/police), contrairement à un
-  // <button>, vole le focus DÈS le pointerdown, AVANT même l'évènement
-  // 'change' - le focus quittant l'éditeur, la sélection réelle qu'on veut
-  // mettre en forme peut être perdue d'ici là. On la capture donc au
-  // pointerdown (position ProseMirror {from,to}, un simple couple de nombres
-  // - PAS besoin de manipuler un Range DOM comme le faisait l'éditeur V1) et
-  // on la restaure explicitement juste avant d'appliquer la commande, plutôt
-  // que de compter sur .focus() seul pour la retrouver.
+  // Un <select>, contrairement à un <button>, vole le focus dès le
+  // pointerdown (avant 'change') - la sélection à mettre en forme doit donc
+  // être capturée à ce moment puis restaurée avant d'appliquer la commande.
   function wireSelectionDependentSelects() {
-    let savedSelection = null;
-    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
-    const withSavedSelection = (fn) => {
-      const chain = editor.chain().focus();
-      if (savedSelection) chain.setTextSelection(savedSelection);
-      fn(chain);
-      chain.run();
-    };
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
     const bindSelect = (id, onChange) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -3207,14 +3163,7 @@ const Editor = (function () {
   ];
 
   function wireCompactFontSizeControls() {
-    let savedSelection = null;
-    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
-    const withSavedSelection = (fn) => {
-      const chain = editor.chain().focus();
-      if (savedSelection) chain.setTextSelection(savedSelection);
-      fn(chain);
-      chain.run();
-    };
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
 
     // Police : pastille icône+valeur, ouvre un panneau flottant (même
     // mécanisme que le menu de couleur) listant les polices supportées.
@@ -3316,7 +3265,7 @@ const Editor = (function () {
     // même schéma "immédiat + arrière-plan" que variables.js pour l'autocomplétion.
     refreshVariableBadgeValidity();
     GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
-      .catch(e => console.warn('[editor] refreshSchema pour la validation des #Variable a échoué', e));
+      .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
   return {
