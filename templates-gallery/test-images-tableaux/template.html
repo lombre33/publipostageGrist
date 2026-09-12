@@ -1,0 +1,33 @@
+<h1 style="text-align:center">Test — Images, tableaux &amp; 2 colonnes</h1>
+<p>Sujet : <span class="var-badge" data-table="Test_ImagesTableaux" data-column="Titre" data-key="Test_ImagesTableaux.Titre">#Test_ImagesTableaux.Titre</span></p>
+<h2>Image au cœur du texte, à cheval sur 2 paragraphes</h2>
+<p>Texte avant l'image.<img class="editor-image" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iODAiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iODAiIGZpbGw9IiNjMDM5MmIiLz48dGV4dCB4PSI2MCIgeT0iNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNRy1BPC90ZXh0Pjwvc3ZnPgo=" alt="Image" data-layer="normal" data-wrap="inline" data-align="left" style="width: 160px"> Ce texte doit s'enrouler à droite de l'image IMG-A (alignée à gauche).</p>
+<p>Second paragraphe distinct : si l'image est assez haute, l'habillage doit se reporter ici aussi (report de flottement entre paragraphes) — sans fusionner les deux paragraphes en un seul bloc, et sans que ce texte ne passe sous l'image avant la fin réelle de sa hauteur.</p>
+<h2>Images en calque (devant / derrière)</h2>
+<p>Paragraphe de référence pour les images en calque ci-dessous — IMG-B est en calque "devant le texte", IMG-C en calque "derrière le texte", toutes deux positionnées près d'un bord de page pour tester les cas limites de bracketing.</p>
+<img class="editor-image" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iODAiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iODAiIGZpbGw9IiMyODc0YTYiLz48dGV4dCB4PSI2MCIgeT0iNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNRy1CPC90ZXh0Pjwvc3ZnPgo=" alt="Image" data-layer="front" data-wrap="inline" style="width: 140px; position: absolute; left: 40px; top: 10px; z-index: 5">
+<img class="editor-image" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iODAiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iODAiIGZpbGw9IiMxZTg0NDkiLz48dGV4dCB4PSI2MCIgeT0iNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNRy1DPC90ZXh0Pjwvc3ZnPgo=" alt="Image" data-layer="behind" data-wrap="inline" style="width: 140px; position: absolute; left: 300px; top: 40px; z-index: -1">
+<h2>Tableau — texte et mise en page par cellule, image dans une cellule</h2>
+<table>
+<tr><th>Colonne A (gras + gauche)</th><th>Colonne B (italique + centré)</th><th>Colonne C (image)</th></tr>
+<tr>
+<td><strong>Texte en gras aligné à gauche.</strong></td>
+<td style="text-align:center"><em>Texte en italique centré.</em></td>
+<td><img class="editor-image" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iODAiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iODAiIGZpbGw9IiNkNjg5MTAiLz48dGV4dCB4PSI2MCIgeT0iNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNRy1EPC90ZXh0Pjwvc3ZnPgo=" alt="Image" data-layer="normal" data-wrap="inline" style="width: 90px"></td>
+</tr>
+<tr>
+<td>
+<ul><li>Liste à puces</li><li>dans une cellule</li></ul>
+</td>
+<td style="text-align:right">Texte aligné à droite.</td>
+<td>Cellule simple.</td>
+</tr>
+</table>
+<h2>Zone 2 colonnes — mise en forme indépendante par colonne, image dans une colonne</h2>
+<div class="two-columns-zone-outer" style="--layout-left: 50%;">
+<div class="two-columns-zone">
+<div class="two-columns-column"><p><strong>Colonne de gauche</strong> — texte en gras, pour vérifier que la mise en forme reste indépendante de la colonne de droite.</p></div>
+<div class="two-columns-column"><p style="text-align:right">Colonne de droite, alignée à droite.</p><p><img class="editor-image" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iODAiPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iODAiIGZpbGw9IiM3ZDNjOTgiLz48dGV4dCB4PSI2MCIgeT0iNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklNRy1FPC90ZXh0Pjwvc3ZnPgo=" alt="Image" data-layer="normal" data-wrap="inline" style="width: 100px"></p></div>
+</div>
+<div class="two-columns-resize-grip" title="Redimensionner les colonnes"></div>
+</div>

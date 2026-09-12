@@ -1,0 +1,36 @@
+<div class="heading-numbering-config" data-style="numeric"></div>
+<h1 style="text-align:center">Rapport de test — Mise en page</h1>
+<p>Auteur : <span class="var-badge" data-table="Test_MiseEnPage" data-column="Auteur" data-key="Test_MiseEnPage.Auteur">#Test_MiseEnPage.Auteur</span> — Sujet : <span class="var-badge" data-table="Test_MiseEnPage" data-column="Sujet" data-key="Test_MiseEnPage.Sujet">#Test_MiseEnPage.Sujet</span></p>
+<div class="toc-marker">Sommaire (généré automatiquement à partir des titres)</div>
+<h2>Formats de texte</h2>
+<p>Ce premier paragraphe de plusieurs lignes sert à vérifier le retour à la ligne naturel dans la largeur de page ainsi que les raccourcis de mise en forme de base : <strong>gras (Ctrl+B)</strong>, <em>italique (Ctrl+I)</em>, <u>souligné (Ctrl+U)</u>, <s>barré</s>, et une combinaison <strong><em><u>gras + italique + souligné</u></em></strong> sur les mêmes mots pour vérifier qu'ils s'additionnent correctement sans se remplacer l'un l'autre.</p>
+<p style="text-align:center">Ce second paragraphe est centré et sert à vérifier l'alignement — il doit rester assez long pour s'enrouler sur au moins deux lignes complètes, afin de vérifier que chaque ligne reste bien centrée individuellement et pas seulement le bloc dans son ensemble, ce qui est une source fréquente de bug d'affichage.</p>
+<p style="text-align:right">Ce troisième paragraphe est aligné à droite, avec un retour à la ligne forcé au milieu<br>plutôt qu'un nouveau paragraphe — pour vérifier que Maj+Entrée reste dans le même bloc, contrairement à Entrée seul qui doit créer un nouveau paragraphe séparé.</p>
+<p style="text-align:justify">Ce quatrième paragraphe est justifié et doit être suffisamment long pour que chaque ligne, sauf la dernière, s'étire visuellement jusqu'au bord droit de la page — un bon test de la justification demande plusieurs lignes complètes pour être vérifié correctement, la dernière ligne d'un paragraphe justifié restant toujours alignée à gauche comme d'habitude.</p>
+<p><span style="font-size: 18pt;">Ce texte est en 18pt.</span> <span style="font-size: 8pt;">Celui-ci est en 8pt.</span> <span style="color: rgb(192, 57, 43);">Ce texte est en couleur rouge.</span> <span style="background-color: rgb(255, 242, 168);">Ce texte est surligné en jaune.</span></p>
+<h2>Titres et numérotation</h2>
+<h3>Un titre de niveau 3</h3>
+<p>Vérifier que la numérotation d'un H3 dépend bien du H2 parent, pas d'un compteur global indépendant.</p>
+<h4>Un titre de niveau 4</h4>
+<h5>Un titre de niveau 5</h5>
+<h6>Un titre de niveau 6</h6>
+<h2>Listes</h2>
+<ul>
+<li>Premier élément à puce</li>
+<li>Deuxième élément à puce
+<ul>
+<li>Sous-élément indenté (Tab)</li>
+</ul>
+</li>
+<li>Troisième élément à puce</li>
+</ul>
+<ol>
+<li>Premier élément numéroté</li>
+<li>Deuxième élément numéroté</li>
+<li>Troisième élément numéroté</li>
+</ol>
+<blockquote><p>Ceci est une citation — vérifier son retrait et sa bordure gauche, aux 3 étages (éditeur, lecture, export PDF).</p></blockquote>
+<div class="page-break-marker">Saut de page</div>
+<h1>Deuxième page — notes et variables dynamiques</h1>
+<p>Une phrase avec un appel de note de bas de page<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Ceci est le texte de la première note de bas de page, à vérifier en bas de la bonne page dans le PDF."></sup> puis une seconde phrase avec un second appel<sup class="footnote-ref-marker" data-note-id="n2" data-note-text="Seconde note - vérifie la numérotation continue (1, 2, jamais 1, 1)."></sup> pour vérifier la numérotation continue.</p>
+<p>Chips intelligents — Date : <span class="smart-chip" data-chip-kind="date">Date</span> — Heure : <span class="smart-chip" data-chip-kind="time">Heure</span> — Email : <span class="smart-chip" data-chip-kind="email">Email</span></p>
