@@ -767,6 +767,16 @@ const PdfExport = (function () {
       nestedPending.push(entry);
     }
   }
+  // Image "au coeur du texte" (flux normal, non en calque) alignée gauche/
+  // droite - cible de l'habillage `columns` (cf. floatedImageParagraphFrom),
+  // par opposition à une image en calque ou sans alignement gauche/droite.
+  function findFloatImageIn(node) {
+    return Array.from(node.querySelectorAll('img.editor-image')).find(img => {
+      const align = img.getAttribute('data-align');
+      const layer = img.getAttribute('data-layer') || 'normal';
+      return layer === 'normal' && (align === 'left' || align === 'right');
+    });
+  }
   function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending) {
     if (line.inline) {
       const before = images.length;
@@ -779,19 +789,10 @@ const PdfExport = (function () {
       return obj;
     }
     const node = line;
-    // Image "au coeur du texte" (flux normal, alignée gauche/droite) dans un
-    // <p>/<div> de cellule - même détection et même chemin que blockFrom
-    // pour le flux principal (floatedImageParagraphFrom), avec la largeur
-    // RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine page : sans
-    // cette branche, cellContentFrom n'avait AUCUN support d'habillage,
-    // l'image atterrissait systématiquement après tout le texte de la
-    // cellule (signalé cassé par l'utilisateur).
+    // Même chemin d'habillage que le flux principal (floatedImageParagraphFrom),
+    // avec la largeur RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine page.
     if (/^(P|DIV)$/.test(node.tagName)) {
-      const floatImgEl = Array.from(node.querySelectorAll('img.editor-image')).find(img => {
-        const align = img.getAttribute('data-align');
-        const layer = img.getAttribute('data-layer') || 'normal';
-        return layer === 'normal' && (align === 'left' || align === 'right');
-      });
+      const floatImgEl = findFloatImageIn(node);
       if (floatImgEl) {
         const floated = floatedImageParagraphFrom(node, false, cellWidthPt);
         if (floated) return floated;
@@ -927,7 +928,7 @@ const PdfExport = (function () {
     const cellPadRightPt = cellCs ? (parseFloat(cellCs.paddingRight) || 0) * PX_TO_PT : 4.5;
     const cellPadTopPt = cellCs ? (parseFloat(cellCs.paddingTop) || 0) * PX_TO_PT : 3;
     const cellPadBottomPt = cellCs ? (parseFloat(cellCs.paddingBottom) || 0) * PX_TO_PT : 3;
-    const availableWidthPt = 595.28 - 56;
+    const availableWidthPt = CONTENT_WIDTH_PT;
     const minColWidthPt = 12;
     // pdfmake ajoute paddingLeft+paddingRight (cf. `layout` plus bas) À CHAQUE
     // colonne EN PLUS de la valeur donnée dans `widths` (vérifié en décodant
@@ -1043,9 +1044,8 @@ const PdfExport = (function () {
   async function twoColumnsFrom(node, pageBreakBefore, rootRect) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
-    const pageWidth = 595.28;
     const columnGapPt = 16 * PX_TO_PT; // css/editor-v2.css: .two-columns-zone { gap: 16px }
-    const contentWidthPx = (pageWidth - 2 * PAGE_MARGIN_PT) / PX_TO_PT;
+    const contentWidthPx = CONTENT_WIDTH_PT / PX_TO_PT;
     const measureHost = document.createElement('div');
     measureHost.className = 'tiptap';
     measureHost.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx + 'px;';
@@ -1062,7 +1062,7 @@ const PdfExport = (function () {
       const bL = parseFloat(cs.borderLeftWidth) || 0, bR = parseFloat(cs.borderRightWidth) || 0;
       return Math.max(10, (r.width - padL - padR - bL - bR) * PX_TO_PT);
     };
-    const fallbackWidth = (pageWidth - 2 * PAGE_MARGIN_PT) / 2;
+    const fallbackWidth = CONTENT_WIDTH_PT / 2;
     const leftWidth = measuredCols[0] ? measureTextWidthPt(measuredCols[0]) : fallbackWidth;
     const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
     const zoneChromeLeftPt = leftPt(zoneClone);
@@ -1423,7 +1423,7 @@ const PdfExport = (function () {
     // dans une cellule/colonne bien plus étroite que la page calculait son
     // habillage/justify comme si elle disposait de la pleine largeur de page,
     // signalé cassé par l'utilisateur.
-    const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
+    const pageWidthPt = availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
     const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
@@ -1624,6 +1624,15 @@ const PdfExport = (function () {
     return { blocks, stillActive: !hasAfter };
   }
 
+  // État transmis à blockFrom() pour le(s) frère(s) SUIVANT(s) quand une
+  // image flottante déborde encore verticalement son propre paragraphe -
+  // cf. wrapParagraphBesideCarriedFloat.
+  function makeFloatCarry(imgRect, align, imageWidthPt, availableWidthPt) {
+    const pageWidthPt = availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT;
+    const gapPt = 12 * PX_TO_PT;
+    return { imgBottom: imgRect.bottom, align, imageWidthPt, remainingWidthPt: Math.max(40, pageWidthPt - imageWidthPt - gapPt), gapPt };
+  }
+
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
   // paragraphe contenant une image produit un bloc de texte ET un bloc image
   // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
@@ -1632,11 +1641,7 @@ const PdfExport = (function () {
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     if (tag === 'P' || tag === 'DIV') {
-      const floatImgEl = Array.from(node.querySelectorAll('img.editor-image')).find(img => {
-        const align = img.getAttribute('data-align');
-        const layer = img.getAttribute('data-layer') || 'normal';
-        return layer === 'normal' && (align === 'left' || align === 'right');
-      });
+      const floatImgEl = findFloatImageIn(node);
       if (floatImgEl) {
         const floated = floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt);
         if (floated) {
@@ -1654,12 +1659,8 @@ const PdfExport = (function () {
           if (lastBlock && !lastBlock.columns) {
             arr._floatCarry = null;
           } else {
-            const align = floatImgEl.getAttribute('data-align');
             const imgRect = floatImgEl.getBoundingClientRect();
-            const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
-            const gapPt = 12 * PX_TO_PT;
-            const imageWidthPt = Math.max(15, imgRect.width * PX_TO_PT);
-            arr._floatCarry = { imgBottom: imgRect.bottom, align, imageWidthPt, remainingWidthPt: Math.max(40, pageWidthPt - imageWidthPt - gapPt), gapPt };
+            arr._floatCarry = makeFloatCarry(imgRect, floatImgEl.getAttribute('data-align'), Math.max(15, imgRect.width * PX_TO_PT), availableWidthPt);
           }
           return arr;
         }
@@ -1723,9 +1724,7 @@ const PdfExport = (function () {
           // habillage sur le(s) frère(s) suivant(s).
           if (seg.image._floatAlign) {
             const imgRect = seg.image._sourceImgNode.getBoundingClientRect();
-            const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
-            const gapPt = 12 * PX_TO_PT;
-            blocks._floatCarry = { imgBottom: imgRect.bottom, align: seg.image._floatAlign, imageWidthPt: seg.image.width, remainingWidthPt: Math.max(40, pageWidthPt - seg.image.width - gapPt), gapPt };
+            blocks._floatCarry = makeFloatCarry(imgRect, seg.image._floatAlign, seg.image.width, availableWidthPt);
           }
           return;
         }
@@ -1796,9 +1795,7 @@ const PdfExport = (function () {
       // SUIVANT(s), cf. wrapParagraphBesideCarriedFloat.
       if (img._floatAlign) {
         const imgRect = img._sourceImgNode.getBoundingClientRect();
-        const pageWidthPt = availableWidthPt != null ? availableWidthPt : (595.28 - 2 * PAGE_MARGIN_PT);
-        const gapPt = 12 * PX_TO_PT;
-        blocks._floatCarry = { imgBottom: imgRect.bottom, align: img._floatAlign, imageWidthPt: img.width, remainingWidthPt: Math.max(40, pageWidthPt - img.width - gapPt), gapPt };
+        blocks._floatCarry = makeFloatCarry(imgRect, img._floatAlign, img.width, availableWidthPt);
       }
     });
     nestedLists.forEach(list => {
