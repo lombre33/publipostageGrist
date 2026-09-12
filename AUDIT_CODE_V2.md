@@ -21,26 +21,27 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 
 | Catégorie | Bloquant | Important | Mineur | Cosmétique |
 |---|---|---|---|---|
-| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | **4** *(non corrigé — sujet de configuration/décision, pas un correctif de code)* | 1 | 0 |
-| Sécurité applicative (XSS / RGPD) | 0 | ~~6~~ **2** *(4 corrigés le 2026-09-12)* | 2 | 0 |
+| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | ~~4~~ **1** *(SRI + documentation des dépendances corrigés le 2026-09-12 ; reste : vendorisation `esm.sh`, décision produit)* | 1 | 0 |
+| Sécurité applicative (XSS / RGPD) | 0 | ~~6~~ **0** *(tous corrigés le 2026-09-12)* | 2 | 0 |
 | Intégrité des données (concurrence) | 0 | 2 | 0 | 0 |
 | Qualité de code (redondance, structure) | 0 | 6 | 8 | 4 |
 | Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
 | Accessibilité (RGAA) | 0 | 1 | 1 | 1 |
-| **Total** | **0** | ~~22~~ **16 restants** (6 corrigés) | **16** | **5** |
+| **Total** | **0** | ~~22~~ **11 restants** (11 corrigés) | **16** | **5** |
 
-**Corrigé le 2026-09-12** (voir détail §3.1/§3.2/§6.2) : fuite RGPD en console, XSS en-tête/pied de
-page, XSS `document.write()`, README.md créé. Nouveau module partagé
-[`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points d'entrée
-HTML non maîtrisé.
+**Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§6.2) : fuite RGPD en console, XSS en-tête/pied
+de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur les 4
+bibliothèques `cdnjs` (V1+V2), README.md créé (avec documentation des dépendances). Nouveau module
+partagé [`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points
+d'entrée HTML non maîtrisé. Vérifié sans régression sur ~90 scénarios de test + export PDF réel.
 
 **Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
 
-1. **[RSSI — voir §2, non corrigé]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`) — désormais moins critique depuis la correction des XSS ci-dessus, mais reste un sujet à documenter/discuter explicitement avec la RSSI (la mitigation passe par les Règles d'accès Grist natives, pas par le code du widget — déjà expliqué dans le nouveau README).
-2. **[RSSI — voir §2, non corrigé]** Le widget charge à l'exécution ~26 paquets JavaScript tiers depuis deux CDN publics non-souverains (`esm.sh`, `cdnjs.cloudflare.com`), sans aucune vérification d'intégrité (`integrity=`/SRI) ni hébergement local — un sujet de souveraineté numérique explicitement mentionné dans le guide Grist.Gouv (§8).
-3. **[Sécurité, non corrigé, mineur]** Noms de colonne/table interpolés sans échappement dans la modale de liaison (`v2/js/variables.js`) — peu exploitable en pratique, correctif simple disponible.
-4. **[Publication, non corrigé]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) ; `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer.
-5. **[Intégrité des données, non corrigé]** Un export PDF d'un document contenant une zone 2-colonnes avec une note de bas de page dans chaque colonne peut produire une numérotation/texte de note corrompu silencieusement.
+1. **[RSSI — voir §2.1, non corrigé]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`) — désormais moins critique depuis la correction des XSS ci-dessus, mais reste un sujet à documenter/discuter explicitement avec la RSSI (la mitigation passe par les Règles d'accès Grist natives, pas par le code du widget — déjà expliqué dans le nouveau README).
+2. **[RSSI — voir §2.2, non corrigé]** Les ~23 paquets ProseMirror/TipTap restent chargés depuis `esm.sh` sans intégrité vérifiable (limitation technique des imports ES, pas juste un oubli) — seule une vendorisation complète réglerait ce point, décision produit à part entière.
+3. **[Publication, non corrigé]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) ; `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer (le choix de licence est une décision de l'utilisateur, pas un défaut de code).
+4. **[Intégrité des données, non corrigé]** Un export PDF d'un document contenant une zone 2-colonnes avec une note de bas de page dans chaque colonne peut produire une numérotation/texte de note corrompu silencieusement.
+5. **[RSSI, non corrigé, mineur]** Le fetch automatique d'images externes à chaque export (§2.3) reste non encadré — clarification produit à faire (allowlist ou confirmation explicite).
 
 ---
 
@@ -68,9 +69,9 @@ HTML non maîtrisé.
 
 | Dépendance | Origine | Version | SRI/intégrité | Constat |
 |---|---|---|---|---|
-| `grist-plugin-api.js` | `docs.getgrist.com` (éditeur de Grist lui-même) | non-versionné (URL sans version) | Absente | Attendu et documenté — dépendance native au produit hôte. |
-| 23 paquets ProseMirror/TipTap/`@floating-ui` | `esm.sh` (CDN public tiers, infrastructure non-française) | **Toutes pinnées** (ex. `@tiptap/core@3.31.3`) — bon point | Absente | `v2/index.html` (import map), également dupliqué dans `v2/smoke-test.html`. |
-| pdfmake, html2pdf.js, JSZip | `cdnjs.cloudflare.com` (CDN public tiers) | Toutes pinnées | Absente | `v2/js/pdf-export.js:54-57`. |
+| `grist-plugin-api.js` | `docs.getgrist.com` (éditeur de Grist lui-même) | non-versionné (URL sans version) | Absente | Attendu et documenté — dépendance native au produit hôte, pas de version stable publiée par Grist à épingler. |
+| 23 paquets ProseMirror/TipTap/`@floating-ui` | `esm.sh` (CDN public tiers, infrastructure non-française) | **Toutes pinnées** (ex. `@tiptap/core@3.31.3`) — bon point | Absente — **non corrigée** (les imports ES via import map ne supportent pas `integrity` comme un `<script src>` classique ; nécessiterait une vendorisation complète, cf. suggestion 2 ci-dessous) | `v2/index.html` (import map), également dupliqué dans `v2/smoke-test.html`. |
+| pdfmake, `vfs_fonts`, html2pdf.js, JSZip | `cdnjs.cloudflare.com` (CDN public tiers) | Toutes pinnées | ✅ **Ajoutée le 2026-09-12** (hash `sha384-...` calculé directement sur chaque fichier réellement servi pour la version épinglée) | `v2/js/pdf-export.js` (chargement paresseux) et `index.html` racine (V1, chargement statique — fichiers partagés) ; vérifié : les 4 bibliothèques se chargent toujours correctement (V1 et V2) après ajout des hashes. |
 
 **Pourquoi c'est un « très gros point » pour une RSSI** :
 - **Aucun `integrity="sha384-..."` (Subresource Integrity)** sur aucun des scripts externes chargés — si l'un de ces CDN sert un contenu altéré (compromission du CDN, attaque de la chaîne d'approvisionnement, faille côté cdnjs/esm.sh déjà documentées publiquement par le passé pour d'autres projets), le navigateur exécute le contenu servi sans aucune vérification, avec le même niveau d'accès `'full'` au document Grist décrit en §2.1.
@@ -78,11 +79,11 @@ HTML non maîtrisé.
 - **Absence de SBOM** (Software Bill of Materials) : aucun inventaire formel des dépendances tierces (versions, licences) n'existe dans le dépôt — les versions sont éparpillées dans les URLs de l'import map, pas dans un fichier dédié facilement audité par un outil de Software Composition Analysis (SCA).
 
 **Suggestions, par ordre d'effort croissant** :
-1. **Immédiat, faible coût** : ajouter les attributs `integrity`/`crossorigin` sur les scripts CDN de `pdf-export.js` (cdnjs publie déjà des hashes SRI officiels pour ces bibliothèques) — ne couvre pas l'import map `esm.sh` (les imports ES ne supportent pas nativement `integrity` de la même façon), mais réduit déjà une partie du risque.
-2. **Moyen terme** : auto-héberger (vendoriser) les bibliothèques critiques (ProseMirror/TipTap, pdfmake, JSZip) dans le dépôt lui-même plutôt que de dépendre d'un CDN à l'exécution — supprime la dépendance réseau ET le risque de chaîne d'approvisionnement pour ces paquets, au prix d'une mise à jour manuelle des versions (au lieu d'automatique via CDN).
-3. **Documentation minimale immédiate** : lister ces dépendances (nom, version, CDN d'origine, licence) dans un fichier dédié (ex. `DEPENDENCIES.md` ou section du futur README) — même sans les vendoriser, ceci répond au minimum à l'exigence d'audit/traçabilité qu'une RSSI demandera.
+1. ~~**Immédiat, faible coût** : ajouter les attributs `integrity`/`crossorigin` sur les scripts CDN de `pdf-export.js`~~ — **fait le 2026-09-12** pour les 4 bibliothèques `cdnjs` (V1 et V2).
+2. **Moyen terme, non fait** : auto-héberger (vendoriser) les bibliothèques critiques (ProseMirror/TipTap sur `esm.sh`, dont SRI ne peut pas protéger via l'import map) dans le dépôt lui-même plutôt que de dépendre d'un CDN à l'exécution — supprime la dépendance réseau ET le risque de chaîne d'approvisionnement pour ces paquets, au prix d'une mise à jour manuelle des versions (au lieu d'automatique via CDN).
+3. ~~**Documentation minimale immédiate**~~ — **fait le 2026-09-12** : dépendances listées dans le README (section Dépendances), avec origine CDN et usage de chacune.
 
-**Priorité : Important** (points 1 et 3) **/ Mineur-mais-structurant** (point 2, vendorisation complète — décision produit à prendre avec l'équipe, hors du périmètre d'un simple correctif).
+**Priorité restante : Mineur-mais-structurant** (point 2, vendorisation d'`esm.sh` — décision produit à prendre avec l'équipe, hors du périmètre d'un simple correctif ; les points 1 et 3, les plus critiques pour un audit RSSI immédiat, sont traités).
 
 ### 2.3 Fuite de données vers des tiers non maîtrisés
 
@@ -131,7 +132,7 @@ correctif.
 | `v2/js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | En-tête/pied de page injecté via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur du document Grist pouvait y placer un payload s'exécutant automatiquement. | ~~Important~~ ✅ |
 | `v2/js/pdf-export.js` (mesure/rendu du gabarit principal, via `reader-mode.js` en amont) | Hôtes de mesure hors-écran injectant le gabarit via `innerHTML` sans assainissement. | ~~Important~~ ✅ |
 | `v2/js/pdf-export.js:2655-2664` (`exportViaBrowserPrint`) | `document.write(... + container.outerHTML + ...)` exécutait réellement les `<script>` du gabarit. | ~~Important~~ ✅ |
-| `v2/js/variables.js:610-613, 553-558` | Noms de colonne/table Grist interpolés sans échappement dans une modale — peu exploitable en pratique (identifiants contraints par l'UI Grist standard) mais non garanti si l'API REST est utilisée pour créer un identifiant hostile. | Important — **non corrigé dans ce lot**, à traiter séparément (fix ciblé : échapper `c`/le nom de table ou construire via `textContent`/`createElement`). |
+| `v2/js/variables.js:610-613, 553-558` | ~~Noms de colonne/table Grist interpolés sans échappement dans une modale~~ — **corrigé le 2026-09-12** : les deux constructions `<option>` passent désormais par `HtmlSanitize.clean()` avant assignation à `innerHTML`. Vérifié : neutralise une injection de test (`<script>` retiré, aucune exécution) tout en préservant à l'identique le rendu avec des colonnes réelles, y compris une colonne Référence. | ~~Important~~ ✅ |
 | `v2/js/pdf-export.js:2105-2144` (`inlineEditorImagesAsDataUri`, S3) | `fetch(src)` vers n'importe quelle URL non-`data:` présente dans le gabarit, sans validation, à chaque export. | Mineur — non corrigé, cf. §2.3. |
 
 **Point important à noter pour l'audit DINUM/RSSI** : `js/reader-mode.js` (résolution des valeurs
@@ -323,14 +324,15 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 
 ## 11. Prochaines étapes proposées
 
-**Fait le 2026-09-12** : README.md créé ; fuite RGPD console corrigée ; XSS en-tête/pied de page et
-`document.write()` corrigés via `js/html-sanitize.js`.
+**Fait le 2026-09-12** : README.md créé ; fuite RGPD console corrigée ; XSS en-tête/pied de page,
+`document.write()` et modale de liaison entre tables corrigés via `js/html-sanitize.js` ; intégrité
+SRI ajoutée sur les 4 bibliothèques `cdnjs` (V1+V2), dépendances documentées dans le README.
 
 1. **Décider du calendrier de rattachement à l'écosystème Grist.Gouv** (Voie A ou B, cf. §8.1) — conditionne l'urgence du `SECURITY.md`/canal VDP et du renommage du dépôt.
 2. **Choisir une licence** (décision légale/organisationnelle, doctrine DINUM = permissive de préférence) pour pouvoir créer `LICENSE`.
-3. **Préparer le dossier RSSI** (§2, non corrigé) : décider d'une éventuelle réduction de la fréquence d'exposition de l'accès `'full'`, et d'une stratégie pour la chaîne d'approvisionnement (SRI immédiat sur les scripts `cdnjs`, vendorisation à plus long terme).
-4. Traiter le point XSS restant, mineur (`v2/js/variables.js`, §3.2) et le fetch d'image externe non encadré (§2.3).
-5. Une fois ces points traités : passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
+3. **Décider si une vendorisation d'`esm.sh`** (TipTap/ProseMirror) est souhaitée (§2.2, point 2) — le seul point RSSI de chaîne d'approvisionnement encore ouvert, décision produit plutôt qu'un correctif ponctuel.
+4. Le fetch d'image externe non encadré (§2.3) reste à clarifier (allowlist ou confirmation explicite) si jugé utile.
+5. Passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
 6. Prévoir séparément un audit RGAA dédié (§7) et la constitution du dossier de sécurité RGS (§9).
 
 Mise à jour du 2026-09-12 : ce rapport reflète les correctifs déjà appliqués (voir mentions "✅

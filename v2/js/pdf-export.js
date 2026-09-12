@@ -50,24 +50,33 @@ const PdfExport = (function () {
   // rien au comportement, juste QUAND ce coût est payé. Mémorisé dans une
   // promesse partagée pour ne charger qu'une seule fois par session, quel que
   // soit le nombre d'exports déclenchés ensuite.
+  // `integrity` (SRI, sha384) calculé directement sur le fichier réellement
+  // servi par cdnjs pour la version épinglée ci-dessous - si cdnjs sert un
+  // jour un contenu différent à cette même URL (CDN compromis, incident),
+  // le navigateur refuse d'exécuter le script plutôt que de l'exécuter tel
+  // quel (cf. AUDIT_CODE_V2.md §2.2). Recalculer ce hash si la version est
+  // changée : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
   const PDF_LIB_URLS = [
-    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' },
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', integrity: 'sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc' },
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
     // Chemins relatifs à v2/index.html (la page qui charge ce module), pas à
     // ce fichier lui-même - mêmes chemins que les anciennes balises <script>
-    // statiques qu'ils remplacent.
-    '../js/pdf-fonts.js?v=0.67',
-    '../js/pdf-fonts-extra.js?v=0.67',
+    // statiques qu'ils remplacent. Même origine que la page : pas de SRI
+    // nécessaire (une éventuelle compromission serait déjà celle du dépôt
+    // lui-même, que SRI ne protège pas).
+    { src: '../js/pdf-fonts.js?v=0.67' },
+    { src: '../js/pdf-fonts-extra.js?v=0.67' },
   ];
   let pdfLibsPromise = null;
-  function loadScriptOnce(src) {
+  function loadScriptOnce(lib) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = src;
+      s.src = lib.src;
+      if (lib.integrity) { s.integrity = lib.integrity; s.crossOrigin = 'anonymous'; }
       s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Échec de chargement du script : ' + src));
+      s.onerror = () => reject(new Error('Échec de chargement du script : ' + lib.src));
       document.head.appendChild(s);
     });
   }
@@ -78,7 +87,7 @@ const PdfExport = (function () {
   async function ensurePdfLibsLoaded() {
     if (!pdfLibsPromise) {
       pdfLibsPromise = (async () => {
-        for (const url of PDF_LIB_URLS) await loadScriptOnce(url);
+        for (const lib of PDF_LIB_URLS) await loadScriptOnce(lib);
       })().catch(e => { pdfLibsPromise = null; throw e; });
     }
     return pdfLibsPromise;

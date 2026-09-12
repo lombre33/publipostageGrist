@@ -609,8 +609,13 @@ const Variables = (function () {
     // qui a l'air valide mais compare deux identifiants de ligne sans rapport.
     const placeholder = `<option value="" disabled selected>${I18n.t('linkConfig.columnPlaceholder')}</option>`;
     const rowIdOption = `<option value="id">${I18n.t('linkConfig.rowId')}</option>`;
-    selectCible.innerHTML = placeholder + rowIdOption + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join('');
-    selectSource.innerHTML = placeholder + rowIdOption + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join('');
+    // HtmlSanitize.clean() en filet de sécurité : colId/nom de table viennent
+    // du schéma Grist réel, normalement déjà contraints à des identifiants
+    // valides par l'UI standard de Grist - mais rien ne le garantit si l'un
+    // d'eux est un jour créé via l'API REST Grist en contournant cette UI
+    // (cf. AUDIT_CODE_V2.md §3.2).
+    selectCible.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join(''));
+    selectSource.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join(''));
 
     // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
     // choix actif, pas un état par défaut dans lequel on tombe sans le
