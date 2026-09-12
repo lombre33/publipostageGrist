@@ -1226,7 +1226,7 @@ const PdfExport = (function () {
     }
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
     const blocks = [];
-    const indentPt = measureIndentPt(node, tag === 'LI' ? 'box' : 'text');
+    const indentPt = measureIndentPt(node, (tag === 'LI' || /^H[1-6]$/.test(tag)) ? 'box' : 'text');
     // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul
     // { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en
     // page. Marge droite = spaceWidthPt() : compense white-space:break-spaces.
@@ -1777,9 +1777,11 @@ const PdfExport = (function () {
   // pdfmake une seule fois - réutilisé par les deux appels de
   // buildNativeDocDefinition (passe de mesure jetable et passe réelle) pour
   // que la pagination calculée pendant la mesure jetable corresponde
-  // exactement au document final. La hauteur réellement rendue de chaque
-  // fragment dimensionne les marges haute/basse de page.
+  // exactement au document final. Marge haute/basse fixe (HF_MAX_ZONE_HEIGHT_PT),
+  // pas la hauteur réellement rendue - même plafond que l'éditeur (60px), pour
+  // une pagination identique quelle que soit la longueur du texte d'en-tête/pied.
   const HEADER_FOOTER_GAP_PT = 10; // espace entre le contenu en-tête/pied et le corps du document
+  const HF_MAX_ZONE_HEIGHT_PT = 60 * PX_TO_PT;
   async function buildHeaderFooterPdfChunks(headerFooterData) {
     const empty = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
     if (!headerFooterData || !headerFooterData.enabled) return empty;
@@ -1819,8 +1821,8 @@ const PdfExport = (function () {
     // varier d'une page à l'autre chez pdfmake, donc "page 1 différente" ne
     // change que le contenu - le plus grand des deux fragments dimensionne
     // la marge des deux variantes.
-    const headerHeightPt = Math.max(headerDefault.heightPt, headerFirst.heightPt);
-    const footerHeightPt = Math.max(footerDefault.heightPt, footerFirst.heightPt);
+    const headerHeightPt = (headerDefault.content || headerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
+    const footerHeightPt = (footerDefault.content || footerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
     return {
       enabled: true,
       differentFirstPage,

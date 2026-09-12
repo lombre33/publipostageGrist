@@ -43,6 +43,23 @@
   });
 
   cases.push({
+    id: 'pagebreak_editor_gap_reserves_full_remaining_page',
+    description: 'Un saut de page forcé après peu de contenu réserve tout le reste de la page (pas juste la hauteur de la bande en-tête/pied)',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête</p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } });
+      Editor.setHTML('<p>Une seule ligne courte.</p>');
+      document.getElementById('v2-btn-page-break').click();
+      await h.sleep(200);
+      const marker = h.tiptap().querySelector('.page-break-marker');
+      const marginBottom = parseFloat(getComputedStyle(marker).marginBottom) || 0;
+      const seam = document.querySelector('.v2-page-band-footer');
+      const pass = marginBottom > 400 && !!seam;
+      return { pass, notes: 'marginBottom=' + marginBottom + ' seamFound=' + !!seam };
+    },
+  });
+
+  cases.push({
     id: 'toc_insert_and_detect_headings',
     description: 'Le sommaire détecte les titres présents dans le document',
     run: async (h) => {

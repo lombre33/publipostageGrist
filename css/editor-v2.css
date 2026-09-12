@@ -28,6 +28,10 @@
    conditions réelles). Même piège déjà rencontré ailleurs dans ce projet,
    cf. mémoire project_stacking_context_trap. */
 .tiptap { position: relative; z-index: 0; outline: none; min-height: 200px; font-size: 14px; line-height: 1.42; color: #1b2430; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
+/* .reader-content a besoin du même repère que .tiptap (left/top des images en
+   calque sont relatifs à ce conteneur) - sans lui, position:absolute remonte
+   à #reader-container et l'image atterrit au mauvais endroit. */
+.reader-content { position: relative; z-index: 0; }
 .tiptap p { margin: 0; }
 .tiptap h1, .tiptap h2, .tiptap h3,
 .tiptap h4, .tiptap h5, .tiptap h6 { margin: 0; font-weight: 700; }
@@ -331,7 +335,7 @@
    confortable" étant restée à son ancien réglage plus généreux - alignée
    ici sur ce même plafond pour qu'un en-tête typique (texte seul OU une
    image à sa taille max) remplisse la zone sans marge résiduelle visible. */
-#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; }
+#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; max-height: 60px; overflow: hidden; }
 
 /* Aperçu format A4 (case #v2-toggle-a4-preview, cf. js/main.js) : contraint
    .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
@@ -497,7 +501,7 @@
 #editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: none; }
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent, #2f6fed); font-weight: 600; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
-.v2-hf-zone-body { color: var(--text-faint, #6b7684); }
+.v2-hf-zone-body { color: var(--text-faint, #6b7684); max-height: 60px; overflow: hidden; }
 /* Cette zone n'est PAS un descendant de `.tiptap` (elle vit dans
    `.v2-page-sheet`, frère de `.tiptap` - cf. plus haut) : le contenu
    d'en-tête/pied résolu qu'on y dépose retombe donc sur la marge PAR DÉFAUT
@@ -537,7 +541,7 @@
 
 .v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 4; }
 .v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
-.v2-page-band-header, .v2-page-band-footer { padding: 8px 37.33px; }
+.v2-page-band-header, .v2-page-band-footer { padding: 8px 37.33px; max-height: 76px; overflow: hidden; box-sizing: border-box; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
 .v2-page-seam-divider { height: 0; border-top: 1px dashed #c3cad6; margin: 0 14px; }
 /* Coupure de page automatique SANS en-tête/pied configuré (retour

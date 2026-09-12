@@ -1868,13 +1868,13 @@ const Editor = (function () {
     Array.from(tiptapEl.children).forEach(child => {
       const height = child.getBoundingClientRect().height;
       if (child.classList.contains('page-break-marker')) {
-        breaks.push({ afterEl: child, forced: true });
+        breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
         lastBlock = child;
         return;
       }
       if (consumed > 0 && consumed + height > pageContentHeightPx) {
-        breaks.push({ afterEl: lastBlock, forced: false });
+        breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
         consumed = height;
       } else {
         consumed += height;
@@ -2041,10 +2041,10 @@ const Editor = (function () {
       // Écrit la feuille à chaque itération : la coupure suivante doit voir
       // l'effet des marges déjà posées avant de mesurer sa propre position.
       const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
-      marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + seamHeight + 'px; }');
+      marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + brk.remainingPx) + 'px; }');
       ensurePaginationMarginStyle().textContent = marginRules.join('\n');
       const afterRect = brk.afterEl.getBoundingClientRect();
-      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top)) + 'px';
+      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top) + brk.remainingPx) + 'px';
     });
   }
 

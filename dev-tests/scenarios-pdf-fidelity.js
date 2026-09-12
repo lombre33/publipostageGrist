@@ -68,6 +68,40 @@
   });
 
   cases.push({
+    id: 'pdffid_sibling_headings_no_cumulative_indent',
+    description: 'Plusieurs H1 de même niveau ont tous une marge gauche nulle dans le PDF (pas d\'indentation cumulative)',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<h1>Titre un</h1><p>a</p><h1>Titre deux</h1><p>b</p><h1>Titre trois</h1>');
+      const numSelect = document.getElementById('v2-heading-numbering-select');
+      numSelect.value = 'roman';
+      numSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(40);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const headings = result.content.filter(b => b && b._isHeading);
+      const pass = headings.length === 3 && headings.every(b => b.margin[0] === 0);
+      return { pass, notes: JSON.stringify(headings.map(b => ({ text: b._headingText, margin0: b.margin[0] }))) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_header_footer_fixed_height_regardless_of_content_length',
+    description: 'La marge de page réservée pour l\'en-tête est identique pour un texte court et un texte long (hauteur fixe, pas mesurée dynamiquement)',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = Editor.getHTML();
+      const shortHf = { enabled: true, differentFirstPage: false, header: { default: '<p>Court</p>', first: '' }, footer: { default: '', first: '' } };
+      const longHf = { enabled: true, differentFirstPage: false, header: { default: '<p>Ligne un</p><p>Ligne deux</p><p>Ligne trois</p><p>Ligne quatre</p>', first: '' }, footer: { default: '', first: '' } };
+      const shortResult = await h.exportPdfContent(html, shortHf);
+      const longResult = await h.exportPdfContent(html, longHf);
+      const shortTop = shortResult.docDefinition.pageMargins[1];
+      const longTop = longResult.docDefinition.pageMargins[1];
+      return { pass: shortTop === longTop && shortTop > 28, notes: JSON.stringify({ shortTop, longTop }) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_table_column_widths_proportional',
     description: 'Les largeurs de colonnes du tableau à l\'écran se retrouvent proportionnellement dans le PDF',
     run: async (h) => {
