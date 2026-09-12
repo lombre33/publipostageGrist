@@ -7,13 +7,9 @@
 // Popup : classes CSS #autocomplete-box/.ac-item/.selected (css/style.css),
 // créée dynamiquement ici plutôt que déclarée dans index.html.
 const Variables = (function () {
-  // Touche de déclenchement configurable (panneau Réglages > Touche de
-  // déclenchement, js/settings.js) - lue directement depuis localStorage
-  // (pas de dépendance de module pour une simple lecture, même choix que
-  // js/editor.js pour le préfixe affiché d'une bulle #Variable). Un seul
-  // caractère imprimable attendu (contrôlé par le <select> du panneau, pas
-  // un champ libre) - tout le reste (longueur ≠ 1, valeur absente) retombe
-  // sur '#' par défaut.
+  // Touche de déclenchement configurable (panneau Réglages), lue directement
+  // depuis localStorage. Un seul caractère attendu (contrôlé par le <select>
+  // du panneau) - tout le reste retombe sur '#' par défaut.
   function triggerChar() {
     try {
       const v = localStorage.getItem('pp_trigger_char');
@@ -24,32 +20,19 @@ const Variables = (function () {
   let acItemsBox = null;
   let currentItems = [];
   let selectedIndex = 0;
-  // Une colonne Grist ajoutée après le chargement du widget n'apparaissait
-  // jamais dans #Variable : GristAPI.refreshSchema() n'est appelé qu'une
-  // fois, à GristAPI.init(). Ce flag déclenche UN SEUL rafraîchissement par
-  // session de saisie (posé à `true` au 1er appel après l'ouverture du
-  // déclencheur #, remis à `false` à la fermeture) plutôt qu'à chaque
-  // frappe - un doc à plusieurs tables ne doit pas repayer un aller-retour
-  // Grist par caractère tapé. Partagé entre le déclencheur de l'éditeur
-  // (createExtension) et celui du champ Nom de fichier PDF
-  // (checkForFilenameTrigger) : jamais actifs en même temps (mémoire
-  // filenameInputState ci-dessous).
+  // Une colonne ajoutée après le chargement du widget n'apparaissait jamais
+  // dans #Variable (refreshSchema n'est appelé qu'une fois, à init()). Ce
+  // flag déclenche un seul rafraîchissement par session de saisie plutôt
+  // qu'à chaque frappe. Partagé entre le déclencheur de l'éditeur et celui
+  // du champ Nom de fichier PDF (jamais actifs en même temps).
   let schemaRefreshedForSession = false;
 
-  // Onglet actif du panneau `#` (éditeur uniquement - le champ "Nom de
-  // fichier PDF" n'a pas cet onglet, cf. checkForFilenameTrigger plus bas qui
-  // continue de lire directement GristAPI.getAllVariables()). Toujours
-  // 'variables' par défaut à l'ouverture (remis à cette valeur dans onExit),
-  // conformément à la demande explicite de l'utilisateur.
+  // Onglet actif du panneau `#` (l'onglet Nom de fichier PDF n'a pas cet
+  // onglet). Toujours 'variables' par défaut à l'ouverture.
   let activeTab = 'variables';
   // 4 chips fixes, jamais issues de GristAPI - `kind:'chip'` distingue ces
-  // entrées d'une #Variable dans le `command` de createExtension ci-dessous
-  // (ni ensureLinkConfigured, ni table/column, ne s'appliquent à ces items).
-  // `key` reste le texte français (jamais affiché directement pour un chip -
-  // uniquement un identifiant de repli si `i18n.js` n'était pas chargé) ;
-  // `i18nKey`, résolu à l'AFFICHAGE (cf. displayKey ci-dessous, jamais figé
-  // une fois pour toutes ici) pour rester réactif à un changement de langue
-  // en cours de session (panneau Réglages), sans recharger la page.
+  // entrées d'une #Variable. `i18nKey` est résolu à l'affichage (displayKey),
+  // pour rester réactif à un changement de langue en cours de session.
   const SMART_CHIP_ITEMS = [
     { key: 'Note de bas de page', i18nKey: 'chips.footnote', kind: 'chip', chipKind: 'footnote' },
     { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
@@ -57,11 +40,9 @@ const Variables = (function () {
     { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
   ];
   function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
-  // Dernières props reçues de @tiptap/suggestion (onStart/onUpdate) - permet
-  // de rejouer updateItems() depuis un clic sur un onglet, qui n'est PAS un
-  // évènement du plugin Suggestion et ne fournit donc pas ces props lui-même
-  // (même contrainte que latestCommand ci-dessous, qui existe déjà pour la
-  // même raison côté clavier/souris).
+  // Dernières props reçues de @tiptap/suggestion - permet de rejouer
+  // updateItems() depuis un clic sur un onglet, qui n'est pas un évènement
+  // du plugin Suggestion et ne fournit donc pas ces props lui-même.
   let latestProps = null;
 
   function ensureBox() {
@@ -80,9 +61,8 @@ const Variables = (function () {
     tabChips.textContent = I18n.t('panel.tabChips');
     tabChips.dataset.tab = 'chips';
     [tabVariables, tabChips].forEach(tab => {
-      // mousedown+preventDefault (pas click) : même précaution que .ac-item
-      // ci-dessous, évite qu'un blur du focus éditeur en cours ne perturbe
-      // quoi que ce soit avant que le changement d'onglet ne s'applique.
+      // mousedown+preventDefault (pas click) : évite qu'un blur du focus
+      // éditeur en cours ne perturbe le changement d'onglet.
       tab.addEventListener('mousedown', e => {
         e.preventDefault();
         if (activeTab === tab.dataset.tab) return;
@@ -99,19 +79,15 @@ const Variables = (function () {
     return acBox;
   }
 
-  // Source des items selon l'onglet actif - GristAPI.getAllVariables()
-  // (comportement historique, inchangé) pour 'variables', la liste fixe de
-  // chips pour 'chips'. Centralisé ici pour être appelé à la fois par
-  // l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur un
-  // onglet (même filtre par texte tapé dans les deux cas).
+  // Source des items selon l'onglet actif - centralisé pour être appelé à la
+  // fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le
+  // clic sur un onglet.
   function computeItems(query) {
     const q = (query || '').toLowerCase();
     if (activeTab === 'chips') {
-      // Note de bas de page exclue en édition d'en-tête/pied de page (cf.
-      // Editor.isEditingHeaderFooter) : cette zone est répétée sur chaque
-      // page, sans repère de page physique auquel ancrer une note - jamais
-      // découverte par le pipeline PDF (content._footnoteBlocks ne parcourt
-      // que le corps principal).
+      // Note de bas de page exclue en édition d'en-tête/pied : cette zone
+      // est répétée sur chaque page, sans repère de page physique auquel
+      // ancrer une note.
       const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
       return items.filter(v => displayKey(v).toLowerCase().includes(q));
     }
@@ -126,11 +102,9 @@ const Variables = (function () {
   function currentTabEl(tabName) {
     return acBox && acBox.querySelector('.ac-tab[data-tab="' + tabName + '"]');
   }
-  // Le champ "Nom de fichier PDF" (texte brut, cf. checkForFilenameTrigger
-  // plus bas) réutilise ce même acBox mais n'a PAS l'onglet Chips (aucun
-  // nœud ProseMirror à y insérer, hors sujet de cette feature) - masqué
-  // plutôt que retiré du DOM, pour ne pas avoir à le reconstruire à chaque
-  // ouverture.
+  // Le champ "Nom de fichier PDF" réutilise ce même acBox mais n'a pas
+  // l'onglet Chips (aucun nœud ProseMirror à y insérer) - masqué plutôt que
+  // retiré du DOM.
   function setTabsVisible(visible) {
     const tabs = ensureBox().querySelector('.ac-tabs');
     if (tabs) tabs.style.display = visible ? '' : 'none';
@@ -161,13 +135,9 @@ const Variables = (function () {
     box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
   }
 
-  // La fonction command() n'est fournie par @tiptap/suggestion QUE dans les
-  // props d'onStart/onUpdate - PAS dans celles d'onKeyDown (confirmé en
-  // conditions réelles : "TypeError: props.command is not a function" en
-  // l'utilisant directement depuis onKeyDown). On la mémorise donc à chaque
-  // onStart/onUpdate pour pouvoir la réutiliser depuis onKeyDown (Entrée) et
-  // depuis un survol/clic à la souris (render), qui n'ont pas non plus accès
-  // aux props d'onKeyDown.
+  // La fonction command() n'est fournie par @tiptap/suggestion que dans les
+  // props d'onStart/onUpdate, jamais celles d'onKeyDown - mémorisée ici pour
+  // être réutilisée depuis onKeyDown et depuis un survol/clic souris (render).
   let latestCommand = null;
 
   function updateItems(props) {
@@ -204,10 +174,9 @@ const Variables = (function () {
     };
   }
 
-  // Construit l'extension TipTap (Suggestion est un plugin ProseMirror, cf.
-  // addProseMirrorPlugins) - reçoit les classes Extension/Suggestion en
-  // paramètre plutôt que de les importer elle-même : évite un second import()
-  // dynamique redondant, editor.js les a déjà chargées au même moment.
+  // Reçoit les classes Extension/Suggestion en paramètre plutôt que de les
+  // importer elle-même : évite un second import() dynamique redondant,
+  // editor.js les a déjà chargées au même moment.
   function createExtension(Extension, Suggestion) {
     return Extension.create({
       name: 'varBadgeSuggestion',
@@ -236,41 +205,26 @@ const Variables = (function () {
             // modifie le document entre-temps.
             command: ({ editor, range, props }) => {
               // Chip (note de bas de page / date / heure / email) : jamais de
-              // colonne/table à lier, aucun besoin d'ensureLinkConfigured -
-              // insertion synchrone directe, contrairement à la branche
-              // #Variable ci-dessous. La note de bas de page ouvre en plus
-              // immédiatement son popup d'édition de texte (cf. editor.js:
-              // openFootnoteEditor), pour pouvoir taper la note tout de suite
-              // après l'avoir insérée.
+              // colonne/table à lier, insertion synchrone directe contrairement
+              // à la branche #Variable ci-dessous. La note de bas de page
+              // ouvre en plus immédiatement son popup d'édition de texte.
               if (props.kind === 'chip') {
                 if (props.chipKind === 'footnote') {
                   const id = 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                   editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id, text: '' } }).run();
-                  // Retrouve la position RÉELLE du nœud fraîchement inséré par
-                  // son id (unique, généré juste au-dessus) plutôt que de
-                  // faire confiance à `range.from` après coup - `range` est
-                  // une position ProseMirror capturée AVANT la transaction ;
-                  // en théorie stable après une transaction qui remplace
-                  // exactement ce range (cf. commentaire plus haut), mais un
-                  // utilisateur a signalé la note bien insérée SANS jamais
-                  // voir la popup d'édition s'ouvrir - jamais reproduit
-                  // localement. Ce nouveau balayage retire complètement la
-                  // dépendance suspectée (au lieu d'essayer de la corriger à
-                  // l'aveugle sans pouvoir reproduire le bug), et fonctionne
-                  // quelle que soit la correspondance exacte de `range.from`
-                  // après coup.
+                  // Retrouve la position réelle du nœud fraîchement inséré par
+                  // son id plutôt que de faire confiance à `range.from` après
+                  // coup - un utilisateur a signalé la note insérée sans que
+                  // la popup ne s'ouvre, jamais reproduit localement, ce
+                  // balayage retire la dépendance suspectée.
                   let insertedPos = null;
                   editor.state.doc.descendants((node, pos) => {
                     if (insertedPos != null) return false;
                     if (node.type.name === 'footnoteRef' && node.attrs.id === id) { insertedPos = pos; return false; }
                     return true;
                   });
-                  // `Editor` (js/editor.js, chargé APRÈS ce fichier - cf.
-                  // index.html) n'est résolu qu'à l'EXÉCUTION de ce callback
-                  // (déclenché par une frappe utilisateur, donc bien après que
-                  // tous les scripts classiques aient fini de s'exécuter), pas
-                  // à l'analyse de ce fichier - même sens de dépendance
-                  // inversé que Editor.js appelant Variables.createExtension.
+                  // `Editor` (chargé après ce fichier) n'est résolu qu'à
+                  // l'exécution de ce callback, pas à l'analyse de ce fichier.
                   if (insertedPos != null) Editor.openFootnoteEditorAt(insertedPos);
                   else console.warn('[variables] note de bas de page insérée mais introuvable ensuite (id=' + id + ') - popup non ouverte.');
                 } else {
@@ -310,12 +264,10 @@ const Variables = (function () {
     const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_]*)$'));
     if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     // Même rafraîchissement "une fois par session" que le déclencheur de
-    // l'éditeur (cf. createExtension/items ci-dessus) - déclenché dès le 1er
-    // caractère tapé après #, PAS seulement si des résultats existent déjà :
-    // sans ça, chercher une colonne toute juste ajoutée ("#" + son nom
-    // exact) ne trouverait jamais rien puisque la branche !items.length
-    // ci-dessous ferme le popup avant même d'avoir eu la chance de
-    // rafraîchir.
+    // l'éditeur, déclenché dès le 1er caractère tapé après # - sans ça,
+    // chercher une colonne toute juste ajoutée ne trouverait jamais rien
+    // puisque la branche !items.length ci-dessous fermerait le popup avant
+    // d'avoir eu la chance de rafraîchir.
     if (!schemaRefreshedForSession) {
       schemaRefreshedForSession = true;
       GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
@@ -358,9 +310,8 @@ const Variables = (function () {
     if (!el) return;
     el.addEventListener('input', () => checkForFilenameTrigger(el));
     el.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') checkForFilenameTrigger(el); });
-    // Un <input> ne passe jamais par @tiptap/suggestion (aucun onKeyDown
-    // fourni) - navigation clavier gérée ici à la main, même logique que
-    // suggestionRender() ci-dessus.
+    // Un <input> ne passe jamais par @tiptap/suggestion - navigation clavier
+    // gérée ici à la main, même logique que suggestionRender() ci-dessus.
     el.addEventListener('keydown', e => {
       if (!filenameInputState || !acBox || acBox.style.display !== 'block') return;
       if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, latestCommand); }
@@ -374,25 +325,14 @@ const Variables = (function () {
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }
 
-  // Résolution des variables (mode Lecture, cf. js/reader-mode.js qui appelle
-  // Variables.resolveVariable(varTable, varColumn, currentTableId, record)).
-  // Couvre la même table (accès direct) et les tables liées configurées
-  // (règle singleton/correspondance, cf. GristAPI.getLinkRule) - y compris
-  // leur configuration à l'insertion, cf. ensureLinkConfigured/showLinkConfigModal plus bas.
-  // `format` (optionnel) = attribut `format` du nœud varBadge (cf.
-  // js/editor.js:createVarBadgeNode), déjà désérialisé par l'appelant
-  // (ReaderMode, cf. js/reader-mode.js:parseBadgeFormat) - { type:'number',
-  // style, decimals, currency, words } ou { type:'date', preset }. Si AUCUN
-  // format explicite n'a jamais été choisi (`format` absent/`null`) ET que
-  // la colonne est un type Date/DateTime Grist natif (détecté via
-  // GristAPI.getColumnType, d'où varTable/varColumn ici), un préréglage de
-  // date par défaut s'applique quand même - sans ça, une bulle #Variable de
-  // date jamais configurée affichait la valeur brute Grist telle quelle
-  // (une chaîne "2026-09-12" ou un timestamp, illisible/confus - signalé par
-  // l'utilisateur, qui avait l'impression que la barre de formatage ne
-  // servait à rien tant qu'on n'avait pas explicitement cliqué un
-  // préréglage). Un nombre sans format explicite reste en revanche
-  // `String(val)` brut (déjà lisible tel quel, aucun changement là).
+  // Résolution des variables (mode Lecture) couvre la même table et les
+  // tables liées configurées (règle singleton/correspondance). `format`
+  // (optionnel) = attribut du nœud varBadge, déjà désérialisé par l'appelant.
+  // Si aucun format explicite n'a jamais été choisi et que la colonne est un
+  // type Date/DateTime Grist natif, un préréglage de date par défaut
+  // s'applique quand même - sans ça, une date jamais configurée affichait sa
+  // valeur brute Grist, illisible. Un nombre sans format reste en revanche
+  // `String(val)` brut.
   function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
     if (Array.isArray(val)) return val.join(', ');
@@ -408,15 +348,12 @@ const Variables = (function () {
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
-  // Trouve la LIGNE/valeur brute référencée par une #Variable (même table,
+  // Trouve la ligne/valeur brute référencée par une #Variable (même table,
   // table liée via règle singleton/correspondance, ou colonne Référence),
-  // AVANT tout formatage en texte - extrait de resolveVariable ci-dessous
-  // pour être réutilisable par resolveAttachmentIds (une colonne Attachments
-  // ne doit jamais passer par formatValue/String(val), cf. plus bas) sans
-  // dupliquer cette logique de recherche de ligne. Retourne soit
-  // { value } (valeur brute de cellule Grist, peut être null/undefined),
-  // soit { error } (message déjà formaté "[ERREUR: ...]", comportement
-  // inchangé pour resolveVariable qui le renvoie tel quel).
+  // avant tout formatage - réutilisable par resolveAttachmentIds (une
+  // colonne Attachments ne doit jamais passer par formatValue/String(val))
+  // sans dupliquer cette logique de recherche de ligne. Retourne { value }
+  // ou { error } (message déjà formaté "[ERREUR: ...]").
   async function resolveRawValueWithRule(varTable, varColumn, rule, record) {
     if (rule.mode === 'singleton') {
       const rows = await GristAPI.fetchTableRows(varTable);
@@ -439,19 +376,12 @@ const Variables = (function () {
     if (!record) return { value: null };
     if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
     if (varTable === resolvedTableId) {
-      // Cas "même table" : les 3 AUTRES branches ci-dessous (table liée/
-      // colonne Référence) lisent toutes via GristAPI.fetchTableRows/
-      // fetchRowById - une lecture brute docApi, dont l'encodage d'une
-      // colonne liste (Attachments/RefList, ex. ['L', id1, id2]) est connu
-      // et déjà exploité par unwrapRefValue ailleurs dans ce fichier. `record`
-      // ici vient en revanche de grist.onRecord (l'API "widget", pas docApi) -
-      // dont l'encodage exact d'une colonne liste n'est pas garanti identique
-      // (jamais vérifié en conditions réelles pour Attachments spécifiquement,
-      // seulement pour du texte/nombre simple). resolveAttachmentIds passe
-      // donc `opts.forceRawFetch` pour repasser par fetchRowById (même lecture
-      // garantie que les 3 autres branches) plutôt que de faire confiance à
-      // `record` tel quel - sans incidence sur resolveVariable (texte simple),
-      // qui n'active jamais cette option et garde son comportement d'origine.
+      // Les 3 autres branches lisent via fetchTableRows/fetchRowById (lecture
+      // brute docApi, encodage de liste connu). `record` ici vient de
+      // grist.onRecord (API "widget"), dont l'encodage exact d'une colonne
+      // Attachments n'est pas garanti identique - resolveAttachmentIds passe
+      // `opts.forceRawFetch` pour repasser par fetchRowById, sans incidence
+      // sur resolveVariable qui n'active jamais cette option.
       if (opts && opts.forceRawFetch && record.id != null) {
         try {
           const row = await GristAPI.fetchRowById(varTable, record.id);
@@ -483,29 +413,20 @@ const Variables = (function () {
   }
 
   // Extrait les identifiants de pièce jointe d'une colonne Attachments
-  // référencée par #Variable (cas d'usage : logo partenaire, image stockée
-  // en PJ sur une autre ligne/table) - AUPARAVANT, une telle variable passait
-  // par resolveVariable/formatValue comme n'importe quelle colonne, qui ne
-  // sait que transformer une valeur en TEXTE (`Array.isArray(val) ?
-  // val.join(', ') : String(val)`) : la valeur brute d'une cellule
-  // Attachments est une liste encodée façon Grist (['L', id1, id2, ...]),
-  // donc au mieux transformée en texte du genre "L, 5" - jamais une image,
-  // ni dans l'aperçu ni dans le PDF - signalé par l'utilisateur. Réutilise
-  // resolveRawValue (même recherche de ligne que le texte : même table,
-  // règle singleton/correspondance, colonne Référence) plutôt que
-  // formatValue, puis aplatit récursivement le résultat pour n'en garder que
-  // les nombres (les ids) - le marqueur 'L' et toute imbrication (le cas
-  // "correspondance" avec plusieurs lignes trouvées renvoie un TABLEAU de
-  // valeurs de cellule, chacune elle-même une liste encodée) disparaissent
-  // naturellement, sans code dédié à chaque forme.
+  // référencée par #Variable - la valeur brute d'une cellule Attachments est
+  // une liste encodée façon Grist (['L', id1, id2, ...]), que
+  // resolveVariable/formatValue transformerait au mieux en texte "L, 5",
+  // jamais une image. Réutilise resolveRawValue (même recherche de ligne que
+  // le texte) plutôt que formatValue, puis aplatit récursivement le résultat
+  // pour n'en garder que les nombres - le marqueur 'L' et toute imbrication
+  // disparaissent naturellement.
   function flattenToNumbers(value) {
     if (value == null) return [];
     if (Array.isArray(value)) return value.flatMap(flattenToNumbers);
     if (typeof value === 'number') return [value];
-    // Filet de sécurité : au cas où une forme différente de l'encodage liste
-    // brut (ex. objet métadonnée {id, fileName, ...}) apparaisse un jour côté
-    // lecture - jamais rencontré en conditions réelles pour l'instant, mais
-    // sans coût pour les formes déjà gérées ci-dessus.
+    // Filet de sécurité pour une forme différente de l'encodage liste brut
+    // (ex. objet métadonnée {id, fileName, ...}), jamais rencontrée en
+    // conditions réelles pour l'instant.
     if (value && typeof value === 'object' && typeof value.id === 'number') return [value.id];
     return [];
   }
@@ -618,8 +539,8 @@ const Variables = (function () {
     if (initialCible) selectCible.value = initialCible;
     if (initialSource) selectSource.value = initialSource;
     // Le cas rare ("ligne fixe") est un lien texte plutôt qu'un choix à
-    // égalité avec le cas normal (cf. mémoire project_link_config_modal_redesign)
-    // - `currentMode` remplace les radios, togglé par les 2 boutons-liens.
+    // égalité avec le cas normal - `currentMode` remplace les radios,
+    // togglé par les 2 boutons-liens.
     let currentMode = initialMode;
     function applyModeVisibility() {
       matchFields.hidden = currentMode !== 'match';
@@ -633,13 +554,9 @@ const Variables = (function () {
       if (!selectCible.value || !selectSource.value) return null;
       return { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
     }
-    // Aperçu en direct : calcule et affiche ce que la règle en cours de
-    // saisie donnerait pour la ligne Grist actuellement sélectionnée -
-    // permet de vérifier immédiatement que la correspondance est la bonne,
-    // et que "singleton" est bien statique alors que "match" varie selon la
-    // ligne courante. La classe .is-good (bulle verte) ne marque que les
-    // issues positives (correspondance trouvée) - tout le reste (attente de
-    // saisie, aucune ligne, erreur) reste neutre.
+    // Aperçu en direct : calcule ce que la règle en cours de saisie donnerait
+    // pour la ligne actuellement sélectionnée. .is-good (bulle verte) ne
+    // marque que les issues positives, le reste reste neutre.
     async function updatePreview() {
       if (!preview) return;
       preview.classList.remove('is-good');
@@ -700,12 +617,10 @@ const Variables = (function () {
       btnCancel.addEventListener('click', onCancel);
     });
   }
-  // Modèles (Templates.getCached(), déjà chargés en mémoire par main.js -
-  // aucun aller-retour Grist supplémentaire ici) dont le contenu contient au
-  // moins un badge #Variable pointant vers `tableCible` - recherche brute sur
-  // l'attribut sérialisé par createVarBadgeNode (js/editor.js), pas besoin
-  // d'un DOMParser complet pour ce seul besoin. Utilisé pour avertir avant de
-  // supprimer une règle de correspondance encore utilisée ailleurs.
+  // Modèles dont le contenu contient au moins un badge #Variable pointant
+  // vers `tableCible` - recherche brute sur l'attribut sérialisé, pas besoin
+  // d'un DOMParser complet. Utilisé pour avertir avant de supprimer une
+  // règle encore utilisée ailleurs.
   function findTemplatesUsingTable(tableCible) {
     const templates = (typeof Templates !== 'undefined' && Templates.getCached) ? Templates.getCached() : [];
     const needle = 'data-table="' + tableCible + '"';
