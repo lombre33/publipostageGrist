@@ -163,7 +163,7 @@ body { display:flex; flex-direction:column; }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
 /* Variable #Variable dont la table/colonne référencée n'existe plus (table
    supprimée, colonne supprimée/renommée depuis Grist) - posé/retiré par
-   v2/js/editor.js:refreshVariableBadgeValidity() à chaque chargement de
+   js/editor.js:refreshVariableBadgeValidity() à chaque chargement de
    modèle et à chaque mise à jour de l'éditeur (purement visuel, rien de
    persisté dans le HTML). Le message d'erreur vit dans l'attribut `title`
    natif posé par ce même code (infobulle système au survol, sans JS de

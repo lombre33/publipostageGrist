@@ -3,7 +3,7 @@
    (.var-badge, .page-break-marker, .toc-marker, .heading-numbering-config)
    sont déjà stylés dans ../css/style.css, réutilisé tel quel - ce fichier ne
    couvre que ce qui est spécifique à .tiptap (racine ProseMirror).
-   Règles scopées à .tiptap SEUL (pas #editor-container .tiptap) : v2/js/pdf-export.js
+   Règles scopées à .tiptap SEUL (pas #editor-container .tiptap) : js/pdf-export.js
    mesure le rendu réel de blocs détachés en leur donnant juste cette classe
    (cf. attachMeasureHost) - une dépendance à l'ID du conteneur éditeur les
    aurait rendues invisibles hors de la page de l'éditeur lui-même. */
@@ -18,7 +18,7 @@
    auto-hébergée, mêmes fichiers que ceux embarqués par pdfmake). */
 /* position:relative + z-index:0 : sert de conteneur de positionnement pour
    les images en calque devant/derrière le texte (position:absolute posé sur
-   leur wrapper NodeView, cf. v2/js/editor.js) - même rôle que
+   leur wrapper NodeView, cf. js/editor.js) - même rôle que
    .ql-editor{position:relative; z-index:0} en V1 (css/style.css). Le
    z-index:0 est INDISPENSABLE, pas juste cosmétique : sans lui, .tiptap ne
    crée PAS son propre contexte d'empilement (position:relative seul n'y
@@ -35,7 +35,7 @@
 .tiptap h3 { font-size: 16pt; } .tiptap h4 { font-size: 14pt; }
 .tiptap h5 { font-size: 13pt; } .tiptap h6 { font-size: 12pt; }
 .tiptap ul, .tiptap ol { margin: 0; padding-left: 1.4em; }
-/* Puces = les MÊMES caractères que l'export PDF (v2/js/pdf-export.js
+/* Puces = les MÊMES caractères que l'export PDF (js/pdf-export.js
    BULLET_MARKERS), pas le rendu natif ○/■ du navigateur (list-style-type:
    circle/square) : demandé explicitement par l'utilisateur après le
    correctif PDF précédent ('°'/'*' au lieu de '○'/'▪', seule plage de
@@ -60,7 +60,7 @@
 /* Case à cocher (extension officielle @tiptap/extension-task-list/-item) -
    3 styles au choix (retour utilisateur : garder les 3 maquettes proposées
    plutôt qu'une seule), portés par `data-tasklist-style` sur le <ul> (posé
-   par createTaskListStyleExtension, v2/js/editor.js - même schéma que
+   par createTaskListStyleExtension, js/editor.js - même schéma que
    bulletStyle/orderedListStyle ci-dessus) :
    - absent/"accentStrike" (réglage par défaut, y compris un document créé
      avant l'introduction des 3 styles) : case bleue accent + texte barré/
@@ -162,7 +162,7 @@
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 /* Pas de style particulier pour <th> (gras/fond coloré) : les tableaux
    insérés depuis la toolbar n'ont pas de ligne d'en-tête (cf.
-   v2/js/editor.js:insertTable, withHeaderRow: false) - une cellule reste
+   js/editor.js:insertTable, withHeaderRow: false) - une cellule reste
    visuellement identique à une autre quel que soit son tag HTML. */
 .tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 .tiptap table .selectedCell { background: rgba(66, 133, 244, 0.15); }
@@ -171,13 +171,13 @@
 .tiptap.resize-cursor { cursor: col-resize; }
 /* Grille (pas flex) : la largeur de la colonne gauche vient de la variable
    --layout-left (posée par la poignée de redimensionnement en édition, cf.
-   v2/js/editor.js:createTwoColumnsNodes, ou directement en style inline
+   js/editor.js:createTwoColumnsNodes, ou directement en style inline
    dans le HTML sérialisé) - la droite prend le reste, moins le gap. */
 .tiptap .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; }
 .tiptap .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 .tiptap .two-columns-column > *:first-child { margin-top: 0; }
-/* Wrapper de la NodeView (v2/js/editor.js) - position:relative sert
+/* Wrapper de la NodeView (js/editor.js) - position:relative sert
    uniquement à ancrer la poignée en absolu ; --layout-left est posée ICI
    (pas sur .two-columns-zone, son enfant) car une variable CSS personnalisée
    n'hérite que vers le bas - la poignée (sa sœur) doit aussi pouvoir la lire. */
@@ -186,7 +186,7 @@
 .tiptap .two-columns-zone-outer:hover .two-columns-resize-grip { opacity: 1; }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
-/* NodeView de l'image (v2/js/editor.js:createEditorImageNode) - structure
+/* NodeView de l'image (js/editor.js:createEditorImageNode) - structure
    DIFFÉRENTE du HTML sérialisé (qui pose position/left/top/data-align/
    data-wrap directement sur l'<img>, forme lue par pdf-export.js/reader-
    mode.js et déjà stylée par les règles globales .editor-image[data-align=…]
@@ -253,7 +253,7 @@
 .tiptap .editor-image-view.editor-image-selected { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 .tiptap .editor-image-view.editor-image-layered { cursor: default; }
 /* Placeholder d'une image liée à une #Variable de colonne Attachments (cf.
-   v2/js/editor.js:createEditorImageNode, attribut varTable) : jamais de
+   js/editor.js:createEditorImageNode, attribut varTable) : jamais de
    vraie image dans l'éditeur (aucune ligne "courante" garantie tant qu'on
    édite le modèle, même limite que #Variable en texte) - un simple encadré
    neutre + icône + libellé "#Table.Colonne" à la place, dans la même boîte
@@ -311,7 +311,7 @@
 #editor-container { position: relative; flex: 1; min-height: 0; padding: 14px; overflow: auto; background: #fff; }
 
 /* === Mode d'édition en-tête/pied de page (.hf-editing, posée par
-   v2/js/editor.js:enterHeaderFooterMode sur #editor-container) === Le contenu
+   js/editor.js:enterHeaderFooterMode sur #editor-container) === Le contenu
    affiché dans .tiptap n'est alors PLUS le document principal (échangé via
    editor.commands.setContent, cf. le plan) - cadre en pointillés accent pour
    qu'il soit impossible de croire par erreur qu'on édite encore le corps du
@@ -320,12 +320,12 @@
    zone blanche vide, ça casserait justement l'effet "on édite juste ce petit
    bout de page" recherché. Le bandeau texte fixe (::before) d'origine a été
    remplacé par une vraie pastille interactive (#v2-hf-pill, cf.
-   v2/js/editor.js:renderHfPill) - retour utilisateur : point d'entrée par
+   js/editor.js:renderHfPill) - retour utilisateur : point d'entrée par
    bouton de toolbar + sous-barre dockée jugé "pas beau", remplacé par un
    clic direct sur la marge de page (cf. .v2-hf-zone plus bas) façon Google
    Docs/Word. `min-height` réduit une seconde fois (80px → 60px) - signalé
    disproportionné par l'utilisateur une fois le plafond de taille d'image
-   lui-même réduit (HF_MAX_IMAGE_HEIGHT_PX, v2/js/editor.js, 120px → 60px) :
+   lui-même réduit (HF_MAX_IMAGE_HEIGHT_PX, js/editor.js, 120px → 60px) :
    une image tenant pile dans ce plafond se retrouvait avec un vide visible
    nettement plus grand qu'elle en dessous, la case "zone cliquable
    confortable" étant restée à son ancien réglage plus généreux - alignée
@@ -333,10 +333,10 @@
    image à sa taille max) remplisse la zone sans marge résiduelle visible. */
 #editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; }
 
-/* Aperçu format A4 (case #v2-toggle-a4-preview, cf. v2/js/main.js) : contraint
+/* Aperçu format A4 (case #v2-toggle-a4-preview, cf. js/main.js) : contraint
    .tiptap à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt
    de marge = 539.28pt, converti en px standard 96/72 = 719.04px), pour que le
-   texte se répartisse sur les lignes comme dans l'export PDF (v2/js/pdf-export.js
+   texte se répartisse sur les lignes comme dans l'export PDF (js/pdf-export.js
    utilise exactement la même largeur pour ses mesures hors-écran, cf.
    CONTENT_WIDTH_PX) - même valeurs, même rationale que la V1 (css/style.css).
    `width` = largeur TOTALE (page + marges), le `padding` simulant la marge de
@@ -353,7 +353,7 @@
    Purement visuel : ne change ni le HTML enregistré, ni aucun comportement
    de l'éditeur. */
 #editor-container.a4-preview { background: #eef1f5; }
-/* `.v2-page-sheet` (frère de nom, enfant réel - cf. v2/js/editor.js:init(),
+/* `.v2-page-sheet` (frère de nom, enfant réel - cf. js/editor.js:init(),
    qui l'enveloppe UNE SEULE FOIS autour de `.tiptap` à la création de
    l'éditeur) porte maintenant le fond/liseré "papier" au lieu de `.tiptap`
    lui-même - retour utilisateur : les zones d'en-tête/pied (cf.
@@ -394,7 +394,7 @@
    que le flux normal). En Aperçu A4, ce défilement cachait la vraie largeur
    qu'utilisera l'export PDF (qui, lui, ne défile jamais - tableFrom répartit
    TOUJOURS proportionnellement dans la largeur de page réelle, cf.
-   v2/js/pdf-export.js) : signalé par l'utilisateur comme trompeur.
+   js/pdf-export.js) : signalé par l'utilisateur comme trompeur.
    `min-width: 0 !important` supprime le plancher dans le cas courant
    (colonnes jamais redimensionnées) ; `overflow-x: hidden` (au lieu de
    `auto`) retire le défilement dans tous les cas - un recadrage visible du
@@ -403,7 +403,7 @@
    pixel-parfait qu'un CSS seul ne peut pas garantir dès qu'une colonne à
    largeur explicite et une colonne sans largeur coexistent (vérifié en
    conditions réelles - cas limite, pas la situation courante).
-   MIS À JOUR depuis `hidden` : `clampOverflowingTables` (v2/js/editor.js,
+   MIS À JOUR depuis `hidden` : `clampOverflowingTables` (js/editor.js,
    ajouté après ce correctif) empêche maintenant activement un tableau de
    dépasser réellement le conteneur dans le cas courant, rendant ce filet de
    sécurité largement redondant - et `hidden` avait un effet de bord non
@@ -423,7 +423,7 @@
 
 /* Même aperçu A4, en mode Lecture (#reader-container/.reader-content, cf.
    js/reader-mode.js) - la case #v2-toggle-a4-preview ne posait jusqu'ici la
-   classe `a4-preview` que sur #editor-container (cf. v2/js/main.js), jamais
+   classe `a4-preview` que sur #editor-container (cf. js/main.js), jamais
    sur #reader-container : le mode Lecture ignorait donc totalement l'aperçu
    A4, quel que soit l'état de la case - signalé cassé par l'utilisateur.
    Mêmes valeurs que .tiptap ci-dessus (même largeur de contenu réelle de
@@ -433,7 +433,7 @@
 #reader-container.a4-preview { background: #eef1f5; }
 #reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
-/* === Aperçu paginé réel - éditeur (incrément 2.3, cf. v2/js/editor.js:
+/* === Aperçu paginé réel - éditeur (incrément 2.3, cf. js/editor.js:
    renderPaginationOverlay) === Deux natures d'éléments, cf. le commentaire JS
    détaillé : les espaceurs de bord (`.v2-page-edge-spacer`, en flux normal,
    frères de `.tiptap`) réservent un vrai espace au tout début/toute fin du
@@ -474,7 +474,7 @@
 #editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-bottom { border-top: 1px dashed #c3cad6; }
 
 /* === Zones cliquables d'en-tête/pied de page (.v2-hf-zone, éditeur
-   uniquement - cf. v2/js/editor.js:updateHfZone/renderPaginationOverlay) ===
+   uniquement - cf. js/editor.js:updateHfZone/renderPaginationOverlay) ===
    Point d'ENTRÉE façon Google Docs/Word : une zone VIDE reste invisible au
    repos (pas de cadre blanc vide qui "pollue" une page sans en-tête/pied,
    cf. la demande initiale) et ne révèle son accroche fantôme qu'au survol ;
@@ -587,14 +587,14 @@
 
 /* Petit repère visuel (point plein en haut à droite de la bulle) quand un
    format nombre/date a été choisi via la barre flottante dédiée (cf.
-   v2/js/editor.js:wireVariableFloatingToolbar) - sans lui, rien ne
+   js/editor.js:wireVariableFloatingToolbar) - sans lui, rien ne
    distingue une bulle formatée d'une bulle par défaut tant qu'on ne l'a
    pas cliquée. `.var-badge` lui-même reste dans css/style.css (partagé
    V1), scopé ici à .tiptap pour ne toucher que l'éditeur V2. */
 .tiptap .var-badge { position: relative; }
 .tiptap .var-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
 
-/* Badge de numéro de page (v2/js/editor.js:createPageNumberBadgeNode,
+/* Badge de numéro de page (js/editor.js:createPageNumberBadgeNode,
    incrément 2.1) - même gabarit que .var-badge ci-dessus mais teinte propre
    (vert plutôt que bleu) pour rester visuellement distinct d'une bulle
    #Variable au premier coup d'œil, les deux pouvant cohabiter dans un même
@@ -603,8 +603,8 @@
    n'est qu'un espace réservé visuel du format choisi. */
 .tiptap .page-number-badge, .reader-content .page-number-badge { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 
-/* Chips intelligents (v2/js/editor.js:createSmartChipNode/createFootnoteRefNode,
-   v2/js/variables.js: onglet "Chips" du panneau #) - même palette verte que
+/* Chips intelligents (js/editor.js:createSmartChipNode/createFootnoteRefNode,
+   js/variables.js: onglet "Chips" du panneau #) - même palette verte que
    .page-number-badge ci-dessus, langage visuel déjà établi pour "valeur
    calculée, pas une #Variable". Le marqueur de note reste volontairement SANS
    pastille/fond (juste un chiffre vert en exposant, cf. compteur CSS
@@ -618,7 +618,7 @@
 .tiptap .footnote-ref-marker, .reader-content .footnote-ref-marker { counter-increment: footnote-ref; color: #146c43; font-weight: 600; cursor: pointer; }
 .tiptap .footnote-ref-marker::before, .reader-content .footnote-ref-marker::before { content: counter(footnote-ref); }
 
-/* Popup d'édition du texte d'une note (v2/js/editor.js:ensureFootnotePopupBox) -
+/* Popup d'édition du texte d'une note (js/editor.js:ensureFootnotePopupBox) -
    harmonisé avec le reste du chrome V2 (retour utilisateur : détonnait avec
    le reste de l'UI) plutôt que des couleurs/police ad hoc - mêmes jetons que
    #v2-image-var-picker ci-dessous (même famille de popup ponctuel) :
@@ -646,7 +646,7 @@
 #v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent); border-color: var(--accent); color: #fff; }
 #v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-hover); }
 
-/* Onglets du panneau `#` (v2/js/variables.js:ensureBox) - Variables (par
+/* Onglets du panneau `#` (js/variables.js:ensureBox) - Variables (par
    défaut) / Chips. #autocomplete-box lui-même reste défini dans
    css/style.css (partagé V1, qui n'a pas ces onglets) - restructuré ici en
    colonne flex (JS bascule son display en 'flex', jamais 'block', cf.
@@ -669,7 +669,7 @@
 .ac-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
-/* #v2-toolbar est imbriqué DANS #toolbar-top (cf. v2/index.html) - la règle
+/* #v2-toolbar est imbriqué DANS #toolbar-top (cf. index.html) - la règle
    générique `#toolbar-top button::before` de css/style.css (posée pour les
    boutons du bandeau partagé Nouveau/Enregistrer/etc., chacun avec son propre
    `#btn-xxx::before{mask-image:...}`) s'applique donc AUSSI par erreur ici :
@@ -679,7 +679,7 @@
    Editor.applyToolbarIcons(). Neutralisé explicitement ici (même spécificité
    que la règle partagée, mais chargé après dans la cascade). */
 #v2-toolbar button::before { content: none; }
-/* Boutons icône-seule (16px, style trait cf. v2/js/icons.js) : plus compact
+/* Boutons icône-seule (16px, style trait cf. js/icons.js) : plus compact
    et plus lisible que les glyphes texte/unicode bruts d'origine (signalé par
    l'utilisateur) - l'identification se fait via le `title` natif (tooltip au
    survol), déjà présent sur chaque bouton. */
@@ -691,7 +691,7 @@
 #v2-toolbar button svg { width: 16px; height: 16px; }
 #v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 /* État actif (ex. gras appliqué là où est le curseur) - absent jusqu'ici,
-   cf. Editor.syncToolbarState dans v2/js/editor.js. */
+   cf. Editor.syncToolbarState dans js/editor.js. */
 #v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 /* Indenter/désindenter : sans effet hors d'une liste (cf. wireToolbar), donc
    grisés plutôt que masqués quand inapplicables (Editor.syncToolbarState) -
@@ -722,7 +722,7 @@
 .v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
 /* Séparateur entre puces et numéros dans le panneau "Liste" fusionné. */
 .v2-hover-vsep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 2px; }
-/* Panneau "Liste" (v2/index.html #v2-list-flyout) restructuré en 3 lignes
+/* Panneau "Liste" (index.html #v2-list-flyout) restructuré en 3 lignes
    empilées (puces/numéros/cases à cocher) plutôt qu'une seule rangée
    horizontale séparée par des .v2-hover-vsep - demandé par l'utilisateur,
    plus lisible pour 3 groupes de 3 boutons. Le conteneur externe passe en
@@ -736,7 +736,7 @@
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 /* Bloc "Numérotation des titres" fusionné dans le flyout Titre (cf.
-   v2/index.html #v2-heading-flyout, demande utilisateur de regrouper les
+   index.html #v2-heading-flyout, demande utilisateur de regrouper les
    deux réglages) - même .v2-segmented/.v2-segmented-btn que la pastille
    en-tête/pied (cf. plus bas), pour ne pas réinventer un 2ᵉ style de
    segmenté dans ce fichier. */
@@ -744,7 +744,7 @@
 .v2-numbering-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-faint, #98a2b3); margin-bottom: 6px; }
 /* PAS de largeur forcée à 100%/flex:1 sur les boutons (essayé, puis retiré :
    "Aucune" dépassait de son bouton, forcé à la même largeur que "I.") - la
-   pastille en-tête/pied (v2/js/editor.js:renderHfPill), seul autre usage de
+   pastille en-tête/pied (js/editor.js:renderHfPill), seul autre usage de
    .v2-segmented dans ce projet, ne le fait pas non plus : chaque bouton
    garde sa largeur naturelle (`width: auto`, déjà la valeur par défaut de
    .v2-segmented-btn, cf. css/toolbar-v2.css).
@@ -782,7 +782,7 @@
 }
 /* Couleur de police / surlignage - DEUX boutons indépendants dans un même
    groupe (pas un bouton unique) : le premier (icône) applique directement la
-   DERNIÈRE couleur choisie (mémorisée par v2/js/editor.js:wireColorPickers),
+   DERNIÈRE couleur choisie (mémorisée par js/editor.js:wireColorPickers),
    le second (chevron) ouvre le menu de nuances (.v2-color-dropdown) - même
    geste que Word/Google Docs, remplace le bouton unique d'origine qui
    n'ouvrait que le menu. Pas de bordure/fond permanents (même traitement que
@@ -880,7 +880,7 @@
    voir lequel des 3 est actif). */
 .v2-floating-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); color: var(--accent, #2f6fed); }
 
-/* Panneau "Tables liées" (v2/js/variables.js) - même overlay plein écran que
+/* Panneau "Tables liées" (js/variables.js) - même overlay plein écran que
    #link-config-modal (../css/style.css, réutilisé tel quel pour son propre
    contenu : .modal-content/.link-rules-list/.link-rule-row y sont déjà
    stylés), mais un ID différent puisque ce sont deux modales DISTINCTES ici
@@ -892,12 +892,12 @@
 .link-rules-modal-content h3 { margin: 0 0 10px; font-size: 14px; }
 .link-rules-empty { font-size: 12px; color: var(--text-faint, #8a94a3); margin: 0 0 8px; }
 
-/* Galerie de templates (v2/js/main.js wireTemplateGalleryModal) - même
+/* Galerie de templates (js/main.js wireTemplateGalleryModal) - même
    overlay plein écran que #link-rules-modal ci-dessus, deux IDs distincts
    pour la même raison (deux modales séparées : mosaïque de choix vs aperçu
    d'un template précis), réutilisant .modal-content de css/style.css. */
 #template-gallery-modal, #template-preview-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
 
-/* Panneau Réglages (v2/js/settings.js) - même overlay plein écran, même
+/* Panneau Réglages (js/settings.js) - même overlay plein écran, même
    raison de le garder sur un ID distinct (encore une modale séparée). */
 #settings-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }

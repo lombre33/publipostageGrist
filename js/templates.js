@@ -66,7 +66,7 @@ const Templates = (function () {
   }
 
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la
-  // forme utilisée côté v2/js/editor.js (dupliquée plutôt qu'importée, ces
+  // forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces
   // deux fichiers ne partagent aucun mécanisme de module - même tolérance à
   // la duplication que le reste de ce projet pour ce genre de petite forme).
   function safeParseHeaderFooter(json) {

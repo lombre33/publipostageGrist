@@ -152,8 +152,8 @@ const I18n = (function () {
     'settings.credits.license': { fr: 'Licence', en: 'License' },
     'settings.credits.bio': { fr: 'Bio', en: 'Bio' },
 
-    // --- Messages de statut (v2/js/main.js:setStatus) ---
-    'status.ready': { fr: 'Widget V2 prêt.', en: 'V2 widget ready.' },
+    // --- Messages de statut (js/main.js:setStatus) ---
+    'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
     'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
     'status.newTemplateReady': { fr: 'Nouveau modèle prêt.', en: 'New template ready.' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
@@ -196,7 +196,7 @@ const I18n = (function () {
     'chips.time': { fr: 'Heure actuelle', en: 'Current time' },
     'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
 
-    // --- Modale de configuration de correspondance (v2/js/variables.js:showLinkConfigModal) ---
+    // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisissez une colonne —', en: '— Choose a column —' },
     'linkConfig.rowId': { fr: 'Identifiant de ligne', en: 'Row ID' },
     'linkConfig.reference': { fr: '{col} (Référence → {table})', en: '{col} (Reference → {table})' },
@@ -213,7 +213,7 @@ const I18n = (function () {
     'linkConfig.previewUnavailable': { fr: 'Aperçu indisponible.', en: 'Preview unavailable.' },
     'linkConfig.chooseBeforeConfirm': { fr: 'Choisissez les deux colonnes avant de valider.', en: 'Choose both columns before confirming.' },
 
-    // --- Panneau "Tables liées" (v2/js/variables.js:refreshLinkRulesPanel) ---
+    // --- Panneau "Tables liées" (js/variables.js:refreshLinkRulesPanel) ---
     'linkRules.empty': { fr: 'Aucune table liée pour l’instant.', en: 'No linked table yet.' },
     'linkRules.edit': { fr: 'Modifier', en: 'Edit' },
     'linkRules.delete': { fr: 'Supprimer', en: 'Delete' },
@@ -238,7 +238,7 @@ const I18n = (function () {
     'imgToolbar.behind': { fr: 'Derrière le texte', en: 'Behind text' },
     'imgToolbar.delete': { fr: 'Supprimer', en: 'Delete' },
 
-    // --- Toolbar flottante de tableau (v2/js/editor.js:wireTableFloatingToolbar) ---
+    // --- Toolbar flottante de tableau (js/editor.js:wireTableFloatingToolbar) ---
     'table.rowBefore': { fr: 'Ligne avant', en: 'Row before' },
     'table.rowAfter': { fr: 'Ligne après', en: 'Row after' },
     'table.rowDel': { fr: 'Supprimer la ligne', en: 'Delete row' },
@@ -252,7 +252,7 @@ const I18n = (function () {
     'image.corsWarning': { fr: 'Cette image ne pourra probablement pas être incluse dans le PDF exporté : le serveur qui l’héberge ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS). Elle continuera de s’afficher normalement ici et en mode lecture, mais l’export PDF devra l’ignorer.\n\nPour éviter ce problème, copiez l’image (Ctrl+C depuis son emplacement d’origine) puis collez-la directement ici (Ctrl+V) plutôt que d’insérer son URL : une image collée n’est jamais concernée par cette restriction.', en: 'This image probably cannot be included in the exported PDF: the server hosting it doesn’t seem to allow downloading it from this widget (CORS restriction). It will keep displaying normally here and in read mode, but the PDF export will have to skip it.\n\nTo avoid this, copy the image (Ctrl+C from its original location) then paste it directly here (Ctrl+V) instead of inserting its URL: a pasted image is never affected by this restriction.' },
     'image.urlPrompt': { fr: 'URL de l’image :', en: 'Image URL:' },
 
-    // --- Picker "Image depuis une variable" (v2/js/editor.js) ---
+    // --- Picker "Image depuis une variable" (js/editor.js) ---
     'imageVarPicker.empty': { fr: 'Aucune colonne Pièce jointe trouvée dans ce document.', en: 'No attachment column found in this document.' },
 
     // --- Popup d'édition du texte d'une note de bas de page ---
@@ -279,7 +279,7 @@ const I18n = (function () {
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },
 
-    // --- Pastille flottante d'édition d'en-tête/pied (v2/js/editor.js:renderHfPill) ---
+    // --- Pastille flottante d'édition d'en-tête/pied (js/editor.js:renderHfPill) ---
     'hf.zoneHeader': { fr: 'En-tête', en: 'Header' },
     'hf.zoneFooter': { fr: 'Pied de page', en: 'Footer' },
     'hf.differentFirstPage': { fr: 'Première page différente', en: 'Different first page' },
@@ -291,7 +291,7 @@ const I18n = (function () {
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
 
-    // --- Sommaire exporté en PDF (v2/js/pdf-export.js:buildTocStack) ---
+    // --- Sommaire exporté en PDF (js/pdf-export.js:buildTocStack) ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
   };
@@ -330,7 +330,7 @@ const I18n = (function () {
 
   // Applique tout de suite (pas seulement lors d'un futur setLang) : ce
   // script est placé après tout le HTML du bandeau/des modales dans
-  // v2/index.html (les <script> sont en fin de <body>), donc le DOM à
+  // index.html (les <script> sont en fin de <body>), donc le DOM à
   // traduire existe déjà à ce point - un utilisateur ayant déjà choisi EN
   // lors d'une session précédente voit l'anglais dès l'ouverture, pas
   // seulement après avoir rouvert le panneau Réglages.

@@ -1,12 +1,12 @@
-// Galerie de templates (feature "Créer à partir d'un template", v2/js/main.js
+// Galerie de templates (feature "Créer à partir d'un template", js/main.js
 // wireTemplateGalleryModal) — catalogue statique versionné dans ce dépôt
-// (v2/templates-gallery/), servi par GitHub Pages en même origine que le
+// (templates-gallery/), servi par GitHub Pages en même origine que le
 // reste de l'app (aucun souci CORS, contrairement au cas des images externes
 // insérées manuellement dans un modèle).
 const TemplateGallery = (function () {
   // Les chemins d'un manifest.json (entry.html/entry.screenshot/entry.schema)
-  // sont relatifs au DOSSIER du manifeste (v2/templates-gallery/), pas à la
-  // page qui charge ce module (v2/index.html) - fetch() résolvant les URL
+  // sont relatifs au DOSSIER du manifeste (templates-gallery/), pas à la
+  // page qui charge ce module (index.html) - fetch() résolvant les URL
   // relatives par rapport à la page courante, il faut préfixer chaque chemin
   // d'entrée avec ce dossier avant de le récupérer (constaté par un test
   // réel en navigateur : un simple `fetch(entry.html)` retombait un niveau
@@ -18,7 +18,7 @@ const TemplateGallery = (function () {
 
   // {cache:'no-store'} sur le manifeste/le HTML/le schéma d'un template :
   // ce sont des fichiers de contenu (pas de ?v=X.Y comme les .js/.css de
-  // v2/index.html, cf. mémoire project_browser_cache_trap), donc rien ne
+  // index.html, cf. mémoire project_browser_cache_trap), donc rien ne
   // force autrement un navigateur/CDN GitHub Pages à en récupérer une
   // version fraîche - vécu en conditions réelles : un push corrigeant
   // template.html serait resté invisible à qui l'avait déjà chargé une fois.
@@ -36,7 +36,7 @@ const TemplateGallery = (function () {
   }
 
   // Le badge #Variable (<span class="var-badge" data-key="...">#key</span>,
-  // posé par createVarBadgeNode dans v2/js/editor.js) est entièrement retiré
+  // posé par createVarBadgeNode dans js/editor.js) est entièrement retiré
   // (pas de texte de substitution) — utilisé pour le mode "Modèle vierge" :
   // un template unique sert aux deux modes (vide / + data), pas deux
   // fichiers HTML à maintenir en double pour un même visuel (cf. plan).
@@ -94,7 +94,7 @@ const TemplateGallery = (function () {
   // Les badges #Variable d'un template "+ data" portent en dur le nom de
   // table tiré du schema.py au moment où le template a été authoré
   // (ex. data-table="Facture_Simple"). Mais la table RÉELLEMENT créée par
-  // useWithData() (v2/js/main.js) peut porter un autre nom : l'utilisateur
+  // useWithData() (js/main.js) peut porter un autre nom : l'utilisateur
   // peut le modifier dans le prompt, ou Grist peut le renommer lui-même en
   // cas de collision avec une table existante - sans ce réalignement, les
   // variables pointeraient vers une table qui n'existe pas (marquées

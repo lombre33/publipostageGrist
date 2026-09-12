@@ -2,9 +2,9 @@
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
   // Format nombre/date choisi via la barre flottante d'une bulle #Variable
-  // (v2 uniquement, cf. v2/js/editor.js:wireVariableFloatingToolbar) -
+  // (v2 uniquement, cf. js/editor.js:wireVariableFloatingToolbar) -
   // sérialisé en JSON dans data-format par le nœud varBadge
-  // (v2/js/editor.js:createVarBadgeNode). Transmis en 5e argument à
+  // (js/editor.js:createVarBadgeNode). Transmis en 5e argument à
   // Variables.resolveVariable, qui l'ignore silencieusement côté V1 (sa
   // propre resolveVariable ne déclare que 4 paramètres) - un seul point de
   // lecture ici, partagé par render()/preview() ci-dessous, qui alimentent
@@ -16,9 +16,9 @@ const ReaderMode = (function () {
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
   // === Aperçu paginé réel - mode Lecture (incrément 2.4) ===
-  // Même principe que v2/js/editor.js:renderPaginationOverlay (incrément
+  // Même principe que js/editor.js:renderPaginationOverlay (incrément
   // 2.3), dupliqué plutôt qu'importé - ce fichier est partagé V1/V2, sans
-  // mécanisme de module avec v2/js/editor.js/pdf-export.js (même tolérance à
+  // mécanisme de module avec js/editor.js/pdf-export.js (même tolérance à
   // la duplication que le reste de ce projet pour ce genre de petites
   // constantes/fonctions, cf. la numérotation des titres). Plus simple ici :
   // contenu statique déjà résolu (vrai enregistrement Grist), pas de
@@ -26,8 +26,8 @@ const ReaderMode = (function () {
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .reader-content en Aperçu A4 (css/editor-v2.css)
-  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, v2/js/pdf-export.js
-  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, v2/js/pdf-export.js
+  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, js/pdf-export.js
+  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, js/pdf-export.js
 
   function measureHtmlHeightPx(html) {
     if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
@@ -80,7 +80,7 @@ const ReaderMode = (function () {
     }));
     // Date/heure/email ont un sens en en-tête/pied (ex. « Généré le #Date à
     // #Heure ») - la note de bas de page n'y est volontairement PAS
-    // insérable (cf. v2/js/variables.js: aucun repère de page n'a de sens
+    // insérable (cf. js/variables.js: aucun repère de page n'a de sens
     // dans une zone répétée sur chaque page), donc rien à exclure ici :
     // resolveSmartChips ne trouve simplement jamais de .footnote-ref-marker
     // dans cette zone.
@@ -91,7 +91,7 @@ const ReaderMode = (function () {
   // normal - jamais de recouvrement de texte réel pour l'en-tête de la page
   // 1/le pied de la dernière page) et les bandes "couture" aux limites
   // intermédiaires (position:absolute, PEUVENT recouvrir un peu de texte
-  // pile à la limite - résidu assumé, même principe que v2/js/editor.js).
+  // pile à la limite - résidu assumé, même principe que js/editor.js).
   async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
     if (!headerFooterData || !headerFooterData.enabled) return;
     if (!container.classList.contains('a4-preview')) return;
@@ -254,7 +254,7 @@ const ReaderMode = (function () {
       return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
-  // Résout un placeholder d'image lié à une #Variable (v2/js/editor.js:
+  // Résout un placeholder d'image lié à une #Variable (js/editor.js:
   // createEditorImageNode, attributs data-var-table/data-var-column posés
   // par renderHTML quand varTable est présent) - contrairement à un badge
   // .var-badge en texte, ce nœud EST déjà un <img class="editor-image">
@@ -290,14 +290,14 @@ const ReaderMode = (function () {
       img.style.objectFit = 'contain';
     }));
   }
-  // Chips intelligents (v2/js/editor.js:createSmartChipNode) - date du jour/
+  // Chips intelligents (js/editor.js:createSmartChipNode) - date du jour/
   // heure actuelle/email utilisateur, valeurs CALCULÉES (jamais liées à une
   // colonne Grist, contrairement à .var-badge) donc résolues à chaque rendu
   // sans recherche de ligne/table liée. `.footnote-ref-marker` (note de bas
   // de page) n'a PAS besoin d'être résolu ici : son numéro vient uniquement
-  // du compteur CSS `footnote-ref` (cf. v2/css/editor-v2.css), déjà correct
+  // du compteur CSS `footnote-ref` (cf. css/editor-v2.css), déjà correct
   // à l'écran sans aucun JS - seul le TEXTE de la note doit encore être
-  // placé au bon endroit dans le PDF exporté (cf. v2/js/pdf-export.js).
+  // placé au bon endroit dans le PDF exporté (cf. js/pdf-export.js).
   function formatTodayDate() {
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
@@ -333,11 +333,11 @@ const ReaderMode = (function () {
   // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
   // (comportement historique) OU une ou plusieurs <img> si la colonne
   // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds,
-  // v2/js/variables.js) : une colonne PJ contenant une image (logo
+  // js/variables.js) : une colonne PJ contenant une image (logo
   // partenaire, etc.) affichait jusqu'ici la valeur de cellule brute passée
   // telle quelle dans formatValue (un texte du genre "L, 5", jamais l'image)
   // aussi bien en aperçu qu'à l'export PDF - signalé par l'utilisateur.
-  // `Variables.resolveAttachmentIds` n'existe que côté V2 (v2/js/variables.js) :
+  // `Variables.resolveAttachmentIds` n'existe que côté V2 (js/variables.js) :
   // ce fichier est partagé avec la V1 (js/variables.js, non modifié), d'où
   // la vérification `typeof ... === 'function'` avant d'emprunter ce chemin -
   // la V1 retombe sur le comportement texte historique, inchangé. Les <img>
@@ -362,7 +362,7 @@ const ReaderMode = (function () {
         img.dataset.source = 'attachment';
         img.dataset.attachmentId = String(id);
         // Largeur par défaut explicite (même valeur que l'insertion d'image
-        // "normale", cf. v2/js/editor.js:insertImageAtDefaultSize) : cette
+        // "normale", cf. js/editor.js:insertImageAtDefaultSize) : cette
         // image n'a jamais été redimensionnée dans l'éditeur (elle n'existe
         // qu'au moment de la résolution, jamais comme un vrai noeud éditable)
         // donc aucun style de largeur ne lui est attaché. La classe
@@ -419,7 +419,7 @@ const ReaderMode = (function () {
     if (!filenameTemplate) return 'publipostage';
     const allVars = GristAPI.getAllVariables();
     const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
-    // Touche de déclenchement configurable (V2 uniquement, cf. v2/js/settings.js) -
+    // Touche de déclenchement configurable (V2 uniquement, cf. js/settings.js) -
     // lue directement en localStorage, jamais posée par la V1 (qui n'a pas
     // ce réglage) donc toujours '#' pour elle, comportement inchangé.
     let triggerChar = '#';

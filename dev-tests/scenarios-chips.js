@@ -151,8 +151,8 @@
 
   cases.push({
     id: 'chip_footnote_survives_twocolumns_zone',
-    // BUG CONFIRMÉ ET CORRIGÉ (cf. AUDIT_CODE_V2.md §4) : buildPdfContentFromRoot
-    // (v2/js/pdf-export.js) remettait footnoteCounter/footnoteEntries à zéro à
+    // BUG CONFIRMÉ ET CORRIGÉ (cf. AUDIT_CODE.md §4) : buildPdfContentFromRoot
+    // (js/pdf-export.js) remettait footnoteCounter/footnoteEntries à zéro à
     // CHAQUE appel, y compris les appels IMBRIQUÉS déclenchés par
     // twoColumnsFrom (un par colonne) - la note de la 1ère colonne traitée
     // disparaissait silencieusement du PDF final (écrasée par la remise à

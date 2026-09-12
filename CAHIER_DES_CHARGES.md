@@ -3,9 +3,9 @@
 **Projet** : `publipostageGrist`
 **Repo GitHub** : https://github.com/lombre33/publipostageGrist
 **Hébergement** : GitHub Pages (widget custom Grist, servi en statique, sans build step)
-**Rédaction initiale** : 03/09/2026 (V1, Quill.js) — **mis à jour le 12/09/2026** pour refléter la V2 (TipTap/ProseMirror), aujourd'hui à parité fonctionnelle et au-delà de la V1.
+**Rédaction initiale** : 03/09/2026 — **mis à jour le 12/09/2026** pour refléter la réécriture TipTap/ProseMirror (ancien moteur Quill.js retiré du dépôt).
 
-> Ce document décrit l'état fonctionnel actuel du widget (V2). Pour l'installation/configuration/dépendances, voir [`README.md`](README.md). Pour l'état de l'audit qualité/sécurité, voir [`AUDIT_CODE_V2.md`](AUDIT_CODE_V2.md).
+> Ce document décrit l'état fonctionnel actuel du widget. Pour l'installation/configuration/dépendances, voir [`README.md`](README.md). Pour l'état de l'audit qualité/sécurité, voir [`AUDIT_CODE.md`](AUDIT_CODE.md).
 
 ---
 
@@ -20,7 +20,7 @@ Widget custom Grist permettant de faire du **publipostage** directement depuis u
 
 Le widget est un module front-end statique (HTML/CSS/JS), sans backend ni build step, déployé via GitHub Pages, intégré dans Grist via `grist-plugin-api.js`.
 
-**Deux versions coexistent dans ce dépôt** : la V1 (racine, Quill.js) est conservée pour compatibilité/rollback mais non maintenue activement ; la V2 (`v2/`, TipTap/ProseMirror) est la version actuelle, cible de ce document.
+Moteur d'édition : TipTap/ProseMirror.
 
 ---
 
@@ -81,36 +81,34 @@ Le widget est un module front-end statique (HTML/CSS/JS), sans backend ni build 
 
 ---
 
-## 4. Architecture technique du repo (V2)
+## 4. Architecture technique du repo
 
 ```
 publipostageGrist/
-├── index.html                    # Point d'entrée V1 (legacy)
-├── css/, js/                     # V1 (legacy) + fichiers partagés avec la V2 :
+├── index.html                    # Point d'entrée
+├── css/
+│   ├── style.css, roboto-fonts.css   # Styles partagés
+│   ├── editor-v2.css, toolbar-v2.css # Styles de l'éditeur/barre d'outils
+├── js/
 │   ├── grist-api.js              #   connexion à l'API Grist
 │   ├── templates.js              #   CRUD des modèles
 │   ├── reader-mode.js            #   résolution des variables, aperçu et entrée de tout export PDF
 │   ├── html-sanitize.js          #   assainissement HTML (retrait script/gestionnaires d'événements)
-│   └── pdf-fonts*.js             #   polices embarquées pour l'export PDF
-├── v2/
-│   ├── index.html                # Point d'entrée V2
-│   ├── css/                      # Styles propres à la V2
-│   ├── js/
-│   │   ├── editor.js             #   éditeur TipTap/ProseMirror, nœuds personnalisés, barres d'outils
-│   │   ├── pdf-export.js         #   conversion HTML → PDF vectoriel (pdfmake) + autres qualités
-│   │   ├── variables.js          #   autocomplétion #, résolution cross-table
-│   │   ├── variable-format.js    #   formatage date/nombre/nombre en lettres
-│   │   ├── heading-numbering.js  #   numérotation de titres (logique CSS partagée)
-│   │   ├── i18n.js               #   dictionnaire de traduction FR/EN
-│   │   ├── icons.js              #   icônes SVG de la barre d'outils
-│   │   ├── settings.js           #   panneau de réglages
-│   │   ├── template-gallery.js   #   galerie de modèles pré-remplis
-│   │   └── main.js               #   orchestration, câblage UI
-│   ├── templates-gallery/        # Modèles pré-remplis (HTML + schéma de table + aperçu)
-│   └── dev-tests/                # Suite de tests automatisés (~90 scénarios)
+│   ├── pdf-fonts*.js             #   polices embarquées pour l'export PDF
+│   ├── editor.js                 #   éditeur TipTap/ProseMirror, nœuds personnalisés, barres d'outils
+│   ├── pdf-export.js             #   conversion HTML → PDF vectoriel (pdfmake) + autres qualités
+│   ├── variables.js              #   autocomplétion #, résolution cross-table
+│   ├── variable-format.js        #   formatage date/nombre/nombre en lettres
+│   ├── heading-numbering.js      #   numérotation de titres (logique CSS partagée)
+│   ├── i18n.js                   #   dictionnaire de traduction FR/EN
+│   ├── icons.js                  #   icônes SVG de la barre d'outils
+│   ├── settings.js               #   panneau de réglages
+│   ├── template-gallery.js       #   galerie de modèles pré-remplis
+│   └── main.js                   #   orchestration, câblage UI
+├── templates-gallery/            # Modèles pré-remplis (HTML + schéma de table + aperçu)
+├── dev-tests/                    # Suite de tests automatisés (~90 scénarios)
 ├── README.md
-├── AUDIT_CODE_V2.md
-└── VERSIONING.md                 # Historique des versions stables (V1)
+└── AUDIT_CODE.md
 ```
 
 - Dépendances tierces chargées via CDN, versions figées, sans bundler ni étape de build — détail complet dans le [`README.md`](README.md#dépendances).
@@ -118,22 +116,22 @@ publipostageGrist/
 
 ---
 
-## 5. Décisions retenues (état actuel, V2)
+## 5. Décisions retenues (état actuel)
 
 | Sujet | Décision |
 |---|---|
-| Moteur d'édition | TipTap/ProseMirror (V2) — Quill.js conservé uniquement en V1 (legacy) |
+| Moteur d'édition | TipTap/ProseMirror |
 | Portée de l'autocomplétion `#` | Table liée au widget par défaut ; toute autre table via une règle de correspondance configurable |
 | Représentation des variables | Badge non éditable dans l'éditeur |
 | Liaison widget ↔ table | Table liée par la page Grist ; variables cross-table via règles de correspondance dédiées |
 | Stockage des modèles | Table Grist interne dédiée, créée automatiquement |
 | Export PDF | 4 qualités (vectoriel/impression navigateur/raster bas/haut), unitaire ou en lot (ZIP) |
-| Déploiement | Push direct sur `main`, GitHub Pages racine `/` (V1) et `/v2/` (V2) |
+| Déploiement | Push direct sur `main`, GitHub Pages racine `/` |
 
 ## 6. Suites possibles
 
-Pistes déjà identifiées mais non retenues à ce jour (voir aussi [`AUDIT_CODE_V2.md`](AUDIT_CODE_V2.md) pour les chantiers de qualité/sécurité en cours) :
+Pistes déjà identifiées mais non retenues à ce jour (voir aussi [`AUDIT_CODE.md`](AUDIT_CODE.md) pour les chantiers de qualité/sécurité en cours) :
 
-- Export "mailto" (scaffold présent, non branché — `v2/js/mailto-export.js`).
+- Export "mailto" (scaffold présent, non branché — `js/mailto-export.js`).
 - Auto-hébergement des dépendances TipTap/ProseMirror (actuellement chargées depuis un CDN tiers), mis en attente.
 - Réduction du niveau d'accès Grist demandé si l'API du plugin venait à proposer un niveau intermédiaire.

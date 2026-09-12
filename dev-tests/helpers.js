@@ -2,7 +2,7 @@
 // (clics réels sur les boutons de la toolbar, frappe clavier, glisser-déposer
 // de poignées) et pour intercepter l'export PDF sans jamais déclencher de
 // vrai téléchargement navigateur - même principe que dev-tests/runner.js
-// (V1), adapté à l'API de v2/js/pdf-export.js (cf. recherche préalable :
+// (V1), adapté à l'API de js/pdf-export.js (cf. recherche préalable :
 // PdfExport.getNativePdfBlobForRecord ne télécharge jamais, mais le "truc"
 // des positions pdfmake nécessite quand même d'intercepter
 // window.pdfMake.createPdf de la même façon).
@@ -206,7 +206,7 @@ window.TestHelpers = (function () {
   // dev-tests/runner.js (V1) - récupère le dernier docDefinition ET force sa
   // mise en page (getBase64) pour peupler `.positions`/`.absolutePosition`
   // sur les blocs, EXACTEMENT l'effet de bord déjà exploité par
-  // v2/js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
+  // js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
   async function exportPdfContent(html, headerFooterData) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;

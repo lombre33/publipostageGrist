@@ -1,108 +1,139 @@
-# Harnais de test de fidélité éditeur ↔ export PDF
+# Suite de tests — éditeur + export PDF vectoriel
 
-Objectif : vérifier, hors Grist (donc testable en local, cf. `feedback_testing_workflow`
-dans la mémoire du projet — seule la partie Grist-dépendante du widget ne peut pas être
-testée localement ; l'éditeur et l'export PDF, eux, le peuvent intégralement), que le
-rendu de `.ql-editor` (en mode "Aperçu format A4") et celui du PDF vectoriel natif
-(`js/pdf-export.js`, qualité "native") correspondent pixel pour pixel — position des
-images en calque, alignement du texte (gauche/centre/droite/justifié), police, taille.
+Suite de tests automatisés (façon "tests unitaires", au sens : chaque scénario
+isole une fonctionnalité précise et renvoie un verdict programmatique)
+couvrant l'éditeur (TipTap/ProseMirror) et l'export PDF **vectoriel
+uniquement** (qualité "native" — les autres qualités d'export, impression
+navigateur/basse/ultra HD, ne sont pas couvertes). Portée volontaire :
+**tout sauf la résolution de `#Variable`/pièces jointes Grist**, qui a
+besoin d'un vrai document Grist et ne peut pas être testée en local (cf.
+mémoire projet `feedback_testing_workflow`). Les chips Date/Heure/Note de
+bas de page, eux, sont testés en entier (aucun appel Grist requis).
 
-## Pourquoi ça existe
+Conçue pour être **rejouée régulièrement** (régression après une future
+modification), pas juste une fois.
 
-Plusieurs correctifs successifs (marge, interligne, ancrage au paragraphe, largeur du
-mode A4, police par défaut) ont chacun corrigé un écart réel, mais découvert au coup
-par coup sur un cas particulier. Ce harnais fait tourner une MATRICE de cas
-représentatifs à chaque fois, pour repérer les écarts D'UN COUP plutôt qu'un par un.
+## Démarrage rapide
 
-## Comment l'utiliser
-
-1. Démarrer le serveur statique local (`static-server`, port 8734 — voir
-   `.claude/launch.json`, non versionné) et ouvrir `http://localhost:8734`.
-2. Charger `scenarios.js` puis `runner.js` dans la page (ou les coller dans la console
-   du navigateur, dans CET ORDRE) :
-   ```js
-   const s1 = await fetch('/dev-tests/scenarios.js', { cache: 'no-store' }).then(r => r.text());
-   eval(s1);
-   const s2 = await fetch('/dev-tests/runner.js', { cache: 'no-store' }).then(r => r.text());
-   eval(s2);
-   ```
-   Toujours utiliser `{ cache: 'no-store' }` — le cache navigateur sur les fichiers JS
-   servis en local a produit plusieurs faux négatifs pendant le développement de ce
-   harnais (un correctif semblait ne rien changer alors que le fichier servi datait
-   d'avant le correctif).
-3. Lancer un scénario : `await FidelityHarness.run(FidelityScenarios.centered_behind)`.
-   Ça configure l'éditeur, bascule l'image en calque via le VRAI chemin UI (clic +
-   bouton toolbar, pas un raccourci interne), exporte le PDF (mêmes deux passes que
-   `pdf-export.js` en production), et renvoie `{ base64, diagnostics }` sans jamais
-   déclencher de téléchargement navigateur (`gen.download` neutralisé).
-4. Sauvegarder le PDF : passer `base64` à un script Python de décodage (voir
-   `dev-tests/save_pdf.py`) vers un fichier dans `test-output/` (jamais commité,
-   voir `.gitignore`), puis le lire (Read tool - il sait afficher un PDF) pour une
-   comparaison VISUELLE avec une capture d'écran de l'éditeur au même moment.
-5. `FidelityHarness.runAll(FidelityScenarios)` exécute toute la matrice et renvoie un
-   tableau de résultats, pour un rapport en une seule passe.
-
-## Portée volontairement limitée
-
-- Ne couvre pas les tableaux ni les zones à 2 colonnes (mise en page pdfmake
-  récursive séparée, cf. commentaires dans `pdf-export.js` — sujet distinct,
-  couvert par `formatting-fidelity.js` ci-dessous pour la MISE EN FORME, pas
-  pour l'ancrage d'image).
-- L'image externe utilisée (`https://picsum.photos/seed/publipostage-fidelity/...`)
-  sert UNIQUEMENT à vérifier que le chemin de conversion data-URI
-  (`inlineEditorImagesAsDataUri`) fonctionne avec un hôte CORS-permissif réel — ce
-  n'est pas un test de l'upload de pièce jointe Grist (connu cassé, cf. mémoire
-  `project_floating_image_position_limits`, hors périmètre : reporté en V2).
-
-## Suite de fidélité de MISE EN FORME (`formatting-fidelity.js`)
-
-Complète ce harnais (centré sur l'ancrage d'image) avec une matrice de cas
-couvrant CHAQUE format de texte (gras/italique/souligné/barré/couleur/
-surlignage/lien/exposant/indice/taille/police/titre/liste/citation/
-indentation/alignement), dans les TROIS contextes d'édition de l'app (flux
-principal Quill, colonne d'une zone 2-colonnes, cellule de tableau) —
-colonnes et cellules utilisent `document.execCommand` (pas le modèle Delta de
-Quill) et produisent donc des balises HTML différentes pour le MÊME format
-visuel que le flux principal (ex: taille "grand" → `<span class="ql-size-large">`
-en flux principal mais `<font size="5">` dans une colonne/cellule).
-
-Usage (même prérequis que ci-dessus - serveur local démarré) :
-```js
-const f = await fetch('/dev-tests/formatting-fidelity.js', { cache: 'no-store' }).then(r => r.text());
-eval(f);
-const results = await FormattingFidelity.runAll();
-results.filter(r => !r.pass);   // ne garder que les échecs
+```bash
+# Depuis la racine du dépôt
+python -m http.server 8843
 ```
-Chaque cas vérifie des PROPRIÉTÉS pdfmake précises (bold/italics/color/
-background/decoration/sup/sub/fontSize/alignment/link) sur le run ou le bloc
-correspondant — pas une comparaison visuelle. Pour une vérification visuelle
-en plus (recommandé après toute modification de `blockFrom`/`inlineRuns`/
-`tableFrom`/`twoColumnsFrom`), construire un cas combiné réaliste, générer son
-PDF (`getBase64`), le décoder (`dev-tests/save_pdf.py`-style) et le lire.
 
-## Robustesse HTML personnalisé (`custom-html-export.js`)
-
-Complète encore les deux suites ci-dessus, mais pour un cas très différent :
-l'onglet "Code HTML" (mode avancé, `js/html-source-tab.js`) permet d'exporter
-du HTML tapé À LA MAIN, qui ne suit AUCUNE convention de l'éditeur (pas de
-`.editable-table`/`<colgroup>`, pas de `.two-columns-zone`, pas de classe
-`editor-image`...). Contrairement aux deux suites précédentes, celle-ci NE
-PASSE PAS par `Editor.setHTML()` — Quill supprimerait silencieusement ce qu'il
-ne reconnaît pas avant même que `pdf-export.js` ne le voie (cf. mémoire projet,
-piège du MutationObserver de `.ql-editor`) — le HTML de chaque cas est transmis
-tel quel à `PdfExport.exportCurrentRecord`, exactement comme le fait
-`main.js:getActiveHtml()` quand cet onglet est actif.
-
-Usage (même prérequis) :
-```js
-const c = await fetch('/dev-tests/custom-html-export.js', { cache: 'no-store' }).then(r => r.text());
-eval(c);
-const results = await CustomHtmlExport.runAll();
-results.filter(r => !r.pass);
-CustomHtmlExport.runSanitizeChecks().filter(r => !r.pass);   // HtmlSourceTab.sanitizeHtml (script/style/on*/javascript:)
+```bash
+bash dev-tests/generate-harness.sh   # régénère _test-harness.html depuis index.html
 ```
-Chaque cas vérifie surtout l'ABSENCE de plantage (`error` capturée plutôt que
-propagée) et une dégradation raisonnable — pas une fidélité pixel-parfaite,
-hors de portée pour du contenu qui ne suit aucune des conventions internes de
-l'éditeur (cf. `js/pdf-export.js:fallbackTextBlock` et les `try/catch` dans
-`buildPdfContentFromRoot`/`tableFrom`/`twoColumnsFrom`).
+
+Ouvrir `http://localhost:8843/_test-harness.html` dans un navigateur,
+puis dans la console :
+
+```js
+async function loadFresh(path) { const r = await fetch(path, {cache:'no-store'}); eval(await r.text()); }
+window.EditorTestSuites = {};
+const files = [
+  'helpers', 'runner',
+  'scenarios-formatting', 'scenarios-lists', 'scenarios-tables',
+  'scenarios-twocolumns', 'scenarios-nesting', 'scenarios-images',
+  'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
+  'scenarios-pdf-fidelity',
+];
+for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
+const results = await TestRunner.runAll(EditorTestSuites);
+console.log(TestRunner.report(results));
+results.filter(r => !r.pass);   // ne garder que les échecs, avec leurs `notes` diagnostiques
+```
+
+Toujours `{ cache: 'no-store' }` en rechargeant un fichier après une
+modification — le cache navigateur sur du JS servi en local produit sinon
+de faux négatifs/positifs (piège déjà rencontré plusieurs fois ce projet,
+cf. mémoire `project_browser_cache_trap`).
+
+**Lancer un seul groupe** (plus rapide en cours de développement) :
+```js
+const r = await TestRunner.runGroup('images', EditorTestSuites.images);
+console.log(TestRunner.report(r));
+```
+
+**Lancer TOUS les groupes d'un coup** peut dépasser le budget de temps de
+certains outils d'exécution JS distants (~45s) — dans ce cas, lancer par
+lots de 2-3 groupes (voir l'historique de cette session pour l'exemple).
+
+## Pourquoi `_test-harness.html` n'est pas commité
+
+Ce fichier est une copie de `index.html` avec le script de l'API Grist
+réelle remplacé par `grist-stub.js` (cf. ce fichier pour le détail du stub —
+un `window.grist` minimal qui suffit à ce que `main.js:init()` se termine
+sans exception, avec un éditeur vide/sans modèle). Il est **régénéré à la
+demande** par `generate-harness.sh` plutôt que commité, pour ne jamais
+risquer qu'une version périmée dérive silencieusement de `index.html`
+(ex. un nouveau `<script>` ajouté à la vraie page, oublié dans une copie
+figée). Toujours relancer `generate-harness.sh` après un changement des
+balises `<script>`/`<link>` de `index.html`.
+
+## Architecture
+
+- `grist-stub.js` — `window.grist` minimal (voir ci-dessus). `js/grist-api.js`
+  n'est PAS modifié, il tourne tel quel contre ce stub.
+- `helpers.js` (`window.TestHelpers`) — pilote l'éditeur comme un VRAI
+  utilisateur : clics réels sur les boutons toolbar (avec coordonnées
+  `clientX`/`clientY` réelles quand la cible est un nœud ProseMirror
+  sélectionnable — indispensable, cf. piège documenté dans le fichier),
+  frappe clavier (`execCommand('insertText')`), glisser-déposer réel pour les
+  poignées de redimensionnement/les grips, et interception de
+  `window.pdfMake.createPdf` pour récupérer le `docDefinition` complet
+  (positions, `absolutePosition`, alignement, tailles...) sans jamais
+  déclencher de téléchargement navigateur.
+- `runner.js` (`window.TestRunner`) — exécute une liste de scénarios,
+  capture toute exception (jamais silencieusement avalée), produit un
+  rapport texte.
+- `scenarios-*.js` — un fichier par domaine fonctionnel, chacun enregistre
+  ses cas dans `window.EditorTestSuites.<nom>`.
+- `BUGS.md` — liste des anomalies RÉELLES trouvées en construisant/passant
+  cette suite (pas des échecs de harnais - ceux-là ont été corrigés au fur
+  et à mesure, cf. commentaires dans `helpers.js`), avec repro précis pour
+  vérification en conditions réelles avant correction.
+
+## Pièges de test déjà rencontrés (évités dans `helpers.js`, à connaître avant d'écrire un nouveau scénario)
+
+- **`execCommand('insertText')`/changement de sélection puis lecture
+  immédiate** : ProseMirror synchronise son propre modèle de façon
+  asynchrone après une mutation DOM "externe" (pas une de ses propres
+  transactions) - toujours attendre un court délai après (`typeText`/
+  `selectAllInEditor`/`focusAtEnd` le font déjà en interne).
+- **Cliquer un nœud atome (image, badge) sans `clientX`/`clientY`** :
+  ProseMirror résout la position cliquée via `posAtCoords()`, qui a besoin
+  de vraies coordonnées - un clic "nu" ne sélectionne rien. Toujours passer
+  par `TestHelpers.selectAtomNode(el)`.
+- **`Editor.getHTML()` (HTML sérialisé) ≠ DOM vivant** : certains attributs
+  n'existent que dans un des deux (ex. `data-type="taskItem"` présent dans
+  `getHTML()` mais absent du DOM vivant rendu par la NodeView). Toujours
+  vérifier lequel des deux un sélecteur doit cibler.
+- **En-tête/pied dans le PDF** : vivent dans `docDefinition.header`/`.footer`
+  (des FONCTIONS `(currentPage, pageCount) => contenu`), jamais dans
+  `docDefinition.content` (réservé au corps). Les appeler soi-même avec
+  `(1, 1)` pour en inspecter le contenu.
+- **Un scénario qui sélectionne un objet (image, ouvre une toolbar
+  flottante) doit laisser le temps à cet état de se stabiliser avant le
+  scénario SUIVANT** - `resetEditor()` inclut déjà un délai de 300ms et sort
+  d'un éventuel mode d'édition en-tête/pied resté actif, spécifiquement pour
+  ça.
+
+## Bugs de fond découverts en construisant/étendant cette suite
+
+- `Editor.setHTML()` ne vidait JAMAIS l'historique annuler/rétablir de TipTap
+  - **corrigé** (nouvelle extension `createClearHistoryExtension`,
+  `js/editor.js`, TipTap v3 n'exposant plus de commande `clearHistory`
+  officielle). Testé par
+  `scenarios-formatting.js:fmt_undo_history_not_cleared_by_sethtml`.
+- Une image "au cœur du texte" sans alignement gauche/droite (par défaut ou
+  centrée) était toujours repoussée en fin de texte de son paragraphe dans
+  l'export PDF, quelle que soit sa position réelle dans le document -
+  **corrigé** (l'utilisateur avait confirmé rencontrer souvent ce type de
+  souci, pas encore revérifié en conditions réelles après ce correctif
+  précis). `blockFrom` (`js/pdf-export.js`) découpe maintenant un tel
+  paragraphe en plusieurs
+  blocs pdfmake successifs respectant l'ordre réel texte/image, au lieu de
+  concaténer tout le texte puis pousser les images après. Testé par
+  `scenarios-pdf-fidelity.js:pdffid_inline_image_position_in_paragraph` - voir
+  `BUGS.md` (Bug 3) pour le détail. Non couvert : une telle image DANS une
+  cellule de tableau garde l'ancien comportement (chemin de code séparé).

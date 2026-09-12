@@ -1,6 +1,6 @@
 // Numérotation des titres — cascade de compteurs reproduite en JS, PARTAGÉE
-// entre v2/js/editor.js (aperçu vivant du sommaire dans l'éditeur) et
-// v2/js/pdf-export.js (marqueurs + sommaire du PDF). Doit produire EXACTEMENT
+// entre js/editor.js (aperçu vivant du sommaire dans l'éditeur) et
+// js/pdf-export.js (marqueurs + sommaire du PDF). Doit produire EXACTEMENT
 // le même texte que les compteurs CSS de css/editor-v2.css
 // (.tiptap[data-heading-style] > h1..h6) — jamais via
 // `getComputedStyle(h, '::before').content` : ce dernier ne renvoie que la
@@ -59,7 +59,7 @@ const HeadingNumbering = (function () {
   }
 
   // Marqueur + texte du titre en une chaîne, pour un simple aperçu texte
-  // (cf. v2/js/editor.js:Toc).
+  // (cf. js/editor.js:Toc).
   function entriesFor(headingEls, numberingStyle) {
     const markers = markersFor(headingEls, numberingStyle);
     return headingEls.map((h, i) => {

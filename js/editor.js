@@ -1,1393 +1,2541 @@
-// Éditeur Quill (snow theme) – publipostage Grist.
-// + variables #badge (v1.3.0)
-// + saut de page forcé à l’export PDF (v1.4.0)
-// + zone à 2 colonnes éditables (v1.8.0)
-// + paste sans saut de ligne parasite (v1.8.1)
-// + module image (upload PJ Grist dédiée par image, URL, resize, opacité, calque devant/derrière) (v1.10.0)
-
+// Éditeur V2 — TipTap/ProseMirror (remplace Quill).
+// Script classique (pas type="module") : TipTap/ProseMirror chargés via
+// import() dynamique dans init(), pour garder le partage de portée globale
+// avec GristAPI/Templates/ReaderMode. Les nœuds/extensions personnalisés
+// (classes TipTap disponibles seulement après cet import) sont construits
+// par des fonctions createXxx(...) plutôt que déclarés en haut de fichier.
 const Editor = (function () {
-  let quill = null;
+  let editor = null;
+  let floatingUi = null;
+  // Nécessaire pour recréer une NodeSelection après tr.setNodeMarkup()
+  // (remplace le nœud) - cf. patchNodeAndReselect.
+  let NodeSelectionClass = null;
+  let currentAlign = 'left';
+  let TextSelectionClass = null;
 
-  // Ancien système (petit/normal/grand/énorme via classes ql-size-*, et
-  // serif/monospace via ql-font-*) enregistré sous un nom Quill DISTINCT
-  // ('legacySize'/'legacyFont') plutôt que remplacé : Quill n'autorise qu'UN
-  // SEUL attributor par nom de format ('size'/'font' ci-dessous, réutilisés
-  // pour le nouveau système à tailles réelles/polices web-safe) - remplacer
-  // ces classes en place aurait fait disparaître silencieusement leur
-  // formatage sur tout modèle DÉJÀ enregistré, dès son premier rechargement
-  // (Quill ne reconnaîtrait plus la classe comme portant un format, donc ne
-  // la reporterait plus dans son modèle Delta ni à la resauvegarde). Ce
-  // second attributor, sous un nom différent, continue de reconnaître ces
-  // classes existantes (le rendu visuel ne dépend que de la classe CSS elle-
-  // même, pas du nom interne Quill qui la relie à son modèle) sans jamais
-  // être écrit par le nouveau picker.
-  //
-  // On CLONE les instances que Quill a DÉJÀ construites avec succès
-  // (formats/size, formats/font), en ne changeant que leur attrName (la clé
-  // sous laquelle Quill.register() les enregistre), plutôt que d'appeler
-  // `new` sur la classe ClassAttributor nous-mêmes : celle-ci n'est pas
-  // exposée de façon fiable via Quill.import('parchment') selon le bundle -
-  // constaté en direct ("ClassAttributor is not a constructor" avec le build
-  // CDN 1.3.6 utilisé ici). Cloner un objet déjà construit contourne
-  // totalement ce problème, quelle que soit la forme exacte de cet export.
-  function cloneAttributorAs(instance, newAttrName) {
-    const clone = Object.create(Object.getPrototypeOf(instance), Object.getOwnPropertyDescriptors(instance));
-    clone.attrName = newAttrName;
-    return clone;
+  // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur,
+  // contenu affiché échangé via setContent).
+  let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
+  let mainDocSnapshot = null;
+  function emptyHeaderFooterData() {
+    return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   }
-  Quill.register(cloneAttributorAs(Quill.import('formats/size'), 'legacySize'), true);
-  Quill.register(cloneAttributorAs(Quill.import('formats/font'), 'legacyFont'), true);
+  let headerFooterDraft = emptyHeaderFooterData();
 
-  // Nouveau système : tailles réelles (pt) et polices web-safe usuelles, l'un
-  // et l'autre via un style inline (font-size/font-family) plutôt qu'une
-  // classe - pdf-export.js lit déjà un style inline générique (inheritedStyle),
-  // aucune nouvelle table de correspondance à maintenir pour la taille ; la
-  // police, elle, doit être réellement embarquée pour l'export PDF (cf.
-  // pdf-fonts-extra.js et FONT_FAMILY_MAP dans pdf-export.js).
-  const FontSize = Quill.import('attributors/style/size');
-  FontSize.whitelist = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
-  Quill.register(FontSize, true);
-
-  const FontFamily = Quill.import('attributors/style/font');
-  FontFamily.whitelist = ['Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Calibri'];
-  Quill.register(FontFamily, true);
-
-  const Embed = Quill.import('blots/embed');
-  class VarBadgeBlot extends Embed {
-    static create(value) {
-      const node = super.create();
-      node.setAttribute('data-table', value.table);
-      node.setAttribute('data-column', value.column);
-      node.setAttribute('data-key', value.key);
-      node.setAttribute('contenteditable', 'false');
-      node.classList.add('var-badge');
-      node.textContent = '#' + value.key;
-      return node;
-    }
-    static value(node) {
-      return { table: node.getAttribute('data-table'), column: node.getAttribute('data-column'), key: node.getAttribute('data-key') };
-    }
+  // Partagé par updateAttrs/updateSelectedImage/updateSelectedBadge :
+  // setNodeMarkup() remplace le nœud, donc la NodeSelection doit être
+  // recréée explicitement dessus (sinon retombe en curseur texte).
+  function patchNodeAndReselect(ed, pos, newAttrs) {
+    const { state, view } = ed;
+    const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
+    if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
+    view.dispatch(tr);
   }
-  VarBadgeBlot.blotName = 'varbadge';
-  VarBadgeBlot.tagName = 'span';
-  VarBadgeBlot.className = 'var-badge';
-  Quill.register(VarBadgeBlot);
 
-  // --- Blot Image custom (sécurisé : accepte objet OU string src) ---
-  class ImageBlot extends Embed {
-    static create(value) {
-      const data = (value && typeof value === 'object' && !(value instanceof Node)) ? value : { src: typeof value === 'string' ? value : '' };
-      const node = super.create(data);
-      node.setAttribute('src', data.src || '');
-      node.setAttribute('alt', data.alt || 'Image');
-      node.setAttribute('contenteditable', 'false');
-      // JAMAIS "true" : aucun mode (normal/devant/derrière) n'a de fonction qui
-      // dépende du glisser HTML5 natif du navigateur - le repositionnement
-      // passe TOUJOURS par notre gestionnaire personnalisé (mousedown sur
-      // .editor-image-floating, ou sur le marqueur d'ancrage qui relaie vers
-      // lui). Si "draggable" restait vrai (que ce soit ici ou remis à "true"
-      // par Quill en reconstruisant ce noeud depuis sa valeur - undo/redo,
-      // resynchronisation...), le glisser natif reprenait la main SANS que
-      // notre gestionnaire ne s'exécute, et un dépôt natif dans une zone
-      // contenteditable insère une COPIE plutôt que de déplacer l'original -
-      // d'où la duplication observée à l'usage.
-      node.setAttribute('draggable', 'false');
-      node.dataset.source = data.source || 'url';
-      if (data.attachmentId) node.dataset.attachmentId = String(data.attachmentId);
-      if (data.column) node.dataset.column = data.column;
-      node.style.width = data.width || '320px';
-      node.style.opacity = data.opacity == null ? '1' : String(data.opacity);
-      node.dataset.wrap = data.wrap || 'inline';
-      node.dataset.layer = data.layer || 'normal';
-      node.classList.add('editor-image');
-      return node;
-    }
-    static value(node) {
-      return {
-        src: node.getAttribute('src') || '',
-        alt: node.getAttribute('alt') || '',
-        source: node.dataset.source || 'url',
-        attachmentId: node.dataset.attachmentId || '',
-        column: node.dataset.column || '',
-        width: node.style.width || '',
-        opacity: node.style.opacity || '1',
-        wrap: node.dataset.wrap || 'inline',
-        layer: node.dataset.layer || 'normal'
-      };
-    }
+  // Taille max d'une image en en-tête/pied (convention, pas une limite technique).
+  const HF_MAX_IMAGE_HEIGHT_PX = 60;
+  const HF_MAX_IMAGE_WIDTH_PX = 300;
+  function clampWidthForHfMaxSize(widthPx, naturalWidth, naturalHeight) {
+    if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
+    const maxWidthFromHeight = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
+    const maxWidthPx = Math.min(HF_MAX_IMAGE_WIDTH_PX, maxWidthFromHeight);
+    return Math.min(widthPx, maxWidthPx);
   }
-  ImageBlot.blotName = 'imagex';
-  ImageBlot.tagName = 'img';
-  ImageBlot.className = 'editor-image';
-  Quill.register(ImageBlot);
-
-  const BlockEmbed = Quill.import('blots/block/embed');
-  class PageBreakBlot extends BlockEmbed {
-    static create(value) { const node = super.create(value); node.setAttribute('contenteditable', 'false'); node.classList.add('page-break-marker'); node.dataset.type = 'page-break'; return node; }
-    static value(node) { return { type: 'pageBreak' }; }
-  }
-  PageBreakBlot.blotName = 'pagebreak'; PageBreakBlot.tagName = 'div'; PageBreakBlot.className = 'page-break-marker'; Quill.register(PageBreakBlot);
-
-  // Configuration (invisible) du style de numérotation des titres - stockée
-  // DANS le contenu lui-même (comme un bloc Quill de plus, cf. PageBreakBlot
-  // ci-dessus) plutôt que dans une colonne Grist séparée : évite toute
-  // migration de schéma sur la table des modèles, déjà existante chez
-  // l'utilisateur. `data-style` piloté par le <select> #heading-numbering-style
-  // (cf. main.js) ; jamais montré à l'utilisateur (display:none, cf.
-  // css/style.css) - un seul par document, cf. Editor.setHeadingNumberingStyle.
-  class HeadingNumberingConfigBlot extends BlockEmbed {
-    static create(value) { const node = super.create(value); node.setAttribute('contenteditable', 'false'); node.classList.add('heading-numbering-config'); node.dataset.style = (value && value.style) || 'none'; return node; }
-    static value(node) { return { style: node.dataset.style || 'none' }; }
-  }
-  HeadingNumberingConfigBlot.blotName = 'headingnumbering'; HeadingNumberingConfigBlot.tagName = 'div'; HeadingNumberingConfigBlot.className = 'heading-numbering-config'; Quill.register(HeadingNumberingConfigBlot);
-
-  // Marqueur de sommaire : simple placeholder dans l'éditeur (les numéros de
-  // page n'ont aucun sens tant que le document n'est pas mis en page par
-  // pdfmake) - remplacé par la vraie liste des titres au rendu (mode lecture,
-  // cf. reader-mode.js) et à l'export PDF (cf. pdf-export.js, résolution des
-  // pages en 2 passes comme pour l'ancrage des images en calque).
-  class TocBlot extends BlockEmbed {
-    static create(value) { const node = super.create(value); node.setAttribute('contenteditable', 'false'); node.classList.add('toc-marker'); node.innerHTML = '<span class="toc-marker-label">Sommaire (généré automatiquement à partir des titres)</span>'; return node; }
-    static value(node) { return { type: 'toc' }; }
-  }
-  TocBlot.blotName = 'toc'; TocBlot.tagName = 'div'; TocBlot.className = 'toc-marker'; Quill.register(TocBlot);
-
-  const TableBlot = Quill.import('blots/block/embed');
-  class EditableTableBlot extends TableBlot {
-    static create(value) {
-      const node = super.create(); node.classList.add('editable-table'); node.setAttribute('contenteditable', 'false');
-      let table = node.querySelector('table');
-      if (value && value.html) { node.innerHTML = value.html; table = node.querySelector('table'); }
-      if (!table) { table = document.createElement('table'); node.appendChild(table); }
-      if (!table.querySelector('tbody')) {
-        const tbody = document.createElement('tbody');
-        for (let r = 0; r < 2; r += 1) { const tr = document.createElement('tr'); for (let c = 0; c < 2; c += 1) { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; tr.appendChild(td); } tbody.appendChild(tr); }
-        table.appendChild(tbody);
-      }
-      ensureTableColumns(table); return node;
-    }
-    static value(node) { const table = node.querySelector('table'); return { html: table ? table.outerHTML : '' }; }
-  }
-  EditableTableBlot.blotName = 'editabletable'; EditableTableBlot.tagName = 'div'; EditableTableBlot.className = 'editable-table'; Quill.register(EditableTableBlot);
-
-  const TwoColumnsBlot = BlockEmbed;
-  class TwoColumnsBlotClass extends TwoColumnsBlot {
-    static create(value) { const node = super.create(); node.classList.add('two-columns-zone'); node.setAttribute('contenteditable', 'false'); const build = html => { const col = document.createElement('div'); col.className = 'two-columns-column'; col.contentEditable = 'true'; col.innerHTML = html || ''; return col; }; node.appendChild(build(value && value.cols ? value.cols[0] : '')); node.appendChild(build(value && value.cols ? value.cols[1] : '')); if (value && value.layoutLeft) node.style.setProperty('--layout-left', value.layoutLeft); ensureTwoColumnsGrip(node); return node; }
-    static value(node) { const cols = node.querySelectorAll('.two-columns-column'); const layoutLeft = node.style.getPropertyValue('--layout-left'); return { cols: [cols[0] ? cols[0].innerHTML : '', cols[1] ? cols[1].innerHTML : ''], ...(layoutLeft ? { layoutLeft } : {}) }; }
-  }
-  TwoColumnsBlotClass.blotName = 'twocolumns'; TwoColumnsBlotClass.tagName = 'div'; TwoColumnsBlotClass.className = 'two-columns-zone'; Quill.register(TwoColumnsBlotClass);
-
-  function ensureTwoColumnsGrip(zone) { if (!zone || !zone.matches || !zone.matches('.two-columns-zone')) return; let grip = zone.querySelector(':scope > .two-columns-resize-grip'); if (!grip) { grip = document.createElement('div'); grip.className = 'two-columns-resize-grip'; grip.contentEditable = 'false'; zone.appendChild(grip); } }
-  function ensureTableColumns(table) {
-    if (!table || !table.rows || !table.rows[0]) return;
-    const firstRow = table.rows[0];
-    const count = firstRow.cells.length;
-    let colgroup = table.querySelector(':scope > colgroup');
-    if (!colgroup) { colgroup = document.createElement('colgroup'); table.insertBefore(colgroup, table.firstChild); }
-    while (colgroup.children.length < count) colgroup.appendChild(document.createElement('col'));
-    while (colgroup.children.length > count) colgroup.lastElementChild.remove();
-    Array.from(colgroup.children).forEach((col, index) => { if (!col.style.width) col.style.width = `${100 / count}%`; col.dataset.index = index; });
-    // Poignée de redimensionnement de colonne (glisser la bordure droite d'une
-    // cellule d'en-tête, cf. .table-col-resize-handle dans css/style.css et le
-    // mousedown listener qui appelle resizeTableColumn) - un <span> par
-    // cellule de la 1ère ligne, recréé à chaque appel (plus simple et sans
-    // risque de doublon qu'un diff incrémental) puisque ensureTableColumns
-    // tourne déjà à chaque ajout/suppression de ligne/colonne.
-    Array.from(firstRow.cells).forEach(cell => cell.querySelectorAll(':scope > .table-col-resize-handle').forEach(h => h.remove()));
-    Array.from(firstRow.cells).forEach(cell => {
-      const handle = document.createElement('span');
-      handle.className = 'table-col-resize-handle';
-      handle.setAttribute('aria-label', 'Redimensionner la colonne');
-      handle.setAttribute('contenteditable', 'false');
-      cell.appendChild(handle);
+  function probeImageDimensions(url) {
+    return new Promise((resolve, reject) => {
+      const probe = new Image();
+      probe.onload = () => resolve({ naturalWidth: probe.naturalWidth, naturalHeight: probe.naturalHeight });
+      probe.onerror = reject;
+      probe.src = url;
     });
   }
-  function resizeTableColumn(table, index, startX) { const firstRow = table.rows[0]; const colgroup = table.querySelector(':scope > colgroup'); if (!firstRow || !colgroup || !colgroup.children[index]) return; const rect = table.getBoundingClientRect(); const widths = Array.from(colgroup.children).map(col => parseFloat(col.style.width) || 100 / firstRow.cells.length); const start = ((startX - rect.left) / rect.width) * 100; const current = widths[index]; const next = index + 1 < widths.length ? widths[index + 1] : null; const onMove = event => { const delta = ((event.clientX - startX) / rect.width) * 100; if (next !== null) { widths[index] = Math.max(5, current + delta); widths[index + 1] = Math.max(5, next - delta); } else widths[index] = Math.max(5, current + delta); widths.forEach((width, i) => { if (colgroup.children[i]) colgroup.children[i].style.width = `${width}%`; }); }; const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp, { once: true }); }
-
-  // Valeur à passer à execCommand('formatBlock', ...) pour un item du picker
-  // ql-header : ce dernier porte data-value="1".."6" (ou pas d'attribut du
-  // tout pour "Normal") - passer cette valeur BRUTE ("2") à formatBlock est
-  // invalide (attend un nom de balise comme "h2"/"p") et échoue en silence.
-  function headerExecValue(value) { return value ? 'H' + value : 'P'; }
-  // Utilitaire partagé : trouve l'ancêtre `selector` le plus proche du point de
-  // départ d'un Range (pas forcément un Element - un noeud texte n'a pas
-  // .closest, d'où la remontée au parentElement dans ce cas).
-  function rangeClosest(range, selector) {
-    const node = range.commonAncestorContainer;
-    const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-    return el && el.closest ? el.closest(selector) : null;
-  }
-  // Pour une sélection COLLAPSED (curseur seul, rien de sélectionné),
-  // execCommand ne matérialise en principe son effet qu'au moment où
-  // l'utilisateur tape RÉELLEMENT un caractère (état "en attente" interne au
-  // navigateur, pour appliquer le format à la PROCHAINE frappe) - ce
-  // mécanisme s'est avéré peu fiable ici (cellule/colonne = contenteditable
-  // imbriqué dans un autre, cf. les nombreux pièges déjà rencontrés dans ce
-  // fichier) : le format restait perdu, revenant à la police/taille par
-  // défaut, forçant l'utilisateur à sélectionner le texte après coup pour
-  // l'appliquer manuellement. Solution robuste, indépendante de cet état
-  // fragile : on insère nous-mêmes un repère de texte invisible (espace de
-  // largeur nulle) portant DÉJÀ le style demandé, et on y place le curseur
-  // JUSTE APRÈS - tout ce que l'utilisateur tape ensuite s'insère alors
-  // naturellement à l'intérieur de cet élément, héritant son style comme
-  // n'importe quel texte tapé dans un span existant.
-  function insertCollapsedFormatMarker(range, styleProps) {
-    const span = document.createElement('span');
-    Object.assign(span.style, styleProps);
-    span.appendChild(document.createTextNode('​'));
-    range.deleteContents();
-    range.insertNode(span);
-    const caret = document.createRange();
-    caret.setStart(span.firstChild, 1);
-    caret.collapse(true);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(caret);
-  }
-  // document.execCommand('fontSize', ...) n'accepte QUE les tailles legacy
-  // 1-7 (échelle HTML historique), jamais un point réel arbitraire - seul
-  // moyen d'obtenir malgré tout une taille exacte SUR UNE SÉLECTION RÉELLE :
-  // appliquer une taille legacy TEMPORAIRE bien reconnaissable (7, la plus
-  // grande - peu de risque qu'elle soit déjà utilisée ailleurs dans
-  // `container`), puis remplacer IMMÉDIATEMENT chaque <font size="7"> ainsi
-  // produit par un style inline portant la VRAIE valeur en pt - lu ensuite
-  // comme n'importe quel style inline générique par pdf-export.js
-  // (inheritedStyle), sans callback dédié. Sélection COLLAPSED : cf.
-  // insertCollapsedFormatMarker ci-dessus, plus fiable ici que le mécanisme
-  // "en attente" d'execCommand.
-  function execRealFontSize(container, range, ptValue) {
-    if (range && range.collapsed) { insertCollapsedFormatMarker(range, { fontSize: ptValue }); return; }
-    document.execCommand('fontSize', false, '7');
-    container.querySelectorAll('font[size="7"]').forEach(f => {
-      f.removeAttribute('size');
-      f.style.fontSize = ptValue;
-    });
-  }
-  // Police : execCommand('fontName', ...) accepte déjà une valeur libre sur
-  // une sélection réelle, mais souffre du même problème de fiabilité que la
-  // taille sur une sélection COLLAPSED (cf. insertCollapsedFormatMarker).
-  function execFontFamily(range, value) {
-    if (range && range.collapsed) { insertCollapsedFormatMarker(range, { fontFamily: value }); return; }
-    document.execCommand('fontName', false, value);
-  }
-  // Un clic sur un bouton de toolbar déclenche DEUX évènements distincts,
-  // 'mousedown' PUIS 'click' - Quill lie ses propres gestionnaires de format
-  // ('list'/'indent' notamment) sur 'click' (phase bulle, par défaut), pas sur
-  // 'mousedown'. preventDefault()/stopPropagation() sur 'mousedown' (ce que
-  // font installTwoColumnsToolbarIsolation et le gestionnaire de cellule)
-  // n'empêche donc PAS ce second évènement 'click' d'atteindre ensuite le
-  // gestionnaire de Quill, qui applique alors le format à SA PROPRE sélection
-  // interne périmée (le blot-conteneur de la cellule/colonne, hors du modèle
-  // Delta) - reconstruisant parfois sa structure DOM au passage (cas de
-  // 'list' : le curseur/focus se retrouve alors éjecté du module, on tape en
-  // dehors). Pour un format CARACTÈRE (gras/italique...) appliqué à une
-  // sélection interne périmée généralement VIDE, cette fuite ne produisait
-  // aucun effet visible (rien à mettre en gras) - d'où un problème resté
-  // invisible jusqu'ici, mais bien réel pour tout format de BLOC (indent,
-  // list) qui s'applique au bloc contenant le curseur, jamais collapsed.
-  // Fix : le gestionnaire 'mousedown' pose ce drapeau dès qu'il absorbe un
-  // clic (cf. handled/isFormatButton) ; ce gestionnaire 'click', posé en
-  // phase CAPTURE (donc avant le gestionnaire bulle de Quill, quel que soit
-  // l'ordre d'enregistrement), consomme le drapeau et stoppe ce second
-  // évènement avant qu'il n'atteigne Quill.
-  let suppressNextToolbarClick = false;
-  function installToolbarClickSuppression(toolbar) {
-    toolbar.addEventListener('click', function (event) {
-      if (!suppressNextToolbarClick) return;
-      suppressNextToolbarClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-    }, true);
-  }
-  function installTwoColumnsToolbarIsolation(toolbar) {
-    toolbar.addEventListener('mousedown', function (event) {
-      const target = event.target;
-      const button = target.closest && target.closest('button');
-      const pickerItem = target.closest && target.closest('.ql-picker-item');
-      const selection = document.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const range = selection.getRangeAt(0).cloneRange();
-      const column = rangeClosest(range, '.two-columns-column');
-      if (!column) return;
-      let command = null; let value = null; let handled = false; let customAction = null;
-      if (button) {
-        if (button.classList.contains('ql-bold')) { command = 'bold'; handled = true; }
-        else if (button.classList.contains('ql-italic')) { command = 'italic'; handled = true; }
-        else if (button.classList.contains('ql-underline')) { command = 'underline'; handled = true; }
-        else if (button.classList.contains('ql-strike')) { command = 'strikeThrough'; handled = true; }
-        else if (button.classList.contains('ql-list')) { command = button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList'; handled = true; }
-        else if (button.classList.contains('ql-indent')) {
-          // TOUJOURS intercepté (handled=true) dès qu'on est dans une colonne,
-          // même hors liste : sans ce garde-fou large, un clic sur ce bouton
-          // hors d'un <li> (command reste null, rien n'est exécuté ici) n'était
-          // ni préventDefault ni stoppé - l'évènement continuait sa route
-          // jusqu'au propre gestionnaire par défaut de Quill pour le format
-          // 'indent', qui l'appliquait alors à SA propre sélection interne
-          // (périmée puisque la vraie sélection vit dans cette colonne, hors
-          // du modèle Delta) - concrètement le blot-conteneur de LA ZONE
-          // entière (classe ql-indent-1 posée sur .two-columns-zone/
-          // .editable-table, décalant tout le module) plutôt que la ligne de
-          // liste visée. Confirmé par retour utilisateur avec le HTML exporté.
-          handled = true;
-          if (rangeClosest(range, 'li')) command = button.getAttribute('value') === '+1' ? 'indent' : 'outdent';
-        }
-      } else if (pickerItem) {
-        handled = true;
-        // Taille réelle (pt) : cf. execRealFontSize - execCommand('fontSize')
-        // n'accepte pas directement une valeur en pt, d'où l'action dédiée
-        // plutôt qu'un simple command/value générique.
-        if (pickerItem.closest('.ql-size')) { const v = pickerItem.getAttribute('data-value'); if (v) customAction = () => execRealFontSize(column, range, v); }
-        else if (pickerItem.closest('.ql-font')) { const v = pickerItem.getAttribute('data-value') || 'Roboto'; customAction = () => execFontFamily(range, v); }
-        else if (pickerItem.closest('.ql-header')) { command = 'formatBlock'; value = headerExecValue(pickerItem.getAttribute('data-value')); }
-      }
-      if (!handled) return;
-      event.preventDefault(); event.stopPropagation();
-      suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
-      column.focus();
-      selection.removeAllRanges(); selection.addRange(range);
-      // quill.update(SOURCE.USER) IMMÉDIATEMENT après la mutation DOM
-      // (execCommand/customAction) - cf. le même appel dans le gestionnaire de
-      // cellule de tableau plus bas. Sans lui, c'est le MutationObserver
-      // interne de Quill (asynchrone, un micro-tick plus tard - typiquement
-      // perçu par l'utilisateur comme "au relâchement du clic") qui finit par
-      // détecter seul cette mutation à l'intérieur du blot-conteneur opaque de
-      // la colonne, et RESYNCHRONISE sa sélection à ce moment-là - Quill ne
-      // sachant rien du détail interne de ce blot, il retombe alors sur "toute
-      // la plage" de ce blot plutôt que sur la sélection réelle qu'on vient de
-      // restaurer, ce qui affichait la colonne entière sélectionnée juste
-      // après le clic. Forcer la resynchronisation ICI, de façon synchrone et
-      // sous notre contrôle (juste après avoir nous-mêmes restauré la bonne
-      // sélection), l'empêche de se reproduire plus tard de façon incontrôlée.
-      if (customAction) { customAction(); quill.update(Quill.sources.USER); return; }
-      if (!command) return; // ex. "Indenter" cliqué hors liste : clic absorbé, rien à exécuter
-      document.execCommand(command, false, value);
-      quill.update(Quill.sources.USER);
-    }, true);
-  }
-  // Tab/Maj+Tab à l'intérieur d'un item de liste, en cellule de tableau ou
-  // colonne 2-colonnes : par défaut, Tab y déplace le focus vers la
-  // cellule/colonne suivante (comportement natif du navigateur pour du
-  // contenteditable, normal et voulu HORS liste) - dans une LISTE, l'usage
-  // attendu est plutôt d'indenter/désindenter la ligne, comme le fait déjà
-  // Quill nativement dans le flux principal (non touché ici, cf. garde-fou
-  // ci-dessous). Ne s'applique donc QUE si le curseur est dans un <li> ET que
-  // ce <li> vit dans une cellule/colonne.
-  function installListTabIndent() {
-    document.addEventListener('keydown', function (event) {
-      if (event.key !== 'Tab') return;
-      const selection = window.getSelection && window.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const range = selection.getRangeAt(0);
-      const li = rangeClosest(range, 'li');
-      if (!li) return;
-      const container = li.closest('.editable-table td, .editable-table th, .two-columns-column');
-      if (!container) return;
-      event.preventDefault();
-      document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
-      quill.update(Quill.sources.USER);
-    }, true);
-  }
-  // Raccourcis Ctrl/Cmd+B/I/U dans une cellule de tableau ou une colonne
-  // 2-colonnes : Quill fournit déjà ces raccourcis nativement dans le flux
-  // principal (module keyboard par défaut), mais une cellule/colonne est
-  // hors de son modèle Delta - rien n'écoutait le clavier là-bas, seul le
-  // clic sur les boutons de la toolbar fonctionnait. Posé en phase CAPTURE
-  // sur document (donc avant que l'évènement n'atteigne quill.root et son
-  // propre gestionnaire clavier) - stopPropagation obligatoire, pas seulement
-  // preventDefault (même leçon que installToolbarClickSuppression : un
-  // preventDefault seul n'empêche pas un gestionnaire tiers déjà accroché
-  // plus bas dans l'arbre de recevoir l'évènement).
-  function installFormattingShortcuts() {
-    document.addEventListener('keydown', function (event) {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      const command = key === 'b' ? 'bold' : key === 'i' ? 'italic' : key === 'u' ? 'underline' : null;
-      if (!command) return;
-      const selection = window.getSelection && window.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const range = selection.getRangeAt(0);
-      const container = rangeClosest(range, '.editable-table td, .editable-table th, .two-columns-column');
-      if (!container) return; // flux principal : laisser Quill gérer son propre raccourci
-      event.preventDefault();
-      event.stopPropagation();
-      document.execCommand(command, false, null);
-      quill.update(Quill.sources.USER);
-    }, true);
-  }
-
-  // Une image par URL externe s'AFFICHE toujours normalement dans l'éditeur/le
-  // mode lecture (un <img src="..."> cross-origin se charge et se peint très
-  // bien - le navigateur ne bloque QUE la lecture programmatique de ses
-  // octets), mais l'export PDF vectoriel (pdf-export.js:inlineEditorImagesAsDataUri)
-  // doit au contraire aller LIRE ces octets (fetch + blob) pour les intégrer
-  // en base64 à pdfmake, qui ne sait rien afficher d'autre - un serveur qui ne
-  // renvoie pas d'en-tête CORS permissif (Access-Control-Allow-Origin) fait
-  // alors échouer ce fetch, et pdf-export.js abandonne alors SILENCIEUSEMENT
-  // cette image (cf. son commentaire "on marque l'image à ignorer plutôt que
-  // de faire planter tout l'export") - découvert par l'utilisateur seulement
-  // en ouvrant le PDF généré, bien après coup. PAS contournable côté client
-  // (CORS est une protection du NAVIGATEUR contre le serveur qui héberge
-  // l'image, aucun contournement JS ne peut forcer ce serveur à répondre
-  // autrement - un vrai contournement demanderait un serveur relais/proxy,
-  // hors de portée de ce widget statique). On reproduit donc ICI, dès
-  // l'insertion, le MÊME fetch que celui que l'export PDF fera plus tard : en
-  // cas d'échec, on prévient l'utilisateur immédiatement plutôt que de le
-  // laisser découvrir l'absence de l'image après export.
-  function warnIfImageUrlNotExportable(src) {
-    if (!src || src.startsWith('data:')) return;
-    fetch(src).then(resp => {
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return resp.blob();
-    }).catch(e => {
-      console.warn('[Editor] image probablement non exportable en PDF (CORS/réseau) :', src, e);
-      alert('Attention : cette image ne pourra probablement pas être incluse dans le PDF exporté.\n\nLe serveur qui héberge cette image ne semble pas autoriser son téléchargement depuis ce widget (restriction CORS) - elle continuera de s’afficher normalement ici et en mode lecture, mais l’export PDF devra l’ignorer.\n\nPour qu’elle soit bien exportée, préférez le bouton « Image » (téléversement direct dans Grist) plutôt qu’une URL externe.');
-    });
-  }
-  // --- Insertion d'image (upload + URL) ---
-  function insertImage(value) {
-    if (!quill) return;
-    const range = quill.getSelection(true);
-    if (!range || !value || !value.src) return;
-    quill.insertEmbed(range.index, 'imagex', value, Quill.sources.USER);
-    // Force Quill à matérialiser l'embed dans le DOM AVANT tout findBlot/update interne.
-    // Sans ce update explicite, Quill peut appeler scroll.update avec un MutationRecord
-    // dont la cible (e) n'est pas encore définie -> erreur "can't access property
-    // 'readOnly', e is undefined".
-    quill.update(Quill.sources.USER);
-    if (value.source === 'url') warnIfImageUrlNotExportable(value.src);
-    // Calque "devant le texte" par défaut plutôt que "normal" (en flux) : le
-    // mode normal n'offre aucun moyen de repositionner l'image (le
-    // glisser-déposer personnalisé ne s'applique qu'aux images en calque), ce
-    // qui rendait une image fraîchement insérée immobile tant que
-    // l'utilisateur n'avait pas d'abord pensé à cliquer "Devant le texte".
-    if (!value.layer) {
-      const leaf = quill.getLeaf(range.index);
-      const node = leaf && leaf[0] && leaf[0].domNode;
-      if (node && node.tagName === 'IMG') setImageLayer(node, 'front');
-    }
-    // Repositionne la sélection après l'image au prochain tick pour éviter le même
-    // parcours findBlot sur un DOM en cours de mise à jour.
-    const newIndex = range.index + 1;
-    setTimeout(function () { if (quill) quill.setSelection(newIndex, 0, Quill.sources.SILENT); }, 0);
-  }
-
-  // Upload réel via l'API REST Grist : jeton d'accès -> POST /attachments -> colonne PJ
-  // dédiée créée sur la table des modèles -> rattachement de la pièce jointe à la ligne
-  // du modèle courant (nécessaire pour que Grist ne purge pas la pièce jointe comme
-  // "orpheline" et pour que l'utilisateur la retrouve dans son document Grist).
-  async function uploadImage(file) {
-    if (!file || !window.grist || !grist.docApi || !grist.docApi.getAccessToken) {
-      throw new Error('API Grist d’upload indisponible.');
-    }
-    const templateId = Templates.getCurrentId();
-    if (!templateId) {
-      throw new Error('Enregistrez d’abord le modèle (bouton « Enregistrer ») avant d’ajouter une image : la pièce jointe doit être rattachée à une ligne du modèle.');
-    }
-    const attachmentId = await GristAPI.uploadAttachment(file);
-    const column = await Templates.createImageColumn();
-    await Templates.attachImage(templateId, column, attachmentId);
-    const src = await GristAPI.getAttachmentDownloadUrl(attachmentId);
-    insertImage({ src, source: 'attachment', attachmentId, column, alt: file.name });
-    return { src, attachmentId, column };
-  }
-
-  // --- UI resize/drag pour les images (upload ET URL, même blot .editor-image) ---
-  let imageToolbar = null;
-  let imageHandles = null;
-
-  // IMPORTANT : ces poignées vivent dans document.body, PAS dans .ql-editor. Quill
-  // pose un MutationObserver sur .ql-editor qui reconcilie le DOM avec son modèle
-  // interne à CHAQUE mutation (pas seulement après un quill.update() explicite) et
-  // efface au microtask suivant tout nœud injecté qu'il ne reconnaît pas comme blot
-  // — impossible donc de garder des poignées posées comme enfants de l'image ou de
-  // son paragraphe, elles seraient supprimées quasi instantanément. En les sortant
-  // de .ql-editor (comme .editor-image-toolbar, qui fonctionne déjà ainsi), elles
-  // échappent totalement à cette reconciliation. Un seul jeu de 4 poignées est créé
-  // et réutilisé pour l'image actuellement sélectionnée (repositionné à chaque fois).
-  function ensureImageHandlesOverlay() {
-    if (imageHandles) return imageHandles;
-    imageHandles = {};
-    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
-      const handle = document.createElement('span');
-      handle.className = 'editor-image-handle editor-image-handle-' + corner;
-      handle.dataset.corner = corner;
-      handle.contentEditable = 'false';
-      document.body.appendChild(handle);
-      imageHandles[corner] = handle;
-    });
-    return imageHandles;
-  }
-
-  function positionImageHandles(img) {
-    const handles = ensureImageHandlesOverlay();
-    if (!img) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
-    const rect = img.getBoundingClientRect();
-    handles.nw.style.top = rect.top + 'px'; handles.nw.style.left = rect.left + 'px';
-    handles.ne.style.top = rect.top + 'px'; handles.ne.style.left = rect.right + 'px';
-    handles.sw.style.top = rect.bottom + 'px'; handles.sw.style.left = rect.left + 'px';
-    handles.se.style.top = rect.bottom + 'px'; handles.se.style.left = rect.right + 'px';
-  }
-
-  // --- Marqueur d'ancrage pour les images en calque devant/derrière le texte ---
-  // Une image "derrière le texte" devient, une fois désélectionnée, très
-  // difficile à recliquer : les paragraphes qui la recouvrent captent le clic
-  // avant elle, même là où ils n'affichent aucun texte (la boîte d'un
-  // paragraphe capte les clics sur toute sa largeur, pas seulement sur ses
-  // glyphes). Sans point d'ancrage toujours cliquable par-dessus tout, une
-  // image basculée "derrière" deviendrait donc impossible à resélectionner.
-  // Même principe que les poignées (overlay dans document.body, immunisé
-  // contre la réconciliation DOM de Quill), mais un marqueur PAR image
-  // flottante : plusieurs images peuvent être en calque simultanément.
-  const imageAnchorMarkers = new Map();
-
-  function ensureAnchorMarker(img) {
-    let marker = imageAnchorMarkers.get(img);
-    if (marker) return marker;
-    marker = document.createElement('button');
-    marker.type = 'button';
-    marker.className = 'editor-image-anchor';
-    marker.title = 'Sélectionner l’image (devant/derrière le texte)';
-    marker.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
-    marker.addEventListener('mousedown', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      quill.root.querySelectorAll('img.editor-image.editor-image-active').forEach(i => { if (i !== img) i.classList.remove('editor-image-active'); });
-      img.classList.add('editor-image-active');
-      setImageHandlesVisible(img, true);
-      showImageToolbar();
-      // Relaie vers le même geste de glisser que l'image elle-même (cf.
-      // startImageDrag) : un simple clic ne fait que sélectionner (l'image ne
-      // bouge pas si la souris ne bouge pas), mais un clic-maintenu-glissé
-      // déplace l'image "derrière le texte", exactement comme pour "devant".
-      startImageDrag(img, event.clientX, event.clientY);
-    });
-    document.body.appendChild(marker);
-    imageAnchorMarkers.set(img, marker);
-    return marker;
-  }
-
-  function removeAnchorMarker(img) {
-    const marker = imageAnchorMarkers.get(img);
-    if (marker) { marker.remove(); imageAnchorMarkers.delete(img); }
-  }
-
-  function positionAnchorMarker(img) {
-    const marker = imageAnchorMarkers.get(img);
-    if (!marker) return;
-    const rect = img.getBoundingClientRect();
-    marker.style.top = Math.round(rect.top - 7) + 'px';
-    marker.style.left = Math.round(rect.left - 7) + 'px';
-  }
-
-  // Recalcule l'ensemble des marqueurs : crée ceux manquants pour les images
-  // actuellement en calque, retire ceux dont l'image a été supprimée ou est
-  // revenue en flux normal.
-  function refreshImageAnchorMarkers() {
-    if (!quill) return;
-    const floating = new Set(quill.root.querySelectorAll('.editor-image-floating'));
-    for (const img of Array.from(imageAnchorMarkers.keys())) {
-      if (!floating.has(img)) removeAnchorMarker(img);
-    }
-    floating.forEach(img => { ensureAnchorMarker(img); positionAnchorMarker(img); });
-  }
-
-  // Remplace le contenu de chaque placeholder .toc-marker par un APERÇU en
-  // direct de la vraie liste des titres - numérotée exactement comme dans le
-  // document (même compteur CSS ::before, mesuré ici sur quill.root lui-même,
-  // DÉJÀ attaché à l'écran - contrairement à reader-mode.js/pdf-export.js, pas
-  // besoin d'un rattachement hors-écran temporaire). Variables #Variable NON
-  // résolues (affichées telles quelles, "#Clé") : l'éditeur n'a jamais accès à
-  // une ligne Grist réelle pour les résoudre, cohérent avec le reste de
-  // l'édition (un badge de variable reste "#Clé" partout ailleurs tant qu'on
-  // n'est pas en mode lecture/export). Appelée au chargement (setHTML), au
-  // changement de style de numérotation, et sur tout text-change (cf. init) -
-  // seul un embed contenteditable="false" comme celui-ci peut être modifié
-  // directement sans que Quill ne l'efface (cf. project_quill_mutation_observer).
-  //
-  // IMPORTANT (déclenché sur 'text-change', cf. init) : n'écrit dans le DOM
-  // QUE si le contenu a réellement changé (data-toc-signature comparée avant
-  // toute réécriture). Réécrire innerHTML à chaque appel, même à l'identique,
-  // déclencherait le MutationObserver interne de Quill (qui surveille TOUT
-  // .ql-editor) → un nouveau 'text-change' → une nouvelle exécution planifiée
-  // de cette même fonction → boucle infinie. Avec la garde, l'écho d'un SEUL
-  // rafraîchissement (le nôtre) s'éteint de lui-même au tour suivant, puisque
-  // les entrées recalculées sont alors identiques à la signature déjà posée.
-  function refreshTocMarkers() {
-    if (!quill) return;
-    const tocMarkers = quill.root.querySelectorAll(':scope > .toc-marker');
-    if (!tocMarkers.length) return;
-    const headings = Array.from(quill.root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
-    const entries = headings.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
-      let marker = '';
+  // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI).
+  async function insertImageAtDefaultSize(src) {
+    let width = 320;
+    if (hfMode) {
       try {
-        const raw = getComputedStyle(h, '::before').content;
-        if (raw && raw !== 'none' && raw !== 'normal') { const stripped = raw.replace(/^["']|["']$/g, '').trim(); if (stripped) marker = stripped + ' '; }
-      } catch (e) { /* pas de numérotation configurée */ }
-      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
-    });
-    const signature = JSON.stringify(entries);
-    tocMarkers.forEach(marker => {
-      if (marker.dataset.tocSignature === signature) return;
-      marker.dataset.tocSignature = signature;
-      marker.innerHTML = '';
-      const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = 'Sommaire'; marker.appendChild(title);
-      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = 'Aucun titre trouvé pour l’instant.'; marker.appendChild(empty); return; }
-      entries.forEach(entry => {
-        const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
-        marker.appendChild(line);
-      });
-    });
-  }
-  function setImageHandlesVisible(img, visible) {
-    const handles = ensureImageHandlesOverlay();
-    if (!visible) { Object.values(handles).forEach(h => { h.style.display = 'none'; }); return; }
-    Object.values(handles).forEach(h => { h.style.display = 'block'; });
-    positionImageHandles(img);
-  }
-
-  // Colle la barre d'outils juste au-dessus de l'image (ou en dessous s'il n'y a
-  // pas assez de place au-dessus, ex. image en haut de l'éditeur), et la maintient
-  // dans le viewport horizontalement. Mesure la taille réelle de la barre (rendue
-  // en position:fixed) plutôt qu'un décalage fixe arbitraire.
-  function positionImageToolbar() {
-    if (!imageToolbar) return;
-    const img = quill && quill.root ? quill.root.querySelector('img.editor-image.editor-image-active') : null;
-    if (!img) { imageToolbar.classList.remove('visible'); return; }
-    imageToolbar.classList.add('visible');
-    const rect = img.getBoundingClientRect();
-    const editorRect = quill.root.getBoundingClientRect();
-    const toolbarRect = imageToolbar.getBoundingClientRect();
-    const gap = 8;
-    const spaceAbove = rect.top - Math.max(0, editorRect.top);
-    const top = spaceAbove >= toolbarRect.height + gap ? rect.top - toolbarRect.height - gap : rect.bottom + gap;
-    const left = rect.left + rect.width / 2 - toolbarRect.width / 2;
-    const maxLeft = Math.max(4, window.innerWidth - toolbarRect.width - 4);
-    imageToolbar.style.top = Math.max(4, top) + 'px';
-    imageToolbar.style.left = Math.min(Math.max(4, left), maxLeft) + 'px';
-  }
-
-  // Mémorise, en plus de sa position CSS (relative à .ql-editor), la position
-  // de l'image RELATIVE au paragraphe qu'elle recouvre VISUELLEMENT en ce
-  // moment (data-anchor-off-*, data-anchor-target-id). Sert uniquement à
-  // l'export PDF (pdf-export.js) pour recaler une image en calque sur la
-  // position RÉELLE de ce paragraphe telle que pdfmake la calcule, plutôt que
-  // sur une simple distance depuis le haut de l'éditeur : cette dernière ne
-  // tient pas compte du fait qu'un titre ou un paragraphe précédent peut
-  // occuper une hauteur différente en PDF qu'à l'écran (tailles de police,
-  // marges de bloc, interligne — tout diverge légèrement entre le rendu
-  // navigateur et le moteur de mise en page de pdfmake), ce qui décale
-  // verticalement toute image positionnée en absolu par rapport au texte
-  // qu'elle est censée recouvrir dès qu'il y a du contenu avant elle.
-  //
-  // L'ancre est choisie par PROXIMITÉ VISUELLE (le bloc dont le rectangle est
-  // le plus proche du centre actuel de l'image), PAS par imbrication DOM
-  // (img.closest('p')). Bug corrigé : une image insérée seule sur sa propre
-  // ligne puis glissée pour recouvrir un AUTRE paragraphe restait ancrée sur
-  // son paragraphe d'origine — désormais vide/quasi invisible une fois
-  // l'image sortie du flux — au lieu du paragraphe qu'elle recouvre
-  // réellement, faisant atterrir l'image bien plus haut que prévu dans le
-  // PDF (souvent perçu comme "l'image saute en haut de la page").
-  //
-  // Comme le bloc-ancre n'est plus forcément celui qui contient l'image dans
-  // le DOM, il lui faut un identifiant stable (data-pm-anchor-id) que
-  // pdf-export.js peut retrouver après avoir traité tout le document (le
-  // bloc-ancre peut apparaître avant OU après l'image dans le HTML).
-  //
-  // Non calculé pour les images dans un tableau/zone 2 colonnes (mise en page
-  // PDF récursive séparée pour ces conteneurs, cf. pdf-export.js) : l'export
-  // retombe alors sur l'ancien calcul (marge de page + padding éditeur).
-  function ensureAnchorId(el) {
-    if (!el.dataset.pmAnchorId) {
-      el.dataset.pmAnchorId = 'a' + Math.random().toString(36).slice(2, 10);
+        const dims = await probeImageDimensions(src);
+        width = clampWidthForHfMaxSize(width, dims.naturalWidth, dims.naturalHeight);
+      } catch (e) { /* repli sur 320px */ }
     }
-    return el.dataset.pmAnchorId;
+    editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
   }
-  // Historique : l'ancrage a d'abord choisi UN SEUL paragraphe (par distance
-  // au centre, puis par chevauchement, puis par hauteur propre en cas
-  // d'égalité - cf. l'historique de ce fichier) et appliqué un décalage brut
-  // à sa position PDF mesurée. Chaque affinage réglait un cas précis mais en
-  // cassait parfois un autre (empilement de lignes vides, zones 2-colonnes,
-  // paragraphes très longs...), le point commun étant : CE PARAGRAPHE UNIQUE
-  // devient lui-même une approximation dès que l'image ne lui est pas
-  // immédiatement adjacente. Remplacé par un encadrement : le bloc
-  // immédiatement AU-DESSUS et celui immédiatement EN DESSOUS de l'image
-  // (peu importe ce qu'elle recouvre entre les deux), puis une
-  // INTERPOLATION LINÉAIRE de sa position entre leurs deux positions PDF
-  // réellement mesurées après mise en page. Cela élimine le besoin de
-  // choisir "LE" bon paragraphe (et donc toute ambiguïté d'égalité) et reste
-  // exact quel que soit ce qui se trouve entre les deux repères, sans
-  // calibrage particulier par type de bloc.
-  // Si l'image est elle-même DANS une colonne d'une zone 2-colonnes, l'ancrage
-  // doit rester CONFINÉ à cette même colonne : un paragraphe d'une autre
-  // colonne, ou du flux principal avant/après toute la zone, n'a pas de
-  // rapport de position stable avec un point à l'intérieur de LA colonne
-  // (largeur différente, chrome de la zone intercalé...). `excludeSelector`
-  // exclut normalement toute colonne/tableau/zone de la liste des repères
-  // possibles - sauf la colonne elle-même quand c'est justement le
-  // périmètre de recherche (image DANS cette colonne).
-  function findBracketingAnchors(img) {
-    const column = img.closest('.two-columns-column');
-    const scopeRoot = column || quill.root;
-    const excludeSelector = '.two-columns-column, .editable-table, .two-columns-zone';
-    const imgRect = img.getBoundingClientRect();
-    const candidates = [];
-    scopeRoot.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre').forEach(el => {
-      const excludedAncestor = el.closest(excludeSelector);
-      if (excludedAncestor && excludedAncestor !== column) return;
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) return; // vide/invisible (ex. paragraphe d'origine d'une image glissée ailleurs)
-      candidates.push({ el, rect: r });
-    });
-    candidates.sort((a, b) => a.rect.top - b.rect.top);
-    const EPS = 0.5;
-    let above = null, below = null;
-    candidates.forEach(c => {
-      if (c.rect.bottom <= imgRect.top + EPS) above = c; // le DERNIER qui finit avant l'image (le plus proche au-dessus)
-      else if (!below && c.rect.top >= imgRect.bottom - EPS) below = c; // le PREMIER qui commence après l'image
-    });
-    return { above: above ? above.el : null, below: below ? below.el : null };
-  }
-  function clearAnchorDataset(img) {
-    delete img.dataset.anchorOffLeft;
-    delete img.dataset.anchorAboveOffTop;
-    delete img.dataset.anchorBelowOffTop;
-    delete img.dataset.anchorAboveId;
-    delete img.dataset.anchorBelowId;
-    delete img.dataset.anchorColumnSide;
-  }
-  function updateAnchorOffset(img) {
-    // Une image dans une CELLULE DE TABLEAU reste non gérée (pas d'équivalent
-    // de la largeur/position de colonne mesurée dont dispose pdf-export.js
-    // pour les 2-colonnes) : fallback sur l'ancien calcul "page à plat",
-    // connu approximatif dans ce cas précis.
-    if (img.closest('.editable-table')) { clearAnchorDataset(img); return; }
-    const { above, below } = findBracketingAnchors(img);
-    const imgRect = img.getBoundingClientRect();
-    if (!above && !below) {
-      // Cas très fréquent pour une image DANS une colonne : la colonne ne
-      // contient souvent qu'un seul <p> (même volumineux, plusieurs lignes),
-      // que l'image recouvre visuellement en partie - ni "au-dessus" ni "en
-      // dessous" au sens de findBracketingAnchors (elle ne finit/commence
-      // jamais avant/après lui). Sans repère de secours, l'image retomberait
-      // sur l'ancien calcul "page à plat" de pdf-export.js, qui ignore
-      // totalement exister une zone 2-colonnes (l'image y est positionnée en
-      // absolu relativement à .two-columns-zone, pas à .ql-editor - vérifié
-      // via offsetParent) : décalage horizontal ET vertical systématique.
-      // Repli : ancrer sur la ZONE elle-même (seul élément englobant dont
-      // pdf-export.js peut connaître la position PDF réellement mesurée,
-      // cf. twoColumnsFrom), en gardant la mesure relative au bord de
-      // contenu de la COLONNE pour l'horizontal (pas la zone, plus étroite
-      // et décalée pour la colonne de droite).
-      const column = img.closest('.two-columns-column');
-      if (column) {
-        const zone = column.closest('.two-columns-zone');
-        const cols = Array.from(zone.querySelectorAll(':scope > .two-columns-column'));
-        const zoneRect = zone.getBoundingClientRect();
-        const zcs = getComputedStyle(zone);
-        const zoneContentTop = zoneRect.top + (parseFloat(zcs.borderTopWidth) || 0) + (parseFloat(zcs.paddingTop) || 0);
-        const colRect = column.getBoundingClientRect();
-        const ccs = getComputedStyle(column);
-        const colContentLeft = colRect.left + (parseFloat(ccs.borderLeftWidth) || 0) + (parseFloat(ccs.paddingLeft) || 0);
-        img.dataset.anchorOffLeft = Math.round(imgRect.left - colContentLeft);
-        img.dataset.anchorAboveId = ensureAnchorId(zone);
-        img.dataset.anchorAboveOffTop = Math.round(imgRect.top - zoneContentTop);
-        img.dataset.anchorColumnSide = cols.indexOf(column) === 0 ? 'left' : 'right';
-        delete img.dataset.anchorBelowId;
-        delete img.dataset.anchorBelowOffTop;
-        return;
+
+  // Menu listant les colonnes Attachments : insère un placeholder lié à la
+  // #Variable (résolu en vraie image en mode Lecture/export).
+  let imageVarPickerBox = null;
+  function ensureImageVarPickerBox() {
+    if (imageVarPickerBox) return imageVarPickerBox;
+    imageVarPickerBox = document.createElement('div');
+    imageVarPickerBox.id = 'v2-image-var-picker';
+    imageVarPickerBox.style.display = 'none';
+    document.body.appendChild(imageVarPickerBox);
+    document.addEventListener('mousedown', event => {
+      if (imageVarPickerBox.style.display !== 'none' && !imageVarPickerBox.contains(event.target)) {
+        imageVarPickerBox.style.display = 'none';
       }
-      clearAnchorDataset(img);
-      return;
-    }
-    delete img.dataset.anchorColumnSide; // repère normal trouvé : pas de repli zone à appliquer
-    // Référence horizontale : le repère au-dessus s'il existe (le plus
-    // probable pour un paragraphe indenté - liste, citation), sinon celui du
-    // dessous. Contrairement à la position verticale, l'horizontal ne dérive
-    // pas selon ce qui précède (le texte démarre toujours au même bord de
-    // page), un seul repère suffit donc, pas besoin d'interpoler.
-    const leftRef = above || below;
-    const leftRefRect = leftRef.getBoundingClientRect();
-    img.dataset.anchorOffLeft = Math.round(imgRect.left - leftRefRect.left);
-    if (above) {
-      img.dataset.anchorAboveId = ensureAnchorId(above);
-      img.dataset.anchorAboveOffTop = Math.round(imgRect.top - above.getBoundingClientRect().top);
-    } else {
-      delete img.dataset.anchorAboveId;
-      delete img.dataset.anchorAboveOffTop;
-    }
-    if (below) {
-      img.dataset.anchorBelowId = ensureAnchorId(below);
-      img.dataset.anchorBelowOffTop = Math.round(imgRect.top - below.getBoundingClientRect().top);
-    } else {
-      delete img.dataset.anchorBelowId;
-      delete img.dataset.anchorBelowOffTop;
-    }
-  }
-
-  // Bascule une image en calque "devant" / "derrière" le texte (position:absolute
-  // + z-index, ancrée à sa position actuelle dans .ql-editor) ou la remet dans le
-  // flux normal ("normal"). Le glisser-déposer prend ensuite le relais pour la
-  // repositionner librement (cf. le mousedown sur .editor-image-floating).
-  function setImageLayer(img, layer) {
-    if (!img) return;
-    if (layer === 'normal') {
-      img.style.position = '';
-      img.style.left = '';
-      img.style.top = '';
-      img.style.zIndex = '';
-      img.dataset.layer = 'normal';
-      img.classList.remove('editor-image-floating');
-      img.draggable = false; // jamais de glisser HTML5 natif, cf. ImageBlot.create()
-      return;
-    }
-    if (img.style.position !== 'absolute') {
-      const container = img.closest('.ql-editor') || img.parentNode;
-      const imgRect = img.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      img.style.left = Math.round(imgRect.left - containerRect.left + container.scrollLeft) + 'px';
-      img.style.top = Math.round(imgRect.top - containerRect.top + container.scrollTop) + 'px';
-      img.style.position = 'absolute';
-    }
-    img.style.zIndex = layer === 'front' ? '5' : '-1';
-    img.dataset.layer = layer;
-    img.classList.add('editor-image-floating');
-    img.draggable = false;
-    updateAnchorOffset(img);
-  }
-
-  // Geste de glisser-déposer d'une image en calque, factorisé pour être
-  // déclenché aussi bien depuis un mousedown direct sur l'image (calque
-  // "devant", qui reçoit les clics normalement) que depuis son marqueur
-  // d'ancrage (calque "derrière" : l'image ne reçoit pas les clics de façon
-  // fiable, cachée sous le texte qui la recouvre - cf. commentaire sur
-  // imageAnchorMarkers - donc le glisser doit pouvoir démarrer depuis le
-  // marqueur, seul élément garanti cliquable dans ce cas).
-  function startImageDrag(img, startX, startY) {
-    const startLeft = parseFloat(img.style.left) || 0;
-    const startTop = parseFloat(img.style.top) || 0;
-    const onMove = moveEvent => {
-      img.style.left = Math.round(startLeft + (moveEvent.clientX - startX)) + 'px';
-      img.style.top = Math.round(startTop + (moveEvent.clientY - startY)) + 'px';
-      positionImageToolbar();
-      positionImageHandles(img);
-      positionAnchorMarker(img);
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      quill.update(Quill.sources.USER);
-      updateAnchorOffset(img);
-      positionImageHandles(img);
-      positionAnchorMarker(img);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp, { once: true });
-  }
-
-  // Aligner une image en calque (position:absolute) n'a pas de sens au sens
-  // CSS habituel (margin:auto n'a aucun effet sur un élément positionné en
-  // absolu) : on lui donne donc un sens dédié, demandé explicitement -
-  // recaler HORIZONTALEMENT l'image sur le bord gauche/le centre/le bord
-  // droit de la zone de texte, tout en conservant sa position VERTICALE
-  // actuelle (celle-ci n'a par définition aucun rapport avec un alignement
-  // gauche/centre/droite). Casse volontairement tout positionnement
-  // horizontal manuel précédent - c'est le but explicite de l'action.
-  function snapFloatingImageHorizontal(img, align) {
-    const container = img.closest('.ql-editor');
-    if (!container) return;
-    const containerRect = container.getBoundingClientRect();
-    const cs = getComputedStyle(container);
-    const padLeft = parseFloat(cs.paddingLeft) || 0;
-    const padRight = parseFloat(cs.paddingRight) || 0;
-    const contentWidth = containerRect.width - padLeft - padRight;
-    const imgWidth = img.getBoundingClientRect().width;
-    let leftPx;
-    if (align === 'left') leftPx = padLeft;
-    else if (align === 'right') leftPx = padLeft + Math.max(0, contentWidth - imgWidth);
-    else leftPx = padLeft + Math.max(0, (contentWidth - imgWidth) / 2);
-    img.style.left = Math.round(leftPx) + 'px';
-    positionImageToolbar();
-    positionImageHandles(img);
-    positionAnchorMarker(img);
-    updateAnchorOffset(img);
-    quill.update(Quill.sources.USER);
-  }
-
-  function updateImageToolbarState(img) {
-    if (!imageToolbar) return;
-    const opacityInput = imageToolbar.querySelector('input[data-act="opacity"]');
-    if (opacityInput) {
-      const raw = img && img.style.opacity !== '' ? parseFloat(img.style.opacity) : 1;
-      opacityInput.value = String(Math.round((isNaN(raw) ? 1 : raw) * 100));
-    }
-    const layer = img ? (img.dataset.layer || 'normal') : 'normal';
-    const front = imageToolbar.querySelector('button[data-act="layer-front"]');
-    const behind = imageToolbar.querySelector('button[data-act="layer-behind"]');
-    if (front) front.classList.toggle('active', layer === 'front');
-    if (behind) behind.classList.toggle('active', layer === 'behind');
-  }
-
-  function applyImageAction(act) {
-    const img = quill.root.querySelector('img.editor-image.editor-image-active');
-    if (!img) return;
-    const currentPx = parseInt(img.style.width, 10) || img.naturalWidth || 320;
-    if (act === 'zoom-in') img.style.width = Math.round(currentPx * 1.25) + 'px';
-    else if (act === 'zoom-out') img.style.width = Math.max(40, Math.round(currentPx * 0.75)) + 'px';
-    else if (act === 'reset') { img.style.width = ''; img.removeAttribute('data-align'); }
-    else if (act === 'align-left') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'left'); else img.dataset.align = 'left'; }
-    else if (act === 'align-center') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'center'); else img.dataset.align = 'center'; }
-    else if (act === 'align-right') { if (img.style.position === 'absolute') snapFloatingImageHorizontal(img, 'right'); else img.dataset.align = 'right'; }
-    else if (act === 'wrap') img.dataset.wrap = img.dataset.wrap === 'block' ? 'inline' : 'block';
-    else if (act === 'layer-front') setImageLayer(img, img.dataset.layer === 'front' ? 'normal' : 'front');
-    else if (act === 'layer-behind') setImageLayer(img, img.dataset.layer === 'behind' ? 'normal' : 'behind');
-    else if (act === 'delete') {
-      const blot = Quill.find(img);
-      if (blot) quill.deleteText(blot.offset(quill.scroll), 1, Quill.sources.USER);
-      if (imageToolbar) imageToolbar.classList.remove('visible');
-      // Les poignées sont un overlay partagé (cf. ensureImageHandlesOverlay) : sans
-      // ce masquage explicite, elles restent affichées à l'ancienne position de
-      // l'image supprimée, orphelines.
-      positionImageHandles(null);
-      removeAnchorMarker(img);
-      quill.update(Quill.sources.USER);
-      return;
-    }
-    quill.update(Quill.sources.USER);
-    setImageHandlesVisible(img, true);
-    refreshImageAnchorMarkers();
-    positionImageToolbar();
-    updateImageToolbarState(img);
-  }
-
-  function showImageToolbar() {
-    if (!imageToolbar) {
-      imageToolbar = document.createElement('div');
-      imageToolbar.className = 'editor-image-toolbar';
-      imageToolbar.contentEditable = 'false';
-      const icon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + path + '</svg>';
-      imageToolbar.innerHTML =
-        '<button data-act="zoom-out" data-tip="Zoom -25%" title="Zoom -25%">' + icon('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/>') + '</button>' +
-        '<button data-act="zoom-in" data-tip="Zoom +25%" title="Zoom +25%">' + icon('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/>') + '</button>' +
-        '<button data-act="reset" data-tip="Taille originale" title="Taille originale">' + icon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>') + '</button>' +
-        '<span class="editor-image-toolbar-sep"></span>' +
-        '<button data-act="align-left" data-tip="Aligner à gauche" title="Aligner à gauche">' + icon('<path d="M4 12H2m18-5H8m12 10H8M4 4v16"/>') + '</button>' +
-        '<button data-act="align-center" data-tip="Centrer" title="Centrer">' + icon('<path d="M12 2v20M6 7h12M4 12h16M6 17h12"/>') + '</button>' +
-        '<button data-act="align-right" data-tip="Aligner à droite" title="Aligner à droite">' + icon('<path d="M22 12h-2M4 7h12M4 17h12M20 4v16"/>') + '</button>' +
-        '<button data-act="wrap" data-tip="Wrap bloc/en ligne" title="Wrap bloc/en ligne">' + icon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/>') + '</button>' +
-        '<span class="editor-image-toolbar-sep"></span>' +
-        '<label class="editor-image-opacity" title="Transparence">' + icon('<path d="M12 3c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.6 3-7 7-12Z"/>') + '<input type="range" data-act="opacity" min="0" max="100" step="5" value="100"></label>' +
-        '<span class="editor-image-toolbar-sep"></span>' +
-        '<button data-act="layer-front" data-tip="Devant le texte" title="Devant le texte">' + icon('<path d="M12 19V5M6 11l6-6 6 6"/>') + '</button>' +
-        '<button data-act="layer-behind" data-tip="Derrière le texte" title="Derrière le texte">' + icon('<path d="M12 5v14M6 13l6 6 6-6"/>') + '</button>' +
-        '<span class="editor-image-toolbar-sep"></span>' +
-        '<button data-act="delete" data-tip="Supprimer" title="Supprimer" class="editor-image-toolbar-danger">' + icon('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>') + '</button>';
-      document.body.appendChild(imageToolbar);
-      imageToolbar.addEventListener('mousedown', function (event) {
-        const btn = event.target.closest && event.target.closest('button[data-act]');
-        if (!btn) return;
-        event.preventDefault();
-        applyImageAction(btn.dataset.act);
-      });
-      imageToolbar.addEventListener('input', function (event) {
-        if (event.target.dataset.act !== 'opacity') return;
-        const img = quill.root.querySelector('img.editor-image.editor-image-active');
-        if (!img) return;
-        img.style.opacity = (parseInt(event.target.value, 10) / 100).toFixed(2);
-        quill.update(Quill.sources.USER);
-        setImageHandlesVisible(img, true);
-      });
-    }
-    updateImageToolbarState(quill.root.querySelector('img.editor-image.editor-image-active'));
-    positionImageToolbar();
-  }
-
-  function chooseImageFile() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.addEventListener('change', function () {
-      const file = input.files && input.files[0];
-      input.remove();
-      if (!file) return;
-      uploadImage(file).catch(err => { console.error('Upload image:', err); alert('Échec de l\'upload : ' + (err.message || err)); });
     });
-    input.click();
+    return imageVarPickerBox;
   }
-
-  function init() {
-    let pendingAlignmentCell = null;
-    let pendingAlignmentColumn = null;
-    let pendingAlignmentRange = null;
-    // Traduit la valeur du picker Quill (left/center/right/justify) en la
-    // commande native execCommand correspondante, pour appliquer l'alignement
-    // UNIQUEMENT au(x) bloc(s) réellement touché(s) par la sélection - pas à
-    // toute la cellule/colonne (cf. repli plus bas, ancien comportement gardé
-    // pour le seul cas où aucune sélection valide n'a pu être capturée).
-    const JUSTIFY_COMMAND = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight', justify: 'justifyFull' };
-    // Restaure la sélection capturée AVANT l'ouverture du picker (cf. le
-    // mousedown du toolbar plus bas) puis applique l'alignement via la
-    // commande native du navigateur : contrairement à un style posé sur tout
-    // le conteneur, execCommand scope naturellement l'effet au(x) bloc(s) que
-    // la sélection touche réellement (comportement standard de tout éditeur
-    // riche - le texte AVANT/APRÈS la sélection, dans un autre paragraphe de
-    // la même cellule/colonne, n'est jamais affecté).
-    function applyGranularAlignment(container, range, command) {
-      const selection = window.getSelection && window.getSelection();
-      if (!selection) return false;
-      container.focus();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand(command, false, null);
-      quill.update(Quill.sources.USER);
-      return true;
-    }
-    const alignHandler = function (value) {
-      const cell = pendingAlignmentCell;
-      const column = pendingAlignmentColumn;
-      const range = pendingAlignmentRange;
-      pendingAlignmentCell = null;
-      pendingAlignmentColumn = null;
-      pendingAlignmentRange = null;
-      const alignment = value || 'left';
-      const justifyCommand = JUSTIFY_COMMAND[alignment] || 'justifyLeft';
-      if (column && column.closest('.two-columns-zone')) {
-        if (range && applyGranularAlignment(column, range, justifyCommand)) return false;
-        // Repli (aucune sélection valide capturée, ex. clic direct sans
-        // sélection préalable) : ancien comportement, toute la colonne.
-        column.style.textAlign = alignment === 'justify' ? 'justify' : alignment;
-        column.querySelectorAll('p, div, li, blockquote, pre').forEach(function (node) {
-          node.style.textAlign = column.style.textAlign;
+  async function openImageVariablePicker(anchorEl) {
+    const box = ensureImageVarPickerBox();
+    await GristAPI.refreshSchema().catch(() => {});
+    const candidates = GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments');
+    box.innerHTML = '';
+    if (!candidates.length) {
+      const empty = document.createElement('div');
+      empty.className = 'v2-image-var-picker-empty';
+      empty.textContent = I18n.t('imageVarPicker.empty');
+      box.appendChild(empty);
+    } else {
+      candidates.forEach(v => {
+        const item = document.createElement('div');
+        item.className = 'v2-image-var-picker-item';
+        item.textContent = v.key;
+        // mousedown (pas click) + preventDefault : évite que le blur du
+        // focus éditeur en cours (déclenché par ce clic) ne referme/perturbe
+        // la sélection avant que insertImage n'ait pu s'exécuter - même
+        // précaution que ac-item (variables.js:render, mousedown+preventDefault).
+        item.addEventListener('mousedown', event => {
+          event.preventDefault();
+          editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
+          box.style.display = 'none';
         });
-        return false;
-      }
-      if (!cell || !cell.closest('.editable-table')) {
-        quill.format('align', alignment, Quill.sources.USER);
-        return;
-      }
-      if (range && applyGranularAlignment(cell, range, justifyCommand)) { activeCell = cell; return false; }
-      // Repli (aucune sélection valide capturée) : ancien comportement, toute la cellule.
-      cell.style.textAlign = alignment === 'justify' ? 'justify' : alignment;
-      cell.querySelectorAll('p, div, li, blockquote, pre').forEach(function (node) {
-        node.style.textAlign = cell.style.textAlign;
+        box.appendChild(item);
       });
-      activeCell = cell;
-      return false;
-    };
-    quill = new Quill('#editor-container', { theme: 'snow', modules: { toolbar: { container: [[{ header: [1, 2, 3, 4, 5, 6, false] }], ['bold', 'italic', 'underline'], [{ align: [] }], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], [{ size: FontSize.whitelist }], [{ font: FontFamily.whitelist }], ['undo', 'redo'], ['page-break', 'insert-table', 'insert-two-columns', 'insert-image', 'insert-image-url', 'insert-toc'], ['clean']], handlers: { align: alignHandler, undo: function () { quill.history.undo(); }, redo: function () { quill.history.redo(); }, 'insert-table': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'editabletable', {}, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-two-columns': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'twocolumns', { cols: ['', ''] }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-image': function () { chooseImageFile(); }, 'insert-image-url': function () { const url = window.prompt('URL de l’image :'); if (url) insertImage({ src: url, source: 'url' }); }, 'page-break': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'pagebreak', { type: 'pageBreak' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); }, 'insert-toc': function () { const range = quill.getSelection(true); if (!range) return; quill.insertEmbed(range.index, 'toc', { type: 'toc' }, Quill.sources.USER); quill.setSelection(range.index + 1, 0, Quill.sources.USER); } } }, history: { delay: 500, maxStack: 100, userOnly: true } } });
-    const toolbar = document.querySelector('.ql-toolbar');
-    if (toolbar) installTwoColumnsToolbarIsolation(toolbar);
-    if (toolbar) installToolbarClickSuppression(toolbar);
-    installListTabIndent();
-    installFormattingShortcuts();
-    if (toolbar) {
-      const undoBtn = toolbar.querySelector('.ql-undo'); const redoBtn = toolbar.querySelector('.ql-redo');
-      const pageBreakBtn = toolbar.querySelector('.ql-page-break'); const tableBtn = toolbar.querySelector('.ql-insert-table');
-      const twoColsBtn = toolbar.querySelector('.ql-insert-two-columns'); const imageBtn = toolbar.querySelector('.ql-insert-image');
-      const imageUrlBtn = toolbar.querySelector('.ql-insert-image-url');
-      const tocBtn = toolbar.querySelector('.ql-insert-toc');
-      const svgIcon = path => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + path + '</svg>';
-      if (undoBtn) undoBtn.innerHTML = svgIcon('<path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/>');
-      if (redoBtn) redoBtn.innerHTML = svgIcon('<path d="M15 7l5 5-5 5M20 12H9A5 5 0 0 0 9 22h1"/>');
-      if (tableBtn) { tableBtn.innerHTML = svgIcon('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/>') + 'Tableau'; tableBtn.title = 'Insérer un tableau 2×2'; }
-      if (twoColsBtn) { twoColsBtn.innerHTML = svgIcon('<rect x="3" y="5" width="8" height="14" rx="1"/><rect x="13" y="5" width="8" height="14" rx="1"/>') + '2 colonnes'; twoColsBtn.title = 'Insérer une zone à 2 colonnes éditables (v1.8.0)'; }
-      if (pageBreakBtn) { pageBreakBtn.innerHTML = svgIcon('<path d="M4 4h16v16H4z M4 10h16M10 4v16"/>') + 'Saut de page'; pageBreakBtn.title = 'Insère un saut de page (forcé à l’export PDF)'; }
-      if (imageBtn) { imageBtn.innerHTML = svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>') + 'Image'; imageBtn.title = 'Insérer une image (upload en pièce jointe Grist)'; }
-      if (imageUrlBtn) { imageUrlBtn.innerHTML = svgIcon('<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 19.5"/>') + 'Image URL'; imageUrlBtn.title = 'Insérer une image depuis une URL externe'; }
-      if (tocBtn) { tocBtn.innerHTML = svgIcon('<path d="M4 6h4M4 12h4M4 18h4M10 6h10M10 12h10M10 18h10"/>') + 'Sommaire'; tocBtn.title = 'Insérer un sommaire (liste des titres, mis à jour à chaque export/lecture)'; }
     }
-    const tableTools = document.createElement('div'); tableTools.className = 'table-context-toolbar';
-    tableTools.innerHTML =
-      '<button data-action="add-row-above" data-tip="+ ligne au-dessus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M12 4v4"/></svg></button>' +
-      '<button data-action="add-row-below" data-tip="+ ligne en dessous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M12 16v4"/></svg></button>' +
-      '<button data-action="remove-row" data-tip="− ligne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16"/></svg></button>' +
-      '<span class="editor-image-toolbar-sep"></span>' +
-      '<button data-action="add-col-left" data-tip="+ colonne à gauche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16M4 12h4"/></svg></button>' +
-      '<button data-action="add-col-right" data-tip="+ colonne à droite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16M16 12h4"/></svg></button>' +
-      '<button data-action="remove-col" data-tip="− colonne"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4v16"/></svg></button>';
-    document.getElementById('editor-container').appendChild(tableTools);
-    quill.root.querySelectorAll('.editable-table table').forEach(ensureTableColumns); quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip); let activeCell = null;
-    // Sommaire tenu à jour EN DIRECT pendant la frappe (titre édité, titre
-    // ajouté/supprimé...) - léger debounce (250ms) pour ne pas rescanner tous
-    // les titres à CHAQUE caractère tapé, sans effet perceptible pour
-    // l'utilisateur. refreshTocMarkers() lui-même sort tout de suite si aucun
-    // sommaire n'est présent dans le document (cas le plus courant).
-    let tocRefreshTimer = null;
-    quill.on('text-change', function () {
-      if (tocRefreshTimer) clearTimeout(tocRefreshTimer);
-      tocRefreshTimer = setTimeout(refreshTocMarkers, 250);
-    });
-    function positionTableToolbar() { if (!activeCell || !tableTools.classList.contains('visible')) return; const tableRect = activeCell.closest('.editable-table').getBoundingClientRect(); const toolbarRect = tableTools.getBoundingClientRect(); tableTools.style.position = 'fixed'; tableTools.style.top = `${Math.max(8, tableRect.top - toolbarRect.height - 6)}px`; tableTools.style.left = `${Math.min(Math.max(8, tableRect.left), window.innerWidth - toolbarRect.width - 8)}px`; }
-    quill.root.addEventListener('click', function (event) { const cell = event.target.closest && event.target.closest('td,th'); if (!cell || !cell.closest('.editable-table')) { tableTools.classList.remove('visible'); activeCell = null; return; } activeCell = cell; tableTools.classList.add('visible'); positionTableToolbar(); });
-    quill.root.addEventListener('click', function (event) {
-      const img = event.target.closest && event.target.closest('img.editor-image');
-      if (img) {
-        quill.root.querySelectorAll('img.editor-image.editor-image-active').forEach(i => { if (i !== img) { i.classList.remove('editor-image-active'); setImageHandlesVisible(i, false); } });
-        img.classList.add('editor-image-active');
-        setImageHandlesVisible(img, true);
-        showImageToolbar();
-      } else if (!event.target.closest || !event.target.closest('.editor-image-toolbar')) {
-        quill.root.querySelectorAll('img.editor-image.editor-image-active').forEach(i => { i.classList.remove('editor-image-active'); setImageHandlesVisible(i, false); });
-        if (imageToolbar) imageToolbar.classList.remove('visible');
-      }
-    });
-    // Écoute à la fois #editor-container ET quill.root (.ql-editor) : lequel
-    // des deux défile réellement dépend du contexte - #editor-container a
-    // overflow:auto pour le débordement HORIZONTAL (mode Aperçu format A4 sur
-    // fenêtre étroite, largeur fixe 793.71px), mais .ql-editor a sa PROPRE
-    // barre de défilement VERTICALE (height:100%; overflow-y:auto, posé par
-    // Quill lui-même) - et 'scroll' ne remonte PAS aux ancêtres (contrairement
-    // à 'input'/'click') : un listener sur #editor-container ne se déclenche
-    // donc JAMAIS pour un défilement vertical qui a réellement lieu un niveau
-    // plus bas, dans .ql-editor. Sans le second listener, les poignées/la
-    // bulle d'ancrage d'image restaient figées à l'écran (position:fixed
-    // jamais recalculée) pendant que le contenu défilait sous elles.
-    function repositionFloatingUi() {
-      positionTableToolbar();
-      positionImageToolbar();
-      const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
-      if (activeImg) positionImageHandles(activeImg);
-      imageAnchorMarkers.forEach((marker, img) => positionAnchorMarker(img));
-    }
-    document.getElementById('editor-container').addEventListener('scroll', repositionFloatingUi);
-    quill.root.addEventListener('scroll', repositionFloatingUi);
-    window.addEventListener('resize', function () {
-      positionImageToolbar();
-      const activeImg = quill.root.querySelector('img.editor-image.editor-image-active');
-      if (activeImg) positionImageHandles(activeImg);
-      imageAnchorMarkers.forEach((marker, img) => positionAnchorMarker(img));
-    });
-    // Les poignées de redimensionnement vivent dans document.body (cf. commentaire sur
-    // ensureImageHandlesOverlay), donc en dehors de quill.root : ce mousedown doit être
-    // posé sur document, pas sur quill.root, sans quoi il ne les verrait jamais.
-    document.addEventListener('mousedown', function (event) {
-      const imgHandle = event.target.closest && event.target.closest('.editor-image-handle');
-      if (!imgHandle) return;
-      const img = quill.root.querySelector('img.editor-image.editor-image-active');
-      if (!img) return;
-      event.preventDefault(); event.stopPropagation();
-      const corner = imgHandle.dataset.corner;
-      const startX = event.clientX, startY = event.clientY;
-      const rect = img.getBoundingClientRect();
-      const startW = rect.width, startH = rect.height;
-      const aspect = startW / startH;
-      document.body.classList.add('resizing-editor-image');
-      const onMove = moveEvent => {
-        let dx = moveEvent.clientX - startX;
-        let dy = moveEvent.clientY - startY;
-        if (corner === 'nw') { dx = -dx; dy = -dy; }
-        else if (corner === 'ne') { dy = -dy; }
-        else if (corner === 'sw') { dx = -dx; }
-        let w = Math.max(40, startW + dx);
-        let h = Math.max(20, startH + dy);
-        if (moveEvent.shiftKey) h = w / aspect;
-        img.style.width = Math.round(w) + 'px';
-        img.style.height = Math.round(h) + 'px';
-        positionImageToolbar();
-        positionImageHandles(img);
-        positionAnchorMarker(img);
-      };
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        document.body.classList.remove('resizing-editor-image');
-        quill.update(Quill.sources.USER);
-        positionImageHandles(img);
-        positionAnchorMarker(img);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp, { once: true });
-    });
-    quill.root.addEventListener('mousedown', function (event) {
-      const floatingImg = event.target.closest && event.target.closest('.editor-image.editor-image-floating');
-      if (floatingImg) {
-        event.preventDefault();
-        startImageDrag(floatingImg, event.clientX, event.clientY);
-        return;
-      }
-      const twoColumnsGrip = event.target.closest && event.target.closest('.two-columns-resize-grip'); if (twoColumnsGrip) { const zone = twoColumnsGrip.closest('.two-columns-zone'); if (!zone) return; event.preventDefault(); event.stopPropagation(); const rect = zone.getBoundingClientRect(); const update = moveEvent => { const usableWidth = rect.width; if (!usableWidth) return; const left = ((moveEvent.clientX - rect.left) / usableWidth) * 100; zone.style.setProperty('--layout-left', `${Math.max(20, Math.min(80, left))}%`); }; const stop = () => { document.removeEventListener('mousemove', update); document.removeEventListener('mouseup', stop); quill.update(Quill.sources.USER); }; document.addEventListener('mousemove', update); document.addEventListener('mouseup', stop, { once: true }); return; } const handle = event.target.closest && event.target.closest('.table-col-resize-handle'); if (!handle) return; const cell = handle.closest('th, td'); const table = handle.closest('table'); if (!cell || !table) return; event.preventDefault(); event.stopPropagation(); resizeTableColumn(table, cell.cellIndex, event.clientX);
-    });
-    quill.root.addEventListener('paste', function (event) { const target = event.target; const editableContainer = target && target.closest && target.closest('.editable-table td, .editable-table th, .two-columns-column'); if (!editableContainer) return; event.preventDefault(); event.stopPropagation(); const clipboard = event.clipboardData; const text = clipboard ? clipboard.getData('text/plain') : ''; if (text) document.execCommand('insertText', false, text); quill.update(Quill.sources.USER); }, true);
+    const rect = anchorEl.getBoundingClientRect();
+    box.style.position = 'absolute';
+    box.style.left = (rect.left + window.scrollX) + 'px';
+    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    box.style.display = 'block';
+  }
 
-    function getRealActiveCell() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const cell = element && element.closest && element.closest('.editable-table td, .editable-table th'); if (cell && cell.isContentEditable) return cell; } return null; }
-    function getRealActiveColumn() { const selection = window.getSelection && window.getSelection(); const nodes = []; if (selection && selection.rangeCount) nodes.push(selection.anchorNode, selection.focusNode); nodes.push(document.activeElement); for (const node of nodes) { const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement); const column = element && element.closest && element.closest('.two-columns-column'); if (column && column.isContentEditable) return column; } return null; }
-    if (toolbar) toolbar.addEventListener('mousedown', function (event) {
-      const target = event.target;
-      const button = target.closest && target.closest('button');
-      const pickerItem = target.closest && target.closest('.ql-picker-item');
-      const cell = getRealActiveCell();
-      if (cell && cell.closest('.editable-table')) {
-        const selectionNow = window.getSelection && window.getSelection();
-        const rangeNow = selectionNow && selectionNow.rangeCount ? selectionNow.getRangeAt(0) : null;
-        // cf. installTwoColumnsToolbarIsolation : 'indent'/'outdent' hors d'une
-        // liste ferait basculer execCommand sur son comportement par défaut
-        // (souvent un <blockquote> dans Chrome) plutôt que sur un retrait de
-        // liste - n'intercepter L'EXÉCUTION de ce bouton QUE si le curseur est
-        // dans un <li>, mais le clic doit être absorbé (preventDefault/
-        // stopPropagation) dans TOUS les cas tant qu'on est dans une cellule :
-        // sinon, cliqué hors liste, l'évènement continue sa route jusqu'au
-        // gestionnaire par défaut de Quill pour le format 'indent', qui
-        // l'applique alors à SA propre sélection périmée (le blot-conteneur de
-        // la cellule/table entière, pas la ligne visée) - confirmé par retour
-        // utilisateur avec le HTML exporté (classe ql-indent-1 posée sur
-        // .editable-table au lieu du <li>).
-        const inList = rangeNow ? !!rangeClosest(rangeNow, 'li') : false;
-        const isFormatButton = button && (button.classList.contains('ql-bold') || button.classList.contains('ql-italic') || button.classList.contains('ql-underline') || button.classList.contains('ql-strike') || button.classList.contains('ql-clean') || button.classList.contains('ql-list') || button.classList.contains('ql-indent'));
-        const formatButton = isFormatButton && (!button.classList.contains('ql-indent') || inList) ? button : null;
-        const formatPicker = pickerItem && (pickerItem.closest('.ql-size') || pickerItem.closest('.ql-font') || pickerItem.closest('.ql-header'));
-        if (isFormatButton || formatPicker) {
-          const selection = window.getSelection && window.getSelection();
-          if (selection && selection.rangeCount) {
-            const range = selection.getRangeAt(0).cloneRange();
+  // Popup d'édition d'une note de bas de page. Une seule active à la fois :
+  // ouvrir une note en valide une autre déjà ouverte (commitFootnotePopup).
+  // Se ferme UNIQUEMENT via une action explicite (OK/Supprimer/Échap/autre
+  // note) - jamais au clic extérieur, source de 3 régressions successives.
+  let footnotePopupBox = null;
+  let footnotePopupPos = null;
+  function ensureFootnotePopupBox() {
+    if (footnotePopupBox) return footnotePopupBox;
+    footnotePopupBox = document.createElement('div');
+    footnotePopupBox.id = 'v2-footnote-popup';
+    footnotePopupBox.style.display = 'none';
+    const textarea = document.createElement('textarea');
+    textarea.rows = 3;
+    textarea.placeholder = I18n.t('footnotePopup.placeholder');
+    textarea.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); commitFootnotePopup(); }
+    });
+    footnotePopupBox.appendChild(textarea);
+    const actions = document.createElement('div');
+    actions.className = 'v2-footnote-popup-actions';
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'v2-footnote-popup-delete';
+    delBtn.textContent = I18n.t('footnotePopup.delete');
+    delBtn.addEventListener('mousedown', event => { event.preventDefault(); deleteFootnotePopupNode(); });
+    actions.appendChild(delBtn);
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'v2-footnote-popup-ok';
+    okBtn.textContent = I18n.t('footnotePopup.ok');
+    okBtn.addEventListener('mousedown', event => { event.preventDefault(); commitFootnotePopup(); });
+    actions.appendChild(okBtn);
+    footnotePopupBox.appendChild(actions);
+    footnotePopupBox._textarea = textarea;
+    document.body.appendChild(footnotePopupBox);
+    return footnotePopupBox;
+  }
+  function commitFootnotePopup() {
+    const box = footnotePopupBox;
+    if (!box || box.style.display === 'none') return;
+    const pos = footnotePopupPos;
+    footnotePopupPos = null;
+    box.style.display = 'none';
+    if (pos == null) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (!current || current.type.name !== 'footnoteRef') return;
+    const tr = editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { text: box._textarea.value }));
+    editor.view.dispatch(tr);
+  }
+  // Retire le nœud footnoteRef lui-même (pas seulement son texte) - lu via
+  // getPos()-équivalent au moment du clic (footnotePopupPos), jamais une
+  // position mise en cache d'avant : le document a pu changer entre
+  // l'ouverture et ce clic (texte tapé ailleurs, etc.).
+  function deleteFootnotePopupNode() {
+    const box = footnotePopupBox;
+    const pos = footnotePopupPos;
+    footnotePopupPos = null;
+    if (box) box.style.display = 'none';
+    if (pos == null) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (!current || current.type.name !== 'footnoteRef') return;
+    editor.view.dispatch(editor.state.tr.delete(pos, pos + current.nodeSize));
+  }
+  function openFootnoteEditorAt(pos) {
+    const box = ensureFootnotePopupBox();
+    if (footnotePopupPos != null && footnotePopupPos !== pos) commitFootnotePopup();
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== 'footnoteRef') {
+      console.warn('[Editor] openFootnoteEditorAt(' + pos + ') : aucun nœud footnoteRef à cette position (trouvé : ' + (node && node.type && node.type.name) + ') - popup non ouverte.');
+      return;
+    }
+    footnotePopupPos = pos;
+    box._textarea.value = node.attrs.text || '';
+    // Bornée à la zone visible (jamais hors champ) ; toute erreur de mesure
+    // retombe sur un positionnement générique plutôt que de bloquer l'ouverture.
+    try {
+      const dom = editor.view.nodeDOM(pos);
+      const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
+      const rect = anchor.getBoundingClientRect();
+      const boxWidth = 240; // cf. #v2-footnote-popup { width: 240px } (editor-v2.css)
+      const boxHeightEstimate = 130;
+      let left = rect.left + window.scrollX;
+      let top = rect.bottom + window.scrollY + 4;
+      // Math.max garantit maxLeft/Top >= minLeft/Top même dans un panneau
+      // très étroit, pour ne jamais clamper à une position pire que l'origine.
+      const minLeft = window.scrollX + 4;
+      const minTop = window.scrollY + 4;
+      const maxLeft = Math.max(minLeft, window.scrollX + window.innerWidth - boxWidth - 8);
+      const maxTop = Math.max(minTop, window.scrollY + window.innerHeight - boxHeightEstimate - 8);
+      left = Math.min(Math.max(left, minLeft), maxLeft);
+      top = Math.min(Math.max(top, minTop), maxTop);
+      box.style.position = 'absolute';
+      box.style.left = left + 'px';
+      box.style.top = top + 'px';
+    } catch (e) {
+      console.warn('[Editor] positionnement du popup de note échoué, repli générique :', e);
+      box.style.position = 'fixed';
+      box.style.left = '40%';
+      box.style.top = '30%';
+    }
+    box.style.display = 'block';
+    // setTimeout(...,0), pas un appel synchrone : le mousedown déclencheur
+    // fait reprendre le focus sur .tiptap par ProseMirror juste après le
+    // retour de cette fonction - un focus() synchrone ici serait écrasé.
+    setTimeout(() => { box._textarea.focus(); }, 0);
+  }
+
+  // Image collée depuis le presse-papiers, convertie en data URI (forme
+  // requise par pdf-export.js) avant insertion.
+  function readFileAsDataUri(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
+      reader.readAsDataURL(file);
+    });
+  }
+  async function pasteImageFile(file) {
+    let dataUri;
+    try {
+      dataUri = await readFileAsDataUri(file);
+    } catch (e) {
+      console.warn('[Editor] image collée illisible :', e);
+      return;
+    }
+    await insertImageAtDefaultSize(dataUri);
+  }
+
+  // Touche de déclenchement configurable (panneau Réglages) - lue
+  // directement depuis localStorage, même clé que js/variables.js (pas de
+  // dépendance de module croisée pour une simple lecture, cf. son en-tête).
+  function varBadgeTriggerChar() {
+    try {
+      const v = localStorage.getItem('pp_trigger_char');
+      return (v && v.length === 1) ? v : '#';
+    } catch (e) { return '#'; }
+  }
+
+  // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
+  // caractère près (contenteditable="false"), même forme HTML que l'éditeur
+  // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
+  // le reconnaissent sans changement :
+  // <span class="var-badge" data-table data-column data-key>.
+  function createVarBadgeNode(Node, mergeAttributes) {
+    return Node.create({
+      name: 'varBadge',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap rend
+        // CHAQUE attribut par défaut comme un attribut HTML bare
+        // (table="..."/column="..."/key="...") EN PLUS des data-table/
+        // data-column/data-key posés à la main dans renderHTML ci-dessous -
+        // un doublon constaté en conditions réelles. Ces attributs ne
+        // doivent exister QUE dans le JSON interne du nœud ProseMirror.
+        const noBareRender = { default: null, renderHTML: () => ({}) };
+        // `format` : { type:'number', style, decimals, currency, words } ou
+        // { type:'date', preset } - choisi via la barre flottante (cf.
+        // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a
+        // rien réglé (comportement historique, String(val) brut).
+        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender };
+      },
+      parseHTML() {
+        return [{
+          tag: 'span.var-badge',
+          getAttrs: el => {
+            let format = null;
+            const raw = el.getAttribute('data-format');
+            if (raw) { try { format = JSON.parse(raw); } catch (e) { format = null; } }
+            return { table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'), format };
+          },
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        const attrs = mergeAttributes(HTMLAttributes, {
+          class: 'var-badge', contenteditable: 'false',
+          'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
+        });
+        if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+        // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la
+        // touche de déclenchement configurée, rétroactif sans migration.
+        return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
+      },
+    });
+  }
+
+  // Badge de numéro de page - même schéma que VarBadge. Le libellé rendu
+  // dans l'éditeur n'est qu'un espace réservé visuel (format choisi),
+  // résolu en vrai numéro seulement à l'export/l'aperçu paginé.
+  function createPageNumberBadgeNode(Node, mergeAttributes) {
+    const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
+    return Node.create({
+      name: 'pageNumberBadge',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return { format: { default: 'n', renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{ tag: 'span.page-number-badge', getAttrs: el => ({ format: el.getAttribute('data-format') || 'n' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({ class: 'page-number-badge', contenteditable: 'false', 'data-format': node.attrs.format });
+        return ['span', attrs, LABELS[node.attrs.format] || LABELS.n];
+      },
+      addCommands() {
+        return { insertPageNumberBadge: format => ({ chain }) => chain().insertContent({ type: this.name, attrs: { format } }).run() };
+      },
+    });
+  }
+
+  // Chip intelligent - date/heure/email, même schéma que VarBadge. Jamais
+  // de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
+  // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour
+  // signaler "valeur calculée, pas une colonne Grist".
+  function createSmartChipNode(Node, mergeAttributes) {
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email' };
+    function labelFor(kind) {
+      const key = KIND_I18N_KEYS[kind];
+      return key ? I18n.t(key) : '?';
+    }
+    return Node.create({
+      name: 'smartChip',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return { kind: { default: 'date', renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{ tag: 'span.smart-chip', getAttrs: el => ({ kind: el.getAttribute('data-chip-kind') || 'date' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': node.attrs.kind });
+        return ['span', attrs, labelFor(node.attrs.kind)];
+      },
+    });
+  }
+
+  // Note de bas de page - nœud atome portant le texte en attribut (`text`,
+  // texte brut). Numérotation continue sur tout le document via le seul
+  // compteur CSS `footnote-ref` (cf. editor-v2.css), jamais compté en JS.
+  function createFootnoteRefNode(Node, mergeAttributes) {
+    return Node.create({
+      name: 'footnoteRef',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          id: { default: null, renderHTML: () => ({}) },
+          text: { default: '', renderHTML: () => ({}) },
+        };
+      },
+      parseHTML() {
+        return [{ tag: 'sup.footnote-ref-marker', getAttrs: el => ({ id: el.getAttribute('data-note-id'), text: el.getAttribute('data-note-text') || '' }) }];
+      },
+      renderHTML({ node }) {
+        const attrs = mergeAttributes({
+          class: 'footnote-ref-marker', contenteditable: 'false',
+          'data-note-id': node.attrs.id, 'data-note-text': node.attrs.text,
+        });
+        // Contenu texte vide à dessein : le chiffre vient de
+        // `::before { content: counter(footnote-ref) }` (editor-v2.css).
+        return ['sup', attrs];
+      },
+      addNodeView() {
+        return ({ getPos }) => {
+          const marker = document.createElement('sup');
+          marker.className = 'footnote-ref-marker';
+          marker.addEventListener('mousedown', event => {
             event.preventDefault();
-            event.stopPropagation();
-            suppressNextToolbarClick = true; // cf. installToolbarClickSuppression
-            cell.focus();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            if (formatButton) {
-              const command = button.classList.contains('ql-bold') ? 'bold' : button.classList.contains('ql-italic') ? 'italic' : button.classList.contains('ql-underline') ? 'underline' : button.classList.contains('ql-strike') ? 'strikeThrough' : button.classList.contains('ql-list') ? (button.getAttribute('value') === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList') : button.classList.contains('ql-indent') ? (button.getAttribute('value') === '+1' ? 'indent' : 'outdent') : 'removeFormat';
-              document.execCommand(command, false, null);
-            } else if (formatPicker) {
-              // "Indenter" cliqué hors liste (isFormatButton vrai, formatButton
-              // null, formatPicker null aussi) tombe ici SANS rien exécuter -
-              // le clic reste absorbé (preventDefault/stopPropagation ci-dessus).
-              if (formatPicker.closest('.ql-size')) {
-                // cf. installTwoColumnsToolbarIsolation/execRealFontSize :
-                // execCommand('fontSize') n'accepte pas une valeur en pt.
-                const value = pickerItem.getAttribute('data-value');
-                if (value) execRealFontSize(cell, range, value);
-              } else if (formatPicker.closest('.ql-font')) {
-                execFontFamily(range, pickerItem.getAttribute('data-value') || 'Roboto');
-              } else {
-                document.execCommand('formatBlock', false, headerExecValue(pickerItem.getAttribute('data-value')));
-              }
+            // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via
+            // un gestionnaire posé sur .tiptap (un ancêtre) - la bloquer
+            // casserait la sélection au clic donc la suppression au clavier.
+            const pos = getPos();
+            if (typeof pos === 'number') openFootnoteEditorAt(pos);
+          });
+          return { dom: marker };
+        };
+      },
+    });
+  }
+
+  // Augmente la marque 'textStyle' via addGlobalAttributes (comme
+  // FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part
+  // (TextStyle, câblée dans init()), sinon ProseMirror lève une erreur.
+  function createFontSizeExtension(Extension) {
+    return Extension.create({
+      name: 'fontSize',
+      addGlobalAttributes() {
+        return [{
+          types: ['textStyle'],
+          attributes: {
+            fontSize: {
+              default: null,
+              parseHTML: el => el.style.fontSize || null,
+              renderHTML: attrs => (attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {}),
+            },
+          },
+        }];
+      },
+      addCommands() {
+        return { setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run() };
+      },
+    });
+  }
+
+  // Couleur de police/surlignage - même schéma que FontSize.
+  function createTextColorExtension(Extension) {
+    return Extension.create({
+      name: 'textColor',
+      addGlobalAttributes() {
+        return [{
+          types: ['textStyle'],
+          attributes: {
+            color: {
+              default: null,
+              parseHTML: el => el.style.color || null,
+              renderHTML: attrs => (attrs.color ? { style: `color: ${attrs.color}` } : {}),
+            },
+          },
+        }];
+      },
+      addCommands() {
+        return {
+          setTextColor: color => ({ chain }) => chain().setMark('textStyle', { color }).run(),
+          unsetTextColor: () => ({ chain }) => chain().setMark('textStyle', { color: null }).run(),
+        };
+      },
+    });
+  }
+  function createHighlightExtension(Extension) {
+    return Extension.create({
+      name: 'highlightColor',
+      addGlobalAttributes() {
+        return [{
+          types: ['textStyle'],
+          attributes: {
+            backgroundColor: {
+              default: null,
+              parseHTML: el => el.style.backgroundColor || null,
+              renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+            },
+          },
+        }];
+      },
+      addCommands() {
+        return {
+          setHighlight: backgroundColor => ({ chain }) => chain().setMark('textStyle', { backgroundColor }).run(),
+          unsetHighlight: () => ({ chain }) => chain().setMark('textStyle', { backgroundColor: null }).run(),
+        };
+      },
+    });
+  }
+
+  // Style de puce - augmente 'bulletList' (StarterKit) plutôt que 'textStyle'.
+  function createBulletStyleExtension(Extension) {
+    return Extension.create({
+      name: 'bulletStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['bulletList'],
+          attributes: {
+            bulletStyle: {
+              default: 'disc',
+              parseHTML: el => el.getAttribute('data-bullet-style') || 'disc',
+              renderHTML: attrs => (attrs.bulletStyle && attrs.bulletStyle !== 'disc' ? { 'data-bullet-style': attrs.bulletStyle } : {}),
+            },
+          },
+        }];
+      },
+    });
+  }
+
+  // Style de numérotation - augmente 'orderedList'.
+  function createOrderedListStyleExtension(Extension) {
+    return Extension.create({
+      name: 'orderedListStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['orderedList'],
+          attributes: {
+            numberStyle: {
+              default: 'decimal',
+              parseHTML: el => el.getAttribute('data-number-style') || 'decimal',
+              renderHTML: attrs => (attrs.numberStyle && attrs.numberStyle !== 'decimal' ? { 'data-number-style': attrs.numberStyle } : {}),
+            },
+          },
+        }];
+      },
+    });
+  }
+
+  // Style de case à cocher - augmente 'taskList'. Rendu réel en CSS
+  // (data-tasklist-style), cette extension ne fait que sérialiser le choix.
+  function createTaskListStyleExtension(Extension) {
+    return Extension.create({
+      name: 'taskListStyle',
+      addGlobalAttributes() {
+        return [{
+          types: ['taskList'],
+          attributes: {
+            taskListStyle: {
+              default: 'accentStrike',
+              parseHTML: el => el.getAttribute('data-tasklist-style') || 'accentStrike',
+              renderHTML: attrs => (attrs.taskListStyle && attrs.taskListStyle !== 'accentStrike' ? { 'data-tasklist-style': attrs.taskListStyle } : {}),
+            },
+          },
+        }];
+      },
+    });
+  }
+
+  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor
+  // que le surlignage de texte (lu par pdf-export.js:tableFrom, pas inheritedStyle).
+  function withCellBackground(CellExtension) {
+    return CellExtension.extend({
+      addAttributes() {
+        return Object.assign({}, this.parent(), {
+          backgroundColor: {
+            default: null,
+            parseHTML: el => el.style.backgroundColor || null,
+            renderHTML: attrs => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+          },
+        });
+      },
+    });
+  }
+  // Applique à toutes les cellules touchées par la sélection (CellSelection
+  // reconnue par duck-typing sur `forEachCell`, pas un instanceof).
+  function setCellsBackground(nodeEditor, color) {
+    const { state, view } = nodeEditor;
+    const { selection } = state;
+    if (typeof selection.forEachCell === 'function') {
+      const tr = state.tr;
+      selection.forEachCell((cell, pos) => {
+        tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: color }));
+      });
+      view.dispatch(tr);
+      return;
+    }
+    nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
+  }
+
+  // Zone 2 colonnes - paire de nœuds imbriqués, mêmes classes CSS que la V1.
+  // `isolating: true` : empêche backspace/suppr de fusionner la zone avec le
+  // paragraphe voisin.
+  // Tab/Shift-Tab : court-circuitent l'indentation de liste en premier
+  // (sinon l'extension Table l'emporte sur StarterKit pour une liste en
+  // cellule), sinon déplacent le curseur d'une colonne à l'autre ou en sortent.
+  function findTwoColumnsContext($from) {
+    let columnDepth = -1;
+    for (let d = $from.depth; d > 0; d -= 1) {
+      if ($from.node(d).type.name === 'twoColumnsColumn') { columnDepth = d; break; }
+    }
+    if (columnDepth === -1) return null;
+    const zoneDepth = columnDepth - 1;
+    if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return null;
+    return { columnDepth, zoneDepth, colIndex: $from.index(zoneDepth) };
+  }
+  function createTabNavigationExtension(Extension) {
+    return Extension.create({
+      name: 'tabNavigation',
+      addKeyboardShortcuts() {
+        return {
+          Tab: ({ editor: ed }) => {
+            if (ed.isActive('listItem')) {
+              // Toujours consommé, même en cas d'échec du sink : jamais de
+              // repli sur un changement de cellule/colonne.
+              ed.commands.sinkListItem('listItem');
+              return true;
             }
-            quill.update(Quill.sources.USER);
+            const { $from } = ed.state.selection;
+            const ctx = findTwoColumnsContext($from);
+            if (!ctx) return false;
+            const { columnDepth, zoneDepth, colIndex } = ctx;
+            if (colIndex === 0) {
+              const afterLeftCol = $from.after(columnDepth);
+              const target = ed.state.doc.resolve(Math.min(afterLeftCol + 1, ed.state.doc.content.size));
+              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, 1)).run();
+              return true;
+            }
+            const afterZone = $from.after(zoneDepth);
+            if (afterZone >= ed.state.doc.content.size) {
+              ed.chain().focus().insertContentAt(afterZone, { type: 'paragraph' }).setTextSelection(afterZone + 1).run();
+              return true;
+            }
+            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(afterZone), 1)).run();
+            return true;
+          },
+          'Shift-Tab': ({ editor: ed }) => {
+            if (ed.isActive('listItem')) {
+              ed.commands.liftListItem('listItem');
+              return true;
+            }
+            const { $from } = ed.state.selection;
+            const ctx = findTwoColumnsContext($from);
+            if (!ctx) return false;
+            const { columnDepth, zoneDepth, colIndex } = ctx;
+            if (colIndex === 1) {
+              const beforeRightCol = $from.before(columnDepth);
+              const target = ed.state.doc.resolve(Math.max(beforeRightCol - 1, 0));
+              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, -1)).run();
+              return true;
+            }
+            const beforeZone = $from.before(zoneDepth);
+            if (beforeZone <= 0) return true; // rien avant la zone - sans effet
+            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(beforeZone - 1), -1)).run();
+            return true;
+          },
+        };
+      },
+    });
+  }
+
+  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) :
+  // reconstruire l'EditorState avec les mêmes plugins réinitialise leur état
+  // (dont l'historique) sans recréer la vue ni perdre le document.
+  function createClearHistoryExtension(Extension, EditorState) {
+    return Extension.create({
+      name: 'clearHistory',
+      addCommands() {
+        return {
+          clearHistory: () => ({ editor: ed }) => {
+            const { view } = ed;
+            view.updateState(EditorState.create({ schema: view.state.schema, doc: view.state.doc, selection: view.state.selection, plugins: view.state.plugins }));
+            return true;
+          },
+        };
+      },
+    });
+  }
+
+  function createTwoColumnsNodes(Node, mergeAttributes) {
+    const TwoColumnsColumn = Node.create({
+      name: 'twoColumnsColumn',
+      content: 'block+',
+      isolating: true,
+      parseHTML() { return [{ tag: 'div.two-columns-column' }]; },
+      renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-column' }), 0]; },
+    });
+    const TwoColumnsZone = Node.create({
+      name: 'twoColumnsZone',
+      group: 'block',
+      content: 'twoColumnsColumn twoColumnsColumn',
+      isolating: true,
+      addAttributes() {
+        return {
+          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser,
+          // sérialisée en variable CSS --layout-left.
+          layoutLeft: {
+            default: 50,
+            parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
+            renderHTML: () => ({}),
+          },
+        };
+      },
+      parseHTML() { return [{ tag: 'div.two-columns-zone' }]; },
+      renderHTML({ HTMLAttributes, node }) {
+        return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style: `--layout-left: ${node.attrs.layoutLeft || 50}%` }), 0];
+      },
+      addCommands() {
+        return {
+          insertTwoColumns: () => ({ chain }) => chain().insertContent({
+            type: this.name,
+            content: [
+              { type: 'twoColumnsColumn', content: [{ type: 'paragraph' }] },
+              { type: 'twoColumnsColumn', content: [{ type: 'paragraph' }] },
+            ],
+          }).run(),
+        };
+      },
+      // dom = wrapper externe (ancre la poignée en absolu) englobant
+      // contentDOM (les 2 colonnes gérées par ProseMirror) et la poignée,
+      // hors contentDOM pour éviter qu'une reconciliation future la retire.
+      // --layout-left posé sur le wrapper (hérite vers le bas uniquement,
+      // la poignée ne le verrait pas si posé sur contentDOM).
+      addNodeView() {
+        return ({ node, editor: nodeEditor, getPos }) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'two-columns-zone-outer';
+          const contentDOM = document.createElement('div');
+          contentDOM.className = 'two-columns-zone';
+          wrap.appendChild(contentDOM);
+          const grip = document.createElement('div');
+          grip.className = 'two-columns-resize-grip';
+          grip.title = I18n.t('twoColumns.resizeGrip');
+          wrap.appendChild(grip);
+
+          const applyLayout = attrs => wrap.style.setProperty('--layout-left', (attrs.layoutLeft || 50) + '%');
+          applyLayout(node.attrs);
+
+          let dragging = false;
+          function onMove(event) {
+            const rect = wrap.getBoundingClientRect();
+            if (!rect.width) return;
+            const left = ((event.clientX - rect.left) / rect.width) * 100;
+            wrap.style.setProperty('--layout-left', Math.max(20, Math.min(80, left)) + '%');
           }
-          return;
+          function onUp() {
+            dragging = false;
+            document.removeEventListener('mousemove', onMove);
+            const finalLeft = Math.round(parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50);
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const { state, view } = nodeEditor;
+            const current = state.doc.nodeAt(pos);
+            if (!current) return;
+            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeft: finalLeft })));
+          }
+          grip.addEventListener('mousedown', event => {
+            event.preventDefault(); event.stopPropagation();
+            dragging = true;
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+          });
+
+          return {
+            dom: wrap,
+            contentDOM,
+            update: updatedNode => {
+              if (updatedNode.type.name !== 'twoColumnsZone') return false;
+              if (!dragging) applyLayout(updatedNode.attrs);
+              return true;
+            },
+            destroy: () => document.removeEventListener('mousemove', onMove),
+            // Sans ça, ProseMirror voit la mutation de style pendant le
+            // glisser (hors transaction) comme inattendue et recrée le
+            // NodeView - le wrapper devient alors détaché avant le mouseup,
+            // et le commit final s'applique à un nœud fantôme.
+            ignoreMutation: () => true,
+          };
+        };
+      },
+    });
+    return { TwoColumnsColumn, TwoColumnsZone };
+  }
+
+  // Image - nœud atome en ligne : `layer` (normal/devant/derrière),
+  // `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({})
+  // - le nœud construit lui-même la chaîne `style` complète ci-dessous.
+  function createEditorImageNode(Node) {
+    const noBareRender = () => ({});
+    // `height` n'est posé que pour une image liée à une variable
+    // (placeholder de taille fixe, mode "contain" côté rendu).
+    function styleFor(a) {
+      const parts = [];
+      if (a.width) parts.push(`width: ${a.width}`);
+      if (a.varTable && a.height) parts.push(`height: ${a.height}`);
+      if (a.layer !== 'normal') {
+        parts.push('position: absolute', `left: ${a.left || 0}px`, `top: ${a.top || 0}px`, `z-index: ${a.layer === 'front' ? 5 : -1}`);
+      }
+      if (a.opacity !== 1 && a.opacity != null) parts.push(`opacity: ${a.opacity}`);
+      return parts.join('; ');
+    }
+    return Node.create({
+      name: 'editorImage',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          src: { default: null },
+          alt: { default: 'Image' },
+          width: { default: '320px', parseHTML: el => el.style.width || null, renderHTML: noBareRender },
+          height: { default: null, parseHTML: el => el.style.height || null, renderHTML: noBareRender },
+          layer: { default: 'normal', parseHTML: el => el.getAttribute('data-layer') || 'normal', renderHTML: noBareRender },
+          left: { default: null, parseHTML: el => (el.style.left ? parseFloat(el.style.left) : null), renderHTML: noBareRender },
+          top: { default: null, parseHTML: el => (el.style.top ? parseFloat(el.style.top) : null), renderHTML: noBareRender },
+          opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
+          align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
+          wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
+          // Posés ensemble : transforment ce nœud en placeholder de #Variable
+          // Attachments (jamais de vraie image dans l'éditeur).
+          varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
+          varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
+          varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
+        };
+      },
+      parseHTML() { return [{ tag: 'img.editor-image' }]; },
+      renderHTML({ node }) {
+        const a = node.attrs;
+        // Placeholder lié à une variable : `src` reste vide (résolu au
+        // rendu/export par js/reader-mode.js:resolveVariableImages).
+        const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
+        if (a.align) attrs['data-align'] = a.align;
+        if (a.varTable) {
+          attrs['data-var-table'] = a.varTable;
+          attrs['data-var-column'] = a.varColumn;
+          attrs['data-var-key'] = a.varKey;
+        }
+        return ['img', attrs];
+      },
+      addCommands() {
+        return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
+      },
+      // NodeView (pas des overlays document.body comme en V1) : les poignées
+      // sont de vrais enfants DOM du wrapper, positionnées en pur CSS.
+      addNodeView() {
+        return ({ node, editor: nodeEditor, getPos }) => {
+          const wrap = document.createElement('span');
+          wrap.className = 'editor-image-view';
+          const img = document.createElement('img');
+          img.className = 'editor-image';
+          img.draggable = false;
+          wrap.appendChild(img);
+
+          // Placeholder de #Variable : <span> superposé (icône +
+          // "#Table.Colonne") plutôt que de compter sur le rendu natif d'un
+          // <img src="">. Le <img> reste dans le DOM, invisible, pour
+          // continuer à porter width/height (poignées, toolbar flottante).
+          const varLabel = document.createElement('span');
+          varLabel.className = 'editor-image-var-label';
+          wrap.appendChild(varLabel);
+
+          const moveHandle = document.createElement('span');
+          moveHandle.className = 'editor-image-move-handle';
+          moveHandle.title = I18n.t('image.moveHandle');
+          wrap.appendChild(moveHandle);
+          ['nw', 'ne', 'sw', 'se'].forEach(corner => {
+            const h = document.createElement('span');
+            h.className = 'editor-image-handle editor-image-handle-' + corner;
+            wrap.appendChild(h);
+            h.addEventListener('mousedown', event => startResize(event, corner));
+          });
+          moveHandle.addEventListener('mousedown', startMove);
+          // Une fois DÉJÀ sélectionnée, permet de glisser directement au
+          // clic sur l'image (pas seulement sur la poignée de déplacement) -
+          // le tout premier clic suit le chemin normal de sélection ProseMirror.
+          img.addEventListener('mousedown', event => {
+            if (!wrap.classList.contains('editor-image-layered')) return;
+            if (!wrap.classList.contains('editor-image-selected')) return;
+            startMove(event);
+          });
+
+          // Le z-index négatif ("derrière le texte") est posé sur l'<img>
+          // seule, pas le wrapper : sinon la poignée de déplacement (enfant
+          // du wrapper) serait entraînée derrière le texte avec lui,
+          // devenant impossible à re-sélectionner une fois cachée.
+          function applyAttrs(attrs) {
+            const isVarBox = !!attrs.varTable;
+            img.src = isVarBox ? '' : (attrs.src || '');
+            img.alt = attrs.alt || '';
+            const imgStyle = [];
+            if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
+            if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
+            if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
+            if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
+            img.setAttribute('style', imgStyle.join('; '));
+            wrap.classList.toggle('editor-image-var-placeholder', isVarBox);
+            varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : '';
+            const layered = attrs.layer !== 'normal';
+            wrap.classList.toggle('editor-image-layered', layered);
+            if (layered) {
+              wrap.style.position = 'absolute';
+              wrap.style.left = (attrs.left || 0) + 'px';
+              wrap.style.top = (attrs.top || 0) + 'px';
+              // Largeur explicite (pas de shrink-to-fit implicite) : dans
+              // une cellule de tableau étroite, le shrink-to-fit par défaut
+              // s'effondre à 0 quand l'image approche la largeur du bloc englobant.
+              wrap.style.width = attrs.width || '';
+            } else {
+              wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.width = '';
+            }
+            moveHandle.style.display = layered ? '' : 'none';
+            if (attrs.align) wrap.setAttribute('data-align', attrs.align); else wrap.removeAttribute('data-align');
+            wrap.setAttribute('data-wrap', attrs.wrap || 'inline');
+          }
+          applyAttrs(node.attrs);
+
+          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni
+          // via selectNode/deselectNode de la NodeView (peu fiable après un
+          // setNodeMarkup, qui remplace le nœud) : centralisé dans
+          // wireImageFloatingToolbar.check(), qui recalcule l'état à chaque
+          // transaction depuis editor.isActive('editorImage').
+          function updateAttrs(patch) {
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const current = nodeEditor.state.doc.nodeAt(pos);
+            if (!current) return;
+            patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
+          }
+
+          // Attributs COURANTS - jamais `node.attrs` directement : ce
+          // paramètre de closure ne reflète que le premier rendu de cette
+          // NodeView, seul `update(updatedNode)` reçoit le nœud frais.
+          function currentAttrs() {
+            const pos = getPos();
+            const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
+            return (current && current.attrs) || node.attrs;
+          }
+
+          let resizeState = null;
+          function startResize(event, corner) {
+            event.preventDefault(); event.stopPropagation();
+            const rect = img.getBoundingClientRect();
+            const attrsNow = currentAttrs();
+            resizeState = {
+              startX: event.clientX, startY: event.clientY,
+              startWidth: rect.width, startHeight: rect.height,
+              signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
+              isVarBox: !!attrsNow.varTable,
+              // En calque, `wrap` a une largeur explicite (cf. applyAttrs) ;
+              // sans la faire grandir aussi pendant le glisser (pas seulement
+              // à la fin), `.editor-image { max-width:100% }` plafonnerait
+              // l'<img> à l'ancienne largeur du wrap.
+              isLayered: attrsNow.layer !== 'normal',
+            };
+            document.addEventListener('mousemove', onResizeMove);
+            document.addEventListener('mouseup', onResizeUp, { once: true });
+          }
+          function onResizeMove(event) {
+            if (!resizeState) return;
+            let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.signX);
+            // En en-tête/pied, la poignée bute sur le plafond mais reste
+            // utilisable (rétrécir reste toujours libre).
+            width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
+            img.style.width = Math.round(width) + 'px';
+            if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
+            if (resizeState.isVarBox) {
+              const height = Math.max(30, resizeState.startHeight + (event.clientY - resizeState.startY) * resizeState.signY);
+              img.style.height = Math.round(height) + 'px';
+            }
+          }
+          function onResizeUp() {
+            document.removeEventListener('mousemove', onResizeMove);
+            if (resizeState) {
+              const patch = { width: Math.round(img.getBoundingClientRect().width) + 'px' };
+              if (resizeState.isVarBox) patch.height = Math.round(img.getBoundingClientRect().height) + 'px';
+              updateAttrs(patch);
+            }
+            resizeState = null;
+          }
+
+          let moveState = null;
+          function startMove(event) {
+            event.preventDefault(); event.stopPropagation();
+            // Attributs courants via getPos()/nodeAt, pas `node` (figé au 1er rendu).
+            const pos = getPos();
+            const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
+            moveState = { startX: event.clientX, startY: event.clientY, startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
+            document.addEventListener('mousemove', onMoveMove);
+            document.addEventListener('mouseup', onMoveUp, { once: true });
+          }
+          function onMoveMove(event) {
+            if (!moveState) return;
+            wrap.style.left = (moveState.startLeft + (event.clientX - moveState.startX)) + 'px';
+            wrap.style.top = (moveState.startTop + (event.clientY - moveState.startY)) + 'px';
+          }
+          function onMoveUp(event) {
+            document.removeEventListener('mousemove', onMoveMove);
+            if (moveState) {
+              updateAttrs({
+                left: Math.round(moveState.startLeft + (event.clientX - moveState.startX)),
+                top: Math.round(moveState.startTop + (event.clientY - moveState.startY)),
+              });
+            }
+            moveState = null;
+          }
+
+          return {
+            dom: wrap,
+            update: updatedNode => {
+              if (updatedNode.type.name !== 'editorImage') return false;
+              applyAttrs(updatedNode.attrs);
+              return true;
+            },
+            selectNode: () => wrap.classList.add('editor-image-selected'),
+            deselectNode: () => wrap.classList.remove('editor-image-selected'),
+            destroy: () => {
+              document.removeEventListener('mousemove', onResizeMove);
+              document.removeEventListener('mousemove', onMoveMove);
+            },
+          };
+        };
+      },
+    });
+  }
+
+  // Saut de page forcé - nœud atome de bloc, même classe que la V1.
+  function createPageBreakNode(Node) {
+    return Node.create({
+      name: 'pageBreak',
+      group: 'block',
+      atom: true,
+      selectable: true,
+      parseHTML() { return [{ tag: 'div.page-break-marker' }]; },
+      renderHTML() { return ['div', { class: 'page-break-marker', contenteditable: 'false' }, 'Saut de page']; },
+      addCommands() {
+        return { insertPageBreak: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
+      },
+    });
+  }
+
+  // Numérotation des titres - configuration persistée comme un nœud dans le
+  // contenu plutôt qu'une colonne Grist séparée (évite une migration de
+  // schéma). Attribut nommé `numberingStyle` pas `style` (collision HTML).
+  function createHeadingNumberingConfigNode(Node) {
+    return Node.create({
+      name: 'headingNumberingConfig',
+      group: 'block',
+      atom: true,
+      selectable: false,
+      addAttributes() {
+        return { numberingStyle: { default: 'none', renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{ tag: 'div.heading-numbering-config', getAttrs: el => ({ numberingStyle: el.dataset.style || 'none' }) }];
+      },
+      renderHTML({ node }) {
+        return ['div', { class: 'heading-numbering-config', contenteditable: 'false', 'data-style': node.attrs.numberingStyle }];
+      },
+      addCommands() {
+        return {
+          // Un seul nœud de config par document : cherche parmi les enfants
+          // directs (doc.forEach), sinon l'insère en tête. `dispatch` peut
+          // être absent (mode "can-run") - ne muter `tr` que s'il est présent.
+          setHeadingNumberingStyle: numberingStyle => ({ tr, state, dispatch }) => {
+            let foundPos = null;
+            state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') foundPos = pos; });
+            if (dispatch) {
+              if (foundPos !== null) tr.setNodeMarkup(foundPos, undefined, { numberingStyle });
+              else tr.insert(0, state.schema.nodes.headingNumberingConfig.create({ numberingStyle }));
+            }
+            return true;
+          },
+        };
+      },
+    });
+  }
+
+  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder
+  // statique (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche
+  // un aperçu vivant via un NodeView, isolé du modèle par `ignoreMutation`.
+  function createTocNode(Node) {
+    return Node.create({
+      name: 'toc',
+      group: 'block',
+      atom: true,
+      selectable: true,
+      parseHTML() { return [{ tag: 'div.toc-marker' }]; },
+      renderHTML() { return ['div', { class: 'toc-marker' }, 'Sommaire (généré automatiquement à partir des titres)']; },
+      addCommands() {
+        return { insertToc: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
+      },
+      addNodeView() {
+        return ({ editor: nodeViewEditor }) => {
+          const dom = document.createElement('div');
+          dom.className = 'toc-marker';
+          const refresh = () => {
+            const headingEls = Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+            dom.innerHTML = '';
+            if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
+            const style = nodeViewEditor.view.dom.dataset.headingStyle || 'none';
+            HeadingNumbering.entriesFor(headingEls, style).forEach(entry => {
+              const line = document.createElement('div');
+              line.className = 'toc-entry-preview';
+              line.style.paddingLeft = ((entry.level - 1) * 14) + 'px';
+              line.textContent = entry.text;
+              dom.appendChild(line);
+            });
+          };
+          refresh();
+          nodeViewEditor.on('update', refresh);
+          return { dom, ignoreMutation: () => true, destroy: () => nodeViewEditor.off('update', refresh) };
+        };
+      },
+    });
+  }
+
+  // En mode Aperçu A4, un tableau ne doit jamais dépasser la largeur de
+  // page réelle : un <col> à largeur EXPLICITE n'a, contrairement à
+  // min-width, aucun plafond naturel - une colonne trop agrandie pousse le
+  // reste du tableau hors de la feuille. L'extension de redimensionnement
+  // n'expose pas de crochet pendant le glisser ; ce correctif tourne donc
+  // sur chaque mise à jour et rétrécit après coup les colonnes
+  // explicitement redimensionnées (`colwidth` réel, jamais les colonnes
+  // "auto" - déjà couvertes par `min-width: 0`) dès que la largeur totale
+  // dépasse le conteneur - un léger rebond après avoir relâché la poignée,
+  // mais le tableau ne peut jamais rester plus large que la page.
+  // Largeur disponible pour un enfant direct de `.tiptap` : son clientWidth
+  // inclut SON PROPRE padding (simule la marge de page en Aperçu A4), non
+  // disponible à un enfant. Partagé entre clampOverflowingTables et
+  // l'alignement des images en calque (même calcul).
+  function editorContentWidthPx(currentEditor) {
+    const rootEl = currentEditor.view.dom;
+    const rootCs = getComputedStyle(rootEl);
+    return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
+  }
+
+  // Tant qu'UNE SEULE colonne d'un tableau reste "auto" (pas de `colwidth`
+  // propre), `<table>` ne porte qu'un `min-width` - `.tiptap table {
+  // width: 100% }` s'applique donc toujours tel quel : agrandir une colonne
+  // ne fait que voler de la place aux colonnes "auto" voisines, et la
+  // poignée extérieure droite (sans colonne voisine à qui prendre de la
+  // place) ne peut jamais faire grandir le tableau du tout. Dès que TOUTES
+  // les colonnes ont un `colwidth` explicite, `<table>` porte un `width`
+  // exact qui l'affranchit du `width:100%` (peut alors dépasser 100%,
+  // jusqu'à ce que clampOverflowingTables le retienne). Fixé en gelant, dès
+  // le premier redimensionnement d'une colonne, la largeur RENDUE actuelle
+  // de chaque colonne encore "auto" du même tableau comme son propre
+  // `colwidth` - clampOverflowingTables rattrape ensuite un éventuel
+  // dépassement.
+  function backfillAutoColumnWidths(currentEditor) {
+    const { state, view } = currentEditor;
+    let tr = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'table') return true;
+      const firstRow = node.firstChild;
+      if (!firstRow) return false;
+      let hasExplicit = false; let hasAuto = false;
+      firstRow.forEach(cellNode => { if (cellNode.attrs.colwidth) hasExplicit = true; else hasAuto = true; });
+      if (!hasExplicit || !hasAuto) return false;
+      node.forEach((rowNode, rowOffset) => {
+        rowNode.forEach((cellNode, cellOffset) => {
+          if (cellNode.attrs.colwidth) return;
+          const cellPos = pos + 1 + rowOffset + 1 + cellOffset;
+          const dom = view.nodeDOM(cellPos);
+          if (!dom || !dom.getBoundingClientRect) return;
+          const span = cellNode.attrs.colspan || 1;
+          const widthPx = Math.max(DEFAULT_COL_PX, Math.round(dom.getBoundingClientRect().width / span));
+          if (!tr) tr = state.tr;
+          tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: Array(span).fill(widthPx) }));
+        });
+      });
+      return false;
+    });
+    if (tr) currentEditor.view.dispatch(tr);
+  }
+
+  const DEFAULT_COL_PX = 25;
+  function clampOverflowingTables(currentEditor) {
+    const editorContainer = document.getElementById('editor-container');
+    if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
+    const containerWidth = editorContentWidthPx(currentEditor);
+    if (!containerWidth) return;
+    const { state } = currentEditor;
+    let tr = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'table') return true;
+      const firstRow = node.firstChild;
+      if (!firstRow) return false;
+      // Calculé sur la première ligne, mais appliqué à TOUTES : sinon
+      // prosemirror-tables (largeur cohérente par colonne exigée) annule la
+      // correction pour la réaligner sur les lignes non corrigées.
+      let total = 0;
+      firstRow.forEach(cellNode => {
+        const span = cellNode.attrs.colspan || 1;
+        const colwidth = cellNode.attrs.colwidth;
+        total += colwidth ? colwidth.reduce((sum, w) => sum + (w || DEFAULT_COL_PX), 0) : DEFAULT_COL_PX * span;
+      });
+      if (total <= containerWidth) return false;
+      const scale = containerWidth / total;
+      node.forEach((rowNode, rowOffset) => {
+        rowNode.forEach((cellNode, cellOffset) => {
+          const colwidth = cellNode.attrs.colwidth;
+          if (!colwidth) return; // colonne "auto" par défaut - laissée telle quelle
+          const newColwidth = colwidth.map(w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w));
+          const cellPos = pos + 1 + rowOffset + 1 + cellOffset;
+          if (!tr) tr = state.tr;
+          tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: newColwidth }));
+        });
+      });
+      return false;
+    });
+    if (tr) currentEditor.view.dispatch(tr);
+  }
+
+  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée
+  // dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
+  function createFloatingPanel(className, innerHTML, onAction, onInput) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.innerHTML = innerHTML;
+    // mousedown+preventDefault : évite de perdre le focus/la sélection
+    // ProseMirror avant que l'action ne s'exécute.
+    el.addEventListener('mousedown', (event) => {
+      const btn = event.target.closest('button[data-action]');
+      if (!btn) return;
+      event.preventDefault();
+      onAction(btn.dataset.action);
+    });
+    if (onInput) el.addEventListener('input', (event) => {
+      const input = event.target.closest('[data-role]');
+      if (input) onInput(input.dataset.role, input.value);
+    });
+    document.body.appendChild(el);
+    let stopAutoUpdate = null;
+    return {
+      el,
+      show(referenceEl) {
+        el.classList.add('visible');
+        const update = () => {
+          floatingUi.computePosition(referenceEl, el, {
+            placement: 'top',
+            middleware: [floatingUi.offset(8), floatingUi.flip(), floatingUi.shift({ padding: 8 })],
+          }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
+        };
+        if (stopAutoUpdate) stopAutoUpdate();
+        stopAutoUpdate = floatingUi.autoUpdate(referenceEl, el, update);
+      },
+      hide() {
+        el.classList.remove('visible');
+        if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
+      },
+    };
+  }
+
+  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable)
+  // ne se ferment normalement que sur un changement RÉEL de sélection
+  // ProseMirror - un clic hors de `.tiptap` ET hors `.v2-floating-toolbar`
+  // les referme toutes, pour les cas où aucun évènement ProseMirror ne se
+  // déclenche (ex. clic sur "Mode lecture").
+  const floatingContextPanels = [];
+  function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
+  document.addEventListener('mousedown', (event) => {
+    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar')) return;
+    hideFloatingContextToolbars();
+  });
+
+  const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
+  const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
+
+  // Un seul menu déroulant à la fois (couleur/police/taille), fermé au clic ailleurs.
+  let openDropdownPanel = null;
+  document.addEventListener('mousedown', (event) => {
+    if (!openDropdownPanel) return;
+    if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')
+      || event.target.closest('.v2-format-panel') || event.target.closest('.v2-format-chip')
+      || event.target.closest('.v2-stepper') || event.target.closest('.v2-fill-chip')) return;
+    openDropdownPanel.hide();
+    openDropdownPanel = null;
+  });
+
+  // Menu déroulant de couleur générique (grille de nuances + case
+  // "personnalisé" ouvrant le sélecteur natif + case "aucune", optionnelle) -
+  // même esprit que la toolbar de tableau/image (createFloatingPanel), pour
+  // le bouton de police/surlignage de la toolbar principale ET le bouton de
+  // fond de cellule de la toolbar de tableau. `onPick(chain, color)`/
+  // `onNone(chain)` reçoivent une chaîne TipTap déjà focus+sélection
+  // restaurée (cf. `withSavedSelection` de chaque appelant) - à eux
+  // d'appeler la commande adéquate dessus, sans jamais lancer .run() (fait
+  // par l'appelant, une seule fois).
+  function createColorDropdown(presets, { noneLabel, onPick, onNone, withSavedSelection }) {
+    const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
+    const html = '<div class="v2-color-grid">' + swatches + '</div>'
+      + '<div class="v2-color-dropdown-footer">'
+      + `<button data-action="custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
+      + (onNone ? `<button data-action="none" title="${noneLabel}">${Icons.svg('noColor')}<span>${noneLabel}</span></button>` : '')
+      + '</div>'
+      + '<input type="color" class="v2-color-dropdown-native">';
+    const panel = createFloatingPanel('v2-color-dropdown', html, (action) => {
+      if (action === 'custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
+      if (action === 'none') { withSavedSelection(chain => onNone(chain)); closeDropdownPanel(); return; }
+      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); closeDropdownPanel(); }
+    });
+    panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', (event) => {
+      withSavedSelection(chain => onPick(chain, event.target.value));
+      closeDropdownPanel();
+    });
+    return panel;
+  }
+  function closeDropdownPanel() { if (openDropdownPanel) { openDropdownPanel.hide(); openDropdownPanel = null; } }
+  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas
+  // click) : même raison que la toolbar de tableau/image, éviter de perdre
+  // la sélection ProseMirror avant que le panneau ne s'ouvre. `getSelection`
+  // capture la sélection AU MOMENT du clic (avant que le panneau ne vole le
+  // focus) - restaurée par `withSavedSelection` quand une couleur est
+  // effectivement choisie, potentiellement bien après ce clic initial.
+  function wireDropdownButton(btn, panel, captureSelection) {
+    if (!btn) return;
+    btn.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      captureSelection();
+      if (openDropdownPanel === panel) { closeDropdownPanel(); return; }
+      closeDropdownPanel();
+      panel.show(btn);
+      openDropdownPanel = panel;
+    });
+  }
+  function setColorBar(id, color) {
+    const el = document.getElementById(id);
+    if (el) el.style.background = color || 'transparent';
+  }
+  function setColorIcon(id, color) {
+    const el = document.getElementById(id);
+    if (el) el.style.color = color || '';
+  }
+
+  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la
+  // sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la
+  // position du curseur, pas la sélection réellement visée par l'utilisateur.
+  function createSelectionPreserver() {
+    let savedSelection = null;
+    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
+    const withSavedSelection = (fn) => {
+      const chain = editor.chain().focus();
+      if (savedSelection) chain.setTextSelection(savedSelection);
+      fn(chain);
+      chain.run();
+    };
+    return { captureSelection, withSavedSelection };
+  }
+
+  // Couleur de police / surlignage : bouton "appliquer" (réapplique la
+  // dernière couleur choisie) + bouton chevron séparé (menu de nuances).
+  function wireColorPickers() {
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+    // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix"
+    // - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
+    let lastTextColor = TEXT_COLOR_PRESETS[0];
+    let lastHighlightColor = FILL_COLOR_PRESETS[0];
+    const wireQuickApply = (id, fn) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('mousedown', (event) => { event.preventDefault(); captureSelection(); withSavedSelection(fn); });
+    };
+
+    const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
+      noneLabel: I18n.t('colorDropdown.noneDefault'),
+      withSavedSelection,
+      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); setColorIcon('v2-text-color-icon', color); },
+      onNone: (chain) => { chain.unsetTextColor(); setColorIcon('v2-text-color-icon', null); },
+    });
+    wireQuickApply('v2-btn-text-color', chain => chain.setTextColor(lastTextColor));
+    wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
+
+    const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
+      noneLabel: I18n.t('colorDropdown.none'),
+      withSavedSelection,
+      onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); setColorIcon('v2-highlight-icon', color); },
+      onNone: (chain) => { chain.unsetHighlight(); setColorIcon('v2-highlight-icon', null); },
+    });
+    wireQuickApply('v2-btn-highlight', chain => chain.setHighlight(lastHighlightColor));
+    wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
+  }
+
+  // Toolbar de gestion de tableau : panneau flottant, visible seulement
+  // curseur dans une cellule, ancré sur le <table> réel.
+  function wireTableFloatingToolbar() {
+    const buttons = [
+      ['row-before', 'rowBefore', I18n.t('table.rowBefore')],
+      ['row-after', 'rowAfter', I18n.t('table.rowAfter')],
+      ['row-del', 'rowDel', I18n.t('table.rowDel')],
+      ['col-before', 'colBefore', I18n.t('table.colBefore')],
+      ['col-after', 'colAfter', I18n.t('table.colAfter')],
+      ['col-del', 'colDel', I18n.t('table.colDel')],
+      ['table-del', 'trash', I18n.t('table.tableDel')],
+    ];
+    const html = buttons.map(([action, icon, title]) =>
+      `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
+      + '<span class="v2-floating-sep"></span>'
+      + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
+      + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
+      + '</button>';
+    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+      const commands = {
+        'row-before': () => editor.chain().focus().addRowBefore().run(),
+        'row-after': () => editor.chain().focus().addRowAfter().run(),
+        'row-del': () => editor.chain().focus().deleteRow().run(),
+        'col-before': () => editor.chain().focus().addColumnBefore().run(),
+        'col-after': () => editor.chain().focus().addColumnAfter().run(),
+        'col-del': () => editor.chain().focus().deleteColumn().run(),
+        'table-del': () => editor.chain().focus().deleteTable().run(),
+        'fill-open': () => {
+          const btn = document.getElementById('v2-table-fill-btn');
+          if (openDropdownPanel === fillPanel) { closeDropdownPanel(); return; }
+          closeDropdownPanel();
+          fillPanel.show(btn);
+          openDropdownPanel = fillPanel;
+        },
+      };
+      (commands[action] || (() => {}))();
+    });
+    // Pas de sélection à restaurer ici : setCellsBackground lit
+    // editor.state.selection directement (persiste indépendamment du focus DOM).
+    const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
+      noneLabel: I18n.t('colorDropdown.none'),
+      withSavedSelection: fn => fn(null),
+      onPick: (chain, color) => { setCellsBackground(editor, color); setColorBar('v2-table-fill-bar', color); },
+      onNone: () => { setCellsBackground(editor, null); setColorBar('v2-table-fill-bar', null); },
+    });
+    floatingContextPanels.push(panel);
+    const check = () => {
+      // editor.isActive(...) ne change pas seul quand le focus quitte
+      // l'éditeur - vérifier hasFocus() explicitement pour fermer le
+      // panneau au clic hors de l'éditeur.
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
+      if (!editor.isActive('table')) { panel.hide(); return; }
+      const { $from } = editor.state.selection;
+      let tableDepth = -1;
+      for (let d = $from.depth; d > 0; d--) { if ($from.node(d).type.name === 'table') { tableDepth = d; break; } }
+      if (tableDepth === -1) { panel.hide(); return; }
+      // nodeDOM d'une table renvoie le wrapper (.tableWrapper de
+      // prosemirror-tables), pas le <table> - redescend dessus pour l'ancrage.
+      const dom = editor.view.nodeDOM($from.before(tableDepth));
+      if (!dom) { panel.hide(); return; }
+      const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
+      panel.show(tableEl);
+      const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
+      setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
+  }
+
+  // Toolbar flottante d'image : zoom, taille d'origine, alignement, wrap,
+  // opacité, calque, suppression.
+  function wireImageFloatingToolbar() {
+    const html = [
+      `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
+      `<button data-action="zoom-in" title="${I18n.t('imgToolbar.grow')}">${Icons.svg('zoomIn')}</button>`,
+      `<button data-action="reset" title="${I18n.t('imgToolbar.originalSize')}">${Icons.svg('resetSize')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="align-left" title="${I18n.t('align.left')}">${Icons.svg('alignLeft')}</button>`,
+      `<button data-action="align-center" title="${I18n.t('align.center')}">${Icons.svg('alignCenter')}</button>`,
+      `<button data-action="align-right" title="${I18n.t('align.right')}">${Icons.svg('alignRight')}</button>`,
+      `<button data-action="wrap" title="${I18n.t('imgToolbar.inlineToggle')}">${Icons.svg('wrapToggle')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<input type="range" data-role="opacity" min="10" max="100" value="100" title="${I18n.t('imgToolbar.opacity')}">`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="layer-normal" title="${I18n.t('imgToolbar.inText')}">${Icons.svg('layerNormal')}</button>`,
+      `<button data-action="layer-front" title="${I18n.t('imgToolbar.front')}">${Icons.svg('layerFront')}</button>`,
+      `<button data-action="layer-behind" title="${I18n.t('imgToolbar.behind')}">${Icons.svg('layerBehind')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
+    ].join('');
+
+    // Exige une VRAIE NodeSelection (`.node`), pas juste editor.isActive()
+    // qui reste vrai pour une simple sélection de texte traversant la
+    // position DOM de l'image. Duck-typing sur `.node` plutôt que
+    // `instanceof NodeSelectionClass` : un clic réel sur l'image produit une
+    // sélection créée en interne par prosemirror-view qui échoue cet
+    // instanceof (deux exemplaires distincts du module prosemirror-state).
+    function selectedImageNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'editorImage') ? node : null;
+    }
+
+    // Dimensions intrinsèques (naturalWidth/Height) pour clampWidthForHfMaxSize.
+    function selectedImageDom() {
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      return (dom && dom.querySelector) ? dom.querySelector('img') : null;
+    }
+
+    function updateSelectedImage(patch) {
+      const node = selectedImageNode();
+      if (!node) return;
+      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
+    }
+
+    // En flux normal, alignement classique ; en calque, réaligne sur le
+    // bord du conteneur (margin:auto n'a aucun effet en position:absolute).
+    function alignOrSnap(align) {
+      const node = selectedImageNode();
+      if (!node) return;
+      const { state } = editor;
+      if (node.attrs.layer === 'normal') { updateSelectedImage({ align }); return; }
+      const dom = editor.view.nodeDOM(state.selection.from);
+      const img = dom && dom.querySelector && dom.querySelector('img');
+      if (!img) return;
+      const imgWidthPx = img.getBoundingClientRect().width;
+      const containerWidthPx = editorContentWidthPx(editor);
+      // `left` est stocké depuis le bord de la boîte de padding, mais
+      // l'alignement vise le bord du texte - décalage explicite du padding.
+      const rootCs = getComputedStyle(editor.view.dom);
+      const padLeft = parseFloat(rootCs.paddingLeft) || 0;
+      const left = align === 'left' ? padLeft : align === 'center' ? padLeft + Math.max(0, (containerWidthPx - imgWidthPx) / 2) : padLeft + Math.max(0, containerWidthPx - imgWidthPx);
+      updateSelectedImage({ left: Math.round(left) });
+    }
+
+    // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton
+    // fixe le calque visé. Au premier passage en calque, initialise
+    // left/top depuis la position RENDUE actuelle pour éviter un saut visuel.
+    function setLayer(target) {
+      const node = selectedImageNode();
+      if (!node) return;
+      const pos = editor.state.selection.from;
+      if (node.attrs.layer === target) return;
+      const patch = { layer: target };
+      if (target !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
+        const dom = editor.view.nodeDOM(pos);
+        const img = dom && dom.querySelector && dom.querySelector('img');
+        if (img) {
+          const imgRect = img.getBoundingClientRect();
+          const rootRect = editor.view.dom.getBoundingClientRect();
+          // Pas de soustraction de padding : left/top sont appliqués tels
+          // quels en CSS depuis le bord de la boîte de padding (styleFor()),
+          // qui ne bouge pas avec le padding - contrairement à la zone de
+          // contenu, seule affectée si on avait retranché le padding ici.
+          patch.left = Math.round(imgRect.left - rootRect.left);
+          patch.top = Math.round(imgRect.top - rootRect.top);
         }
       }
-      const alignButton = target.closest && target.closest('.ql-align');
-      if (!alignButton) return;
-      const column = getRealActiveColumn();
-      if (cell) { pendingAlignmentCell = cell; activeCell = cell; }
-      if (column) pendingAlignmentColumn = column;
-      // Capture la sélection UNIQUEMENT au clic sur le LABEL du picker (pas
-      // encore sur une valeur, pickerItem est alors null) : c'est le seul
-      // moment où la sélection dans la cellule/colonne est encore garantie
-      // valide - au clic sur l'item choisi ensuite, le picker déjà ouvert a
-      // pu faire perdre le focus (et donc la sélection réelle) à la cellule/
-      // colonne. Sans ce filtre, ce second passage écraserait la bonne
-      // sélection capturée au premier par une sélection vide/hors-contexte.
-      if (!pickerItem && (cell || column)) {
-        const selection = window.getSelection && window.getSelection();
-        pendingAlignmentRange = (selection && selection.rangeCount) ? selection.getRangeAt(0).cloneRange() : null;
+      patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));
+    }
+
+    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+      const selNode = selectedImageNode();
+      if (!selNode) return;
+      const attrs = selNode.attrs;
+      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en tête
+      // de fichier) : zoom avant/reset restent utilisables (poignées aussi,
+      // cf. startResize) - juste bornés à la taille max, jamais bloqués.
+      // zoom-out n'a besoin d'aucun plafond (il ne fait que rétrécir).
+      const clampedWidth = widthPx => {
+        const dom = selectedImageDom();
+        return dom ? clampWidthForHfMaxSize(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
+      };
+      const commands = {
+        'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
+        'zoom-in': () => updateSelectedImage({ width: Math.round(clampedWidth((parseFloat(attrs.width) || 320) * 1.25)) + 'px' }),
+        reset: () => updateSelectedImage({ width: Math.round(clampedWidth(320)) + 'px', align: null }),
+        'align-left': () => alignOrSnap('left'),
+        'align-center': () => alignOrSnap('center'),
+        'align-right': () => alignOrSnap('right'),
+        wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
+        'layer-normal': () => setLayer('normal'),
+        // Verrouillé en mode en-tête/pied (cf. syncState ci-dessous pour le
+        // grisage visuel) - garde-fou en plus du CSS pointer-events:none, au
+        // cas où : pdf-export.js ne résout pas encore la position d'une
+        // image en calque à l'intérieur d'un en-tête/pied (pas de mesure en
+        // 2 passes pour cette zone, contrairement au flux principal).
+        'layer-front': () => { if (!hfMode) setLayer('front'); },
+        'layer-behind': () => { if (!hfMode) setLayer('behind'); },
+        delete: () => {
+          const pos = editor.state.selection.from;
+          editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
+        },
+      };
+      (commands[action] || (() => {}))();
+    }, (role, value) => {
+      if (role === 'opacity') updateSelectedImage({ opacity: Math.max(0.1, parseInt(value, 10) / 100) });
+    });
+
+    function syncState() {
+      const node = selectedImageNode();
+      if (!node) return;
+      const attrs = node.attrs;
+      const opacityInput = panel.el.querySelector('input[data-role="opacity"]');
+      if (opacityInput && document.activeElement !== opacityInput) opacityInput.value = Math.round((attrs.opacity != null ? attrs.opacity : 1) * 100);
+      const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
+      setActive('align-left', attrs.align === 'left');
+      setActive('align-center', attrs.align === 'center');
+      setActive('align-right', attrs.align === 'right');
+      setActive('wrap', attrs.wrap === 'block');
+      setActive('layer-normal', !attrs.layer || attrs.layer === 'normal');
+      setActive('layer-front', attrs.layer === 'front');
+      setActive('layer-behind', attrs.layer === 'behind');
+      // Cf. commentaire sur 'layer-front'/'layer-behind' dans onAction
+      // ci-dessus : calque non résolu par pdf-export.js à l'intérieur d'un
+      // en-tête/pied, grisé pendant tout le mode (même classe/mécanisme que
+      // le reste de la toolbar, cf. .v2-hf-locked dans css/toolbar-v2.css).
+      const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
+      setLockedBtn('layer-front', !!hfMode);
+      setLockedBtn('layer-behind', !!hfMode);
+    }
+
+    // Retour visuel de sélection (classe .editor-image-selected) recalculé
+    // ICI à chaque passage plutôt que de dépendre de selectNode/deselectNode
+    // de la NodeView (constaté peu fiable après un setNodeMarkup - cf.
+    // commentaire dans updateAttrs) : on efface d'abord toute classe
+    // résiduelle, puis on ne la repose que sur l'image RÉELLEMENT
+    // sélectionnée. Source de vérité unique, correcte même si une NodeView a
+    // été recréée entre-temps.
+    floatingContextPanels.push(panel);
+    const check = () => {
+      // Cf. commentaire équivalent dans wireTableFloatingToolbar - un blur
+      // réel (clic hors de l'éditeur) ne change pas la sélection ProseMirror
+      // à lui seul, donc sans cette garde une 'transaction' qui suit peut
+      // rouvrir le panneau juste après sa fermeture.
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
+      document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
+      if (!selectedImageNode()) { panel.hide(); return; }
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      const img = dom && dom.querySelector && dom.querySelector('img');
+      if (!img) { panel.hide(); return; }
+      dom.classList.add('editor-image-selected');
+      syncState();
+      panel.show(img);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
+  }
+
+  // Barre flottante de formatage nombre/date d'une bulle #Variable, sur le
+  // même modèle que celle de l'image (createFloatingPanel, sélection réelle
+  // du nœud - cf. commentaire de selectedImageNode ci-dessus sur le piège
+  // instanceof/duck-typing, même prudence ici). Le TYPE de colonne Grist
+  // (GristAPI.getColumnType) détermine lequel des 2 sous-panneaux (nombre/
+  // date) s'affiche - une colonne Texte/Référence n'a rien à formater, la
+  // barre reste cachée. Rien n'est stocké sur le nœud tant que l'utilisateur
+  // n'a rien choisi (`format: null` par défaut, cf. createVarBadgeNode) :
+  // formatValue() garde alors son comportement historique (String(val) brut).
+  function wireVariableFloatingToolbar() {
+    const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+    const html = [
+      '<div data-var-panel="number">',
+      '<span class="v2-varfmt-seg">',
+      `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
+      `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
+      `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
+      '</span>',
+      `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>`,
+      `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+      '</div>',
+      '<div data-var-panel="date" hidden>',
+      '<span class="v2-varfmt-seg">',
+      `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">J</button>`,
+      `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">M</button>`,
+      `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">A</button>`,
+      '</span>',
+      `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+      '</div>',
+    ].join('');
+    const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
+    floatingContextPanels.push(panel);
+
+    function selectedVarBadgeNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'varBadge') ? node : null;
+    }
+    function updateSelectedBadge(patch) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      const format = Object.assign({}, node.attrs.format, patch);
+      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
+    }
+    function onAction(action) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
+      if (action === 'num-words') {
+        const current = node.attrs.format || {};
+        updateSelectedBadge({ type: 'number', words: !current.words });
+        return;
       }
-    }, true);
-    tableTools.addEventListener('click', function (event) { const actionBtn = event.target.closest && event.target.closest('button[data-action]'); const action = actionBtn && actionBtn.dataset.action; if (!action || !activeCell) return; const table = activeCell.closest('table'); const row = activeCell.parentElement; const col = activeCell.cellIndex; const makeCell = () => { const td = document.createElement('td'); td.innerHTML = '&nbsp;'; td.contentEditable = 'true'; return td; }; if (action === 'add-row-above' || action === 'add-row-below') { const tr = document.createElement('tr'); for (let i = 0; i < table.rows[0].cells.length; i += 1) tr.appendChild(makeCell()); row.parentElement.insertBefore(tr, action.endsWith('above') ? row : row.nextSibling); } if (action === 'remove-row' && table.rows.length > 1) row.remove(); if (action === 'add-col-left' || action === 'add-col-right') Array.from(table.rows).forEach(r => r.insertBefore(makeCell(), action.endsWith('left') ? r.cells[col] : r.cells[col].nextSibling)); if (action === 'remove-col' && row.cells.length > 1) Array.from(table.rows).forEach(r => { if (r.cells[col]) r.deleteCell(col); }); ensureTableColumns(table); quill.update(Quill.sources.USER); });
-    Variables.init(quill); return quill;
-  }
-  function getQuill() { return quill; }
-  // La poignée 2-colonnes et les poignées de colonnes de tableau sont de simples
-  // enfants DOM injectés pour l'édition : elles ne doivent jamais polluer le HTML
-  // persisté (les poignées de redimensionnement d'image, elles, vivent hors de
-  // quill.root — cf. ensureImageHandlesOverlay — donc n'ont pas besoin d'être
-  // nettoyées ici).
-  function getHTML() {
-    // Auto-guérison : une image en calque enregistrée AVANT l'introduction de
-    // data-anchor-off-* (ou jamais re-basculée/glissée depuis) n'a pas cette
-    // donnée — l'export PDF retombe alors sur un calcul de position moins
-    // fiable (cf. pdf-export.js). On la (re)calcule donc systématiquement ici,
-    // à CHAQUE sauvegarde/export, tant que l'éditeur est visible (sinon
-    // getBoundingClientRect ne renverrait que des rectangles vides — cf. mode
-    // lecture, #editor-container en display:none — et écrirait une donnée
-    // fausse plutôt que de laisser l'ancienne valeur ou l'absence de donnée).
-    if (quill.root.offsetParent !== null) {
-      // Purge tous les data-pm-anchor-id existants avant de recalculer : le
-      // navigateur (scission d'un bloc contenteditable par Entrée, ou la
-      // reconstruction interne de Quill) clone parfois les ATTRIBUTS du
-      // paragraphe existant sur les nouveaux paragraphes qu'il crée à côté -
-      // confirmé par repro : insérer 3 lignes vides juste au-dessus d'un
-      // paragraphe déjà ancré (data-pm-anchor-id posé par un export
-      // précédent) leur fait hériter TOUTES le même identifiant. Comme
-      // pdf-export.js résout `data-anchor-target-id` via une simple table
-      // {id -> bloc} remplie au fil d'un parcours du DOM (le dernier
-      // paragraphe partageant cet id "gagne", silencieusement), un tel
-      // doublon peut faire résoudre l'ancre d'une image sur N'IMPORTE LEQUEL
-      // des paragraphes dupliqués plutôt que sur le vrai - le choix dépendant
-      // alors de l'ordre du DOM, pas de la réalité. Repartir d'un état sans
-      // AUCUN data-pm-anchor-id avant chaque recalcul garantit que
-      // ensureAnchorId() ne réutilise jamais un id déjà posé ailleurs : cette
-      // passe réattribue toujours des id neufs et donc uniques.
-      quill.root.querySelectorAll('[data-pm-anchor-id]').forEach(el => { delete el.dataset.pmAnchorId; });
-      quill.root.querySelectorAll('img.editor-image.editor-image-floating').forEach(updateAnchorOffset);
+      // Le dernier composant J/M/A actif ne peut pas être désactivé (date vide sinon).
+      if (action.indexOf('date-part:') === 0) {
+        const part = action.slice(10);
+        const current = node.attrs.format || {};
+        const activeParts = ['day', 'month', 'year'].filter(p => current[p] !== false);
+        if (activeParts.length === 1 && activeParts[0] === part) return;
+        updateSelectedBadge({ type: 'date', [part]: current[part] === false });
+        return;
+      }
+      if (action === 'date-words') {
+        const current = node.attrs.format || {};
+        updateSelectedBadge({ type: 'date', words: !current.words });
+      }
     }
-    const clone = quill.root.cloneNode(true);
-    clone.querySelectorAll('.two-columns-resize-grip, .table-col-resize-handle').forEach(el => el.remove());
-    return clone.innerHTML;
+    function onInput(role, value) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
+      if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
+      if (role === 'date-preset') { updateSelectedBadge({ type: 'date', preset: value }); return; }
+    }
+
+    function syncState() {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      const format = node.attrs.format || {};
+      const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
+      // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
+      const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
+      const style = format.type === 'number' ? (format.style || defaultStyle) : defaultStyle;
+      setActive('num-style:fr', style === 'fr');
+      setActive('num-style:us', style === 'us');
+      setActive('num-style:none', style === 'none');
+      setActive('num-words', format.type === 'number' && !!format.words);
+      panel.el.querySelector('[data-var-panel="number"]').classList.toggle('v2-varfmt-words-active', format.type === 'number' && !!format.words);
+      const decimalsSelect = panel.el.querySelector('select[data-role="num-decimals"]');
+      if (decimalsSelect && document.activeElement !== decimalsSelect) decimalsSelect.value = (format.type === 'number' && format.decimals != null) ? String(format.decimals) : '';
+      const currencyInput = panel.el.querySelector('input[data-role="num-currency"]');
+      if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
+      const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
+      if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
+      const isDate = format.type === 'date';
+      setActive('date-part:day', !isDate || format.day !== false);
+      setActive('date-part:month', !isDate || format.month !== false);
+      setActive('date-part:year', !isDate || format.year !== false);
+      setActive('date-words', isDate && !!format.words);
+    }
+
+    const check = () => {
+      // Cf. commentaire équivalent dans wireTableFloatingToolbar.
+      if (!editor.view.hasFocus()) { panel.hide(); return; }
+      const node = selectedVarBadgeNode();
+      if (!node) { panel.hide(); return; }
+      const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
+      const isNumber = type === 'Numeric' || type === 'Int';
+      const isDate = type === 'Date' || type === 'DateTime';
+      if (!isNumber && !isDate) { panel.hide(); return; }
+      panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
+      panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
+      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      if (!dom) { panel.hide(); return; }
+      syncState();
+      panel.show(dom);
+    };
+    editor.on('selectionUpdate', check);
+    editor.on('transaction', check);
   }
-  function setHTML(html) {
-    quill.root.innerHTML = html || '';
-    // CRITIQUE : force Quill à reconstruire immédiatement son modèle interne
-    // (Delta/index/arbre de blots) à partir du DOM qu'on vient d'injecter.
-    // Sans cet appel, Quill ne se resynchronise que de façon asynchrone via
-    // son MutationObserver — tant que ça n'a pas eu lieu, `quill.getLength()`
-    // et `quill.getSelection()`/`insertEmbed(index, ...)` peuvent opérer sur
-    // un modèle interne qui ne correspond PAS au DOM réellement affiché.
-    // Bug constaté et reproduit : charger un modèle (titre + paragraphes)
-    // puis insérer IMMÉDIATEMENT une image (sans clic/frappe intermédiaire
-    // qui aurait forcé Quill à se resynchroniser tout seul) fait atterrir
-    // l'image dans le mauvais bloc (le titre, au lieu du paragraphe visé) —
-    // explique une image "en calque" qui semble atterrir n'importe où dans
-    // le document une fois exportée en PDF, alors que sa position PDF est
-    // elle-même calculée correctement PAR RAPPORT à ce bloc ancre erroné.
-    quill.update(Quill.sources.SILENT);
-    quill.root.querySelectorAll('.two-columns-zone').forEach(ensureTwoColumnsGrip);
-    // Le src des pièces jointes n'est jamais fiable dans le HTML enregistré (le jeton
-    // d'accès expire après quelques minutes) : on le régénère à chaque chargement.
-    GristAPI.hydrateAttachmentImages(quill.root).catch(function (e) { console.warn('[Editor] hydratation des images échouée', e); });
-    // Les images en calque devant/derrière (classe persistée dans le HTML) ont
-    // besoin de leur marqueur d'ancrage dès le chargement pour rester
-    // resélectionnables (cf. ensureAnchorMarker).
-    refreshImageAnchorMarkers();
-    syncHeadingNumberingDataset();
-    refreshTocMarkers();
+
+  // Teste en avance le fetch() que pdf-export.js refera à l'export (même URL) ;
+  // avertit si un CORS permissif manque, sans bloquer l'insertion déjà faite.
+  async function warnIfImageUrlNotExportable(src) {
+    if (!src || src.startsWith('data:')) return;
+    try {
+      const resp = await fetch(src);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      await resp.blob();
+    } catch (e) {
+      console.warn('[Editor] image probablement non exportable en PDF (CORS) :', src, e);
+      window.alert(I18n.t('image.corsWarning'));
+    }
   }
-  // Reporte le style choisi (cf. HeadingNumberingConfigBlot) sur .ql-editor
-  // lui-même sous forme de data-attribute : c'est CE data-attribute que les
-  // compteurs CSS (cf. css/style.css, ".ql-editor[data-heading-style=...]
-  // h1::before") utilisent réellement pour numéroter les titres à l'écran -
-  // le bloc de config lui-même n'est qu'un moyen de PERSISTER le choix dans
-  // le contenu (donc dans le HTML sauvegardé), invisible et sans effet
-  // visuel direct par lui-même.
-  function syncHeadingNumberingDataset() {
-    const config = quill.root.querySelector(':scope > .heading-numbering-config');
-    quill.root.dataset.headingStyle = (config && config.dataset.style) || 'none';
+
+  // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment
+  // voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du
+  // document principal à la toute première entrée).
+  function enterHeaderFooterMode(zone, variant) {
+    if (!editor) return;
+    if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    else mainDocSnapshot = editor.getHTML();
+    headerFooterDraft.enabled = true;
+    hfMode = { zone, variant };
+    editor.commands.setContent(headerFooterDraft[zone][variant] || '');
+    const container = document.getElementById('editor-container');
+    if (container) container.classList.add('hf-editing');
+    syncToolbarState();
+    renderHfPill();
+    renderPaginationOverlay();
   }
+
+  function exitHeaderFooterMode() {
+    if (!hfMode || !editor) return;
+    headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    hfMode = null;
+    editor.commands.setContent(mainDocSnapshot || '');
+    mainDocSnapshot = null;
+    const container = document.getElementById('editor-container');
+    if (container) container.classList.remove('hf-editing');
+    syncToolbarState();
+    renderHfPill();
+    renderPaginationOverlay();
+  }
+
+  // Appelé par main.js avant Save/Export/Lecture - sans ça editor.getHTML()
+  // renverrait le fragment d'en-tête/pied actuellement chargé, pas le document.
+  function exitHeaderFooterModeIfActive() {
+    if (hfMode) exitHeaderFooterMode();
+  }
+  // Note de bas de page masquée en zone en-tête/pied : répétée sur chaque page,
+  // aucune page physique à laquelle l'ancrer (le pipeline PDF ne les résout que
+  // depuis le corps principal).
+  function isEditingHeaderFooter() { return !!hfMode; }
+
+  // Reflète le brouillon EN COURS (zone/variante actuellement affichée
+  // comprise) sans devoir sortir du mode - les appelants réels (Save/Export)
+  // appellent de toute façon exitHeaderFooterModeIfActive() juste avant,
+  // mais un appel pendant que le mode est encore actif reste cohérent.
+  function getHeaderFooterData() {
+    if (hfMode && editor) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    return headerFooterDraft;
+  }
+
+  // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js
+  // appelle exitHeaderFooterModeIfActive juste avant).
+  function setHeaderFooterData(data) {
+    const empty = emptyHeaderFooterData();
+    headerFooterDraft = data && typeof data === 'object'
+      ? Object.assign(empty, data, {
+          header: Object.assign({}, empty.header, data.header),
+          footer: Object.assign({}, empty.footer, data.footer),
+        })
+      : empty;
+    // Assaini ici : seul point d'entrée d'un en-tête/pied venant de la colonne
+    // Grist (modifiable par un autre collaborateur sans ouvrir ce widget).
+    headerFooterDraft.header.default = HtmlSanitize.clean(headerFooterDraft.header.default);
+    headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
+    headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
+    headerFooterDraft.footer.first = HtmlSanitize.clean(headerFooterDraft.footer.first);
+    renderPaginationOverlay();
+  }
+
+  // Pastille flottante d'édition d'en-tête/pied, sticky en haut de
+  // #editor-container, visible seulement pendant l'édition (hfMode actif).
+  // On y entre en cliquant une zone de marge posée par renderPaginationOverlay,
+  // pas via un bouton de toolbar. Construite une fois puis resynchronisée.
+  function renderHfPill() {
+    const container = document.getElementById('editor-container');
+    if (!container) return;
+    let pill = document.getElementById('v2-hf-pill');
+    if (!hfMode) { if (pill) pill.remove(); return; }
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'v2-hf-pill';
+      pill.className = 'v2-hf-pill';
+      pill.innerHTML =
+        '<span class="v2-segmented" id="v2-hf-zone-segment">'
+        + `<button type="button" class="v2-segmented-btn" data-zone="header">${I18n.t('hf.zoneHeader')}</button>`
+        + `<button type="button" class="v2-segmented-btn" data-zone="footer">${I18n.t('hf.zoneFooter')}</button>`
+        + '</span>'
+        + `<label class="v2-hf-checkbox"><input type="checkbox" id="v2-hf-different-first">${I18n.t('hf.differentFirstPage')}</label>`
+        + '<span class="v2-segmented" id="v2-hf-variant-segment" hidden>'
+        + `<button type="button" class="v2-segmented-btn" data-variant="default">${I18n.t('hf.variantDefault')}</button>`
+        + `<button type="button" class="v2-segmented-btn" data-variant="first">${I18n.t('hf.variantFirst')}</button>`
+        + '</span>'
+        + '<span class="v2-hover-group" id="v2-hf-pagenum-group">'
+        + `<button type="button" id="v2-hf-btn-pagenum" data-tip="${I18n.t('hf.insertPageNumber')}" aria-label="${I18n.t('hf.insertPageNumber')}"><span class="v2-hf-pagenum-icon" aria-hidden="true">#</span></button>`
+        + '<span class="v2-hover-flyout v2-hover-flyout-v" id="v2-hf-pagenum-flyout">'
+        + `<span class="v2-hover-row" data-pagenum-format="n">${I18n.t('hf.pagenumSimple')}</span>`
+        + `<span class="v2-hover-row" data-pagenum-format="page-n">${I18n.t('hf.pagenumPageN')}</span>`
+        + `<span class="v2-hover-row" data-pagenum-format="n-slash-total">${I18n.t('hf.pagenumSlash')}</span>`
+        + '</span>'
+        + '</span>'
+        + `<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">${I18n.t('hf.done')}</button>`;
+      container.insertBefore(pill, container.firstChild);
+
+      pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => {
+        btn.addEventListener('click', () => { if (hfMode && hfMode.zone !== btn.dataset.zone) enterHeaderFooterMode(btn.dataset.zone, hfMode.variant); });
+      });
+      pill.querySelectorAll('#v2-hf-variant-segment button').forEach(btn => {
+        btn.addEventListener('click', () => { if (hfMode && hfMode.variant !== btn.dataset.variant) enterHeaderFooterMode(hfMode.zone, btn.dataset.variant); });
+      });
+      pill.querySelector('#v2-hf-different-first').addEventListener('change', (event) => {
+        headerFooterDraft.differentFirstPage = event.target.checked;
+        if (!event.target.checked && hfMode && hfMode.variant === 'first') enterHeaderFooterMode(hfMode.zone, 'default');
+        else renderHfPill();
+      });
+      pill.querySelector('#v2-hf-btn-done').addEventListener('click', () => exitHeaderFooterMode());
+      // mousedown+preventDefault (pas click) : un simple click perdrait la
+      // sélection ProseMirror avant l'exécution de la commande.
+      pill.querySelectorAll('#v2-hf-pagenum-flyout .v2-hover-row').forEach(row => {
+        row.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          editor.chain().focus().insertPageNumberBadge(row.dataset.pagenumFormat).run();
+        });
+      });
+    }
+    pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => btn.classList.toggle('active', btn.dataset.zone === hfMode.zone));
+    pill.querySelectorAll('#v2-hf-variant-segment button').forEach(btn => btn.classList.toggle('active', btn.dataset.variant === hfMode.variant));
+    pill.querySelector('#v2-hf-different-first').checked = !!headerFooterDraft.differentFirstPage;
+    pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
+  }
+
+  // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge
+  // 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
+  const PT_TO_PX = 96 / 72;
+  const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
+  const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .tiptap en Aperçu A4
+  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
+  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
+
+  // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le
+  // 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête
+  // d'une ligne mesurerait 200px).
+  function measureHtmlHeightPx(html) {
+    // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte
+    // mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
+    if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
+    const host = document.createElement('div');
+    host.className = 'tiptap';
+    host.innerHTML = html;
+    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    document.body.appendChild(host);
+    const h = host.getBoundingClientRect().height;
+    document.body.removeChild(host);
+    return h;
+  }
+
+  // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte
+  // .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en
+  // deux), pas du pixel comme pdfmake. Retourne le bloc après lequel insérer
+  // la coupure (afterEl), pour poser un margin-bottom réel dessus.
+  function computePageBreaks(tiptapEl, pageContentHeightPx) {
+    const breaks = [];
+    let consumed = 0;
+    let lastBlock = null;
+    Array.from(tiptapEl.children).forEach(child => {
+      const height = child.getBoundingClientRect().height;
+      if (child.classList.contains('page-break-marker')) {
+        breaks.push({ afterEl: child, forced: true });
+        consumed = 0;
+        lastBlock = child;
+        return;
+      }
+      if (consumed > 0 && consumed + height > pageContentHeightPx) {
+        breaks.push({ afterEl: lastBlock, forced: false });
+        consumed = height;
+      } else {
+        consumed += height;
+      }
+      lastBlock = child;
+    });
+    return breaks;
+  }
+
+  // Résout chaque badge .page-number-badge en son texte réel pour cette page
+  // (même conversion que formatPageNumberText côté pdf-export.js, dupliquée).
+  function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
+    const host = document.createElement('div');
+    host.innerHTML = html || '';
+    host.querySelectorAll('.page-number-badge').forEach(badge => {
+      const format = badge.getAttribute('data-format') || 'n';
+      badge.textContent = format === 'page-n' ? ('Page ' + pageNum) : format === 'n-slash-total' ? (pageNum + '/' + totalPages) : String(pageNum);
+    });
+    return host.innerHTML;
+  }
+
+  let paginationOverlayEl = null;
+  let paginationEdgeTopEl = null;
+  let paginationEdgeBottomEl = null;
+  let paginationRecomputeTimer = null;
+  // Réserve un vrai espace vide sous le dernier bloc d'une page (cf.
+  // renderPaginationOverlay) via une FEUILLE DE STYLE dédiée (règles
+  // `:nth-child`), PAS un style inline posé directement sur le bloc : un
+  // style inline sur un nœud géré par ProseMirror s'est avéré silencieusement
+  // ANNULÉ peu après (constaté en conditions réelles - présent juste après
+  // l'appel, disparu à la vérification suivante) - ProseMirror surveille les
+  // mutations DOM sur les nœuds qu'il gère et "répare" tout ce qu'il n'a pas
+  // lui-même produit via une transaction, y compris un simple attribut style
+  // (même famille de piège que project_quill_mutation_observer, qui ne
+  // concernait jusqu'ici que des enfants DOM ajoutés à la main). Une feuille
+  // de style EXTERNE ciblant les blocs par POSITION (`:nth-child`) ne modifie
+  // en revanche RIEN sur les nœuds eux-mêmes (ni attribut, ni enfant) - hors
+  // de portée de cette surveillance, donc jamais annulée.
+  let paginationMarginStyleEl = null;
+  function ensurePaginationMarginStyle() {
+    if (!paginationMarginStyleEl) {
+      paginationMarginStyleEl = document.createElement('style');
+      paginationMarginStyleEl.id = 'v2-pagination-margins-style';
+      document.head.appendChild(paginationMarginStyleEl);
+    }
+    return paginationMarginStyleEl;
+  }
+  function clearPageBreakMargins() {
+    if (paginationMarginStyleEl) paginationMarginStyleEl.textContent = '';
+  }
+  function schedulePaginationRecompute() {
+    if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
+    paginationRecomputeTimer = setTimeout(renderPaginationOverlay, 200);
+  }
+  function clearPaginationOverlay() {
+    if (paginationOverlayEl) paginationOverlayEl.innerHTML = '';
+    if (paginationEdgeTopEl && paginationEdgeTopEl.parentNode) paginationEdgeTopEl.parentNode.removeChild(paginationEdgeTopEl);
+    if (paginationEdgeBottomEl && paginationEdgeBottomEl.parentNode) paginationEdgeBottomEl.parentNode.removeChild(paginationEdgeBottomEl);
+    paginationEdgeTopEl = null; paginationEdgeBottomEl = null;
+    clearPageBreakMargins();
+  }
+
+  // Zones de marge cliquables (façon Google Docs/Word) : un clic appelle
+  // enterHeaderFooterMode(zone, variant). Début/fin de document ont un vrai
+  // espace en flux normal (`.v2-page-edge-spacer`, jamais enfant de `.tiptap`
+  // lui-même - cf. mémoire project_quill_mutation_observer). Les limites
+  // intermédiaires n'ont pas d'espace naturel, donc restent de purs overlays
+  // `position:absolute` posés dans l'espace réservé par margin-bottom.
+  function ensureEdgeZone(pageSheet, tiptapEl, pos) {
+    if (pos === 'top' && !paginationEdgeTopEl) {
+      paginationEdgeTopEl = document.createElement('div');
+      paginationEdgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top v2-hf-zone';
+      pageSheet.insertBefore(paginationEdgeTopEl, tiptapEl);
+    }
+    if (pos === 'bottom' && !paginationEdgeBottomEl) {
+      paginationEdgeBottomEl = document.createElement('div');
+      paginationEdgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom v2-hf-zone';
+      pageSheet.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
+    }
+  }
+  function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
+    const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
+    // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte)
+    // serait traitée à tort comme vide (même correctif que resolveZone, pdf-export.js).
+    const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
+    el.classList.toggle('v2-hf-zone-empty', !hasContent);
+    el.classList.toggle('v2-hf-zone-filled', hasContent);
+    el.innerHTML = hasContent
+      ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
+      : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
+    el.onclick = () => enterHeaderFooterMode(zone, variant);
+  }
+  function renderPaginationOverlay() {
+    const container = document.getElementById('editor-container');
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!container || !tiptapEl) return;
+    if (hfMode || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
+
+    if (!paginationOverlayEl) {
+      paginationOverlayEl = document.createElement('div');
+      paginationOverlayEl.className = 'v2-pagination-overlay';
+      container.appendChild(paginationOverlayEl);
+    }
+    paginationOverlayEl.innerHTML = '';
+
+    const enabled = !!headerFooterDraft.enabled;
+    const differentFirstPage = enabled && !!headerFooterDraft.differentFirstPage;
+    const headerHtml = enabled ? headerFooterDraft.header.default : null;
+    const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
+    const footerHtml = enabled ? headerFooterDraft.footer.default : null;
+    const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
+    const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml;
+    const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml;
+
+    const headerHeightPx = enabled ? Math.max(measureHtmlHeightPx(headerHtml), measureHtmlHeightPx(headerFirstHtml)) : 0;
+    const footerHeightPx = enabled ? Math.max(measureHtmlHeightPx(footerHtml), measureHtmlHeightPx(footerFirstHtml)) : 0;
+    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer
+    // d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
+    clearPageBreakMargins();
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    const totalPages = breaks.length + 1;
+
+    const pageSheet = tiptapEl.parentElement;
+    ensureEdgeZone(pageSheet, tiptapEl, 'top');
+    ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
+    updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', 'Ajouter un en-tête');
+    updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', 'Ajouter un pied de page');
+
+    const tiptapOffsetLeft = tiptapEl.offsetLeft;
+    const tiptapWidth = tiptapEl.getBoundingClientRect().width;
+    const tiptapRect = tiptapEl.getBoundingClientRect();
+
+    // Limites intermédiaires : une bande par frontière entre 2 pages, toujours
+    // affichée dès que le document dépasse une page même sans en-tête/pied
+    // configuré (repère "— Page N —" par défaut).
+    //
+    // L'espace est réservé sous `afterEl` via une règle CSS `:nth-child` dans
+    // une feuille dédiée, pas un style inline sur `afterEl` : ProseMirror
+    // annule silencieusement toute mutation DOM (y compris un simple style)
+    // qu'il n'a pas produite lui-même via une transaction ; une règle CSS
+    // externe ciblant par position échappe à cette surveillance.
+    const marginRules = [];
+    const tiptapChildren = Array.from(tiptapEl.children);
+    breaks.forEach((brk, i) => {
+      const pageEnding = i + 1;
+      const pageStarting = i + 2;
+      const footerText = enabled ? footerForPage(pageEnding) : null;
+      const headerText = enabled ? headerForPage(pageStarting) : null;
+      const seam = document.createElement('div');
+      if (!footerText && !headerText) {
+        seam.className = 'v2-page-band v2-page-break-line';
+        seam.innerHTML = '<span class="v2-page-break-label">Page ' + pageStarting + '</span>';
+      } else {
+        seam.className = 'v2-page-band v2-page-seam';
+        if (footerText) {
+          const f = document.createElement('div');
+          f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled';
+          f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
+          f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
+          seam.appendChild(f);
+        }
+        const divider = document.createElement('div');
+        divider.className = 'v2-page-seam-divider';
+        seam.appendChild(divider);
+        if (headerText) {
+          const h = document.createElement('div');
+          h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
+          h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
+          h.onclick = () => enterHeaderFooterMode('header', 'default');
+          seam.appendChild(h);
+        }
+      }
+      paginationOverlayEl.appendChild(seam);
+      seam.style.left = tiptapOffsetLeft + 'px';
+      seam.style.width = tiptapWidth + 'px';
+      const seamHeight = seam.getBoundingClientRect().height;
+      // Écrit la feuille à chaque itération : la coupure suivante doit voir
+      // l'effet des marges déjà posées avant de mesurer sa propre position.
+      const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
+      marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + seamHeight + 'px; }');
+      ensurePaginationMarginStyle().textContent = marginRules.join('\n');
+      const afterRect = brk.afterEl.getBoundingClientRect();
+      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top)) + 'px';
+    });
+  }
+
+  function applyToolbarIcons() {
+    const set = (id, icon) => { const el = document.getElementById(id); if (el) el.innerHTML = Icons.svg(icon); };
+    set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
+    set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
+    set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
+    set('v2-btn-align-right', 'alignRight'); set('v2-btn-align-justify', 'alignJustify');
+    // v2-btn-align-main : icône initiale, resynchronisée dès le premier appel
+    // de syncToolbarState avec l'alignement réel du curseur.
+    set('v2-btn-align-main', 'alignLeft');
+    set('v2-btn-bullet', 'bulletList');
+    set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
+    set('v2-btn-ordered-numeric', 'orderedList'); set('v2-btn-ordered-alpha', 'orderedAlpha'); set('v2-btn-ordered-roman', 'orderedRoman');
+    set('v2-btn-checklist-accent-strike', 'checklistAccentStrike');
+    set('v2-btn-checklist-classic', 'checklistClassic');
+    set('v2-btn-checklist-accent-plain', 'checklistAccentPlain');
+    set('v2-btn-outdent', 'outdent'); set('v2-btn-indent', 'indent');
+    set('v2-btn-table', 'table');
+    set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
+    set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
+    set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
+    set('v2-highlight-icon', 'highlight');
+    set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
+    set('v2-font-chip-caret', 'caretDown');
+  }
+
+  // Retour visuel d'état actif, recalculé à chaque sélection/transaction
+  // (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
+  function syncToolbarState() {
+    const setActive = (id, isActive) => { const el = document.getElementById(id); if (el) el.classList.toggle('is-active', !!isActive); };
+    setActive('v2-btn-bold', editor.isActive('bold'));
+    setActive('v2-btn-italic', editor.isActive('italic'));
+    setActive('v2-btn-underline', editor.isActive('underline'));
+    setActive('v2-btn-strike', editor.isActive('strike'));
+    setActive('v2-btn-align-left', editor.isActive({ textAlign: 'left' }));
+    setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
+    setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
+    setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
+    // Bouton principal du groupe survol "Alignement" : montre toujours
+    // l'alignement réel du curseur, relu par son propre clic pour le réappliquer.
+    const aligns = ['left', 'center', 'right', 'justify'];
+    currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
+    const alignMain = document.getElementById('v2-btn-align-main');
+    if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
+    // Bouton "Liste" fusionné : actif dès qu'un des trois types l'est.
+    setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList'));
+    const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
+    setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
+    setActive('v2-btn-bullet-circle', bulletStyle === 'circle');
+    setActive('v2-btn-bullet-square', bulletStyle === 'square');
+    const orderedStyle = editor.isActive('orderedList') ? (editor.getAttributes('orderedList').numberStyle || 'decimal') : null;
+    setActive('v2-btn-ordered-numeric', orderedStyle === 'decimal');
+    setActive('v2-btn-ordered-alpha', orderedStyle === 'alpha');
+    setActive('v2-btn-ordered-roman', orderedStyle === 'roman');
+    const taskListStyle = editor.isActive('taskList') ? (editor.getAttributes('taskList').taskListStyle || 'accentStrike') : null;
+    setActive('v2-btn-checklist-accent-strike', taskListStyle === 'accentStrike');
+    setActive('v2-btn-checklist-classic', taskListStyle === 'classic');
+    setActive('v2-btn-checklist-accent-plain', taskListStyle === 'accentPlain');
+    const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
+    setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
+    setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
+    // En mode en-tête/pied : grise tableau/2-colonnes/saut de page/sommaire/
+    // numérotation (aucun sens dans ce contexte) - seuls les boutons sont
+    // bloqués, le schéma ProseMirror reste unique et partagé. Image non
+    // verrouillée : au flux normal elle s'exporte très bien dans un en-tête/
+    // pied, seul le calque devant/derrière reste bloqué (pas de pagination
+    // à l'intérieur d'un en-tête/pied).
+    const inHfMode = !!hfMode;
+    const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
+    setLocked('v2-btn-table', inHfMode);
+    setLocked('v2-btn-two-columns', inHfMode);
+    setLocked('v2-btn-page-break', inHfMode);
+    setLocked('v2-btn-toc', inHfMode);
+    // Numérotation seule verrouillée : un niveau de titre garde un sens dans
+    // un en-tête/pied, la numérotation (titres du flux principal seul) non.
+    setLocked('v2-numbering-seg', inHfMode);
+    const headerSelect = document.getElementById('v2-header-select');
+    if (headerSelect) {
+      let value = 'p';
+      for (let level = 1; level <= 6; level++) { if (editor.isActive('heading', { level })) value = String(level); }
+      if (headerSelect.value !== value) headerSelect.value = value;
+      const chipVal = document.getElementById('v2-heading-chip-val');
+      if (chipVal) chipVal.textContent = value === 'p' ? 'Normal' : 'Titre ' + value;
+      const headingFlyout = document.getElementById('v2-heading-flyout');
+      if (headingFlyout) {
+        headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
+          row.classList.toggle('is-active', row.dataset.level === value);
+        });
+      }
+    }
+    const textStyleAttrs = editor.getAttributes('textStyle');
+    setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
+    setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
+    // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap
+    // dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
+    // "Police"/"Taille" vide qui ne montrait jamais rien par défaut.
+    const fontChipVal = document.getElementById('v2-font-chip-val');
+    if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
+    const sizeChipVal = document.getElementById('v2-size-chip-val');
+    if (sizeChipVal) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeChipVal.textContent !== value) sizeChipVal.textContent = value; }
+  }
+
+  async function init() {
+    const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
+    const { StarterKit } = await import('@tiptap/starter-kit');
+    const { TextAlign } = await import('@tiptap/extension-text-align');
+    const { TextStyle } = await import('@tiptap/extension-text-style');
+    const { FontFamily } = await import('@tiptap/extension-font-family');
+    const { Suggestion } = await import('@tiptap/suggestion');
+    const { Table } = await import('@tiptap/extension-table');
+    const { TableRow } = await import('@tiptap/extension-table-row');
+    const { TableCell } = await import('@tiptap/extension-table-cell');
+    const { TableHeader } = await import('@tiptap/extension-table-header');
+    const { TaskList } = await import('@tiptap/extension-task-list');
+    const { TaskItem } = await import('@tiptap/extension-task-item');
+    const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
+    floatingUi = { computePosition, offset, flip, shift, autoUpdate };
+    let EditorStateClass;
+    ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass, EditorState: EditorStateClass } = await import('prosemirror-state'));
+
+    const VarBadge = createVarBadgeNode(Node, mergeAttributes);
+    const PageNumberBadge = createPageNumberBadgeNode(Node, mergeAttributes);
+    const SmartChip = createSmartChipNode(Node, mergeAttributes);
+    const FootnoteRef = createFootnoteRefNode(Node, mergeAttributes);
+    const FontSize = createFontSizeExtension(Extension);
+    const TextColor = createTextColorExtension(Extension);
+    const HighlightColor = createHighlightExtension(Extension);
+    const BulletStyle = createBulletStyleExtension(Extension);
+    const OrderedListStyle = createOrderedListStyleExtension(Extension);
+    const TaskListStyle = createTaskListStyleExtension(Extension);
+    const TableHeaderWithBg = withCellBackground(TableHeader);
+    const TableCellWithBg = withCellBackground(TableCell);
+    const { TwoColumnsColumn, TwoColumnsZone } = createTwoColumnsNodes(Node, mergeAttributes);
+    const EditorImage = createEditorImageNode(Node);
+    const PageBreak = createPageBreakNode(Node);
+    const HeadingNumberingConfig = createHeadingNumberingConfigNode(Node);
+    const Toc = createTocNode(Node);
+
+    editor = new TiptapEditor({
+      element: document.getElementById('editor-container'),
+      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
+      // Ne consomme que si le presse-papiers contient réellement une image ;
+      // un collage de texte normal suit le traitement natif de ProseMirror.
+      editorProps: {
+        handlePaste(view, event) {
+          const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
+          const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
+          if (!imageItem) return false;
+          const file = imageItem.getAsFile();
+          if (!file) return false;
+          event.preventDefault();
+          pasteImageFile(file);
+          return true;
+        },
+      },
+      extensions: [
+        StarterKit,
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        TextStyle,
+        FontFamily,
+        FontSize,
+        TextColor,
+        HighlightColor,
+        BulletStyle,
+        OrderedListStyle,
+        TaskList,
+        TaskItem.configure({ nested: false }),
+        TaskListStyle,
+        VarBadge,
+        PageNumberBadge,
+        SmartChip,
+        FootnoteRef,
+        Variables.createExtension(Extension, Suggestion),
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableHeaderWithBg,
+        TableCellWithBg,
+        TwoColumnsColumn,
+        TwoColumnsZone,
+        EditorImage,
+        PageBreak,
+        HeadingNumberingConfig,
+        Toc,
+        createTabNavigationExtension(Extension),
+        createClearHistoryExtension(Extension, EditorStateClass),
+      ],
+      content: '',
+    });
+
+    // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay
+    // relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en Aperçu A4
+    // pour que les zones d'en-tête/pied restent visuellement collées au corps.
+    const pageSheet = document.createElement('div');
+    pageSheet.className = 'v2-page-sheet';
+    editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
+    pageSheet.appendChild(editor.view.dom);
+
+    wireToolbar();
+    wireColorPickers();
+    wireTableFloatingToolbar();
+    wireImageFloatingToolbar();
+    wireVariableFloatingToolbar();
+    editor.on('selectionUpdate', syncToolbarState);
+    editor.on('transaction', syncToolbarState);
+    window.addEventListener('resize', schedulePaginationRecompute);
+    return editor;
+  }
+
+  // Une seule instance, une seule toolbar : chaque bouton appelle directement
+  // une commande TipTap sur la sélection réelle - plus besoin de savoir "suis-je
+  // dans une cellule/colonne" avant d'agir (contrairement à l'éditeur V1), et
+  // plus aucun execCommand.
+  function wireToolbar() {
+    applyToolbarIcons();
+    const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    bind('v2-btn-bold', () => editor.chain().focus().toggleBold().run());
+    bind('v2-btn-italic', () => editor.chain().focus().toggleItalic().run());
+    bind('v2-btn-underline', () => editor.chain().focus().toggleUnderline().run());
+    bind('v2-btn-strike', () => editor.chain().focus().toggleStrike().run());
+    bind('v2-btn-align-left', () => editor.chain().focus().setTextAlign('left').run());
+    bind('v2-btn-align-center', () => editor.chain().focus().setTextAlign('center').run());
+    bind('v2-btn-align-right', () => editor.chain().focus().setTextAlign('right').run());
+    bind('v2-btn-align-justify', () => editor.chain().focus().setTextAlign('justify').run());
+    // Bouton principal du groupe survol - réapplique l'alignement qu'il
+    // montre actuellement (currentAlign, tenu à jour par syncToolbarState) ;
+    // les 4 boutons ci-dessus vivent maintenant dans le panneau révélé au
+    // survol (cf. index.html .v2-hover-flyout), inchangés sinon.
+    bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
+    bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
+    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette
+    // "Options au survol") - crée la liste si le curseur n'y est pas encore,
+    // sinon change juste le style de la liste existante à cet endroit.
+    const applyBulletStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('bulletList')) chain.toggleBulletList();
+      chain.updateAttributes('bulletList', { bulletStyle: style }).run();
+    };
+    bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
+    bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
+    bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
+    const applyOrderedStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('orderedList')) chain.toggleOrderedList();
+      chain.updateAttributes('orderedList', { numberStyle: style }).run();
+    };
+    bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
+    bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
+    bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
+    const applyTaskListStyle = (style) => {
+      const chain = editor.chain().focus();
+      if (!editor.isActive('taskList')) chain.toggleTaskList();
+      chain.updateAttributes('taskList', { taskListStyle: style }).run();
+    };
+    bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
+    bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
+    bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
+    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState)
+    // plutôt qu'un masquage complet du bouton.
+    bind('v2-btn-outdent', () => editor.chain().focus().liftListItem('listItem').run());
+    bind('v2-btn-indent', () => editor.chain().focus().sinkListItem('listItem').run());
+    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
+    bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
+    bind('v2-btn-image', async () => {
+      const url = window.prompt(I18n.t('image.urlPrompt'));
+      if (!url) return;
+      await insertImageAtDefaultSize(url);
+      warnIfImageUrlNotExportable(url);
+    });
+    bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
+    bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
+    bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
+    bind('v2-btn-undo', () => editor.chain().focus().undo().run());
+    bind('v2-btn-redo', () => editor.chain().focus().redo().run());
+
+    wireHeadingMenu();
+    wireSelectionDependentSelects();
+    wireCompactFontSizeControls();
+  }
+
+  // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent
+  // portés par un <select> caché comme source de vérité, le flyout ne fait
+  // que poser sa valeur puis redéclencher 'change' - pas de capture/
+  // restauration de sélection nécessaire (un <span>/<button> ne vole jamais
+  // le focus comme l'ouverture d'un <select> natif).
+  function wireHeadingMenu() {
+    const headerSelect = document.getElementById('v2-header-select');
+    const flyout = document.getElementById('v2-heading-flyout');
+    if (headerSelect && flyout) {
+      flyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
+        row.addEventListener('click', () => {
+          if (headerSelect.value === row.dataset.level) return;
+          headerSelect.value = row.dataset.level;
+          headerSelect.dispatchEvent(new Event('change'));
+        });
+      });
+    }
+    // Réglage de document, pas de sélection : le data-attribute est posé
+    // avant de dispatcher la commande pour que le rafraîchissement synchrone
+    // du sommaire (déclenché par elle) lise déjà la bonne valeur.
+    const select = document.getElementById('v2-heading-numbering-select');
+    if (!select) return;
+    select.addEventListener('change', () => {
+      editor.view.dom.dataset.headingStyle = select.value;
+      editor.chain().setHeadingNumberingStyle(select.value).focus().run();
+    });
+    if (!flyout) return;
+    const numButtons = flyout.querySelectorAll('#v2-numbering-seg [data-num]');
+    const syncActiveNum = () => numButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.num === select.value));
+    numButtons.forEach(btn => btn.addEventListener('click', () => {
+      if (select.value === btn.dataset.num) return;
+      select.value = btn.dataset.num;
+      select.dispatchEvent(new Event('change'));
+      syncActiveNum();
+    }));
+    // Lu à la volée à chaque survol : la valeur peut aussi changer sans
+    // passer par ici (chargement d'un modèle pose select.value directement).
+    const group = document.getElementById('v2-heading-group');
+    if (group) group.addEventListener('mouseenter', syncActiveNum);
+    syncActiveNum();
+  }
+
+  // Un <select>, contrairement à un <button>, vole le focus dès le
+  // pointerdown (avant 'change') - la sélection à mettre en forme doit donc
+  // être capturée à ce moment puis restaurée avant d'appliquer la commande.
+  function wireSelectionDependentSelects() {
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+    const bindSelect = (id, onChange) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerdown', captureSelection);
+      el.addEventListener('change', () => onChange(el.value));
+    };
+    bindSelect('v2-header-select', value => withSavedSelection(chain => {
+      if (value === 'p') chain.setParagraph(); else chain.toggleHeading({ level: parseInt(value, 10) });
+    }));
+  }
+
+  const FONT_SIZE_PRESETS = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
+  const FONT_FAMILY_PRESETS = [
+    { value: 'Roboto', label: 'Roboto (par défaut)' },
+    { value: 'Arial', label: 'Arial' },
+    { value: 'Times New Roman', label: 'Times New Roman' },
+    { value: 'Georgia', label: 'Georgia' },
+    { value: 'Courier New', label: 'Courier New' },
+    { value: 'Calibri', label: 'Calibri' },
+  ];
+
+  function wireCompactFontSizeControls() {
+    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+
+    const fontHtml = FONT_FAMILY_PRESETS.map(o => `<button data-action="${o.value}">${o.label}</button>`).join('');
+    const fontPanel = createFloatingPanel('v2-format-panel', fontHtml, (value) => {
+      withSavedSelection(chain => chain.setFontFamily(value));
+      closeDropdownPanel();
+    });
+    wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
+
+    const sizeHtml = FONT_SIZE_PRESETS.map(s => `<button data-action="${s}">${s}</button>`).join('');
+    const sizePanel = createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
+      withSavedSelection(chain => chain.setFontSize(value));
+      closeDropdownPanel();
+    });
+    const sizeValBtn = document.getElementById('v2-size-chip-val');
+    wireDropdownButton(sizeValBtn, sizePanel, captureSelection);
+    const stepSize = (delta) => {
+      captureSelection();
+      const current = sizeValBtn.textContent.trim();
+      const idx = FONT_SIZE_PRESETS.indexOf(current);
+      const nextIdx = idx === -1 ? (delta > 0 ? 0 : FONT_SIZE_PRESETS.length - 1) : Math.min(FONT_SIZE_PRESETS.length - 1, Math.max(0, idx + delta));
+      withSavedSelection(chain => chain.setFontSize(FONT_SIZE_PRESETS[nextIdx]));
+    };
+    const minusBtn = document.getElementById('v2-size-minus');
+    const plusBtn = document.getElementById('v2-size-plus');
+    if (minusBtn) minusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(-1); });
+    if (plusBtn) plusBtn.addEventListener('mousedown', (event) => { event.preventDefault(); stepSize(1); });
+  }
+
+  function getHTML() { return editor ? editor.getHTML() : ''; }
+
   function getHeadingNumberingStyle() {
-    const config = quill.root.querySelector(':scope > .heading-numbering-config');
-    return (config && config.dataset.style) || 'none';
+    if (!editor) return 'none';
+    let style = 'none';
+    editor.state.doc.forEach(node => { if (node.type.name === 'headingNumberingConfig') style = node.attrs.numberingStyle; });
+    return style;
   }
-  // Crée le bloc de config s'il n'existe pas encore (tout premier réglage de
-  // ce document), sinon met à jour celui déjà présent - un seul par document,
-  // toujours en tête (peu importe sa position réelle pour la mesure CSS,
-  // seul le data-attribute posé sur .ql-editor compte pour le rendu).
-  function setHeadingNumberingStyle(style) {
-    let config = quill.root.querySelector(':scope > .heading-numbering-config');
-    if (config) {
-      config.dataset.style = style;
-    } else {
-      quill.insertEmbed(0, 'headingnumbering', { style }, Quill.sources.USER);
-      quill.update(Quill.sources.SILENT);
-    }
-    syncHeadingNumberingDataset();
-    // Le style choisi change le texte de CHAQUE marqueur (::before) déjà
-    // affiché devant les titres - le sommaire déjà inséré doit donc être
-    // regénéré immédiatement, pas seulement à la prochaine frappe.
-    refreshTocMarkers();
+
+  // Signale les badges #Variable dont la table/colonne n'existe plus : simple
+  // classe+title sur le <span> rendu, jamais un attribut du nœud (dépend d'un
+  // état externe, pas du contenu) - ProseMirror peut reconstruire ce span à
+  // tout moment, donc rejoué à chaque déclencheur pertinent plutôt que posé une fois.
+  function refreshVariableBadgeValidity() {
+    if (!editor) return;
+    editor.view.dom.querySelectorAll('span.var-badge').forEach(el => {
+      const table = el.dataset.table;
+      const column = el.dataset.column;
+      let reason = '';
+      if (table && GristAPI.getTables().indexOf(table) === -1) {
+        reason = `La table « ${table} » n'existe plus dans ce document.`;
+      } else if (table && column && GristAPI.getColumns(table).indexOf(column) === -1) {
+        reason = `La colonne « ${column} » n'existe plus dans la table « ${table} ».`;
+      }
+      el.classList.toggle('var-badge-broken', !!reason);
+      if (reason) el.title = reason; else el.removeAttribute('title');
+    });
   }
-  return { init, getQuill, getHTML, setHTML, insertImage, uploadImage, getHeadingNumberingStyle, setHeadingNumberingStyle };
+
+  function setHTML(html) {
+    if (!editor) return;
+    editor.commands.setContent(html || '', { emitUpdate: false });
+    // Sans ça l'historique Annuler/Rétablir s'accumule à travers les
+    // changements de modèle : un Annuler après chargement pouvait faire
+    // réapparaître le contenu d'un modèle précédent (bug confirmé).
+    editor.commands.clearHistory();
+    editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
+    // Force un rafraîchissement du NodeView du sommaire : son premier rendu
+    // (pendant setContent) a eu lieu avant que headingStyle soit posé ci-dessus.
+    editor.view.dispatch(editor.state.tr);
+    // Le dispatch ci-dessus ne déclenche pas onUpdate (pas de changement réel),
+    // donc clampOverflowingTables ne tourne pas seul pour un tableau déjà trop
+    // large importé - appelé explicitement ici pour couvrir ce cas.
+    backfillAutoColumnWidths(editor);
+    clampOverflowingTables(editor);
+    renderPaginationOverlay();
+    // Vérification immédiate (schéma en cache) puis après rafraîchissement
+    // explicite (couvre une table/colonne supprimée entretemps).
+    refreshVariableBadgeValidity();
+    GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
+      .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
+  }
+
+  return {
+    init, getHTML, setHTML, getHeadingNumberingStyle,
+    getHeaderFooterData, setHeaderFooterData, exitHeaderFooterModeIfActive,
+    refreshPaginationPreview: renderPaginationOverlay,
+    openFootnoteEditorAt, isEditingHeaderFooter,
+  };
 })();

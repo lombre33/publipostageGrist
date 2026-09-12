@@ -2,7 +2,7 @@
 // seulement "ça exporte sans planter") : gras/italique/souligné/barré,
 // taille de police, alignement, largeurs de colonnes de tableau/2-colonnes,
 // position d'une image en calque. Même esprit que dev-tests/formatting-
-// fidelity.js (V1), adapté à v2/js/pdf-export.js.
+// fidelity.js (V1), adapté à js/pdf-export.js.
 (function () {
   const cases = [];
 
@@ -164,7 +164,7 @@
     // SANS alignement gauche/droite (par défaut, ou centrée) était toujours
     // repoussée en fin de texte de son paragraphe dans le PDF, quelle que
     // soit sa position réelle dans le HTML source (début/milieu/fin de
-    // phrase). Corrigé : `blockFrom` (v2/js/pdf-export.js) découpe
+    // phrase). Corrigé : `blockFrom` (js/pdf-export.js) découpe
     // maintenant le paragraphe en plusieurs blocs pdfmake successifs
     // (texte, image, texte...) qui respectent l'ordre réel, au lieu de
     // concaténer tout le texte en un seul bloc suivi des images.

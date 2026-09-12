@@ -1,8 +1,10 @@
-# Audit de code — Publipostage Grist V2 (préparation publication + audit DINUM)
+# Audit de code — Publipostage Grist (préparation publication + audit DINUM)
 
 **Date** : 2026-09-12 (mis à jour le même jour avec le guide de contribution Grist.Gouv, l'enjeu RSSI, puis les premiers correctifs appliqués)
-**Périmètre** : tous les fichiers chargés en production par `v2/index.html`, y compris les fichiers V1 partagés (`js/grist-api.js`, `js/templates.js`, `js/reader-mode.js`, `js/html-sanitize.js`, `css/style.css`, `css/roboto-fonts.css`), plus l'inventaire du dossier `v2/` et de la racine du dépôt. La V1 « pure » (`index.html` racine, `js/editor.js`, `js/main.js`, `js/pdf-export.js`, `js/html-source-tab.js`, `js/variables.js` — jamais chargés par la V2) est **hors périmètre**. **Correction de portée** : `js/pdf-fonts.js`/`js/pdf-fonts-extra.js` avaient été classés à tort comme V1-seuls dans la version initiale de ce rapport — ils sont en réalité chargés dynamiquement par `v2/js/pdf-export.js` (`ensurePdfLibsLoaded`) pour l'export vectoriel ; ce sont des données de police pures (pas de logique métier), non ré-audités en détail pour cette raison.
-**Méthode** : lecture intégrale de chaque fichier (aucune modification lors de l'audit initial), en 4 lots parallèles + vérifications ponctuelles manuelles. ~11 850 lignes de code auditées sur 18 fichiers de production, plus l'inventaire complet de `v2/` et de la racine. Correctifs ultérieurs appliqués et testés (voir §3.1/§3.2/§6.2).
+**Périmètre** : tous les fichiers chargés en production par `index.html`, ~11 850 lignes de code sur 18 fichiers de production à l'audit initial.
+**Méthode** : lecture intégrale de chaque fichier (aucune modification lors de l'audit initial), en 4 lots parallèles + vérifications ponctuelles manuelles. Correctifs ultérieurs appliqués et testés (voir §3.1/§3.2/§6.2).
+
+**Mise à jour 2026-09-12 (soir)** : l'ancienne version V1 (Quill.js, historique) a été entièrement retirée du dépôt — elle avait atteint la parité fonctionnelle et n'était plus maintenue. L'arborescence `v2/` a été aplatie à la racine du dépôt (`v2/js/` → `js/`, `v2/css/` → `css/`, `v2/dev-tests/` → `dev-tests/`, `v2/templates-gallery/` → `templates-gallery/`, `v2/index.html` → `index.html`) : il n'existe plus qu'une seule version, un seul point d'entrée, une seule URL GitHub Pages. Ce même jour, régression critique trouvée et corrigée : la touche **Entrée ne scindait plus aucun bloc, dans aucun contexte** (paragraphe, liste...) — cause racine : l'import map ne couvrait pas les sous-chemins `@tiptap/pm/*` que le bundle esm.sh de `@tiptap/core` importe via des URLs absolues, chargeant une deuxième instance de `prosemirror-model` distincte de celle partagée par le reste du code (cf. §5 et le commit de correction). Les 4 échecs de tests listés plus loin comme « limitation connue du harnais » étaient en réalité CE bug réel, à tort écartés comme faux positifs — leçon retenue : ne plus classer un échec de test comme limitation d'outillage sans avoir isolé la cause avec un test indépendant du mécanisme suspecté.
 **Référence externe** : « Contributing Guide — Grist.Gouv Widgets » (guide officiel DINUM/ANCT pour la contribution de widgets à l'instance souveraine Grist.Gouv, fourni par l'utilisateur, dernière mise à jour juillet 2026) — voir §8 pour la mise en regard détaillée.
 
 ## Comment lire ce rapport
@@ -83,8 +85,8 @@ revus un par un ; à poursuivre si une passe exhaustive est explicitement demand
 | Dépendance | Origine | Version | SRI/intégrité | Constat |
 |---|---|---|---|---|
 | `grist-plugin-api.js` | `docs.getgrist.com` (éditeur de Grist lui-même) | non-versionné (URL sans version) | Absente | Attendu et documenté — dépendance native au produit hôte, pas de version stable publiée par Grist à épingler. |
-| 23 paquets ProseMirror/TipTap/`@floating-ui` | `esm.sh` (CDN public tiers, infrastructure non-française) | **Toutes pinnées** (ex. `@tiptap/core@3.31.3`) — bon point | Absente — **non corrigée** (les imports ES via import map ne supportent pas `integrity` comme un `<script src>` classique ; nécessiterait une vendorisation complète, cf. suggestion 2 ci-dessous) | `v2/index.html` (import map), également dupliqué dans `v2/smoke-test.html`. |
-| pdfmake, `vfs_fonts`, html2pdf.js, JSZip | `cdnjs.cloudflare.com` (CDN public tiers) | Toutes pinnées | ✅ **Ajoutée le 2026-09-12** (hash `sha384-...` calculé directement sur chaque fichier réellement servi pour la version épinglée) | `v2/js/pdf-export.js` (chargement paresseux) et `index.html` racine (V1, chargement statique — fichiers partagés) ; vérifié : les 4 bibliothèques se chargent toujours correctement (V1 et V2) après ajout des hashes. |
+| 23 paquets ProseMirror/TipTap/`@floating-ui` | `esm.sh` (CDN public tiers, infrastructure non-française) | **Toutes pinnées** (ex. `@tiptap/core@3.31.3`) — bon point | Absente — **non corrigée** (les imports ES via import map ne supportent pas `integrity` comme un `<script src>` classique ; nécessiterait une vendorisation complète, cf. suggestion 2 ci-dessous) | `index.html` (import map). |
+| pdfmake, `vfs_fonts`, html2pdf.js, JSZip | `cdnjs.cloudflare.com` (CDN public tiers) | Toutes pinnées | ✅ **Ajoutée le 2026-09-12** (hash `sha384-...` calculé directement sur chaque fichier réellement servi pour la version épinglée) | `js/pdf-export.js` (chargement paresseux) et `index.html` racine (V1, chargement statique — fichiers partagés) ; vérifié : les 4 bibliothèques se chargent toujours correctement (V1 et V2) après ajout des hashes. |
 
 **Pourquoi c'est un « très gros point » pour une RSSI** :
 - **Aucun `integrity="sha384-..."` (Subresource Integrity)** sur aucun des scripts externes chargés — si l'un de ces CDN sert un contenu altéré (compromission du CDN, attaque de la chaîne d'approvisionnement, faille côté cdnjs/esm.sh déjà documentées publiquement par le passé pour d'autres projets), le navigateur exécute le contenu servi sans aucune vérification, avec le même niveau d'accès `'full'` au document Grist décrit en §2.1.
@@ -100,7 +102,7 @@ revus un par un ; à poursuivre si une passe exhaustive est explicitement demand
 
 ### 2.3 Fuite de données vers des tiers non maîtrisés
 
-Déjà identifié en détail en §3.2 (S3) mais à relire sous l'angle RSSI : `v2/js/pdf-export.js:2105-2144` télécharge automatiquement, à CHAQUE export, toute image du gabarit dont l'URL n'est pas un `data:` URI — sans validation de domaine. Un gabarit partagé par un collaborateur pointant vers un serveur tiers permet à ce tiers de savoir qu'un export a eu lieu (adresse IP, user-agent), à l'insu de l'utilisateur exportateur. Combiné à l'accès `'full'` (§2.1), un tel gabarit pourrait aussi, en théorie, être conçu pour exfiltrer des informations si un futur code moins prudent venait à inclure des données de session dans une URL construite dynamiquement (non constaté aujourd'hui, mais un pattern à surveiller).
+Déjà identifié en détail en §3.2 (S3) mais à relire sous l'angle RSSI : `js/pdf-export.js:2105-2144` télécharge automatiquement, à CHAQUE export, toute image du gabarit dont l'URL n'est pas un `data:` URI — sans validation de domaine. Un gabarit partagé par un collaborateur pointant vers un serveur tiers permet à ce tiers de savoir qu'un export a eu lieu (adresse IP, user-agent), à l'insu de l'utilisateur exportateur. Combiné à l'accès `'full'` (§2.1), un tel gabarit pourrait aussi, en théorie, être conçu pour exfiltrer des informations si un futur code moins prudent venait à inclure des données de session dans une URL construite dynamiquement (non constaté aujourd'hui, mais un pattern à surveiller).
 
 **Priorité : Mineur aujourd'hui, mais à mentionner explicitement à la RSSI comme un principe à valider (allowlist de domaines, ou confirmation explicite avant tout appel réseau sortant déclenché automatiquement).**
 
@@ -130,7 +132,7 @@ d'insertion individuellement :
 - `js/reader-mode.js` : `render()` et `preview()` — couvre l'aperçu "Lecture" ET tout export PDF
   (vectoriel, impression navigateur, raster), puisque `PdfExport.exportCurrentRecord`/
   `getNativePdfBlobForRecord` obtiennent systématiquement leur HTML via `ReaderMode.preview()`.
-- `v2/js/editor.js` : `setHeaderFooterData()` — seul point d'entrée d'un en-tête/pied venant de
+- `js/editor.js` : `setHeaderFooterData()` — seul point d'entrée d'un en-tête/pied venant de
   l'extérieur de l'éditeur (colonne Grist `HeaderFooter`) ; couvre par ricochet tous les sites de
   rendu qui le consomment (`measureHtmlHeightPx`, `resolvePageNumberBadgesForPreview`, `updateHfZone`,
   `renderPaginationOverlay`) et l'export PDF de l'en-tête/pied (`pdf-export.js`, qui lit la même
@@ -142,11 +144,11 @@ correctif.
 
 | Fichier:ligne(s) (état AVANT correctif) | Constat | Priorité |
 |---|---|---|
-| `v2/js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | En-tête/pied de page injecté via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur du document Grist pouvait y placer un payload s'exécutant automatiquement. | ~~Important~~ ✅ |
-| `v2/js/pdf-export.js` (mesure/rendu du gabarit principal, via `reader-mode.js` en amont) | Hôtes de mesure hors-écran injectant le gabarit via `innerHTML` sans assainissement. | ~~Important~~ ✅ |
-| `v2/js/pdf-export.js:2655-2664` (`exportViaBrowserPrint`) | `document.write(... + container.outerHTML + ...)` exécutait réellement les `<script>` du gabarit. | ~~Important~~ ✅ |
-| `v2/js/variables.js:610-613, 553-558` | ~~Noms de colonne/table Grist interpolés sans échappement dans une modale~~ — **corrigé le 2026-09-12** : les deux constructions `<option>` passent désormais par `HtmlSanitize.clean()` avant assignation à `innerHTML`. Vérifié : neutralise une injection de test (`<script>` retiré, aucune exécution) tout en préservant à l'identique le rendu avec des colonnes réelles, y compris une colonne Référence. | ~~Important~~ ✅ |
-| `v2/js/pdf-export.js:2105-2144` (`inlineEditorImagesAsDataUri`, S3) | `fetch(src)` vers n'importe quelle URL non-`data:` présente dans le gabarit, sans validation, à chaque export. | Mineur — non corrigé, cf. §2.3. |
+| `js/editor.js:2480, 2527/2532, 2638, 2730, 2740` | En-tête/pied de page injecté via `innerHTML` sans passer par le schéma de l'éditeur — un collaborateur du document Grist pouvait y placer un payload s'exécutant automatiquement. | ~~Important~~ ✅ |
+| `js/pdf-export.js` (mesure/rendu du gabarit principal, via `reader-mode.js` en amont) | Hôtes de mesure hors-écran injectant le gabarit via `innerHTML` sans assainissement. | ~~Important~~ ✅ |
+| `js/pdf-export.js:2655-2664` (`exportViaBrowserPrint`) | `document.write(... + container.outerHTML + ...)` exécutait réellement les `<script>` du gabarit. | ~~Important~~ ✅ |
+| `js/variables.js:610-613, 553-558` | ~~Noms de colonne/table Grist interpolés sans échappement dans une modale~~ — **corrigé le 2026-09-12** : les deux constructions `<option>` passent désormais par `HtmlSanitize.clean()` avant assignation à `innerHTML`. Vérifié : neutralise une injection de test (`<script>` retiré, aucune exécution) tout en préservant à l'identique le rendu avec des colonnes réelles, y compris une colonne Référence. | ~~Important~~ ✅ |
+| `js/pdf-export.js:2105-2144` (`inlineEditorImagesAsDataUri`, S3) | `fetch(src)` vers n'importe quelle URL non-`data:` présente dans le gabarit, sans validation, à chaque export. | Mineur — non corrigé, cf. §2.3. |
 
 **Point important à noter pour l'audit DINUM/RSSI** : `js/reader-mode.js` (résolution des valeurs
 `#Table.Colonne`) reste vérifié **sain** par ailleurs — il utilise systématiquement `textContent`,
@@ -157,7 +159,7 @@ du modèle lui-même (et les données d'en-tête/pied de page), pas une donnée 
 
 | Fichier:ligne(s) | Constat | Priorité |
 |---|---|---|
-| `js/grist-api.js:10` vs `js/templates.js:4` vs `v2/dev-tests/grist-stub.js:44` | Le nom de la table interne `Publipostage_Modeles` est recopié en dur à 3 endroits indépendants au lieu d'être lu depuis une seule source (`Templates.TABLE_NAME`, déjà exporté mais jamais réutilisé). Un renommage futur non répercuté partout ferait réapparaître la table des modèles comme table "normale" dans les sélecteurs de variables. | Important |
+| `js/grist-api.js:10` vs `js/templates.js:4` vs `dev-tests/grist-stub.js:44` | Le nom de la table interne `Publipostage_Modeles` est recopié en dur à 3 endroits indépendants au lieu d'être lu depuis une seule source (`Templates.TABLE_NAME`, déjà exporté mais jamais réutilisé). Un renommage futur non répercuté partout ferait réapparaître la table des modèles comme table "normale" dans les sélecteurs de variables. | Important |
 | `js/grist-api.js:8-10, 376-378` | La détection des tables internes (`Publipostage_Modeles`/`_LiensTables`/`_UserProbe`) ne vérifie que le NOM, jamais la forme des colonnes. Si un document Grist contient déjà une table portant l'un de ces noms par coïncidence, le widget la traite comme sienne et lit/écrit dessus avec le schéma attendu — risque de corruption de données utilisateur préexistantes. | Important |
 | `js/grist-api.js:572-604` | `getCurrentUserEmail()` ne cache que le résultat final, pas la promesse en vol : plusieurs résolutions de chip email en parallèle (ex. en-tête + pied de page) déclenchent chacune leur propre cycle `AddTable`/`AddRecord`/`RemoveRecord`. De plus, `ensureUserProbeTable()` n'a pas de `try/catch` autour de l'`AddTable`, contrairement à sa fonction sœur `ensureLinksTableExists` — une exception ici remonte sans être rattrapée. | Important |
 
@@ -170,13 +172,13 @@ du modèle lui-même (et les données d'en-tête/pied de page), pas une donnée 
 
 | Fichier:ligne(s) | Constat | Priorité |
 |---|---|---|
-| `v2/js/pdf-export.js` (état module `footnoteCounter`/`footnoteEntries`, `buildPdfContentFromRoot`) | ~~Les deux colonnes d'une zone 2-colonnes sont traitées en parallèle... réinitialise `footnoteCounter = 0` en entrée~~ — **root cause réévaluée et corrigée le 2026-09-12** : le vrai problème n'était pas QUE la concurrence (`Promise.all`), mais que `buildPdfContentFromRoot` remettait `footnoteCounter`/`footnoteEntries` à zéro à **CHAQUE** appel, y compris les appels imbriqués (un par colonne). Même en exécution strictement séquentielle, le traitement de la 2ᵉ colonne écrasait déjà le résultat de la 1ʳᵉ — **vérifié par reproduction directe avant correctif** (la note de la 1ʳᵉ colonne disparaissait du PDF, celle de la 2ᵉ survivait seule). | ~~Important~~ ✅ |
-| `v2/js/main.js` (boutons d'export) | ~~Aucun verrou n'empêche de déclencher un second export pendant qu'un premier est en cours~~ — **corrigé** : `withExportLock()` désactive les deux boutons d'export (unitaire + en lot) pendant toute opération, empêchant un chevauchement entre deux exports distincts. | ~~Important~~ ✅ |
+| `js/pdf-export.js` (état module `footnoteCounter`/`footnoteEntries`, `buildPdfContentFromRoot`) | ~~Les deux colonnes d'une zone 2-colonnes sont traitées en parallèle... réinitialise `footnoteCounter = 0` en entrée~~ — **root cause réévaluée et corrigée le 2026-09-12** : le vrai problème n'était pas QUE la concurrence (`Promise.all`), mais que `buildPdfContentFromRoot` remettait `footnoteCounter`/`footnoteEntries` à zéro à **CHAQUE** appel, y compris les appels imbriqués (un par colonne). Même en exécution strictement séquentielle, le traitement de la 2ᵉ colonne écrasait déjà le résultat de la 1ʳᵉ — **vérifié par reproduction directe avant correctif** (la note de la 1ʳᵉ colonne disparaissait du PDF, celle de la 2ᵉ survivait seule). | ~~Important~~ ✅ |
+| `js/main.js` (boutons d'export) | ~~Aucun verrou n'empêche de déclencher un second export pendant qu'un premier est en cours~~ — **corrigé** : `withExportLock()` désactive les deux boutons d'export (unitaire + en lot) pendant toute opération, empêchant un chevauchement entre deux exports distincts. | ~~Important~~ ✅ |
 
 **Correctif appliqué** (2 volets complémentaires) :
 1. `buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel)` — nouveau paramètre `isTopLevel` (déjà utilisé ailleurs pour la numérotation des titres, juste jamais propagé jusqu'ici) : la remise à zéro de `footnoteCounter`/`footnoteEntries` ne se fait plus que pour le VRAI appel top-level (une fois par passe de mesure/rendu du document entier), jamais pour les appels imbriqués via une zone 2-colonnes. Une colonne continue donc la numérotation là où le document principal (ou la colonne précédente) l'a laissée, au lieu de repartir de zéro et écraser le travail déjà fait.
 2. `twoColumnsFrom` : les deux colonnes sont désormais traitées **séquentiellement** (plus de `Promise.all`) — élimine aussi toute race résiduelle si une colonne attend un décodage d'image pendant que l'autre progresse. Coût négligeable (jamais plus de 2 colonnes).
-3. `v2/js/main.js` : nouveau `withExportLock()`, désactive les boutons d'export unitaire ET en lot (span `v2-btn-export-pdf-batch` inclus - `.disabled` n'a pas d'effet sur un `<span>`, géré via `pointer-events`/`opacity`) pendant toute la durée d'un export, en défense en profondeur contre un chevauchement de deux exports top-level distincts (que la correction n°1 ne couvre pas, puisqu'il s'agit alors de deux VRAIS appels top-level légitimement concurrents).
+3. `js/main.js` : nouveau `withExportLock()`, désactive les boutons d'export unitaire ET en lot (span `v2-btn-export-pdf-batch` inclus - `.disabled` n'a pas d'effet sur un `<span>`, géré via `pointer-events`/`opacity`) pendant toute la durée d'un export, en défense en profondeur contre un chevauchement de deux exports top-level distincts (que la correction n°1 ne couvre pas, puisqu'il s'agit alors de deux VRAIS appels top-level légitimement concurrents).
 
 Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test APRÈS (les deux notes apparaissent, numérotées 1 et 2) ; scénario supplémentaire note dans le corps principal + note en colonne (numérotation continue 1/2 correcte) ; nouveau test de régression permanent `scenarios-chips.js:chip_footnote_survives_twocolumns_zone` ; suite complète (~90 scénarios) sans régression.
 
@@ -184,7 +186,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 
 ## 5. Qualité de code — redondance et « mille-feuille »
 
-### 5.1 `v2/js/editor.js` (3316 → 3211 lignes) — ✅ redondances corrigées, élagage des commentaires en cours
+### 5.1 `js/editor.js` (3316 → 3211 lignes) — ✅ redondances corrigées, élagage des commentaires en cours
 
 | Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
@@ -205,7 +207,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 4. Barre d'outils statique principale → `main-toolbar.js`
 5. Cœur du module (`init`, `getHTML`/`setHTML`, API publique) → reste dans `editor.js`, réduit à un point d'assemblage.
 
-### 5.2 `v2/js/pdf-export.js` (2757 → 2807 lignes, +50 lignes de repli try/catch) — ✅ redondances et robustesse corrigées
+### 5.2 `js/pdf-export.js` (2757 → 2807 lignes, +50 lignes de repli try/catch) — ✅ redondances et robustesse corrigées
 
 | Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
@@ -226,10 +228,10 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 |---|---|---|
 | `js/templates.js` | ~~Boucle de validation qui ne peut structurellement jamais se déclencher~~ — **retirée**. | ~~Mineur~~ ✅ |
 | `js/grist-api.js` | ~~`getCurrentMappings`/`getCurrentOptions` exportés mais jamais appelés~~ — **retirés** (variables internes `_currentMappings`/`_currentOptions` conservées, toujours utilisées ailleurs). | ~~Mineur~~ ✅ |
-| `v2/js/variables.js:82-87` | Les libellés d'onglets du panneau `#` (singleton créé une seule fois) ne sont jamais retraduits si l'utilisateur change de langue après la première ouverture du panneau — contrairement au reste du panneau, reconstruit à chaque ouverture. | Mineur |
-| `v2/js/i18n.js:323,328` | Le paramètre `root` d'`applyTranslations(root)` n'est en pratique jamais utilisé (aucun module ne crée dynamiquement d'élément `data-i18n*` ni n'appelle la fonction avec un argument) — fonctionnalité prête mais jamais exercée, à documenter comme telle ou à retirer. | Cosmétique |
-| `v2/js/main.js:533` | `GristAPI.init()` continue même en cas d'échec (try/catch qui n'interrompt pas la suite) — probablement voulu (résilience) mais non commenté à cet endroit précis. | Mineur |
-| `v2/js/editor.js:25` | Pas de `'use strict'` en tête de l'IIFE — aucune fuite constatée en pratique, mais coût nul à ajouter en défense en profondeur. | Cosmétique |
+| `js/variables.js:82-87` | Les libellés d'onglets du panneau `#` (singleton créé une seule fois) ne sont jamais retraduits si l'utilisateur change de langue après la première ouverture du panneau — contrairement au reste du panneau, reconstruit à chaque ouverture. | Mineur |
+| `js/i18n.js:323,328` | Le paramètre `root` d'`applyTranslations(root)` n'est en pratique jamais utilisé (aucun module ne crée dynamiquement d'élément `data-i18n*` ni n'appelle la fonction avec un argument) — fonctionnalité prête mais jamais exercée, à documenter comme telle ou à retirer. | Cosmétique |
+| `js/main.js:533` | `GristAPI.init()` continue même en cas d'échec (try/catch qui n'interrompt pas la suite) — probablement voulu (résilience) mais non commenté à cet endroit précis. | Mineur |
+| `js/editor.js:25` | Pas de `'use strict'` en tête de l'IIFE — aucune fuite constatée en pratique, mais coût nul à ajouter en défense en profondeur. | Cosmétique |
 
 ### 5.4 Portée des variables — jugement global
 
@@ -239,14 +241,14 @@ Aucune fuite de portée trouvée dans les fichiers audités (pas de globale acci
 
 ## 6. Fichiers, inventaire, publication
 
-### 6.1 Fichiers orphelins / à statut clarifier dans `v2/`
+### 6.1 Fichiers orphelins / à statut clarifier
 
 | Fichier | Statut constaté | Recommandation | Priorité |
 |---|---|---|---|
-| `v2/js/mailto-export.js` | Scaffold non câblé (aucun `<script>` ne le charge), mais son propre en-tête l'indique déjà clairement ("SCAFFOLD, pas encore implémenté") | Garder tel quel, rien à corriger | — |
-| `v2/smoke-test.html` | Orphelin à la racine de `v2/` (même niveau que le code de production), non listé dans `dev-tests/README.md`, mais cité en dur dans 2 commentaires (`v2/index.html:16`, `v2/js/editor.js:2971`) | Déplacer dans `v2/dev-tests/` (ou un sous-dossier `manual/`), mettre à jour les 2 commentaires qui le citent, l'ajouter au README de dev-tests | Mineur |
-| `v2/templates-gallery/*/schema.py` | **Réellement exécuté** (parsé par regex via `template-gallery.js:68-92` pour créer une vraie table Grist) — pas juste de la documentation humaine, contrairement à ce que son extension `.py` pourrait laisser croire | Ajouter un `v2/templates-gallery/README.md` expliquant le rôle de chaque fichier (`manifest.json`, `template.html`, `schema.py`, `screenshot.svg`) et le format exact attendu pour `schema.py` | Mineur |
-| `v2/_test-harness.html` | Généré à la demande, jamais commité (`.gitignore` documenté) | Cohérent, rien à faire | — |
+| `js/mailto-export.js` | Scaffold non câblé (aucun `<script>` ne le charge), mais son propre en-tête l'indique déjà clairement ("SCAFFOLD, pas encore implémenté") | Garder tel quel, rien à corriger | — |
+| `smoke-test.html` | ~~Orphelin, cité en dur dans 2 commentaires~~ **Supprimé le 2026-09-12** (prototype obsolète, supersédé par `dev-tests/`) | — | — |
+| `templates-gallery/*/schema.py` | **Réellement exécuté** (parsé par regex via `template-gallery.js:68-92` pour créer une vraie table Grist) — pas juste de la documentation humaine, contrairement à ce que son extension `.py` pourrait laisser croire | Ajouter un `templates-gallery/README.md` expliquant le rôle de chaque fichier (`manifest.json`, `template.html`, `schema.py`, `screenshot.svg`) et le format exact attendu pour `schema.py` | Mineur |
+| `_test-harness.html` | Généré à la demande, jamais commité (`.gitignore` documenté) | Cohérent, rien à faire | — |
 
 ### 6.2 Racine du dépôt
 
@@ -271,9 +273,9 @@ Le secteur public français est soumis au RGAA (106 critères, 13 thèmes — DI
 
 | Constat | Fichier(s) | Priorité | Référence |
 |---|---|---|---|
-| Aucune des 5 fenêtres modales n'a `role="dialog"`/`aria-modal="true"` ; le focus clavier n'est jamais déplacé à l'ouverture ni restitué à la fermeture ; la touche Échap n'est pas gérée. | `v2/index.html`, `v2/js/main.js`, `v2/js/settings.js` | **Important** | RGAA 12.7/12.8 (WCAG 2.1 SC 2.4.3, 4.1.2) |
-| 3 champs texte n'ont qu'un `placeholder`, sans `aria-label`/`<label>` associé (nom de modèle, nom de fichier PDF, recherche de galerie) — un `placeholder` seul n'est pas une alternative accessible fiable. | `v2/index.html` (lignes 67, 114, 262) | Mineur | RGAA thème formulaires |
-| Les modales utilisent `style="display:none"` + bascule JS, alors que le panneau Réglages (même fichier) utilise l'attribut natif `hidden` — deux conventions cohabitent sans qu'un choix soit expliqué. | `v2/index.html` | Cosmétique | — |
+| Aucune des 5 fenêtres modales n'a `role="dialog"`/`aria-modal="true"` ; le focus clavier n'est jamais déplacé à l'ouverture ni restitué à la fermeture ; la touche Échap n'est pas gérée. | `index.html`, `js/main.js`, `js/settings.js` | **Important** | RGAA 12.7/12.8 (WCAG 2.1 SC 2.4.3, 4.1.2) |
+| 3 champs texte n'ont qu'un `placeholder`, sans `aria-label`/`<label>` associé (nom de modèle, nom de fichier PDF, recherche de galerie) — un `placeholder` seul n'est pas une alternative accessible fiable. | `index.html` (lignes 67, 114, 262) | Mineur | RGAA thème formulaires |
+| Les modales utilisent `style="display:none"` + bascule JS, alors que le panneau Réglages (même fichier) utilise l'attribut natif `hidden` — deux conventions cohabitent sans qu'un choix soit expliqué. | `index.html` | Cosmétique | — |
 
 **Recommandation** : prévoir un audit RGAA dédié avant publication officielle (hors périmètre de cet audit de code), au minimum sur les points ci-dessus qui sont peu coûteux à corriger (ajout d'attributs ARIA, piège à focus, gestion d'Échap).
 
@@ -293,7 +295,7 @@ Le guide décrit deux chemins : **Voie A** (l'équipe Grist.Gouv découvre et «
 |---|---|---|---|
 | **README.md** expliquant : ce que fait le widget, comment le configurer, ses dépendances | ~~Absent~~ — **créé le 2026-09-12**, couvre objet/configuration/dépendances/sécurité-permissions/tests/état du projet. | — | ~~Important~~ ✅ |
 | **Portée fonctionnelle raisonnablement étroite** ("si votre widget semble faire plusieurs métiers différents, envisagez de le scinder") | Le widget fait : édition riche + export PDF + galerie de modèles + résolution de variables cross-table + réglages i18n. Peut se justifier comme UN seul métier cohérent ("publipostage documentaire"), mais le volume de code (~11 850 lignes) et la taille de certains fichiers (`editor.js` 3316 lignes) vont dans le sens d'une préoccupation légitime sur ce critère. | À argumenter explicitement dans le README (pourquoi ce périmètre reste un seul widget cohérent) plutôt qu'à découper en plusieurs widgets — une explication claire suffit probablement à satisfaire l'esprit du critère. | Mineur |
-| **Tests** : fonctionnalités cœur couvertes par des tests unitaires ; au moins un scénario d'intégration (création de document, interaction widget) | `v2/dev-tests/` couvre ~85 scénarios (formatage, listes, tableaux, 2-colonnes, images, export PDF vectoriel...) — un socle réel et non négligeable. **Mais** : ce sont des tests pilotés manuellement depuis la console navigateur contre un `grist-stub.js` (pas une vraie exécution Grist), pas une suite automatisée exécutable en CI/CD, et rien ne teste le scénario "création de document réel + interaction widget" avec l'API Grist réelle (résolution `#Variable` réelle explicitement documentée comme non testable en local, cf. `dev-tests/README.md`). | Documenter clairement dans le README ce que couvre/ne couvre pas la suite actuelle ; envisager, a minima, un script qui exécute la suite automatiquement (headless) plutôt qu'à la main, même sans aller jusqu'à un vrai test d'intégration Grist réel. | Important |
+| **Tests** : fonctionnalités cœur couvertes par des tests unitaires ; au moins un scénario d'intégration (création de document, interaction widget) | `dev-tests/` couvre ~85 scénarios (formatage, listes, tableaux, 2-colonnes, images, export PDF vectoriel...) — un socle réel et non négligeable. **Mais** : ce sont des tests pilotés manuellement depuis la console navigateur contre un `grist-stub.js` (pas une vraie exécution Grist), pas une suite automatisée exécutable en CI/CD, et rien ne teste le scénario "création de document réel + interaction widget" avec l'API Grist réelle (résolution `#Variable` réelle explicitement documentée comme non testable en local, cf. `dev-tests/README.md`). | Documenter clairement dans le README ce que couvre/ne couvre pas la suite actuelle ; envisager, a minima, un script qui exécute la suite automatiquement (headless) plutôt qu'à la main, même sans aller jusqu'à un vrai test d'intégration Grist réel. | Important |
 | **Lisibilité/maintenabilité** : code compréhensible par un humain sans IA, noms explicites | Conforme dans l'ensemble (cf. §5 — conventions de nommage homogènes, commentaires expliquant le "pourquoi") — sous réserve des points de duplication/longueur de fichier déjà listés en §5. | Aucun écart bloquant, nettoyages recommandés en §5. | — |
 | **Concis, pas de verbosité excessive** ("Les outils IA ont tendance à générer du code plus long que nécessaire... les relecteurs devraient pouvoir lire la logique de votre widget d'une traite") | Les fichiers `editor.js` (3316 lignes) et `pdf-export.js` (2757 lignes) ne permettent PAS une lecture "d'une traite" par un relecteur — c'est le point le plus directement testé par ce critère du guide. Le code interne à chaque fonction reste cependant loin d'être verbeux artificiellement (audit §5 : peu de code mort, peu de sur-ingénierie) — la longueur vient du nombre de fonctionnalités réelles empilées dans peu de fichiers, pas de code inutilement bavard. | Le découpage en modules proposé en §5.1/§5.2 répond directement à ce critère. | Important |
 | **Pas de duplication de code inter-widgets** ("le code partagé doit vivre dans un module commun, pas être copié-collé") | Vérifié : les 3 chemins de rendu PDF (cellule/flux/2-colonnes) réutilisent déjà les briques transverses communes (cf. §5.2, point positif) ; les duplications résiduelles trouvées (§5.1, §5.2) sont internes à un même fichier, pas entre widgets distincts. | Pas d'écart sur l'esprit du critère (un seul widget dans ce dépôt), les duplications internes restent à traiter par ailleurs (§5). | — |
@@ -334,7 +336,7 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 
 - **Résolution des variables Grist (`reader-mode.js`)** : systématiquement via `textContent`, jamais `innerHTML` — le vecteur XSS identifié en §3.2 vient du gabarit/de l'en-tête-pied, pas d'une valeur de cellule métier.
 - **Cohérence de style remarquable** dans `editor.js`/`pdf-export.js` : conventions de nommage homogènes (`createXxx`/`wireXxx`/`ensureXxx`), gestion d'erreur `try/catch` + repli systématique, commentaires en français expliquant systématiquement le "pourquoi" (bug réel constaté) plutôt que de paraphraser le code.
-- **Suite de tests automatisés** (`v2/dev-tests/`, ~90 scénarios) déjà en place et à jour — un vrai filet de sécurité pour les corrections proposées ici, en particulier pour les refactorings de §5, et une réponse partielle (à documenter/étoffer, cf. §8.2) au critère "Tests" du guide Grist.Gouv. A servi à valider les correctifs de sécurité du 2026-09-12 (aucune régression).
+- **Suite de tests automatisés** (`dev-tests/`, ~90 scénarios) déjà en place et à jour — un vrai filet de sécurité pour les corrections proposées ici, en particulier pour les refactorings de §5, et une réponse partielle (à documenter/étoffer, cf. §8.2) au critère "Tests" du guide Grist.Gouv. A servi à valider les correctifs de sécurité du 2026-09-12 (aucune régression).
 - **Correctifs de sécurité 2026-09-12** : fuite RGPD (console), XSS en-tête/pied de page, XSS `document.write()` corrigés via un point d'entrée unique par vulnérabilité plutôt qu'un correctif dispersé sur chaque site d'insertion — cf. §3.1/§3.2. README.md créé, couvrant notamment la section "Sécurité et permissions" attendue par une RSSI.
 - **Correctif d'intégrité des données 2026-09-12** (§4) : la corruption silencieuse de la numérotation des notes de bas de page dans une zone 2-colonnes s'est révélée avoir une cause plus profonde que prévu à l'audit initial (remise à zéro sur tout appel imbriqué, pas seulement un problème de concurrence) — détectée par reproduction directe AVANT correctif, corrigée avec un paramètre `isTopLevel` déjà existant ailleurs dans le fichier, et couverte par un nouveau test de régression permanent.
 - **Duplication déjà justifiée et documentée** entre les 3 chemins de rendu PDF (cellule/flux principal/2-colonnes) — pas un défaut, un choix assumé, conforme à l'esprit du critère anti-duplication du guide Grist.Gouv (§8.2).

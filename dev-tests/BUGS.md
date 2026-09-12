@@ -1,7 +1,7 @@
 # Anomalies trouvées — état au 2026-09-12
 
 Historique : les 2 premières anomalies ci-dessous ont été trouvées en
-construisant la suite de tests automatisés (`v2/dev-tests/`, ~76 scénarios).
+construisant la suite de tests automatisés (`dev-tests/`, ~76 scénarios).
 Une 3e a été trouvée dans une passe de test dédiée, plus poussée, sur la
 position des images "au cœur du texte" dans l'export PDF (demande explicite
 de vérifier ce point après un retour d'expérience "j'avais plein de bug
@@ -34,7 +34,7 @@ pour utiliser un vrai zoom avant avant de cliquer reset — passe maintenant.
 ### Ce qui était cassé
 
 Changer de modèle (`Editor.setHTML()`, chemin réel de "Nouveau modèle"/
-sélecteur de modèle, cf. `v2/js/main.js`) n'effaçait jamais la pile
+sélecteur de modèle, cf. `js/main.js`) n'effaçait jamais la pile
 Annuler/Rétablir de TipTap. Après avoir chargé un modèle B, appuyer sur
 Annuler pouvait faire réapparaître le contenu du modèle A précédent (ou,
 constaté en test prolongé, un contenu bien plus ancien) — la pile
@@ -50,7 +50,7 @@ La solution habituelle "appeler `clearHistory`" documentée précédemment ici
 ne s'applique donc pas à cette version.
 
 Ajouté à la place une petite extension maison (`createClearHistoryExtension`,
-`v2/js/editor.js`) qui reconstruit l'`EditorState` avec les MÊMES plugins
+`js/editor.js`) qui reconstruit l'`EditorState` avec les MÊMES plugins
 (même schéma, même document, mêmes plugins) via `EditorState.create(...)` +
 `view.updateState(...)` — ce qui réinitialise l'état de TOUS les plugins,
 historique inclus, sans recréer la vue ni perdre le contenu en cours.
@@ -128,7 +128,7 @@ réel.
 
 ### Correction appliquée
 
-`v2/js/pdf-export.js` : seul le cas `layer==='normal' && (align==='left' ||
+`js/pdf-export.js` : seul le cas `layer==='normal' && (align==='left' ||
 align==='right')` passait déjà par le mécanisme d'habillage `columns`
 (`floatedImageParagraphFrom`). Dans TOUS les autres cas (pas d'alignement,
 ou `align==='center'`), `blockFrom()` retombait sur le chemin générique où

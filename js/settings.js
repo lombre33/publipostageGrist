@@ -1,10 +1,10 @@
-// Panneau Réglages V2 (icône roue crantée, v2/index.html #v2-btn-settings) -
-// 3 onglets indépendants : Langue (I18n.setLang, cf. v2/js/i18n.js),
-// Touche de déclenchement (localStorage, lu directement par v2/js/variables.js
-// et v2/js/editor.js - AUCUNE dépendance croisée vers ce module pour une
+// Panneau Réglages V2 (icône roue crantée, index.html #v2-btn-settings) -
+// 3 onglets indépendants : Langue (I18n.setLang, cf. js/i18n.js),
+// Touche de déclenchement (localStorage, lu directement par js/variables.js
+// et js/editor.js - AUCUNE dépendance croisée vers ce module pour une
 // simple lecture, cf. mémoire projet), Crédits (contenu statique, aucune
 // logique). Même convention d'ouverture/fermeture que les autres modales V2
-// (wireLinkRulesModal/wireTemplateGalleryModal, v2/js/main.js) : bascule
+// (wireLinkRulesModal/wireTemplateGalleryModal, js/main.js) : bascule
 // simple de style.display, pas de fermeture au clic sur le fond (aucune
 // modale existante de ce projet ne le fait non plus).
 const Settings = (function () {
@@ -58,7 +58,7 @@ const Settings = (function () {
         try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
         // Pas de reconfiguration à chaud du plugin ProseMirror Suggestion
         // (son `char` est un simple littéral capturé une fois à la
-        // construction de l'éditeur, cf. v2/js/variables.js) - un
+        // construction de l'éditeur, cf. js/variables.js) - un
         // rechargement de page est plus simple et plus sûr qu'une
         // reconfiguration ProseMirror en direct pour un réglage qui change
         // rarement (Editor.init() n'est appelé qu'une seule fois dans toute

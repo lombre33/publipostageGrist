@@ -7,14 +7,14 @@
    Volontairement PAS dans ../css/style.css (partagé avec la V1) : les
    sélecteurs ci-dessous (.title-cluster/.action-cluster/[data-tip]/
    #btn-link-rules/#btn-rename-template/#v2-heading-group) n'existent que
-   dans le HTML de v2/index.html - la V1 garde son propre mécanisme (icône
+   dans le HTML de index.html - la V1 garde son propre mécanisme (icône
    seule + libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
 
 /* === Cluster "modèle courant" (sélecteur + renommage) ===
    Remplace les deux champs séparés (select de la V1 + input#template-name
    toujours visible) par UN seul contrôle : le select affiche/choisit le
    modèle, un petit crayon juste à côté fait apparaître l'input à SA place
-   pour le renommer (logique posée/togglée par v2/js/main.js:wireTemplateRename)
+   pour le renommer (logique posée/togglée par js/main.js:wireTemplateRename)
    - même geste que renommer le titre d'un document Google Docs/Notion. */
 .title-cluster { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .title-cluster select { border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; border-radius: 0; }
@@ -73,7 +73,7 @@
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* === Menu "Titre" fusionné (niveau de titre + numérotation des titres,
-   #v2-heading-group/#v2-heading-flyout, v2/index.html) === Remplace deux
+   #v2-heading-group/#v2-heading-flyout, index.html) === Remplace deux
    contrôles jusqu'ici séparés (un <select> natif "Normal/Titre 1-6" en tout
    début de barre, et une pastille de numérotation isolée bien plus loin) -
    demandé par l'utilisateur pour regrouper les deux réglages, qui portent
@@ -81,7 +81,7 @@
    que Police) déclenche un flyout listant les niveaux PUIS, séparé par un
    filet, le style de numérotation (.v2-segmented, même chrome que la
    pastille en-tête/pied). Les DEUX <select> natifs (v2-header-select/
-   v2-heading-numbering-select) restent dans le DOM (masqués) : v2/js/main.js
+   v2-heading-numbering-select) restent dans le DOM (masqués) : js/main.js
    s'appuie encore dessus pour lire/poser la valeur au chargement d'un modèle
    (cf. loadTemplateIntoEditor), inchangé pour ne rien casser côté
    sauvegarde/chargement. */
@@ -102,7 +102,7 @@
 
 /* === Nom de fichier PDF masqué derrière un crayon (même geste que le
    renommage de modèle ci-dessus) - reste visible si un nom est déjà
-   configuré (cf. v2/js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor),
+   configuré (cf. js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor),
    pour ne pas cacher un réglage actif derrière une icône anodine. */
 .v2-pdf-filename-cluster { display: inline-flex; align-items: center; gap: 4px; }
 #pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
@@ -110,9 +110,9 @@
 
 /* === Qualité PDF : bouton + panneau au survol (même mécanisme que les
    styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un
-   <select> toujours affiché - v2/js/main.js:onExportPdf lit encore
+   <select> toujours affiché - js/main.js:onExportPdf lit encore
    v2-pdf-quality.value directement, inchangé. */
-/* Page (coin plié, même silhouette que l'icône "saut de page" de v2/js/
+/* Page (coin plié, même silhouette que l'icône "saut de page" de js/
    icons.js - ancre visuellement ce bouton comme "propre au PDF/document")
    + petites barres ascendantes à l'intérieur (niveaux de qualité) - retenu
    parmi plusieurs maquettes proposées (option "J") après plusieurs essais
@@ -121,7 +121,7 @@
 #v2-pdf-quality[hidden] { display: none; }
 
 /* === Modale "Correspondance de tables" (#link-config-modal, cf.
-   v2/js/variables.js:showLinkConfigModal) === Remplacée par une maquette plus
+   js/variables.js:showLinkConfigModal) === Remplacée par une maquette plus
    sobre après audit UI/UX : les 2 radios + astuce (cas normal/cas particulier
    traités à égalité) laissent place au cas normal ("Ligne correspondante",
    toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien
@@ -154,7 +154,7 @@
 .link-config-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }
 
 /* === Modale "Tables liées" (#link-rules-modal, cf.
-   v2/js/variables.js:refreshLinkRulesPanel) === Liste des règles déjà
+   js/variables.js:refreshLinkRulesPanel) === Liste des règles déjà
    configurées ; chaque ligne avait 2 boutons texte bruts ("Modifier"/
    "Supprimer", aucun style) - remplacés par des icônes cohérentes avec le
    reste de la toolbar (même crayon que le renommage de modèle, même
@@ -174,8 +174,8 @@
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
 
 /* === Galerie de templates (#template-gallery-modal/#template-preview-modal,
-   cf. v2/js/main.js wireTemplateGalleryModal) === Même overlay que
-   #link-rules-modal (v2/css/editor-v2.css), mais un contenu bien plus large
+   cf. js/main.js wireTemplateGalleryModal) === Même overlay que
+   #link-rules-modal (css/editor-v2.css), mais un contenu bien plus large
    (mosaïque) : .modal-content de css/style.css plafonne à 440px, ne convient
    pas ici - élargi + repassé en colonne (en-tête fixe, grille scrollable,
    actions en bas) plutôt qu'un contenu qui grandit sans limite. */
@@ -210,7 +210,7 @@
 .tpl-preview-actions #tpl-preview-use-empty:hover, .tpl-preview-actions #tpl-preview-use-data:hover { background: var(--accent-hover); }
 .tpl-preview-body { flex: 1; overflow: auto; background: var(--surface-sunken); padding: 16px; border-radius: 6px; }
 /* Le "look page A4" (largeur/padding) de .v2-page-sheet/.tiptap est normalement
-   posé par des règles SCOPÉES à #editor-container.a4-preview (v2/css/editor-v2.css) -
+   posé par des règles SCOPÉES à #editor-container.a4-preview (css/editor-v2.css) -
    cette prévisualisation vit dans une modale, pas dans #editor-container, donc
    aucune de ces règles ne s'applique ici. Reprend seulement les 2 constantes
    nécessaires (mêmes valeurs que editor-v2.css, tolérance à la duplication déjà
@@ -258,7 +258,7 @@
 .settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
 /* === Barre flottante de formatage nombre/date d'une bulle #Variable (cf.
-   v2/js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
+   js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
    .v2-floating-toolbar (même positionnement/ombre que les barres image/
    tableau) ; ce qui suit ne couvre que le CONTENU propre à cette barre
    (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages
@@ -285,7 +285,7 @@
 [data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg { opacity: .4; pointer-events: none; }
 
 /* Boutons/groupes sans aucun sens pendant l'édition d'en-tête/pied de page
-   (posée dynamiquement par v2/js/editor.js:syncToolbarState) - pointer-events
+   (posée dynamiquement par js/editor.js:syncToolbarState) - pointer-events
    (pas juste disabled, la numérotation des titres est un GROUPE au survol,
    pas un simple <button>) hérite vers tous les descendants, bloquant aussi
    le panneau flottant révélé au survol, pas seulement le déclencheur.
@@ -298,7 +298,7 @@
 #v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
 
 /* === Pastille flottante d'édition d'en-tête/pied de page (#v2-hf-pill, cf.
-   v2/js/editor.js:renderHfPill) === Remplace l'ancien bouton de toolbar +
+   js/editor.js:renderHfPill) === Remplace l'ancien bouton de toolbar +
    sous-barre dockée pleine largeur (jugé "pas beau" par l'utilisateur,
    cassait la continuité visuelle de la page) - façon Google Docs/Word :
    on entre en édition en cliquant directement une zone de marge de la page
@@ -326,7 +326,7 @@
 .v2-hf-btn-done { margin-left: auto; width: auto; height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
 .v2-hf-btn-done:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-/* Menu "Image depuis une variable" (v2/js/editor.js:openImageVariablePicker) -
+/* Menu "Image depuis une variable" (js/editor.js:openImageVariablePicker) -
    même langage visuel que #autocomplete-box (../css/style.css, #Variable en
    texte), instance DOM séparée (id différent) pour ne rien partager entre
    les deux fichiers. */

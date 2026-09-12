@@ -207,7 +207,7 @@
   cases.push({
     id: 'fmt_undo_history_not_cleared_by_sethtml',
     // BUG CONFIRMÉ (cf. BUGS.md) : Editor.setHTML() (chemin réel de "Nouveau
-    // modèle"/changement de modèle, cf. v2/js/main.js:loadTemplateIntoEditor)
+    // modèle"/changement de modèle, cf. js/main.js:loadTemplateIntoEditor)
     // ne vide PAS l'historique annuler/rétablir de TipTap - après avoir
     // chargé un AUTRE contenu, appuyer sur Annuler peut faire réapparaître le
     // contenu du modèle PRÉCÉDENT au lieu de ne rien faire (ou de rester sur

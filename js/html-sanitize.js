@@ -2,7 +2,7 @@
 // outerHTML/document.write) d'un contenu qui peut avoir été modifié EN
 // DEHORS de l'éditeur (colonne Grist Contenu/HeaderFooter éditée
 // directement via l'UI/API Grist par un autre collaborateur du document,
-// gabarit importé) - cf. AUDIT_CODE_V2.md §3.2/§8.2. Retire les vecteurs
+// gabarit importé) - cf. AUDIT_CODE.md §3.2/§8.2. Retire les vecteurs
 // d'exécution de script (balises <script>, attributs on*, URLs
 // javascript:) via un parsing DOMParser (document inerte : aucune image
 // ne charge, aucun script ne s'exécute pendant le parsing lui-même), sans

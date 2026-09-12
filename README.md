@@ -8,8 +8,7 @@ d'une ligne Grist (`#Table.Colonne`), puis d'exporter ce document en PDF — y c
 
 ## Sommaire
 
-- [Deux versions dans ce dépôt](#deux-versions-dans-ce-dépôt)
-- [Fonctionnalités (V2)](#fonctionnalités-v2)
+- [Fonctionnalités](#fonctionnalités)
 - [Installation dans Grist](#installation-dans-grist)
 - [Configuration](#configuration)
 - [Sécurité et permissions](#sécurité-et-permissions)
@@ -18,18 +17,10 @@ d'une ligne Grist (`#Table.Colonne`), puis d'exporter ce document en PDF — y c
 - [État du projet](#état-du-projet)
 - [Licence](#licence)
 
-## Deux versions dans ce dépôt
+Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Déployé comme une page statique
+unique sur GitHub Pages — aucune étape de build.
 
-| | Emplacement | Moteur d'édition | Statut |
-|---|---|---|---|
-| **V2** (actuelle) | [`v2/`](v2/) | [TipTap](https://tiptap.dev/)/ProseMirror | En développement actif, cible de ce README |
-| V1 (historique) | racine du dépôt | [Quill](https://quilljs.com/) | Conservée pour compatibilité/rollback, non maintenue activement |
-
-Les deux versions sont déployées comme deux pages statiques indépendantes (racine du dépôt = V1,
-`v2/` = V2) sur le même hébergement GitHub Pages — aucune branche ni fork séparé. La V2 a atteint la
-parité fonctionnelle avec la V1 et est celle destinée à une publication officielle.
-
-## Fonctionnalités (V2)
+## Fonctionnalités
 
 - Éditeur de texte riche (gras/italique/souligné/barré, couleurs, polices/tailles réelles en points,
   alignement, listes à puces/numérotées/cases à cocher, citations, tableaux, zones 2 colonnes,
@@ -45,8 +36,8 @@ parité fonctionnelle avec la V1 et est celle destinée à une publication offic
 
 ## Installation dans Grist
 
-1. Dans une page Grist, ajouter un widget personnalisé et renseigner l'URL de la V2 (page
-   `v2/index.html` de ce dépôt une fois publié — voir le déploiement GitHub Pages du dépôt).
+1. Dans une page Grist, ajouter un widget personnalisé et renseigner l'URL du dépôt publié (voir
+   le déploiement GitHub Pages du dépôt).
 2. Lier le widget à la table Grist dont les lignes serviront de source de données pour le
    publipostage (le widget suit la sélection de ligne active, comme n'importe quel widget "détail"
    Grist standard).
@@ -90,7 +81,7 @@ depuis deux CDN publics (`esm.sh` pour le moteur d'édition TipTap/ProseMirror, 
 pour la génération de PDF — détail complet ci-dessous). Les bibliothèques `cdnjs` sont protégées par
 une intégrité SRI (le navigateur refuse d'exécuter un fichier altéré) ; ce n'est techniquement pas
 possible pour l'import map `esm.sh` (limitation des imports ES) — voir
-[`AUDIT_CODE_V2.md`](AUDIT_CODE_V2.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque)
+[`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque)
 pour l'analyse détaillée de ce point et la piste restante (auto-hébergement).
 
 **Aucune donnée n'est stockée hors de Grist** : les seules données conservées côté navigateur
@@ -108,23 +99,23 @@ tierces sont chargées à l'exécution, versions toujours figées (jamais `@late
 | Bibliothèque | Usage | Origine |
 |---|---|---|
 | `grist-plugin-api.js` | API du widget Grist (obligatoire) | `docs.getgrist.com` |
-| TipTap 3.31.3 + ProseMirror (~20 paquets) + `@floating-ui/dom` | Moteur d'édition riche | `esm.sh` (import map, `v2/index.html`) |
+| TipTap 3.31.3 + ProseMirror (~20 paquets) + `@floating-ui/dom` | Moteur d'édition riche | `esm.sh` (import map, `index.html`) |
 | pdfmake 0.2.7 + `vfs_fonts` | Export PDF vectoriel | `cdnjs.cloudflare.com` |
 | html2pdf.js 0.10.1 | Export PDF qualité raster | `cdnjs.cloudflare.com` |
 | JSZip 3.10.1 | Export en lot (archive zip) | `cdnjs.cloudflare.com` |
 
 ## Tests
 
-Une suite de tests automatisés (`v2/dev-tests/`, ~90 scénarios) couvre l'éditeur et l'export PDF
-vectoriel — voir [`v2/dev-tests/README.md`](v2/dev-tests/README.md) pour l'exécuter. Portée
+Une suite de tests automatisés (`dev-tests/`, ~90 scénarios) couvre l'éditeur et l'export PDF
+vectoriel — voir [`dev-tests/README.md`](dev-tests/README.md) pour l'exécuter. Portée
 volontaire : tout sauf la résolution `#Variable`/pièces jointes réelles, qui nécessite un vrai
 document Grist et n'est pas testable en local.
 
 ## État du projet
 
 Un audit de code complet (qualité, sécurité, conformité aux exigences de publication) a été réalisé
-le 2026-09-12 — voir [`AUDIT_CODE_V2.md`](AUDIT_CODE_V2.md) pour le détail des constats et leur
-priorité. L'historique des versions stables de la V1 est dans [`VERSIONING.md`](VERSIONING.md).
+le 2026-09-12 — voir [`AUDIT_CODE.md`](AUDIT_CODE.md) pour le détail des constats et leur
+priorité.
 
 ## Licence
 

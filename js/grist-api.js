@@ -209,7 +209,7 @@ const GristAPI = (function () {
       // Un fetchTable par table, EN PARALLÈLE (indépendants) plutôt qu'en
       // séquence - la latence totale devient celle du plus lent des appels,
       // pas leur somme. Déterminant depuis que Variables.js
-      // (v2/js/variables.js:createExtension) appelle refreshSchema() à
+      // (js/variables.js:createExtension) appelle refreshSchema() à
       // chaque nouvelle session de saisie de #Variable (pour voir les
       // colonnes ajoutées depuis le lancement du widget) - un doc à N
       // tables ne doit pas payer N aller-retours séquentiels à chaque fois.
@@ -537,7 +537,7 @@ const GristAPI = (function () {
   }
 
   // Email de l'utilisateur courant (chip intelligent #Variable, cf.
-  // v2/js/editor.js:createSmartChipNode).
+  // js/editor.js:createSmartChipNode).
   //
   // PREMIÈRE VERSION (abandonnée) : GET /api/profile/user via le jeton de
   // getAccessTokenCached() - signalé cassé par l'utilisateur, renvoyait

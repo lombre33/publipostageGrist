@@ -1,8 +1,8 @@
-// Stub minimal de window.grist pour tester l'éditeur/export PDF V2 HORS Grist
+// Stub minimal de window.grist pour tester l'éditeur/export PDF HORS Grist
 // (cf. dev-tests/README.md - même principe déjà éprouvé de nombreuses fois en
 // séance sous forme de fichiers jetables, ici rendu permanent et réutilisable).
 // Remplace le <script src="https://docs.getgrist.com/grist-plugin-api.js">
-// dans v2/_test-harness.html (généré depuis v2/index.html, cf.
+// dans _test-harness.html (généré depuis index.html, cf.
 // generate-harness.sh) - js/grist-api.js lui-même n'est PAS modifié, il tourne
 // tel quel contre ce stub, exactement comme il tournerait contre le vrai
 // window.grist fourni par Grist.

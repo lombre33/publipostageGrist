@@ -1,13 +1,13 @@
 // Icônes de la toolbar V2 — SVG "trait" (viewBox 24x24, stroke=currentColor,
 // stroke-width=2, fill=none), même esprit que le svgIcon() de la V1
 // (js/editor.js) : aucune dépendance externe, cohérent avec l'absence de
-// bundler dans cet environnement (v2/index.html charge tout en ESM natif via
+// bundler dans cet environnement (index.html charge tout en ESM natif via
 // importmap). Les tracés déjà dessinés en V1 (undo/redo/table/2-colonnes/
 // saut de page/image/sommaire, + les 6 icônes de la toolbar de tableau
 // contextuelle) sont repris tels quels ; les autres sont nouveaux, dans le
 // même style.
 // Source de vérité UNIQUE : utilisé à la fois pour injecter les icônes de la
-// toolbar statique (boutons déjà présents dans v2/index.html, cf.
+// toolbar statique (boutons déjà présents dans index.html, cf.
 // applyToolbarIcons dans editor.js) et pour construire en JS le contenu des
 // toolbars flottantes (tableau, image) dont le HTML n'existe pas à l'avance.
 const Icons = (function () {
@@ -49,9 +49,9 @@ const Icons = (function () {
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
     // 3 styles de case à cocher (survol du bouton "Liste", 3ᵉ ligne du
     // panneau) - différenciés par la FORME (le trait/la case), le vrai
-    // libellé de chacun vit dans son data-tip (v2/index.html) : le rendu réel
+    // libellé de chacun vit dans son data-tip (index.html) : le rendu réel
     // dans le document dépend de data-tasklist-style (CSS, cf. editor-v2.css,
-    // et taskCheckboxCanvas côté export PDF, v2/js/pdf-export.js), pas de ces
+    // et taskCheckboxCanvas côté export PDF, js/pdf-export.js), pas de ces
     // icônes elles-mêmes.
     checklistAccentStrike: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
     checklistClassic: '<rect x="3" y="9" width="7" height="7"/><path d="M4.5 12.5l1.3 1.3L9 11"/>',
