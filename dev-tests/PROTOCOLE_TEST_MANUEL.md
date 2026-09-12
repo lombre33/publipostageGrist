@@ -238,7 +238,10 @@ silencieusement entre les 3 étages.
 (`scenarios-headerfooter.js`) ; `pagebreak_insert`, `pagebreak_pdf_two_pages`,
 `toc_insert_and_detect_headings`, `toc_empty_state`, `toc_pdf_page_numbers`
 (`scenarios-pagebreak-toc.js`, + `pagebreak_editor_gap_reserves_full_remaining_page` ajouté le
-2026-09-13) ; `chip_footnote_insert_and_edit`, `chip_footnote_delete`,
+2026-09-13, **puis** `pagebreak_readmode_gap_matches_editor` le même jour une fois découvert que
+`reader-mode.js` garde sa PROPRE copie de cette logique de pagination, restée non corrigée après
+le premier correctif éditeur - à surveiller à chaque futur changement de l'un des deux fichiers,
+l'autre ne suit pas automatiquement) ; `chip_footnote_insert_and_edit`, `chip_footnote_delete`,
 `chip_footnote_two_notes_numbering`, `chip_footnote_pdf_placement`,
 `chip_footnote_survives_twocolumns_zone`, `chip_smart_*` (date/heure/email — `scenarios-chips.js`).
 `pdffid_header_footer_fixed_height_regardless_of_content_length` (`scenarios-pdf-fidelity.js`,
@@ -302,6 +305,15 @@ bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
   image "au cœur du texte" à cheval sur 2 paragraphes, une image en calque devant ET derrière
   (positions volontairement proches d'un bord de page), une image dans une cellule de tableau et
   une dans une colonne 2-colonnes.
+- **`vitrine-fonctionnalites`** ("Vitrine des fonctionnalités", tag `démo`/`vitrine`, séparé des
+  deux ci-dessus qui sont des fixtures de test internes) : document de 4 pages, destiné à la fois
+  à faire la démonstration du module et à servir de test de bout en bout - en-tête/pied de page
+  (première page différente), sommaire, tous les formats de texte, listes, citation, note de bas
+  de page, tableau, image au cœur du texte à cheval sur 2 paragraphes, 2 images en calque avec de
+  vraies photos (Lorem Picsum, vérifié CORS-safe pour l'export), article de presse en zone
+  2-colonnes, variables Grist et chips intelligents. C'est en testant ce modèle (éditeur → lecture
+  → PDF, 4 pages) que le bug reader-mode du §7 a été trouvé - un bon rappel que ce modèle vaut la
+  peine d'être rejoué après tout changement touchant la pagination ou le positionnement en calque.
 
 **Utilisation** : charger le modèle, dérouler le protocole correspondant (§1-§7) aux 3 étages
 (Éditeur → Lecture → PDF), sans avoir à reconstruire le contenu de test à la main.
