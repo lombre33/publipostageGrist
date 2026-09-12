@@ -28,8 +28,8 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 | Intégrité des données (concurrence) | 0 | ~~2~~ **0** *(corrigés le 2026-09-12)* | 0 | 0 |
 | Qualité de code (redondance, structure) | 0 | ~~6~~ **1** *(5 corrigées le 2026-09-12 : dédup. editor.js/pdf-export.js, robustesse, code mort ; reste : découpage structurel des 2 gros fichiers)* | 8 | 4 |
 | Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
-| Accessibilité (RGAA) | 0 | 1 | 1 | 1 |
-| **Total** | **0** | ~~22~~ **4 restants** (18 corrigés) | **16** | **5** |
+| Accessibilité (RGAA) | 0 | ~~1~~ **0** *(modales corrigées le 2026-09-13)* | 1 | 1 |
+| **Total** | **0** | ~~22~~ **3 restants** (19 corrigés) | **16** | **5** |
 
 **Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§4/§5/§6.2) : fuite RGPD en console, XSS
 en-tête/pied de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur
@@ -56,6 +56,8 @@ depuis un passage à `'flex'` — seule la sélection à la souris fonctionnait)
 commentaires disproportionnés (§5, jugé "partiel" ci-dessus) est désormais **terminé** sur tous les
 fichiers de production : tout bloc de 5 lignes ou plus a été relu et condensé à 1-3 lignes,
 gardant le fait "pourquoi" et retirant la narration. Suite de tests toujours 89/89 après coup.
+
+**Mise à jour 2026-09-13** : accessibilité RGAA des 5 modales corrigée (§7, cf. `wireModalAccessibility()` dans `js/main.js`). Par ailleurs, les 3 qualités d'export PDF non-vectorielles (impression navigateur, basse/ultra HD) — jamais aussi robustes que le vectoriel, cf. §5.2 — ont été isolées dans un nouveau fichier dédié `js/pdf-export-alt.js` (aucune dépendance croisée avec le moteur pdfmake) et **désactivées dans l'UI** (options grisées, non cliquables) en attendant d'être fiabilisées ; seul l'export vectoriel reste proposé aux utilisateurs de l'alpha publique.
 
 **Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
 
@@ -213,7 +215,7 @@ Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test
 4. Barre d'outils statique principale → `main-toolbar.js`
 5. Cœur du module (`init`, `getHTML`/`setHTML`, API publique) → reste dans `editor.js`, réduit à un point d'assemblage.
 
-### 5.2 `js/pdf-export.js` (2757 → 2011 lignes) — ✅ redondances, robustesse et commentaires corrigés
+### 5.2 `js/pdf-export.js` (2757 → 1922 lignes, + `js/pdf-export-alt.js` 95 lignes) — ✅ redondances, robustesse, commentaires corrigés, impression navigateur/raster isolées
 
 | Constat | Lignes (avant correctif) | Priorité |
 |---|---|---|
@@ -280,8 +282,8 @@ Le secteur public français est soumis au RGAA (106 critères, 13 thèmes — DI
 
 | Constat | Fichier(s) | Priorité | Référence |
 |---|---|---|---|
-| Aucune des 5 fenêtres modales n'a `role="dialog"`/`aria-modal="true"` ; le focus clavier n'est jamais déplacé à l'ouverture ni restitué à la fermeture ; la touche Échap n'est pas gérée. | `index.html`, `js/main.js`, `js/settings.js` | **Important** | RGAA 12.7/12.8 (WCAG 2.1 SC 2.4.3, 4.1.2) |
-| 3 champs texte n'ont qu'un `placeholder`, sans `aria-label`/`<label>` associé (nom de modèle, nom de fichier PDF, recherche de galerie) — un `placeholder` seul n'est pas une alternative accessible fiable. | `index.html` (lignes 67, 114, 262) | Mineur | RGAA thème formulaires |
+| ~~Aucune des 5 fenêtres modales n'a `role="dialog"`/`aria-modal="true"` ; le focus clavier n'est jamais déplacé à l'ouverture ni restitué à la fermeture ; la touche Échap n'est pas gérée.~~ — **corrigé le 2026-09-13** : nouveau `wireModalAccessibility()` (`js/main.js`), générique via `MutationObserver` sur le `style.display` de chaque modale — pose `role="dialog"`/`aria-modal="true"`, déplace le focus sur le premier élément focusable à l'ouverture, piège Tab/Shift+Tab à l'intérieur, ferme sur Échap (en déclenchant le VRAI bouton de fermeture, pas une fermeture réimplémentée), et restitue le focus à l'élément qui avait ouvert la modale. Aucun site d'ouverture/fermeture existant n'a été modifié. Vérifié sur 2 modales (comportement identique pour les 3 autres, même mécanisme générique). | ~~`index.html`, `js/main.js`, `js/settings.js`~~ | ~~Important~~ ✅ | RGAA 12.7/12.8 (WCAG 2.1 SC 2.4.3, 4.1.2) |
+| 3 champs texte n'ont qu'un `placeholder`, sans `aria-label`/`<label>` associé (nom de modèle, nom de fichier PDF, recherche de galerie) — un `placeholder` seul n'est pas une alternative accessible fiable. | `index.html` (lignes 67, 114, 262) | Mineur — non corrigé | RGAA thème formulaires |
 | Les modales utilisent `style="display:none"` + bascule JS, alors que le panneau Réglages (même fichier) utilise l'attribut natif `hidden` — deux conventions cohabitent sans qu'un choix soit expliqué. | `index.html` | Cosmétique | — |
 
 **Recommandation** : prévoir un audit RGAA dédié avant publication officielle (hors périmètre de cet audit de code), au minimum sur les points ci-dessus qui sont peu coûteux à corriger (ajout d'attributs ARIA, piège à focus, gestion d'Échap).
