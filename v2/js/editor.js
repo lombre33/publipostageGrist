@@ -666,13 +666,8 @@ const Editor = (function () {
       isolating: true,
       addAttributes() {
         return {
-          // Pourcentage de largeur de la colonne GAUCHE (grille CSS, cf.
-          // css/editor-v2.css), clampé 20-80 au glisser de la poignée -
-          // même borne que la V1 (js/editor.js). Sérialisé en variable CSS
-          // `--layout-left` sur le nœud lui-même (comme la V1), pas en
-          // attribut HTML bare - lu par pdf-export.js indirectement (il
-          // mesure la géométrie RENDUE des colonnes, jamais cette variable
-          // par son nom, cf. twoColumnsFrom).
+          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser,
+          // sérialisée en variable CSS --layout-left.
           layoutLeft: {
             default: 50,
             parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
@@ -695,18 +690,11 @@ const Editor = (function () {
           }).run(),
         };
       },
-      // NodeView : le schéma (content: 'twoColumnsColumn twoColumnsColumn')
-      // n'autorise pas un enfant DOM supplémentaire hors contentDOM
-      // autrement - `dom` est donc un wrapper EXTERNE (position:relative,
-      // pour ancrer la poignée en absolu) englobant `contentDOM` (les deux
-      // colonnes, gérées par ProseMirror, avec la classe/grille réelle
-      // .two-columns-zone) et la poignée elle-même, en enfant du wrapper
-      // mais PAS de contentDOM - la laisser en dehors du contenu géré par
-      // ProseMirror évite tout risque qu'une reconciliation future la
-      // retire en la traitant comme un enfant inattendu. --layout-left posé
-      // sur le WRAPPER (pas sur contentDOM) : une variable CSS personnalisée
-      // hérite vers le BAS uniquement - posée sur contentDOM, la poignée
-      // (sa sœur, pas sa descendante) ne la verrait jamais.
+      // dom = wrapper externe (ancre la poignée en absolu) englobant
+      // contentDOM (les 2 colonnes gérées par ProseMirror) et la poignée,
+      // hors contentDOM pour éviter qu'une reconciliation future la retire.
+      // --layout-left posé sur le wrapper (hérite vers le bas uniquement,
+      // la poignée ne le verrait pas si posé sur contentDOM).
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('div');
@@ -756,22 +744,10 @@ const Editor = (function () {
               return true;
             },
             destroy: () => document.removeEventListener('mousemove', onMove),
-            // Sans ça, ProseMirror surveille via MutationObserver le DOM de
-            // CE NodeView et considère toute mutation qu'IL n'a pas
-            // lui-même provoquée (ici : `wrap.style.setProperty(...)` dans
-            // onMove, en dehors de toute transaction) comme "inattendue" -
-            // il tente alors de "réparer" la vue en RECRÉANT le NodeView.
-            // Constaté précisément : `getPos()` valait un nombre correct au
-            // mousedown, mais `wrap`/`contentDOM` étaient déjà DÉTACHÉS du
-            // document (`isConnected: false`) au moment du mouseup, quelques
-            // dizaines de ms plus tard - le glisser semblait fonctionner
-            // (la poignée bougeait bien à l'écran) mais le commit final sur
-            // relâchement de la souris s'appliquait à un nœud fantôme,
-            // jamais reporté sur le document réel (signalé par
-            // l'utilisateur : "la poignée ne fonctionne pas"). Cette
-            // NodeView gère elle-même toutes les mutations de son propre
-            // `dom` (le style CSS pendant le glisser) - dire à ProseMirror
-            // de les ignorer TOUTES est donc correct ici, pas une échappatoire.
+            // Sans ça, ProseMirror voit la mutation de style pendant le
+            // glisser (hors transaction) comme inattendue et recrée le
+            // NodeView - le wrapper devient alors détaché avant le mouseup,
+            // et le commit final s'applique à un nœud fantôme.
             ignoreMutation: () => true,
           };
         };
@@ -780,26 +756,13 @@ const Editor = (function () {
     return { TwoColumnsColumn, TwoColumnsZone };
   }
 
-  // Image — nœud "atome" en ligne. Parité V1 (js/editor.js:ImageBlot) pour les
-  // attributs de mise en forme : `layer` (normal/devant/derrière le texte,
-  // via position:absolute + left/top/z-index), `opacity`, `align` (gauche/
-  // centre/droite, uniquement en flux normal), `wrap` (en ligne/bloc).
-  // Contrairement à VarBadge, chaque attribut garde `renderHTML: () => ({})`
-  // (pas de rendu bare) : le nœud construit lui-même la chaîne `style`
-  // complète dans son propre renderHTML() ci-dessous plutôt que de compter
-  // sur le comportement de fusion par défaut de plusieurs attributs qui
-  // écriraient chacun dans `style` indépendamment.
+  // Image - nœud atome en ligne : `layer` (normal/devant/derrière),
+  // `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({})
+  // - le nœud construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
     const noBareRender = () => ({});
-    // `height` n'est posé/lu QUE pour une image liée à une variable
-    // (`varTable` non nul, cf. plus bas) : une image normale garde sa
-    // hauteur `auto` historique (dépend du ratio intrinsèque de l'image
-    // insérée) - le concept même de hauteur EXPLICITE, indépendante du
-    // ratio, n'existait pas avant cette feature (chaque ligne Grist ayant sa
-    // propre image, de ratio différent, un placeholder de taille FIXE dans
-    // lequel la vraie image doit "rentrer" sans être déformée - cf.
-    // js/reader-mode.js:resolveVariableImages et
-    // pdf-export.js:pdfImageFromNode pour le mode "contain" côté rendu).
+    // `height` n'est posé que pour une image liée à une variable
+    // (placeholder de taille fixe, mode "contain" côté rendu).
     function styleFor(a) {
       const parts = [];
       if (a.width) parts.push(`width: ${a.width}`);
@@ -828,11 +791,8 @@ const Editor = (function () {
           opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
           align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
           wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
-          // Image liée à une #Variable de colonne Attachments (cf. plan) :
-          // ces 3 attributs, posés ensemble, transforment ce nœud en
-          // "placeholder" (jamais de vraie image dans l'éditeur, cf.
-          // renderHTML/NodeView ci-dessous) - même convention de noms que
-          // varBadge (createVarBadgeNode) pour la cohérence.
+          // Posés ensemble : transforment ce nœud en placeholder de #Variable
+          // Attachments (jamais de vraie image dans l'éditeur).
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
           varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
@@ -841,11 +801,8 @@ const Editor = (function () {
       parseHTML() { return [{ tag: 'img.editor-image' }]; },
       renderHTML({ node }) {
         const a = node.attrs;
-        // Placeholder lié à une variable : `src` reste VIDE dans le HTML
-        // sérialisé (jamais de vraie image tant que la ligne n'est pas
-        // résolue, cf. js/reader-mode.js:resolveVariableImages qui pose le
-        // vrai src au moment du rendu/export) - seuls les attributs
-        // data-var-* identifient QUEL #Variable résoudre à cet endroit.
+        // Placeholder lié à une variable : `src` reste vide (résolu au
+        // rendu/export par js/reader-mode.js:resolveVariableImages).
         const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
         if (a.align) attrs['data-align'] = a.align;
         if (a.varTable) {
@@ -858,11 +815,8 @@ const Editor = (function () {
       addCommands() {
         return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
       },
-      // NodeView plutôt que les overlays document.body de la V1 (cf. mémoire
-      // project_quill_mutation_observer) : les poignées de redimensionnement/
-      // déplacement sont de vrais enfants DOM du wrapper, positionnés en pur
-      // CSS - pas besoin de recalculer leur position en JS à chaque scroll/
-      // resize comme le faisait la V1.
+      // NodeView (pas des overlays document.body comme en V1) : les poignées
+      // sont de vrais enfants DOM du wrapper, positionnées en pur CSS.
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('span');
@@ -872,16 +826,10 @@ const Editor = (function () {
           img.draggable = false;
           wrap.appendChild(img);
 
-          // Placeholder d'une image liée à une #Variable (jamais de vraie
-          // image dans l'éditeur, cf. renderHTML plus haut) : un <span>
-          // superposé (icône + "#Table.Colonne"), au lieu de compter sur le
-          // rendu natif du navigateur pour un <img src=""> (comportement peu
-          // fiable selon navigateur - rien, ou une icône "image cassée"). Le
-          // <img> lui-même reste dans le DOM, invisible (cf. CSS
-          // .editor-image-var-placeholder), pour continuer à porter
-          // width/height (poignées de redimensionnement, toolbar flottante -
-          // tout le reste de ce fichier suppose déjà "l'image sélectionnée"
-          // = ce <img>, cf. selectedImageDom()).
+          // Placeholder de #Variable : <span> superposé (icône +
+          // "#Table.Colonne") plutôt que de compter sur le rendu natif d'un
+          // <img src="">. Le <img> reste dans le DOM, invisible, pour
+          // continuer à porter width/height (poignées, toolbar flottante).
           const varLabel = document.createElement('span');
           varLabel.className = 'editor-image-var-label';
           wrap.appendChild(varLabel);
@@ -897,42 +845,19 @@ const Editor = (function () {
             h.addEventListener('mousedown', event => startResize(event, corner));
           });
           moveHandle.addEventListener('mousedown', startMove);
-          // Une fois l'image DÉJÀ sélectionnée (2e interaction), permet de la
-          // glisser directement au clic sur l'image elle-même, sans devoir
-          // viser précisément la poignée de déplacement (petite bulle) - cf.
-          // retour utilisateur : difficile de la déplacer sans cliquer
-          // spécifiquement sur la bulle, qui n'est là que pour amorcer la
-          // toute première sélection (indispensable pour une image "derrière
-          // le texte" couverte par du texte, cf. commentaire CSS sur
-          // .editor-image-move-handle - la poignée reste inchangée, toujours
-          // affichée pour ce cas). Le TOUT PREMIER clic (pas encore
-          // sélectionnée) continue de suivre le chemin normal de ProseMirror
-          // (sélection du nœud) - ne déclenche PAS de déplacement immédiat,
-          // qui surprendrait sur un simple clic de sélection.
+          // Une fois DÉJÀ sélectionnée, permet de glisser directement au
+          // clic sur l'image (pas seulement sur la poignée de déplacement) -
+          // le tout premier clic suit le chemin normal de sélection ProseMirror.
           img.addEventListener('mousedown', event => {
             if (!wrap.classList.contains('editor-image-layered')) return;
             if (!wrap.classList.contains('editor-image-selected')) return;
             startMove(event);
           });
 
-          // NodeView vivante : structure DIFFÉRENTE du HTML sérialisé
-          // (renderHTML ci-dessus, qui pose position/left/top/z-index
-          // directement sur l'<img>, forme lue par pdf-export.js/reader-
-          // mode.js) - ici le positionnement en calque est porté par le
-          // <span> wrapper (position:relative en permanence, pour que les
-          // poignées s'y ancrent par un simple CSS absolu). Le z-index NÉGATIF
-          // ("derrière le texte") est en revanche posé sur l'<img> SEULE, pas
-          // sur le wrapper : un enfant positionné SANS z-index propre ne crée
-          // PAS son propre contexte d'empilement, donc la poignée de
-          // déplacement (z-index positif, cf. CSS) reste comparée directement
-          // aux autres enfants de .tiptap et peut passer AU-DESSUS du texte
-          // même quand l'image elle-même passe dessous - sans quoi, avec le
-          // z-index négatif posé sur le wrapper, TOUT son contenu (poignée
-          // comprise) serait entraîné derrière le texte avec elle, la rendant
-          // impossible à re-sélectionner une fois cachée (vérifié en
-          // conditions réelles). Même précédent que le .tableWrapper de
-          // prosemirror-tables : un artefact d'édition en direct, absent de
-          // la sérialisation (cf. mémoire project_v2_tiptap_migration).
+          // Le z-index négatif ("derrière le texte") est posé sur l'<img>
+          // seule, pas le wrapper : sinon la poignée de déplacement (enfant
+          // du wrapper) serait entraînée derrière le texte avec lui,
+          // devenant impossible à re-sélectionner une fois cachée.
           function applyAttrs(attrs) {
             const isVarBox = !!attrs.varTable;
             img.src = isVarBox ? '' : (attrs.src || '');
@@ -951,21 +876,9 @@ const Editor = (function () {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
               wrap.style.top = (attrs.top || 0) + 'px';
-              // Largeur EXPLICITE (pas de "shrink-to-fit" implicite, le
-              // comportement par défaut d'un position:absolute sans largeur
-              // posée) : dans une cellule de tableau (bloc englobant CSS
-              // étroit, cf. pdf-export.js/attributeNestedPendingImages), un
-              // glisser qui approche/dépasse la largeur de CE bloc englobant
-              // (pas besoin d'un glisser extrême - une cellule fait souvent
-              // deux/trois cents pixels) fait s'effondrer la largeur calculée
-              // en mode shrink-to-fit à 0 (vérifié en conditions réelles :
-              // l'image entière, poignées comprises, devient un rectangle
-              // 0×0 - donc invisible - alors que `left`/`top` restent des
-              // nombres parfaitement valides) : l'image "disparaît dans le
-              // vide" en sortant du tableau plutôt que de simplement en
-              // sortir visuellement, signalé cassé par l'utilisateur. Poser
-              // ici la même largeur que l'<img> lui-même retire toute
-              // dépendance à ce calcul de largeur implicite.
+              // Largeur explicite (pas de shrink-to-fit implicite) : dans
+              // une cellule de tableau étroite, le shrink-to-fit par défaut
+              // s'effondre à 0 quand l'image approche la largeur du bloc englobant.
               wrap.style.width = attrs.width || '';
             } else {
               wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.width = '';
@@ -989,19 +902,9 @@ const Editor = (function () {
             patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
           }
 
-          // Attributs COURANTS du nœud - jamais `node.attrs` directement : ce
-          // paramètre de closure ne reflète que le TOUT PREMIER rendu de
-          // cette NodeView et ne se met JAMAIS à jour lui-même ensuite (seul
-          // `update(updatedNode)` reçoit le nœud frais, cf. commentaire sur
-          // startMove plus bas - le même piège, jusqu'ici seulement évité par
-          // startMove/updateAttrs, pas par startResize). Vérifié en
-          // conditions réelles : `node.attrs.layer` d'une image insérée déjà
-          // en calque (donc dont la toute première NodeView est créée avec
-          // layer≠'normal') pouvait quand même valoir 'normal' ici selon le
-          // moment exact du montage - resizeState.isLayered en devenait
-          // fantaisiste (parfois vrai, parfois faux pour la MÊME image),
-          // d'où des redimensionnements de calque incohérents signalés par
-          // l'utilisateur ("plein de soucis" sur les deux modes).
+          // Attributs COURANTS - jamais `node.attrs` directement : ce
+          // paramètre de closure ne reflète que le premier rendu de cette
+          // NodeView, seul `update(updatedNode)` reçoit le nœud frais.
           function currentAttrs() {
             const pos = getPos();
             const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
@@ -1017,26 +920,11 @@ const Editor = (function () {
               startX: event.clientX, startY: event.clientY,
               startWidth: rect.width, startHeight: rect.height,
               signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
-              // Un placeholder lié à une #Variable a une hauteur EXPLICITE et
-              // indépendante (boîte fixe dans laquelle la vraie image de
-              // chaque ligne devra "rentrer", cf. plan) - contrairement à une
-              // image normale, dont la hauteur reste toujours `auto` (suit le
-              // ratio intrinsèque de l'image insérée), jamais stockée.
               isVarBox: !!attrsNow.varTable,
-              // Bug trouvé en testant le positionnement (signalé par
-              // l'utilisateur) : en calque (devant/derrière), applyAttrs pose
-              // `wrap.style.width` EXPLICITEMENT (cf. plus haut, nécessaire
-              // contre l'effondrement shrink-to-fit dans un tableau/2-colonnes) -
-              // mais ne le mettait à jour QU'À LA FIN du redimensionnement
-              // (updateAttrs → applyAttrs), jamais PENDANT le glisser. Or
-              // `.editor-image { max-width:100% }` (css/style.css, générique)
-              // plafonne l'<img> à la largeur de SON conteneur : agrandir
-              // au-delà de la largeur de départ du wrap n'avait donc AUCUN
-              // effet visible tant qu'on ne relâchait pas (et la valeur relue
-              // à ce moment via getBoundingClientRect() était déjà plafonnée
-              // par le wrap resté à l'ancienne taille - le glisser semblait
-              // simplement ne rien faire passé la taille initiale). Il faut
-              // donc aussi faire grandir `wrap` en direct, pas seulement `img`.
+              // En calque, `wrap` a une largeur explicite (cf. applyAttrs) ;
+              // sans la faire grandir aussi pendant le glisser (pas seulement
+              // à la fin), `.editor-image { max-width:100% }` plafonnerait
+              // l'<img> à l'ancienne largeur du wrap.
               isLayered: attrsNow.layer !== 'normal',
             };
             document.addEventListener('mousemove', onResizeMove);
@@ -1045,17 +933,10 @@ const Editor = (function () {
           function onResizeMove(event) {
             if (!resizeState) return;
             let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.signX);
-            // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en
-            // tête de fichier) : les poignées restent utilisables (demande
-            // utilisateur, contrairement au premier essai qui les masquait
-            // entièrement) - le glisser va simplement buter sans dépasser la
-            // taille max, jamais bloqué en dessous (rétrécir reste libre).
-            // Sans effet pour un placeholder (naturalWidth/Height valent 0,
-            // clampWidthForHfMaxSize se neutralise déjà d'elle-même).
+            // En en-tête/pied, la poignée bute sur le plafond mais reste
+            // utilisable (rétrécir reste toujours libre).
             width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
-            // cf. resizeState.isLayered ci-dessus : sans ceci, `img` reste
-            // plafonné par le `wrap` resté à l'ancienne largeur (max-width:100%).
             if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
             if (resizeState.isVarBox) {
               const height = Math.max(30, resizeState.startHeight + (event.clientY - resizeState.startY) * resizeState.signY);
@@ -1075,13 +956,7 @@ const Editor = (function () {
           let moveState = null;
           function startMove(event) {
             event.preventDefault(); event.stopPropagation();
-            // Lit les attributs COURANTS via getPos()/nodeAt (pas la variable
-            // `node` capturée à la création de la NodeView) : cette dernière
-            // ne se met jamais à jour toute seule après le premier rendu -
-            // seul `update(updatedNode)` reçoit le nœud frais à chaque
-            // transaction - donc `node.attrs.left` resterait bloqué sur sa
-            // valeur d'origine (souvent `null`) après un premier déplacement,
-            // faussant le point de départ du déplacement suivant.
+            // Attributs courants via getPos()/nodeAt, pas `node` (figé au 1er rendu).
             const pos = getPos();
             const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
             moveState = { startX: event.clientX, startY: event.clientY, startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
@@ -1123,10 +998,7 @@ const Editor = (function () {
     });
   }
 
-  // Saut de page forcé — nœud "atome" de bloc, même classe que la V1
-  // (.page-break-marker) pour que pdf-export.js le reconnaisse tel quel ;
-  // aucun contenu ProseMirror réel (comme VarBadge), le libellé n'existe que
-  // dans le rendu.
+  // Saut de page forcé - nœud atome de bloc, même classe que la V1.
   function createPageBreakNode(Node) {
     return Node.create({
       name: 'pageBreak',
@@ -1141,14 +1013,9 @@ const Editor = (function () {
     });
   }
 
-  // Numérotation des titres — configuration invisible persistée DANS le
-  // contenu (un nœud de plus, comme PageBreak), plutôt que dans une colonne
-  // Grist séparée : évite toute migration de schéma sur la table des modèles
-  // déjà existante (même choix que la V1, cf. HeadingNumberingConfigBlot).
-  // Attribut interne nommé `numberingStyle` (PAS `style`, qui collisionnerait
-  // avec l'attribut HTML `style=` lors du rendu bare par défaut) ; sérialisé
-  // en `data-style` pour rester lisible par reader-mode.js (réutilisé tel
-  // quel) et par les compteurs CSS (cf. css/editor-v2.css, sur `.tiptap`).
+  // Numérotation des titres - configuration persistée comme un nœud dans le
+  // contenu plutôt qu'une colonne Grist séparée (évite une migration de
+  // schéma). Attribut nommé `numberingStyle` pas `style` (collision HTML).
   function createHeadingNumberingConfigNode(Node) {
     return Node.create({
       name: 'headingNumberingConfig',
@@ -1166,12 +1033,9 @@ const Editor = (function () {
       },
       addCommands() {
         return {
-          // Un seul nœud de config par document (comme la V1) : cherche le
-          // nœud existant parmi les enfants DIRECTS du document (`doc.forEach`
-          // ne descend pas dans les tableaux/colonnes/etc.), sinon l'insère en
-          // tête. `dispatch` peut être absent (appel en mode "can-run" par
-          // TipTap) - dans ce cas on ne doit QUE renvoyer true/false, jamais
-          // muter `tr`.
+          // Un seul nœud de config par document : cherche parmi les enfants
+          // directs (doc.forEach), sinon l'insère en tête. `dispatch` peut
+          // être absent (mode "can-run") - ne muter `tr` que s'il est présent.
           setHeadingNumberingStyle: numberingStyle => ({ tr, state, dispatch }) => {
             let foundPos = null;
             state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') foundPos = pos; });
@@ -1186,16 +1050,9 @@ const Editor = (function () {
     });
   }
 
-  // Sommaire — nœud "atome" de bloc. Le HTML SÉRIALISÉ (`getHTML()`, utilisé
-  // pour l'enregistrement) reste un simple placeholder statique, comme la V1
-  // (résolu en vraie liste de titres par reader-mode.js/pdf-export.js au
-  // rendu, pas ici). L'éditeur affiche en revanche un aperçu VIVANT via un
-  // NodeView personnalisé : contrairement à la V1 (où muter le DOM
-  // directement dans .ql-editor risquait de déclencher une boucle avec le
-  // MutationObserver de Quill, cf. mémoire project_quill_mutation_observer),
-  // un NodeView ProseMirror possède son propre sous-arbre DOM et
-  // `ignoreMutation: () => true` suffit à l'isoler proprement du modèle - pas
-  // besoin de signature de garde anti-boucle ici.
+  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder
+  // statique (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche
+  // un aperçu vivant via un NodeView, isolé du modèle par `ignoreMutation`.
   function createTocNode(Node) {
     return Node.create({
       name: 'toc',
