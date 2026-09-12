@@ -313,7 +313,7 @@ const Variables = (function () {
     // Un <input> ne passe jamais par @tiptap/suggestion - navigation clavier
     // gérée ici à la main, même logique que suggestionRender() ci-dessus.
     el.addEventListener('keydown', e => {
-      if (!filenameInputState || !acBox || acBox.style.display !== 'block') return;
+      if (!filenameInputState || !acBox || acBox.style.display !== 'flex') return;
       if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, latestCommand); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = (selectedIndex - 1 + currentItems.length) % currentItems.length; render(currentItems, latestCommand); }
       else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); latestCommand(currentItems[selectedIndex]); }
