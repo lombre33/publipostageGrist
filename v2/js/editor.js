@@ -1,57 +1,30 @@
 // Éditeur V2 — TipTap/ProseMirror (remplace Quill).
-//
-// Script CLASSIQUE (pas type="module") : TipTap/ProseMirror sont chargés via
-// import() DYNAMIQUE dans init() (respecte l'import map de v2/index.html
-// sans faire de ce fichier un vrai module ES, ce qui casserait le partage de
-// portée global avec GristAPI/Templates/ReaderMode - un module ES ne voit
-// jamais les `const` racine d'un autre script classique).
-//
-// `getHTML`/`setHTML` gardent la même forme d'API que l'éditeur V1 pour que
-// main.js/Templates/ReaderMode s'intègrent sans surprise.
-//
-// Les nœuds/extensions personnalisés ont besoin des classes TipTap
-// (Node/Extension/mergeAttributes), disponibles seulement après l'import()
-// dynamique - construits par des fonctions `createXxx(...)` recevant ces
-// classes en paramètre plutôt que déclarés en haut de fichier ; `init()` se
-// contente de les appeler et d'assembler le résultat.
+// Script classique (pas type="module") : TipTap/ProseMirror chargés via
+// import() dynamique dans init(), pour garder le partage de portée globale
+// avec GristAPI/Templates/ReaderMode. Les nœuds/extensions personnalisés
+// (classes TipTap disponibles seulement après cet import) sont construits
+// par des fonctions createXxx(...) plutôt que déclarés en haut de fichier.
 const Editor = (function () {
   let editor = null;
-  // Rempli dans init() après import dynamique - évite de réimporter à chaque appel.
   let floatingUi = null;
-  // Rempli dans init() après import de prosemirror-state. Nécessaire pour
-  // recréer explicitement une NodeSelection après tr.setNodeMarkup() (qui
-  // remplace le nœud plutôt que de le muter en place) - sans ça, la sélection
-  // retombe sur un simple curseur texte et referme la toolbar flottante
-  // (cf. patchNodeAndReselect ci-dessous).
+  // Nécessaire pour recréer une NodeSelection après tr.setNodeMarkup()
+  // (remplace le nœud) - cf. patchNodeAndReselect.
   let NodeSelectionClass = null;
-  // Alignement affiché par le bouton principal du groupe "Alignement" -
-  // mis à jour par syncToolbarState, relu par son propre clic.
   let currentAlign = 'left';
-  // Utilisé par createTabNavigationExtension pour placer le curseur à la
-  // position de texte valide la plus proche d'une position candidate.
   let TextSelectionClass = null;
 
-  // Mode d'édition en-tête/pied de page : un seul éditeur/schéma partagé,
-  // entrer dans ce mode ÉCHANGE juste le contenu affiché (editor.commands.
-  // setContent) plutôt que d'instancier un second éditeur. `null` = édition
-  // normale du document principal.
+  // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur,
+  // contenu affiché échangé via setContent).
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
-  // HTML du document principal, sauvegardé en entrant dans hfMode, restauré à la sortie.
   let mainDocSnapshot = null;
-  // Brouillon en mémoire des 4 fragments (en-tête/pied × normal/1ère page) -
-  // lu/écrit par getHeaderFooterData/setHeaderFooterData, persisté par
-  // js/templates.js dans la colonne Grist HeaderFooter (JSON).
   function emptyHeaderFooterData() {
     return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
-  // setNodeMarkup() remplace le nœud (suppression+insertion) au lieu de le
-  // muter en place : sans recréer explicitement une NodeSelection dessus, la
-  // sélection retombe sur un simple curseur texte et ferme la toolbar
-  // flottante qui dépend de cette sélection. Partagé par les 3 endroits qui
-  // patchent les attributs d'un nœud sélectionné (image, badge de variable,
-  // NodeView de l'image).
+  // Partagé par updateAttrs/updateSelectedImage/updateSelectedBadge :
+  // setNodeMarkup() remplace le nœud, donc la NodeSelection doit être
+  // recréée explicitement dessus (sinon retombe en curseur texte).
   function patchNodeAndReselect(ed, pos, newAttrs) {
     const { state, view } = ed;
     const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
@@ -59,35 +32,15 @@ const Editor = (function () {
     view.dispatch(tr);
   }
 
-  // Taille max (largeur×hauteur) d'une image dans l'en-tête/pied de page -
-  // convention du projet pour garder un en-tête/pied raisonnable (logo),
-  // pas une limite technique dure. Les DEUX dimensions comptent : un logo
-  // large et bas (grande bannière, ratio ~3:1) peut rester sous un plafond
-  // de hauteur seul tout en étant bien trop large pour un en-tête.
-  // 60px + le padding vertical de la zone (cf. css/editor-v2.css) + l'écart
-  // avant le corps totalisent ~8% d'une page A4 - proportion "papier à
-  // en-tête" discret. Ajustable, aucun autre code n'en dépend.
+  // Taille max d'une image en en-tête/pied (convention, pas une limite technique).
   const HF_MAX_IMAGE_HEIGHT_PX = 60;
   const HF_MAX_IMAGE_WIDTH_PX = 300;
-  // Ramène `widthPx` à la plus grande valeur qui garde l'image DANS la boîte
-  // HF_MAX_IMAGE_WIDTH_PX × HF_MAX_IMAGE_HEIGHT_PX (comme un "contain" CSS -
-  // le ratio intrinsèque naturalWidth/naturalHeight décide laquelle des deux
-  // dimensions est la plus contraignante) - SEULEMENT en mode en-tête/pied
-  // (`hfMode`, cf. plus haut) ; ne réduit JAMAIS en dessous de la valeur
-  // demandée (Math.min), donc ne bloque jamais un rétrécissement, seulement
-  // un agrandissement au-delà du plafond.
   function clampWidthForHfMaxSize(widthPx, naturalWidth, naturalHeight) {
     if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
     const maxWidthFromHeight = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
     const maxWidthPx = Math.min(HF_MAX_IMAGE_WIDTH_PX, maxWidthFromHeight);
     return Math.min(widthPx, maxWidthPx);
   }
-  // Dimensions intrinsèques d'une image distante, nécessaires pour choisir sa
-  // largeur d'INSERTION dans un en-tête/pied (cf. bind('v2-btn-image', ...)
-  // plus bas) - naturalWidth/naturalHeight restent lisibles même sur une
-  // image "tainted" CORS (seul l'accès aux pixels serait bloqué), donc
-  // aucune précaution particulière nécessaire ici au-delà du repli sur échec
-  // de chargement (URL invalide, réseau...).
   function probeImageDimensions(url) {
     return new Promise((resolve, reject) => {
       const probe = new Image();
@@ -96,13 +49,7 @@ const Editor = (function () {
       probe.src = url;
     });
   }
-  // Insertion PARTAGÉE par le bouton toolbar (bind('v2-btn-image', ...)) ET
-  // le collage d'image depuis le presse-papiers (handlePaste ci-dessous) -
-  // même repli/plafond en mode en-tête/pied dans les deux cas, pour ne pas
-  // dupliquer cette logique. `src` peut être une URL distante (bouton) OU
-  // une data URI déjà décodée (presse-papiers, cf. probeImageDimensions qui
-  // fonctionne identiquement pour les deux, aucun réseau nécessaire pour une
-  // data URI).
+  // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI).
   async function insertImageAtDefaultSize(src) {
     let width = 320;
     if (hfMode) {
@@ -114,13 +61,8 @@ const Editor = (function () {
     editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
   }
 
-  // Petit menu listant les colonnes Attachments du document (même famille
-  // visuelle que #autocomplete-box de v2/js/variables.js, mais une instance
-  // dédiée - pas de dépendance croisée entre les deux fichiers) : clic sur
-  // une entrée insère un placeholder lié à cette #Variable plutôt qu'une
-  // image fixe (cf. createEditorImageNode, attributs varTable/varColumn/
-  // varKey - résolu en vraie image seulement en mode Lecture/export PDF,
-  // cf. js/reader-mode.js:resolveVariableImages).
+  // Menu listant les colonnes Attachments : insère un placeholder lié à la
+  // #Variable (résolu en vraie image en mode Lecture/export).
   let imageVarPickerBox = null;
   function ensureImageVarPickerBox() {
     if (imageVarPickerBox) return imageVarPickerBox;
@@ -137,9 +79,6 @@ const Editor = (function () {
   }
   async function openImageVariablePicker(anchorEl) {
     const box = ensureImageVarPickerBox();
-    // Schéma à jour avant de filtrer par type - même précaution que
-    // resolveBadgeNode (js/reader-mode.js) pour une colonne Attachments
-    // ajoutée après l'ouverture du widget.
     await GristAPI.refreshSchema().catch(() => {});
     const candidates = GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments');
     box.innerHTML = '';
@@ -172,25 +111,12 @@ const Editor = (function () {
     box.style.display = 'block';
   }
 
-  // Popup d'édition du texte d'une note de bas de page (nœud footnoteRef,
-  // cf. createFootnoteRefNode) - même famille de pattern que
-  // ensureImageVarPickerBox ci-dessus (un seul <div> réutilisé, positionné
-  // près de l'élément visé). Une seule popup active à la fois : ouvrir une
-  // note en ayant déjà une AUTRE ouverte valide d'abord le texte en attente
-  // (commitFootnotePopup), jamais deux popups simultanées.
+  // Popup d'édition d'une note de bas de page. Une seule active à la fois :
+  // ouvrir une note en valide une autre déjà ouverte (commitFootnotePopup).
+  // Se ferme UNIQUEMENT via une action explicite (OK/Supprimer/Échap/autre
+  // note) - jamais au clic extérieur, source de 3 régressions successives.
   let footnotePopupBox = null;
   let footnotePopupPos = null;
-  // PAS de fermeture "au clic ailleurs" (contrairement à ensureImageVarPickerBox
-  // ci-dessus) - 3 régressions successives sont venues de là (stopPropagation
-  // cassant la sélection ProseMirror du marqueur ; le drapeau de suppression
-  // qui a remplacé stopPropagation, toujours sujet à un cas d'insertion
-  // encore signalé cassé sans jamais avoir pu être reproduit ni expliqué
-  // localement). La popup ne se ferme donc plus que par une action EXPLICITE :
-  // bouton OK, bouton Supprimer, Échap dans le textarea, ou l'ouverture d'une
-  // AUTRE note (valide alors la première au passage, cf. openFootnoteEditorAt) -
-  // plus robuste qu'un mécanisme de détection de clic extérieur, au prix
-  // (accepté) de devoir cliquer explicitement OK plutôt que n'importe où
-  // ailleurs.
   function ensureFootnotePopupBox() {
     if (footnotePopupBox) return footnotePopupBox;
     footnotePopupBox = document.createElement('div');
@@ -205,14 +131,6 @@ const Editor = (function () {
     footnotePopupBox.appendChild(textarea);
     const actions = document.createElement('div');
     actions.className = 'v2-footnote-popup-actions';
-    // Bouton "Supprimer" explicite - ne pas compter SEULEMENT sur
-    // sélection+Suppr/Retour arrière au clavier après un clic sur le
-    // marqueur : un utilisateur peut légitimement rater cette mécanique
-    // (sélectionner un nœud atome puis le supprimer est parfois 2 frappes
-    // successives selon le raccourci, cf. comportement ProseMirror par
-    // défaut), et c'est justement de là que venait le rapport de bug "la
-    // note ne disparaît pas vraiment". Un vrai bouton dédié retire le nœud
-    // de façon garantie, sans dépendre d'aucune mécanique de sélection.
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'v2-footnote-popup-delete';
@@ -261,23 +179,13 @@ const Editor = (function () {
     if (footnotePopupPos != null && footnotePopupPos !== pos) commitFootnotePopup();
     const node = editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'footnoteRef') {
-      // Ne devrait normalement jamais arriver (appelant toujours une
-      // position tout juste vérifiée) - un utilisateur a pourtant signalé
-      // "la note s'ajoute mais la popup ne s'ouvre jamais", jamais reproduit
-      // localement : ce log laisse au moins une trace exploitable si ça se
-      // reproduit (F12 → Console), plutôt qu'un échec totalement silencieux.
       console.warn('[Editor] openFootnoteEditorAt(' + pos + ') : aucun nœud footnoteRef à cette position (trouvé : ' + (node && node.type && node.type.name) + ') - popup non ouverte.');
       return;
     }
     footnotePopupPos = pos;
     box._textarea.value = node.attrs.text || '';
-    // Positionnement au mieux - une erreur de mesure (DOM pas encore monté,
-    // etc.) ne doit JAMAIS empêcher la popup de s'afficher (mieux vaut mal
-    // positionnée que totalement invisible). Bornée à la zone visible :
-    // une note tapée en bas/à droite d'un document long ancrait sinon la
-    // popup hors du champ visible (JAMAIS d'erreur, JAMAIS de trace console -
-    // rendue mais invisible, indiscernable d'un bug pour l'utilisateur -
-    // signalé cassé sans jamais avoir pu être reproduit localement).
+    // Bornée à la zone visible (jamais hors champ) ; toute erreur de mesure
+    // retombe sur un positionnement générique plutôt que de bloquer l'ouverture.
     try {
       const dom = editor.view.nodeDOM(pos);
       const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
@@ -286,15 +194,8 @@ const Editor = (function () {
       const boxHeightEstimate = 130;
       let left = rect.left + window.scrollX;
       let top = rect.bottom + window.scrollY + 4;
-      // minLeft/minTop d'abord, maxLeft/maxTop AU MOINS égaux à ceux-ci
-      // (Math.max) : dans un panneau de widget étroit/court (innerWidth/
-      // innerHeight petits - un widget Grist peut être une colonne étroite),
-      // `scrollX/Y + innerWidth/Height - boxWidth/HeightEstimate` peut tomber
-      // EN DESSOUS du minimum, ce qui - sans ce garde-fou - clampait la
-      // popup à une position ENCORE PLUS hors champ que sa position
-      // d'origine nue (pire que pas de bornage du tout). Avec ce garde-fou,
-      // le pire cas devient "épinglée au coin visible le plus proche",
-      // jamais négatif/hors zone visible.
+      // Math.max garantit maxLeft/Top >= minLeft/Top même dans un panneau
+      // très étroit, pour ne jamais clamper à une position pire que l'origine.
       const minLeft = window.scrollX + 4;
       const minTop = window.scrollY + 4;
       const maxLeft = Math.max(minLeft, window.scrollX + window.innerWidth - boxWidth - 8);
@@ -311,35 +212,14 @@ const Editor = (function () {
       box.style.top = '30%';
     }
     box.style.display = 'block';
-    // Différé (setTimeout, pas un simple appel synchrone ni une microtâche) :
-    // le mousedown qui a mené ici (clic sur le marqueur, ou clic sur l'item
-    // "Note de bas de page" du panneau #) continue sa propre gestion NATIVE
-    // après le retour de cette fonction - notamment ProseMirror lui-même,
-    // qui reprend le focus sur .tiptap pour que la frappe suivante aille
-    // dans le document (comportement natif indispensable au clic normal,
-    // maintenant que ce mousedown n'est plus intercepté via stopPropagation,
-    // cf. correctif de la suppression). Un focus() synchrone ici serait
-    // écrasé par cette reprise de focus juste après - constaté en conditions
-    // réelles (retour utilisateur : la popup s'affichait mais taper au
-    // clavier n'écrivait plus rien dedans, ça partait dans l'éditeur). Un
-    // setTimeout(...,0) s'exécute après TOUTE cette gestion native (et toute
-    // micro-tâche que ProseMirror aurait pu programmer), donc ce focus()-ci
-    // est bien le DERNIER à s'appliquer.
+    // setTimeout(...,0), pas un appel synchrone : le mousedown déclencheur
+    // fait reprendre le focus sur .tiptap par ProseMirror juste après le
+    // retour de cette fonction - un focus() synchrone ici serait écrasé.
     setTimeout(() => { box._textarea.focus(); }, 0);
   }
 
-  // Colle une image directement depuis le presse-papiers (Ctrl+V après un
-  // "Copier l'image" dans une autre appli/le navigateur) - demandé par
-  // l'utilisateur en alternative à une URL externe : la restriction CORS
-  // qui empêche parfois l'export PDF d'une image par URL (cf.
-  // warnIfImageUrlNotExportable) ne s'applique JAMAIS ici, il n'y a AUCUNE
-  // requête réseau - le presse-papiers fournit déjà les octets bruts de
-  // l'image. Convertie en data URI (déjà la forme que pdf-export.js exige
-  // pour embarquer une image, cf. inlineRuns) avant insertion : contrairement
-  // à une image collée par une extension officielle @tiptap/extension-image
-  // (qui garderait un simple blob: URL, invalide pour l'export et perdu à la
-  // fermeture de l'onglet), aucune conversion supplémentaire n'est donc
-  // nécessaire à l'export.
+  // Image collée depuis le presse-papiers, convertie en data URI (forme
+  // requise par pdf-export.js) avant insertion.
   function readFileAsDataUri(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -412,27 +292,16 @@ const Editor = (function () {
           'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        // Préfixe purement décoratif, régénéré à CHAQUE rendu depuis les
-        // attributs du nœud (jamais stocké/reparsé ailleurs - la résolution
-        // en mode Lecture/export lit data-table/data-column, jamais ce
-        // texte) - suit donc la touche de déclenchement configurée (panneau
-        // Réglages), rétroactif sur tout document existant sans migration :
-        // au prochain rendu, une bulle déjà créée affiche le nouveau symbole.
+        // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la
+        // touche de déclenchement configurée, rétroactif sans migration.
         return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
       },
     });
   }
 
-  // Badge de numéro de page — même schéma que VarBadge ci-dessus (nœud atome
-  // en ligne, non éditable), pour l'en-tête/pied de page (incrément 2.1).
-  // Un seul attribut `format` (n / page-n / n-slash-total) : pas de système
-  // de position gauche/droite dédié, l'alignement de paragraphe déjà présent
-  // dans la toolbar réutilisée couvre déjà "à gauche"/"à droite"/"centré".
-  // Contrairement à VarBadge, aucune vraie valeur n'existe encore à ce stade
-  // (2.1 ne construit ni l'export PDF natif ni l'aperçu paginé réel, cf. le
-  // plan) - le libellé rendu ici n'est qu'un espace réservé visuel indiquant
-  // le FORMAT choisi, résolu en un vrai numéro seulement à l'incrément 2.2
-  // (export PDF)/2.3-2.4 (aperçus paginés).
+  // Badge de numéro de page - même schéma que VarBadge. Le libellé rendu
+  // dans l'éditeur n'est qu'un espace réservé visuel (format choisi),
+  // résolu en vrai numéro seulement à l'export/l'aperçu paginé.
   function createPageNumberBadgeNode(Node, mergeAttributes) {
     const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
     return Node.create({
@@ -457,26 +326,11 @@ const Editor = (function () {
     });
   }
 
-  // Chip intelligent — date du jour / heure actuelle / email de
-  // l'utilisateur (incrément "chips intelligents") : même schéma que
-  // VarBadge/PageNumberBadge (nœud atome en ligne, non éditable), un seul
-  // attribut `kind`. Comme PageNumberBadge, jamais de vraie valeur dans
-  // l'éditeur (résolue uniquement en mode Lecture/export, cf.
-  // js/reader-mode.js:resolveSmartChips) - seul un libellé fixe indique CE
-  // QUE ce chip représente. Vert (`.smart-chip`, cf. editor-v2.css) plutôt
-  // que bleu (`.var-badge`) : signale visuellement "valeur calculée, pas une
-  // colonne Grist" - même palette que `.page-number-badge`, qui a déjà établi
-  // ce langage visuel en en-tête/pied de page.
+  // Chip intelligent - date/heure/email, même schéma que VarBadge. Jamais
+  // de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
+  // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour
+  // signaler "valeur calculée, pas une colonne Grist".
   function createSmartChipNode(Node, mergeAttributes) {
-    // Résolu à CHAQUE rendu (jamais figé une fois pour toutes) - réactif à
-    // un changement de langue en cours de session, mêmes clés i18n que
-    // v2/js/variables.js:displayKey pour ces mêmes 3 chips dans le panneau
-    // `#`. Ce libellé n'est qu'un espace réservé visuel (non résolu tant que
-    // le mode Lecture/export n'a pas remplacé le nœud par la vraie valeur) -
-    // un changement de langue en cours de session peut laisser une bulle
-    // DÉJÀ insérée affichée dans l'ancienne langue jusqu'au prochain rendu
-    // ProseMirror du nœud (compromis accepté, mineur et cohérent avec la
-    // nature "espace réservé" de ce libellé).
     const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email' };
     function labelFor(kind) {
       const key = KIND_I18N_KEYS[kind];
@@ -501,16 +355,9 @@ const Editor = (function () {
     });
   }
 
-  // Note de bas de page — nœud atome en ligne portant le TEXTE de la note en
-  // attribut (`text`, texte brut - pas de mise en forme riche, hors de
-  // portée de ce premier incrément). `id` (généré à l'insertion, cf.
-  // v2/js/variables.js:command) n'est utile qu'en cas de sérialisation/
-  // parsing (retrouver le nœud correspondant), jamais lu ailleurs pour
-  // l'instant. Numérotation CONTINUE sur tout le document (choix confirmé) :
-  // aucun JS de comptage ici, le numéro affiché à l'écran vient uniquement
-  // du compteur CSS `footnote-ref` (cf. editor-v2.css) - un seul
-  // `counter-reset` à la racine de `.tiptap`/`.reader-content` suffit donc,
-  // même technique que la numérotation des titres.
+  // Note de bas de page - nœud atome portant le texte en attribut (`text`,
+  // texte brut). Numérotation continue sur tout le document via le seul
+  // compteur CSS `footnote-ref` (cf. editor-v2.css), jamais compté en JS.
   function createFootnoteRefNode(Node, mergeAttributes) {
     return Node.create({
       name: 'footnoteRef',
@@ -532,14 +379,10 @@ const Editor = (function () {
           class: 'footnote-ref-marker', contenteditable: 'false',
           'data-note-id': node.attrs.id, 'data-note-text': node.attrs.text,
         });
-        // Contenu textuel vide à dessein : le chiffre visible vient
-        // uniquement de `::before { content: counter(footnote-ref) }` (cf.
-        // editor-v2.css) - jamais recalculé/dupliqué ici.
+        // Contenu texte vide à dessein : le chiffre vient de
+        // `::before { content: counter(footnote-ref) }` (editor-v2.css).
         return ['sup', attrs];
       },
-      // Clic pour éditer le texte de la note (cf. openFootnoteEditor plus
-      // bas) - même schéma NodeView que EditorImage (getPos() à l'ouverture
-      // du popup, jamais un `node` de closure figé au premier rendu).
       addNodeView() {
         return ({ getPos }) => {
           const marker = document.createElement('sup');
@@ -547,10 +390,8 @@ const Editor = (function () {
           marker.addEventListener('mousedown', event => {
             event.preventDefault();
             // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via
-            // un gestionnaire posé sur .tiptap (un ancêtre) - bloquer la
-            // propagation casserait la sélection au clic, donc la suppression
-            // au clavier ensuite. cf. commitFootnotePopup pour la logique qui
-            // évite de refermer la popup qu'on vient d'ouvrir.
+            // un gestionnaire posé sur .tiptap (un ancêtre) - la bloquer
+            // casserait la sélection au clic donc la suppression au clavier.
             const pos = getPos();
             if (typeof pos === 'number') openFootnoteEditorAt(pos);
           });
@@ -560,14 +401,9 @@ const Editor = (function () {
     });
   }
 
-  // `FontFamily` (paquet officiel, câblé dans init() ci-dessous) n'ÉTEND PAS
-  // 'textStyle' lui-même : c'est une extension à part qui AUGMENTE la marque
-  // 'textStyle' via `addGlobalAttributes` - la marque elle-même doit être
-  // enregistrée séparément (`TextStyle`, également câblée dans init()), sans
-  // quoi ProseMirror lève "There is no mark type named 'textStyle'" (confirmé
-  // en conditions réelles). `FontSize` suit exactement le même schéma que
-  // Color/FontFamily dans l'écosystème officiel : une extension indépendante
-  // qui cible `types: ['textStyle']`, jamais une sous-classe.
+  // Augmente la marque 'textStyle' via addGlobalAttributes (comme
+  // FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part
+  // (TextStyle, câblée dans init()), sinon ProseMirror lève une erreur.
   function createFontSizeExtension(Extension) {
     return Extension.create({
       name: 'fontSize',
@@ -589,13 +425,7 @@ const Editor = (function () {
     });
   }
 
-  // Couleur de police / surlignage - même schéma exact que FontSize
-  // ci-dessus (une extension par attribut, toutes deux augmentant la marque
-  // 'textStyle') : rien de spécifique aux tableaux/2-colonnes à écrire, une
-  // marque s'applique au texte où qu'il vive dans le schéma - lue par
-  // pdf-export.js au même endroit générique que gras/italique/souligné/
-  // taille/police (inheritedStyle), donc déjà correcte partout où ce
-  // dernier est déjà appelé (flux principal, cellule de tableau, colonne).
+  // Couleur de police/surlignage - même schéma que FontSize.
   function createTextColorExtension(Extension) {
     return Extension.create({
       name: 'textColor',
@@ -643,12 +473,7 @@ const Editor = (function () {
     });
   }
 
-  // Style de puce (disque/cercle/carré) - même schéma que FontSize/TextColor
-  // ci-dessus, mais augmente 'bulletList' (le nœud officiel de StarterKit,
-  // jamais remplacé) plutôt que 'textStyle' : pas besoin d'importer/épingler
-  // un package @tiptap/extension-bullet-list séparé juste pour un attribut.
-  // `updateAttributes('bulletList', ...)` est une commande CORE de TipTap,
-  // pas besoin d'en déclarer une dédiée ici (cf. wireToolbar).
+  // Style de puce - augmente 'bulletList' (StarterKit) plutôt que 'textStyle'.
   function createBulletStyleExtension(Extension) {
     return Extension.create({
       name: 'bulletStyle',
@@ -667,11 +492,7 @@ const Editor = (function () {
     });
   }
 
-  // Style de numérotation (numérique/lettres/romain) - même schéma que
-  // BulletStyle ci-dessus, augmente 'orderedList' (StarterKit). Les marqueurs
-  // alpha/romain de l'export PDF réutilisent HeadingNumbering.
-  // formatCounterValue (mémoire commune de conversion, cf. heading-numbering.js)
-  // plutôt que de réinventer une conversion chiffre→lettre/romain.
+  // Style de numérotation - augmente 'orderedList'.
   function createOrderedListStyleExtension(Extension) {
     return Extension.create({
       name: 'orderedListStyle',
@@ -690,11 +511,8 @@ const Editor = (function () {
     });
   }
 
-  // Style de case à cocher (accentStrike/classic/accentPlain) - même schéma
-  // que BulletStyle/OrderedListStyle ci-dessus, augmente 'taskList' (extension
-  // officielle @tiptap/extension-task-list). Le rendu réel de chaque style
-  // vit en CSS (data-tasklist-style, cf. css/editor-v2.css) - cette extension
-  // ne fait que porter/sérialiser le choix sur le <ul>.
+  // Style de case à cocher - augmente 'taskList'. Rendu réel en CSS
+  // (data-tasklist-style), cette extension ne fait que sérialiser le choix.
   function createTaskListStyleExtension(Extension) {
     return Extension.create({
       name: 'taskListStyle',
@@ -713,13 +531,8 @@ const Editor = (function () {
     });
   }
 
-  // Fond de cellule (remplir) - augmente TableCell/TableHeader (extensions
-  // officielles) du même `backgroundColor` que le surlignage de texte
-  // ci-dessus, MÊME NOM d'attribut/style CSS que par coïncidence utile (pas
-  // de lien réel entre les deux, une cellule et une marque de texte sont des
-  // choses différentes) : lu par pdf-export.js à l'endroit dédié aux
-  // cellules (tableFrom), pas via inheritedStyle (une cellule n'est pas un
-  // run de texte).
+  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor
+  // que le surlignage de texte (lu par pdf-export.js:tableFrom, pas inheritedStyle).
   function withCellBackground(CellExtension) {
     return CellExtension.extend({
       addAttributes() {
@@ -733,12 +546,8 @@ const Editor = (function () {
       },
     });
   }
-  // Applique à TOUTES les cellules touchées par la sélection - un simple
-  // curseur dans une cellule (editor.commands.updateAttributes suffit) ou
-  // une vraie sélection de plusieurs cellules (CellSelection de
-  // prosemirror-tables, reconnue par duck-typing sur `forEachCell` plutôt
-  // que d'importer le type rien que pour un instanceof - évite une
-  // dépendance supplémentaire pour une simple vérification de forme).
+  // Applique à toutes les cellules touchées par la sélection (CellSelection
+  // reconnue par duck-typing sur `forEachCell`, pas un instanceof).
   function setCellsBackground(nodeEditor, color) {
     const { state, view } = nodeEditor;
     const { selection } = state;
@@ -753,24 +562,12 @@ const Editor = (function () {
     nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
   }
 
-  // Zone 2 colonnes - pas d'extension officielle équivalente à
-  // extension-table ; construite comme une paire de nœuds suivant le même
-  // principe d'imbrication. Mêmes noms de classe que la V1
-  // (.two-columns-zone/.two-columns-column) pour limiter l'adaptation de
-  // pdf-export.js. `isolating: true` sur les deux nœuds : empêche
-  // backspace/suppr en bord de colonne de fusionner la zone avec le
+  // Zone 2 colonnes - paire de nœuds imbriqués, mêmes classes CSS que la V1.
+  // `isolating: true` : empêche backspace/suppr de fusionner la zone avec le
   // paragraphe voisin.
-  // Tab/Shift-Tab personnalisés : court-circuitent EN PREMIER l'indentation
-  // de liste (sinkListItem/liftListItem) - sans ça, l'extension Table
-  // (goToNextCell/goToPreviousCell) l'emporte sur celle de StarterKit pour
-  // une liste nichée dans une cellule et change de cellule au lieu
-  // d'indenter. Hors liste, Tab/Shift-Tab déplace le curseur d'une colonne
-  // à l'autre, ou en sort (paragraphe suivant/précédent la zone, créé s'il
-  // n'existe pas déjà en sortie avant). Enregistrée en DERNIER dans
-  // `extensions` (cf. init()) : conditionne quelle extension gagne la main
-  // sur une touche partagée.
-  // Résout la zone/colonne englobant `$from`, factorisé entre Tab et
-  // Shift-Tab (même détection, direction de navigation opposée).
+  // Tab/Shift-Tab : court-circuitent l'indentation de liste en premier
+  // (sinon l'extension Table l'emporte sur StarterKit pour une liste en
+  // cellule), sinon déplacent le curseur d'une colonne à l'autre ou en sortent.
   function findTwoColumnsContext($from) {
     let columnDepth = -1;
     for (let d = $from.depth; d > 0; d -= 1) {
@@ -788,10 +585,8 @@ const Editor = (function () {
         return {
           Tab: ({ editor: ed }) => {
             if (ed.isActive('listItem')) {
-              // Résultat (succès ou non - ex. premier item sans rien
-              // au-dessus où s'imbriquer) toujours consommé : un échec de
-              // sink doit rester SANS EFFET, pas retomber sur un
-              // changement de cellule/colonne à la place.
+              // Toujours consommé, même en cas d'échec du sink : jamais de
+              // repli sur un changement de cellule/colonne.
               ed.commands.sinkListItem('listItem');
               return true;
             }
@@ -815,9 +610,6 @@ const Editor = (function () {
           },
           'Shift-Tab': ({ editor: ed }) => {
             if (ed.isActive('listItem')) {
-              // Même logique de consommation systématique que Tab ci-dessus
-              // (un lift déjà au premier niveau reste sans effet, ne retombe
-              // jamais sur un changement de cellule/colonne).
               ed.commands.liftListItem('listItem');
               return true;
             }
@@ -841,14 +633,9 @@ const Editor = (function () {
     });
   }
 
-  // TipTap v3 a remplacé l'ancienne extension-history dédiée par un simple
-  // "undoRedo" (cf. @tiptap/extensions) qui ne fournit plus AUCUNE commande
-  // pour vider la pile prosemirror-history sous-jacente (seulement undo/redo)
-  // - vérifié en inspectant le paquet publié, pas de clearHistory nulle part.
-  // Reconstruire l'EditorState avec les MÊMES plugins réinitialise l'état de
-  // chacun d'eux (dont l'historique) sans recréer la vue ni perdre le
-  // document courant - seul moyen fiable trouvé, cf. BUGS.md pour le bug que
-  // ça corrige (Editor.setHTML() qui ne vidait jamais l'historique).
+  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) :
+  // reconstruire l'EditorState avec les mêmes plugins réinitialise leur état
+  // (dont l'historique) sans recréer la vue ni perdre le document.
   function createClearHistoryExtension(Extension, EditorState) {
     return Extension.create({
       name: 'clearHistory',
