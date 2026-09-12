@@ -11,9 +11,9 @@ const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const DEFAULT_TRIGGER_CHAR = '#';
 
-  // Lu ici aussi (import.js/editor.js relisent la même clé indépendamment,
-  // cf. commentaire ci-dessus) - exposé malgré tout pour que ce fichier
-  // reste la référence documentée de la valeur par défaut/nom de clé.
+  // js/variables.js et js/editor.js relisent la même clé indépendamment -
+  // exposé ici pour que ce fichier reste la référence documentée de la
+  // valeur par défaut/nom de clé.
   function getTriggerChar() {
     try {
       const v = localStorage.getItem(TRIGGER_KEY_STORAGE);
@@ -56,13 +56,9 @@ const Settings = (function () {
     if (triggerSelect && reloadNotice && reloadBtn) {
       triggerSelect.addEventListener('change', () => {
         try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
-        // Pas de reconfiguration à chaud du plugin ProseMirror Suggestion
-        // (son `char` est un simple littéral capturé une fois à la
-        // construction de l'éditeur, cf. js/variables.js) - un
-        // rechargement de page est plus simple et plus sûr qu'une
-        // reconfiguration ProseMirror en direct pour un réglage qui change
-        // rarement (Editor.init() n'est appelé qu'une seule fois dans toute
-        // l'appli, aucun mécanisme de re-création de l'éditeur n'existe).
+        // Pas de reconfiguration à chaud du plugin Suggestion (son `char`
+        // est un littéral capturé une fois à la construction de l'éditeur) -
+        // un rechargement est plus simple pour un réglage qui change rarement.
         reloadNotice.hidden = false;
       });
       reloadBtn.addEventListener('click', () => location.reload());

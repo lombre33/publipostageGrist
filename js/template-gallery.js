@@ -4,24 +4,17 @@
 // reste de l'app (aucun souci CORS, contrairement au cas des images externes
 // insérées manuellement dans un modèle).
 const TemplateGallery = (function () {
-  // Les chemins d'un manifest.json (entry.html/entry.screenshot/entry.schema)
-  // sont relatifs au DOSSIER du manifeste (templates-gallery/), pas à la
-  // page qui charge ce module (index.html) - fetch() résolvant les URL
-  // relatives par rapport à la page courante, il faut préfixer chaque chemin
-  // d'entrée avec ce dossier avant de le récupérer (constaté par un test
-  // réel en navigateur : un simple `fetch(entry.html)` retombait un niveau
-  // trop haut, 404).
+  // Les chemins d'un manifest.json sont relatifs au dossier du manifeste,
+  // pas à la page qui charge ce module - fetch() résolvant les URL par
+  // rapport à la page courante, chaque chemin doit être préfixé de ce dossier.
   const BASE = 'templates-gallery/';
   let manifestCache = null;
 
   function resolveUrl(relPath) { return BASE + relPath; }
 
-  // {cache:'no-store'} sur le manifeste/le HTML/le schéma d'un template :
-  // ce sont des fichiers de contenu (pas de ?v=X.Y comme les .js/.css de
-  // index.html, cf. mémoire project_browser_cache_trap), donc rien ne
-  // force autrement un navigateur/CDN GitHub Pages à en récupérer une
-  // version fraîche - vécu en conditions réelles : un push corrigeant
-  // template.html serait resté invisible à qui l'avait déjà chargé une fois.
+  // {cache:'no-store'} : ces fichiers de contenu n'ont pas de ?v=X.Y comme
+  // les .js/.css de index.html, rien ne force sinon un navigateur/CDN
+  // GitHub Pages à en récupérer une version fraîche.
   async function fetchNoStore(url) { return fetch(url, { cache: 'no-store' }); }
 
   async function loadManifest() {
@@ -35,15 +28,10 @@ const TemplateGallery = (function () {
     return (await fetchNoStore(resolveUrl(entry.html))).text();
   }
 
-  // Le badge #Variable (<span class="var-badge" data-key="...">#key</span>,
-  // posé par createVarBadgeNode dans js/editor.js) est entièrement retiré
-  // (pas de texte de substitution) — utilisé pour le mode "Modèle vierge" :
-  // un template unique sert aux deux modes (vide / + data), pas deux
-  // fichiers HTML à maintenir en double pour un même visuel (cf. plan).
-  // Retiré au complet plutôt que converti en texte "#key" (essayé d'abord,
-  // rejeté par l'utilisateur : sans table de données derrière, ce texte ne
-  // représente plus rien et ne doit laisser AUCUNE trace visible). No-op si
-  // le template n'a aucune variable.
+  // Retire entièrement le badge #Variable (pas de texte de substitution),
+  // pour le mode "Modèle vierge" : un template unique sert aux deux modes
+  // (vide / + data), pas deux fichiers HTML à maintenir en double. Sans
+  // table de données derrière, "#key" en texte ne représenterait plus rien.
   function stripVariableBadges(html) {
     const root = document.createElement('div');
     root.innerHTML = html;
@@ -92,15 +80,10 @@ const TemplateGallery = (function () {
   }
 
   // Les badges #Variable d'un template "+ data" portent en dur le nom de
-  // table tiré du schema.py au moment où le template a été authoré
-  // (ex. data-table="Facture_Simple"). Mais la table RÉELLEMENT créée par
-  // useWithData() (js/main.js) peut porter un autre nom : l'utilisateur
-  // peut le modifier dans le prompt, ou Grist peut le renommer lui-même en
-  // cas de collision avec une table existante - sans ce réalignement, les
-  // variables pointeraient vers une table qui n'existe pas (marquées
-  // "cassées" par refreshVariableBadgeValidity dès le premier chargement,
-  // alors que la table existe bel et bien, juste sous un autre nom). No-op
-  // si les deux noms sont déjà identiques.
+  // table tiré du schema.py à l'authoring. La table réellement créée par
+  // useWithData() (js/main.js) peut porter un autre nom (modifié dans le
+  // prompt, ou renommé par Grist en cas de collision) - sans ce réalignement
+  // les variables pointeraient vers une table inexistante.
   function rebindVariableTable(html, fromTable, toTable) {
     if (!fromTable || !toTable || fromTable === toTable) return html;
     const root = document.createElement('div');
