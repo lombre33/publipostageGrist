@@ -9,14 +9,9 @@ const GristAPI = (function () {
   // et les sélecteurs de table cible du panneau de liaison).
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
-  // Table interne pour GristAPI.getCurrentUserEmail() ci-dessous (chip
-  // intelligent "Email de l'utilisateur") - une seule colonne à FORMULE
-  // DÉCLENCHÉE (pas une formule normale, toujours recalculée pour tout le
-  // monde pareil - une formule déclenchée capture QUI a réellement déclenché
-  // le calcul, ex. `user.Email`, l'identité de la vraie session Grist qui a
-  // fait l'action). Table vidée après chaque lecture (cf. getCurrentUserEmail),
-  // jamais montrée à l'utilisateur (exclue ci-dessus comme les autres tables
-  // internes de ce fichier).
+  // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") -
+  // une colonne à formule déclenchée (capture qui a réellement déclenché le
+  // calcul, `user.Email`), vidée après chaque lecture.
   const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
   let _tables = [];
   let _columnsByTable = {};
@@ -33,17 +28,12 @@ const GristAPI = (function () {
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      // ATTENTION : ne PAS ajouter columns:[...] ici sans revalider en conditions
-      // réelles (Grist) que ça ne casse rien. Un ajout de mappage de colonne
-      // "Colonne PJ pour le PDF exporté" (pour main.js:onSaveToAttachment, cf.
-      // commit 5dfecb1) a coïncidé avec une régression totale de la résolution
-      // des variables #Xxx (vide partout : lecture, export, nom de fichier),
-      // très probablement parce que déclarer des `columns` change la façon
-      // dont Grist peuple `mappings` (dont mappings.tableId, dont dépend toute
-      // la détection de table courante ici) - retiré en urgence tant que la
-      // fonctionnalité PJ elle-même est de toute façon différée (cf. mémoire
-      // project_pdf_attachment_column_feature.md). Revoir get PdfAttachmentColumnId()
-      // plus bas si cette fonctionnalité est reprise plus tard.
+      // Attention : ne pas ajouter columns:[...] ici sans revalider en Grist
+      // réel. Un ajout de mappage de colonne a déjà coïncidé avec une
+      // régression totale de la résolution des variables #Xxx, très
+      // probablement parce que déclarer des `columns` change la façon dont
+      // Grist peuple `mappings.tableId`, dont dépend toute la détection de
+      // table courante ici.
       grist.ready({ requiredAccess: 'full' });
       console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
@@ -58,13 +48,9 @@ const GristAPI = (function () {
       grist.onRecord(function (record, mappings) {
         const receivedAt = new Date();
         const rowId = record && record.id != null ? record.id : null;
-        // Ne JAMAIS logger `record`/`mappings` en entier : une ligne Grist de
-        // ce widget (publipostage) contient typiquement des données
-        // personnelles (nom, email, adresse...) - un log complet, même en
-        // développement, resterait actif en production et exposerait ces
-        // données à quiconque ouvre la console du navigateur. Seul l'ID de
-        // ligne (déjà visible ailleurs dans l'UI Grist elle-même) est utile
-        // au diagnostic sans rien exposer de nouveau.
+        // Ne jamais logger `record`/`mappings` en entier : une ligne de ce
+        // widget contient typiquement des données personnelles (RGPD). Seul
+        // l'ID de ligne, déjà visible dans l'UI Grist, est loggé.
         console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
         _currentRecord = record;
         _currentMappings = mappings || null;
@@ -206,20 +192,12 @@ const GristAPI = (function () {
       const tables = await grist.docApi.listTables();
       _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
-      // Un fetchTable par table, EN PARALLÈLE (indépendants) plutôt qu'en
-      // séquence - la latence totale devient celle du plus lent des appels,
-      // pas leur somme. Déterminant depuis que Variables.js
-      // (js/variables.js:createExtension) appelle refreshSchema() à
-      // chaque nouvelle session de saisie de #Variable (pour voir les
-      // colonnes ajoutées depuis le lancement du widget) - un doc à N
-      // tables ne doit pas payer N aller-retours séquentiels à chaque fois.
-      // Écrit dans un objet TEMPORAIRE, remplacé d'un coup à la fin plutôt
-      // que vidé puis repeuplé sur _columnsByTable directement : sinon,
-      // toute lecture de getAllVariables()/getColumns() qui tombe pendant
-      // les allers-retours réseau (précisément ce qui arrive maintenant,
-      // rafraîchissement déclenché à CHAQUE frappe de # par l'utilisateur)
-      // verrait un schéma vidé mais pas encore repeuplé - la popup #Variable
-      // clignoterait à vide pendant le rafraîchissement.
+      // Un fetchTable par table, en parallèle : la latence totale devient
+      // celle du plus lent des appels, pas leur somme - déterminant puisque
+      // refreshSchema() est appelé à chaque frappe de # par l'utilisateur.
+      // Écrit dans un objet temporaire, remplacé d'un coup à la fin : sinon
+      // toute lecture de getAllVariables()/getColumns() qui tombe pendant les
+      // allers-retours réseau verrait un schéma vidé mais pas encore repeuplé.
       const nextColumnsByTable = {};
       await Promise.all(_tables.map(async t => {
         try {
@@ -238,12 +216,9 @@ const GristAPI = (function () {
     await refreshColumnTypes();
   }
 
-  // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - utilisé
-  // pour signaler dans la modale de liaison entre tables qu'une colonne est
-  // une Référence (et vers quelle table), afin que l'utilisateur sache qu'il
-  // faut la comparer à l'Identifiant de ligne de la table référencée, pas à
-  // une colonne texte (source du bug "aucune ligne ne correspond" quand on
-  // compare par erreur une Référence à un nom affiché).
+  // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale
+  // dans la modale de liaison qu'une colonne est une Référence, pour que
+  // l'utilisateur la compare à l'Identifiant de ligne, pas à une colonne texte.
   async function refreshColumnTypes() {
     _columnTypesByTable = {};
     try {
@@ -338,11 +313,10 @@ const GristAPI = (function () {
     return row;
   }
 
-  // Toutes les lignes d'une table sous forme de tableau d'objets {colonne: valeur}
-  // (au lieu du format colonnaire brut de fetchTable) - utilisé par la résolution
-  // "match"/"singleton" des règles de liaison entre tables (cf. saveLinkRule plus
-  // bas), qui doit comparer/lire plusieurs lignes à la fois, contrairement à
-  // fetchRowById qui n'en cible qu'une seule.
+  // Toutes les lignes d'une table sous forme de tableau d'objets {colonne:
+  // valeur} (au lieu du format colonnaire de fetchTable) - utilisé par la
+  // résolution "match"/"singleton" des règles de liaison, qui compare
+  // plusieurs lignes à la fois, contrairement à fetchRowById.
   async function fetchTableRows(tableId) {
     const data = await grist.docApi.fetchTable(tableId);
     const ids = data && data.id ? data.id : [];
@@ -356,15 +330,10 @@ const GristAPI = (function () {
   }
 
   // Table de bookkeeping stockant, pour chaque table cible référencée via #
-  // depuis une table différente de la table courante, COMMENT en trouver la
-  // bonne ligne : soit "singleton" (une seule ligne pertinente, ex. une table
-  // de paramètres), soit "match" (comparer ColonneCible de la table cible à
-  // ColonneSource de la table courante - ColonneSource ou ColonneCible peut
-  // valoir le littéral "id" pour désigner l'identifiant de ligne Grist). Un
-  // seul mécanisme générique couvre donc colonne Référence directe, relation
-  // inverse, et correspondance par clé métier arbitraire. Même pattern que
-  // Publipostage_Modeles (templates.js) : table créée à la volée au premier
-  // besoin, jamais explicitement par l'utilisateur.
+  // depuis une autre table, comment en trouver la bonne ligne : "singleton"
+  // (une seule ligne pertinente) ou "match" (comparer ColonneCible de la
+  // table cible à ColonneSource de la table courante - "id" désigne
+  // l'identifiant de ligne Grist). Créée à la volée au premier besoin.
   async function ensureLinksTableExists() {
     const tables = await grist.docApi.listTables();
     if (tables.includes(LINKS_TABLE_NAME)) return;
@@ -436,11 +405,10 @@ const GristAPI = (function () {
     delete _linkRulesByTable[tableCible];
   }
 
-  // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré côté
-  // serveur), getAccessToken() renvoie un baseUrl avec un host interne injoignable
-  // depuis le navigateur (ex. 0.0.0.0). On le corrige en réutilisant l'origine de
-  // document.referrer (celle de la page Grist qui embarque ce widget en iframe),
-  // seul indice disponible côté client sans configuration serveur supplémentaire.
+  // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré),
+  // getAccessToken() renvoie un baseUrl avec un host interne injoignable
+  // (ex. 0.0.0.0). Corrigé en réutilisant l'origine de document.referrer
+  // (la page Grist qui embarque ce widget en iframe).
   function fixBaseUrl(baseUrl) {
     try {
       const url = new URL(baseUrl);
@@ -481,14 +449,11 @@ const GristAPI = (function () {
     }
   }
 
-  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS sur
-  // l'endpoint POST /attachments pour l'origine du widget, même si le domaine est
-  // parfaitement valide et joignable (contrairement au cas "baseUrl cassé" traité
-  // par fixBaseUrl) : le navigateur lève alors une NetworkError et bloque
-  // totalement la requête en mode 'cors' normal. On repère la pièce jointe
-  // nouvellement créée en comparant les id de _grist_Attachments avant/après,
-  // celle-ci étant lue via le pont RPC du plugin (grist.docApi.fetchTable), qui
-  // n'est jamais soumis à CORS puisqu'il ne passe pas par un fetch réseau direct.
+  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS
+  // sur POST /attachments, même avec un domaine valide : le navigateur bloque
+  // la requête en mode 'cors' normal. On repère la pièce jointe nouvellement
+  // créée en comparant les id de _grist_Attachments avant/après, lue via le
+  // pont RPC du plugin, jamais soumis à CORS.
   async function findNewAttachmentId(beforeIds, fileName) {
     for (let attempt = 0; attempt < 10; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 400));
@@ -536,40 +501,27 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
-  // Email de l'utilisateur courant (chip intelligent #Variable, cf.
-  // js/editor.js:createSmartChipNode).
+  // Email de l'utilisateur courant (chip intelligent #Variable).
   //
-  // PREMIÈRE VERSION (abandonnée) : GET /api/profile/user via le jeton de
-  // getAccessTokenCached() - signalé cassé par l'utilisateur, renvoyait
-  // systématiquement "anon@getgrist.com" au lieu du vrai email. Confirmé par
-  // recherche (communauté Grist officielle) : ce jeton d'accès "hors-bande"
-  // représente une identité scopée au DOCUMENT, PAS la vraie session
-  // navigateur de l'utilisateur - /profile/user y répond donc pour un
-  // utilisateur anonyme/générique, jamais la bonne personne.
+  // GET /api/profile/user via le jeton hors-bande de getAccessTokenCached()
+  // renvoie systématiquement "anon@getgrist.com" : ce jeton représente une
+  // identité scopée au document, pas la vraie session navigateur.
   //
-  // VRAIE TECHNIQUE (celle que la communauté Grist utilise réellement pour
-  // ce besoin, aucune méthode dédiée n'existe dans l'API Plugin officielle) :
-  // une FORMULE DÉCLENCHÉE (trigger formula, PAS une formule normale - une
-  // formule normale est recalculée pour TOUT LE MONDE pareil, elle ne peut
-  // structurellement pas capturer "qui regarde CE viewer précis") sur une
-  // colonne, réglée sur `user.Email` - Grist attribue alors CETTE valeur à
-  // QUI A RÉELLEMENT DÉCLENCHÉ le calcul (ici : la création d'une ligne via
-  // grist.docApi.applyUserActions, qui passe par le pont RPC du plugin -
-  // donc bien la VRAIE session navigateur de l'utilisateur, contrairement au
-  // jeton REST hors-bande ci-dessus). Table interne dédiée
-  // (USER_PROBE_TABLE_NAME, créée au premier besoin comme LINKS_TABLE_NAME) :
-  // une ligne y est ajoutée (déclenche le calcul), relue pour récupérer
-  // l'email résolu, puis retirée aussitôt - cette table reste donc vide en
-  // régime permanent, aucune trace laissée.
+  // Technique retenue (aucune méthode dédiée dans l'API Plugin officielle) :
+  // une formule déclenchée (pas une formule normale, qui est recalculée pour
+  // tout le monde pareil) sur une colonne réglée sur `user.Email` - Grist
+  // attribue cette valeur à qui a réellement déclenché le calcul, ici la
+  // création d'une ligne via applyUserActions (la vraie session navigateur).
+  // Une ligne est ajoutée dans une table interne dédiée, relue pour
+  // récupérer l'email résolu, puis retirée aussitôt.
   async function ensureUserProbeTable() {
     const tables = await grist.docApi.listTables();
     if (tables.includes(USER_PROBE_TABLE_NAME)) return;
     await grist.docApi.applyUserActions([
       ['AddTable', USER_PROBE_TABLE_NAME, [
-        // recalcWhen:0 = RecalcWhen.DEFAULT ("calculer sur les nouvelles
-        // lignes, ou quand un champ de recalcDeps change") - recalcDeps:null
-        // car aucune dépendance à un autre champ n'est nécessaire ici, seule
-        // la création de ligne doit déclencher le calcul.
+        // recalcWhen:0 = RecalcWhen.DEFAULT (nouvelles lignes ou changement
+        // de recalcDeps) ; recalcDeps:null car seule la création de ligne
+        // doit déclencher le calcul.
         { id: 'Email', type: 'Text', isFormula: false, formula: 'user.Email', recalcWhen: 0, recalcDeps: null },
       ]],
     ]);
