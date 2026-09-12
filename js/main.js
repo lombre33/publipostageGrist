@@ -336,10 +336,58 @@
     if (!select || !flyout || !trigger) return;
     const rows = flyout.querySelectorAll('.v2-hover-row');
     const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
-    rows.forEach(row => row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); }));
+    rows.forEach(row => {
+      if (row.classList.contains('v2-hover-row-disabled')) return;
+      row.addEventListener('click', () => { select.value = row.dataset.quality; syncActiveRow(); });
+    });
     const group = trigger.closest('.v2-hover-group');
     if (group) group.addEventListener('mouseenter', syncActiveRow);
     syncActiveRow();
+  }
+
+  // Accessibilité RGAA des 5 modales du projet : role/aria-modal statiques,
+  // piège de focus (Tab/Shift+Tab), Échap, restauration du focus au ferme -
+  // générique via MutationObserver sur leur propre style.display plutôt que
+  // de toucher chaque site d'ouverture/fermeture existant (aucun risque de
+  // régression sur leur logique propre).
+  function wireModalAccessibility() {
+    const MODALS = [
+      { id: 'link-rules-modal', closeId: 'link-rules-close' },
+      { id: 'link-config-modal', closeId: 'link-config-cancel' },
+      { id: 'template-gallery-modal', closeId: 'tpl-gallery-close' },
+      { id: 'template-preview-modal', closeId: 'tpl-preview-close' },
+      { id: 'settings-modal', closeId: 'settings-close' },
+    ];
+    MODALS.forEach(({ id, closeId }) => {
+      const modal = document.getElementById(id);
+      const closeBtn = document.getElementById(closeId);
+      if (!modal) return;
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      let restoreFocusTo = null;
+      const focusablesIn = () => Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]'))
+        .filter(el => !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null);
+      new MutationObserver(() => {
+        const isOpen = getComputedStyle(modal).display !== 'none';
+        if (isOpen && !restoreFocusTo) {
+          restoreFocusTo = document.activeElement;
+          (focusablesIn()[0] || modal).focus();
+        } else if (!isOpen && restoreFocusTo) {
+          const toFocus = restoreFocusTo;
+          restoreFocusTo = null;
+          if (toFocus && document.contains(toFocus)) toFocus.focus();
+        }
+      }).observe(modal, { attributes: true, attributeFilter: ['style'] });
+      modal.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') { event.preventDefault(); if (closeBtn) closeBtn.click(); return; }
+        if (event.key !== 'Tab') return;
+        const focusables = focusablesIn();
+        if (!focusables.length) return;
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+    });
   }
 
   // "Tables liées" (js/variables.js) : modale séparée, rafraîchit la liste à
@@ -544,6 +592,7 @@
     wirePdfFilenameToggle();
     wireQualityDropdown();
     Settings.wireSettingsModal();
+    wireModalAccessibility();
     Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
     setStatus(I18n.t('status.ready'));

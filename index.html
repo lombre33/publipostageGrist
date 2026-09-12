@@ -74,7 +74,7 @@
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.67">
 <link rel="stylesheet" href="css/style.css?v=0.68">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.53">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.54">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.19">
 </head>
 <body>
@@ -111,15 +111,15 @@
         <button type="button" id="v2-btn-quality" aria-label="Qualité d'export PDF" data-tip="Qualité PDF" data-i18n-aria="toolbar.quality.aria" data-i18n-tip="toolbar.quality.tip"></button>
         <select id="v2-pdf-quality" aria-label="Qualité d'export PDF" data-i18n-aria="toolbar.quality.aria" hidden>
           <option value="native" selected data-i18n="quality.native">Vectoriel (par défaut)</option>
-          <option value="browser-print" data-i18n="quality.browserPrint">Impr. navigateur</option>
-          <option value="low" data-i18n="quality.low">Basse qualité (compressé)</option>
-          <option value="ultra" data-i18n="quality.ultra">Ultra HD (impression)</option>
+          <option value="browser-print" disabled data-i18n="quality.browserPrint">Impr. navigateur (bientôt)</option>
+          <option value="low" disabled data-i18n="quality.low">Basse qualité (bientôt)</option>
+          <option value="ultra" disabled data-i18n="quality.ultra">Ultra HD (bientôt)</option>
         </select>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-quality-flyout">
           <span class="v2-hover-row" data-quality="native" data-i18n="quality.native">Vectoriel (par défaut)</span>
-          <span class="v2-hover-row" data-quality="browser-print" data-i18n="quality.browserPrint">Impr. navigateur</span>
-          <span class="v2-hover-row" data-quality="low" data-i18n="quality.low">Basse qualité (compressé)</span>
-          <span class="v2-hover-row" data-quality="ultra" data-i18n="quality.ultra">Ultra HD (impression)</span>
+          <span class="v2-hover-row v2-hover-row-disabled" data-quality="browser-print" data-i18n="quality.browserPrint">Impr. navigateur (bientôt)</span>
+          <span class="v2-hover-row v2-hover-row-disabled" data-quality="low" data-i18n="quality.low">Basse qualité (bientôt)</span>
+          <span class="v2-hover-row v2-hover-row-disabled" data-quality="ultra" data-i18n="quality.ultra">Ultra HD (bientôt)</span>
         </span>
       </span>
       <span class="v2-hover-group" id="v2-export-pdf-group">
@@ -258,12 +258,12 @@
   </div>
   <div id="editor-container"></div>
   <div id="reader-container" style="display:none;"></div>
-  <div id="link-rules-modal" style="display:none;"><div class="modal-content link-rules-modal-content">
+  <div id="link-rules-modal" style="display:none;" tabindex="-1"><div class="modal-content link-rules-modal-content">
     <h3 data-i18n="linkRules.title">Tables liées (correspondance pour #Variable)</h3>
     <div id="link-rules-list" class="link-rules-list"></div>
     <div class="modal-actions"><button id="link-rules-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="link-config-modal" style="display:none;"><div class="modal-content link-config-modal-content">
+  <div id="link-config-modal" style="display:none;" tabindex="-1"><div class="modal-content link-config-modal-content">
     <h3 id="link-config-title"></h3>
     <div id="link-config-match-fields" class="link-config-bridge" hidden>
       <div class="link-config-bridge-col"><label id="link-config-table-source-name"></label><select id="link-config-col-source"></select></div>
@@ -275,7 +275,7 @@
     <button type="button" id="link-config-toggle-match" class="link-config-toggle-link" data-i18n="linkConfig.changeMatch" hidden>Changer de correspondance</button>
     <div class="modal-actions"><button id="link-config-cancel" data-i18n="common.cancel">Annuler</button><button id="link-config-confirm" class="link-config-btn-primary" data-i18n="common.confirm">Valider</button></div>
   </div></div>
-  <div id="template-gallery-modal" style="display:none;"><div class="modal-content template-gallery-modal-content">
+  <div id="template-gallery-modal" style="display:none;" tabindex="-1"><div class="modal-content template-gallery-modal-content">
     <h3 data-i18n="gallery.title">Créer à partir d'un template</h3>
     <div class="tpl-gallery-filters">
       <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…" data-i18n-placeholder="gallery.searchPlaceholder">
@@ -284,7 +284,7 @@
     <div class="tpl-gallery-grid" id="tpl-gallery-grid"></div>
     <div class="modal-actions"><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="template-preview-modal" style="display:none;"><div class="modal-content template-preview-modal-content">
+  <div id="template-preview-modal" style="display:none;" tabindex="-1"><div class="modal-content template-preview-modal-content">
     <div class="tpl-preview-header">
       <h3 id="tpl-preview-name"></h3>
       <div class="tpl-preview-actions">
@@ -295,7 +295,7 @@
     <div class="tpl-preview-body" id="tpl-preview-body"><div class="v2-page-sheet a4-preview"><div class="tiptap" id="tpl-preview-tiptap"></div></div></div>
     <div class="modal-actions"><button id="tpl-preview-back" data-i18n="gallery.backToGallery">Retour à la galerie</button><button id="tpl-preview-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="settings-modal" style="display:none;"><div class="modal-content settings-modal-content">
+  <div id="settings-modal" style="display:none;" tabindex="-1"><div class="modal-content settings-modal-content">
     <h3 data-i18n="settings.title">Réglages</h3>
     <div class="settings-tabs" id="settings-tabs">
       <button type="button" class="settings-tab active" data-settings-tab="language" data-i18n="settings.tab.language">Langue</button>
@@ -338,15 +338,16 @@
 <script src="js/grist-api.js?v=0.73"></script>
 <script src="js/templates.js?v=0.68"></script>
 <script src="js/reader-mode.js?v=0.78"></script>
-<script src="js/i18n.js?v=0.2"></script>
+<script src="js/i18n.js?v=0.3"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.7"></script>
 <script src="js/variables.js?v=0.22"></script>
 <script src="js/icons.js?v=0.18"></script>
 <script src="js/editor.js?v=0.88"></script>
-<script src="js/pdf-export.js?v=0.86"></script>
+<script src="js/pdf-export-alt.js?v=0.1"></script>
+<script src="js/pdf-export.js?v=0.87"></script>
 <script src="js/template-gallery.js?v=0.4"></script>
 <script src="js/settings.js?v=0.3"></script>
-<script src="js/main.js?v=0.26"></script>
+<script src="js/main.js?v=0.27"></script>
 </body>
 </html>

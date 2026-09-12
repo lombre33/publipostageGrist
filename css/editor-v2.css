@@ -735,6 +735,8 @@
 .v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
+.v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
+.v2-hover-row-disabled:hover { background: none; }
 /* Bloc "Numérotation des titres" fusionné dans le flyout Titre (cf.
    index.html #v2-heading-flyout, demande utilisateur de regrouper les
    deux réglages) - même .v2-segmented/.v2-segmented-btn que la pastille

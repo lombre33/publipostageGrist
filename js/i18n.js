@@ -40,9 +40,9 @@ const I18n = (function () {
 
     // --- Qualité d'export PDF (options + rangées du menu) ---
     'quality.native': { fr: 'Vectoriel (par défaut)', en: 'Vector (default)' },
-    'quality.browserPrint': { fr: 'Impr. navigateur', en: 'Browser print' },
-    'quality.low': { fr: 'Basse qualité (compressé)', en: 'Low quality (compressed)' },
-    'quality.ultra': { fr: 'Ultra HD (impression)', en: 'Ultra HD (print)' },
+    'quality.browserPrint': { fr: 'Impr. navigateur (bientôt)', en: 'Browser print (soon)' },
+    'quality.low': { fr: 'Basse qualité (bientôt)', en: 'Low quality (soon)' },
+    'quality.ultra': { fr: 'Ultra HD (bientôt)', en: 'Ultra HD (soon)' },
 
     // --- Titre / numérotation des titres ---
     'heading.tip': { fr: 'Titre', en: 'Heading' },
