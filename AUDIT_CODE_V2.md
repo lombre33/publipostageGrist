@@ -21,27 +21,32 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 
 | Catégorie | Bloquant | Important | Mineur | Cosmétique |
 |---|---|---|---|---|
-| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | ~~4~~ **1** *(SRI + documentation des dépendances corrigés le 2026-09-12 ; reste : vendorisation `esm.sh`, décision produit)* | 1 | 0 |
+| **Enjeu RSSI (périmètre d'accès + chaîne d'approvisionnement)** | 0 | ~~4~~ **1** *(SRI + documentation des dépendances corrigés le 2026-09-12 ; reste : vendorisation `esm.sh`, décision produit **mise en attente à la demande de l'utilisateur**)* | 1 | 0 |
 | Sécurité applicative (XSS / RGPD) | 0 | ~~6~~ **0** *(tous corrigés le 2026-09-12)* | 2 | 0 |
-| Intégrité des données (concurrence) | 0 | 2 | 0 | 0 |
+| Intégrité des données (concurrence) | 0 | ~~2~~ **0** *(corrigés le 2026-09-12)* | 0 | 0 |
 | Qualité de code (redondance, structure) | 0 | 6 | 8 | 4 |
 | Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
 | Accessibilité (RGAA) | 0 | 1 | 1 | 1 |
-| **Total** | **0** | ~~22~~ **11 restants** (11 corrigés) | **16** | **5** |
+| **Total** | **0** | ~~22~~ **9 restants** (13 corrigés) | **16** | **5** |
 
-**Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§6.2) : fuite RGPD en console, XSS en-tête/pied
+**Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§4/§6.2) : fuite RGPD en console, XSS en-tête/pied
 de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur les 4
-bibliothèques `cdnjs` (V1+V2), README.md créé (avec documentation des dépendances). Nouveau module
-partagé [`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points
-d'entrée HTML non maîtrisé. Vérifié sans régression sur ~90 scénarios de test + export PDF réel.
+bibliothèques `cdnjs` (V1+V2), README.md créé (avec documentation des dépendances), **corruption
+silencieuse de la numérotation des notes de bas de page dans une zone 2-colonnes** (root cause plus
+profonde qu'un simple problème de concurrence, cf. §4). Nouveau module partagé
+[`js/html-sanitize.js`](js/html-sanitize.js) réutilisable pour d'éventuels futurs points d'entrée
+HTML non maîtrisé. Vérifié sans régression sur ~90 scénarios de test + export PDF réel + nouveau test
+de régression permanent pour le bug de notes de bas de page.
+
+**Mis en attente à la demande explicite de l'utilisateur** : la vendorisation d'`esm.sh` (§2.2) —
+décision produit délibérément reportée, pas oubliée.
 
 **Ce qui reste à traiter en priorité avant l'audit DINUM/RSSI :**
 
 1. **[RSSI — voir §2.1, non corrigé]** Le widget demande l'accès **complet** en lecture/écriture à tout le document Grist (`requiredAccess: 'full'`) — désormais moins critique depuis la correction des XSS ci-dessus, mais reste un sujet à documenter/discuter explicitement avec la RSSI (la mitigation passe par les Règles d'accès Grist natives, pas par le code du widget — déjà expliqué dans le nouveau README).
-2. **[RSSI — voir §2.2, non corrigé]** Les ~23 paquets ProseMirror/TipTap restent chargés depuis `esm.sh` sans intégrité vérifiable (limitation technique des imports ES, pas juste un oubli) — seule une vendorisation complète réglerait ce point, décision produit à part entière.
+2. **[RSSI — voir §2.2, en attente]** Les ~23 paquets ProseMirror/TipTap restent chargés depuis `esm.sh` sans intégrité vérifiable (limitation technique des imports ES, pas juste un oubli) — vendorisation complète mise en attente, décision produit à part entière (cf. ci-dessus).
 3. **[Publication, non corrigé]** `CAHIER_DES_CHARGES.md` est corrompu (contient du code JavaScript V1 au lieu d'un cahier des charges) ; `LICENSE`/`CONTRIBUTING.md`/`SECURITY.md` restent à créer (le choix de licence est une décision de l'utilisateur, pas un défaut de code).
-4. **[Intégrité des données, non corrigé]** Un export PDF d'un document contenant une zone 2-colonnes avec une note de bas de page dans chaque colonne peut produire une numérotation/texte de note corrompu silencieusement.
-5. **[RSSI, non corrigé, mineur]** Le fetch automatique d'images externes à chaque export (§2.3) reste non encadré — clarification produit à faire (allowlist ou confirmation explicite).
+4. **[RSSI, non corrigé, mineur]** Le fetch automatique d'images externes à chaque export (§2.3) reste non encadré — clarification produit à faire (allowlist ou confirmation explicite).
 
 ---
 
@@ -153,15 +158,19 @@ du modèle lui-même (et les données d'en-tête/pied de page), pas une donnée 
 
 ---
 
-## 4. Intégrité des données — état de module et concurrence (`pdf-export.js`)
+## 4. Intégrité des données — état de module et concurrence (`pdf-export.js`) — ✅ CORRIGÉ
 
 | Fichier:ligne(s) | Constat | Priorité |
 |---|---|---|
-| `v2/js/pdf-export.js:110-111` (état module `footnoteCounter`/`footnoteEntries`) + `1075-1087` (`twoColumnsFrom` utilise `Promise.all` sur les 2 colonnes) | Les deux colonnes d'une zone 2-colonnes sont traitées en **parallèle**, chacune via son propre appel à `buildPdfContentFromRoot`, qui réinitialise `footnoteCounter = 0` en entrée. Si les deux colonnes contiennent chacune une note de bas de page, l'exécution concurrente peut faire qu'une colonne réinitialise le compteur pendant que l'autre est encore en train de l'incrémenter — **numérotation ou texte de note corrompu(e) silencieusement**, sans erreur visible, dans un export PDF pourtant présenté comme fiable. Reproductible avec un simple export normal (pas besoin d'interaction inhabituelle). | **Important** |
-| `v2/js/main.js` (boutons d'export, ~lignes 161-175/214+) | Aucun verrou n'empêche de déclencher un second export pendant qu'un premier est en cours (bouton non désactivé pendant l'opération asynchrone). Deux exports simultanés partageraient le même état de module (`footnoteCounter`), avec un risque de corruption croisée **entre deux enregistrements Grist différents**. | **Important** |
+| `v2/js/pdf-export.js` (état module `footnoteCounter`/`footnoteEntries`, `buildPdfContentFromRoot`) | ~~Les deux colonnes d'une zone 2-colonnes sont traitées en parallèle... réinitialise `footnoteCounter = 0` en entrée~~ — **root cause réévaluée et corrigée le 2026-09-12** : le vrai problème n'était pas QUE la concurrence (`Promise.all`), mais que `buildPdfContentFromRoot` remettait `footnoteCounter`/`footnoteEntries` à zéro à **CHAQUE** appel, y compris les appels imbriqués (un par colonne). Même en exécution strictement séquentielle, le traitement de la 2ᵉ colonne écrasait déjà le résultat de la 1ʳᵉ — **vérifié par reproduction directe avant correctif** (la note de la 1ʳᵉ colonne disparaissait du PDF, celle de la 2ᵉ survivait seule). | ~~Important~~ ✅ |
+| `v2/js/main.js` (boutons d'export) | ~~Aucun verrou n'empêche de déclencher un second export pendant qu'un premier est en cours~~ — **corrigé** : `withExportLock()` désactive les deux boutons d'export (unitaire + en lot) pendant toute opération, empêchant un chevauchement entre deux exports distincts. | ~~Important~~ ✅ |
 
-**Suggestion** : à court terme, désactiver les boutons d'export pendant une opération en cours (correctif simple, `main.js`) ; à plus long terme, threader l'état des notes de bas de page en paramètre plutôt qu'en variable de module partagée (plus invasif, à faire avec des tests de non-régression ciblés sur `dev-tests/scenarios-headerfooter.js`/notes).
-**Impact fonctionnel** : le verrou de bouton est sans risque. Le threading de l'état des notes touche un mécanisme central utilisé par tous les chemins (flux principal, tableaux, 2-colonnes) — à faire prudemment, avec la suite de tests automatisés comme filet de sécurité.
+**Correctif appliqué** (2 volets complémentaires) :
+1. `buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel)` — nouveau paramètre `isTopLevel` (déjà utilisé ailleurs pour la numérotation des titres, juste jamais propagé jusqu'ici) : la remise à zéro de `footnoteCounter`/`footnoteEntries` ne se fait plus que pour le VRAI appel top-level (une fois par passe de mesure/rendu du document entier), jamais pour les appels imbriqués via une zone 2-colonnes. Une colonne continue donc la numérotation là où le document principal (ou la colonne précédente) l'a laissée, au lieu de repartir de zéro et écraser le travail déjà fait.
+2. `twoColumnsFrom` : les deux colonnes sont désormais traitées **séquentiellement** (plus de `Promise.all`) — élimine aussi toute race résiduelle si une colonne attend un décodage d'image pendant que l'autre progresse. Coût négligeable (jamais plus de 2 colonnes).
+3. `v2/js/main.js` : nouveau `withExportLock()`, désactive les boutons d'export unitaire ET en lot (span `v2-btn-export-pdf-batch` inclus - `.disabled` n'a pas d'effet sur un `<span>`, géré via `pointer-events`/`opacity`) pendant toute la durée d'un export, en défense en profondeur contre un chevauchement de deux exports top-level distincts (que la correction n°1 ne couvre pas, puisqu'il s'agit alors de deux VRAIS appels top-level légitimement concurrents).
+
+Vérifié : reproduction du bug AVANT correctif (confirmé cassé), puis re-test APRÈS (les deux notes apparaissent, numérotées 1 et 2) ; scénario supplémentaire note dans le corps principal + note en colonne (numérotation continue 1/2 correcte) ; nouveau test de régression permanent `scenarios-chips.js:chip_footnote_survives_twocolumns_zone` ; suite complète (~90 scénarios) sans régression.
 
 ---
 
@@ -316,6 +325,7 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 - **Cohérence de style remarquable** dans `editor.js`/`pdf-export.js` : conventions de nommage homogènes (`createXxx`/`wireXxx`/`ensureXxx`), gestion d'erreur `try/catch` + repli systématique, commentaires en français expliquant systématiquement le "pourquoi" (bug réel constaté) plutôt que de paraphraser le code.
 - **Suite de tests automatisés** (`v2/dev-tests/`, ~90 scénarios) déjà en place et à jour — un vrai filet de sécurité pour les corrections proposées ici, en particulier pour les refactorings de §5, et une réponse partielle (à documenter/étoffer, cf. §8.2) au critère "Tests" du guide Grist.Gouv. A servi à valider les correctifs de sécurité du 2026-09-12 (aucune régression).
 - **Correctifs de sécurité 2026-09-12** : fuite RGPD (console), XSS en-tête/pied de page, XSS `document.write()` corrigés via un point d'entrée unique par vulnérabilité plutôt qu'un correctif dispersé sur chaque site d'insertion — cf. §3.1/§3.2. README.md créé, couvrant notamment la section "Sécurité et permissions" attendue par une RSSI.
+- **Correctif d'intégrité des données 2026-09-12** (§4) : la corruption silencieuse de la numérotation des notes de bas de page dans une zone 2-colonnes s'est révélée avoir une cause plus profonde que prévu à l'audit initial (remise à zéro sur tout appel imbriqué, pas seulement un problème de concurrence) — détectée par reproduction directe AVANT correctif, corrigée avec un paramètre `isTopLevel` déjà existant ailleurs dans le fichier, et couverte par un nouveau test de régression permanent.
 - **Duplication déjà justifiée et documentée** entre les 3 chemins de rendu PDF (cellule/flux principal/2-colonnes) — pas un défaut, un choix assumé, conforme à l'esprit du critère anti-duplication du guide Grist.Gouv (§8.2).
 - **Versions de dépendances externes systématiquement pinnées** (jamais de `@latest`) — bon point partiel pour la chaîne d'approvisionnement (§2.2), il manque l'intégrité (SRI) et l'hébergement local pour compléter le tableau.
 - **Choix `requiredAccess: 'full'` documenté et techniquement justifié** (§2.1) — ce n'est pas une négligence de configuration, un point qui jouera en faveur du projet dans la discussion avec la RSSI même si le niveau d'accès lui-même reste un point de vigilance.
@@ -326,14 +336,18 @@ Le guide est explicite : *« Le code assisté par IA doit être compris, lu et t
 
 **Fait le 2026-09-12** : README.md créé ; fuite RGPD console corrigée ; XSS en-tête/pied de page,
 `document.write()` et modale de liaison entre tables corrigés via `js/html-sanitize.js` ; intégrité
-SRI ajoutée sur les 4 bibliothèques `cdnjs` (V1+V2), dépendances documentées dans le README.
+SRI ajoutée sur les 4 bibliothèques `cdnjs` (V1+V2), dépendances documentées dans le README ;
+corruption silencieuse des notes de bas de page en zone 2-colonnes corrigée (§4) + verrou
+anti-double-export.
+
+**Mis en attente à la demande de l'utilisateur** : vendorisation `esm.sh` (§2.2) — décision produit
+délibérément reportée.
 
 1. **Décider du calendrier de rattachement à l'écosystème Grist.Gouv** (Voie A ou B, cf. §8.1) — conditionne l'urgence du `SECURITY.md`/canal VDP et du renommage du dépôt.
 2. **Choisir une licence** (décision légale/organisationnelle, doctrine DINUM = permissive de préférence) pour pouvoir créer `LICENSE`.
-3. **Décider si une vendorisation d'`esm.sh`** (TipTap/ProseMirror) est souhaitée (§2.2, point 2) — le seul point RSSI de chaîne d'approvisionnement encore ouvert, décision produit plutôt qu'un correctif ponctuel.
-4. Le fetch d'image externe non encadré (§2.3) reste à clarifier (allowlist ou confirmation explicite) si jugé utile.
-5. Passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
-6. Prévoir séparément un audit RGAA dédié (§7) et la constitution du dossier de sécurité RGS (§9).
+3. Le fetch d'image externe non encadré (§2.3) reste à clarifier (allowlist ou confirmation explicite) si jugé utile.
+4. Passe de nettoyage qualité (§5), en commençant par les duplications à faible risque (constantes, petites factorisations) avant les refactorings plus structurants (découpage de fichiers, §5.1/§5.2 — répond aussi au critère "concision" du guide, §8.2).
+5. Prévoir séparément un audit RGAA dédié (§7) et la constitution du dossier de sécurité RGS (§9).
 
 Mise à jour du 2026-09-12 : ce rapport reflète les correctifs déjà appliqués (voir mentions "✅
 CORRIGÉ" ci-dessus) suite à validation explicite de l'utilisateur. Toutes les autres sections

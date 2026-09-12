@@ -158,6 +158,44 @@
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
+  // Verrou anti-double-export : PdfExport.pdf-export.js utilise un état de
+  // MODULE partagé (footnoteCounter/footnoteEntries, remis à zéro en entrée
+  // de chaque export) pour numéroter les notes de bas de page - deux exports
+  // lancés en parallèle (double-clic, ou export unitaire pendant qu'un
+  // export en lot tourne déjà) partageraient cet état et pourraient corrompre
+  // silencieusement la numérotation de l'un des deux (cf. AUDIT_CODE_V2.md
+  // §4). Désactive les deux boutons pendant TOUTE opération d'export, pas
+  // seulement celui cliqué, tant que ce partage d'état existe côté
+  // pdf-export.js.
+  let exportOperationInProgress = false;
+  // `v2-btn-export-pdf-batch` est un <span> (ligne de menu au survol), pas un
+  // <button> - `.disabled` n'a aucun effet dessus (propriété réservée aux
+  // contrôles de formulaire) ; `pointer-events`/`opacity` fonctionnent sur
+  // n'importe quel élément.
+  function setExportControlLocked(el, locked) {
+    if (!el) return;
+    if ('disabled' in el) el.disabled = locked;
+    el.style.pointerEvents = locked ? 'none' : '';
+    el.style.opacity = locked ? '.5' : '';
+  }
+  function withExportLock(fn) {
+    return async (...args) => {
+      if (exportOperationInProgress) return;
+      exportOperationInProgress = true;
+      const btnSingle = document.getElementById('btn-export-pdf');
+      const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
+      setExportControlLocked(btnSingle, true);
+      setExportControlLocked(btnBatch, true);
+      try {
+        await fn(...args);
+      } finally {
+        exportOperationInProgress = false;
+        setExportControlLocked(btnSingle, false);
+        setExportControlLocked(btnBatch, false);
+      }
+    };
+  }
+
   async function onExportPdf() {
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
@@ -545,8 +583,8 @@
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
-    document.getElementById('btn-export-pdf').addEventListener('click', onExportPdf);
-    document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', onExportPdfBatch);
+    document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
+    document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(onExportPdfBatch));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();

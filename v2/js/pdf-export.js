@@ -1081,7 +1081,20 @@ const PdfExport = (function () {
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
     ];
     document.body.removeChild(measureHost);
-    const columns = await Promise.all(colNodes.map(async (col, colIdx) => {
+    // SÉQUENTIEL (pas Promise.all) : chaque itération appelle htmlToPdfContent
+    // -> buildPdfContentFromRoot, qui utilise footnoteCounter/footnoteEntries
+    // comme état de MODULE (remis à zéro en entrée, cf. leur déclaration plus
+    // haut) - deux appels EXÉCUTÉS EN PARALLÈLE (l'ancien Promise.all) peuvent
+    // s'entrelacer si l'une des deux colonnes attend un décodage d'image :
+    // l'autre colonne réinitialise alors le compteur pendant que la première
+    // est encore en train de l'incrémenter, corrompant silencieusement la
+    // numérotation/le texte des notes de bas de page d'un export par ailleurs
+    // parfaitement normal (bug confirmé, cf. AUDIT_CODE_V2.md §4). Une zone
+    // 2-colonnes n'a jamais plus de 2 colonnes : le coût de séquentialiser
+    // est négligeable face au risque de corruption.
+    const columns = [];
+    for (let colIdx = 0; colIdx < colNodes.length; colIdx += 1) {
+      const col = colNodes[colIdx];
       const colAlign = alignment(col);
       // Largeur RÉELLE de cette colonne (mesurée ci-dessus sur le vrai
       // rendu de la zone) - passée à htmlToPdfContent pour que son hôte de
@@ -1123,8 +1136,8 @@ const PdfExport = (function () {
         }
         if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) blocks[i].alignment = a;
       }
-      return blocks;
-    }));
+      columns.push(blocks);
+    }
     // Images en calque imbriquées dans une colonne : chaque colonne a déjà
     // sa PROPRE résolution complète (bracketing+interpolation, pas juste le
     // raccourci "container") via son propre appel à htmlToPdfContent/
@@ -1796,7 +1809,7 @@ const PdfExport = (function () {
     return blocks;
   }
 
-  async function buildPdfContentFromRoot(root, headingMarkers, availableWidthPt) {
+  async function buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel) {
     const blocks = [];
     // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée -
     // sert uniquement à mesurer la position RENDUE réelle des blocs voisins
@@ -1804,18 +1817,32 @@ const PdfExport = (function () {
     // ailleurs.
     const sourceNodes = [];
     const headingBlocks = []; const tocBlocks = []; const footnoteBlocks = [];
-    // Remis à zéro ICI (pas au niveau module, jamais initialisé qu'une fois) :
-    // buildPdfContentFromRoot est appelé une fois par PASSE (cf.
-    // resolveNativePdfContent, mesure puis rendu final) - htmlToPdfContent
-    // rejouant le même HTML dans le même ordre les deux fois, ce reset donne
-    // la MÊME numérotation aux deux passes (numérotation continue sur tout
-    // le document, choix confirmé - jamais de reset par page). footnoteCounter/
-    // footnoteEntries sont des variables de MODULE (déclarées plus haut dans
-    // ce fichier) plutôt que des paramètres à faire traverser tableFrom/
+    // Remis à zéro ICI (pas au niveau module, jamais initialisé qu'une fois),
+    // et SEULEMENT pour le VRAI appel top-level (isTopLevel, cf. htmlToPdfContent) :
+    // buildPdfContentFromRoot est appelé une fois par PASSE au niveau du
+    // document entier (cf. resolveNativePdfContent, mesure puis rendu final) -
+    // htmlToPdfContent rejouant le même HTML dans le même ordre les deux fois,
+    // ce reset donne la MÊME numérotation aux deux passes (numérotation
+    // continue sur tout le document, choix confirmé - jamais de reset par
+    // page). Mais buildPdfContentFromRoot est AUSSI appelé de façon imbriquée,
+    // via htmlToPdfContent(html, false, ...), une fois par colonne d'une zone
+    // 2-colonnes (cf. twoColumnsFrom) : sans ce garde-fou, le traitement de la
+    // 2e colonne remettait le compteur à zéro PENDANT/APRÈS celui de la 1ère,
+    // faisant disparaître silencieusement la note de la 1ère colonne du PDF
+    // final (bug confirmé, cf. AUDIT_CODE_V2.md §4 - vérifié y compris sans
+    // aucune concurrence, un simple appel séquentiel suffisait à le
+    // reproduire, la vraie cause étant ce reset non gardé, pas seulement le
+    // Promise.all déjà corrigé côté twoColumnsFrom). footnoteCounter/
+    // footnoteEntries restent des variables de MODULE (déclarées plus haut
+    // dans ce fichier) plutôt que des paramètres à faire traverser tableFrom/
     // twoColumnsFrom/cellLineToPdfObject : inlineRuns (cf. plus haut) les
-    // incrémente/alimente directement, quelle que soit sa profondeur d'appel.
-    footnoteCounter = 0;
-    footnoteEntries = [];
+    // incrémente/alimente directement, quelle que soit sa profondeur d'appel -
+    // une colonne doit donc continuer la numérotation là où le document
+    // principal (ou la colonne précédente) l'a laissée, pas repartir de 1.
+    if (isTopLevel) {
+      footnoteCounter = 0;
+      footnoteEntries = [];
+    }
     // Images en calque IMBRIQUÉES (cellule de tableau, colonne de zone
     // 2-colonnes) - accumulées ici à part de `resolvePendingImageAnchors`
     // (qui ne voit que les blocs TOP-LEVEL) : tableFrom/twoColumnsFrom
@@ -2077,7 +2104,7 @@ const PdfExport = (function () {
       // floatedImageParagraphFrom) - la seule garantie robuste est d'attendre
       // le décodage des images DE CE ROOT MESURÉ lui-même.
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
-      return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt);
+      return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel);
     } finally {
       detachMeasureHost();
     }

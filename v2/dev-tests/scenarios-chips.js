@@ -149,6 +149,38 @@
     });
   });
 
+  cases.push({
+    id: 'chip_footnote_survives_twocolumns_zone',
+    // BUG CONFIRMÉ ET CORRIGÉ (cf. AUDIT_CODE_V2.md §4) : buildPdfContentFromRoot
+    // (v2/js/pdf-export.js) remettait footnoteCounter/footnoteEntries à zéro à
+    // CHAQUE appel, y compris les appels IMBRIQUÉS déclenchés par
+    // twoColumnsFrom (un par colonne) - la note de la 1ère colonne traitée
+    // disparaissait silencieusement du PDF final (écrasée par la remise à
+    // zéro de la 2e colonne), reproductible même sans aucune concurrence
+    // réelle. Corrigé en ne remettant à zéro qu'au VRAI appel top-level
+    // (nouveau paramètre isTopLevel, déjà utilisé par ailleurs pour la
+    // numérotation des titres). Construit le HTML directement (marqueur
+    // <sup class="footnote-ref-marker">) plutôt que de passer par l'UI - plus
+    // simple pour placer une note dans chaque colonne à coup sûr.
+    description: 'Une note de bas de page DANS CHAQUE colonne d\'une zone 2-colonnes apparaît bien deux fois (numérotées 1 et 2) dans le pied de page du PDF, aucune des deux ne disparaît',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<div class="two-columns-zone" style="--layout-left: 50%;">'
+        + '<div class="two-columns-column"><p>Colonne gauche<sup class="footnote-ref-marker" data-note-id="a" data-note-text="Note colonne gauche">1</sup></p></div>'
+        + '<div class="two-columns-column"><p>Colonne droite<sup class="footnote-ref-marker" data-note-id="b" data-note-text="Note colonne droite">1</sup></p></div>'
+        + '</div><p></p>';
+      Editor.setHTML(html);
+      await h.sleep(80);
+      const result = await h.exportPdfContent(Editor.getHTML(), null);
+      const footerContent = typeof result.docDefinition.footer === 'function' ? result.docDefinition.footer(1, 1) : null;
+      const footerJSON = JSON.stringify(footerContent);
+      const hasLeft = footerJSON.includes('Note colonne gauche');
+      const hasRight = footerJSON.includes('Note colonne droite');
+      const numbers = footerJSON.match(/\d\. /g) || [];
+      return { pass: hasLeft && hasRight && numbers.length === 2, notes: JSON.stringify({ hasLeft, hasRight, numbers, footerJSON }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.chips = cases;
 })();
