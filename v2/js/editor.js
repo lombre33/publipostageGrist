@@ -1,27 +1,19 @@
-// Éditeur V2 — TipTap/ProseMirror (remplace Quill, cf. plan d'architecture).
+// Éditeur V2 — TipTap/ProseMirror (remplace Quill).
 //
-// Script CLASSIQUE (pas type="module") : les paquets TipTap/ProseMirror sont
-// chargés via import() DYNAMIQUE à l'intérieur de init() plutôt que via des
-// imports statiques ES module - un import() dynamique respecte la <script
-// type="importmap"> de v2/index.html au même titre qu'un import statique,
-// mais reste utilisable depuis un script classique. Ça évite d'avoir à faire
-// de v2/js/editor.js un vrai module ES, ce qui aurait cassé le partage de
-// portée global avec GristAPI/Templates/ReaderMode (chargés en scripts
-// classiques, comme le reste du projet) - un module ES ne voit JAMAIS les
-// `const` de niveau racine d'un autre script, même classique.
+// Script CLASSIQUE (pas type="module") : TipTap/ProseMirror sont chargés via
+// import() DYNAMIQUE dans init() (respecte l'import map de v2/index.html
+// sans faire de ce fichier un vrai module ES, ce qui casserait le partage de
+// portée global avec GristAPI/Templates/ReaderMode - un module ES ne voit
+// jamais les `const` racine d'un autre script classique).
 //
-// `getHTML`/`setHTML` gardent volontairement la même forme d'API que
-// l'éditeur V1 (js/editor.js), pour que main.js et les modules partagés
-// (Templates/ReaderMode) s'intègrent sans surprise.
+// `getHTML`/`setHTML` gardent la même forme d'API que l'éditeur V1 pour que
+// main.js/Templates/ReaderMode s'intègrent sans surprise.
 //
-// Les nœuds/extensions personnalisés (VarBadge, tableaux 2 colonnes, image,
-// saut de page, numérotation des titres, sommaire) ont besoin des classes
-// TipTap (Node/Extension/mergeAttributes), qui n'existent qu'APRÈS résolution
-// de l'import() dynamique ci-dessus - ils sont donc construits par de petites
-// fonctions `createXxx(...)` qui reçoivent ces classes en paramètre, plutôt
-// que déclarés en haut de fichier. `init()` ne fait qu'appeler ces fonctions
-// et assembler le résultat - la définition de chaque nœud reste isolée et
-// nommée, au lieu de gonfler `init()` lui-même.
+// Les nœuds/extensions personnalisés ont besoin des classes TipTap
+// (Node/Extension/mergeAttributes), disponibles seulement après l'import()
+// dynamique - construits par des fonctions `createXxx(...)` recevant ces
+// classes en paramètre plutôt que déclarés en haut de fichier ; `init()` se
+// contente de les appeler et d'assembler le résultat.
 const Editor = (function () {
   let editor = null;
   // Rempli dans init() après import dynamique - évite de réimporter à chaque appel.
@@ -67,26 +59,14 @@ const Editor = (function () {
     view.dispatch(tr);
   }
 
-  // Taille max (boîte largeur×hauteur) d'une image dans l'en-tête/pied de
-  // page (demande utilisateur) : aucune limite technique dure n'existe
-  // réellement ici (la marge de page réservée s'adapte simplement à la
-  // hauteur mesurée du contenu, cf. buildHeaderFooterPdfChunks/
-  // renderPaginationOverlay) - une convention de ce projet pour garder un
-  // en-tête/pied raisonnable (typiquement un logo), pas une image qui
-  // grandit sans limite au gré d'un glisser malencontreux. LES DEUX
-  // dimensions comptent (pas juste la hauteur, cf. version précédente) :
-  // un logo large et bas (large bannière, ratio ~3:1 - cas réel signalé par
-  // l'utilisateur) peut avoir une hauteur minuscule à 320px de large sans
-  // jamais dépasser un plafond de hauteur seul, alors que sa LARGEUR est
-  // déjà largement excessive pour un en-tête.
-  // Hauteur revue à la baisse (120 → 60px, demande utilisateur : la zone
-  // d'en-tête paraissait occuper "presque 1/6 de la page") - 60px + le
-  // padding vertical de la zone (8px×2, cf. .v2-page-edge-spacer dans
-  // css/editor-v2.css) + l'écart avant le corps (HEADER_FOOTER_GAP_PX, cf.
-  // plus bas) totalisent ~89px sur les ~1122px d'une page A4 (PT_TO_PX ci-
-  // dessous), soit ~8% - une proportion standard de type "papier à en-tête"
-  // (logo/bandeau discret), pas un bandeau qui mange le tiers de la page.
-  // Ajustable si besoin, aucun autre code n'en dépend.
+  // Taille max (largeur×hauteur) d'une image dans l'en-tête/pied de page -
+  // convention du projet pour garder un en-tête/pied raisonnable (logo),
+  // pas une limite technique dure. Les DEUX dimensions comptent : un logo
+  // large et bas (grande bannière, ratio ~3:1) peut rester sous un plafond
+  // de hauteur seul tout en étant bien trop large pour un en-tête.
+  // 60px + le padding vertical de la zone (cf. css/editor-v2.css) + l'écart
+  // avant le corps totalisent ~8% d'une page A4 - proportion "papier à
+  // en-tête" discret. Ajustable, aucun autre code n'en dépend.
   const HF_MAX_IMAGE_HEIGHT_PX = 60;
   const HF_MAX_IMAGE_WIDTH_PX = 300;
   // Ramène `widthPx` à la plus grande valeur qui garde l'image DANS la boîte
@@ -773,34 +753,24 @@ const Editor = (function () {
     nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
   }
 
-  // Zone 2 colonnes — pas d'extension officielle équivalente à
+  // Zone 2 colonnes - pas d'extension officielle équivalente à
   // extension-table ; construite comme une paire de nœuds suivant le même
-  // principe d'imbrication (une colonne accepte du contenu riche directement
-  // dans le schéma). Mêmes noms de classe que la V1
+  // principe d'imbrication. Mêmes noms de classe que la V1
   // (.two-columns-zone/.two-columns-column) pour limiter l'adaptation de
   // pdf-export.js. `isolating: true` sur les deux nœuds : empêche
   // backspace/suppr en bord de colonne de fusionner la zone avec le
-  // paragraphe voisin (comportement par défaut de ProseMirror sans ça,
-  // vérifié en conditions réelles).
-  // Tab/Shift-Tab personnalisés : AVANT toute autre chose, préserve le
-  // comportement natif d'indentation de liste (sinkListItem/liftListItem) -
-  // sans ce court-circuit explicite, l'extension Table (dont le propre
-  // Tab/Shift-Tab - goToNextCell/goToPreviousCell - l'emporte en pratique
-  // sur celui de StarterKit pour une liste nichée dans une cellule, vérifié
-  // en conditions réelles, l'ordre exact de préséance entre extensions pour
-  // une MÊME touche n'étant pas fiable à deviner) changeait de cellule au
-  // lieu d'indenter/désindenter, signalé cassé par l'utilisateur. Hors
-  // liste, Tab/Shift-Tab dans une colonne de zone 2-colonnes (aucun
-  // comportement par défaut avant ce correctif - signalé cassé, "il ne se
-  // passe rien") déplace le curseur d'une colonne à l'autre, ou en sort
-  // (paragraphe suivant/précédent la zone - nouveau paragraphe vide créé en
-  // sortie avant s'il n'y en a pas déjà un ; en sortie arrière, sans effet
-  // s'il n'y a rien avant). Enregistrée en DERNIER dans `extensions` (cf.
-  // init()) : conditionne empiriquement quelle extension gagne la main sur
-  // une touche partagée.
-  // Résout la zone/colonne englobant `$from`, si applicable - factorisé
-  // entre Tab et Shift-Tab (même détection, direction de navigation
-  // opposée seulement).
+  // paragraphe voisin.
+  // Tab/Shift-Tab personnalisés : court-circuitent EN PREMIER l'indentation
+  // de liste (sinkListItem/liftListItem) - sans ça, l'extension Table
+  // (goToNextCell/goToPreviousCell) l'emporte sur celle de StarterKit pour
+  // une liste nichée dans une cellule et change de cellule au lieu
+  // d'indenter. Hors liste, Tab/Shift-Tab déplace le curseur d'une colonne
+  // à l'autre, ou en sort (paragraphe suivant/précédent la zone, créé s'il
+  // n'existe pas déjà en sortie avant). Enregistrée en DERNIER dans
+  // `extensions` (cf. init()) : conditionne quelle extension gagne la main
+  // sur une touche partagée.
+  // Résout la zone/colonne englobant `$from`, factorisé entre Tab et
+  // Shift-Tab (même détection, direction de navigation opposée).
   function findTwoColumnsContext($from) {
     let columnDepth = -1;
     for (let d = $from.depth; d > 0; d -= 1) {
@@ -1475,27 +1445,20 @@ const Editor = (function () {
     });
   }
 
-  // En mode Aperçu A4, un tableau ne doit jamais dépasser la largeur de page
-  // réelle : signalé par l'utilisateur - agrandir une colonne à la main au
-  // point de manquer de place poussait le reste du tableau hors de la
-  // feuille (un <col> avec une largeur EXPLICITE n'a, contrairement à
-  // min-width, aucun plafond naturel - une largeur de 900px déborde
-  // simplement le conteneur, vérifié en conditions réelles). L'extension
-  // officielle de redimensionnement n'expose pas de crochet pendant le
-  // glisser lui-même ; ce correctif tourne donc sur CHAQUE mise à jour
-  // (comme le NodeView du sommaire ci-dessus) et rétrécit après coup les
-  // colonnes EXPLICITEMENT redimensionnées (attribut `colwidth` réel,
-  // jamais les colonnes "auto" par défaut - déjà couvertes par le
-  // `min-width: 0` de css/editor-v2.css) dès que la largeur totale dépasse
-  // le conteneur - perçu comme un léger rebond juste après avoir relâché la
-  // poignée plutôt qu'une résistance pendant le glisser, mais garantit que
-  // le tableau ne peut jamais rester plus large que la page.
-  // Largeur réellement disponible pour un enfant direct de la racine
-  // ProseMirror (.tiptap) - son clientWidth inclut SON PROPRE padding (utile
-  // pour simuler la marge de page en Aperçu A4, cf. css/editor-v2.css), qui
-  // n'est pas disponible à un enfant. Partagé entre clampOverflowingTables
-  // (tableaux) et l'alignement des images en calque (snap gauche/centre/
-  // droite), même calcul dans les deux cas.
+  // En mode Aperçu A4, un tableau ne doit jamais dépasser la largeur de
+  // page réelle : un <col> à largeur EXPLICITE n'a, contrairement à
+  // min-width, aucun plafond naturel - une colonne trop agrandie pousse le
+  // reste du tableau hors de la feuille. L'extension de redimensionnement
+  // n'expose pas de crochet pendant le glisser ; ce correctif tourne donc
+  // sur chaque mise à jour et rétrécit après coup les colonnes
+  // explicitement redimensionnées (`colwidth` réel, jamais les colonnes
+  // "auto" - déjà couvertes par `min-width: 0`) dès que la largeur totale
+  // dépasse le conteneur - un léger rebond après avoir relâché la poignée,
+  // mais le tableau ne peut jamais rester plus large que la page.
+  // Largeur disponible pour un enfant direct de `.tiptap` : son clientWidth
+  // inclut SON PROPRE padding (simule la marge de page en Aperçu A4), non
+  // disponible à un enfant. Partagé entre clampOverflowingTables et
+  // l'alignement des images en calque (même calcul).
   function editorContentWidthPx(currentEditor) {
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
@@ -1503,25 +1466,18 @@ const Editor = (function () {
   }
 
   // Tant qu'UNE SEULE colonne d'un tableau reste "auto" (pas de `colwidth`
-  // propre), `<table>` lui-même ne porte qu'un `min-width` (jamais un
-  // `width` exact) - `.tiptap table { width: 100% }` (css/editor-v2.css)
-  // s'applique donc TOUJOURS tel quel, quelle que soit la largeur demandée
-  // pour une colonne explicitement redimensionnée : agrandir une colonne ne
-  // fait alors que voler de la place aux colonnes "auto" voisines, le
-  // tableau entier restant coincé à 100% du conteneur - la poignée extérieure
-  // droite (qui n'a PAS de colonne voisine à qui prendre de la place de
-  // l'autre côté) ne peut alors jamais faire grandir le tableau du tout,
-  // signalé cassé par l'utilisateur ("redimensionne les autres mais ne bouge
-  // pas"). Dès que TOUTES les colonnes ont un `colwidth` explicite en
-  // revanche, `<table>` porte un `width` exact (constaté en conditions
-  // réelles) qui l'affranchit du `width:100%` - le tableau peut alors
-  // dépasser 100% (jusqu'à ce que clampOverflowingTables le retienne dans la
-  // page). Fixé en gelant, dès le premier redimensionnement d'UNE colonne
-  // d'un tableau, la largeur RENDUE actuelle de chaque colonne encore "auto"
-  // du même tableau comme son propre `colwidth` explicite - même mécanisme
-  // (tourne sur chaque mise à jour, une seule colonne de référence -
-  // première ligne - pour la détection) que clampOverflowingTables ci-
-  // dessous, appelé juste après pour rattraper un éventuel dépassement.
+  // propre), `<table>` ne porte qu'un `min-width` - `.tiptap table {
+  // width: 100% }` s'applique donc toujours tel quel : agrandir une colonne
+  // ne fait que voler de la place aux colonnes "auto" voisines, et la
+  // poignée extérieure droite (sans colonne voisine à qui prendre de la
+  // place) ne peut jamais faire grandir le tableau du tout. Dès que TOUTES
+  // les colonnes ont un `colwidth` explicite, `<table>` porte un `width`
+  // exact qui l'affranchit du `width:100%` (peut alors dépasser 100%,
+  // jusqu'à ce que clampOverflowingTables le retienne). Fixé en gelant, dès
+  // le premier redimensionnement d'une colonne, la largeur RENDUE actuelle
+  // de chaque colonne encore "auto" du même tableau comme son propre
+  // `colwidth` - clampOverflowingTables rattrape ensuite un éventuel
+  // dépassement.
   function backfillAutoColumnWidths(currentEditor) {
     const { state, view } = currentEditor;
     let tr = null;
@@ -2553,45 +2509,23 @@ const Editor = (function () {
     clearPageBreakMargins();
   }
 
-  // Zones de marge CLIQUABLES (façon Google Docs/Word - retour utilisateur :
-  // l'ancien bouton de toolbar + sous-barre dockée était moche et coupait la
-  // continuité de la page). Toujours présentes en Aperçu A4 - même sans
-  // aucun en-tête/pied encore configuré - pour servir de point d'ENTRÉE :
-  // une accroche fantôme apparaît au survol tant que la zone est vide
-  // ("+ Ajouter un en-tête"/"+ Ajouter un pied de page"), un simple
-  // survol-teinté + crayon une fois du contenu présent. Un clic (zone vide OU
-  // déjà remplie) appelle directement enterHeaderFooterMode(zone, variant) -
-  // AUCUN bouton de toolbar dédié n'existe plus, cf. renderHfPill (pastille
-  // flottante, visible seulement PENDANT l'édition elle-même).
+  // Zones de marge cliquables (façon Google Docs/Word) : un clic (zone vide
+  // ou déjà remplie) appelle enterHeaderFooterMode(zone, variant) - aucun
+  // bouton de toolbar dédié, cf. renderHfPill pour la pastille flottante
+  // visible pendant l'édition. Recalculées au fil de la frappe (débounce,
+  // cf. schedulePaginationRecompute) ; masquées si Aperçu A4 désactivé ou
+  // édition d'en-tête/pied déjà en cours (hfMode).
   //
-  // Recalculées au fil de la frappe (débounce, cf. schedulePaginationRecompute)
-  // et du redimensionnement. Masquées dès que : Aperçu A4 désactivé, ou
-  // édition d'en-tête/pied déjà en cours (hfMode - le document affiché n'est
-  // alors plus le document principal, rien de pertinent à cliquer/prévisualiser).
-  //
-  // Deux natures de zones, pour un résultat honnête plutôt qu'un faux
-  // pixel-parfait généralisé : le tout début (en-tête de la page 1) et la
-  // toute fin (pied de la dernière page) du document ont un vrai espace
-  // libre disponible avant/après `.tiptap` - ce sont donc de VRAIS éléments
-  // DOM en flux normal (`.v2-page-edge-spacer`, DANS `.v2-page-sheet`, JAMAIS
-  // enfants de `.tiptap` lui-même - un enfant inattendu dans `.tiptap` serait
-  // la même trappe que la V1 avec Quill, cf. mémoire
-  // project_quill_mutation_observer), qui ne recouvrent donc jamais de texte
-  // réel - collées à `.tiptap` (aucun espace, juste un filet en pointillé
-  // quand elles ont du contenu), pour ressembler le plus possible à la vraie
-  // page exportée (retour utilisateur, cf. css/editor-v2.css:.v2-page-sheet).
-  // Les limites INTERMÉDIAIRES (frontière RÉELLE entre deux pages physiques)
-  // n'ont PAS d'espace disponible NATURELLEMENT - le contenu continue de
-  // défiler sans interruption - mais restent de purs overlays en
-  // position:absolute posés dans un espace RÉSERVÉ EXPRÈS (`margin-bottom`
-  // posé sur le dernier bloc de la page qui se termine, cf.
-  // pageBreakMarginEls plus bas) : signalé par l'utilisateur, du texte se
-  // retrouvait sinon visuellement recouvert par ces bandes. Elles s'affichent
-  // maintenant dès que le document dépasse une page, MÊME sans aucun
-  // en-tête/pied configuré (retour utilisateur : la pagination automatique
-  // doit rester visible dès "beaucoup de lignes", pas seulement quand un
-  // en-tête/pied existe ou qu'un saut de page est forcé) - un simple repère
-  // "Page N" remplace alors le contenu en-tête/pied absent.
+  // Deux natures de zones : le début/la fin du document ont un vrai espace
+  // libre avant/après `.tiptap`, donc de VRAIS éléments DOM en flux normal
+  // (`.v2-page-edge-spacer`, dans `.v2-page-sheet`, JAMAIS enfants de
+  // `.tiptap` lui-même - cf. mémoire project_quill_mutation_observer pour
+  // pourquoi). Les limites INTERMÉDIAIRES (entre deux pages) n'ont pas
+  // d'espace naturel - le contenu défile sans interruption - donc restent
+  // de purs overlays `position:absolute` posés dans un espace réservé
+  // exprès (`margin-bottom` sur le dernier bloc de la page, cf.
+  // pageBreakMarginEls plus bas), affichées dès que le document dépasse
+  // une page même sans en-tête/pied configuré (repère "Page N" par défaut).
   function ensureEdgeZone(pageSheet, tiptapEl, pos) {
     if (pos === 'top' && !paginationEdgeTopEl) {
       paginationEdgeTopEl = document.createElement('div');
