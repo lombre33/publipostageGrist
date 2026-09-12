@@ -28,6 +28,13 @@ const TemplateGallery = (function () {
     return (await fetchNoStore(resolveUrl(entry.html))).text();
   }
 
+  // Optionnel - la plupart des templates n'ont pas d'en-tête/pied. Même forme
+  // que Editor.getHeaderFooterData()/setHeaderFooterData().
+  async function fetchHeaderFooter(entry) {
+    if (!entry.headerFooter) return null;
+    return (await fetchNoStore(resolveUrl(entry.headerFooter))).json();
+  }
+
   // Retire entièrement le badge #Variable (pas de texte de substitution),
   // pour le mode "Modèle vierge" : un template unique sert aux deux modes
   // (vide / + data), pas deux fichiers HTML à maintenir en double. Sans
@@ -94,5 +101,5 @@ const TemplateGallery = (function () {
     return root.innerHTML;
   }
 
-  return { loadManifest, fetchHtml, fetchSchema, stripVariableBadges, parseGristSchema, rebindVariableTable, resolveUrl };
+  return { loadManifest, fetchHtml, fetchHeaderFooter, fetchSchema, stripVariableBadges, parseGristSchema, rebindVariableTable, resolveUrl };
 })();

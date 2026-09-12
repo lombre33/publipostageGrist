@@ -46,5 +46,14 @@
     "screenshot": "test-images-tableaux/screenshot.svg",
     "html": "test-images-tableaux/template.html",
     "schema": "test-images-tableaux/schema.py"
+  },
+  {
+    "id": "vitrine-fonctionnalites",
+    "name": "Vitrine des fonctionnalités",
+    "tags": ["démo", "vitrine"],
+    "screenshot": "vitrine-fonctionnalites/screenshot.svg",
+    "html": "vitrine-fonctionnalites/template.html",
+    "schema": "vitrine-fonctionnalites/schema.py",
+    "headerFooter": "vitrine-fonctionnalites/headerfooter.json"
   }
 ]

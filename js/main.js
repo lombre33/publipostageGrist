@@ -513,8 +513,9 @@
     async function useEmpty() {
       if (!currentEntry || !currentHtml) return;
       const html = TemplateGallery.stripVariableBadges(currentHtml);
+      const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
       setStatus(I18n.t('status.templateSavedAsNew', { name: currentEntry.name }));
@@ -549,8 +550,9 @@
         return;
       }
       const html = TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId);
+      const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter: null, nom: currentEntry.name, nomFichierPDF: '' });
+      loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
       setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: currentEntry.name }));

@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "differentFirstPage": true,
+  "header": {
+    "default": "<p>Vitrine des fonctionnalités — Publipostage Grist</p>",
+    "first": ""
+  },
+  "footer": {
+    "default": "<p style=\"text-align:center\">Page <span class=\"page-number-badge\" data-format=\"n-slash-total\">#/#</span></p>",
+    "first": ""
+  }
+}

@@ -1,0 +1,57 @@
+<div class="heading-numbering-config" data-style="numeric"></div>
+<h1 style="text-align:center">Vitrine des fonctionnalités</h1>
+<p style="text-align:center"><em>Publipostage Grist — démonstration de mise en page (éditeur / lecture / export PDF)</em></p>
+<p style="text-align:center">Préparé pour <span class="var-badge" data-table="Vitrine" data-column="NomClient" data-key="Vitrine.NomClient">#Vitrine.NomClient</span> (<span class="var-badge" data-table="Vitrine" data-column="Ville" data-key="Vitrine.Ville">#Vitrine.Ville</span>) par <span class="var-badge" data-table="Vitrine" data-column="Auteur" data-key="Vitrine.Auteur">#Vitrine.Auteur</span>, le <span class="var-badge" data-table="Vitrine" data-column="DateRapport" data-key="Vitrine.DateRapport">#Vitrine.DateRapport</span>.</p>
+<p>Ce document rassemble, sur quatre pages, l'essentiel des fonctionnalités de mise en page disponibles dans l'éditeur : texte, titres, listes, tableaux, images (au cœur du texte et en calque), zone 2 colonnes, notes de bas de page, variables Grist et chips intelligents. Il sert à la fois de démonstration du module et de test de cohérence visuelle entre l'éditeur, le mode Lecture et l'export PDF vectoriel — les trois doivent produire une mise en page identique.</p>
+<div class="toc-marker">Sommaire (généré automatiquement à partir des titres)</div>
+<div class="page-break-marker">Saut de page</div>
+<h2>1. Mise en forme du texte</h2>
+<p>Un paragraphe de plusieurs lignes pour vérifier <strong>le gras</strong>, <em>l'italique</em>, <u>le souligné</u>, <s>le barré</s>, ainsi qu'une combinaison <strong><em><u>des trois à la fois</u></em></strong> — et un retour à la ligne forcé avec Maj+Entrée<br>plutôt qu'un nouveau paragraphe, pour rester dans le même bloc de texte.</p>
+<p style="text-align:justify">Ce paragraphe est justifié : Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse potenti. Integer euismod, nunc ut aliquam lacinia, nunc nisl aliquet nunc, eget aliquam nunc nisl eget nunc. Sed euismod, nunc ut aliquam lacinia, nunc nisl aliquet nunc, eget aliquam nunc nisl eget nunc — chaque ligne doit s'étirer jusqu'au bord droit, sauf la dernière.</p>
+<p><span style="font-size: 18pt;">Taille 18pt.</span> <span style="font-size: 8pt;">Taille 8pt.</span> <span style="color: rgb(192, 57, 43);">Couleur de texte.</span> <span style="background-color: rgb(255, 242, 168);">Surlignage.</span> <span style="font-family: &quot;Times New Roman&quot;;">Police Times New Roman.</span></p>
+<h2>2. Listes</h2>
+<ul>
+<li>Élément à puce</li>
+<li>Élément avec un sous-élément indenté
+<ul>
+<li>Sous-élément (Tab pour indenter)</li>
+</ul>
+</li>
+</ul>
+<ol>
+<li>Premier élément numéroté</li>
+<li>Deuxième élément numéroté</li>
+</ol>
+<h2>3. Citation et note de bas de page</h2>
+<blockquote><p>« La qualité d'un document ne se mesure pas qu'à son contenu, mais aussi à la rigueur de sa mise en page. »</p></blockquote>
+<p>Une phrase avec un appel de note<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Note de bas de page : vérifier son affichage en bas de la bonne page, dans l'éditeur comme à l'export PDF."></sup> pour vérifier la numérotation continue des notes sur l'ensemble du document.</p>
+<div class="page-break-marker">Saut de page</div>
+<h2>4. Tableau</h2>
+<p>Comparatif trimestriel, avec mise en forme différente par cellule :</p>
+<table>
+<tr><th>Trimestre</th><th>Chiffre d'affaires</th><th>Évolution</th></tr>
+<tr><td>T1</td><td style="text-align:right">128 400 €</td><td style="text-align:right">—</td></tr>
+<tr><td>T2</td><td style="text-align:right">146 900 €</td><td style="text-align:right"><strong style="color: rgb(30, 132, 73);">+14,4 %</strong></td></tr>
+<tr><td>T3</td><td style="text-align:right">139 250 €</td><td style="text-align:right"><strong style="color: rgb(192, 57, 43);">-5,2 %</strong></td></tr>
+</table>
+<h2>5. Image au cœur du texte</h2>
+<p>Une image alignée à gauche, avec du texte qui s'enroule à côté d'elle sur plusieurs lignes.<img class="editor-image" draggable="false" src="https://picsum.photos/seed/vitrine-inline/420/260" alt="Photo de démonstration" data-layer="normal" data-wrap="inline" data-align="left" style="width: 220px"> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse potenti. Integer euismod nunc ut aliquam lacinia, nunc nisl aliquet nunc.</p>
+<p>Second paragraphe : si l'image est assez haute, l'habillage se poursuit ici aussi, sans que ce texte ne passe sous l'image avant sa fin réelle — vérifier que ce comportement reste identique en mode Lecture et dans le PDF.</p>
+<h2>6. Images en calque (devant / derrière)</h2>
+<p>Le badge ci-dessous est en calque « devant le texte », l'image large en arrière-plan est « derrière le texte » — vérifier leur position exacte aux 3 étages (éditeur, lecture, export).</p>
+<img class="editor-image" draggable="false" src="https://picsum.photos/seed/vitrine-behind/650/160?grayscale" alt="Arrière-plan" data-layer="behind" data-wrap="inline" style="width: 400px; position: absolute; left: 37px; top: 2740px; z-index: -1; opacity: 0.35">
+<img class="editor-image" draggable="false" src="https://picsum.photos/seed/vitrine-front/140/140" alt="Badge" data-layer="front" data-wrap="inline" style="width: 70px; position: absolute; left: 437px; top: 2769px; z-index: 5">
+<div class="page-break-marker">Saut de page</div>
+<h2>7. Article de presse — zone 2 colonnes</h2>
+<p>La zone 2 colonnes permet une mise en page façon article de presse, chaque colonne gardant sa propre mise en forme :</p>
+<div class="two-columns-zone-outer" style="--layout-left: 55%;">
+<div class="two-columns-zone">
+<div class="two-columns-column"><p><strong>Le publipostage nouvelle génération</strong></p><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse potenti. Integer euismod nunc ut aliquam lacinia, nunc nisl aliquet nunc, eget aliquam nunc nisl eget nunc. Sed euismod nunc ut aliquam lacinia, nunc nisl aliquet nunc.</p><p>Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.</p></div>
+<div class="two-columns-column"><p><img class="editor-image" draggable="false" src="https://picsum.photos/seed/vitrine-article/300/200" alt="Illustration" data-layer="normal" data-wrap="inline" style="width: 100%"></p><p style="text-align:center"><em>Illustration — colonne de droite.</em></p></div>
+</div>
+<div class="two-columns-resize-grip" title="Redimensionner les colonnes"></div>
+</div>
+<h2>8. Variables Grist et chips intelligents</h2>
+<p>Rapport rédigé par <span class="var-badge" data-table="Vitrine" data-column="Auteur" data-key="Vitrine.Auteur">#Vitrine.Auteur</span> pour <span class="var-badge" data-table="Vitrine" data-column="NomClient" data-key="Vitrine.NomClient">#Vitrine.NomClient</span>, à <span class="var-badge" data-table="Vitrine" data-column="Ville" data-key="Vitrine.Ville">#Vitrine.Ville</span>.</p>
+<p>Chips intelligents — insérés à la date/heure d'édition : <span class="smart-chip" data-chip-kind="date">Date</span>, <span class="smart-chip" data-chip-kind="time">Heure</span>, et l'email de l'utilisateur connecté : <span class="smart-chip" data-chip-kind="email">Email</span>.</p>
+<p style="text-align:center"><em>Fin de la démonstration.</em></p>
