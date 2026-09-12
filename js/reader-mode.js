@@ -1,13 +1,8 @@
 // Publipostage Grist — reader mode v1.1.2 — 2026-09-04
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
-  // Format nombre/date choisi via la barre flottante d'une bulle #Variable
-  // (cf. js/editor.js:wireVariableFloatingToolbar), sérialisé en JSON dans
-  // data-format par le nœud varBadge. Transmis en 5e argument à
-  // Variables.resolveVariable ; un seul point de lecture ici, partagé par
-  // render()/preview() ci-dessous, qui alimentent respectivement le mode
-  // Lecture et l'export PDF (PdfExport ne voit jamais les bulles brutes,
-  // preview() les a déjà toutes résolues avant).
+  // Format nombre/date choisi via la barre flottante d'une bulle #Variable,
+  // sérialisé en JSON dans data-format ; transmis à Variables.resolveVariable.
   function parseBadgeFormat(badge) {
     const raw = badge.getAttribute('data-format');
     if (!raw) return null;
@@ -173,16 +168,10 @@ const ReaderMode = (function () {
     container.appendChild(wrapper);
     await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
   }
-  // Remplace chaque placeholder .toc-marker par la vraie liste des titres de
-  // premier niveau, numérotée avec le même schéma que la numérotation CSS à
-  // l'écran. Pas de numéro de page ici (le mode lecture n'est pas paginé),
-  // contrairement à l'export PDF vectoriel.
-  //
-  // Le marqueur est recalculé en JS (headingCounterEntries), pas lu via
-  // getComputedStyle(h, '::before').content : ce dernier ne renvoie que la
-  // valeur CSS déclarée (littéralement "counter(h1c)"), jamais le texte
-  // réellement peint - `counter()` n'est résolu qu'au moment de la peinture,
-  // la CSSOM ne l'expose pas.
+  // Remplace .toc-marker par la vraie liste de titres, sans numéro de page
+  // (non paginé ici). Marqueur recalculé en JS, jamais lu via
+  // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas
+  // le texte peint - counter() n'est résolu qu'à la peinture).
   function resolveTocMarkers(wrapper) {
     const tocMarkers = wrapper.querySelectorAll(':scope > .toc-marker');
     if (!tocMarkers.length) return;
@@ -224,12 +213,8 @@ const ReaderMode = (function () {
       return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
-  // Résout un placeholder d'image lié à une #Variable : ce nœud est déjà un
-  // <img class="editor-image"> (width/height fixés dans l'éditeur), il ne
-  // s'agit que de le rattacher à la bonne pièce jointe pour que
-  // GristAPI.hydrateAttachmentImages lui pose un vrai src. `object-fit:
-  // contain` fait le reste à l'écran nativement, jamais déformé ni rogné.
-  // Retire le nœud entièrement si la ligne courante n'a aucune pièce jointe.
+  // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour
+  // que hydrateAttachmentImages lui pose un vrai src ; le retire si aucune PJ.
   async function resolveVariableImages(wrapper, tableId, record) {
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]'));
     await Promise.all(nodes.map(async img => {
@@ -281,17 +266,9 @@ const ReaderMode = (function () {
       chip.replaceWith(span);
     }));
   }
-  // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
-  // (comportement historique) OU une ou plusieurs <img> si la colonne
-  // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds) :
-  // une colonne PJ contenant une image affichait jusqu'ici la valeur de
-  // cellule brute passée telle quelle dans formatValue (un texte du genre
-  // "L, 5", jamais l'image) aussi bien en aperçu qu'à l'export PDF - signalé
-  // par l'utilisateur. Les <img> produites réutilisent exactement les
-  // classes/attributs déjà lus par GristAPI.hydrateAttachmentImages
-  // (img.editor-image[data-source="attachment"][data-attachment-id]), déjà
-  // appelé juste après par preview()/render() - aucun nouveau code de
-  // résolution d'URL de pièce jointe à écrire ici.
+  // Résout un badge #Variable en texte, ou en <img> si la colonne est de
+  // type Attachments ; les <img> produites réutilisent les classes/attributs
+  // déjà lus par GristAPI.hydrateAttachmentImages, appelé juste après.
   async function resolveBadgeNode(badge, tableId, record, format) {
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
@@ -342,13 +319,9 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
-  // Découpe le gabarit en scannant chaque "#" et en essayant la plus longue
-  // clé de variable connue qui suit (pas un simple regex [A-Za-z0-9_]+) :
-  // une clé Grist ("Clients_Nom") contient elle-même des "_", indiscernables
-  // d'un séparateur tapé entre deux variables - un simple regex captait à
-  // tort le séparateur, la variable entière était alors silencieusement
-  // perdue. Comparer aux clés réellement connues (les plus longues d'abord)
-  // élimine cette ambiguïté.
+  // Scanne chaque "#" et essaie la plus longue clé connue qui suit (pas un
+  // regex [A-Za-z0-9_]+) : une clé Grist contient elle-même des "_", ambigus
+  // avec un séparateur tapé entre deux variables.
   async function resolveFilename(filenameTemplate, tableId, record) {
     if (!filenameTemplate) return 'publipostage';
     const allVars = GristAPI.getAllVariables();

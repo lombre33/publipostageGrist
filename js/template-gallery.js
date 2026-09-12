@@ -39,15 +39,9 @@ const TemplateGallery = (function () {
     return root.innerHTML;
   }
 
-  // Parse le texte "Code View" natif de Grist (copié-collé tel quel par le
-  // contributeur du template depuis un document Grist où il a construit une
-  // table d'exemple pour valider les bons types) :
-  //   @grist.UserTable
-  //   class NomTable:
-  //     Colonne = grist.Text()
-  // Ne gère QUE cette syntaxe précise (classe + attributs `Col = grist.Type(...)`),
-  // pas du Python arbitraire — c'est un format machine-généré par Grist, pas
-  // une entrée libre.
+  // Parse le "Code View" natif de Grist (`@grist.UserTable` / `class Nom:` /
+  // `Col = grist.Type()`) - ne gère que cette syntaxe machine-générée précise,
+  // pas du Python arbitraire.
   const PY_TYPE_TO_GRIST_TYPE = {
     Text: 'Text', Numeric: 'Numeric', Int: 'Int', Bool: 'Bool',
     Date: 'Date', DateTime: 'DateTime', Choice: 'Choice', ChoiceList: 'ChoiceList',

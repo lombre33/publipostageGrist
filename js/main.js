@@ -1,8 +1,5 @@
-// Orchestration : gestion de modèles + mode Édition/Lecture + export PDF
-// (vectoriel uniquement, cf. js/pdf-export.js) + câblage Grist (variables/
-// tableaux/2 colonnes/images/sommaire sont gérés dans js/editor.js, pas ici)
-// + modale "Tables liées" (règles de correspondance inter-tables, cf.
-// wireLinkRulesModal/js/variables.js). `Editor.init()` est async : js/editor.js
+// Orchestration : gestion de modèles + mode Édition/Lecture + export PDF +
+// câblage Grist + modale "Tables liées". `Editor.init()` est async : il
 // charge TipTap/ProseMirror via import() dynamique au moment de l'appel.
 (function () {
   let currentMode = 'edit';
@@ -221,11 +218,9 @@
     return name;
   }
 
-  // Export PDF en lot : une ligne Grist de la table courante = un PDF, tous
-  // regroupés dans une archive ZIP. Lit toutes les lignes de la table
-  // (lecture directe docApi, ignore un éventuel filtre de vue), pas
-  // seulement la ligne sélectionnée. Volontairement limité au vectoriel :
-  // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne et les
+  // Export en lot : une ligne = un PDF, regroupés en ZIP. Lit toutes les
+  // lignes via docApi (ignore un filtre de vue). Limité au vectoriel :
+  // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne, et les
   // qualités raster n'ont pas de variante "retourne un blob".
   async function onExportPdfBatch() {
     Editor.exitHeaderFooterModeIfActive();

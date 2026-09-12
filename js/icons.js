@@ -1,11 +1,6 @@
-// Icônes de la toolbar — SVG "trait" (viewBox 24x24, stroke=currentColor,
-// stroke-width=2, fill=none) : aucune dépendance externe, cohérent avec
-// l'absence de bundler dans cet environnement (index.html charge tout en
-// ESM natif via importmap).
-// Source de vérité UNIQUE : utilisé à la fois pour injecter les icônes de la
-// toolbar statique (boutons déjà présents dans index.html, cf.
-// applyToolbarIcons dans editor.js) et pour construire en JS le contenu des
-// toolbars flottantes (tableau, image) dont le HTML n'existe pas à l'avance.
+// Icônes SVG "trait" (viewBox 24x24, stroke=currentColor) - source unique
+// pour la toolbar statique (applyToolbarIcons, editor.js) et le HTML généré
+// des toolbars flottantes (tableau, image).
 const Icons = (function () {
   const WRAP_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
   const WRAP_CLOSE = '</svg>';

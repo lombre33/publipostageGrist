@@ -1,12 +1,7 @@
-// Panneau Réglages (icône roue crantée, index.html #v2-btn-settings) -
-// 3 onglets indépendants : Langue (I18n.setLang, cf. js/i18n.js),
-// Touche de déclenchement (localStorage, lu directement par js/variables.js
-// et js/editor.js - aucune dépendance croisée vers ce module pour une
-// simple lecture), Crédits (contenu statique, aucune logique). Même
-// convention d'ouverture/fermeture que les autres modales
-// (wireLinkRulesModal/wireTemplateGalleryModal, js/main.js) : bascule
-// simple de style.display, pas de fermeture au clic sur le fond (aucune
-// modale existante de ce projet ne le fait non plus).
+// Panneau Réglages - 3 onglets : Langue (I18n.setLang), Touche de
+// déclenchement (localStorage, lu directement par variables.js/editor.js),
+// Crédits (statique). Même convention d'ouverture/fermeture que les autres
+// modales (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const DEFAULT_TRIGGER_CHAR = '#';

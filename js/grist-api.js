@@ -28,12 +28,9 @@ const GristAPI = (function () {
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      // Attention : ne pas ajouter columns:[...] ici sans revalider en Grist
-      // réel. Un ajout de mappage de colonne a déjà coïncidé avec une
-      // régression totale de la résolution des variables #Xxx, très
-      // probablement parce que déclarer des `columns` change la façon dont
-      // Grist peuple `mappings.tableId`, dont dépend toute la détection de
-      // table courante ici.
+      // Ne pas ajouter columns:[...] sans revalider en Grist réel : ça a déjà
+      // cassé toute la résolution #Variable (change mappings.tableId, dont
+      // dépend la détection de table courante).
       grist.ready({ requiredAccess: 'full' });
       console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
@@ -192,12 +189,9 @@ const GristAPI = (function () {
       const tables = await grist.docApi.listTables();
       _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
-      // Un fetchTable par table, en parallèle : la latence totale devient
-      // celle du plus lent des appels, pas leur somme - déterminant puisque
-      // refreshSchema() est appelé à chaque frappe de # par l'utilisateur.
-      // Écrit dans un objet temporaire, remplacé d'un coup à la fin : sinon
-      // toute lecture de getAllVariables()/getColumns() qui tombe pendant les
-      // allers-retours réseau verrait un schéma vidé mais pas encore repeuplé.
+      // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit
+      // dans un objet temporaire, remplacé d'un coup pour éviter un schéma
+      // vidé-mais-pas-repeuplé pendant les allers-retours réseau.
       const nextColumnsByTable = {};
       await Promise.all(_tables.map(async t => {
         try {
@@ -501,19 +495,11 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
-  // Email de l'utilisateur courant (chip intelligent #Variable).
-  //
-  // GET /api/profile/user via le jeton hors-bande de getAccessTokenCached()
-  // renvoie systématiquement "anon@getgrist.com" : ce jeton représente une
-  // identité scopée au document, pas la vraie session navigateur.
-  //
-  // Technique retenue (aucune méthode dédiée dans l'API Plugin officielle) :
-  // une formule déclenchée (pas une formule normale, qui est recalculée pour
-  // tout le monde pareil) sur une colonne réglée sur `user.Email` - Grist
-  // attribue cette valeur à qui a réellement déclenché le calcul, ici la
-  // création d'une ligne via applyUserActions (la vraie session navigateur).
-  // Une ligne est ajoutée dans une table interne dédiée, relue pour
-  // récupérer l'email résolu, puis retirée aussitôt.
+  // Email utilisateur (chip #Variable) : le jeton de getAccessTokenCached()
+  // renvoie toujours "anon@getgrist.com" (identité scopée au document, pas
+  // la session navigateur). Contournement : une formule DÉCLENCHÉE sur
+  // `user.Email`, dans une table interne dédiée, attribue la vraie valeur à
+  // qui déclenche le calcul (ici, une ligne ajoutée puis aussitôt retirée).
   async function ensureUserProbeTable() {
     const tables = await grist.docApi.listTables();
     if (tables.includes(USER_PROBE_TABLE_NAME)) return;

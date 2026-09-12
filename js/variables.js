@@ -1,9 +1,4 @@
-// Variables — badges #Variable + autocomplétion, construites sur
-// @tiptap/suggestion (utilitaire officiel TipTap pour exactement ce cas
-// d'usage : déclencheur + liste + insertion). Une seule instance d'édition,
-// jamais de contenteditable imbriqué, donc pas de détection manuelle de
-// déclencheur/position de curseur à contourner.
-//
+// Variables — badges #Variable + autocomplétion, sur @tiptap/suggestion.
 // Popup : classes CSS #autocomplete-box/.ac-item/.selected (css/style.css),
 // créée dynamiquement ici plutôt que déclarée dans index.html.
 const Variables = (function () {
@@ -189,20 +184,13 @@ const Variables = (function () {
             // littéral capturé une seule fois ici, à la construction de
             // l'éditeur - cf. triggerChar() ci-dessus).
             char: triggerChar(),
-            // GristAPI (const de niveau racine d'un script classique, chargé
-            // avant celui-ci) est visible par simple identifiant nu, comme
-            // Editor/Templates/ReaderMode ailleurs dans le projet - JAMAIS via
-            // window.GristAPI (un `const` classique ne s'attache jamais à
-            // l'objet global, cf. mémoire projet_html_source_tab sur ce même
-            // piège rencontré dans dev-tests/custom-html-export.js).
+            // GristAPI, const racine chargée avant ce script, visible par
+            // identifiant nu - jamais window.GristAPI (ne s'y attache pas).
             items: ({ query }) => computeItems(query),
-            // Async : une variable venant d'une AUTRE table que la table
-            // courante peut nécessiter de configurer (ou de faire configurer
-            // à l'utilisateur, via une modale) une règle de correspondance
-            // avant que l'insertion ne se poursuive (cf. ensureLinkConfigured
-            // plus bas). `range` (position ProseMirror pure, pas liée au
-            // focus DOM) reste valide pendant l'attente : rien d'autre ne
-            // modifie le document entre-temps.
+            // Async : une variable d'une autre table peut exiger de configurer
+            // une règle de correspondance avant insertion (ensureLinkConfigured
+            // plus bas). `range` reste valide pendant l'attente (position
+            // ProseMirror pure, pas liée au focus DOM).
             command: ({ editor, range, props }) => {
               // Chip (note de bas de page / date / heure / email) : jamais de
               // colonne/table à lier, insertion synchrone directe contrairement
@@ -245,17 +233,11 @@ const Variables = (function () {
     });
   }
 
-  // Champ "Nom de fichier PDF" (#pdf-filename-template, cf. index.html) :
-  // un <input> HTML plein texte, jamais géré par TipTap/ProseMirror (aucun
-  // @tiptap/suggestion possible dedans - ce n'est pas un contenteditable).
-  // Réutilise le même acBox/currentItems/selectedIndex que
-  // l'éditeur (jamais actifs en même temps - on ne tape jamais dans les deux
-  // champs à la fois) plutôt que dupliquer tout l'appareil de rendu/position.
-  // `filenameInputState` distingue "la popup vient de ce champ" (par
-  // opposition à l'éditeur) - nécessaire ici puisque `latestCommand` est
-  // partagé : sans lui, confirmer un item déclenché depuis l'éditeur
-  // pourrait par erreur retomber sur la dernière commande posée par ce
-  // champ (ou l'inverse) si un flux d'évènements imprévu les entrelaçait.
+  // Champ "Nom de fichier PDF" : un <input> plein texte, pas de
+  // @tiptap/suggestion possible (pas un contenteditable) - réutilise le même
+  // acBox/currentItems/selectedIndex que l'éditeur (jamais actifs ensemble).
+  // `filenameInputState` distingue l'origine de la popup, car `latestCommand`
+  // est partagé entre les deux champs.
   let filenameInputState = null;
   function checkForFilenameTrigger(el) {
     const caret = el.selectionStart;
@@ -325,14 +307,9 @@ const Variables = (function () {
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }
 
-  // Résolution des variables (mode Lecture) couvre la même table et les
-  // tables liées configurées (règle singleton/correspondance). `format`
-  // (optionnel) = attribut du nœud varBadge, déjà désérialisé par l'appelant.
-  // Si aucun format explicite n'a jamais été choisi et que la colonne est un
-  // type Date/DateTime Grist natif, un préréglage de date par défaut
-  // s'applique quand même - sans ça, une date jamais configurée affichait sa
-  // valeur brute Grist, illisible. Un nombre sans format reste en revanche
-  // `String(val)` brut.
+  // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même
+  // un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans
+  // format reste en revanche `String(val)` brut.
   function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
     if (Array.isArray(val)) return val.join(', ');
@@ -348,12 +325,9 @@ const Variables = (function () {
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
-  // Trouve la ligne/valeur brute référencée par une #Variable (même table,
-  // table liée via règle singleton/correspondance, ou colonne Référence),
-  // avant tout formatage - réutilisable par resolveAttachmentIds (une
-  // colonne Attachments ne doit jamais passer par formatValue/String(val))
-  // sans dupliquer cette logique de recherche de ligne. Retourne { value }
-  // ou { error } (message déjà formaté "[ERREUR: ...]").
+  // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable
+  // par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
+  // Retourne { value } ou { error } (déjà formaté "[ERREUR: ...]").
   async function resolveRawValueWithRule(varTable, varColumn, rule, record) {
     if (rule.mode === 'singleton') {
       const rows = await GristAPI.fetchTableRows(varTable);
@@ -376,12 +350,9 @@ const Variables = (function () {
     if (!record) return { value: null };
     if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
     if (varTable === resolvedTableId) {
-      // Les 3 autres branches lisent via fetchTableRows/fetchRowById (lecture
-      // brute docApi, encodage de liste connu). `record` ici vient de
-      // grist.onRecord (API "widget"), dont l'encodage exact d'une colonne
-      // Attachments n'est pas garanti identique - resolveAttachmentIds passe
-      // `opts.forceRawFetch` pour repasser par fetchRowById, sans incidence
-      // sur resolveVariable qui n'active jamais cette option.
+      // `record` vient de grist.onRecord, encodage Attachments non garanti
+      // identique à fetchRowById - resolveAttachmentIds force `forceRawFetch`
+      // pour repasser par ce dernier ; resolveVariable n'active jamais l'option.
       if (opts && opts.forceRawFetch && record.id != null) {
         try {
           const row = await GristAPI.fetchRowById(varTable, record.id);
@@ -412,14 +383,9 @@ const Variables = (function () {
     }
   }
 
-  // Extrait les identifiants de pièce jointe d'une colonne Attachments
-  // référencée par #Variable - la valeur brute d'une cellule Attachments est
-  // une liste encodée façon Grist (['L', id1, id2, ...]), que
-  // resolveVariable/formatValue transformerait au mieux en texte "L, 5",
-  // jamais une image. Réutilise resolveRawValue (même recherche de ligne que
-  // le texte) plutôt que formatValue, puis aplatit récursivement le résultat
-  // pour n'en garder que les nombres - le marqueur 'L' et toute imbrication
-  // disparaissent naturellement.
+  // Une cellule Attachments encode sa liste façon Grist (['L', id1, id2]) ;
+  // aplatit récursivement pour n'en garder que les nombres, le marqueur 'L'
+  // et toute imbrication disparaissent naturellement.
   function flattenToNumbers(value) {
     if (value == null) return [];
     if (Array.isArray(value)) return value.flatMap(flattenToNumbers);
@@ -461,12 +427,9 @@ const Variables = (function () {
     const source = rule.colonneSource === 'id' ? rowIdLabel : rule.colonneSource;
     return `${cible} = ${source}`;
   }
-  // Appelée avant toute insertion de variable (cf. le `command` de
-  // createExtension ci-dessus) : si la variable vient d'une AUTRE table que
-  // la table courante et qu'aucune règle n'existe encore pour cette table,
-  // ouvre la modale de configuration et enregistre la règle choisie AVANT
-  // que l'insertion ne se poursuive. Retourne false si l'utilisateur annule
-  // (rien n'est alors inséré).
+  // Si la variable vient d'une autre table sans règle encore configurée,
+  // ouvre la modale et enregistre la règle avant l'insertion. Retourne false
+  // si l'utilisateur annule (rien n'est alors inséré).
   async function ensureLinkConfigured(item) {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!currentTableId || item.table === currentTableId) return true;
@@ -477,12 +440,9 @@ const Variables = (function () {
     refreshLinkRulesPanel();
     return true;
   }
-  // Modale de configuration d'une règle de correspondance, partagée par
-  // l'insertion (existingRule=null, pré-remplie par auto-détection si une
-  // seule colonne Référence candidate existe, sens direct OU inverse) et le
-  // panneau de gestion (existingRule fourni, pour modifier une règle déjà
-  // enregistrée). Résout avec {mode, colonneCible, colonneSource} ou null si
-  // annulé.
+  // Partagée par l'insertion (existingRule=null, auto-détectée si une seule
+  // colonne Référence candidate existe) et le panneau de gestion (règle
+  // existante à modifier). Résout {mode, colonneCible, colonneSource} ou null.
   async function showLinkConfigModal(targetTable, currentTableId, existingRule) {
     const modal = document.getElementById('link-config-modal');
     if (!modal) return null;

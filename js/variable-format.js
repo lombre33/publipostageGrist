@@ -28,15 +28,10 @@ const VariableFormat = (function () {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en-US' : 'fr-FR';
   }
 
-  // Une colonne Date/DateTime Grist arrive ici soit en timestamp Unix en
-  // secondes (nombre), soit en chaîne déjà formatée (ex. "2026-09-12", via
-  // grist.onRecord) - une chaîne est confiée telle quelle au constructeur
-  // Date natif, jamais parseFloat/multipliée par 1000 (parseFloat("2026-09-12")
-  // ne lit que "2026", confondu avec un timestamp Unix - symptôme "1/1/1970" constaté).
-  // Chaque composant est lu en UTC partout dans ce fichier, jamais en heure
-  // locale : une colonne Date pure est ancrée à minuit UTC pour son jour
-  // civil, la lire en heure locale ferait dériver d'un jour entier pour tout
-  // fuseau à l'ouest de l'UTC.
+  // Arrive en timestamp Unix (secondes) ou en chaîne déjà formatée - une
+  // chaîne va telle quelle au constructeur Date, jamais parseFloat*1000
+  // (confondrait "2026-09-12" avec un timestamp). Lu en UTC partout dans ce
+  // fichier : une colonne Date pure est ancrée à minuit UTC pour son jour civil.
   function gristDateToJsDate(val) {
     if (val == null || val === '') return null;
     if (typeof val === 'number') return Number.isFinite(val) ? new Date(val * 1000) : null;
@@ -89,12 +84,8 @@ const VariableFormat = (function () {
       const d = String(date.getUTCDate()).padStart(2, '0');
       parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: d }];
     } else if (preset.shortNoPad) {
-      // Construit à la main plutôt que via Intl.DateTimeFormat : la locale
-      // fr-FR zéro-remplit jour/mois même avec `numeric` (vérifié - aucune
-      // option Intl ne produit "12/9/26" non complété), ce préréglage existe
-      // justement pour s'en distinguer de dmy_slash_full. Ordre ET locale
-      // suivent I18n.getLang() comme le reste de ce fichier - jour/mois
-      // d'abord en français, mois/jour d'abord en anglais (convention US).
+      // Construit à la main : Intl fr-FR zéro-remplit toujours jour/mois,
+      // même avec `numeric` - ce préréglage existe pour s'en distinguer.
       const day = String(date.getUTCDate());
       const month = String(date.getUTCMonth() + 1);
       const year = String(date.getUTCFullYear()).slice(-2);

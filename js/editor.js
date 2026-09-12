@@ -1087,39 +1087,18 @@ const Editor = (function () {
     });
   }
 
-  // En mode Aperçu A4, un tableau ne doit jamais dépasser la largeur de
-  // page réelle : un <col> à largeur EXPLICITE n'a, contrairement à
-  // min-width, aucun plafond naturel - une colonne trop agrandie pousse le
-  // reste du tableau hors de la feuille. L'extension de redimensionnement
-  // n'expose pas de crochet pendant le glisser ; ce correctif tourne donc
-  // sur chaque mise à jour et rétrécit après coup les colonnes
-  // explicitement redimensionnées (`colwidth` réel, jamais les colonnes
-  // "auto" - déjà couvertes par `min-width: 0`) dès que la largeur totale
-  // dépasse le conteneur - un léger rebond après avoir relâché la poignée,
-  // mais le tableau ne peut jamais rester plus large que la page.
-  // Largeur disponible pour un enfant direct de `.tiptap` : son clientWidth
-  // inclut SON PROPRE padding (simule la marge de page en Aperçu A4), non
-  // disponible à un enfant. Partagé entre clampOverflowingTables et
-  // l'alignement des images en calque (même calcul).
+  // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ;
+  // partagé entre clampOverflowingTables et l'alignement des images en calque.
   function editorContentWidthPx(currentEditor) {
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
     return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
   }
 
-  // Tant qu'UNE SEULE colonne d'un tableau reste "auto" (pas de `colwidth`
-  // propre), `<table>` ne porte qu'un `min-width` - `.tiptap table {
-  // width: 100% }` s'applique donc toujours tel quel : agrandir une colonne
-  // ne fait que voler de la place aux colonnes "auto" voisines, et la
-  // poignée extérieure droite (sans colonne voisine à qui prendre de la
-  // place) ne peut jamais faire grandir le tableau du tout. Dès que TOUTES
-  // les colonnes ont un `colwidth` explicite, `<table>` porte un `width`
-  // exact qui l'affranchit du `width:100%` (peut alors dépasser 100%,
-  // jusqu'à ce que clampOverflowingTables le retienne). Fixé en gelant, dès
-  // le premier redimensionnement d'une colonne, la largeur RENDUE actuelle
-  // de chaque colonne encore "auto" du même tableau comme son propre
-  // `colwidth` - clampOverflowingTables rattrape ensuite un éventuel
-  // dépassement.
+  // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde
+  // `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ;
+  // on gèle donc la largeur rendue de chaque colonne "auto" dès le premier
+  // redimensionnement, pour libérer le `width` exact du tableau.
   function backfillAutoColumnWidths(currentEditor) {
     const { state, view } = currentEditor;
     let tr = null;
@@ -1148,6 +1127,9 @@ const Editor = (function () {
   }
 
   const DEFAULT_COL_PX = 25;
+  // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à
+  // min-width) : rétrécit après coup les colonnes redimensionnées quand le
+  // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
   function clampOverflowingTables(currentEditor) {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
@@ -1251,15 +1233,9 @@ const Editor = (function () {
     openDropdownPanel = null;
   });
 
-  // Menu déroulant de couleur générique (grille de nuances + case
-  // "personnalisé" ouvrant le sélecteur natif + case "aucune", optionnelle) -
-  // même esprit que la toolbar de tableau/image (createFloatingPanel), pour
-  // le bouton de police/surlignage de la toolbar principale ET le bouton de
-  // fond de cellule de la toolbar de tableau. `onPick(chain, color)`/
-  // `onNone(chain)` reçoivent une chaîne TipTap déjà focus+sélection
-  // restaurée (cf. `withSavedSelection` de chaque appelant) - à eux
-  // d'appeler la commande adéquate dessus, sans jamais lancer .run() (fait
-  // par l'appelant, une seule fois).
+  // Grille de nuances + case "personnalisé"/"aucune", partagée entre police,
+  // surlignage et fond de cellule. `onPick`/`onNone` reçoivent une chaîne déjà
+  // focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes.
   function createColorDropdown(presets, { noneLabel, onPick, onNone, withSavedSelection }) {
     const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
     const html = '<div class="v2-color-grid">' + swatches + '</div>'
@@ -1575,19 +1551,12 @@ const Editor = (function () {
       setLockedBtn('layer-behind', !!hfMode);
     }
 
-    // Retour visuel de sélection (classe .editor-image-selected) recalculé
-    // ICI à chaque passage plutôt que de dépendre de selectNode/deselectNode
-    // de la NodeView (constaté peu fiable après un setNodeMarkup - cf.
-    // commentaire dans updateAttrs) : on efface d'abord toute classe
-    // résiduelle, puis on ne la repose que sur l'image RÉELLEMENT
-    // sélectionnée. Source de vérité unique, correcte même si une NodeView a
-    // été recréée entre-temps.
+    // Sélection visuelle recalculée ici (pas via selectNode/deselectNode,
+    // peu fiable après un setNodeMarkup) : source de vérité unique.
     floatingContextPanels.push(panel);
     const check = () => {
-      // Cf. commentaire équivalent dans wireTableFloatingToolbar - un blur
-      // réel (clic hors de l'éditeur) ne change pas la sélection ProseMirror
-      // à lui seul, donc sans cette garde une 'transaction' qui suit peut
-      // rouvrir le panneau juste après sa fermeture.
+      // Un blur réel ne change pas seul la sélection ProseMirror - sans
+      // cette garde, une 'transaction' suivante rouvrirait le panneau.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
@@ -1602,15 +1571,9 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Barre flottante de formatage nombre/date d'une bulle #Variable, sur le
-  // même modèle que celle de l'image (createFloatingPanel, sélection réelle
-  // du nœud - cf. commentaire de selectedImageNode ci-dessus sur le piège
-  // instanceof/duck-typing, même prudence ici). Le TYPE de colonne Grist
-  // (GristAPI.getColumnType) détermine lequel des 2 sous-panneaux (nombre/
-  // date) s'affiche - une colonne Texte/Référence n'a rien à formater, la
-  // barre reste cachée. Rien n'est stocké sur le nœud tant que l'utilisateur
-  // n'a rien choisi (`format: null` par défaut, cf. createVarBadgeNode) :
-  // formatValue() garde alors son comportement historique (String(val) brut).
+  // Barre flottante de formatage nombre/date d'une bulle #Variable (même
+  // modèle que l'image). Le type de colonne Grist choisit le sous-panneau
+  // affiché ; une colonne Texte/Référence n'a rien à formater, barre cachée.
   function wireVariableFloatingToolbar() {
     const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
@@ -1937,19 +1900,9 @@ const Editor = (function () {
   let paginationEdgeTopEl = null;
   let paginationEdgeBottomEl = null;
   let paginationRecomputeTimer = null;
-  // Réserve un vrai espace vide sous le dernier bloc d'une page (cf.
-  // renderPaginationOverlay) via une FEUILLE DE STYLE dédiée (règles
-  // `:nth-child`), PAS un style inline posé directement sur le bloc : un
-  // style inline sur un nœud géré par ProseMirror s'est avéré silencieusement
-  // ANNULÉ peu après (constaté en conditions réelles - présent juste après
-  // l'appel, disparu à la vérification suivante) - ProseMirror surveille les
-  // mutations DOM sur les nœuds qu'il gère et "répare" tout ce qu'il n'a pas
-  // lui-même produit via une transaction, y compris un simple attribut style
-  // (même famille de piège que project_quill_mutation_observer, qui ne
-  // concernait jusqu'ici que des enfants DOM ajoutés à la main). Une feuille
-  // de style EXTERNE ciblant les blocs par POSITION (`:nth-child`) ne modifie
-  // en revanche RIEN sur les nœuds eux-mêmes (ni attribut, ni enfant) - hors
-  // de portée de cette surveillance, donc jamais annulée.
+  // Feuille de style dédiée (règles `:nth-child`), pas un style inline : un
+  // style posé directement sur un nœud ProseMirror est silencieusement annulé
+  // (ProseMirror répare toute mutation DOM qu'il n'a pas produite lui-même).
   let paginationMarginStyleEl = null;
   function ensurePaginationMarginStyle() {
     if (!paginationMarginStyleEl) {
@@ -2047,15 +2000,9 @@ const Editor = (function () {
     const tiptapWidth = tiptapEl.getBoundingClientRect().width;
     const tiptapRect = tiptapEl.getBoundingClientRect();
 
-    // Limites intermédiaires : une bande par frontière entre 2 pages, toujours
-    // affichée dès que le document dépasse une page même sans en-tête/pied
-    // configuré (repère "— Page N —" par défaut).
-    //
-    // L'espace est réservé sous `afterEl` via une règle CSS `:nth-child` dans
-    // une feuille dédiée, pas un style inline sur `afterEl` : ProseMirror
-    // annule silencieusement toute mutation DOM (y compris un simple style)
-    // qu'il n'a pas produite lui-même via une transaction ; une règle CSS
-    // externe ciblant par position échappe à cette surveillance.
+    // Une bande par frontière entre 2 pages (repère "— Page N —" par défaut
+    // sans en-tête/pied) ; espace réservé via `:nth-child` externe, pas un
+    // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
     const marginRules = [];
     const tiptapChildren = Array.from(tiptapEl.children);
     breaks.forEach((brk, i) => {
@@ -2161,12 +2108,7 @@ const Editor = (function () {
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
-    // En mode en-tête/pied : grise tableau/2-colonnes/saut de page/sommaire/
-    // numérotation (aucun sens dans ce contexte) - seuls les boutons sont
-    // bloqués, le schéma ProseMirror reste unique et partagé. Image non
-    // verrouillée : au flux normal elle s'exporte très bien dans un en-tête/
-    // pied, seul le calque devant/derrière reste bloqué (pas de pagination
-    // à l'intérieur d'un en-tête/pied).
+    // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque devant/derrière est bloqué plus bas.
     const inHfMode = !!hfMode;
     const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
     setLocked('v2-btn-table', inHfMode);
