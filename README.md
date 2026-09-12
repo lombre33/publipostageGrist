@@ -87,10 +87,11 @@ lui-même (Règles d'accès), pas dans la configuration du widget**, qui ne l'ex
 
 **Dépendances externes** : le widget charge des bibliothèques JavaScript tierces à l'exécution
 depuis deux CDN publics (`esm.sh` pour le moteur d'édition TipTap/ProseMirror, `cdnjs.cloudflare.com`
-pour la génération de PDF — détail complet ci-dessous) — voir
+pour la génération de PDF — détail complet ci-dessous). Les bibliothèques `cdnjs` sont protégées par
+une intégrité SRI (le navigateur refuse d'exécuter un fichier altéré) ; ce n'est techniquement pas
+possible pour l'import map `esm.sh` (limitation des imports ES) — voir
 [`AUDIT_CODE_V2.md`](AUDIT_CODE_V2.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque)
-pour l'analyse détaillée de ce point et les pistes de réduction du risque associé (intégrité SRI,
-auto-hébergement).
+pour l'analyse détaillée de ce point et la piste restante (auto-hébergement).
 
 **Aucune donnée n'est stockée hors de Grist** : les seules données conservées côté navigateur
 (`localStorage`) sont des préférences d'interface (langue, touche de déclenchement) — aucune donnée
