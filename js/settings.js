@@ -1,9 +1,9 @@
-// Panneau Réglages V2 (icône roue crantée, index.html #v2-btn-settings) -
+// Panneau Réglages (icône roue crantée, index.html #v2-btn-settings) -
 // 3 onglets indépendants : Langue (I18n.setLang, cf. js/i18n.js),
 // Touche de déclenchement (localStorage, lu directement par js/variables.js
-// et js/editor.js - AUCUNE dépendance croisée vers ce module pour une
-// simple lecture, cf. mémoire projet), Crédits (contenu statique, aucune
-// logique). Même convention d'ouverture/fermeture que les autres modales V2
+// et js/editor.js - aucune dépendance croisée vers ce module pour une
+// simple lecture), Crédits (contenu statique, aucune logique). Même
+// convention d'ouverture/fermeture que les autres modales
 // (wireLinkRulesModal/wireTemplateGalleryModal, js/main.js) : bascule
 // simple de style.display, pas de fermeture au clic sur le fond (aucune
 // modale existante de ce projet ne le fait non plus).

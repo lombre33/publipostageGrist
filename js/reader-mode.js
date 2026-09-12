@@ -2,27 +2,22 @@
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
   // Format nombre/date choisi via la barre flottante d'une bulle #Variable
-  // (v2 uniquement, cf. js/editor.js:wireVariableFloatingToolbar) -
-  // sérialisé en JSON dans data-format par le nœud varBadge
-  // (js/editor.js:createVarBadgeNode). Transmis en 5e argument à
-  // Variables.resolveVariable, qui l'ignore silencieusement côté V1 (sa
-  // propre resolveVariable ne déclare que 4 paramètres) - un seul point de
-  // lecture ici, partagé par render()/preview() ci-dessous, qui alimentent
-  // respectivement le mode Lecture et l'export PDF (PdfExport ne voit jamais
-  // les bulles brutes, preview() les a déjà toutes résolues avant).
+  // (cf. js/editor.js:wireVariableFloatingToolbar), sérialisé en JSON dans
+  // data-format par le nœud varBadge. Transmis en 5e argument à
+  // Variables.resolveVariable ; un seul point de lecture ici, partagé par
+  // render()/preview() ci-dessous, qui alimentent respectivement le mode
+  // Lecture et l'export PDF (PdfExport ne voit jamais les bulles brutes,
+  // preview() les a déjà toutes résolues avant).
   function parseBadgeFormat(badge) {
     const raw = badge.getAttribute('data-format');
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
-  // === Aperçu paginé réel - mode Lecture (incrément 2.4) ===
-  // Même principe que js/editor.js:renderPaginationOverlay (incrément
-  // 2.3), dupliqué plutôt qu'importé - ce fichier est partagé V1/V2, sans
-  // mécanisme de module avec js/editor.js/pdf-export.js (même tolérance à
-  // la duplication que le reste de ce projet pour ce genre de petites
-  // constantes/fonctions, cf. la numérotation des titres). Plus simple ici :
-  // contenu statique déjà résolu (vrai enregistrement Grist), pas de
-  // débounce nécessaire - calculé une seule fois par rendu.
+  // === Aperçu paginé réel - mode Lecture ===
+  // Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt
+  // qu'importé (pas de mécanisme de module entre scripts classiques - même
+  // tolérance à la duplication que la numérotation des titres). Plus simple
+  // ici : contenu statique déjà résolu, pas de débounce nécessaire.
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .reader-content en Aperçu A4 (css/editor-v2.css)
@@ -266,11 +261,8 @@ const ReaderMode = (function () {
   // width×height reste celle configurée dans l'éditeur - jamais déformée,
   // jamais rognée. Retire le nœud entièrement si la ligne courante n'a
   // aucune pièce jointe dans cette colonne (pas de placeholder dans le rendu
-  // final, qui n'a de sens que côté édition). `Variables.resolveAttachmentIds`
-  // n'existe que côté V2 (même garde que resolveBadgeNode ci-dessous, pour la
-  // compatibilité V1 qui n'a pas ce nœud).
+  // final, qui n'a de sens que côté édition).
   async function resolveVariableImages(wrapper, tableId, record) {
-    if (typeof Variables.resolveAttachmentIds !== 'function') return;
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]'));
     await Promise.all(nodes.map(async img => {
       const table = img.getAttribute('data-var-table');
@@ -332,24 +324,19 @@ const ReaderMode = (function () {
   }
   // Résout un badge #Variable en noeud DOM à insérer à sa place - texte
   // (comportement historique) OU une ou plusieurs <img> si la colonne
-  // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds,
-  // js/variables.js) : une colonne PJ contenant une image (logo
-  // partenaire, etc.) affichait jusqu'ici la valeur de cellule brute passée
-  // telle quelle dans formatValue (un texte du genre "L, 5", jamais l'image)
-  // aussi bien en aperçu qu'à l'export PDF - signalé par l'utilisateur.
-  // `Variables.resolveAttachmentIds` n'existe que côté V2 (js/variables.js) :
-  // ce fichier est partagé avec la V1 (js/variables.js, non modifié), d'où
-  // la vérification `typeof ... === 'function'` avant d'emprunter ce chemin -
-  // la V1 retombe sur le comportement texte historique, inchangé. Les <img>
-  // produites réutilisent exactement les classes/attributs déjà lus par
-  // GristAPI.hydrateAttachmentImages (img.editor-image[data-source="attachment"]
-  // [data-attachment-id]), déjà appelé juste après par preview()/render() -
-  // aucun nouveau code de résolution d'URL de pièce jointe à écrire ici.
+  // référencée est de type Grist Attachments (cf. Variables.resolveAttachmentIds) :
+  // une colonne PJ contenant une image affichait jusqu'ici la valeur de
+  // cellule brute passée telle quelle dans formatValue (un texte du genre
+  // "L, 5", jamais l'image) aussi bien en aperçu qu'à l'export PDF - signalé
+  // par l'utilisateur. Les <img> produites réutilisent exactement les
+  // classes/attributs déjà lus par GristAPI.hydrateAttachmentImages
+  // (img.editor-image[data-source="attachment"][data-attachment-id]), déjà
+  // appelé juste après par preview()/render() - aucun nouveau code de
+  // résolution d'URL de pièce jointe à écrire ici.
   async function resolveBadgeNode(badge, tableId, record, format) {
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
-    const isAttachments = typeof Variables.resolveAttachmentIds === 'function'
-      && GristAPI.getColumnType(table, column) === 'Attachments';
+    const isAttachments = GristAPI.getColumnType(table, column) === 'Attachments';
     if (isAttachments) {
       let ids = [];
       try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
@@ -419,9 +406,8 @@ const ReaderMode = (function () {
     if (!filenameTemplate) return 'publipostage';
     const allVars = GristAPI.getAllVariables();
     const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
-    // Touche de déclenchement configurable (V2 uniquement, cf. js/settings.js) -
-    // lue directement en localStorage, jamais posée par la V1 (qui n'a pas
-    // ce réglage) donc toujours '#' pour elle, comportement inchangé.
+    // Touche de déclenchement configurable (cf. js/settings.js), lue
+    // directement en localStorage.
     let triggerChar = '#';
     try { const v = localStorage.getItem('pp_trigger_char'); if (v && v.length === 1) triggerChar = v; } catch (e) { /* repli '#' */ }
     const matches = [];

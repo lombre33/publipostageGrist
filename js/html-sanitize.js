@@ -8,8 +8,7 @@
 // ne charge, aucun script ne s'exécute pendant le parsing lui-même), sans
 // toucher au reste de la mise en forme.
 //
-// Partagé V1/V2 (comme js/reader-mode.js, qui en dépend) : toute page qui
-// charge reader-mode.js doit charger ce fichier AVANT.
+// Toute page qui charge js/reader-mode.js doit charger ce fichier avant.
 const HtmlSanitize = (function () {
   function clean(html) {
     if (!html) return html || '';

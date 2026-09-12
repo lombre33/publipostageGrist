@@ -1,10 +1,8 @@
-// Orchestration V2 — même structure que js/main.js (V1), volontairement
-// simplifiée pour cet incrément agile : gestion de modèles + mode Édition/
-// Lecture + export PDF (vectoriel uniquement, cf. js/pdf-export.js) +
-// câblage Grist (variables/tableaux/2 colonnes/images/sommaire sont gérés
-// dans js/editor.js, pas ici) + modale "Tables liées" (règles de
-// correspondance inter-tables, cf. wireLinkRulesModal/js/variables.js).
-// `Editor.init()` est ASYNC ici (contrairement à V1) - js/editor.js
+// Orchestration : gestion de modèles + mode Édition/Lecture + export PDF
+// (vectoriel uniquement, cf. js/pdf-export.js) + câblage Grist (variables/
+// tableaux/2 colonnes/images/sommaire sont gérés dans js/editor.js, pas ici)
+// + modale "Tables liées" (règles de correspondance inter-tables, cf.
+// wireLinkRulesModal/js/variables.js). `Editor.init()` est async : js/editor.js
 // charge TipTap/ProseMirror via import() dynamique au moment de l'appel.
 (function () {
   let currentMode = 'edit';
@@ -330,10 +328,9 @@
     // largeur réelle d'une page PDF (cf. commentaire CSS) ne marchait
     // jamais en mode Lecture, quel que soit l'état de la case - signalé
     // cassé par l'utilisateur.
-    // .checked sur le <label> lui-même (classe partagée .a4-toggle, cf.
-    // css/style.css - même mécanisme que la V1) : fait rester l'icône en
-    // accent/bleu tant que la case est cochée, plutôt qu'un simple texte de
-    // case à cocher (demandé par l'utilisateur).
+    // .checked sur le <label> lui-même (classe .a4-toggle, cf. css/style.css)
+    // fait rester l'icône en accent/bleu tant que la case est cochée, plutôt
+    // qu'un simple texte de case à cocher (demandé par l'utilisateur).
     const label = toggle.closest('.a4-toggle');
     const sync = () => {
       editorContainer.classList.toggle('a4-preview', toggle.checked);
@@ -378,9 +375,8 @@
     syncActiveRow();
   }
 
-  // "Tables liées" (js/variables.js) : modale séparée plutôt que le volet
-  // repliable de la V1 (#toolbar-panel) - v2 n'a pas ce volet du tout, une
-  // modale évite d'avoir à en introduire un pour ce seul besoin. Rafraîchit
+  // "Tables liées" (js/variables.js) : modale séparée, pas de volet repliable
+  // pour ce seul besoin. Rafraîchit
   // la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via
   // l'insertion d'une variable).
   function wireLinkRulesModal() {

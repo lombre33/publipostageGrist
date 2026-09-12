@@ -1,11 +1,7 @@
-// Icônes de la toolbar V2 — SVG "trait" (viewBox 24x24, stroke=currentColor,
-// stroke-width=2, fill=none), même esprit que le svgIcon() de la V1
-// (js/editor.js) : aucune dépendance externe, cohérent avec l'absence de
-// bundler dans cet environnement (index.html charge tout en ESM natif via
-// importmap). Les tracés déjà dessinés en V1 (undo/redo/table/2-colonnes/
-// saut de page/image/sommaire, + les 6 icônes de la toolbar de tableau
-// contextuelle) sont repris tels quels ; les autres sont nouveaux, dans le
-// même style.
+// Icônes de la toolbar — SVG "trait" (viewBox 24x24, stroke=currentColor,
+// stroke-width=2, fill=none) : aucune dépendance externe, cohérent avec
+// l'absence de bundler dans cet environnement (index.html charge tout en
+// ESM natif via importmap).
 // Source de vérité UNIQUE : utilisé à la fois pour injecter les icônes de la
 // toolbar statique (boutons déjà présents dans index.html, cf.
 // applyToolbarIcons dans editor.js) et pour construire en JS le contenu des

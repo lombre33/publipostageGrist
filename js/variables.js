@@ -1,17 +1,11 @@
-// Variables V2 — badges #Variable + autocomplétion, construites sur
+// Variables — badges #Variable + autocomplétion, construites sur
 // @tiptap/suggestion (utilitaire officiel TipTap pour exactement ce cas
-// d'usage : déclencheur + liste + insertion). Remplace l'éditeur V1
-// (js/variables.js) qui devait contourner à la main la détection du
-// déclencheur ET la position du curseur, notamment à cause du piège des
-// contenteditable imbriqués (cf. mémoire projet_nested_contenteditable_event_target_trap) -
-// piège qui ne se pose PLUS ici puisqu'il n'y a plus qu'une seule instance
-// d'édition, jamais de contenteditable imbriqué (cf. plan de migration V2).
+// d'usage : déclencheur + liste + insertion). Une seule instance d'édition,
+// jamais de contenteditable imbriqué, donc pas de détection manuelle de
+// déclencheur/position de curseur à contourner.
 //
-// Popup réutilisée telle quelle de la V1 : mêmes classes CSS
-// (#autocomplete-box/.ac-item/.selected, déjà stylées dans css/style.css,
-// partagé sans changement) - créée dynamiquement ici plutôt que déclarée
-// dans index.html, pour ne rien avoir à changer côté HTML pour cet
-// incrément.
+// Popup : classes CSS #autocomplete-box/.ac-item/.selected (css/style.css),
+// créée dynamiquement ici plutôt que déclarée dans index.html.
 const Variables = (function () {
   // Touche de déclenchement configurable (panneau Réglages > Touche de
   // déclenchement, js/settings.js) - lue directement depuis localStorage
@@ -143,9 +137,7 @@ const Variables = (function () {
   }
 
   // Un survol à la souris met aussi à jour la sélection (pas seulement les
-  // flèches du clavier) - cf. le bug corrigé cette même session dans
-  // l'éditeur V1 (feedback : le survol donnait l'impression trompeuse d'une
-  // sélection sans que Entrée ne suive réellement l'item survolé).
+  // flèches du clavier), pour qu'Entrée suive réellement l'item survolé.
   function render(items, onPick) {
     ensureBox();
     ['variables', 'chips'].forEach(t => { const el = currentTabEl(t); if (el) el.classList.toggle('active', t === activeTab); });
@@ -238,12 +230,10 @@ const Variables = (function () {
             // Async : une variable venant d'une AUTRE table que la table
             // courante peut nécessiter de configurer (ou de faire configurer
             // à l'utilisateur, via une modale) une règle de correspondance
-            // AVANT que l'insertion ne se poursuive (cf. ensureLinkConfigured
-            // plus bas, porté tel quel de la V1 - js/variables.js). `range`
-            // (position ProseMirror pure, pas liée au focus DOM) reste valide
-            // pendant l'attente : rien d'autre ne modifie le document entre
-            // temps, exactement comme en V1 (confirmSelection y capture aussi
-            // `range` avant d'attendre la modale).
+            // avant que l'insertion ne se poursuive (cf. ensureLinkConfigured
+            // plus bas). `range` (position ProseMirror pure, pas liée au
+            // focus DOM) reste valide pendant l'attente : rien d'autre ne
+            // modifie le document entre-temps.
             command: ({ editor, range, props }) => {
               // Chip (note de bas de page / date / heure / email) : jamais de
               // colonne/table à lier, aucun besoin d'ensureLinkConfigured -
@@ -303,10 +293,8 @@ const Variables = (function () {
 
   // Champ "Nom de fichier PDF" (#pdf-filename-template, cf. index.html) :
   // un <input> HTML plein texte, jamais géré par TipTap/ProseMirror (aucun
-  // @tiptap/suggestion possible dedans - ce n'est pas un contenteditable) -
-  // porté quasi tel quel de la V1 (js/variables.js:checkForFilenameTrigger/
-  // insertFilenameVariable/initFilenameInput), qui affrontait déjà exactement
-  // ce même problème. Réutilise le MÊME acBox/currentItems/selectedIndex que
+  // @tiptap/suggestion possible dedans - ce n'est pas un contenteditable).
+  // Réutilise le même acBox/currentItems/selectedIndex que
   // l'éditeur (jamais actifs en même temps - on ne tape jamais dans les deux
   // champs à la fois) plutôt que dupliquer tout l'appareil de rendu/position.
   // `filenameInputState` distingue "la popup vient de ce champ" (par
@@ -346,10 +334,9 @@ const Variables = (function () {
     ensureBox().style.display = 'flex';
   }
   // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut
-  // "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ,
-  // logique partagée avec la V1) - insérer directement "#Cle" en texte,
-  // sans badge (un <input> ne peut de toute façon pas contenir de HTML), est
-  // donc suffisant et cohérent avec ce mécanisme déjà en place.
+  // "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ) -
+  // insérer directement "#Cle" en texte, sans badge (un <input> ne peut de
+  // toute façon pas contenir de HTML), est donc suffisant.
   function insertFilenameVariable(item) {
     const state = filenameInputState;
     if (!state) return;
@@ -383,20 +370,15 @@ const Variables = (function () {
     });
     // Un clic sur un item de la popup (mousedown, déjà en preventDefault()
     // dans render() ci-dessus) s'exécute avant le blur du champ - ce filet de
-    // sécurité (délai court) couvre les cas où le focus partirait quand même
-    // (ex. Échap ailleurs), même prudence que la V1.
+    // sécurité (délai court) couvre les cas où le focus partirait quand même (ex. Échap ailleurs).
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }
 
-  // Résolution des variables (mode Lecture, cf. ../js/reader-mode.js réutilisé
-  // tel quel - il appelle Variables.resolveVariable(varTable, varColumn,
-  // currentTableId, record), qui doit donc exister ici aussi). Portée telle
-  // quelle depuis l'éditeur V1 (js/variables.js) - logique de résolution pure
-  // (aucune dépendance à Quill/au DOM de l'éditeur), inchangée par la
-  // migration. Couvre la même table (accès direct) et les tables liées
-  // configurées (règle singleton/correspondance, cf. GristAPI.getLinkRule) -
-  // y compris leur CONFIGURATION à l'insertion, cf. ensureLinkConfigured/
-  // showLinkConfigModal plus bas (portées de la V1 juste après ce bloc).
+  // Résolution des variables (mode Lecture, cf. js/reader-mode.js qui appelle
+  // Variables.resolveVariable(varTable, varColumn, currentTableId, record)).
+  // Couvre la même table (accès direct) et les tables liées configurées
+  // (règle singleton/correspondance, cf. GristAPI.getLinkRule) - y compris
+  // leur configuration à l'insertion, cf. ensureLinkConfigured/showLinkConfigModal plus bas.
   // `format` (optionnel) = attribut `format` du nœud varBadge (cf.
   // js/editor.js:createVarBadgeNode), déjà désérialisé par l'appelant
   // (ReaderMode, cf. js/reader-mode.js:parseBadgeFormat) - { type:'number',
@@ -539,17 +521,12 @@ const Variables = (function () {
   }
 
   // --- Configuration des correspondances entre tables (à l'insertion +
-  // panneau de gestion) - porté quasi tel quel de la V1 (js/variables.js) :
-  // logique pure DOM/GristAPI, aucune dépendance à Quill ni à TipTap, donc
-  // réutilisable sans changement d'engin. Seule différence : la V1 range ce
-  // panneau dans un volet repliable dédié (#toolbar-panel/#btn-toggle-panel) ;
-  // ici, une modale séparée (#link-rules-modal, cf. index.html) plutôt que
-  // d'introduire tout un système de volet repliable pour ce seul besoin.
+  // panneau de gestion), dans une modale séparée (#link-rules-modal, cf.
+  // index.html) plutôt qu'un volet repliable dédié pour ce seul besoin.
 
   // Signale dans le libellé qu'une colonne est une Référence (et vers quelle
   // table) - sans ça, rien dans la modale n'indique qu'une colonne stocke en
-  // réalité un identifiant de ligne plutôt qu'un texte (piège déjà rencontré
-  // en V1, cf. mémoire project_cross_table_variable_links).
+  // réalité un identifiant de ligne plutôt qu'un texte.
   function describeColumnOption(tableId, colId) {
     const type = GristAPI.getColumnType(tableId, colId);
     if (type && type.indexOf('Ref:') === 0) return I18n.t('linkConfig.reference', { col: colId, table: type.slice(4) });

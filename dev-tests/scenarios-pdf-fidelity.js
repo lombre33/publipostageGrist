@@ -1,8 +1,7 @@
-// Suite "pdfFidelity" - vérifie des PROPRIÉTÉS PDFMAKE PRÉCISES (pas
+// Suite "pdfFidelity" - vérifie des propriétés pdfmake précises (pas
 // seulement "ça exporte sans planter") : gras/italique/souligné/barré,
 // taille de police, alignement, largeurs de colonnes de tableau/2-colonnes,
-// position d'une image en calque. Même esprit que dev-tests/formatting-
-// fidelity.js (V1), adapté à js/pdf-export.js.
+// position d'une image en calque.
 (function () {
   const cases = [];
 

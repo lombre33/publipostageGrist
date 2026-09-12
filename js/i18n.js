@@ -1,5 +1,5 @@
-// Traduction FR/EN de l'interface V2 (panneau Réglages > Langue) - IIFE
-// classique, chargée en tout premier parmi les scripts V2 (avant
+// Traduction FR/EN de l'interface (panneau Réglages > Langue) - IIFE
+// classique, chargée en tout premier (avant
 // variable-format.js/variables.js/editor.js/main.js/settings.js) pour que
 // ceux-ci puissent lire I18n.getLang()/I18n.t() comme un global nu déjà
 // prêt, même schéma de dépendance implicite par ordre de <script> que

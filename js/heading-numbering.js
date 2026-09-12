@@ -1,14 +1,12 @@
-// Numérotation des titres — cascade de compteurs reproduite en JS, PARTAGÉE
-// entre js/editor.js (aperçu vivant du sommaire dans l'éditeur) et
-// js/pdf-export.js (marqueurs + sommaire du PDF). Doit produire EXACTEMENT
-// le même texte que les compteurs CSS de css/editor-v2.css
-// (.tiptap[data-heading-style] > h1..h6) — jamais via
-// `getComputedStyle(h, '::before').content` : ce dernier ne renvoie que la
-// valeur CSS déclarée (littéralement "counter(h1c)"), jamais le texte
-// réellement peint à l'écran (bug réel trouvé et corrigé cette session).
+// Numérotation des titres — cascade de compteurs reproduite en JS, partagée
+// entre js/editor.js (aperçu vivant du sommaire) et js/pdf-export.js
+// (marqueurs + sommaire du PDF). Doit produire exactement le même texte que
+// les compteurs CSS de css/editor-v2.css (.tiptap[data-heading-style] >
+// h1..h6) — jamais via `getComputedStyle(h, '::before').content`, qui ne
+// renvoie que la valeur CSS déclarée, jamais le texte réellement peint.
 //
-// ../js/reader-mode.js a besoin de la même logique mais garde SA PROPRE copie
-// (fichier partagé avec la V1, qui ne charge pas ce module) — deux copies au
+// js/reader-mode.js a besoin de la même logique mais garde sa propre copie
+// (pas de mécanisme de module entre scripts classiques) — deux copies au
 // lieu d'une est un compromis délibéré plutôt qu'un oubli.
 const HeadingNumbering = (function () {
   const SCHEMES = {

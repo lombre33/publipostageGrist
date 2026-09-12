@@ -1,4 +1,4 @@
-// Export PDF V2 — 4 qualités : vectoriel (pdfmake, moteur principal de ce
+// Export PDF — 4 qualités : vectoriel (pdfmake, moteur principal de ce
 // fichier), impression navigateur (exportViaBrowserPrint, relie les vraies
 // feuilles de style dans un iframe et délègue à window.print()) et raster
 // basse/ultra qualité (buildRasterContainerAndOptions + html2pdf.js, capture
@@ -7,11 +7,9 @@
 // vrai DOM résolu, donc les corrections CSS/éditeur s'y appliquent
 // automatiquement, sans double maintenance.
 //
-// Réécrit depuis js/pdf-export.js (V1), pas copié : le HTML TipTap diffère
-// assez de celui de Quill pour que certaines mesures ne s'appliquent plus.
-// Les branches propres à Quill (ql-align-*/ql-indent-*/ql-size-*/data-list/
-// <font>) sont volontairement absentes ici, structurellement impossibles
-// dans du HTML TipTap.
+// Ne lit que du HTML produit par TipTap - aucune branche pour les classes
+// Quill (ql-align-*/ql-indent-*/ql-size-*/data-list/<font>), structurellement
+// impossibles ici.
 const PdfExport = (function () {
   // Chargement paresseux des bibliothèques PDF (~plusieurs Mo au total,
   // pdf-fonts-extra.js seul ~1.6 Mo) au premier clic d'export plutôt qu'au
@@ -213,9 +211,7 @@ const PdfExport = (function () {
   // Indentation horizontale RÉELLE d'un bloc (liste/citation) : mesurée sur
   // le rendu effectif dans un hôte hors-écran portant la classe .tiptap
   // (pour hériter le CSS de css/editor-v2.css - padding des listes,
-  // bordure+padding des citations), pas devinée/codée en dur - même
-  // technique que la V1 (js/pdf-export.js:measureIndentPt), généralisable
-  // sans changement puisque purement géométrique.
+  // bordure+padding des citations), pas devinée/codée en dur.
   // - 'box' (LI) : bord gauche de la boîte du bloc (l'indentation vient du
   //   <ul>/<ol> ancêtre ; le marqueur "•"/numéro est ajouté à part par
   //   listMarkerFor, mesurer le TEXTE compterait ce marqueur en double).
@@ -2065,19 +2061,12 @@ const PdfExport = (function () {
   };
   function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.low; }
 
-  // Passe par la boîte de dialogue d'impression native du navigateur
-  // ("Enregistrer au format PDF") plutôt que par un rendu canvas (html2canvas)
-  // ou une image base64 (pdfmake) - même raisonnement que js/pdf-export.js
-  // (V1) : un <img> s'affiche sans CORS, donc ce mode est le seul immunisé
-  // contre les images bloquées par CORS à l'export. Contrairement à la V1,
-  // le document imprimé RÉUTILISE les vraies feuilles de style du projet
-  // (roboto-fonts.css/style.css/editor-v2.css, relinkées telles quelles
-  // depuis les <link> déjà présents dans ce document) au lieu d'un <style>
-  // recopié à la main : tout correctif visuel déjà fait sur .tiptap/
-  // .reader-content (tableaux, 2-colonnes, images flottantes, numérotation
-  // des titres...) s'applique donc ici automatiquement, sans double
-  // maintenance - exactement le risque de régression signalé par
-  // l'utilisateur en demandant ce mode.
+  // Passe par la boîte de dialogue d'impression native du navigateur plutôt
+  // que par un rendu canvas ou une image base64 : un <img> s'affiche sans
+  // CORS, seul mode immunisé contre les images bloquées par CORS à l'export.
+  // Le document imprimé réutilise les vraies feuilles de style du projet
+  // (relinkées depuis les <link> déjà présents) plutôt qu'un <style> recopié
+  // à la main : tout correctif visuel déjà fait sur .tiptap/.reader-content s'applique ici sans double maintenance.
   async function exportViaBrowserPrint(resolvedHtml, filename) {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -2133,17 +2122,11 @@ const PdfExport = (function () {
     }
   }
 
-  // Conteneur détaché (attaché à document.body, hors écran via padding
-  // normal - contrairement à .pdf-measure-host qui est positionné hors
-  // champ) pour les qualités raster (html2canvas + jsPDF via html2pdf.js).
-  // Classes 'tiptap reader-content' + attribut data-heading-style : mêmes
-  // deux mécanismes déjà utilisés ailleurs (édition = .tiptap dans
-  // editor-v2.css, lecture = .reader-content dans css/style.css) - portées
-  // TOUTES LES DEUX sur ce même conteneur pour cumuler mise en page réelle
-  // (tableaux/2-colonnes/images) ET numérotation des titres, sans dupliquer
-  // aucune règle CSS. Le sommaire (.toc-marker) n'est PAS résolu ici (comme
-  // en V1) : html2canvas n'a aucune notion de "page" exploitable pour les
-  // numéros de page d'un titre - reste affiché tel quel (encadré pointillé).
+  // Conteneur détaché pour les qualités raster (html2canvas + jsPDF via
+  // html2pdf.js). Classes 'tiptap reader-content' portées toutes les deux
+  // sur ce même conteneur pour cumuler mise en page réelle et numérotation
+  // des titres, sans dupliquer de règle CSS. Le sommaire n'est pas résolu
+  // ici : html2canvas n'a aucune notion de "page" pour les numéros de titre.
   function buildRasterContainerAndOptions(resolvedHtml, filename, quality) {
     const container = document.createElement('div');
     container.style.padding = '20px';
@@ -2170,26 +2153,19 @@ const PdfExport = (function () {
       try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
       return;
     }
-    // En-tête/pied de page : uniquement le chemin vectoriel natif pour cet
-    // incrément (2.2), ni l'impression navigateur ni les qualités raster
-    // ci-dessus (qui réutilisent respectivement les vraies feuilles de style
-    // et html2canvas, aucun des deux mécanismes n'a de notion de header/
-    // footer natif de page - hors scope de cet incrément, cf. le plan).
+    // En-tête/pied de page : uniquement le chemin vectoriel natif - ni
+    // l'impression navigateur ni les qualités raster n'ont de notion de
+    // header/footer natif de page.
     const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
-  // Export PDF EN LOT (une ligne Grist -> un blob PDF, cf. js/main.js
-  // onExportPdfBatch) - factorisé à partir du chemin "natif" ci-dessus
-  // (résolution #Variable + en-tête/pied de page, puis pdfmake) plutôt que
-  // dupliqué : c'est la même paire ReaderMode.preview/resolveHeaderFooterVariables,
-  // juste appelée une fois par ligne au lieu d'une seule fois pour la ligne
-  // sélectionnée. Volontairement limité au vectoriel (getNativePdfBlob) :
-  // 'browser-print' ouvre une boîte de dialogue d'impression par ligne
-  // (inutilisable sans surveillance) et les qualités raster (html2canvas)
-  // n'ont pas de variante "retourne un blob" - seul le vectoriel expose déjà
-  // ce chemin (utilisé par exportCurrentRecord côté V1... non, ici seul ce
-  // fichier), donc le seul praticable pour un export non surveillé de N lignes.
+  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js
+  // onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
+  // resolveHeaderFooterVariables que exportCurrentRecord, appelée une fois
+  // par ligne. Volontairement limité au vectoriel : 'browser-print' ouvre
+  // une boîte de dialogue par ligne (inutilisable sans surveillance) et les
+  // qualités raster n'ont pas de variante "retourne un blob".
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);

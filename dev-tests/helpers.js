@@ -1,11 +1,9 @@
-// Aides bas niveau pour piloter l'éditeur V2 comme un vrai utilisateur
-// (clics réels sur les boutons de la toolbar, frappe clavier, glisser-déposer
-// de poignées) et pour intercepter l'export PDF sans jamais déclencher de
-// vrai téléchargement navigateur - même principe que dev-tests/runner.js
-// (V1), adapté à l'API de js/pdf-export.js (cf. recherche préalable :
-// PdfExport.getNativePdfBlobForRecord ne télécharge jamais, mais le "truc"
-// des positions pdfmake nécessite quand même d'intercepter
-// window.pdfMake.createPdf de la même façon).
+// Aides bas niveau pour piloter l'éditeur comme un vrai utilisateur (clics
+// réels sur les boutons de la toolbar, frappe clavier, glisser-déposer de
+// poignées) et pour intercepter l'export PDF sans jamais déclencher de vrai
+// téléchargement navigateur - PdfExport.getNativePdfBlobForRecord ne
+// télécharge jamais, mais lire les positions pdfmake nécessite quand même
+// d'intercepter window.pdfMake.createPdf.
 window.TestHelpers = (function () {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -202,11 +200,10 @@ window.TestHelpers = (function () {
   }
 
   // --- Export PDF sans jamais déclencher de téléchargement ---
-  // Intercepte window.pdfMake.createPdf le temps de l'appel, comme
-  // dev-tests/runner.js (V1) - récupère le dernier docDefinition ET force sa
-  // mise en page (getBase64) pour peupler `.positions`/`.absolutePosition`
-  // sur les blocs, EXACTEMENT l'effet de bord déjà exploité par
-  // js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
+  // Intercepte window.pdfMake.createPdf le temps de l'appel, récupère le
+  // dernier docDefinition et force sa mise en page (getBase64) pour peupler
+  // `.positions`/`.absolutePosition` sur les blocs - exactement l'effet de
+  // bord déjà exploité par js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
   async function exportPdfContent(html, headerFooterData) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;

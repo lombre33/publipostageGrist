@@ -49,7 +49,7 @@ window.TestRunner = (function () {
         out += (r.pass ? '  [OK] ' : '  [XX] ') + r.id + ' - ' + r.description + (r.notes ? '\n        ' + r.notes : '') + '\n';
       });
     });
-    out = '# Rapport de test V2 - ' + totalPass + '/' + (totalPass + totalFail) + ' passés\n' + out;
+    out = '# Rapport de test - ' + totalPass + '/' + (totalPass + totalFail) + ' passés\n' + out;
     return out;
   }
 

@@ -1,4 +1,4 @@
-// Éditeur V2 — TipTap/ProseMirror (remplace Quill).
+// Éditeur — TipTap/ProseMirror.
 // Script classique (pas type="module") : TipTap/ProseMirror chargés via
 // import() dynamique dans init(), pour garder le partage de portée globale
 // avec GristAPI/Templates/ReaderMode. Les nœuds/extensions personnalisés
@@ -250,10 +250,8 @@ const Editor = (function () {
   }
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
-  // caractère près (contenteditable="false"), même forme HTML que l'éditeur
-  // V1 (js/editor.js:VarBadgeBlot) pour que reader-mode.js/pdf-export.js
-  // le reconnaissent sans changement :
-  // <span class="var-badge" data-table data-column data-key>.
+  // caractère près (contenteditable="false") : <span class="var-badge"
+  // data-table data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
   function createVarBadgeNode(Node, mergeAttributes) {
     return Node.create({
       name: 'varBadge',
@@ -562,7 +560,7 @@ const Editor = (function () {
     nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
   }
 
-  // Zone 2 colonnes - paire de nœuds imbriqués, mêmes classes CSS que la V1.
+  // Zone 2 colonnes - paire de nœuds imbriqués.
   // `isolating: true` : empêche backspace/suppr de fusionner la zone avec le
   // paragraphe voisin.
   // Tab/Shift-Tab : court-circuitent l'indentation de liste en premier
@@ -815,8 +813,8 @@ const Editor = (function () {
       addCommands() {
         return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
       },
-      // NodeView (pas des overlays document.body comme en V1) : les poignées
-      // sont de vrais enfants DOM du wrapper, positionnées en pur CSS.
+      // NodeView : les poignées sont de vrais enfants DOM du wrapper,
+      // positionnées en pur CSS.
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('span');
@@ -998,7 +996,7 @@ const Editor = (function () {
     });
   }
 
-  // Saut de page forcé - nœud atome de bloc, même classe que la V1.
+  // Saut de page forcé - nœud atome de bloc.
   function createPageBreakNode(Node) {
     return Node.create({
       name: 'pageBreak',
@@ -2311,9 +2309,8 @@ const Editor = (function () {
   }
 
   // Une seule instance, une seule toolbar : chaque bouton appelle directement
-  // une commande TipTap sur la sélection réelle - plus besoin de savoir "suis-je
-  // dans une cellule/colonne" avant d'agir (contrairement à l'éditeur V1), et
-  // plus aucun execCommand.
+  // une commande TipTap sur la sélection réelle, jamais besoin de savoir
+  // "suis-je dans une cellule/colonne" avant d'agir.
   function wireToolbar() {
     applyToolbarIcons();
     const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };

@@ -102,7 +102,7 @@
 
   cases.push({
     id: 'table_cell_text_formatting',
-    description: 'Gras appliqué à l\'intérieur d\'une cellule (même bouton toolbar que le flux principal - un document ProseMirror UNIQUE, contrairement à V1 qui isolait les cellules via execCommand)',
+    description: 'Gras appliqué à l\'intérieur d\'une cellule (même bouton toolbar que le flux principal - un document ProseMirror unique, pas de cellule isolée)',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
