@@ -14,5 +14,21 @@
     "screenshot": "contrat-prestation-services/screenshot.svg",
     "html": "contrat-prestation-services/template.html",
     "schema": "contrat-prestation-services/schema.py"
+  },
+  {
+    "id": "attestation",
+    "name": "Attestation",
+    "tags": ["attestation", "administratif"],
+    "screenshot": "attestation/screenshot.svg",
+    "html": "attestation/template.html",
+    "schema": "attestation/schema.py"
+  },
+  {
+    "id": "courrier-relance",
+    "name": "Courrier de relance",
+    "tags": ["relance", "facture"],
+    "screenshot": "courrier-relance/screenshot.svg",
+    "html": "courrier-relance/template.html",
+    "schema": "courrier-relance/schema.py"
   }
 ]
