@@ -121,7 +121,7 @@ Déjà identifié en détail en §3.2 (S3) mais à relire sous l'angle RSSI : `j
 **Suggestion** : retirer ces deux instructions, ou les conditionner à un flag de debug explicite (`localStorage.pp_debug`) absent par défaut.
 **Impact fonctionnel d'une correction** : nul (purement du logging).
 
-### 3.2 Injection HTML non assainie (XSS) — ✅ CORRIGÉ (sauf le point mineur `variables.js`)
+### 3.2 Injection HTML non assainie (XSS) — ✅ CORRIGÉ
 
 **Correctif appliqué** : nouveau module partagé V1/V2 [`js/html-sanitize.js`](js/html-sanitize.js)
 (`HtmlSanitize.clean(html)`) — parse le HTML via `DOMParser` (document inerte : aucun script ni
@@ -254,16 +254,17 @@ Aucune fuite de portée trouvée dans les fichiers audités (pas de globale acci
 
 | Fichier | Constat | Recommandation | Priorité |
 |---|---|---|---|
-| `CAHIER_DES_CHARGES.md` | **Confirmé corrompu** : contient le module `Variables` V1 (JavaScript brut, Quill) au lieu d'un cahier des charges. Le vrai contenu existe encore dans l'historique git (`git show 33d7784:CAHIER_DES_CHARGES.md`), écrasé par un commit ultérieur (`fd5d69c`, message générique suspect, qui modifie aussi `js/grist-api.js` dans le même commit — signe d'un écrasement accidentel lors d'un push scripté). | Régénérer le contenu depuis `33d7784`, le mettre à jour pour refléter la V2 (aujourd'hui à parité fonctionnelle), ou le supprimer si le projet préfère documenter le périmètre uniquement via un futur `README.md`/`VERSIONING.md`. **Ne pas se contenter de restaurer `33d7784` tel quel** (ne décrirait que la V1). | **Important** — un fichier nommé "cahier des charges" contenant du code sans rapport est le genre de détail qui discrédite un dépôt aux yeux d'un relecteur externe. |
-| `VERSIONING.md` | Périmé pour V2 : dernière entrée `v0.10` (2026-09-08), alors que la V2 est activement développée jusqu'au 12/09 (settings, correctifs export PDF, suite de tests — invisibles dans ce fichier). | Soit indiquer explicitement en tête que ce fichier ne couvre que la V1, soit le compléter avec les jalons V2. | Mineur |
+| `CAHIER_DES_CHARGES.md` | ~~Confirmé corrompu : contenait le module `Variables` V1 (JavaScript brut, Quill) au lieu d'un cahier des charges~~ — **régénéré le 2026-09-12** depuis l'historique git, mis à jour pour refléter l'état actuel. | — | ~~Important~~ ✅ |
+| `VERSIONING.md` | ~~Périmé, ne couvrait que l'historique V1~~ — **supprimé le 2026-09-12** avec le retrait de la V1 (les tags git existants restent disponibles pour un rollback historique si nécessaire). | — | — |
 | `README.md` | ~~Absent de la racine~~ — **créé le 2026-09-12** : objet, configuration, section dédiée "Sécurité et permissions" (accès `'full'` + renvoi vers les Règles d'accès Grist), dépendances, tests, état du projet. | — | ~~Important~~ ✅ |
 | `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md` | Toujours absents. La doctrine DINUM générale attend LICENSE (permissive) et CONTRIBUTING.md pour un dépôt public ; le guide Grist.Gouv attend un canal de signalement de vulnérabilité (§8.2). | Choix de licence à valider avec l'utilisateur (décision légale/organisationnelle, pas un défaut de code) avant de créer `LICENSE`. `SECURITY.md` dépend du calendrier de rattachement officiel à l'écosystème Grist.Gouv. | **Important** |
 | Nom du dépôt (`publipostageGrist`) | Le guide Grist.Gouv recommande le format `grist-widget-[nom-fonctionnel]` (ex. `grist-widget-publipostage`) pour la découvrabilité dans l'écosystème. | Envisager un renommage avant publication officielle (impact : mise à jour de l'URL GitHub Pages et de tout lien existant). | Mineur |
 | `.gitignore` | Cohérent avec l'état actuel du projet (V2 + dev-tests pris en compte), vérifié en pratique. | Rien à faire. | — |
 
-### 6.3 Références croisées V1 ↔ V2
+### 6.3 Références internes (obsolète — V1 retirée le 2026-09-12)
 
-Toutes les références croisées trouvées (V2 → `../js/grist-api.js`/`templates.js`/`reader-mode.js`/`../css/*`, `pdf-export.js` → `../js/pdf-fonts(-extra).js`) sont accompagnées d'un commentaire explicite justifiant le partage. **Aucune référence accidentelle détectée.**
+Section devenue sans objet : la V1 a été retirée et l'arborescence `v2/` aplatie à la racine
+(cf. l'entrée du 2026-09-12 en tête de ce rapport). Il n'existe plus qu'un seul jeu de fichiers.
 
 ---
 
