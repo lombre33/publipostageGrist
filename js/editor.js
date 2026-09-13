@@ -364,6 +364,7 @@ const Editor = (function () {
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     HeaderFooterPreview.renderPaginationOverlay();
+    HeaderFooterPreview.migrateLegacyImagePositions();
     // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps).
     refreshVariableBadgeValidity();
     GristAPI.refreshSchema().then(refreshVariableBadgeValidity)

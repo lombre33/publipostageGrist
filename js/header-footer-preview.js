@@ -352,6 +352,31 @@ const HeaderFooterPreview = (function () {
     };
   }
 
+  // Migration silencieuse : une image en calque positionnée AVANT l'introduction de la grille page (data-page-index/left/top-pt) n'a que left/top (relatifs
+  // à son offsetParent au moment du calque/glisser) - pdf-export.js doit alors reconstruire sa position via l'ancien système d'ancrage textuel, qui suppose
+  // à tort que left/top représentent une distance LOCALE au paragraphe hôte. C'est FAUX dès que l'image a été glissée ailleurs (l'usage normal d'un calque
+  // "flottant") : position:absolute ignore totalement le flux du document, left/top n'ont alors plus aucun rapport avec "où est le paragraphe hôte" - d'où
+  // des résultats aberrants (confirmé : une image glissée loin de son paragraphe pouvait ressortir collée en haut de page). Rattrapée ici en capturant la
+  // grille page de toute image déjà en calque dès qu'un document est chargé (Aperçu A4 actif) - aucune action de l'utilisateur nécessaire, un ancien
+  // document se met à niveau tout seul à la prochaine ouverture.
+  function migrateLegacyImagePositions() {
+    if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return;
+    const toPatch = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && node.attrs.pageIndex == null && node.attrs.left != null) {
+        toPatch.push(pos);
+      }
+    });
+    toPatch.forEach(pos => {
+      const dom = editor.view.nodeDOM(pos);
+      if (!dom) return;
+      const grid = computePageGridPosition(dom);
+      if (!grid) return;
+      const current = editor.state.doc.nodeAt(pos);
+      if (current) EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, current.attrs, grid));
+    });
+  }
+
   function renderPaginationOverlay() {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
@@ -431,6 +456,6 @@ const HeaderFooterPreview = (function () {
     setEditor, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
     enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData, renderHfPill,
-    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition,
+    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions,
   };
 })();
