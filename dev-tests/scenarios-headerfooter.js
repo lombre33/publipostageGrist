@@ -23,6 +23,9 @@
     description: 'Cliquer une vraie zone de marge entre en mode édition en-tête/pied (chemin UI complet, pas setHeaderFooterData)',
     run: async (h) => {
       await h.resetEditor();
+      // Les zones de marge (.v2-hf-zone) ne sont rendues que sous a4-preview (cf. header-footer-preview.js:renderPaginationOverlay) - resetEditor() la
+      // retire par défaut (isolation entre scénarios), ce scénario la repose donc explicitement.
+      document.getElementById('editor-container').classList.add('a4-preview');
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
       await h.sleep(80);
       const zone = document.querySelector('.v2-hf-zone');
@@ -39,6 +42,7 @@
     description: 'Taper du texte en mode en-tête, sortir, revérifier via getHeaderFooterData',
     run: async (h) => {
       await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
       await h.sleep(80);
       const zone = document.querySelector('.v2-hf-zone');
@@ -82,6 +86,7 @@
       description: 'Badge de numéro de page format "' + format + '" inséré via le VRAI bouton toolbar, présent dans le PDF (en-tête)',
       run: async (h) => {
         await h.resetEditor();
+        document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
         await h.typeText('Corps du document');
         Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
         await h.sleep(80);
@@ -126,6 +131,7 @@
     description: 'Appuyer sur Entrée en boucle dans une zone en-tête/pied ne fait plus grandir le contenu au-delà de l\'espace réellement disponible',
     run: async (h) => {
       await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
       await h.sleep(80);
       const zone = document.querySelector('.v2-hf-zone');
@@ -148,6 +154,7 @@
     description: 'Un en-tête déjà trop long (modèle existant) n\'est pas tronqué à l\'entrée en mode édition, une suppression y reste possible',
     run: async (h) => {
       await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
       const longHeader = '<p>Ligne un déjà longue</p><p>Ligne deux déjà longue</p><p>Ligne trois déjà longue</p><p>Ligne quatre déjà longue</p>';
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: longHeader, first: '' }, footer: { default: '', first: '' } });
       await h.sleep(80);

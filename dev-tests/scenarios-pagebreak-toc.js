@@ -47,6 +47,9 @@
     description: 'Un saut de page forcé après peu de contenu réserve tout le reste de la page (pas juste la hauteur de la bande en-tête/pied)',
     run: async (h) => {
       await h.resetEditor();
+      // La bande en-tête/pied paginée (.v2-page-band-footer) n'est rendue que sous a4-preview (cf. header-footer-preview.js:renderPaginationOverlay) -
+      // resetEditor() la retire par défaut (isolation entre scénarios), ce scénario la repose donc explicitement.
+      document.getElementById('editor-container').classList.add('a4-preview');
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête</p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } });
       Editor.setHTML('<p>Une seule ligne courte.</p>');
       document.getElementById('v2-btn-page-break').click();
@@ -73,6 +76,8 @@
       document.getElementById('editor-container').style.display = 'none';
       const readerContainer = document.getElementById('reader-container');
       readerContainer.style.display = 'block';
+      // Même garde a4-preview côté lecture (reader-mode.js), cf. commentaire sur pagebreak_editor_gap_reserves_full_remaining_page ci-dessus.
+      readerContainer.classList.add('a4-preview');
       await ReaderMode.render(html, 'FakeTable', {}, hf);
       await h.sleep(200);
       const seam = document.querySelector('#reader-container .v2-page-band-footer');
