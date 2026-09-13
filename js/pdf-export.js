@@ -704,18 +704,23 @@ const PdfExport = (function () {
       margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
-    // imgTopPx/imgLeftPx restent relatifs à .tiptap (comme au top-level) - recalés en local à la colonne UNIQUEMENT quand une ancre locale existe.
+    // .two-columns-zone (node) a son propre position:relative (css/style.css, règle générique non scopée) : c'est le vrai offsetParent d'une image en
+    // calque ici (vérifié empiriquement), pas .tiptap ni la colonne. Les ancres locales (container/above/below) restent mesurées depuis le début du
+    // contenu de LA COLONNE (l'isolat rendu pour htmlToPdfContent) - l'image doit donc être ramenée à CE référentiel, pas simplement "dé-zoné".
+    const zoneRect = node.getBoundingClientRect();
     const nestedPending = [];
     columns.forEach((colBlocks, colIdx) => {
       const pending = colBlocks._pendingImages || [];
       if (pending.length) {
         const colRect = colNodes[colIdx].getBoundingClientRect();
-        const colOffsetTopPx = colRect.top - rootRect.top - A4_PREVIEW_PADDING_PX;
-        const colOffsetLeftPx = colRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
         pending.forEach(p => {
           if (p.container || p.above || p.below) {
-            p.imgTopPx -= colOffsetTopPx;
-            p.imgLeftPx -= colOffsetLeftPx;
+            p.imgTopPx += A4_PREVIEW_PADDING_PX + (zoneRect.top - colRect.top);
+            p.imgLeftPx += A4_PREVIEW_PADDING_PX + (zoneRect.left - colRect.left);
+          } else {
+            // Aucune ancre : repli générique page-relatif (resolveImageAbsolutePosition) - ramène à la position réelle de la zone dans le document.
+            p.imgTopPx += zoneRect.top - rootRect.top;
+            p.imgLeftPx += zoneRect.left - rootRect.left;
           }
           nestedPending.push(p);
         });
@@ -1474,17 +1479,19 @@ const PdfExport = (function () {
       // Capturé avant de reconstruire : fb.block.positions devient obsolète dès que htmlToPdfContent recrée des objets neufs. Le numéro de chaque note est
       // déjà définitif dès la 1ère passe (numérotation continue) - seule sa page avait besoin d'être mesurée.
       const footnotePageNumbers = (content._footnoteBlocks || []).map(fb => (fb.block.positions && fb.block.positions[0] && fb.block.positions[0].pageNumber) || null);
-      // Un bloc composite (ex. columns) peut porter une entrée de remesure pdfmake à {left:0,top:0}, à une position non déterministe - l'écarter.
-      const lastPosition = block => {
+      // Un bloc composite (ex. columns) peut porter une entrée de remesure pdfmake à {left:0,top:0}, à une position non déterministe - l'écarter. Un bloc
+      // texte multi-lignes porte UNE entrée par ligne réellement enchaînée : above/below/container sont tous mesurés côté éditeur par le HAUT du bloc
+      // (xxxTopPx), donc leur pendant PDF doit être sa 1ère ligne, pas la dernière - sinon le delta img-ancre compte la hauteur du bloc en trop.
+      const firstPosition = block => {
         if (!block || !block.positions || !block.positions.length) return null;
         const real = block.positions.filter(p => !(p.left === 0 && p.top === 0));
         const list = real.length ? real : block.positions;
-        return list[list.length - 1];
+        return list[0];
       };
       const resolvedAnchors = (content._pendingImages || []).map(p => {
-        const aboveResolved = lastPosition(p.above);
-        const belowResolved = lastPosition(p.below);
-        const containerResolved = lastPosition(p.container);
+        const aboveResolved = firstPosition(p.above);
+        const belowResolved = firstPosition(p.below);
+        const containerResolved = firstPosition(p.container);
         return {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,

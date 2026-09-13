@@ -274,19 +274,24 @@
     },
   });
 
-  ['table', 'twoColumns'].forEach(container => {
+  ['table', 'twoColumns', 'twoColumns-right'].forEach(container => {
+    const baseContainer = container === 'twoColumns-right' ? 'twoColumns' : container;
     cases.push({
       id: 'img_layer_toggle_no_jump_in_' + container,
       // Bug réel (signalé par l'utilisateur) : dans une cellule de tableau (position:relative CSS), setLayer() calculait left/top depuis .tiptap alors que
       // le navigateur les applique depuis la cellule (son propre ancêtre positionné réel) - l'image sautait hors de la zone de texte à l'affichage.
+      // Variante "-right" : la colonne de DROITE d'un module 2 colonnes - même ancêtre positionné réel (.two-columns-zone, cf.
+      // project_two_columns_image_anchor_bug) que la gauche, mais jamais exercée explicitement avant cet audit de couverture.
       description: 'Passer une image en calque "devant" dans un(e) ' + container + ' ne la fait pas sauter visuellement',
       run: async (h) => {
         await h.resetEditor();
         await h.focusAtEnd();
-        document.getElementById(container === 'table' ? 'v2-btn-table' : 'v2-btn-two-columns').click();
+        document.getElementById(baseContainer === 'table' ? 'v2-btn-table' : 'v2-btn-two-columns').click();
         await h.sleep(80);
         const ed = EditorCore.getEditor();
-        const hostP = container === 'table' ? h.tiptap().querySelector('table td p') : h.tiptap().querySelector('.two-columns-column p');
+        const hostP = baseContainer === 'table' ? h.tiptap().querySelector('table td p')
+          : container === 'twoColumns-right' ? h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('p')
+          : h.tiptap().querySelector('.two-columns-column p');
         ed.commands.setTextSelection(ed.view.posAtDOM(hostP, 0));
         ed.commands.focus();
         await h.sleep(50);
@@ -305,6 +310,82 @@
         return { pass: jump < 10, notes: JSON.stringify({ before: { top: beforeRect.top, left: beforeRect.left }, after: { top: afterRect.top, left: afterRect.left }, jump }) };
       },
     });
+  });
+
+  // Mode Lecture ne fait AUCUNE résolution de position lui-même : il injecte le HTML sérialisé tel quel (l'image en calque y est un <img> nu avec son
+  // style inline position:absolute, sans le wrapper NodeView de l'éditeur) et laisse le CSS natif du navigateur résoudre l'ancêtre positionné. Ces 3 tests
+  // vérifient que ça retombe bien sur le MÊME ancêtre que dans l'éditeur pour les 3 contextes qui comptent - un seul (cellule de tableau) avait un vrai
+  // trou de CSS (#reader-container td/th sans position:relative, cf. .tiptap table td/th qui l'a) avant ce correctif.
+  async function renderHtmlInReaderMode(h, html) {
+    document.getElementById('editor-container').style.display = 'none';
+    const readerContainer = document.getElementById('reader-container');
+    readerContainer.style.display = 'block';
+    await ReaderMode.render(html, 'FakeTable', {}, null);
+    await h.sleep(200);
+  }
+  function exitReaderModeAfterTest(h) {
+    document.getElementById('editor-container').style.display = '';
+    document.getElementById('reader-container').style.display = '';
+    document.getElementById('btn-mode-edit').click();
+  }
+  function assertReaderImagePosition(offsetParentSelector, expectedLeft, expectedTop) {
+    const img = document.querySelector('#reader-container img.editor-image');
+    const parent = document.querySelector('#reader-container ' + offsetParentSelector);
+    if (!img || !parent) return { pass: false, notes: 'img=' + !!img + ' parent=' + !!parent };
+    const imgRect = img.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const actualLeft = imgRect.left - parentRect.left;
+    const actualTop = imgRect.top - parentRect.top;
+    const pass = Math.abs(actualLeft - expectedLeft) < 3 && Math.abs(actualTop - expectedTop) < 3;
+    return { pass, notes: JSON.stringify({ expectedLeft, expectedTop, actualLeft, actualTop }) };
+  }
+
+  cases.push({
+    id: 'readmode_layered_image_position_top_level',
+    description: 'Mode Lecture : une image en calque au premier niveau (hors tableau/2-colonnes) se positionne au bon endroit (ancêtre positionné : .reader-content)',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Texte porteur pour ancrage, un paragraphe normal au premier niveau du document.</p>'
+        + '<p><img class="editor-image" src="' + DATA_PNG + '" alt="" data-layer="front" data-wrap="inline" style="width:40px;position:absolute;left:120px;top:80px;z-index:5"></p>';
+      await renderHtmlInReaderMode(h, html);
+      const result = assertReaderImagePosition('.reader-content', 120, 80);
+      exitReaderModeAfterTest(h);
+      await h.sleep(60);
+      return result;
+    },
+  });
+
+  cases.push({
+    id: 'readmode_layered_image_position_in_table_cell',
+    // Régression directe du bug trouvé cette session : #reader-container td/th n'avait pas position:relative (contrairement à .tiptap table td/th côté
+    // éditeur) - l'image en calque résolvait son ancêtre positionné sur un DIV bien plus haut, atterrissant à un endroit incohérent.
+    description: 'Mode Lecture : une image en calque dans une cellule de tableau se positionne relativement à SA cellule (ancêtre positionné réel), pas plus haut',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<table><tbody><tr><td><p>Texte de cellule.<img class="editor-image" src="' + DATA_PNG + '" alt="" data-layer="front" data-wrap="inline" style="width:40px;position:absolute;left:15px;top:20px;z-index:5"></p></td><td><p>Autre cellule.</p></td></tr></tbody></table>';
+      await renderHtmlInReaderMode(h, html);
+      const result = assertReaderImagePosition('table td', 15, 20);
+      exitReaderModeAfterTest(h);
+      await h.sleep(60);
+      return result;
+    },
+  });
+
+  cases.push({
+    id: 'readmode_layered_image_position_in_twoColumns',
+    description: 'Mode Lecture : une image en calque dans une colonne d\'un module 2 colonnes se positionne relativement à la ZONE (.two-columns-zone, son vrai ancêtre positionné - règle générique non scopée de style.css), pas à .reader-content',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<div class="two-columns-zone" style="--layout-left: 50%;">'
+        + '<div class="two-columns-column"><p>Texte colonne gauche.</p></div>'
+        + '<div class="two-columns-column"><p>Texte colonne droite.<img class="editor-image" src="' + DATA_PNG + '" alt="" data-layer="front" data-wrap="inline" style="width:40px;position:absolute;left:60px;top:35px;z-index:5"></p></div>'
+        + '</div>';
+      await renderHtmlInReaderMode(h, html);
+      const result = assertReaderImagePosition('.two-columns-zone', 60, 35);
+      exitReaderModeAfterTest(h);
+      await h.sleep(60);
+      return result;
+    },
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

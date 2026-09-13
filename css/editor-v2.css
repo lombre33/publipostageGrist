@@ -83,7 +83,7 @@
 #reader-container .reader-content h5 { font-size: 13pt; } #reader-container .reader-content h6 { font-size: 12pt; }
 #reader-container .reader-content blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
 #reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; vertical-align: top; text-align: left; font-weight: normal; }
+#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* La zone 2 colonnes en lecture héritait des règles génériques .two-columns-zone/.two-columns-column de ../css/style.css (pensées pour l'éditeur V1 - bordure
    pleine visible sur CHAQUE colonne, gap 18px et non 16, padding de colonne 6px et non 4px, d'où un texte qui ne coupe pas au même endroit qu'en édition). */
 #reader-container .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; padding: 0; }

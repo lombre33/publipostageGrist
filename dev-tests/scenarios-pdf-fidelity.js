@@ -285,11 +285,17 @@
   cases.push({
     id: 'pdffid_layered_image_above_anchor_in_column_not_stuck_at_page_top',
     // Bug réel (signalé par l'utilisateur, avec capture PDF) : une image en calque SEULE dans son propre paragraphe, précédée de texte réel dans la MÊME
-    // colonne (ancre "au-dessus" trouvée, pas de conteneur partagé), atterrissait quand même collée en haut de page - colOffsetTopPx (twoColumnsFrom)
-    // n'incluait pas le même A4_PREVIEW_PADDING_PX que imgTopPx, faussant le delta local à la colonne d'un montant constant.
+    // colonne (partage le même paragraphe source, ancre "container"), atterrissait quand même collée en haut de page - deux causes cumulées trouvées par
+    // mesure directe d'offsetParent : (1) twoColumnsFrom comparait l'image (positionnée relativement à .two-columns-zone, son vrai offsetParent) aux ancres
+    // locales (mesurées relativement au DÉBUT DE LA COLONNE dans le clone isolé) sans convertir vers un référentiel commun ; (2) le texte du paragraphe hôte
+    // enveloppe sur plusieurs lignes dans une colonne étroite, et la position PDF résolue de l'ancre prenait sa DERNIÈRE ligne (lastPosition) au lieu de sa
+    // 1ère - alors que containerTopPx (côté éditeur) mesure toujours le HAUT du bloc, doublant une partie de la hauteur du paragraphe dans le delta.
+    // Nécessite "Aperçu format A4" actif pour un ancrage pixel-cohérent avec la largeur cible du PDF (cf. mémoire project_floating_image_position_limits) -
+    // sans lui, l'éditeur peut être bien plus large que la page PDF et une position absolue en px n'a plus le même sens une fois réinterprétée à l'export.
     description: 'Une image en calque après du texte dans la même colonne (ancre "au-dessus") atterrit sur son paragraphe, pas collée en haut de page',
     run: async (h) => {
       await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
       await h.focusAtEnd();
       document.getElementById('v2-btn-two-columns').click();
       await h.sleep(80);
@@ -318,8 +324,9 @@
       if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
       const abs = images[0].absolutePosition;
       if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
-      // "Collé en haut" (bug) donnait ~28pt ; le texte qui précède dans la même colonne place la vraie ancre bien plus bas.
-      const pass = abs.y > 100;
+      // "Collé en haut" (bug) donnait ~28-40pt (marge de page) ; le paragraphe de 3 lignes qui précède dans la même colonne place la vraie ancre nettement
+      // plus bas (~90pt avec Aperçu A4 actif). Fourchette large (pas une valeur exacte) : robuste à un léger ajustement futur de la formule d'ancrage.
+      const pass = abs.y > 55 && abs.y < 150;
       return { pass, notes: 'abs=' + JSON.stringify(abs) + ' html=' + html };
     },
   });
@@ -368,6 +375,110 @@
       if (!left || !right) return { pass: false, notes: 'image absente : ' + JSON.stringify({ left, right }) };
       const pass = right.x > left.x + 50;
       return { pass, notes: JSON.stringify({ left, right }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_layered_image_multiline_container_anchor_top_level',
+    // Généralisation, hors 2-colonnes, du bug ci-dessus : l'ancre "container" (même paragraphe source que l'image) prenait la DERNIÈRE ligne rendue du
+    // texte porteur (lastPosition) au lieu de sa 1ère, alors que containerTopPx (côté éditeur) mesure toujours le HAUT du bloc - un texte assez long pour
+    // envelopper sur plusieurs lignes (même à pleine largeur de page) exposait le même double-comptage de hauteur que dans une colonne étroite. Corrigé par
+    // firstPosition (resolveNativePdfContent) : above/below/container utilisent tous les 3 la 1ère ligne réelle, pas la dernière.
+    description: 'Une image en calque juste après un long paragraphe (qui enveloppe sur plusieurs lignes) au premier niveau atterrit près de son texte, pas anormalement plus bas',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await h.focusAtEnd();
+      await h.typeText('Ceci est un paragraphe de texte reel suffisamment long pour envelopper sur plusieurs lignes meme a pleine largeur de page, afin de verifier que l\'ancrage ne compte pas deux fois la hauteur du paragraphe porteur.');
+      const origPrompt = window.prompt;
+      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      document.getElementById('v2-btn-image').click();
+      await h.sleep(120);
+      window.prompt = origPrompt;
+      const img = h.tiptap().querySelector('img.editor-image');
+      await h.selectAtomNode(img);
+      await h.sleep(80);
+      const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+      if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+      frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      // Le bug (dernière ligne au lieu de la 1ère) ajoutait la hauteur du paragraphe une 2e fois - avec Aperçu A4, un paragraphe de 3-4 lignes qui enveloppe
+      // sur ~35pt de haut donnerait un y anormalement élevé (>110pt) ; la vraie position doit rester proche du bas du paragraphe (~35-70pt).
+      const pass = abs.y > 20 && abs.y < 90;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) + ' html=' + html };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_layered_image_below_anchor_not_stuck_at_page_top',
+    // Cas jamais testé explicitement : une image en calque SEULE (paragraphe propre, sans texte partagé ni texte au-dessus) suivie d'un VRAI paragraphe de
+    // texte APRÈS elle - bracketing "en-dessous" (below) uniquement, aucune ancre "container" ni "au-dessus" disponible. Vérifie que resolveImageAbsolutePosition
+    // gère bien cette branche (layer!=='front' préfère "above" puis "below" ; "front" préfère "below" puis "above" - ici seul "below" existe, quel que soit le calque).
+    description: 'Une image en calque SEULE suivie de texte réel (ancre "en-dessous" uniquement) suit bien ce texte quand elle se rapproche de lui, pas une valeur figée',
+    run: async (h) => {
+      // Fixture HTML directe : l'image est le tout 1er contenu du document (rien avant - "au-dessus" impossible par construction), seule dans son propre
+      // paragraphe (aucun texte partagé - pas d'ancre "container" non plus), suivie d'un paragraphe de VRAI texte - seul "en-dessous" (below) est
+      // disponible. Deux variantes (top CSS proche vs. loin du texte suivant) : si l'ancrage "en-dessous" fonctionne vraiment (interpolation sur
+      // imgTopPx/belowTopPx, pas un repli figé), la variante "loin" doit atterrir clairement plus bas dans le PDF que la variante "proche".
+      async function exportWithImgTop(topPx) {
+        const html = '<p><img class="editor-image" draggable="false" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="" data-layer="front" data-wrap="inline" style="width:40px;position:absolute;left:37px;top:' + topPx + 'px;z-index:5"></p>'
+          + '<p>Paragraphe de texte reel place juste apres l\'image dans le flux du document.</p>';
+        const result = await h.exportPdfContent(html, null);
+        const images = h.findImages(result.content);
+        return images[0] && images[0].absolutePosition;
+      }
+      const near = await exportWithImgTop(5);
+      const far = await exportWithImgTop(300);
+      if (!near || !far) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify({ near, far }) };
+      const pass = far.y > near.y + 100;
+      return { pass, notes: JSON.stringify({ near, far }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_layered_image_behind_layer_in_twoColumns_anchor',
+    // Tous les tests 2-colonnes précédents (offsetParent = .two-columns-zone, firstPosition) n'exercaient que data-layer="front" - vérifie que "behind"
+    // (repli/ordre d'ancrage inversé dans resolveNativePdfContent : insertAfter=false) profite du même correctif d'ancrage local à la colonne.
+    description: 'Une image en calque "derrière" (behind) après du texte dans une colonne 2-colonnes atterrit aussi sur son paragraphe, pas collée en haut de page',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await h.focusAtEnd();
+      document.getElementById('v2-btn-two-columns').click();
+      await h.sleep(80);
+      const ed = EditorCore.getEditor();
+      const colP = h.tiptap().querySelectorAll('.two-columns-zone > .two-columns-column')[0].querySelector('p');
+      ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
+      ed.commands.focus();
+      await h.sleep(50);
+      await h.typeText('Texte de colonne gauche pour ancrage, assez long pour occuper plusieurs lignes dans cette colonne etroite.');
+      document.execCommand('insertParagraph');
+      const origPrompt = window.prompt;
+      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      document.getElementById('v2-btn-image').click();
+      await h.sleep(120);
+      window.prompt = origPrompt;
+      const img = h.tiptap().querySelectorAll('.two-columns-column')[0].querySelector('img.editor-image');
+      await h.selectAtomNode(img);
+      await h.sleep(80);
+      const behindBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-behind"]');
+      if (!behindBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+      behindBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      const pass = abs.y > 55 && abs.y < 150;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) + ' html=' + html };
     },
   });
 
