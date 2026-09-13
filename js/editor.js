@@ -2,11 +2,7 @@
 // de portée globale avec GristAPI/Templates/ReaderMode ; nœuds/extensions construits par des createXxx(...) (classes TipTap indisponibles avant cet import).
 const Editor = (function () {
   let editor = null;
-  let floatingUi = null;
-  // Nécessaire pour recréer une NodeSelection après tr.setNodeMarkup() (remplace le nœud) - cf. patchNodeAndReselect.
-  let NodeSelectionClass = null;
   let currentAlign = 'left';
-  let TextSelectionClass = null;
 
   // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur, contenu affiché échangé via setContent).
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
@@ -15,15 +11,6 @@ const Editor = (function () {
     return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   }
   let headerFooterDraft = emptyHeaderFooterData();
-
-  // Partagé par updateAttrs/updateSelectedImage/updateSelectedBadge : setNodeMarkup() remplace le nœud, donc la NodeSelection doit être recréée explicitement
-  // dessus (sinon retombe en curseur texte).
-  function patchNodeAndReselect(ed, pos, newAttrs) {
-    const { state, view } = ed;
-    const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
-    if (NodeSelectionClass) tr.setSelection(NodeSelectionClass.create(tr.doc, pos));
-    view.dispatch(tr);
-  }
 
   // Taille max d'une image en en-tête/pied (convention, pas une limite technique).
   const HF_MAX_IMAGE_HEIGHT_PX = 60;
@@ -553,7 +540,7 @@ const Editor = (function () {
             if (colIndex === 0) {
               const afterLeftCol = $from.after(columnDepth);
               const target = ed.state.doc.resolve(Math.min(afterLeftCol + 1, ed.state.doc.content.size));
-              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, 1)).run();
+              ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(target, 1)).run();
               return true;
             }
             const afterZone = $from.after(zoneDepth);
@@ -561,7 +548,7 @@ const Editor = (function () {
               ed.chain().focus().insertContentAt(afterZone, { type: 'paragraph' }).setTextSelection(afterZone + 1).run();
               return true;
             }
-            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(afterZone), 1)).run();
+            ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(afterZone), 1)).run();
             return true;
           },
           'Shift-Tab': ({ editor: ed }) => {
@@ -576,12 +563,12 @@ const Editor = (function () {
             if (colIndex === 1) {
               const beforeRightCol = $from.before(columnDepth);
               const target = ed.state.doc.resolve(Math.max(beforeRightCol - 1, 0));
-              ed.chain().focus().setTextSelection(TextSelectionClass.near(target, -1)).run();
+              ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(target, -1)).run();
               return true;
             }
             const beforeZone = $from.before(zoneDepth);
             if (beforeZone <= 0) return true; // rien avant la zone - sans effet
-            ed.chain().focus().setTextSelection(TextSelectionClass.near(ed.state.doc.resolve(beforeZone - 1), -1)).run();
+            ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(beforeZone - 1), -1)).run();
             return true;
           },
         };
@@ -834,7 +821,7 @@ const Editor = (function () {
             if (typeof pos !== 'number') return;
             const current = nodeEditor.state.doc.nodeAt(pos);
             if (!current) return;
-            patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
+            EditorCore.patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
           }
 
           // Attributs COURANTS - jamais `node.attrs` directement : ce paramètre de closure ne reflète que le premier rendu de cette NodeView, seul
@@ -1017,13 +1004,6 @@ const Editor = (function () {
     });
   }
 
-  // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en calque.
-  function editorContentWidthPx(currentEditor) {
-    const rootEl = currentEditor.view.dom;
-    const rootCs = getComputedStyle(rootEl);
-    return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
-  }
-
   // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on gèle donc
   // la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
   function backfillAutoColumnWidths(currentEditor) {
@@ -1059,7 +1039,7 @@ const Editor = (function () {
   function clampOverflowingTables(currentEditor) {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
-    const containerWidth = editorContentWidthPx(currentEditor);
+    const containerWidth = EditorCore.editorContentWidthPx(currentEditor);
     if (!containerWidth) return;
     const { state } = currentEditor;
     let tr = null;
@@ -1092,66 +1072,8 @@ const Editor = (function () {
     if (tr) currentEditor.view.dispatch(tr);
   }
 
-  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
-  function createFloatingPanel(className, innerHTML, onAction, onInput) {
-    const el = document.createElement('div');
-    el.className = className;
-    el.innerHTML = innerHTML;
-    // mousedown+preventDefault : évite de perdre le focus/la sélection ProseMirror avant que l'action ne s'exécute.
-    el.addEventListener('mousedown', (event) => {
-      const btn = event.target.closest('button[data-action]');
-      if (!btn) return;
-      event.preventDefault();
-      onAction(btn.dataset.action);
-    });
-    if (onInput) el.addEventListener('input', (event) => {
-      const input = event.target.closest('[data-role]');
-      if (input) onInput(input.dataset.role, input.value);
-    });
-    document.body.appendChild(el);
-    let stopAutoUpdate = null;
-    return {
-      el,
-      show(referenceEl) {
-        el.classList.add('visible');
-        const update = () => {
-          floatingUi.computePosition(referenceEl, el, {
-            placement: 'top',
-            middleware: [floatingUi.offset(8), floatingUi.flip(), floatingUi.shift({ padding: 8 })],
-          }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
-        };
-        if (stopAutoUpdate) stopAutoUpdate();
-        stopAutoUpdate = floatingUi.autoUpdate(referenceEl, el, update);
-      },
-      hide() {
-        el.classList.remove('visible');
-        if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
-      },
-    };
-  }
-
-  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable) ne se ferment normalement que sur un changement réel de sélection ProseMirror -
-  // un clic hors de `.tiptap` ET hors `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic sur "Mode lecture").
-  const floatingContextPanels = [];
-  function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
-  document.addEventListener('mousedown', (event) => {
-    if (event.target.closest('.tiptap') || event.target.closest('.v2-floating-toolbar')) return;
-    hideFloatingContextToolbars();
-  });
-
   const TEXT_COLOR_PRESETS = ['#000000', '#5f6368', '#c0392b', '#d68910', '#8a7000', '#1e8449', '#2874a6', '#7d3c98'];
   const FILL_COLOR_PRESETS = ['#fff2a8', '#c8f7c5', '#c8e6ff', '#ffd6d6', '#e6d6ff', '#ffe0b3', '#e0e0e0'];
-
-  // Un seul menu déroulant à la fois (couleur/police/taille), fermé au clic ailleurs.
-  let openDropdownPanel = null;
-  document.addEventListener('mousedown', (event) => {
-    if (!openDropdownPanel) return;
-    if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')
-      || event.target.closest('.v2-format-panel') || event.target.closest('.v2-format-chip')
-      || event.target.closest('.v2-stepper') || event.target.closest('.v2-fill-chip')) return;
-    openDropdownPanel.hide();
-    openDropdownPanel = null;
-  });
 
   // Grille de nuances + case "personnalisé"/"aucune", partagée entre police, surlignage et fond de cellule. `onPick`/`onNone` reçoivent une chaîne déjà
   // focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes.
@@ -1163,57 +1085,21 @@ const Editor = (function () {
       + (onNone ? `<button data-action="none" title="${noneLabel}">${Icons.svg('noColor')}<span>${noneLabel}</span></button>` : '')
       + '</div>'
       + '<input type="color" class="v2-color-dropdown-native">';
-    const panel = createFloatingPanel('v2-color-dropdown', html, (action) => {
+    const panel = EditorCore.createFloatingPanel('v2-color-dropdown', html, (action) => {
       if (action === 'custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
-      if (action === 'none') { withSavedSelection(chain => onNone(chain)); closeDropdownPanel(); return; }
-      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); closeDropdownPanel(); }
+      if (action === 'none') { withSavedSelection(chain => onNone(chain)); EditorCore.closeDropdownPanel(); return; }
+      if (action.indexOf('pick:') === 0) { const color = action.slice(5); withSavedSelection(chain => onPick(chain, color)); EditorCore.closeDropdownPanel(); }
     });
     panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', (event) => {
       withSavedSelection(chain => onPick(chain, event.target.value));
-      closeDropdownPanel();
+      EditorCore.closeDropdownPanel();
     });
     return panel;
-  }
-  function closeDropdownPanel() { if (openDropdownPanel) { openDropdownPanel.hide(); openDropdownPanel = null; } }
-  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas click), comme la toolbar tableau/image, pour ne pas perdre la sélection avant
-  // l'ouverture. `getSelection` capture la sélection AU MOMENT du clic, restaurée par `withSavedSelection` quand une couleur est vraiment choisie.
-  function wireDropdownButton(btn, panel, captureSelection) {
-    if (!btn) return;
-    btn.addEventListener('mousedown', (event) => {
-      event.preventDefault();
-      captureSelection();
-      if (openDropdownPanel === panel) { closeDropdownPanel(); return; }
-      closeDropdownPanel();
-      panel.show(btn);
-      openDropdownPanel = panel;
-    });
-  }
-  function setColorBar(id, color) {
-    const el = document.getElementById(id);
-    if (el) el.style.background = color || 'transparent';
-  }
-  function setColorIcon(id, color) {
-    const el = document.getElementById(id);
-    if (el) el.style.color = color || '';
-  }
-
-  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la position du
-  // curseur, pas la sélection réellement visée par l'utilisateur.
-  function createSelectionPreserver() {
-    let savedSelection = null;
-    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
-    const withSavedSelection = (fn) => {
-      const chain = editor.chain().focus();
-      if (savedSelection) chain.setTextSelection(savedSelection);
-      fn(chain);
-      chain.run();
-    };
-    return { captureSelection, withSavedSelection };
   }
 
   // Couleur de police / surlignage : bouton "appliquer" (réapplique la dernière couleur choisie) + bouton chevron séparé (menu de nuances).
   function wireColorPickers() {
-    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+    const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
     // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix" - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
     let lastTextColor = TEXT_COLOR_PRESETS[0];
     let lastHighlightColor = FILL_COLOR_PRESETS[0];
@@ -1226,20 +1112,20 @@ const Editor = (function () {
     const textColorPanel = createColorDropdown(TEXT_COLOR_PRESETS, {
       noneLabel: I18n.t('colorDropdown.noneDefault'),
       withSavedSelection,
-      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); setColorIcon('v2-text-color-icon', color); },
-      onNone: (chain) => { chain.unsetTextColor(); setColorIcon('v2-text-color-icon', null); },
+      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); EditorCore.setColorIcon('v2-text-color-icon', color); },
+      onNone: (chain) => { chain.unsetTextColor(); EditorCore.setColorIcon('v2-text-color-icon', null); },
     });
     wireQuickApply('v2-btn-text-color', chain => chain.setTextColor(lastTextColor));
-    wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
+    EditorCore.wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
 
     const highlightPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection,
-      onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); setColorIcon('v2-highlight-icon', color); },
-      onNone: (chain) => { chain.unsetHighlight(); setColorIcon('v2-highlight-icon', null); },
+      onPick: (chain, color) => { lastHighlightColor = color; chain.setHighlight(color); EditorCore.setColorIcon('v2-highlight-icon', color); },
+      onNone: (chain) => { chain.unsetHighlight(); EditorCore.setColorIcon('v2-highlight-icon', null); },
     });
     wireQuickApply('v2-btn-highlight', chain => chain.setHighlight(lastHighlightColor));
-    wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
+    EditorCore.wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
   }
 
   // Toolbar de gestion de tableau : panneau flottant, visible seulement curseur dans une cellule, ancré sur le <table> réel.
@@ -1259,7 +1145,7 @@ const Editor = (function () {
       + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
       + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
       + '</button>';
-    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+    const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const commands = {
         'row-before': () => editor.chain().focus().addRowBefore().run(),
         'row-after': () => editor.chain().focus().addRowAfter().run(),
@@ -1270,10 +1156,10 @@ const Editor = (function () {
         'table-del': () => editor.chain().focus().deleteTable().run(),
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
-          if (openDropdownPanel === fillPanel) { closeDropdownPanel(); return; }
-          closeDropdownPanel();
+          if (EditorCore.getOpenDropdownPanel() === fillPanel) { EditorCore.closeDropdownPanel(); return; }
+          EditorCore.closeDropdownPanel();
           fillPanel.show(btn);
-          openDropdownPanel = fillPanel;
+          EditorCore.setOpenDropdownPanel(fillPanel);
         },
       };
       (commands[action] || (() => {}))();
@@ -1282,10 +1168,10 @@ const Editor = (function () {
     const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection: fn => fn(null),
-      onPick: (chain, color) => { setCellsBackground(editor, color); setColorBar('v2-table-fill-bar', color); },
-      onNone: () => { setCellsBackground(editor, null); setColorBar('v2-table-fill-bar', null); },
+      onPick: (chain, color) => { setCellsBackground(editor, color); EditorCore.setColorBar('v2-table-fill-bar', color); },
+      onNone: () => { setCellsBackground(editor, null); EditorCore.setColorBar('v2-table-fill-bar', null); },
     });
-    floatingContextPanels.push(panel);
+    EditorCore.registerFloatingPanel(panel);
     const check = () => {
       // editor.isActive(...) ne change pas seul quand le focus quitte l'éditeur - vérifier hasFocus() explicitement pour fermer le panneau au clic hors de
       // l'éditeur.
@@ -1301,7 +1187,7 @@ const Editor = (function () {
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
       panel.show(tableEl);
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
-      setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
+      EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };
     editor.on('selectionUpdate', check);
     editor.on('transaction', check);
@@ -1344,7 +1230,7 @@ const Editor = (function () {
     function updateSelectedImage(patch) {
       const node = selectedImageNode();
       if (!node) return;
-      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
+      EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
     }
 
     // En flux normal, alignement classique ; en calque, réaligne sur le bord du conteneur (margin:auto n'a aucun effet en position:absolute).
@@ -1357,7 +1243,7 @@ const Editor = (function () {
       const img = dom && dom.querySelector && dom.querySelector('img');
       if (!img) return;
       const imgWidthPx = img.getBoundingClientRect().width;
-      const containerWidthPx = editorContentWidthPx(editor);
+      const containerWidthPx = EditorCore.editorContentWidthPx(editor);
       // `left` est stocké depuis le bord de la boîte de padding, mais l'alignement vise le bord du texte - décalage explicite du padding.
       const rootCs = getComputedStyle(editor.view.dom);
       const padLeft = parseFloat(rootCs.paddingLeft) || 0;
@@ -1385,10 +1271,10 @@ const Editor = (function () {
           patch.top = Math.round(imgRect.top - rootRect.top);
         }
       }
-      patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));
+      EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));
     }
 
-    const panel = createFloatingPanel('v2-floating-toolbar', html, (action) => {
+    const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
@@ -1443,7 +1329,7 @@ const Editor = (function () {
     }
 
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
-    floatingContextPanels.push(panel);
+    EditorCore.registerFloatingPanel(panel);
     const check = () => {
       // Un blur réel ne change pas seul la sélection ProseMirror - sans cette garde, une 'transaction' suivante rouvrirait le panneau.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
@@ -1487,8 +1373,8 @@ const Editor = (function () {
       `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
       '</div>',
     ].join('');
-    const panel = createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
-    floatingContextPanels.push(panel);
+    const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
+    EditorCore.registerFloatingPanel(panel);
 
     function selectedVarBadgeNode() {
       const node = editor.state.selection.node;
@@ -1498,7 +1384,7 @@ const Editor = (function () {
       const node = selectedVarBadgeNode();
       if (!node) return;
       const format = Object.assign({}, node.attrs.format, patch);
-      patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
+      EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
     }
     function onAction(action) {
       const node = selectedVarBadgeNode();
@@ -1993,8 +1879,8 @@ const Editor = (function () {
       }
     }
     const textStyleAttrs = editor.getAttributes('textStyle');
-    setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
-    setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
+    EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
+    EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
     // "Police"/"Taille" vide qui ne montrait jamais rien par défaut.
     const fontChipVal = document.getElementById('v2-font-chip-val');
@@ -2017,9 +1903,12 @@ const Editor = (function () {
     const { TaskList } = await import('@tiptap/extension-task-list');
     const { TaskItem } = await import('@tiptap/extension-task-item');
     const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
-    floatingUi = { computePosition, offset, flip, shift, autoUpdate };
+    EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     let EditorStateClass;
-    ({ NodeSelection: NodeSelectionClass, TextSelection: TextSelectionClass, EditorState: EditorStateClass } = await import('prosemirror-state'));
+    const { NodeSelection, TextSelection, EditorState } = await import('prosemirror-state');
+    EditorCore.setNodeSelectionClass(NodeSelection);
+    EditorCore.setTextSelectionClass(TextSelection);
+    EditorStateClass = EditorState;
 
     const VarBadge = createVarBadgeNode(Node, mergeAttributes);
     const PageNumberBadge = createPageNumberBadgeNode(Node, mergeAttributes);
@@ -2088,6 +1977,7 @@ const Editor = (function () {
       ],
       content: '',
     });
+    EditorCore.setEditor(editor);
 
     // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en
     // Aperçu A4 pour que les zones d'en-tête/pied restent visuellement collées au corps.
@@ -2212,7 +2102,7 @@ const Editor = (function () {
   // Un <select>, contrairement à un <button>, vole le focus dès le pointerdown (avant 'change') - la sélection à mettre en forme doit donc être capturée à ce
   // moment puis restaurée avant d'appliquer la commande.
   function wireSelectionDependentSelects() {
-    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+    const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
     const bindSelect = (id, onChange) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -2235,22 +2125,22 @@ const Editor = (function () {
   ];
 
   function wireCompactFontSizeControls() {
-    const { captureSelection, withSavedSelection } = createSelectionPreserver();
+    const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
 
     const fontHtml = FONT_FAMILY_PRESETS.map(o => `<button data-action="${o.value}">${o.label}</button>`).join('');
-    const fontPanel = createFloatingPanel('v2-format-panel', fontHtml, (value) => {
+    const fontPanel = EditorCore.createFloatingPanel('v2-format-panel', fontHtml, (value) => {
       withSavedSelection(chain => chain.setFontFamily(value));
-      closeDropdownPanel();
+      EditorCore.closeDropdownPanel();
     });
-    wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
+    EditorCore.wireDropdownButton(document.getElementById('v2-font-chip'), fontPanel, captureSelection);
 
     const sizeHtml = FONT_SIZE_PRESETS.map(s => `<button data-action="${s}">${s}</button>`).join('');
-    const sizePanel = createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
+    const sizePanel = EditorCore.createFloatingPanel('v2-format-panel', sizeHtml, (value) => {
       withSavedSelection(chain => chain.setFontSize(value));
-      closeDropdownPanel();
+      EditorCore.closeDropdownPanel();
     });
     const sizeValBtn = document.getElementById('v2-size-chip-val');
-    wireDropdownButton(sizeValBtn, sizePanel, captureSelection);
+    EditorCore.wireDropdownButton(sizeValBtn, sizePanel, captureSelection);
     const stepSize = (delta) => {
       captureSelection();
       const current = sizeValBtn.textContent.trim();
