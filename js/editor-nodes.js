@@ -503,6 +503,12 @@ const EditorNodes = (function () {
           opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
           align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
           wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
+          // Position "grille page" : capturée UNE FOIS, directement depuis le rendu réel de l'éditeur (Aperçu A4), au moment où l'image est positionnée
+          // (setLayer/glisser/aligner) - pdf-export.js l'utilise telle quelle, sans reconstruction ni ancrage textuel, pour garantir un rendu identique
+          // entre l'éditeur et le PDF. `null` = jamais positionnée ainsi (document ancien, ou positionnée hors Aperçu A4) - repli sur l'ancien système.
+          pageIndex: { default: null, parseHTML: el => (el.hasAttribute('data-page-index') ? parseInt(el.getAttribute('data-page-index'), 10) : null), renderHTML: noBareRender },
+          pageLeftPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-left-pt') ? parseFloat(el.getAttribute('data-page-left-pt')) : null), renderHTML: noBareRender },
+          pageTopPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-top-pt') ? parseFloat(el.getAttribute('data-page-top-pt')) : null), renderHTML: noBareRender },
           // Posés ensemble : transforment ce nœud en placeholder de #Variable Attachments (jamais de vraie image dans l'éditeur).
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
@@ -515,6 +521,9 @@ const EditorNodes = (function () {
         // Placeholder lié à une variable : `src` reste vide (résolu au rendu/export par js/reader-mode.js:resolveVariableImages).
         const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
         if (a.align) attrs['data-align'] = a.align;
+        if (a.pageIndex != null) attrs['data-page-index'] = String(a.pageIndex);
+        if (a.pageLeftPt != null) attrs['data-page-left-pt'] = String(a.pageLeftPt);
+        if (a.pageTopPt != null) attrs['data-page-top-pt'] = String(a.pageTopPt);
         if (a.varTable) {
           attrs['data-var-table'] = a.varTable;
           attrs['data-var-column'] = a.varColumn;
@@ -667,10 +676,15 @@ const EditorNodes = (function () {
           function onMoveUp(event) {
             document.removeEventListener('mousemove', onMoveMove);
             if (moveState) {
-              updateAttrs({
+              const patch = {
                 left: Math.round(moveState.startLeft + (event.clientX - moveState.startX)),
                 top: Math.round(moveState.startTop + (event.clientY - moveState.startY)),
-              });
+              };
+              // `wrap` porte déjà la position finale (onMoveMove l'a suivie en direct pendant le glisser) - mesurable immédiatement, même schéma que
+              // setLayer/alignOrSnap : c'est cette grille page, pas left/top, que pdf-export.js utilise pour garantir un rendu identique éditeur/PDF.
+              const grid = HeaderFooterPreview.computePageGridPosition(wrap);
+              if (grid) Object.assign(patch, grid);
+              updateAttrs(patch);
             }
             moveState = null;
           }

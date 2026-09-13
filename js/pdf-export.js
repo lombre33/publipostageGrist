@@ -232,6 +232,17 @@ const PdfExport = (function () {
       // Placeholder écrasé une fois l'ancrage résolu : sans absolutePosition, pdfmake traite ce bloc comme un élément de flux et lui réserve sa propre
       // hauteur dès la 1ère passe de mesure, gonflant à tort la position mesurée des blocs suivants (~46pt d'écart, exactement la hauteur de l'image).
       image.absolutePosition = { x: 0, y: 0 };
+      // Grille page (data-page-index/left/top-pt) : position capturée UNE FOIS dans l'éditeur (Aperçu A4), directement depuis le DOM déjà mis en page -
+      // prioritaire sur tout le système d'ancrage/bracketing ci-dessous dès qu'elle existe (resolveNativePdfContent), pour un rendu garanti identique à
+      // l'éditeur. Absente pour un document ancien (jamais repositionné depuis) ou positionné hors Aperçu A4 - repli sur l'ancrage historique.
+      if (node.hasAttribute('data-page-index')) {
+        const pageIndex = parseInt(node.getAttribute('data-page-index'), 10);
+        const pageLeftPt = parseFloat(node.getAttribute('data-page-left-pt'));
+        const pageTopPt = parseFloat(node.getAttribute('data-page-top-pt'));
+        if (Number.isFinite(pageIndex) && Number.isFinite(pageLeftPt) && Number.isFinite(pageTopPt)) {
+          image._pageGrid = { pageIndex, pageLeftPt, pageTopPt };
+        }
+      }
     } else {
       const align = node.getAttribute('data-align');
       // gauche/droite = habillage (float CSS) géré par floatedImageParagraphFrom (colonne image + colonne texte), pas par `alignment` de pdfmake (qui
@@ -1547,6 +1558,13 @@ const PdfExport = (function () {
           aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx, aboveLeftPx: p.aboveLeftPx, belowLeftPx: p.belowLeftPx,
         };
       });
+      // Page (pdfmake, 1-based) de chaque bloc DE PREMIER NIVEAU du document, dans le même ordre que `content` (le tableau top-level lui-même, alias
+      // `blocks` dans buildPdfContentFromRoot) - sert UNIQUEMENT à retrouver "un bloc quelconque sur la page N" pour y insérer une image grille-page à
+      // côté (ordre de peinture devant/derrière), jamais à calculer sa position elle-même (déjà connue, cf. _pageGrid ci-dessous). Exclut les images en
+      // attente elles-mêmes (placeholder {x:0,y:0}, position pas encore significative) - sinon une image pouvait se retrouver choisie comme SA PROPRE
+      // ancre, retirée de `content` puis jamais réinsérée (indexOf introuvable après coup) : disparaissait purement et simplement du PDF final.
+      const pendingImageObjs = new Set((content._pendingImages || []).map(p => p.image));
+      const blockPageNumbers = content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; });
       content = await htmlToPdfContent(inlinedHtml, true);
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
@@ -1561,11 +1579,39 @@ const PdfExport = (function () {
       });
       content._footnoteByPage = footnoteByPage;
       (content._pendingImages || []).forEach((p, i) => {
-        const a = resolvedAnchors[i];
         const layer = p.image._pendingLayer;
-        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer);
+        const pageGrid = p.image._pageGrid;
         delete p.image._pendingImgNode;
         delete p.image._pendingLayer;
+        delete p.image._pageGrid;
+        if (pageGrid) {
+          // Position connue directement (capturée dans l'éditeur, Aperçu A4) - aucun ancrage/interpolation à faire, garantie de rendu identique à
+          // l'éditeur. Seule inconnue restante : sur QUELLE page ce document (peut-être modifié depuis) place réellement ce contenu aujourd'hui - trouvée
+          // via blockPageNumbers, jamais en reconstruisant une position depuis un ancrage textuel.
+          p.image.absolutePosition = { x: PAGE_MARGIN_PT + pageGrid.pageLeftPt, y: topMarginPt + pageGrid.pageTopPt };
+          const targetPage = pageGrid.pageIndex + 1;
+          const candidateIdxs = blockPageNumbers.reduce((acc, pn, j) => { if (pn === targetPage) acc.push(j); return acc; }, []);
+          // Page introuvable (document raccourci depuis le dernier positionnement de cette image, ex.) : repli sur la DERNIÈRE page connue plutôt que de
+          // laisser l'image bloquée sur son tableau/colonne d'origine (pourrait ne plus exister au même endroit après une réédition du contenu).
+          const fallbackIdxs = candidateIdxs.length ? candidateIdxs : blockPageNumbers.reduce((acc, pn, j) => { if (pn != null) acc.push(j); return acc; }, []);
+          if (!fallbackIdxs.length) return;
+          // "devant" peint APRÈS tout le reste de sa page (recouvre), "derrière" AVANT (recouvert) - même intention que le bracketing historique
+          // ci-dessous, réduite à "en dernier/en premier sur la page" puisqu'il n'y a plus de bloc-ancre précis à respecter.
+          const anchorBlock = content[layer === 'front' ? fallbackIdxs[fallbackIdxs.length - 1] : fallbackIdxs[0]];
+          const insertAfter = layer === 'front';
+          // Toujours au niveau racine (jamais p.parentArray) : une image grille-page est volontairement indépendante de son tableau/colonne d'origine -
+          // elle "s'évade" vers le contenu top-level, ce qui ne change rien visuellement (absolutePosition ignore la profondeur d'imbrication). Retirée de
+          // son tableau d'ORIGINE (souvent nested) avant d'être insérée dans `content`, jamais les deux à la fois (sinon dupliquée dans le PDF final).
+          const sourceArr = p.parentArray || content;
+          const sourceIdx = sourceArr.indexOf(p.image);
+          if (sourceIdx !== -1) sourceArr.splice(sourceIdx, 1);
+          const anchorIdx = content.indexOf(anchorBlock);
+          if (anchorIdx === -1) return;
+          content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
+          return;
+        }
+        const a = resolvedAnchors[i];
+        p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer);
         // pdfmake peint content[] dans l'ordre (une entrée plus tardive recouvre les précédentes) : "devant" doit finir aussi tard que possible (ancré sur le
         // bloc du dessous, inséré après) pour recouvrir le texte proche ; "derrière" l'inverse (ancré au-dessus, inséré avant).
         let anchorBlock = null; let insertAfter = true;

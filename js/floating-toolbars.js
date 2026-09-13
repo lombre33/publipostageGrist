@@ -196,6 +196,10 @@ const FloatingToolbars = (function () {
       const padLeft = parseFloat(rootCs.paddingLeft) || 0;
       const left = align === 'left' ? padLeft : align === 'center' ? padLeft + Math.max(0, (containerWidthPx - imgWidthPx) / 2) : padLeft + Math.max(0, containerWidthPx - imgWidthPx);
       updateSelectedImage({ left: Math.round(left) });
+      // dispatch() ci-dessus a déjà mis à jour le DOM de façon synchrone (NodeView applyAttrs) : `dom` reflète donc déjà la nouvelle position, mesurable
+      // immédiatement pour la grille page (voir setLayer, même schéma).
+      const grid = HeaderFooterPreview.computePageGridPosition(dom);
+      if (grid) updateSelectedImage(grid);
     }
 
     // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton fixe le calque visé. Au premier passage en calque, initialise left/top depuis la
@@ -206,15 +210,21 @@ const FloatingToolbars = (function () {
       const pos = editor.state.selection.from;
       if (node.attrs.layer === target) return;
       const patch = { layer: target };
-      if (target !== 'normal' && (node.attrs.left == null || node.attrs.top == null)) {
+      if (target !== 'normal') {
         const dom = editor.view.nodeDOM(pos);
         const img = dom && dom.querySelector && dom.querySelector('img');
-        if (img) {
+        if (img && (node.attrs.left == null || node.attrs.top == null)) {
           const imgRect = img.getBoundingClientRect();
           // offsetParent du wrapper (pas toujours .tiptap - une cellule de tableau en est un elle-même) : sinon l'image saute à l'affichage.
           const rootRect = (dom.offsetParent || editor.view.dom).getBoundingClientRect();
           patch.left = Math.round(imgRect.left - rootRect.left);
           patch.top = Math.round(imgRect.top - rootRect.top);
+        }
+        // Grille page (pageIndex/pageLeftPt/pageTopPt) : capturée à CHAQUE passage en calque (pas seulement au 1er), lue directement sur le rendu réel
+        // (Aperçu A4) - c'est cette valeur, pas left/top, que pdf-export.js utilise désormais pour garantir un rendu identique éditeur/PDF.
+        if (dom) {
+          const grid = HeaderFooterPreview.computePageGridPosition(dom);
+          if (grid) Object.assign(patch, grid);
         }
       }
       EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));

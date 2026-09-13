@@ -275,6 +275,83 @@ const HeaderFooterPreview = (function () {
       : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
     el.onclick = () => enterHeaderFooterMode(zone, variant);
   }
+  // Géométrie de page courante (en-tête/pied activés + bande RÉSERVÉE toujours pleine hauteur, HF_MAX_IMAGE_HEIGHT_PX - même plafond que
+  // pdf-export.js:HF_MAX_ZONE_HEIGHT_PT, jamais la hauteur RENDUE du contenu actuel : pdf-export.js réserve TOUJOURS cette bande fixe dès qu'une zone a du
+  // contenu, quelle que soit sa hauteur réelle, souvent bien moins que le plafond - un en-tête d'une seule ligne, par ex. Mesurer la hauteur réelle ici
+  // sous-estimait l'espace réservé côté éditeur, décalant tout le corps - et donc la position de toute image en calque - par rapport à l'export dès que le
+  // contenu était plus court que le plafond, bug réel signalé par l'utilisateur). Partagée par renderPaginationOverlay ET computePageGridPosition : les
+  // deux doivent voir EXACTEMENT la même page pour qu'une position capturée dans l'un vaille pour l'autre.
+  function currentPageGeometry() {
+    const enabled = !!headerFooterDraft.enabled;
+    const differentFirstPage = enabled && !!headerFooterDraft.differentFirstPage;
+    const headerHtml = enabled ? headerFooterDraft.header.default : null;
+    const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
+    const footerHtml = enabled ? headerFooterDraft.footer.default : null;
+    const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
+    // measureHtmlHeightPx ne sert plus qu'à détecter "zone vraiment vide" (même logique que pdf-export.js:resolveZone) - sa valeur de hauteur elle-même
+    // n'est plus utilisée pour dimensionner la réserve.
+    const headerHasContent = enabled && (measureHtmlHeightPx(headerHtml) > 0 || measureHtmlHeightPx(headerFirstHtml) > 0);
+    const footerHasContent = enabled && (measureHtmlHeightPx(footerHtml) > 0 || measureHtmlHeightPx(footerFirstHtml) > 0);
+    const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
+    const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
+    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, topExtraPx, bottomExtraPx, pageContentHeightPx };
+  }
+
+  // Ancêtre direct de .tiptap contenant `el` (computePageBreaks ne regarde jamais plus profond qu'un enfant direct - une zone 2-colonnes/un tableau compte
+  // comme UN bloc). Sert à situer un élément nested (image dans une colonne/cellule) parmi les coupures de page.
+  function topLevelAncestorIn(tiptapEl, el) {
+    let cur = el;
+    while (cur && cur.parentElement !== tiptapEl) cur = cur.parentElement;
+    return cur;
+  }
+
+  // Position d'un élément RÉELLEMENT RENDU sur la grille de page (index de page + décalage en pt depuis le coin haut-gauche IMPRIMABLE de cette page) -
+  // lue directement sur le DOM déjà mis en page (breaks + marges de coupure déjà appliquées), jamais reconstruite : c'est exactement cette garantie qui
+  // permet à pdf-export.js de placer l'image au même endroit sans avoir à deviner un contexte ou chercher une ancre textuelle. `null` si l'Aperçu A4 n'est
+  // pas actif (pagination non significative dans ce cas, cf. renderPaginationOverlay) ou si `el` n'est pas dans .tiptap.
+  function computePageGridPosition(el) {
+    const container = document.getElementById('editor-container');
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!container || !tiptapEl || !el || !container.classList.contains('a4-preview')) return null;
+    const topLevelEl = topLevelAncestorIn(tiptapEl, el);
+    if (!topLevelEl) return null;
+    // Resynchronise D'ABORD les marges de coupure réelles (renderPaginationOverlay les efface puis les repose à jour) : sans ça, une règle de marge
+    // laissée par un calcul PRÉCÉDENT (contenu ou en-tête/pied différents à ce moment-là) gonfle la hauteur mesurée d'un bloc au hasard et fait déclencher
+    // des coupures bien trop tôt - confirmé (pageIndex aberrant, ~= l'index brut de l'élément) avant ce correctif.
+    renderPaginationOverlay();
+    const { pageContentHeightPx } = currentPageGeometry();
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    const children = Array.from(tiptapEl.children);
+    const elIdx = children.indexOf(topLevelEl);
+    let pageIndex = 0;
+    let lastBreak = null;
+    for (const brk of breaks) {
+      if (elIdx > children.indexOf(brk.afterEl)) { pageIndex++; lastBreak = brk; } else break;
+    }
+    const tiptapRect = tiptapEl.getBoundingClientRect();
+    const cs = getComputedStyle(tiptapEl);
+    const padTop = parseFloat(cs.paddingTop) || 0;
+    const padLeft = parseFloat(cs.paddingLeft) || 0;
+    let pageStartTop, pageStartLeft = tiptapRect.left + padLeft;
+    if (!lastBreak) {
+      pageStartTop = tiptapRect.top + padTop;
+    } else {
+      // Le margin-bottom de coupure est déjà appliqué au DOM réel (ensurePaginationMarginStyle) : le prochain frère direct est donc déjà poussé à la
+      // position exacte du début de page suivante - pas besoin de reconstruire la hauteur de la bande de coupure elle-même.
+      const nextSibling = lastBreak.afterEl.nextElementSibling;
+      pageStartTop = nextSibling ? nextSibling.getBoundingClientRect().top : lastBreak.afterEl.getBoundingClientRect().bottom;
+    }
+    const elRect = el.getBoundingClientRect();
+    return {
+      pageIndex,
+      pageLeftPt: (elRect.left - pageStartLeft) / PT_TO_PX,
+      pageTopPt: (elRect.top - pageStartTop) / PT_TO_PX,
+    };
+  }
+
   function renderPaginationOverlay() {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
@@ -288,29 +365,7 @@ const HeaderFooterPreview = (function () {
     }
     paginationOverlayEl.innerHTML = '';
 
-    const enabled = !!headerFooterDraft.enabled;
-    const differentFirstPage = enabled && !!headerFooterDraft.differentFirstPage;
-    const headerHtml = enabled ? headerFooterDraft.header.default : null;
-    const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
-    const footerHtml = enabled ? headerFooterDraft.footer.default : null;
-    const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
-    const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml;
-    const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml;
-
-    // Bande RÉSERVÉE toujours pleine hauteur (HF_MAX_IMAGE_HEIGHT_PX, même plafond que pdf-export.js:HF_MAX_ZONE_HEIGHT_PT), jamais la hauteur RENDUE du
-    // contenu actuel : pdf-export.js réserve TOUJOURS cette même bande fixe dès qu'une zone a du contenu, quelle que soit sa hauteur réelle (souvent bien
-    // moins que le plafond - un en-tête d'une seule ligne, par ex.). Mesurer la hauteur réelle ici sous-estimait l'espace réservé côté éditeur, décalant
-    // tout le corps (et donc la position de toute image en calque) par rapport à l'export dès que le contenu était plus court que le plafond - bug réel
-    // signalé par l'utilisateur, confirmé : les deux passes de mesure PDF s'accordent déjà entre elles (headerFooterChunks threadé à l'identique), seul
-    // l'aperçu éditeur divergeait de l'export. measureHtmlHeightPx garde ici son rôle de détection "zone vraiment vide" (même logique que
-    // pdf-export.js:resolveZone), sa valeur de hauteur elle-même n'est plus utilisée.
-    const headerHasContent = enabled && (measureHtmlHeightPx(headerHtml) > 0 || measureHtmlHeightPx(headerFirstHtml) > 0);
-    const footerHasContent = enabled && (measureHtmlHeightPx(footerHtml) > 0 || measureHtmlHeightPx(footerFirstHtml) > 0);
-    const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
-    const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
-    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    const { enabled, differentFirstPage, headerForPage, footerForPage, topExtraPx, bottomExtraPx, pageContentHeightPx } = currentPageGeometry();
     // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
     clearPageBreakMargins();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
@@ -376,6 +431,6 @@ const HeaderFooterPreview = (function () {
     setEditor, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
     enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData, renderHfPill,
-    schedulePaginationRecompute, renderPaginationOverlay,
+    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition,
   };
 })();
