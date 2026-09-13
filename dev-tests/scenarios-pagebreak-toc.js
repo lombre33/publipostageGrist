@@ -93,6 +93,35 @@
   });
 
   cases.push({
+    id: 'pagebreak_header_height_fixed_regardless_of_content',
+    // Bug réel (signalé par l'utilisateur) : la bande d'en-tête/pied réservée par la pagination de l'ÉDITEUR (renderPaginationOverlay) mesurait la hauteur
+    // RENDUE du contenu actuel (measureHtmlHeightPx), alors que pdf-export.js réserve TOUJOURS une bande fixe (HF_MAX_ZONE_HEIGHT_PT/HF_MAX_IMAGE_HEIGHT_PX,
+    // 60px) dès qu'une zone a du contenu, quelle que soit sa hauteur réelle. Un en-tête plus court que 60px (le cas courant) faisait donc apparaître,
+    // dans l'éditeur, moins de place réservée qu'à l'export réel - décalant tout le corps du document (paragraphes, images en calque...) vers le haut par
+    // rapport à ce que produit vraiment le PDF. Vérifie qu'un même document force le même saut de page (même paragraphe hôte) qu'un en-tête tienne sur 1
+    // ligne courte ou sur 2 lignes plus longues - la RÉSERVE doit rester fixe, seule la bande visuelle de la bannière de saut peut varier.
+    description: 'La pagination réserve une hauteur fixe pour l\'en-tête, pas la hauteur réellement rendue de son contenu actuel',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await h.sleep(50);
+      const filler = Array.from({ length: 80 }, (_, i) => '<p>Ligne de remplissage ' + i + ' pour forcer un saut de page assez loin dans le document afin de declencher une vraie pagination.</p>').join('');
+      Editor.setHTML(filler);
+      await h.sleep(100);
+      const styleEl = document.getElementById('v2-pagination-margins-style');
+      const nthChildsOf = text => (text || '').match(/nth-child\((\d+)\)/g);
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>Court</p>', first: '' }, footer: { default: '', first: '' } });
+      await h.sleep(150);
+      const nthChildShort = nthChildsOf(styleEl && styleEl.textContent);
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>Ligne 1 assez longue pour occuper de la place dans la bande reservee</p><p>Ligne 2 du meme en-tete</p>', first: '' }, footer: { default: '', first: '' } });
+      await h.sleep(150);
+      const nthChildLong = nthChildsOf(styleEl && styleEl.textContent);
+      const pass = !!nthChildShort && !!nthChildLong && JSON.stringify(nthChildShort) === JSON.stringify(nthChildLong);
+      return { pass, notes: JSON.stringify({ nthChildShort, nthChildLong }) };
+    },
+  });
+
+  cases.push({
     id: 'toc_insert_and_detect_headings',
     description: 'Le sommaire détecte les titres présents dans le document',
     run: async (h) => {

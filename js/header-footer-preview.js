@@ -297,8 +297,17 @@ const HeaderFooterPreview = (function () {
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml;
 
-    const headerHeightPx = enabled ? Math.max(measureHtmlHeightPx(headerHtml), measureHtmlHeightPx(headerFirstHtml)) : 0;
-    const footerHeightPx = enabled ? Math.max(measureHtmlHeightPx(footerHtml), measureHtmlHeightPx(footerFirstHtml)) : 0;
+    // Bande RÉSERVÉE toujours pleine hauteur (HF_MAX_IMAGE_HEIGHT_PX, même plafond que pdf-export.js:HF_MAX_ZONE_HEIGHT_PT), jamais la hauteur RENDUE du
+    // contenu actuel : pdf-export.js réserve TOUJOURS cette même bande fixe dès qu'une zone a du contenu, quelle que soit sa hauteur réelle (souvent bien
+    // moins que le plafond - un en-tête d'une seule ligne, par ex.). Mesurer la hauteur réelle ici sous-estimait l'espace réservé côté éditeur, décalant
+    // tout le corps (et donc la position de toute image en calque) par rapport à l'export dès que le contenu était plus court que le plafond - bug réel
+    // signalé par l'utilisateur, confirmé : les deux passes de mesure PDF s'accordent déjà entre elles (headerFooterChunks threadé à l'identique), seul
+    // l'aperçu éditeur divergeait de l'export. measureHtmlHeightPx garde ici son rôle de détection "zone vraiment vide" (même logique que
+    // pdf-export.js:resolveZone), sa valeur de hauteur elle-même n'est plus utilisée.
+    const headerHasContent = enabled && (measureHtmlHeightPx(headerHtml) > 0 || measureHtmlHeightPx(headerFirstHtml) > 0);
+    const footerHasContent = enabled && (measureHtmlHeightPx(footerHtml) > 0 || measureHtmlHeightPx(footerFirstHtml) > 0);
+    const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
+    const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
