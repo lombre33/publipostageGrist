@@ -1,20 +1,10 @@
-/* Publipostage Grist – stylesheet.
-   Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
+/* Publipostage Grist – stylesheet. Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
-/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié
-   séparément dans index.html avant cette feuille. Auto-hébergée (et non plus
-   chargée depuis Google Fonts) pour garantir que .ql-editor/#reader-container
-   utilisent EXACTEMENT les mêmes fichiers de police que ceux embarqués dans
-   le PDF par pdfmake (vfs_fonts.min.js + js/pdf-fonts.js pour le gras) - sans
-   quoi le texte du courrier ne coupe pas ses lignes aux mêmes endroits dans
-   l'éditeur et dans l'export PDF. */
+/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour garantir que .ql-editor/
+   #reader-container utilisent EXACTEMENT les mêmes fichiers que ceux embarqués dans le PDF par pdfmake - sinon le texte ne coupe pas ses lignes pareil. */
 
-/* === Design tokens ===
-   --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils,
-   boutons, libellés) : le contenu du courrier (.ql-editor, #reader-container)
-   garde volontairement Roboto (cf. import ci-dessus, pour matcher l'export
-   PDF) plutôt que Manrope, pour ne pas changer le rendu du document ni
-   l'export PDF au-delà de ce qui est nécessaire à leur faire correspondre. */
+/* === Design tokens === --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
+   volontairement Roboto (pour matcher l'export PDF) plutôt que Manrope. */
 :root {
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -45,24 +35,12 @@
 /* === Typographie et mise en page de base === */
 html, body { margin:0; padding:0; height:100%; font-family: Arial, sans-serif; background: var(--bg); }
 body { display:flex; flex-direction:column; }
-/* #app n'avait ni hauteur ni flex propres : un enfant flex sans flex-basis
-   explicite se dimensionne à son CONTENU par défaut, donc dès que l'éditeur
-   contenait assez de texte pour dépasser la hauteur de la fenêtre, c'est
-   TOUTE LA PAGE qui gagnait sa propre barre de défilement (au lieu du
-   défilement interne déjà prévu sur #editor-container via flex:1+overflow:
-   auto plus bas) - faisant défiler la barre d'outils et le bandeau du haut
-   avec le contenu au lieu de les laisser fixes en haut. #app reproduit donc
-   le même schéma flex-column contraint en hauteur que body, pour que ce
-   soit #editor-container (et #reader-container) qui défile, jamais la page. */
+/* #app n'avait ni hauteur ni flex propres : un enfant flex sans flex-basis se dimensionne à son CONTENU par défaut, donc dès que l'éditeur dépassait la
+   hauteur de la fenêtre, c'est TOUTE LA PAGE qui gagnait sa barre de défilement (barre d'outils comprise) au lieu du défilement interne prévu sur
+   #editor-container. #app reproduit le même schéma flex-column contraint que body, pour que ce soit #editor-container qui défile, jamais la page. */
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
-/* Bandeau compact (demande : maximiser la hauteur dispo pour l'éditeur, on
-   perd déjà de la place en haut à cause de Grist lui-même) : UNE seule ligne
-   toujours visible (.bar-row) + un second volet (#toolbar-panel) replié par
-   défaut pour les deux champs texte rarement modifiés (nom du modèle, nom de
-   fichier PDF) - le reste (sélecteur de modèle, actions, mode, qualité,
-   export) reste des boutons/icônes à portée de clic immédiate. Tous les id
-   de bouton/input sont INCHANGÉS : main.js les cible toujours par les mêmes
-   id, seule la présentation change. */
+/* Bandeau compact (maximiser la hauteur dispo pour l'éditeur) : UNE seule ligne toujours visible (.bar-row) + un second volet (#toolbar-panel) replié par
+   défaut pour les champs texte rarement modifiés. Tous les id de bouton/input sont INCHANGÉS : main.js les cible toujours pareil. */
 #toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
 .bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
@@ -82,9 +60,8 @@ body { display:flex; flex-direction:column; }
   transition: background .12s ease, border-color .12s ease;
 }
 #toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
-/* Icône seule par défaut, libellé texte révélé au survol/focus (place
-   minimale au repos, information complète accessible sans clic). Une
-   largeur max de 160px suffit large à tous les libellés de ce bandeau. */
+/* Icône seule par défaut, libellé texte révélé au survol/focus (place minimale au repos, information complète accessible sans clic). Une largeur max de 160px
+   suffit large à tous les libellés de ce bandeau. */
 #toolbar-top button .btn-text, .a4-toggle .btn-text {
   display:inline-block; max-width:0; opacity:0; overflow:hidden; white-space:nowrap;
   transition: max-width .16s ease, opacity .1s ease, margin-left .16s ease;
@@ -102,9 +79,8 @@ body { display:flex; flex-direction:column; }
 #toolbar-top button::before { content:""; display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
 #btn-new::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
 #btn-save::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z'/%3E%3Cpath d='M17 21v-8H7v8M7 3v5h8'/%3E%3C/svg%3E"); }
-/* Enregistrer sous = copie du modèle courant sous un nouveau nom : icône de
-   duplication distincte de la disquette "Enregistrer" (même symbole que
-   celui déjà utilisé ailleurs dans l'app pour "dupliquer"). */
+/* Enregistrer sous = copie du modèle courant sous un nouveau nom : icône de duplication distincte de la disquette "Enregistrer" (même symbole que celui déjà
+   utilisé ailleurs dans l'app pour "dupliquer"). */
 #btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); }
 #btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 #btn-export-pdf::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); }
@@ -112,48 +88,38 @@ body { display:flex; flex-direction:column; }
 #btn-save-attachment::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); }
 #btn-mode-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
-/* Bouton de bascule du volet #toolbar-panel (nom du modèle / nom de fichier
-   PDF) : chevron qui pivote à 180° quand le volet est ouvert (aria-expanded,
-   posé par main.js). */
+/* Bouton de bascule du volet #toolbar-panel (nom du modèle / nom de fichier PDF) : chevron qui pivote à 180° quand le volet est ouvert (aria-expanded, posé
+   par main.js). */
 #btn-toggle-panel::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); transition: transform .15s ease; }
 #btn-toggle-panel[aria-expanded="true"]::before { transform: rotate(180deg); }
-/* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de
-   la règle générique #toolbar-top button ci-dessus (même compte d'ID que la
-   règle générique + type "button" s'annuleraient sinon en cas d'égalité). */
+/* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de la règle générique #toolbar-top button ci-dessus (même compte d'ID que la règle
+   générique + type "button" s'annuleraient sinon en cas d'égalité). */
 #toolbar-top #btn-save { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
 #toolbar-top #btn-export-pdf { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-export-pdf:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-/* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté
-   (même comportement JS : ils gardent leurs id et leur classe .active togglée
+/* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté (même comportement JS : ils gardent leurs id et leur classe .active togglée
    par main.js, seul l'agencement CSS change). */
 .mode-toggle { display:inline-flex; }
 #toolbar-top #btn-mode-edit, #toolbar-top #btn-mode-read { background: var(--surface-sunken); }
 #toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
-/* Bouton "Code HTML" (mode avancé) : délibérément À PART du groupe segmenté
-   Édition/Lecture ci-dessus (pas dans .mode-toggle) et visuellement discret
-   (pas de fond, texte atténué) - un onglet qu'on découvre en le cherchant,
-   pas une 3e option mise sur un pied d'égalité avec les deux premières. */
+/* Bouton "Code HTML" (mode avancé) : délibérément À PART du groupe segmenté Édition/Lecture ci-dessus (pas dans .mode-toggle) et visuellement discret (pas de
+   fond, texte atténué) - un onglet qu'on découvre en le cherchant, pas une 3e option mise sur un pied d'égalité avec les deux premières. */
 #toolbar-top .html-mode-btn { background: transparent; border-style: dashed; color: var(--text-muted, #6b7280); font-family: 'Courier New', monospace; }
 #toolbar-top .html-mode-btn:hover { color: var(--text); border-color: var(--text-muted, #6b7280); }
 #toolbar-top .html-mode-btn.active { background: var(--surface-sunken); color: var(--accent); border-color: var(--accent); border-style: solid; }
-/* Onglet Code HTML : textarea pleine hauteur + bandeau d'avertissement fixe
-   (toujours visible, pas une modale qu'on ferme et oublie) rappelant les deux
-   limites actées avec l'utilisateur - pas d'aller-retour garanti vers
-   l'éditeur classique, export vectoriel best-effort pour du HTML non produit
-   par l'éditeur (cf. commentaire équivalent dans js/html-source-tab.js). */
+/* Onglet Code HTML : textarea pleine hauteur + bandeau d'avertissement fixe (pas une modale qu'on ferme et oublie) rappelant les deux limites : pas
+   d'aller-retour garanti vers l'éditeur classique, export vectoriel best-effort pour du HTML non produit par l'éditeur. */
 #html-source-container { display:flex; flex-direction:column; flex:1; min-height:0; }
 .html-source-warning { flex:none; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5b12; font-size:.82em; line-height:1.4; }
 #html-source-textarea { flex:1; min-height:0; width:100%; box-sizing:border-box; border:0; padding:14px 18px; resize:none; font-family:'Courier New', monospace; font-size:.85em; line-height:1.5; color:#1b2430; background:#fff; }
 #html-source-textarea:focus { outline:none; }
-/* Volet replié par défaut ([hidden] posé dans le HTML, togglé par main.js) :
-   nom du modèle + nom de fichier PDF, moins souvent consultés que le reste
-   du bandeau - la spécificité de [hidden] doit dépasser celle de .toolbar-panen
-   {display:flex} ci-dessous, d'où le doublement du sélecteur de classe. */
+/* Volet replié par défaut ([hidden] posé dans le HTML, togglé par main.js) : nom du modèle + nom de fichier PDF, moins souvent consultés que le reste du
+   bandeau - la spécificité de [hidden] doit dépasser celle de .toolbar-panen {display:flex} ci-dessous, d'où le doublement du sélecteur de classe. */
 .toolbar-panel { display:flex; flex-wrap:wrap; gap:10px 16px; padding:8px 10px; border-top:1px solid var(--border); background: var(--surface-sunken); }
 .toolbar-panel.toolbar-panel[hidden] { display:none; }
 .toolbar-panel-field { display:flex; flex-direction:column; gap:2px; flex:1; min-width:220px; }
@@ -161,13 +127,8 @@ body { display:flex; flex-direction:column; }
 .toolbar-panel-field input { width:100%; box-sizing:border-box; }
 .field-hint { font-size:10.5px; color: var(--text-faint); line-height:1.35; }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
-/* Variable #Variable dont la table/colonne référencée n'existe plus (table
-   supprimée, colonne supprimée/renommée depuis Grist) - posé/retiré par
-   js/editor.js:refreshVariableBadgeValidity() à chaque chargement de
-   modèle et à chaque mise à jour de l'éditeur (purement visuel, rien de
-   persisté dans le HTML). Le message d'erreur vit dans l'attribut `title`
-   natif posé par ce même code (infobulle système au survol, sans JS de
-   popup dédié à écrire). */
+/* Variable #Variable dont la table/colonne référencée n'existe plus - posé/retiré par refreshVariableBadgeValidity() à chaque mise à jour (purement visuel,
+   rien de persisté). Le message d'erreur vit dans l'attribut `title` natif (infobulle système, sans JS de popup dédié). */
 .var-badge.var-badge-broken { background:#fbe9e9; color:#a4231c; border-color:#f0b3b3; padding-right:16px; position:relative; cursor:help; }
 .var-badge.var-badge-broken::after {
   content:""; position:absolute; top:50%; right:3px; transform:translateY(-50%);
@@ -197,45 +158,19 @@ body { display:flex; flex-direction:column; }
 .link-rules-empty { font-size:12px; color: var(--text-faint); margin:0; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
-/* Aperçu format A4 (case à cocher #toggle-a4-preview) : contraint .ql-editor à
-   la largeur de contenu réelle d'une page PDF A4 (page 595.28pt - 2×28pt de
-   marge = 539.28pt, converti en px standard 96/72 = 719.04px), pour que le
-   texte se répartisse sur les lignes exactement comme dans l'export PDF —
-   utile en particulier pour positionner une image en calque devant/derrière
-   le texte (cf. pdf-export.js, la position ne peut être fidèle que si
-   l'éditeur et le PDF font retomber le texte au même endroit).
-   CORRECTIF : `width` doit être la largeur TOTALE de la boîte (page + marges),
-   pas la largeur de contenu visée — sinon le `padding` (qui simule la marge
-   de page) la retranche EN PLUS, et le texte se retrouve à retomber sur une
-   largeur de ~645px au lieu de 719.04px (un paragraphe qui semblait "caler"
-   avec une image en calque ne le faisait donc qu'à peu près : le texte
-   coupait ses lignes plus tôt que dans le PDF réel, ce qui décalait tout ce
-   qui suit). Largeur totale = 719.04px de contenu + 2×37.33px de marge
-   (28pt convertis en px) = 793.71px.
-   Purement visuel : ne change ni le HTML enregistré, ni aucun comportement de
-   l'éditeur. */
+/* Aperçu format A4 (case #toggle-a4-preview) : contraint .ql-editor à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt de marge, converti
+   en px standard 96/72 = 719.04px) - utile pour positionner une image en calque, dont la position n'est fidèle que si l'éditeur et le PDF font retomber le
+   texte au même endroit. CORRECTIF : `width` doit être la largeur TOTALE (page + marges), sinon le `padding` la retranche EN PLUS et le texte retombe sur
+   ~645px au lieu de 719.04px. Largeur totale = 719.04px + 2×37.33px de marge = 793.71px. Purement visuel. */
 #editor-container.a4-preview { background: var(--surface-sunken); }
 #editor-container.a4-preview .ql-editor { width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(20,28,46,.10); }
-/* z-index:0 (en plus de position:relative) : force #reader-container à établir
-   son PROPRE contexte d'empilement local. Sans ça, son fond opaque (background:
-   #fff) n'est qu'un enfant "en flux normal" du contexte d'empilement racine de
-   toute la page — il se peint alors APRÈS (donc par-dessus) toute image en
-   calque "derrière le texte" (z-index négatif) qui, elle, se retrouve comparée
-   dans ce même contexte racine plutôt que localement au sein du conteneur.
-   Résultat sans ce correctif : l'image devient invisible ET ne reçoit plus les
-   clics (le fond de #reader-container/.ql-editor capte le point derrière elle). */
+/* z-index:0 (en plus de position:relative) : force #reader-container à établir son PROPRE contexte d'empilement local - sans ça son fond opaque se peint
+   APRÈS (par-dessus) toute image en calque "derrière le texte" (z-index négatif), la rendant invisible et lui volant ses clics. */
 #reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 
 /* === Éditeur Quill === */
-/* position:relative : sert de repère aux poignées de redimensionnement et aux
-   images en calque devant/derrière le texte (position:absolute + z-index).
-   z-index:0 : force .ql-editor à établir son PROPRE contexte d'empilement —
-   sans ça son fond opaque (posé par le thème Quill) se peint comme un enfant
-   "normal" du contexte racine de la page, donc APRÈS toute image en z-index
-   négatif (calque "derrière le texte"), qui elle est comparée dans ce même
-   contexte racine : l'image devient alors invisible et cesse de recevoir les
-   clics (le fond de .ql-editor capte le point derrière elle). Voir la même
-   note sur #reader-container. */
+/* position:relative : sert de repère aux poignées de redimensionnement et aux images en calque devant/derrière le texte. z-index:0 : force .ql-editor à
+   établir son PROPRE contexte d'empilement, même raison que #reader-container ci-dessus (sinon une image "derrière le texte" devient invisible). */
 .ql-editor { position:relative; z-index:0; min-height:240px; font-size: 14px; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 .ql-toolbar.ql-snow { background: var(--surface); border-color: var(--border); font-family: var(--font-ui); padding: 7px 10px; }
 .ql-snow .ql-picker { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); }
@@ -256,8 +191,7 @@ body { display:flex; flex-direction:column; }
 .editable-table table { border-collapse: collapse; table-layout: fixed; width: 100%; }
 .editable-table th, .editable-table td { border:1px solid #999; padding:6px 8px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .editable-table th { background:#eef3f8; }
-/* Même langage visuel que .editor-image-toolbar (pastille sombre flottante à
-   icônes) pour une barre contextuelle cohérente entre image et tableau. */
+/* Même langage visuel que .editor-image-toolbar (pastille sombre flottante à icônes) pour une barre contextuelle cohérente entre image et tableau. */
 .table-context-toolbar { display:none; position:absolute; align-items:center; background: var(--dark-bg); border: 1px solid var(--dark-border); padding:5px; box-shadow: var(--shadow-float); border-radius: 10px; gap:2px; z-index:50; }
 .table-context-toolbar.visible { display:flex; flex-wrap:wrap; }
 .table-context-toolbar button {
@@ -277,9 +211,8 @@ body { display:flex; flex-direction:column; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 .ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc { display: inline-flex; align-items: center; width: auto; }
-/* Boutons "large" injectés par editor.js (icône SVG + libellé) : page-break,
-   tableau, 2 colonnes, image, image URL, sommaire. Même gabarit que les
-   icon-btn Quill voisins, mais avec du texte. */
+/* Boutons "large" injectés par editor.js (icône SVG + libellé) : page-break, tableau, 2 colonnes, image, image URL, sommaire. Même gabarit que les icon-btn
+   Quill voisins, mais avec du texte. */
 .ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-two-columns, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc {
   height: 30px; padding: 0 9px; gap: 6px; border-radius: var(--radius-sm);
   font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text);
@@ -289,13 +222,8 @@ body { display:flex; flex-direction:column; }
 .ql-toolbar .ql-insert-image:hover, .ql-toolbar .ql-insert-image-url:hover { background: var(--accent-soft); }
 .ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg, .ql-toolbar .ql-insert-toc svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
 .ql-toolbar .ql-undo svg, .ql-toolbar .ql-redo svg { width: 16px; height: 16px; vertical-align: -3px; }
-/* margin/padding volontairement réduits au minimum (juste la place du
-   repère "2 COLONNES" en haut) : cette "chrome" d'édition n'existe pas côté
-   PDF (pdf-export.js:twoColumnsFrom ne pose qu'une petite marge de 13/4pt,
-   calibrée pour correspondre à CETTE valeur précisément) - un padding/marge
-   plus généreux ici gonflait la hauteur de la zone dans l'éditeur sans
-   contrepartie dans le PDF, décalant tout ce qui suit (ex. une image en
-   calque ancrée juste après). */
+/* margin/padding volontairement réduits au minimum : cette "chrome" d'édition n'existe pas côté PDF (twoColumnsFrom pose une marge calibrée pour matcher
+   CETTE valeur) - un padding plus généreux gonflait la zone dans l'éditeur sans contrepartie dans le PDF, décalant tout ce qui suit. */
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
@@ -309,14 +237,8 @@ body { display:flex; flex-direction:column; }
 .editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
 .editable-table td, .editable-table th { text-align: inherit; }
 
-/* === Slider de redimensionnement de colonnes (v1.8.2) ===
-   Poignee centree verticalement sur la hauteur de la cellule d'en-tete,
-   materialisee par un grip vertical central clairement visible.
-   - Ancre absolue : cellule d'en-tete (tr:first-child > td/th) en position:relative
-   - Recouvre la hauteur totale de la cellule -> cible de drag large et stable
-   - Curseur ew-resize explicite
-   - z-index eleve : reste au-dessus du contenu
-   - Grip central (::after) rend le slider visible et cliquable. */
+/* === Slider de redimensionnement de colonnes (v1.8.2) === Poignee sur toute la hauteur de la cellule d'en-tete (ancree en position:relative), pour une
+   cible de drag large et stable - curseur ew-resize, z-index eleve, grip central (::after) qui rend le slider visible et cliquable. */
 .table-col-resize-handle {
   position: absolute;
   top: 0;
@@ -357,17 +279,9 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
 
-/* === Sommaire + numérotation des titres ===
-   Configuration invisible (persistée dans le contenu, cf. editor.js
-   HeadingNumberingConfigBlot). Le marqueur de sommaire (.toc-marker) affiche
-   un APERÇU en direct de la vraie liste des titres DANS l'éditeur lui-même
-   (cf. editor.js:refreshTocMarkers - variables #Variable non résolues, comme
-   partout ailleurs à l'édition), dans un encadré en pointillés qui le
-   distingue du reste du contenu (même traitement visuel que .page-break-marker
-   ci-dessus). En mode lecture (reader-mode.js) et à l'export PDF
-   (pdf-export.js), le même marqueur est entièrement résolu (variables
-   comprises, + numéro de page en PDF) et perd cet encadré pour s'intégrer
-   normalement au document (.toc-resolved). */
+/* === Sommaire + numérotation des titres === Configuration invisible (persistée dans le contenu). Le marqueur de sommaire (.toc-marker) affiche un APERÇU
+   en direct de la vraie liste des titres DANS l'éditeur, dans un encadré en pointillés (même traitement que .page-break-marker). En mode lecture et à
+   l'export PDF, le même marqueur est entièrement résolu (variables + numéro de page) et perd cet encadré (.toc-resolved). */
 .heading-numbering-config { display: none; }
 .toc-marker { display: block; margin: 18px 0; padding: 10px 14px; border: 1px dashed #6b7280; border-radius: 4px; color: #6b7280; font-size: .9em; }
 .toc-title { font-weight: 600; font-size: 1.15em; margin: 0 0 8px; color: inherit; }
@@ -378,28 +292,15 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .toc-entry.toc-level-4 { margin-left: 42px; }
 .toc-entry.toc-level-5 { margin-left: 56px; }
 .toc-entry.toc-level-6 { margin-left: 70px; }
-/* Mode lecture : le placeholder éditeur (encadré en pointillés, texte muet)
-   reste masqué tant qu'il n'est pas résolu par reader-mode.js - une fois
-   résolu (classe .toc-resolved posée par resolveTocMarkers), ré-affiché avec
-   une mise en forme normale, intégrée au document comme un vrai bloc. */
+/* Mode lecture : le placeholder éditeur (encadré en pointillés, texte muet) reste masqué tant qu'il n'est pas résolu par reader-mode.js - une fois résolu
+   (classe .toc-resolved posée par resolveTocMarkers), ré-affiché avec une mise en forme normale, intégrée au document comme un vrai bloc. */
 #reader-container .toc-marker { display: none; user-select: none; }
 #reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
 
-/* Numérotation automatique des titres H1-H6, pilotée par le data-attribute
-   data-heading-style posé sur .ql-editor (cf. editor.js:syncHeadingNumberingDataset)
-   ou sur .reader-content (cf. reader-mode.js - PAS #reader-container lui-même :
-   le HTML du modèle est chargé dans un <div> intermédiaire, .reader-content,
-   qui est le seul VRAI parent direct des titres - #reader-container > h1 ne
-   correspondrait jamais à rien) - un pur compteur CSS (::before), à l'image
-   des puces/numéros de liste déjà gérés ainsi (cf. listMarkerFor dans
-   pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF
-   plutôt que de réimplémenter la logique de compteurs à la main).
-   Cascade sur 3 styles (décimal -> alpha -> romain minuscule/majuscule), qui
-   se répète au-delà de h3 - point de départ choisi par l'utilisateur pour
-   h1 (cf. #heading-numbering-style). Uniquement les titres de PREMIER NIVEAU
-   du flux principal (combinateur enfant direct `>`) : un titre tapé/collé
-   dans un tableau ou une colonne 2-colonnes n'est pas numéroté (hors
-   périmètre du sommaire, qui ne liste que le flux principal). */
+/* Numérotation automatique des titres H1-H6, pilotée par le data-attribute data-heading-style posé sur .ql-editor ou sur .reader-content (PAS
+   #reader-container lui-même : .reader-content est le seul VRAI parent direct des titres) - un pur compteur CSS (::before), à l'image des puces/numéros de
+   liste (cf. listMarkerFor dans pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF). Cascade sur 3 styles (décimal -> alpha -> romain),
+   qui se répète au-delà de h3. Uniquement les titres de PREMIER NIVEAU du flux principal (`>`) : un titre dans un tableau/une colonne n'est pas numéroté. */
 .ql-editor[data-heading-style], .reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
 .ql-editor[data-heading-style] > h1, .reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
 .ql-editor[data-heading-style] > h2, .reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
@@ -437,9 +338,8 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
 .editor-image:hover, .editor-image.editor-image-active { outline-color: #1f5dbf; }
 .editor-image.editor-image-floating { cursor: move; }
-/* position:fixed est indispensable : sans elle, top/left posés en JS (coordonnées
-   viewport via getBoundingClientRect) n'ont aucun effet et la barre retombe dans
-   le flux normal, tout en bas du document (dernier enfant de <body>). */
+/* position:fixed est indispensable : sans elle, top/left posés en JS (coordonnées viewport via getBoundingClientRect) n'ont aucun effet et la barre retombe
+   dans le flux normal, tout en bas du document (dernier enfant de <body>). */
 .editor-image-toolbar { display: none; align-items: center; position: fixed; z-index: 10000; padding: 5px; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 10px; box-shadow: var(--shadow-float); white-space: nowrap; }
 .editor-image-toolbar.visible { display: flex; }
 .editor-image-toolbar button { width: 30px; height: 30px; min-width: 30px; padding: 0; margin: 0; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--dark-text-muted); background: transparent; cursor: pointer; position: relative; }
@@ -458,21 +358,16 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 .editor-image-opacity { display: inline-flex; align-items: center; gap: 6px; color: var(--dark-text-muted); font-size: 12px; padding: 0 6px; vertical-align: middle; }
 .editor-image-opacity svg { width: 14px; height: 14px; flex: none; }
 .editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; accent-color: var(--accent); }
-/* Poignées volontairement grandes et contrastées (carré blanc, bordure bleue
-   épaisse) : ce sont elles qui portent le redimensionnement libre — les boutons
-   de zoom +/- de la barre d'outils ne sont qu'un raccourci rapide en +/-25%.
-   position:fixed (coordonnées viewport, comme .editor-image-toolbar) : ces
-   poignées vivent dans document.body, hors de .ql-editor, pour échapper à la
-   reconciliation DOM de Quill qui les effacerait sinon en quelques millisecondes. */
+/* Poignées volontairement grandes et contrastées : ce sont elles qui portent le redimensionnement libre, les boutons zoom +/- n'étant qu'un raccourci en
+   +/-25%. position:fixed : ces poignées vivent dans document.body, hors de .ql-editor, pour échapper à la reconciliation DOM de Quill. */
 .editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid var(--accent); border-radius: 3px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
 .editor-image-handle:hover { background: var(--accent-soft); }
 .editor-image-handle-nw { cursor: nwse-resize; }
 .editor-image-handle-ne { cursor: nesw-resize; }
 .editor-image-handle-sw { cursor: nesw-resize; }
 .editor-image-handle-se { cursor: nwse-resize; }
-/* Marqueur d'ancrage des images devant/derrière le texte : reste cliquable
-   par-dessus tout (comme les poignées) pour resélectionner une image que le
-   flux normal du texte recouvre autrement complètement une fois désélectionnée. */
+/* Marqueur d'ancrage des images devant/derrière le texte : reste cliquable par-dessus tout (comme les poignées) pour resélectionner une image que le flux
+   normal du texte recouvre autrement complètement une fois désélectionnée. */
 .editor-image-anchor { position: fixed; z-index: 10001; width: 20px; height: 20px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); color: var(--accent); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 .editor-image-anchor svg { width: 12px; height: 12px; }
 .editor-image-anchor:hover { background: var(--accent); color: #fff; }
@@ -483,15 +378,8 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 body.resizing-editor-image { cursor: nwse-resize; user-select: none; }
 body.resizing-editor-image * { user-select: none; }
 
-/* === Pickers Taille/Police (tailles réelles en pt + polices web-safe,
-   cf. editor.js) - remplacent la liste petit/normal/grand/énorme et
-   serif/monospace de Quill par défaut, dont le CSS de quill.snow.css ne
-   connaît que CES valeurs précises (règles ::before ciblant
-   [data-value="small"] etc.) - sans ce qui suit, les nouvelles valeurs de la
-   whitelist n'affichent aucun texte du tout dans le picker. La valeur elle-
-   même (ex. "14pt", "Georgia") étant déjà lisible telle quelle, une seule
-   règle générique attr(data-value) suffit, pas besoin d'un libellé par
-   option comme le ferait Quill nativement. */
+/* === Pickers Taille/Police (tailles réelles en pt + polices web-safe) - remplacent la liste petit/normal/grand/énorme de Quill par défaut, dont le CSS ne
+   connaît que CES valeurs précises - sans ce qui suit, les nouvelles valeurs n'affichent aucun texte. Une seule règle générique attr(data-value) suffit. */
 .ql-snow .ql-picker.ql-size .ql-picker-label::before,
 .ql-snow .ql-picker.ql-size .ql-picker-item::before {
   content: attr(data-value);
@@ -508,10 +396,8 @@ body.resizing-editor-image * { user-select: none; }
 .ql-snow .ql-picker.ql-font .ql-picker-item:not([data-value])::before {
   content: 'Roboto';
 }
-/* Aperçu visuel : chaque option du picker "Police" s'affiche dans sa propre
-   police (CSS n'autorise pas de attr() générique pour font-family, une règle
-   explicite par police est donc nécessaire ici - seulement 5, cf. la liste
-   volontairement restreinte choisie pour cette fonctionnalité). */
+/* Aperçu visuel : chaque option du picker "Police" s'affiche dans sa propre police (CSS n'autorise pas de attr() générique pour font-family, une règle
+   explicite par police est donc nécessaire ici - seulement 5, cf. la liste volontairement restreinte choisie pour cette fonctionnalité). */
 .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Arial"] { font-family: Arial, Helvetica, sans-serif; }
 .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Times New Roman"] { font-family: 'Times New Roman', Times, serif; }
 .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Georgia"] { font-family: Georgia, serif; }

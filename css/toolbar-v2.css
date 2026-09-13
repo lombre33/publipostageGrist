@@ -1,65 +1,35 @@
-/* Refonte UI/UX de la ligne "modèle/export" (.bar-row) et de la ligne de mise
-   en forme (#v2-toolbar), demandée après audit comparatif avec les standards
-   actuels (Google Docs/Notion). Fichier séparé de editor-v2.css (qui ne
-   couvre que .tiptap, cf. son en-tête) : ce qui suit touche le CHROME de
-   l'app (barre du haut), pas l'éditeur lui-même.
+/* Refonte UI/UX de la ligne "modèle/export" (.bar-row) et de la ligne de mise en forme (#v2-toolbar). Fichier séparé de editor-v2.css (qui ne couvre que
+   .tiptap) : ce qui suit touche le CHROME de l'app (barre du haut), pas l'éditeur lui-même.
 
-   Volontairement PAS dans ../css/style.css (partagé avec la V1) : les
-   sélecteurs ci-dessous (.title-cluster/.action-cluster/[data-tip]/
-   #btn-link-rules/#btn-rename-template/#v2-heading-group) n'existent que
-   dans le HTML de index.html - la V1 garde son propre mécanisme (icône
-   seule + libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
+   Volontairement PAS dans ../css/style.css (partagé avec la V1) : les sélecteurs ci-dessous n'existent que dans le HTML de index.html - la V1 garde son
+   propre mécanisme (icône seule + libellé révélé au survol, cf. css/style.css `.btn-text`), inchangé. */
 
-/* === Cluster "modèle courant" (sélecteur + renommage) ===
-   Remplace les deux champs séparés (select de la V1 + input#template-name
-   toujours visible) par UN seul contrôle : le select affiche/choisit le
-   modèle, un petit crayon juste à côté fait apparaître l'input à SA place
-   pour le renommer (logique posée/togglée par js/main.js:wireTemplateRename)
-   - même geste que renommer le titre d'un document Google Docs/Notion. */
+/* === Cluster "modèle courant" (sélecteur + renommage) === Remplace les deux champs séparés (select V1 + input#template-name toujours visible) par UN seul
+   contrôle : le select affiche/choisit le modèle, un crayon fait apparaître l'input à sa place pour renommer - même geste que Google Docs/Notion. */
 .title-cluster { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .title-cluster select { border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; border-radius: 0; }
 .title-cluster select:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
 .title-cluster .title-cluster-input { border: none; height: 26px; background: var(--accent-soft); padding: 0 8px; width: 160px; outline: none; }
 .title-cluster button.rename-btn { border: none; border-left: 1px solid var(--border); border-radius: 0; height: 26px; width: 26px; padding: 0; background: transparent; color: var(--text-faint); }
 .title-cluster button.rename-btn:hover, .title-cluster button.rename-btn:focus-visible { color: var(--text); background: var(--surface-sunken); }
-/* Crayon de renommage : délibérément plus petit/discret que celui du mode
-   Édition (#btn-mode-edit, même ligne, quelques contrôles plus loin) pour ne
-   pas laisser croire aux deux boutons la même fonction. */
+/* Crayon de renommage : délibérément plus petit/discret que celui du mode Édition pour ne pas laisser croire aux deux boutons la même fonction. */
 #toolbar-top #btn-rename-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 
-/* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/
-   Tables liées) === Juste un regroupement par ESPACEMENT (gap), sans boîte
-   visuelle autour : une première version encadrait le groupe d'un fond gris
-   + bordure (pour lire d'un coup d'œil "ce sont des actions liées"), mais
-   à l'usage ce cadre lisait comme un bloc gris terne, pas dans le style du
-   reste de l'app - retiré sur retour utilisateur. Chaque bouton garde son
-   style par défaut (#toolbar-top button, css/style.css) ; Enregistrer/
-   Supprimer/Exporter restent distingués par COULEUR (accent/rouge), pas par
-   un encadré de groupe. */
+/* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/Tables liées) === Juste un regroupement par ESPACEMENT (gap), sans boîte visuelle
+   autour (un encadré gris testé puis retiré, pas dans le style du reste de l'app). Enregistrer/Supprimer/Exporter restent distingués par COULEUR. */
 .action-cluster { display: inline-flex; align-items: center; gap: 4px; }
 
-/* Icône "Tables liées" : deux mini-tableaux reliés par un trait - distincte
-   du bouton "Insérer un tableau" de la ligne de mise en forme (un seul
-   tableau), qui n'a pas la même fonction. Remplace le carré plein qui
-   résultait de l'absence totale de règle ::before pour ce bouton. */
+/* Icône "Tables liées" : deux mini-tableaux reliés par un trait - distincte du bouton "Insérer un tableau" (un seul tableau). Remplace le carré plein
+   résultant de l'absence de règle ::before pour ce bouton. */
 #btn-link-rules::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8'%3E%3Crect x='2' y='3' width='8' height='8' rx='1'/%3E%3Cpath d='M2 7h8M6 3v8'/%3E%3Crect x='14' y='13' width='8' height='8' rx='1'/%3E%3Cpath d='M14 17h8M18 13v8'/%3E%3Cpath d='M10 7h2a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E"); }
 
-/* Icône "Réglages" (roue crantée) - même famille d'icône que .bar-row
-   (masque ::before, PAS Icons.svg()/applyToolbarIcons qui ne couvre que les
-   boutons de #v2-toolbar, la ligne du DESSOUS - #v2-btn-settings vit dans
-   .bar-row comme #btn-rename-template/#btn-link-rules ci-dessus). Poussé
-   tout à droite par #status-msg juste avant lui (margin-left:auto, cf.
-   css/style.css), sans CSS de positionnement supplémentaire nécessaire. */
+/* Icône "Réglages" (roue crantée) - même famille d'icône que .bar-row (masque ::before, PAS Icons.svg()/applyToolbarIcons qui ne couvre que #v2-toolbar).
+   Poussé tout à droite par #status-msg juste avant lui (margin-left:auto), sans CSS de positionnement supplémentaire. */
 #v2-btn-settings::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); }
 
-/* === Infobulle classique (bulle sombre sous le bouton), remplace le
-   mécanisme "libellé révélé au survol" de la V1 (css/style.css `.btn-text`,
-   qui élargit le bouton et pousse les éléments suivants). Déclenchée par
-   [data-tip] plutôt que par `title` : les deux natifs ne cohabitent pas bien
-   (l'infobulle native du navigateur finirait par apparaître par-dessus après
-   un survol prolongé) - l'accessibilité passe par aria-label sur ces mêmes
-   boutons, posé dans le HTML. Pas de flèche/pointeur (les icônes ::before
-   occupent déjà le seul autre pseudo-élément disponible sur ces boutons). */
+/* === Infobulle classique (bulle sombre sous le bouton), remplace "libellé révélé au survol" de la V1 (`.btn-text`, qui élargit le bouton). Déclenchée par
+   [data-tip] plutôt que `title` (les deux natifs ne cohabitent pas bien) - l'accessibilité passe par aria-label. Pas de flèche : les icônes ::before
+   occupent déjà le seul autre pseudo-élément disponible. */
 .bar-row [data-tip], #v2-toolbar [data-tip] { position: relative; }
 .bar-row [data-tip]::after, #v2-toolbar [data-tip]::after {
   content: attr(data-tip);
@@ -72,65 +42,36 @@
 .bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after,
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* === Menu "Titre" fusionné (niveau de titre + numérotation des titres,
-   #v2-heading-group/#v2-heading-flyout, index.html) === Remplace deux
-   contrôles jusqu'ici séparés (un <select> natif "Normal/Titre 1-6" en tout
-   début de barre, et une pastille de numérotation isolée bien plus loin) -
-   demandé par l'utilisateur pour regrouper les deux réglages, qui portent
-   tous les deux sur les titres. Un seul chip (.v2-format-chip, même style
-   que Police) déclenche un flyout listant les niveaux PUIS, séparé par un
-   filet, le style de numérotation (.v2-segmented, même chrome que la
-   pastille en-tête/pied). Les DEUX <select> natifs (v2-header-select/
-   v2-heading-numbering-select) restent dans le DOM (masqués) : js/main.js
-   s'appuie encore dessus pour lire/poser la valeur au chargement d'un modèle
-   (cf. loadTemplateIntoEditor), inchangé pour ne rien casser côté
-   sauvegarde/chargement. */
+/* === Menu "Titre" fusionné (niveau + numérotation des titres) === Remplace deux contrôles jusqu'ici séparés (un <select> "Normal/Titre 1-6" + une pastille
+   de numérotation isolée), qui portent tous deux sur les titres. Un seul chip (.v2-format-chip) déclenche un flyout listant les niveaux PUIS, séparé par un
+   filet, le style de numérotation (.v2-segmented). Les DEUX <select> natifs restent dans le DOM (masqués) : js/main.js s'appuie encore dessus pour
+   lire/poser la valeur au chargement d'un modèle. */
 #v2-header-select[hidden], #v2-heading-numbering-select[hidden] { display: none; }
 
-/* === Contours retirés sur la ligne du haut aussi (même traitement que la
-   ligne de mise en forme) - transparent au repos, révélé au survol
-   seulement. Override V2-only (spécificité égale à la règle partagée
-   #toolbar-top button de css/style.css, gagne car chargé après) : les
-   boutons deja distingués par couleur (Enregistrer/Supprimer/Exporter) ou
-   par état (.active du mode Édition/Lecture) restent inchangés, leurs
-   propres règles sont plus spécifiques. */
+/* === Contours retirés sur la ligne du haut aussi - transparent au repos, révélé au survol seulement. Override V2-only (spécificité égale à la règle
+   partagée de css/style.css, gagne car chargé après) : les boutons déjà distingués par couleur ou état gardent leurs propres règles plus spécifiques. */
 #toolbar-top button { border-color: transparent; }
 #toolbar-top button:hover { border-color: var(--border-strong); }
 .title-cluster { border-color: transparent; }
 .a4-toggle { border-color: transparent; background: transparent; }
 .a4-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
 
-/* === Nom de fichier PDF masqué derrière un crayon (même geste que le
-   renommage de modèle ci-dessus) - reste visible si un nom est déjà
-   configuré (cf. js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor),
-   pour ne pas cacher un réglage actif derrière une icône anodine. */
+/* === Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) - reste visible si un nom est déjà configuré (cf.
+   js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor), pour ne pas cacher un réglage actif derrière une icône anodine. */
 .v2-pdf-filename-cluster { display: inline-flex; align-items: center; gap: 4px; }
 #pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
 #btn-toggle-pdf-filename::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 
-/* === Qualité PDF : bouton + panneau au survol (même mécanisme que les
-   styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un
-   <select> toujours affiché - js/main.js:onExportPdf lit encore
-   v2-pdf-quality.value directement, inchangé. */
-/* Page (coin plié, même silhouette que l'icône "saut de page" de js/
-   icons.js - ancre visuellement ce bouton comme "propre au PDF/document")
-   + petites barres ascendantes à l'intérieur (niveaux de qualité) - retenu
-   parmi plusieurs maquettes proposées (option "J") après plusieurs essais
-   moins concluants (jauge à aiguille, trame de points, curseurs). */
+/* === Qualité PDF : bouton + panneau au survol (même mécanisme que les styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un <select>
+   toujours affiché - js/main.js:onExportPdf lit encore v2-pdf-quality.value directement, inchangé. */
+/* Page (coin plié, même silhouette que l'icône "saut de page" - ancre ce bouton comme "propre au PDF/document") + petites barres ascendantes (niveaux de
+   qualité) - retenu après plusieurs essais moins concluants (jauge à aiguille, trame de points, curseurs). */
 #v2-btn-quality::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v4h4'/%3E%3Cpath d='M9 17v-2.5M12.5 17v-5M16 17v-3'/%3E%3C/svg%3E"); }
 #v2-pdf-quality[hidden] { display: none; }
 
-/* === Modale "Correspondance de tables" (#link-config-modal, cf.
-   js/variables.js:showLinkConfigModal) === Remplacée par une maquette plus
-   sobre après audit UI/UX : les 2 radios + astuce (cas normal/cas particulier
-   traités à égalité) laissent place au cas normal ("Ligne correspondante",
-   toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien
-   texte, sur le modèle de la carte option la moins probable qu'on ne
-   présente pas au même niveau que l'option par défaut. Les deux <select>
-   portent chacun leur propre étiquette JUSTE AU-DESSUS (association
-   select ↔ table sans ambiguïté - la 1ère maquette les avait en bulles aux
-   deux extrémités de la ligne, association peu claire, corrigé avant
-   implémentation). */
+/* === Modale "Correspondance de tables" (#link-config-modal) === Maquette sobre : les 2 radios à égalité laissent place au cas normal ("Ligne
+   correspondante", toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien texte. Les deux <select> portent chacun leur propre
+   étiquette JUSTE AU-DESSUS (association select ↔ table sans ambiguïté). */
 .link-config-modal-content { font-family: var(--font-ui); width: 360px; }
 .link-config-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 14px; color: var(--text); }
 .link-config-bridge { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
@@ -153,12 +94,8 @@
 .link-config-modal-content .modal-actions .link-config-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .link-config-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }
 
-/* === Modale "Tables liées" (#link-rules-modal, cf.
-   js/variables.js:refreshLinkRulesPanel) === Liste des règles déjà
-   configurées ; chaque ligne avait 2 boutons texte bruts ("Modifier"/
-   "Supprimer", aucun style) - remplacés par des icônes cohérentes avec le
-   reste de la toolbar (même crayon que le renommage de modèle, même
-   corbeille que Supprimer). */
+/* === Modale "Tables liées" (#link-rules-modal) === Liste des règles configurées ; chaque ligne avait 2 boutons texte bruts sans style, remplacés par des
+   icônes cohérentes avec le reste de la toolbar (même crayon que le renommage, même corbeille que Supprimer). */
 .link-rules-modal-content { font-family: var(--font-ui); width: 340px; }
 .link-rules-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
 .link-rules-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
@@ -173,12 +110,8 @@
 .link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
 
-/* === Galerie de templates (#template-gallery-modal/#template-preview-modal,
-   cf. js/main.js wireTemplateGalleryModal) === Même overlay que
-   #link-rules-modal (css/editor-v2.css), mais un contenu bien plus large
-   (mosaïque) : .modal-content de css/style.css plafonne à 440px, ne convient
-   pas ici - élargi + repassé en colonne (en-tête fixe, grille scrollable,
-   actions en bas) plutôt qu'un contenu qui grandit sans limite. */
+/* === Galerie de templates (#template-gallery-modal/#template-preview-modal) === Même overlay que #link-rules-modal, mais contenu bien plus large
+   (mosaïque) : .modal-content plafonne à 440px, élargi + repassé en colonne (en-tête fixe, grille scrollable, actions en bas). */
 .template-gallery-modal-content, .template-preview-modal-content {
   font-family: var(--font-ui); width: min(920px, 92vw); max-width: none;
   max-height: 85vh; display: flex; flex-direction: column;
@@ -209,24 +142,15 @@
 .tpl-preview-actions #tpl-preview-use-empty, .tpl-preview-actions #tpl-preview-use-data { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tpl-preview-actions #tpl-preview-use-empty:hover, .tpl-preview-actions #tpl-preview-use-data:hover { background: var(--accent-hover); }
 .tpl-preview-body { flex: 1; overflow: auto; background: var(--surface-sunken); padding: 16px; border-radius: 6px; }
-/* Le "look page A4" (largeur/padding) de .v2-page-sheet/.tiptap est normalement
-   posé par des règles SCOPÉES à #editor-container.a4-preview (css/editor-v2.css) -
-   cette prévisualisation vit dans une modale, pas dans #editor-container, donc
-   aucune de ces règles ne s'applique ici. Reprend seulement les 2 constantes
-   nécessaires (mêmes valeurs que editor-v2.css, tolérance à la duplication déjà
-   établie dans ce projet pour ce genre de petite constante partagée) - tout le
-   reste (styles des titres/listes/tableaux/badges #Variable dans .tiptap) est
-   bien générique, non scopé à #editor-container, donc déjà actif ici tel quel. */
+/* Le "look page A4" de .v2-page-sheet/.tiptap est normalement posé par des règles SCOPÉES à #editor-container.a4-preview - cette prévisualisation vit dans
+   une modale, donc aucune ne s'applique ici. Reprend seulement les 2 constantes nécessaires (mêmes valeurs que editor-v2.css) ; tout le reste (styles des
+   titres/listes/tableaux/badges #Variable) est générique, non scopé, donc déjà actif ici tel quel. */
 .tpl-preview-body .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
 .tpl-preview-body .tiptap { box-sizing: border-box; padding: 37.33px; background: transparent; }
 .template-gallery-modal-content .modal-actions, .template-preview-modal-content .modal-actions { margin-top: 14px; }
 
-/* === Panneau Réglages (langue / touche de déclenchement / crédits) ===
-   Même gabarit exact que .link-config-modal-content/.link-rules-modal-content
-   ci-dessus (largeur fixe modeste, boutons de pied identiques) - premier
-   système d'onglets du projet (aucun précédent équivalent trouvé), construit
-   simplement : une rangée de boutons + un panneau par onglet, un seul visible
-   à la fois via l'attribut `hidden` natif (pas de librairie/état complexe). */
+/* === Panneau Réglages (langue / touche de déclenchement / crédits) === Même gabarit que .link-config-modal-content ci-dessus - premier système d'onglets
+   du projet : une rangée de boutons + un panneau par onglet, un seul visible via l'attribut `hidden` natif (pas de librairie/état complexe). */
 .settings-modal-content { font-family: var(--font-ui); width: 360px; }
 .settings-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
 .settings-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
@@ -238,15 +162,8 @@
 .settings-radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
 #settings-trigger-char { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
 .settings-trigger-reload-notice { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 12.5px; color: var(--text-muted); }
-/* `display:flex` juste au-dessus a EXACTEMENT la même spécificité qu'une
-   feuille de style utilisateur (0,1,0) que la règle native [hidden]{display:
-   none} de la feuille UA du navigateur - à égalité de spécificité, la règle
-   AUTEUR (celle-ci) l'emporte sur la règle UA dans la cascade, quel que soit
-   l'ordre d'écriture ici : l'attribut `hidden` natif ne masquait donc plus
-   rien (constaté en conditions réelles - l'avis "Rechargez la page" restait
-   visible en permanence malgré `hidden` correctement posé/retiré en JS).
-   Re-déclaré ici avec [hidden] en plus dans le sélecteur (0,2,0, gagne sans
-   ambiguïté) pour que l'attribut natif reprenne la main. */
+/* `display:flex` juste au-dessus a EXACTEMENT la même spécificité (0,1,0) que la règle native [hidden]{display:none} de la feuille UA - la règle AUTEUR
+   l'emporte dans la cascade, donc l'attribut `hidden` ne masquait plus rien. Re-déclaré avec [hidden] en plus (0,2,0) pour qu'il reprenne la main. */
 .settings-trigger-reload-notice[hidden] { display: none; }
 .settings-trigger-reload-notice button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
 .settings-trigger-reload-notice button:hover { background: var(--accent-hover); }
@@ -257,15 +174,9 @@
 .settings-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
-/* === Barre flottante de formatage nombre/date d'une bulle #Variable (cf.
-   js/editor.js:wireVariableFloatingToolbar) === Réutilise le chrome
-   .v2-floating-toolbar (même positionnement/ombre que les barres image/
-   tableau) ; ce qui suit ne couvre que le CONTENU propre à cette barre
-   (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages
-   de date) - ses boutons ont besoin d'une largeur variable (libellés
-   texte), contrairement aux boutons icône-seule des autres barres
-   flottantes (d'où des sélecteurs plus spécifiques plutôt que de rouvrir
-   la règle générique). */
+/* === Barre flottante de formatage nombre/date d'une bulle #Variable === Réutilise le chrome .v2-floating-toolbar ; ce qui suit ne couvre que le CONTENU
+   propre (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages de date) - ses boutons ont besoin d'une largeur variable (libellés texte),
+   contrairement aux boutons icône-seule des autres barres flottantes. */
 .v2-varfmt-toolbar { align-items: center; }
 .v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; }
 .v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
@@ -276,37 +187,19 @@
 .v2-varfmt-toolbar input[data-role="num-currency"] { width: 56px; }
 .v2-varfmt-toolbar select[data-role="date-preset"] { width: 190px; }
 .v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
-/* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a
-   plus de sens (cf. numberToWordsFr) - grisé, pas retiré. Les décimales
-   RESTENT actives (demandé explicitement) : la partie décimale s'écrit
-   elle aussi en toutes lettres ("virgule cinquante-six"), pas d'arrondi
-   silencieux à l'entier - la devise reste utilisable elle aussi ("mille
-   euros"). */
+/* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens - grisé, pas retiré. Les décimales RESTENT actives : la partie
+   décimale s'écrit elle aussi en toutes lettres ("virgule cinquante-six"), pas d'arrondi silencieux ; la devise reste utilisable ("mille euros"). */
 [data-var-panel="number"].v2-varfmt-words-active .v2-varfmt-seg { opacity: .4; pointer-events: none; }
 
-/* Boutons/groupes sans aucun sens pendant l'édition d'en-tête/pied de page
-   (posée dynamiquement par js/editor.js:syncToolbarState) - pointer-events
-   (pas juste disabled, la numérotation des titres est un GROUPE au survol,
-   pas un simple <button>) hérite vers tous les descendants, bloquant aussi
-   le panneau flottant révélé au survol, pas seulement le déclencheur.
-   `.v2-floating-toolbar .v2-hf-locked` en plus (pas juste #v2-toolbar) :
-   les boutons "devant/derrière le texte" de la barre flottante d'image (cf.
-   wireImageFloatingToolbar) vivent dans document.body, hors de #v2-toolbar -
-   verrouillés en mode en-tête/pied car pdf-export.js ne résout pas la
-   position d'une image en calque dans cette zone (image "au cœur du texte"
-   seule prise en charge là-bas). */
+/* Boutons/groupes sans aucun sens pendant l'édition d'en-tête/pied de page - pointer-events (pas juste disabled, la numérotation des titres est un GROUPE
+   au survol) hérite vers tous les descendants, bloquant aussi le panneau flottant révélé au survol. `.v2-floating-toolbar .v2-hf-locked` en plus : les
+   boutons "devant/derrière le texte" de la barre flottante d'image vivent hors de #v2-toolbar, verrouillés car pdf-export.js ne résout pas la position
+   d'une image en calque dans cette zone. */
 #v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
 
-/* === Pastille flottante d'édition d'en-tête/pied de page (#v2-hf-pill, cf.
-   js/editor.js:renderHfPill) === Remplace l'ancien bouton de toolbar +
-   sous-barre dockée pleine largeur (jugé "pas beau" par l'utilisateur,
-   cassait la continuité visuelle de la page) - façon Google Docs/Word :
-   on entre en édition en cliquant directement une zone de marge de la page
-   (cf. .v2-hf-zone, editor-v2.css), CETTE pastille n'apparaît qu'ENSUITE,
-   pendant l'édition elle-même. `position: sticky` (dans #editor-container,
-   qui défile) plutôt qu'ancrée au clic : reste visible même sur un en-tête
-   qui déborderait de la zone visible, contrairement à un simple positionnement
-   ponctuel qui sortirait de l'écran au moindre scroll. */
+/* === Pastille flottante d'édition d'en-tête/pied de page (#v2-hf-pill) === Remplace l'ancien bouton de toolbar + sous-barre dockée pleine largeur - façon
+   Google Docs/Word : on entre en édition en cliquant une zone de marge de la page (cf. .v2-hf-zone), cette pastille n'apparaît qu'ENSUITE. `position:
+   sticky` (dans #editor-container, qui défile) plutôt qu'ancrée au clic : reste visible même sur un en-tête qui déborderait de la zone visible. */
 .v2-hf-pill {
   position: sticky; top: 8px; z-index: 25; width: fit-content; margin: 0 auto 14px;
   display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px;
@@ -326,10 +219,8 @@
 .v2-hf-btn-done { margin-left: auto; width: auto; height: 28px; padding: 0 14px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
 .v2-hf-btn-done:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-/* Menu "Image depuis une variable" (js/editor.js:openImageVariablePicker) -
-   même langage visuel que #autocomplete-box (../css/style.css, #Variable en
-   texte), instance DOM séparée (id différent) pour ne rien partager entre
-   les deux fichiers. */
+/* Menu "Image depuis une variable" (js/editor.js:openImageVariablePicker) - même langage visuel que #autocomplete-box (../css/style.css, #Variable en texte),
+   instance DOM séparée (id différent) pour ne rien partager entre les deux fichiers. */
 #v2-image-var-picker { position: absolute; z-index: 1000; min-width: 200px; max-width: 320px; max-height: 240px; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; font-family: var(--font-ui); font-size: 12.5px; }
 .v2-image-var-picker-item { padding: 6px 10px; cursor: pointer; color: var(--text); }
 .v2-image-var-picker-item:hover { background: var(--surface-sunken); }

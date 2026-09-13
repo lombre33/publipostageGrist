@@ -1,19 +1,9 @@
-/* Roboto auto-hebergee (data URI), utilisee par .ql-editor et #reader-container
-   (voir css/style.css) pour que le texte du courrier s'affiche EXACTEMENT dans
-   la police que pdfmake utilise a l'export PDF (police par defaut de
-   vfs_fonts.min.js), plutot que de retomber silencieusement sur Helvetica/Arial
-   faute de Roboto installee sur le poste - deux polices aux metriques de
-   caracteres differentes, qui ne coupaient donc pas les lignes aux memes
-   endroits entre l'editeur et le PDF.
-   Regular/Italic : memes fichiers .ttf que ceux embarques par pdfmake
-   (vfs_fonts.min.js) pour 'normal'/'italics', extraits tels quels pour
-   garantir un rendu au pixel pres identique.
-   Bold/Bold Italic : pdfmake n'embarque PAS de vrai Bold par defaut (seulement
-   Roboto-Medium, plus etroit que le Bold reellement rendu par le navigateur -
-   c'est ce qui faisait "gagner" un mot de plus par ligne a l'export). On fournit
-   donc ici le vrai Roboto-Bold/Bold-Italic (Google Fonts, charset latin +
-   latin-ext), et js/pdf-fonts.js embarque EXACTEMENT les memes deux fichiers
-   dans le VFS de pdfmake pour qu'ils correspondent au gras du navigateur. */
+/* Roboto auto-hebergee (data URI), utilisee par .ql-editor et #reader-container pour que le texte s'affiche EXACTEMENT dans la police que pdfmake utilise
+   a l'export, plutot que de retomber sur Helvetica/Arial faute de Roboto installee - deux polices aux metriques differentes ne coupent pas les lignes
+   pareil. Regular/Italic : memes fichiers .ttf que ceux embarques par pdfmake, extraits tels quels pour un rendu identique au pixel pres.
+
+   Bold/Bold Italic : pdfmake n'embarque PAS de vrai Bold par defaut (seulement Roboto-Medium, plus etroit que le Bold du navigateur - d'ou un mot de plus
+   par ligne a l'export). On fournit donc ici le vrai Roboto-Bold/Bold-Italic, et js/pdf-fonts.js embarque EXACTEMENT les memes fichiers dans pdfmake. */
 @font-face {
   font-family: 'Roboto';
   font-style: normal;
