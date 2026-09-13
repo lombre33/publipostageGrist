@@ -199,7 +199,10 @@ const FloatingToolbars = (function () {
       // dispatch() ci-dessus a déjà mis à jour le DOM de façon synchrone (NodeView applyAttrs) : `dom` reflète donc déjà la nouvelle position, mesurable
       // immédiatement pour la grille page (voir setLayer, même schéma).
       const grid = HeaderFooterPreview.computePageGridPosition(dom);
-      if (grid) updateSelectedImage(grid);
+      // offsetLeft/offsetTop APRÈS computePageGridPosition (pas `left` recalculé ci-dessus) : reflète une éventuelle correction si l'alignement sortait de
+      // la page physique (cf. le commentaire de computePageGridPosition) - improbable pour un alignement horizontal classique, mais garde tout cohérent
+      // (et rattrape au passage un `top` déjà hors bornes avant cet appel, sans quoi il resterait stocké tel quel malgré la correction visuelle).
+      if (grid) updateSelectedImage(Object.assign({ left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) }, grid));
     }
 
     // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton fixe le calque visé. Au premier passage en calque, initialise left/top depuis la
@@ -219,12 +222,28 @@ const FloatingToolbars = (function () {
           const rootRect = (dom.offsetParent || editor.view.dom).getBoundingClientRect();
           patch.left = Math.round(imgRect.left - rootRect.left);
           patch.top = Math.round(imgRect.top - rootRect.top);
+          // Reporté IMMÉDIATEMENT sur `dom` (pas seulement sur `patch`, qui n'est appliqué qu'à la toute fin) : computePageGridPosition ci-dessous mesure
+          // ET corrige `dom` lui-même si cette position sort de la page physique (cf. son propre commentaire) - sans ce report, la correction ne serait
+          // jamais reflétée dans le left/top finalement enregistré.
+          dom.style.position = 'absolute';
+          dom.style.left = patch.left + 'px';
+          dom.style.top = patch.top + 'px';
         }
         // Grille page (pageIndex/pageLeftPt/pageTopPt) : capturée à CHAQUE passage en calque (pas seulement au 1er), lue directement sur le rendu réel
         // (Aperçu A4) - c'est cette valeur, pas left/top, que pdf-export.js utilise désormais pour garantir un rendu identique éditeur/PDF.
         if (dom) {
           const grid = HeaderFooterPreview.computePageGridPosition(dom);
-          if (grid) Object.assign(patch, grid);
+          if (grid) {
+            Object.assign(patch, grid);
+            // offsetLeft/offsetTop APRÈS computePageGridPosition : reflète une éventuelle correction du 1er calque ci-dessus. Seulement pertinent quand ce
+            // bloc vient de positionner `dom` lui-même (patch.left/top déjà posés) - pour un changement de calque ULTÉRIEUR (left/top déjà existants),
+            // `dom` n'est pas nécessairement en position:absolute au bon endroit à cet instant, patch.left/top restent alors ceux déjà stockés dans
+            // node.attrs (comportement inchangé).
+            if (patch.left != null && patch.top != null) {
+              patch.left = Math.round(dom.offsetLeft);
+              patch.top = Math.round(dom.offsetTop);
+            }
+          }
         }
       }
       EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, patch));

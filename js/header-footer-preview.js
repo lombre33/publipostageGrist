@@ -163,6 +163,9 @@ const HeaderFooterPreview = (function () {
 
   // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
   const PT_TO_PX = 96 / 72;
+  // Doit matcher PAGE_MARGIN_PT dans js/pdf-export.js - utilisé uniquement pour empêcher une image en calque de sortir de la page physique (cf.
+  // computePageGridPosition), pas pour un calcul de mise en page.
+  const PAGE_MARGIN_PT = 28;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .tiptap en Aperçu A4
   const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
@@ -311,7 +314,8 @@ const HeaderFooterPreview = (function () {
   // Position d'un élément RÉELLEMENT RENDU sur la grille de page (index de page + décalage en pt depuis le coin haut-gauche IMPRIMABLE de cette page) -
   // lue directement sur le DOM déjà mis en page (breaks + marges de coupure déjà appliquées), jamais reconstruite : c'est exactement cette garantie qui
   // permet à pdf-export.js de placer l'image au même endroit sans avoir à deviner un contexte ou chercher une ancre textuelle. `null` si l'Aperçu A4 n'est
-  // pas actif (pagination non significative dans ce cas, cf. renderPaginationOverlay) ou si `el` n'est pas dans .tiptap.
+  // pas actif (pagination non significative dans ce cas, cf. renderPaginationOverlay) ou si `el` n'est pas dans .tiptap. EFFET DE BORD : repositionne `el`
+  // (style.left/top) si la mesure le place au-delà du bord physique de la page - voir le commentaire plus bas, juste avant le `return`.
   function computePageGridPosition(el) {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
@@ -345,10 +349,28 @@ const HeaderFooterPreview = (function () {
       pageStartTop = nextSibling ? nextSibling.getBoundingClientRect().top : lastBreak.afterEl.getBoundingClientRect().bottom;
     }
     const elRect = el.getBoundingClientRect();
+    const rawLeftPt = (elRect.left - pageStartLeft) / PT_TO_PX;
+    const rawTopPt = (elRect.top - pageStartTop) / PT_TO_PX;
+    // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà, -PAGE_MARGIN_PT) donnerait un point
+    // de grille qui, une fois exporté (PAGE_MARGIN_PT + pageTopPt/pageLeftPt), tombe à une coordonnée PDF négative : invisible/coupée dans le PDF alors que
+    // le navigateur, lui, continue de l'afficher en entier (ni `.tiptap` ni `.v2-page-sheet` ne la découpe visuellement) - l'éditeur mentait sur ce qui sera
+    // réellement imprimable (repéré par l'utilisateur : image "tout en haut de l'éditeur" ressortant rognée au PDF). Corrigé en repoussant l'élément dans le
+    // DOM RÉEL (pas seulement la valeur retournée) jusqu'au bord physique dès qu'on le détecte ici - le seul point de passage commun aux 3 sites d'appel
+    // (setLayer/alignOrSnap/glisser), qui lisent tous ensuite `el.offsetLeft`/`offsetTop` pour connaître le left/top brut à enregistrer, donc restent
+    // automatiquement cohérents avec cette correction sans avoir à la dupliquer.
+    const minPt = -PAGE_MARGIN_PT;
+    const clampDeltaLeftPt = rawLeftPt < minPt ? minPt - rawLeftPt : 0;
+    const clampDeltaTopPt = rawTopPt < minPt ? minPt - rawTopPt : 0;
+    if (clampDeltaLeftPt || clampDeltaTopPt) {
+      const curLeftPx = parseFloat(el.style.left) || 0;
+      const curTopPx = parseFloat(el.style.top) || 0;
+      el.style.left = (curLeftPx + clampDeltaLeftPt * PT_TO_PX) + 'px';
+      el.style.top = (curTopPx + clampDeltaTopPt * PT_TO_PX) + 'px';
+    }
     return {
       pageIndex,
-      pageLeftPt: (elRect.left - pageStartLeft) / PT_TO_PX,
-      pageTopPt: (elRect.top - pageStartTop) / PT_TO_PX,
+      pageLeftPt: rawLeftPt + clampDeltaLeftPt,
+      pageTopPt: rawTopPt + clampDeltaTopPt,
     };
   }
 

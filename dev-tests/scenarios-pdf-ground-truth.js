@@ -99,6 +99,58 @@
     });
   });
 
+  // Bug réel (repéré par l'utilisateur) : une image en calque glissée tout en haut/à gauche de l'éditeur pouvait finir avec un `pageTopPt`/`pageLeftPt`
+  // négatif au-delà de -PAGE_MARGIN_PT - une fois exportée (PAGE_MARGIN_PT + pageTopPt), une coordonnée PDF négative, donc une image partiellement ou
+  // entièrement rognée/invisible, alors que ni `.tiptap` ni `.v2-page-sheet` ne la découpaient visuellement dans l'éditeur (l'éditeur montrait l'image
+  // entière, le PDF non - vrai écart de fidélité, pas juste "l'utilisateur l'a mal placée"). Corrigé en repoussant l'image dans le DOM réel jusqu'au bord
+  // physique de la page dès que `computePageGridPosition` la détecte au-delà (js/header-footer-preview.js) - vérifié ici en glissant délibérément bien
+  // au-delà du bord et en confirmant que la position peinte finale est exactement calée sur ce bord (0,0), jamais négative.
+  ['top', 'left'].forEach(axis => {
+    cases.push({
+      id: 'pdfgt_clamp_image_dragged_off_page_' + axis,
+      description: 'Une image en calque glissée hors de la page physique (' + axis + ') est repoussée au bord, jamais rognée/invisible au PDF',
+      run: async (h) => {
+        await h.resetEditor();
+        document.getElementById('editor-container').classList.add('a4-preview');
+        await h.focusAtEnd();
+        const tinyPngDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const origPrompt = window.prompt;
+        window.prompt = () => tinyPngDataUri;
+        document.getElementById('v2-btn-image').click();
+        await h.sleep(120);
+        window.prompt = origPrompt;
+        const img = h.tiptap().querySelector('img.editor-image');
+        if (!img) return { pass: false, notes: 'image non insérée' };
+        await h.selectAtomNode(img);
+        await h.sleep(80);
+        const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+        if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+        frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(100);
+        const wrap = img.closest('.editor-image-view');
+        const handle = wrap.querySelector('.editor-image-move-handle');
+        const handleRect = handle.getBoundingClientRect();
+        const tiptapRect = h.tiptap().getBoundingClientRect();
+        // Cible délibérément à 150px AU-DELÀ du bord physique (pas juste dans la marge) - le cas qui a produit le bug réel.
+        const target = axis === 'top' ? [handleRect.left, tiptapRect.top - 150] : [tiptapRect.left - 150, handleRect.top];
+        await h.dragFromTo(handle, null, target, 8);
+        const ed = EditorCore.getEditor();
+        let attrs = null;
+        ed.state.doc.descendants(node => { if (node.type.name === 'editorImage') attrs = node.attrs; });
+        if (!attrs) return { pass: false, notes: 'nœud image introuvable après glisser' };
+        const html = Editor.getHTML();
+        const result = await h.exportPdfContent(html, null);
+        const gt = await h.extractPdfGroundTruth(result.base64);
+        const painted = gt.pages[0] && gt.pages[0].images[0];
+        if (!painted) return { pass: false, notes: 'aucune image peinte trouvée dans le PDF décodé' };
+        const pass = axis === 'top'
+          ? Math.abs(painted.y - 0) < 1.5 && attrs.pageTopPt === -28
+          : Math.abs(painted.x - 0) < 1.5 && attrs.pageLeftPt === -28;
+        return { pass, notes: JSON.stringify({ attrs: { pageLeftPt: attrs.pageLeftPt, pageTopPt: attrs.pageTopPt }, painted }) };
+      },
+    });
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfGroundTruth = cases;
 })();

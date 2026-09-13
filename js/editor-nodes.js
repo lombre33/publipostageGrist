@@ -676,13 +676,12 @@ const EditorNodes = (function () {
           function onMoveUp(event) {
             document.removeEventListener('mousemove', onMoveMove);
             if (moveState) {
-              const patch = {
-                left: Math.round(moveState.startLeft + (event.clientX - moveState.startX)),
-                top: Math.round(moveState.startTop + (event.clientY - moveState.startY)),
-              };
               // `wrap` porte déjà la position finale (onMoveMove l'a suivie en direct pendant le glisser) - mesurable immédiatement, même schéma que
               // setLayer/alignOrSnap : c'est cette grille page, pas left/top, que pdf-export.js utilise pour garantir un rendu identique éditeur/PDF.
               const grid = HeaderFooterPreview.computePageGridPosition(wrap);
+              // Lu APRÈS computePageGridPosition (pas recalculé depuis event.clientX/Y) : cette fonction repositionne `wrap` si le glisser sort de la page
+              // physique (cf. son propre commentaire) - offsetLeft/offsetTop reflètent alors la position CORRIGÉE, jamais désynchronisée de la grille.
+              const patch = { left: Math.round(wrap.offsetLeft), top: Math.round(wrap.offsetTop) };
               if (grid) Object.assign(patch, grid);
               updateAttrs(patch);
             }
