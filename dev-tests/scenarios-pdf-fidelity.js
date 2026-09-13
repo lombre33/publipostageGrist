@@ -219,6 +219,44 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_image_alone_in_column_not_stuck_at_page_top',
+    // Bug réel (signalé par l'utilisateur) : une image en calque SEULE dans
+    // une colonne 2-colonnes (aucun autre bloc mesurable dans la même
+    // colonne pour servir d'ancre au-dessus/en-dessous/conteneur) atterrissait
+    // collée au haut de la PAGE (~28pt, la marge) au lieu d'être sur sa
+    // colonne, même quand celle-ci est poussée loin dans la page. Cause :
+    // twoColumnsFrom résout chaque colonne via un rendu isolé détaché (son
+    // propre référentiel de coordonnées) puis recale imgTopPx sur la
+    // colonne réelle - mais sans AUCUNE ancre locale trouvée, le filet de
+    // sécurité générique de resolveImageAbsolutePosition traitait ce
+    // imgTopPx (déjà local à la colonne) comme une distance depuis le haut
+    // de PAGE. Fixé en ancrant ce cas de repli sur le bloc de la zone
+    // 2-colonnes elle-même (un vrai bloc du flux, avec une position de page
+    // réelle) - a aussi révélé et corrigé deux bugs latents : la relocation
+    // de l'image pouvait la perdre silencieusement si son ancre vit dans un
+    // autre tableau que le sien, et .positions[0] d'un bloc composite
+    // `columns:[...]` est une entrée de remesure interne à pdfmake
+    // ({top:0}), pas la position réelle (toujours prendre la dernière).
+    description: 'Une image en calque seule dans une colonne 2-colonnes (sans texte voisin dans la même colonne) atterrit sur sa colonne, pas collée au haut de page',
+    run: async (h) => {
+      await h.resetEditor();
+      const filler = Array.from({ length: 15 }, (_, i) => '<p>Ligne de remplissage numero ' + i + ' pour pousser le contenu loin dans la page.</p>').join('');
+      const html = filler + '<div class="two-columns-zone" style="--layout-left: 50%;">'
+        + '<div class="two-columns-column"><p><img class="editor-image" draggable="false" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="" data-layer="front" data-wrap="inline" style="width:60px;position:absolute;left:53px;top:383px;z-index:5"></p></div>'
+        + '<div class="two-columns-column"><p></p></div>'
+        + '</div><p></p>';
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF (perdue pendant la relocation ?) : ' + JSON.stringify(result.content) };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      // "Collé en haut" (bug) donnait ~28-50pt ; la colonne réelle (15 paragraphes de remplissage avant) est bien plus bas sur la page.
+      const pass = abs.y > 150;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_inline_image_position_in_paragraph',
     // Anciennement CASSÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte"
     // SANS alignement gauche/droite (par défaut, ou centrée) était toujours

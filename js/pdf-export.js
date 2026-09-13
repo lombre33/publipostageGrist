@@ -715,6 +715,11 @@ const PdfExport = (function () {
       margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
+    // Filet de sécurité propre à cette colonne : sans texte voisin exploitable (image seule dans la colonne, rien avant/après au même niveau), le filet
+    // générique de resolveImageAbsolutePosition traiterait imgTopPx (déjà rendu local à la colonne ci-dessus) comme une distance depuis le haut de PAGE -
+    // image collée en haut au lieu d'être sur sa colonne (bug réel, reproduit avec une image seule dans une colonne poussée loin dans la page). La zone
+    // 2-colonnes elle-même (`block`) est un bloc réel du flux principal, donc résolue à une vraie position de page : sert d'ancre de repli.
+    nestedPending.forEach(p => { if (!p.container && !p.above && !p.below) { p.container = block; p.containerTopPx = 0; } });
     if (nestedPending.length) block._nestedPending = nestedPending;
     return block;
   }
@@ -1467,10 +1472,14 @@ const PdfExport = (function () {
       // Capturé avant de reconstruire : fb.block.positions devient obsolète dès que htmlToPdfContent recrée des objets neufs. Le numéro de chaque note est
       // déjà définitif dès la 1ère passe (numérotation continue) - seule sa page avait besoin d'être mesurée.
       const footnotePageNumbers = (content._footnoteBlocks || []).map(fb => (fb.block.positions && fb.block.positions[0] && fb.block.positions[0].pageNumber) || null);
+      // .positions[0] n'est pas toujours la position finale réelle : un bloc composite (ex. `columns:[...]`, cf. l'ancre de repli de twoColumnsFrom) porte
+      // une entrée de remesure interne à pdfmake (resetXY, {top:0} pour tout bloc de ce type) AVANT sa vraie position - toujours prendre la DERNIÈRE entrée
+      // (sans effet sur un bloc texte simple, qui n'en a qu'une).
+      const lastPosition = block => block && block.positions && block.positions.length ? block.positions[block.positions.length - 1] : null;
       const resolvedAnchors = (content._pendingImages || []).map(p => {
-        const aboveResolved = p.above && p.above.positions && p.above.positions[0];
-        const belowResolved = p.below && p.below.positions && p.below.positions[0];
-        const containerResolved = p.container && p.container.positions && p.container.positions[0];
+        const aboveResolved = lastPosition(p.above);
+        const belowResolved = lastPosition(p.below);
+        const containerResolved = lastPosition(p.container);
         return {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
@@ -1518,10 +1527,14 @@ const PdfExport = (function () {
         const arr = p.parentArray || content;
         const imgIdx = arr.indexOf(p.image);
         if (imgIdx === -1) return;
-        arr.splice(imgIdx, 1);
+        // anchorBlock peut vivre dans un tableau différent de `arr` (ex. le bloc de zone 2-colonnes lui-même, utilisé comme ancre de repli alors que
+        // l'image vit dans le tableau interne de sa propre colonne) : retirer l'image avant de vérifier échouerait à la réinsérer et la perdrait
+        // silencieusement (bug réel, découvert avec ce repli). Toujours vérifier la présence de l'ancre AVANT de retirer l'image de `arr`.
         const anchorIdx = arr.indexOf(anchorBlock);
         if (anchorIdx === -1) return;
-        arr.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
+        arr.splice(imgIdx, 1);
+        const shiftedAnchorIdx = anchorIdx > imgIdx ? anchorIdx - 1 : anchorIdx;
+        arr.splice(insertAfter ? shiftedAnchorIdx + 1 : shiftedAnchorIdx, 0, p.image);
       });
     }
     // Filet de sécurité résiduel : une image dont ni bracket ni container n'a pu être résolu garderait sinon son absolutePosition placeholder (0,0)
