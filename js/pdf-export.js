@@ -695,17 +695,6 @@ const PdfExport = (function () {
       }
       columns.push(blocks);
     }
-    // Chaque colonne résout ses images via son propre appel imbriqué à htmlToPdfContent, dans un sous-arbre détaché dont l'origine est son propre début :
-    // imgTopPx reste relatif à .tiptap alors que containerTopPx y est local (~0), donc on soustrait la position Y réelle de la colonne (pas besoin pour X).
-    const nestedPending = [];
-    columns.forEach((colBlocks, colIdx) => {
-      const pending = colBlocks._pendingImages || [];
-      if (pending.length) {
-        const colOffsetTopPx = colNodes[colIdx].getBoundingClientRect().top - rootRect.top;
-        pending.forEach(p => { p.imgTopPx -= colOffsetTopPx; nestedPending.push(p); });
-      }
-      delete colBlocks._pendingImages;
-    });
     const block = {
       columns: [
         { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, colOwnInsetRight[0], 0] }] },
@@ -715,8 +704,24 @@ const PdfExport = (function () {
       margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
-    // Repli si aucune ancre locale : sans ça imgTopPx (local à la colonne) serait lu comme une distance depuis le haut de PAGE.
-    nestedPending.forEach(p => { if (!p.container && !p.above && !p.below) { p.container = block; p.containerTopPx = 0; } });
+    // imgTopPx/imgLeftPx restent relatifs à .tiptap (comme au top-level) - recalés en local à la colonne UNIQUEMENT quand une ancre locale existe.
+    const nestedPending = [];
+    columns.forEach((colBlocks, colIdx) => {
+      const pending = colBlocks._pendingImages || [];
+      if (pending.length) {
+        const colRect = colNodes[colIdx].getBoundingClientRect();
+        const colOffsetTopPx = colRect.top - rootRect.top;
+        const colOffsetLeftPx = colRect.left - rootRect.left;
+        pending.forEach(p => {
+          if (p.container || p.above || p.below) {
+            p.imgTopPx -= colOffsetTopPx;
+            p.imgLeftPx -= colOffsetLeftPx;
+          }
+          nestedPending.push(p);
+        });
+      }
+      delete colBlocks._pendingImages;
+    });
     if (nestedPending.length) block._nestedPending = nestedPending;
     return block;
   }
@@ -1258,6 +1263,7 @@ const PdfExport = (function () {
       const hostNode = sourceNodes[idx];
       const container = hostToOwnTextBlock.get(hostNode) || null;
       const containerTopPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().top - rootRect.top) : null;
+      const containerLeftPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().left - rootRect.left) : null;
       let above = null, aboveTopPx = -Infinity;
       let below = null, belowTopPx = Infinity;
       measurable.forEach(({ block: other, node }) => {
@@ -1272,7 +1278,7 @@ const PdfExport = (function () {
       });
       // parentArray : tableau dans lequel l'image et son ancre vivent toutes les deux, utilisé par resolveNativePdfContent pour relocaliser l'image à côté de
       // son ancre sans dépendre d'un tableau top-level codé en dur.
-      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx, aboveTopPx, belowTopPx, container, containerTopPx, parentArray: blocks });
+      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx, aboveTopPx, belowTopPx, container, containerTopPx, containerLeftPx, parentArray: blocks });
     });
     return pending;
   }
@@ -1419,8 +1425,7 @@ const PdfExport = (function () {
   function resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer) {
     const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
     const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : PAGE_MARGIN_PT;
-    // imgLeftPx est page-relative pour le flux principal et une colonne 2-colonnes (aucun des deux n'a son propre position:relative). Une cellule de tableau
-    // EN a un (cf. attributeNestedPendingImages) : containerLeftPx/containerLeft signalent ce cas et pilotent X en local au conteneur, pas en page-relative.
+    // containerLeftPx/containerLeft (posées par attributeNestedPendingImages, cellule de tableau) pilotent X en local au conteneur, sinon page-relative.
     const xPt = a.containerLeftPx != null && a.containerLeft != null
       ? a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT
       : PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
@@ -1469,8 +1474,13 @@ const PdfExport = (function () {
       // Capturé avant de reconstruire : fb.block.positions devient obsolète dès que htmlToPdfContent recrée des objets neufs. Le numéro de chaque note est
       // déjà définitif dès la 1ère passe (numérotation continue) - seule sa page avait besoin d'être mesurée.
       const footnotePageNumbers = (content._footnoteBlocks || []).map(fb => (fb.block.positions && fb.block.positions[0] && fb.block.positions[0].pageNumber) || null);
-      // .positions[0] d'un bloc composite (ex. columns) est une entrée de remesure interne pdfmake, pas la position réelle - prendre la dernière.
-      const lastPosition = block => block && block.positions && block.positions.length ? block.positions[block.positions.length - 1] : null;
+      // Un bloc composite (ex. columns) peut porter une entrée de remesure pdfmake à {left:0,top:0}, à une position non déterministe - l'écarter.
+      const lastPosition = block => {
+        if (!block || !block.positions || !block.positions.length) return null;
+        const real = block.positions.filter(p => !(p.left === 0 && p.top === 0));
+        const list = real.length ? real : block.positions;
+        return list[list.length - 1];
+      };
       const resolvedAnchors = (content._pendingImages || []).map(p => {
         const aboveResolved = lastPosition(p.above);
         const belowResolved = lastPosition(p.below);

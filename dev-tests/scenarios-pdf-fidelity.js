@@ -257,6 +257,79 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_image_alone_in_right_column_not_stuck_at_page_top',
+    // Même bug que pdffid_layered_image_alone_in_column_not_stuck_at_page_top,
+    // mais pour la colonne de DROITE (colIdx=1) : découvert lors de l'audit de
+    // couverture qui a suivi le premier correctif - la correction n'était pas
+    // symétrique (ordre non déterministe des entrées `positions` de pdfmake
+    // pour le bloc composite `columns:[...]`, cf. lastPosition() dans
+    // resolveNativePdfContent).
+    description: 'Une image en calque seule dans la colonne de DROITE (sans texte voisin) atterrit sur sa colonne, pas collée au haut de page',
+    run: async (h) => {
+      await h.resetEditor();
+      const filler = Array.from({ length: 15 }, (_, i) => '<p>Ligne de remplissage numero ' + i + ' pour pousser le contenu loin dans la page.</p>').join('');
+      const html = filler + '<div class="two-columns-zone" style="--layout-left: 50%;">'
+        + '<div class="two-columns-column"><p></p></div>'
+        + '<div class="two-columns-column"><p><img class="editor-image" draggable="false" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="" data-layer="front" data-wrap="inline" style="width:60px;position:absolute;left:53px;top:383px;z-index:5"></p></div>'
+        + '</div><p></p>';
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + JSON.stringify(result.content) };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      const pass = abs.y > 150;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) };
+    },
+  });
+
+  cases.push({
+    id: 'pdffid_layered_image_x_position_differs_by_column',
+    // Bug réel (découvert pendant le même audit) : le X d'une image en calque
+    // dans une colonne 2-colonnes utilisait toujours la formule générique
+    // "page-relatif" SANS jamais tenir compte de quelle colonne l'héberge -
+    // une image dans la colonne de DROITE atterrissait au même X que si elle
+    // était dans la colonne de GAUCHE. Vérifie que deux images (une par
+    // colonne, positions CSS réelles différentes via un vrai aller-retour
+    // toolbar "calque devant") donnent des X sensiblement différents dans le
+    // PDF, dans le bon ordre (gauche < droite).
+    description: 'Une image en calque dans la colonne de droite a un X PDF différent (plus grand) que dans la colonne de gauche',
+    run: async (h) => {
+      async function layerImageInColumn(colIndex) {
+        await h.resetEditor();
+        await h.focusAtEnd();
+        for (let i = 0; i < 15; i += 1) { await h.typeText('Ligne de remplissage ' + i + '. '); document.execCommand('insertParagraph'); }
+        document.getElementById('v2-btn-two-columns').click();
+        await h.sleep(80);
+        const ed = EditorCore.getEditor();
+        const colP = document.querySelectorAll('.two-columns-zone > .two-columns-column')[colIndex].querySelector('p');
+        ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
+        ed.commands.focus();
+        await h.sleep(50);
+        const origPrompt = window.prompt;
+        window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        document.getElementById('v2-btn-image').click();
+        await h.sleep(120);
+        window.prompt = origPrompt;
+        const img = document.querySelectorAll('.two-columns-column')[colIndex].querySelector('img.editor-image');
+        await h.selectAtomNode(img);
+        await h.sleep(80);
+        const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+        frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(80);
+        const html = Editor.getHTML();
+        const result = await h.exportPdfContent(html, null);
+        const images = h.findImages(result.content);
+        return images[0] && images[0].absolutePosition;
+      }
+      const left = await layerImageInColumn(0);
+      const right = await layerImageInColumn(1);
+      if (!left || !right) return { pass: false, notes: 'image absente : ' + JSON.stringify({ left, right }) };
+      const pass = right.x > left.x + 50;
+      return { pass, notes: JSON.stringify({ left, right }) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_inline_image_position_in_paragraph',
     // Anciennement CASSÉ (cf. BUGS.md, Bug 3) : une image "au coeur du texte"
     // SANS alignement gauche/droite (par défaut, ou centrée) était toujours
