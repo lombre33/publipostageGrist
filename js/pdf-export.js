@@ -688,41 +688,22 @@ const PdfExport = (function () {
     const columns = [];
     for (let colIdx = 0; colIdx < colNodes.length; colIdx += 1) {
       const col = colNodes[colIdx];
-      const colAlign = alignment(col);
       // Largeur réelle de cette colonne, pour que l'hôte de mesure interne de htmlToPdfContent habille une image flottante à la bonne largeur plutôt qu'à la
       // pleine largeur de page.
       const colWidthPt = colIdx === 0 ? leftWidth : rightWidth;
       let blocks;
       try { blocks = await htmlToPdfContent(col.innerHTML, false, colWidthPt); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
-      const alignSources = [];
-      const collect = n => {
-        if (n.nodeType === Node.TEXT_NODE) { if (n.nodeValue && n.nodeValue.trim()) alignSources.push(n); return; }
-        if (n.nodeType !== Node.ELEMENT_NODE) return;
-        if (n.classList.contains('page-break-marker')) return;
-        if (n.tagName === 'TABLE') { alignSources.push(n); return; }
-        if (n.classList.contains('two-columns-zone')) { alignSources.push(n); return; }
-        if (isBlock(n)) { alignSources.push(n); return; }
-        n.childNodes.forEach(collect);
-      };
-      const root = document.createElement('div');
-      root.innerHTML = col.innerHTML || '';
-      Array.from(root.childNodes).forEach(collect);
-      if (colAlign) { blocks.forEach(b => { if (b && typeof b === 'object' && !b.columns) b.alignment = colAlign; }); }
-      for (let i = 0; i < blocks.length && i < alignSources.length; i += 1) {
-        const src = alignSources[i];
-        const isPlaceholder = src.tagName === 'TABLE' || (src.classList && src.classList.contains('two-columns-zone'));
-        if (isPlaceholder) continue;
-        const probe = (src.nodeType === Node.TEXT_NODE && src.parentElement) ? src.parentElement : src;
-        let a; let cur = probe;
-        while (cur && !a) {
-          a = alignment(cur);
-          if (a) break;
-          if (cur.classList && (cur.classList.contains('two-columns-column') || cur === root)) break;
-          cur = cur.parentElement;
-        }
-        if (a && blocks[i] && typeof blocks[i] === 'object' && !blocks[i].columns) blocks[i].alignment = a;
-      }
+      // Un mécanisme de ré-application d'alignement (héritage V1/Quill, `alignSources`+ré-affectation par index) vivait ici jusqu'à ce correctif : redondant
+      // avec `blockFrom` (appelé par htmlToPdfContent ci-dessus), qui lit déjà `text-align` sur CHAQUE paragraphe via alignment(), colonne ou pas - vérifié
+      // en le retirant complètement puis en confirmant (positions réelles extraites du PDF via pdf.js, pas les métadonnées `.positions[]` de pdfmake qui se
+      // sont révélées peu fiables pour du texte centré multi-lignes) que centre/droite continuent de s'appliquer correctement. En plus d'être inutile, ce
+      // mécanisme était activement nuisible : il ré-affectait l'alignement du PARAGRAPHE à "whatever bloc s'y trouvait", y compris une image en calque
+      // (position:absolute) placée seule dans un paragraphe centré/aligné - pdfmake applique alors `alignment` PAR-DESSUS `absolutePosition`, décalant le
+      // rendu réel de l'image de dizaines de pt sans que rien dans les métadonnées ne le révèle (repéré par l'utilisateur sur un cas réel, confirmé par
+      // extraction directe des octets du PDF). Le pairage par INDEX entre `alignSources` (un nœud DOM par paragraphe) et `blocks` (qui peut contenir
+      // PLUSIEURS blocs pour un seul paragraphe, ex. texte + image) pouvait aussi désynchroniser les deux tableaux et appliquer le mauvais alignement au
+      // mauvais bloc - un second bug latent, éliminé par la même suppression plutôt que patché séparément.
       columns.push(blocks);
     }
     const block = {

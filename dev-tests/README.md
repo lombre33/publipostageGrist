@@ -33,7 +33,7 @@ apparaît) :
 
 | Fichier modifié | Groupe(s) à lancer |
 |---|---|
-| `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity`** (c'est le point d'entrée export commun à tout) |
+| `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity` ET `pdfGroundTruth`** (points d'entrée export communs à tout - `pdfGroundTruth` en particulier couvre tout changement touchant la position d'une image en calque ou l'alignement d'un paragraphe) |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur) |
 | `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips` |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée) |
@@ -71,7 +71,7 @@ const files = [
   'scenarios-formatting', 'scenarios-lists', 'scenarios-tables',
   'scenarios-twocolumns', 'scenarios-nesting', 'scenarios-images',
   'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
-  'scenarios-pdf-fidelity',
+  'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
 const results = await TestRunner.runAll(EditorTestSuites);
@@ -110,6 +110,52 @@ d'appeler `TestRunner.runAll(EditorTestSuites)`.
 **Lancer TOUS les groupes d'un coup** peut dépasser le budget de temps de
 certains outils d'exécution JS distants (~45s) — dans ce cas, lancer par
 lots de 2-3 groupes (voir l'historique de cette session pour l'exemple).
+
+**Une session longue qui a fait beaucoup de manipulations DOM manuelles dans
+un même onglet (edits d'attributs, overrides `window.prompt`, injection de
+librairies tierces...) peut laisser cet onglet dans un état corrompu qui fait
+échouer des tests SANS RAPPORT avec le changement en cours** (constaté : 14
+échecs sur des tests de formatage/liste/tableau de base après une longue
+session de diagnostic manuel, disparus intégralement en relançant les mêmes
+tests dans un onglet fraîchement ouvert). Si des tests basiques échouent de
+façon inattendue après une session de debug prolongée dans le même onglet,
+ouvrir un onglet neuf avant de conclure à une régression (cf. mémoire
+`project_stale_tab_module_corruption`, même famille de piège).
+
+## `.positions[]`/`.absolutePosition` (métadonnées pdfmake) ne sont PAS la vérité terrain — utiliser `h.extractPdfGroundTruth` pour tout ce qui est centré/aligné-droite/en calque
+
+`exportPdfContent` lit `.positions[]` et `.absolutePosition` directement sur
+les objets `docDefinition` APRÈS mise en page (`getBase64`) - un raccourci
+pratique, réel effet de bord déjà exploité par `pdf-export.js` lui-même pour
+son propre ancrage. Mais ces propriétés se sont révélées **peu fiables** dans
+deux cas précis, découverts en creusant un vrai bug utilisateur (position
+d'image "aléatoire" sur un scénario 2-colonnes centré) :
+
+1. **Texte multi-lignes centré/aligné à droite** : `.positions[]` peut
+   rapporter la MÊME valeur `left` pour TOUTES les lignes d'un bloc, alors que
+   le rendu réel centre/aligne chaque ligne indépendamment (une ligne plus
+   courte est visuellement plus indentée). Un test qui ne vérifie que
+   `positions[0].left` peut sembler "passer" en comparant deux valeurs
+   également fausses de la même façon, sans jamais toucher le vrai rendu.
+2. **Image en calque (`absolutePosition`) avec un `alignment` résiduel** :
+   pdfmake applique `alignment` MÊME par-dessus une `absolutePosition` -
+   `.absolutePosition` continue d'afficher la valeur qu'on lui a assignée
+   (donc "correcte" en apparence) alors que le PIXEL réellement peint est
+   décalé par le centrage. C'était la cause exacte du bug utilisateur : rien
+   dans les métadonnées ne le révélait, seul le décodage des octets du PDF
+   final l'a montré.
+
+**`TestHelpers.extractPdfGroundTruth(base64)`** (dev-tests/helpers.js) décode
+le PDF généré avec pdf.js (chargé depuis un CDN, comme pdfmake lui-même) et
+renvoie, par page, `textItems` (position réelle de chaque run de glyphes) et
+`images` (position/dimensions réelles de chaque image peinte, dans l'ordre de
+peinture). **Toujours l'utiliser** (jamais `.positions[]`/`.absolutePosition`
+seuls) pour vérifier la position d'un bloc centré, aligné à droite, ou d'une
+image en calque - `scenarios-pdf-ground-truth.js` (groupe `pdfGroundTruth`)
+en est l'exemple de référence (matrice contexte × alignement × type d'ancre,
+32 cas). `.positions[]`/`.absolutePosition` restent fiables pour du texte
+aligné à GAUCHE en une seule ligne (cas déjà couvert par
+`scenarios-pdf-fidelity.js`, pas besoin de tout migrer).
 
 ## Pourquoi `_test-harness.html` n'est pas commité
 

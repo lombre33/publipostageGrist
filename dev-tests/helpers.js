@@ -238,6 +238,67 @@ window.TestHelpers = (function () {
     return { docDefinition: lastContent, content: lastContent.content, pageCount: gens.length, base64, blob };
   }
 
+  // --- Vérité terrain PDF (pdf.js) ---
+  // `.positions[]`/`.absolutePosition` (métadonnées internes pdfmake, lues directement sur les objets docDefinition par exportPdfContent ci-dessus) se
+  // sont révélées PEU FIABLES pour du texte multi-lignes aligné centre/droite : `.positions[].left` peut rapporter la même valeur pour TOUTES les lignes
+  // d'un même bloc, alors que le rendu réel centre/aligne chaque ligne indépendamment - et un bloc `image` avec `absolutePosition` PEUT quand même être
+  // décalé par un `alignment` résiduel que pdfmake applique par-dessus (bug réel trouvé ainsi, cf. mémoire page-grid-positioning). Ces fonctions lisent
+  // la POSITION RÉELLEMENT PEINTE en décodant les octets du PDF généré (via pdf.js, chargé depuis un CDN comme pdfmake lui-même) - à utiliser CHAQUE FOIS
+  // qu'un test vérifie la position d'un bloc CENTRÉ, ALIGNÉ À DROITE, ou d'une image en calque : ne plus se fier à `.positions[]`/`.absolutePosition` seuls
+  // pour ces cas (un alignement/texte multi-ligne peut les rendre trompeurs), même s'ils restent corrects pour du texte aligné à GAUCHE en une seule ligne.
+  let pdfJsPromise = null;
+  function ensurePdfJsLoaded() {
+    if (!pdfJsPromise) {
+      pdfJsPromise = new Promise((resolve, reject) => {
+        if (window.pdfjsLib) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(); };
+        s.onerror = reject;
+        document.head.appendChild(s);
+      }).catch(e => { pdfJsPromise = null; throw e; });
+    }
+    return pdfJsPromise;
+  }
+
+  // Décode un PDF (base64, cf. exportPdfContent) et rend, pour chaque page, les positions RÉELLEMENT peintes : `textItems` (un par run de glyphes tel que
+  // découpé par pdf.js - PAS forcément un mot entier) et `images` (une par image peinte, position/dimensions du rectangle réel, dans l'ORDRE de peinture -
+  // pas d'identifiant fiable au-delà de cet ordre, à croiser avec le nombre d'images attendues dans le scénario). Coordonnées en pt, origine en HAUT-GAUCHE
+  // de la page (comme partout ailleurs dans ce projet - PDF natif a l'origine en bas, déjà retourné ici via `viewport.height - y`).
+  async function extractPdfGroundTruth(base64) {
+    await ensurePdfJsLoaded();
+    const binStr = atob(base64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const pages = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      const textItems = textContent.items
+        .filter(it => it.str && it.str.trim())
+        .map(it => ({ str: it.str, x: it.transform[4], y: viewport.height - it.transform[5], width: it.width }));
+      const opList = await page.getOperatorList();
+      const OPS = window.pdfjsLib.OPS;
+      const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const stack = [];
+      const images = [];
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        const fn = opList.fnArray[i]; const args = opList.argsArray[i];
+        if (fn === OPS.save) stack.push(ctm.slice());
+        else if (fn === OPS.restore) ctm = stack.pop();
+        else if (fn === OPS.transform) ctm = mul(ctm, args);
+        else if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject) {
+          images.push({ x: ctm[4], y: viewport.height - (ctm[5] + ctm[3]), width: ctm[0], height: ctm[3] });
+        }
+      }
+      pages.push({ textItems, images, width: viewport.width, height: viewport.height });
+    }
+    return { pages };
+  }
+
   // Aplati récursivement un tableau de contenu pdfmake (stack/columns/table
   // body imbriqués) en une liste plate de blocs - pratique pour chercher
   // "y a-t-il un run avec ce texte quelque part" sans connaître la structure
@@ -274,5 +335,6 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, focusAtEnd, focusInElement, typeText,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
+    ensurePdfJsLoaded, extractPdfGroundTruth,
   };
 })();
