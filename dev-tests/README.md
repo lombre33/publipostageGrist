@@ -13,6 +13,42 @@ bas de page, eux, sont testés en entier (aucun appel Grist requis).
 Conçue pour être **rejouée régulièrement** (régression après une future
 modification), pas juste une fois.
 
+## Portée du test : ciblé (par défaut) vs complet (sur demande explicite)
+
+Deux niveaux de non-régression, pas un seul :
+
+- **Ciblé** (par défaut, à chaque correctif/évolution) : uniquement le(s)
+  groupe(s) `scenarios-*.js` couverts par la table ci-dessous pour les
+  fichiers réellement modifiés. Plus rapide, suffisant pour valider un
+  changement localisé sans balayer tout le reste à chaque fois.
+- **Complet** (uniquement si l'utilisateur le demande explicitement - "lance
+  tous les tests", "vérifie qu'il n'y a pas de régression partout" - ou avant
+  un commit qui touche un fichier réellement transverse comme
+  `editor-core.js`) : tous les groupes de la section "Démarrage rapide"
+  ci-dessous, par lots de 2-3 (budget ~45s par lot).
+
+**Table fichier source → groupe(s) de tests concernés** (mettre à jour cette
+table quand un fichier change de rôle ou qu'un nouveau `scenarios-*.js`
+apparaît) :
+
+| Fichier modifié | Groupe(s) à lancer |
+|---|---|
+| `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity`** (c'est le point d'entrée export commun à tout) |
+| `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur) |
+| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips` |
+| `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée) |
+| `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
+| `js/main-toolbar.js` | `formatting`, `lists` |
+| `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
+| `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
+| `js/editor-core.js`, `js/editor.js` | **Transverse** - traiter comme une demande de suite complète, ces fichiers sont partagés par tous les domaines |
+| `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
+
+Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
+QUE `scenarios-twocolumns.js` + `scenarios-pdf-fidelity.js` (+ `scenarios-images.js`
+si le correctif touche une image en calque dans une colonne) - pas les 10
+groupes.
+
 ## Démarrage rapide
 
 ```bash
@@ -48,11 +84,28 @@ modification — le cache navigateur sur du JS servi en local produit sinon
 de faux négatifs/positifs (piège déjà rencontré plusieurs fois ce projet,
 cf. mémoire `project_browser_cache_trap`).
 
-**Lancer un seul groupe** (plus rapide en cours de développement) :
+**`loadFresh`/`eval()` ne recharge PAS un fichier `js/*.js` de l'app** (seuls
+les `dev-tests/*.js` s'y prêtent, car ils font `window.TestHelpers = ...`/
+`window.EditorTestSuites.xxx = ...` explicitement). Chaque fichier applicatif
+(`pdf-export.js`, `editor.js`, `floating-toolbars.js`...) est un
+`const X = (function(){...})();` top-level : un `eval()` DANS une fonction
+(`loadFresh` en est une) crée un `const` local à cet appel, jamais exposé
+globalement - `window.PdfExport` par exemple n'existe même pas. Après avoir
+modifié un fichier `js/*.js`, il faut un **vrai rechargement de page**
+(`navigate`/F5), jamais `loadFresh` sur ce fichier précis - sinon les tests
+valident silencieusement l'ANCIEN code (piège rencontré et longuement
+diagnostiqué en séance, cf. mémoire
+`project_v2_twocolumns_offsetparent_and_multiline_anchor`).
+
+**Lancer un seul groupe (test ciblé)** - voir la table plus haut pour choisir
+le(s) groupe(s) pertinent(s) au fichier modifié :
 ```js
 const r = await TestRunner.runGroup('images', EditorTestSuites.images);
 console.log(TestRunner.report(r));
 ```
+Pour plusieurs groupes ciblés à la fois, ne charger QUE leurs fichiers dans
+`files` (au lieu de la liste complète du "Démarrage rapide" ci-dessus) avant
+d'appeler `TestRunner.runAll(EditorTestSuites)`.
 
 **Lancer TOUS les groupes d'un coup** peut dépasser le budget de temps de
 certains outils d'exécution JS distants (~45s) — dans ce cas, lancer par
@@ -117,6 +170,34 @@ balises `<script>`/`<link>` de `index.html`.
   scénario SUIVANT** - `resetEditor()` inclut déjà un délai de 300ms et sort
   d'un éventuel mode d'édition en-tête/pied resté actif, spécifiquement pour
   ça.
+- **"Aperçu format A4" (`.a4-preview`) n'est PAS synchronisé par défaut dans
+  ce harnais** : la case `#v2-toggle-a4-preview` est cochée par défaut dans
+  `index.html`, mais `main.js:wireA4PreviewToggle()` (qui applique cet état
+  au chargement) n'est jamais atteint ici (`main.js:init()` s'arrête plus tôt
+  dans l'environnement stubbé, cf. piège "Local testing scope" ci-dessous) -
+  toute mesure pixel-exacte dépendant de la largeur réelle de page (calque
+  d'image notamment) doit poser la classe à la main :
+  `document.getElementById('editor-container').classList.add('a4-preview')`
+  en tout début de scénario, sinon la largeur réelle de `.tiptap` est celle,
+  arbitraire, de la fenêtre du navigateur de test - pas celle du PDF. Un
+  cluster entier de scénarios en-tête/pied/saut-de-page dépend de cette même
+  classe pour trouver leurs zones DOM (`.v2-hf-zone` etc.) - si un nouveau
+  scénario dans ce domaine échoue avec "zone introuvable" sans rapport
+  apparent avec son propre changement, vérifier ceci en premier.
+- **Le harnais local n'atteint jamais certains câblages `main.js`** (cf.
+  mémoire `project_local_testing_scope`) - `init()` y lève une exception
+  avant certains `wireXxx()`, silencieusement. `.a4-preview` (ci-dessus) en
+  est un exemple concret ; si un nouveau bouton top-toolbar ne réagit à rien
+  en test alors qu'il fonctionne en vrai Grist, soupçonner ceci avant un bug
+  applicatif.
+- **Une suite peut laisser une fuite d'état pour la suivante MÊME sans lien
+  fonctionnel apparent** (ex. `scenarios-chips.js` fait parfois échouer
+  `pdffid_layered_image_absolute_position` juste après, alors que rien dans
+  les puces ne touche à l'image top-level testée) - confirmé non lié à un
+  changement de code (repro identique sur une page vierge, juste dans cet
+  ordre précis). Cause exacte non élucidée à ce jour ; si un scénario échoue
+  seulement en suite complète mais passe seul, ne pas assumer une régression
+  du code avant d'avoir vérifié qu'il passe bien seul.
 
 ## Bugs de fond découverts en construisant/étendant cette suite
 
