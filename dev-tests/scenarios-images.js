@@ -324,9 +324,12 @@
     await h.sleep(200);
   }
   function exitReaderModeAfterTest(h) {
-    document.getElementById('editor-container').style.display = '';
-    document.getElementById('reader-container').style.display = '';
-    document.getElementById('btn-mode-edit').click();
+    // btn-mode-edit.click() (comme dans pagebreak_readmode_gap_matches_editor) ne restaure RIEN dans ce harnais local : le clic du bouton passe par
+    // main.js:switchMode, câblé seulement dans le vrai init() Grist (cf. mémoire project_local_testing_scope) - jamais atteint ici. Sans ce constat, ce
+    // scénario laissait #reader-container visible EN PLUS de #editor-container après coup (tiptapRect à {} pour tout scénario suivant qui en a besoin) -
+    // reproduit donc directement l'effet DOM de switchMode('edit') à la main plutôt que de compter sur le clic.
+    document.getElementById('editor-container').style.display = 'block';
+    document.getElementById('reader-container').style.display = 'none';
   }
   function assertReaderImagePosition(offsetParentSelector, expectedLeft, expectedTop) {
     const img = document.querySelector('#reader-container img.editor-image');

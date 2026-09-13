@@ -33,6 +33,12 @@ window.TestHelpers = (function () {
     Editor.exitHeaderFooterModeIfActive();
     Editor.setHTML('<p></p>');
     Editor.setHeaderFooterData({ enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+    // Le bouton "Aperçu format A4" (v2-toggle-a4-preview) ne réagit pas ici (câblé par main.js:wireA4PreviewToggle, jamais atteint dans ce harnais - cf.
+    // mémoire projet_local_testing_scope) - un scénario qui a besoin d'une largeur cohérente avec le PDF (ex. mesures pixel-exactes 2-colonnes) pose donc
+    // la classe CSS directement sur #editor-container. Sans ce retrait ici, elle restait collée pour TOUS les scénarios suivants du même run (largeur ~794px
+    // au lieu de la largeur large habituelle), cassant des scénarios sans rapport (recherche de zone en-tête/pied, détection de saut de page).
+    document.getElementById('editor-container').classList.remove('a4-preview');
+    document.getElementById('reader-container').classList.remove('a4-preview');
     await sleep(300);
   }
 
