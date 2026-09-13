@@ -1,14 +1,11 @@
-// Panneau Réglages - 3 onglets : Langue (I18n.setLang), Touche de
-// déclenchement (localStorage, lu directement par variables.js/editor.js),
-// Crédits (statique). Même convention d'ouverture/fermeture que les autres
-// modales (style.display, pas de fermeture au clic sur le fond).
+// Panneau Réglages - 3 onglets : Langue (I18n.setLang), Touche de déclenchement (localStorage, lu directement par variables.js/editor.js), Crédits
+// (statique). Même convention d'ouverture/fermeture que les autres modales (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const DEFAULT_TRIGGER_CHAR = '#';
 
-  // js/variables.js et js/editor.js relisent la même clé indépendamment -
-  // exposé ici pour que ce fichier reste la référence documentée de la
-  // valeur par défaut/nom de clé.
+  // js/variables.js et js/editor.js relisent la même clé indépendamment - exposé ici pour que ce fichier reste la référence documentée de la valeur par
+  // défaut/nom de clé.
   function getTriggerChar() {
     try {
       const v = localStorage.getItem(TRIGGER_KEY_STORAGE);
@@ -51,9 +48,8 @@ const Settings = (function () {
     if (triggerSelect && reloadNotice && reloadBtn) {
       triggerSelect.addEventListener('change', () => {
         try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
-        // Pas de reconfiguration à chaud du plugin Suggestion (son `char`
-        // est un littéral capturé une fois à la construction de l'éditeur) -
-        // un rechargement est plus simple pour un réglage qui change rarement.
+        // Pas de reconfiguration à chaud du plugin Suggestion (son `char` est un littéral capturé une fois à la construction de l'éditeur) - un rechargement
+        // est plus simple pour un réglage qui change rarement.
         reloadNotice.hidden = false;
       });
       reloadBtn.addEventListener('click', () => location.reload());

@@ -1,13 +1,7 @@
-// Numérotation des titres — cascade de compteurs reproduite en JS, partagée
-// entre js/editor.js (aperçu vivant du sommaire) et js/pdf-export.js
-// (marqueurs + sommaire du PDF). Doit produire exactement le même texte que
-// les compteurs CSS de css/editor-v2.css (.tiptap[data-heading-style] >
-// h1..h6) — jamais via `getComputedStyle(h, '::before').content`, qui ne
-// renvoie que la valeur CSS déclarée, jamais le texte réellement peint.
+// Numérotation des titres — cascade de compteurs reproduite en JS, partagée entre js/editor.js (aperçu du sommaire) et js/pdf-export.js (marqueurs + sommaire
+// du PDF). Doit produire le même texte que les compteurs CSS de editor-v2.css - jamais via `getComputedStyle(h,'::before').content` (déclaré, pas peint).
 //
-// js/reader-mode.js a besoin de la même logique mais garde sa propre copie
-// (pas de mécanisme de module entre scripts classiques) — deux copies au
-// lieu d'une est un compromis délibéré plutôt qu'un oubli.
+// js/reader-mode.js a besoin de la même logique mais garde sa propre copie (pas de mécanisme de module entre scripts classiques) — compromis délibéré.
 const HeadingNumbering = (function () {
   const SCHEMES = {
     numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
@@ -39,11 +33,8 @@ const HeadingNumbering = (function () {
     return String(n);
   }
 
-  // Un marqueur ("1) "/"a) "/"") par titre, aligné par index à `headingEls`
-  // (ordre document) - jamais le texte complet du titre : les deux
-  // consommateurs construisent ce texte différemment (pdf-export.js préserve
-  // la mise en forme interne via de vrais "runs" pdfmake, l'aperçu du
-  // sommaire n'a besoin que du textContent brut, cf. entriesFor ci-dessous).
+  // Un marqueur ("1) "/"a) "/"") par titre, aligné par index à `headingEls` (ordre document) - jamais le texte complet du titre : les deux consommateurs
+  // construisent ce texte différemment (pdf-export.js préserve la mise en forme via de vrais "runs" pdfmake, le sommaire n'a besoin que du textContent brut).
   function markersFor(headingEls, numberingStyle) {
     const scheme = SCHEMES[numberingStyle];
     if (!scheme) return headingEls.map(() => '');
@@ -56,8 +47,7 @@ const HeadingNumbering = (function () {
     });
   }
 
-  // Marqueur + texte du titre en une chaîne, pour un simple aperçu texte
-  // (cf. js/editor.js:Toc).
+  // Marqueur + texte du titre en une chaîne, pour un simple aperçu texte (cf. js/editor.js:Toc).
   function entriesFor(headingEls, numberingStyle) {
     const markers = markersFor(headingEls, numberingStyle);
     return headingEls.map((h, i) => {

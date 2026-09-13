@@ -1,9 +1,5 @@
-// Qualités PDF non-vectorielles — impression navigateur et raster
-// (basse/ultra HD via html2pdf.js). Isolées de js/pdf-export.js (moteur
-// vectoriel pdfmake) : aucune dépendance croisée, ces deux chemins
-// capturent le vrai DOM résolu plutôt que de construire un docDefinition.
-// Actuellement désactivées dans l'UI (index.html) - encore peu robustes,
-// à finir de fiabiliser avant réactivation.
+// Qualités PDF non-vectorielles — impression navigateur et raster (basse/ultra HD via html2pdf.js). Isolées de js/pdf-export.js (moteur vectoriel pdfmake) :
+// ces deux chemins capturent le vrai DOM résolu plutôt qu'un docDefinition. Désactivées dans l'UI (index.html) - encore peu robustes, à fiabiliser.
 const PdfExportAlt = (function () {
   const QUALITY_PRESETS = {
     low: { label: 'Basse qualité (compressé)', image: { type: 'jpeg', quality: 0.6 }, html2canvas: { scale: 1.5 }, jsPDF: { compress: true } },
@@ -11,11 +7,8 @@ const PdfExportAlt = (function () {
   };
   function getQualityPreset(quality) { return QUALITY_PRESETS[quality] || QUALITY_PRESETS.low; }
 
-  // Passe par la boîte de dialogue d'impression native du navigateur plutôt
-  // que par un rendu canvas ou une image base64 : un <img> s'affiche sans
-  // CORS, seul mode immunisé contre les images bloquées par CORS à l'export.
-  // Réutilise les vraies feuilles de style du projet (relinkées depuis les
-  // <link> déjà présents), pas un <style> recopié à la main.
+  // Passe par la boîte de dialogue d'impression native du navigateur plutôt que par un rendu canvas ou une image base64 : un <img> s'affiche sans CORS, seul
+  // mode immunisé contre les images bloquées par CORS à l'export. Réutilise les vraies feuilles de style du projet (relinkées), pas un <style> recopié.
   async function exportViaBrowserPrint(resolvedHtml, filename) {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -42,16 +35,13 @@ const PdfExportAlt = (function () {
         '<style>' +
         '@page { size: A4; margin: 18mm; }' +
         'body { margin: 0; }' +
-        // Pagination d'impression - absente des feuilles de style du projet
-        // (non pertinente hors export), ajoutée ici seulement.
+        // Pagination d'impression - absente des feuilles de style du projet (non pertinente hors export), ajoutée ici seulement.
         '.page-break-marker { page-break-after: always; break-after: page; height: 0; margin: 0; border: 0; color: transparent; background: transparent; }' +
         '</style></head><body>' + container.outerHTML + '</body></html>'
       );
       doc.close();
-      // Attend le chargement des feuilles de style ET des images avant
-      // d'imprimer (avec filet de sécurité) : sans ça, la mise en page
-      // (tableaux/2-colonnes/numérotation) ou certaines images
-      // apparaîtraient non stylées/blanches dans le PDF imprimé.
+      // Attend le chargement des feuilles de style ET des images avant d'imprimer (avec filet de sécurité) : sans ça, la mise en page
+      // (tableaux/2-colonnes/numérotation) ou certaines images apparaîtraient non stylées/blanches dans le PDF imprimé.
       await new Promise(resolve => {
         const pending = Array.from(doc.images || []).concat(Array.from(doc.querySelectorAll('link[rel="stylesheet"]')));
         if (!pending.length) { resolve(); return; }
@@ -71,11 +61,8 @@ const PdfExportAlt = (function () {
     }
   }
 
-  // Conteneur détaché pour les qualités raster (html2canvas + jsPDF via
-  // html2pdf.js). Classes 'tiptap reader-content' portées toutes les deux
-  // sur ce même conteneur pour cumuler mise en page réelle et numérotation
-  // des titres, sans dupliquer de règle CSS. Le sommaire n'est pas résolu
-  // ici : html2canvas n'a aucune notion de "page" pour les numéros de titre.
+  // Conteneur détaché pour les qualités raster (html2canvas + jsPDF via html2pdf.js). Classes 'tiptap reader-content' portées toutes les deux sur ce même
+  // conteneur pour cumuler mise en page réelle et numérotation des titres. Le sommaire n'est pas résolu ici : html2canvas n'a aucune notion de "page".
   function buildRasterContainerAndOptions(resolvedHtml, filename, quality) {
     const container = document.createElement('div');
     container.style.padding = '20px';

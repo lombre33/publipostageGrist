@@ -1,18 +1,14 @@
 // Publipostage Grist — reader mode v1.1.2 — 2026-09-04
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
-  // Format nombre/date choisi via la barre flottante d'une bulle #Variable,
-  // sérialisé en JSON dans data-format ; transmis à Variables.resolveVariable.
+  // Format nombre/date choisi via la barre flottante d'une bulle #Variable, sérialisé en JSON dans data-format ; transmis à Variables.resolveVariable.
   function parseBadgeFormat(badge) {
     const raw = badge.getAttribute('data-format');
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
-  // === Aperçu paginé réel - mode Lecture ===
-  // Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt
-  // qu'importé (pas de mécanisme de module entre scripts classiques - même
-  // tolérance à la duplication que la numérotation des titres). Plus simple
-  // ici : contenu statique déjà résolu, pas de débounce nécessaire.
+  // === Aperçu paginé réel - mode Lecture === Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt qu'importé (pas de mécanisme de module
+  // entre scripts classiques). Plus simple ici : contenu statique déjà résolu, pas de débounce nécessaire.
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .reader-content en Aperçu A4 (css/editor-v2.css)
@@ -24,8 +20,7 @@ const ReaderMode = (function () {
     const host = document.createElement('div');
     host.className = 'reader-content';
     host.innerHTML = html;
-    // min-height:0 : .reader-content n'a pas le min-height:200px de .tiptap
-    // (css/editor-v2.css, propre à l'éditeur VIDE) - conservé quand même par
+    // min-height:0 : .reader-content n'a pas le min-height:200px de .tiptap (css/editor-v2.css, propre à l'éditeur VIDE) - conservé quand même par
     // cohérence/robustesse avec la même mesure côté éditeur/export PDF.
     host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(host);
@@ -60,9 +55,8 @@ const ReaderMode = (function () {
     });
     return host.innerHTML;
   }
-  // #Variable d'un fragment d'en-tête/pied - même résolution que le corps
-  // (badges .var-badge remplacés par leur valeur réelle), avec le VRAI
-  // enregistrement Grist affiché en mode Lecture.
+  // #Variable d'un fragment d'en-tête/pied - même résolution que le corps (badges .var-badge remplacés par leur valeur réelle), avec le VRAI enregistrement
+  // Grist affiché en mode Lecture.
   async function resolveHeaderFooterZone(html, tableId, record) {
     if (!html) return html;
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
@@ -72,15 +66,13 @@ const ReaderMode = (function () {
       const format = parseBadgeFormat(badge);
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
     }));
-    // La note de bas de page n'est volontairement pas insérable en en-tête/
-    // pied (aucun repère de page dans une zone répétée sur chaque page),
-    // donc resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
+    // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
+    // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
     return wrapper.innerHTML;
   }
-  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux
-  // normal) et les bandes "couture" aux limites intermédiaires
-  // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé).
+  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
+  // peuvent recouvrir un peu de texte pile à la limite - résidu assumé).
   async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
     if (!headerFooterData || !headerFooterData.enabled) return;
     if (!container.classList.contains('a4-preview')) return;
@@ -100,10 +92,8 @@ const ReaderMode = (function () {
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
-    // Un saut de page forcé après peu de contenu doit réserver tout le reste
-    // de la page (même correctif que l'aperçu éditeur) - sans ça la couture
-    // suivante, et tout contenu positionné en absolu après elle, se retrouve
-    // décalé vers le haut par rapport à l'éditeur.
+    // Un saut de page forcé après peu de contenu doit réserver tout le reste de la page (même correctif que l'aperçu éditeur) - sans ça la couture suivante,
+    // et tout contenu positionné en absolu après elle, se retrouve décalé vers le haut par rapport à l'éditeur.
     const wrapperChildren = Array.from(wrapper.children);
     const marginRules = offsets
       .filter(o => o.remainingPx > 0 && wrapperChildren[o.afterIndex])
@@ -116,15 +106,13 @@ const ReaderMode = (function () {
     const rootRect = wrapper.getBoundingClientRect();
     offsets.forEach(o => {
       const el = wrapperChildren[o.afterIndex];
-      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément
-      // (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut
-      // donc rajouter remainingPx à la main pour retrouver la vraie frontière.
+      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut donc
+      // rajouter remainingPx à la main pour retrouver la vraie frontière.
       o.top = el ? (el.getBoundingClientRect().bottom - rootRect.top + o.remainingPx) : o.top;
     });
 
-    // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus
-    // récent peut avoir déjà repeint `container` pendant l'attente, `wrapper`
-    // ne serait alors plus attaché et insertBefore lèverait une exception.
+    // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus récent peut avoir déjà repeint `container` pendant l'attente, `wrapper` ne serait
+    // alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return;
 
     const edgeTop = document.createElement('div');
@@ -165,15 +153,13 @@ const ReaderMode = (function () {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
     if (!record) { container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
-    // .reader-content : le parent direct des titres de premier niveau, celui
-    // qui porte data-heading-style (#reader-container ne peut pas jouer ce
-    // rôle, ce <div> s'intercale toujours entre les deux).
+    // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
+    // <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
-    // Rafraîchit le schéma avant de résoudre les badges : resolveBadgeNode a
-    // besoin de GristAPI.getColumnType à jour pour détecter une colonne
-    // Attachments récemment ajoutée.
+    // Rafraîchit le schéma avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments
+    // récemment ajoutée.
     await GristAPI.refreshSchema().catch(() => {});
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
@@ -185,8 +171,7 @@ const ReaderMode = (function () {
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
-    // Variables déjà résolues (texte des titres définitif) : peut construire
-    // le sommaire maintenant, avant le swap DOM final ci-dessous.
+    // Variables déjà résolues (texte des titres définitif) : peut construire le sommaire maintenant, avant le swap DOM final ci-dessous.
     resolveTocMarkers(wrapper);
     if (renderId !== renderGeneration) return;
     container.innerHTML = '';
@@ -194,10 +179,8 @@ const ReaderMode = (function () {
     container.appendChild(wrapper);
     await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
   }
-  // Remplace .toc-marker par la vraie liste de titres, sans numéro de page
-  // (non paginé ici). Marqueur recalculé en JS, jamais lu via
-  // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas
-  // le texte peint - counter() n'est résolu qu'à la peinture).
+  // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Marqueur recalculé en JS, jamais lu via
+  // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas le texte peint - counter() n'est résolu qu'à la peinture).
   function resolveTocMarkers(wrapper) {
     const tocMarkers = wrapper.querySelectorAll(':scope > .toc-marker');
     if (!tocMarkers.length) return;
@@ -215,9 +198,8 @@ const ReaderMode = (function () {
       });
     });
   }
-  // Reproduit en JS la cascade de compteurs CSS de style.css : chaque titre
-  // incrémente le compteur de son niveau et réinitialise ceux des niveaux
-  // plus profonds, même ordre de style par niveau que les règles CSS ::before.
+  // Reproduit en JS la cascade de compteurs CSS de style.css : chaque titre incrémente le compteur de son niveau et réinitialise ceux des niveaux plus
+  // profonds, même ordre de style par niveau que les règles CSS ::before.
   const HEADING_COUNTER_SCHEMES = {
     numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
     alpha: ['lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal'],
@@ -239,8 +221,7 @@ const ReaderMode = (function () {
       return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
     });
   }
-  // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour
-  // que hydrateAttachmentImages lui pose un vrai src ; le retire si aucune PJ.
+  // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour que hydrateAttachmentImages lui pose un vrai src ; le retire si aucune PJ.
   async function resolveVariableImages(wrapper, tableId, record) {
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]'));
     await Promise.all(nodes.map(async img => {
@@ -250,19 +231,15 @@ const ReaderMode = (function () {
       try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
       catch (e) { ids = []; }
       if (!ids.length) { img.remove(); return; }
-      // data-var-table/-column/-key restent posés : c'est le marqueur que
-      // pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe,
-      // image mise à l'échelle sans déformation) plutôt que `width` seul.
+      // data-var-table/-column/-key restent posés : c'est le marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe, image mise à
+      // l'échelle sans déformation) plutôt que `width` seul.
       img.dataset.source = 'attachment';
       img.dataset.attachmentId = String(ids[0]);
       img.style.objectFit = 'contain';
     }));
   }
-  // Chips intelligents - date du jour/heure actuelle/email utilisateur,
-  // valeurs calculées (jamais liées à une colonne Grist) donc résolues à
-  // chaque rendu sans recherche de ligne/table liée. `.footnote-ref-marker`
-  // n'a pas besoin d'être résolu ici : son numéro vient du compteur CSS,
-  // déjà correct à l'écran - seul son texte doit être placé dans le PDF exporté.
+  // Chips intelligents - date du jour/heure actuelle/email utilisateur, valeurs calculées (jamais liées à une colonne Grist) donc résolues à chaque rendu
+  // sans recherche de ligne/table liée. `.footnote-ref-marker` n'a pas besoin d'être résolu ici : son numéro vient du compteur CSS, déjà correct à l'écran.
   function formatTodayDate() {
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
@@ -279,8 +256,7 @@ const ReaderMode = (function () {
       if (kind === 'date') text = formatTodayDate();
       else if (kind === 'time') text = formatNowTime();
       else if (kind === 'email') {
-        // Repli visuel identique à une #Variable cassée en cas d'échec
-        // (réseau, portée du jeton insuffisante...), jamais un blocage du reste du rendu.
+        // Repli visuel identique à une #Variable cassée en cas d'échec (réseau, portée du jeton insuffisante...), jamais un blocage du reste du rendu.
         try {
           text = await GristAPI.getCurrentUserEmail();
           if (!text) { text = '[Email indisponible]'; isError = true; }
@@ -292,9 +268,8 @@ const ReaderMode = (function () {
       chip.replaceWith(span);
     }));
   }
-  // Résout un badge #Variable en texte, ou en <img> si la colonne est de
-  // type Attachments ; les <img> produites réutilisent les classes/attributs
-  // déjà lus par GristAPI.hydrateAttachmentImages, appelé juste après.
+  // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
+  // par GristAPI.hydrateAttachmentImages, appelé juste après.
   async function resolveBadgeNode(badge, tableId, record, format) {
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
@@ -310,11 +285,8 @@ const ReaderMode = (function () {
         img.className = 'editor-image';
         img.dataset.source = 'attachment';
         img.dataset.attachmentId = String(id);
-        // Largeur par défaut explicite (même valeur que l'insertion d'image
-        // normale) : cette image n'a jamais été redimensionnée dans l'éditeur
-        // (elle n'existe qu'au moment de la résolution), donc sans cette
-        // valeur une photo haute résolution s'afficherait à sa pleine
-        // largeur intrinsèque, plus grande qu'un logo n'a besoin de l'être.
+        // Largeur par défaut explicite (même valeur que l'insertion normale) : cette image n'existe qu'au moment de la résolution, donc sans elle une
+        // photo haute résolution s'afficherait à sa pleine largeur intrinsèque, plus grande qu'un logo n'a besoin de l'être.
         img.style.width = '320px';
         frag.appendChild(img);
       });
@@ -332,8 +304,7 @@ const ReaderMode = (function () {
   }
   async function preview(htmlContent, tableId, record) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent); const badges = wrapper.querySelectorAll('.var-badge');
-    // Cf. commentaire équivalent dans render() : schéma à jour nécessaire
-    // pour que resolveBadgeNode détecte correctement une colonne Attachments.
+    // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
@@ -345,15 +316,13 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
-  // Scanne chaque "#" et essaie la plus longue clé connue qui suit (pas un
-  // regex [A-Za-z0-9_]+) : une clé Grist contient elle-même des "_", ambigus
-  // avec un séparateur tapé entre deux variables.
+  // Scanne chaque "#" et essaie la plus longue clé connue qui suit (pas un regex [A-Za-z0-9_]+) : une clé Grist contient elle-même des "_", ambigus avec un
+  // séparateur tapé entre deux variables.
   async function resolveFilename(filenameTemplate, tableId, record) {
     if (!filenameTemplate) return 'publipostage';
     const allVars = GristAPI.getAllVariables();
     const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
-    // Touche de déclenchement configurable (cf. js/settings.js), lue
-    // directement en localStorage.
+    // Touche de déclenchement configurable (cf. js/settings.js), lue directement en localStorage.
     let triggerChar = '#';
     try { const v = localStorage.getItem('pp_trigger_char'); if (v && v.length === 1) triggerChar = v; } catch (e) { /* repli '#' */ }
     const matches = [];

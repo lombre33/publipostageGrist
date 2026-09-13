@@ -1,6 +1,5 @@
-// Icônes SVG "trait" (viewBox 24x24, stroke=currentColor) - source unique
-// pour la toolbar statique (applyToolbarIcons, editor.js) et le HTML généré
-// des toolbars flottantes (tableau, image).
+// Icônes SVG "trait" (viewBox 24x24, stroke=currentColor) - source unique pour la toolbar statique (applyToolbarIcons, editor.js) et le HTML généré des
+// toolbars flottantes (tableau, image).
 const Icons = (function () {
   const WRAP_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
   const WRAP_CLOSE = '</svg>';
@@ -23,19 +22,15 @@ const Icons = (function () {
     table: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/>',
     twoColumns: '<rect x="3" y="5" width="8" height="14" rx="1"/><rect x="13" y="5" width="8" height="14" rx="1"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>',
-    // Page + ligne de coupe pointillée : l'ancienne icône (carré divisé en
-    // 4) ne voulait rien dire de précis.
+    // Page + ligne de coupe pointillée : l'ancienne icône (carré divisé en 4) ne voulait rien dire de précis.
     pageBreak: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16" stroke-dasharray="2 2"/><path d="M2.5 12h1.5M20 12h1.5"/>',
-    // Pointillés + folios, évoque le sommaire imprimé classique - l'ancienne
-    // icône (lignes puces + texte) était trop proche visuellement du bouton
-    // "Liste" juste à côté. Les "points de suite" sont des tracés de
-    // longueur nulle (h.01) : avec stroke-linecap="round" ça se peint comme un simple point.
+    // Pointillés + folios, évoque le sommaire imprimé classique - l'ancienne icône (lignes puces + texte) était trop proche visuellement du bouton "Liste"
+    // juste à côté. Les "points de suite" sont des tracés de longueur nulle (h.01) : avec stroke-linecap="round" ça se peint comme un simple point.
     toc: '<path d="M4 6h5M4 12h5M4 18h5"/><path d="M11.5 6h.01M14 6h.01M16.5 6h.01M11.5 12h.01M14 12h.01M11.5 18h.01"/><text x="18.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">1</text><text x="18.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">2</text><text x="18.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">3</text>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
-    // 3 styles de case à cocher, différenciés par la forme - le rendu réel
-    // dans le document dépend de data-tasklist-style (CSS + taskCheckboxCanvas
-    // côté export PDF), pas de ces icônes elles-mêmes.
+    // 3 styles de case à cocher, différenciés par la forme - le rendu réel dans le document dépend de data-tasklist-style (CSS + taskCheckboxCanvas côté
+    // export PDF), pas de ces icônes elles-mêmes.
     checklistAccentStrike: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
     checklistClassic: '<rect x="3" y="9" width="7" height="7"/><path d="M4.5 12.5l1.3 1.3L9 11"/>',
     checklistAccentPlain: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h5"/>',
@@ -52,8 +47,8 @@ const Icons = (function () {
     zoomOut: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M7 10h6"/>',
     zoomIn: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M10 7v6M7 10h6"/>',
     resetSize: '<path d="M20 11A8 8 0 1 0 18 16"/><path d="M20 5v6h-6"/>',
-    // Distinct de alignJustify : un petit carré (l'image) à côté de lignes
-    // courtes (texte qui l'habille) puis des lignes pleines en dessous (le flux qui reprend).
+    // Distinct de alignJustify : un petit carré (l'image) à côté de lignes courtes (texte qui l'habille) puis des lignes pleines en dessous (le flux qui
+    // reprend).
     wrapToggle: '<rect x="4" y="4" width="7" height="7" rx="1"/><path d="M13 6h7M13 9h7M4 16h16M4 20h11"/>',
     layerNormal: '<path d="M4 6h6M4 18h16M4 12h6"/><rect x="12" y="9" width="8" height="6" rx="1"/>',
     layerFront: '<rect x="3" y="3" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="9" y="9" width="12" height="12" rx="1.5"/>',

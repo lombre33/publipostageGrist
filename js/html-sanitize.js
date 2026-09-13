@@ -1,12 +1,5 @@
-// Assainissement minimal du HTML avant toute insertion DOM (innerHTML/
-// outerHTML/document.write) d'un contenu qui peut avoir été modifié EN
-// DEHORS de l'éditeur (colonne Grist Contenu/HeaderFooter éditée
-// directement via l'UI/API Grist par un autre collaborateur du document,
-// gabarit importé) - cf. AUDIT_CODE.md §3.2/§8.2. Retire les vecteurs
-// d'exécution de script (balises <script>, attributs on*, URLs
-// javascript:) via un parsing DOMParser (document inerte : aucune image
-// ne charge, aucun script ne s'exécute pendant le parsing lui-même), sans
-// toucher au reste de la mise en forme.
+// Assainissement minimal du HTML avant toute insertion DOM (contenu potentiellement modifié EN DEHORS de l'éditeur - colonne Grist éditée par un autre
+// collaborateur, gabarit importé - cf. AUDIT_CODE.md §3.2/§8.2). Retire <script>/attributs on*/URLs javascript: via un DOMParser inerte (rien ne charge/s'exécute).
 //
 // Toute page qui charge js/reader-mode.js doit charger ce fichier avant.
 const HtmlSanitize = (function () {

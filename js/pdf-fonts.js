@@ -1,14 +1,9 @@
-// Vraie police Roboto Bold/Bold-Italic (Google Fonts, charset latin + latin-ext),
-// pour remplacer le Roboto-Medium utilise par defaut par pdfmake pour le gras :
-// Roboto-Medium a une chasse differente de la vraie graisse Bold rendue par le
-// navigateur, ce qui faisait "gagner" un mot de plus par ligne a l'export PDF.
+// Vraie police Roboto Bold/Bold-Italic (Google Fonts, charset latin + latin-ext), pour remplacer le Roboto-Medium utilise par defaut par pdfmake pour le gras
+// : Roboto-Medium a une chasse differente de la vraie graisse Bold rendue par le navigateur, ce qui faisait "gagner" un mot de plus par ligne a l'export PDF.
 (function () {
   if (!window.pdfMake || !window.pdfMake.vfs) return;
-  // pdfmake n'expose pas de `pdfMake.fonts` par defaut : sans lui, la librairie
-  // retombe silencieusement sur son mapping interne code en dur (Regular /
-  // Medium / Italic / MediumItalic) qu'aucun code de ce projet ne definit
-  // jamais explicitement. Il faut donc le CREER ici (pas seulement muter un
-  // 'bold' existant) pour que ce remplacement prenne effet.
+  // pdfmake n'expose pas de `pdfMake.fonts` par defaut : sans lui, la librairie retombe silencieusement sur son mapping interne code en dur (Regular/Medium/
+  // Italic/MediumItalic). Il faut donc le CREER ici (pas seulement muter un 'bold' existant) pour que ce remplacement prenne effet.
   if (!window.pdfMake.fonts) {
     window.pdfMake.fonts = {
       Roboto: { normal: 'Roboto-Regular.ttf', bold: 'Roboto-Medium.ttf', italics: 'Roboto-Italic.ttf', bolditalics: 'Roboto-MediumItalic.ttf' }

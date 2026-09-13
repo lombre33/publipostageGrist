@@ -1,18 +1,14 @@
-// Export PDF — 4 qualités : vectoriel (pdfmake, moteur principal de ce
-// fichier), impression navigateur (iframe + window.print()) et raster
-// basse/ultra (html2pdf.js sur un conteneur détaché) - ces deux derniers
-// capturent le vrai DOM résolu, jamais le docDefinition pdfmake.
+// Export PDF — 4 qualités : vectoriel (pdfmake, moteur principal de ce fichier), impression navigateur (iframe + window.print()) et raster basse/ultra
+// (html2pdf.js sur un conteneur détaché) - ces deux derniers capturent le vrai DOM résolu, jamais le docDefinition pdfmake.
 const PdfExport = (function () {
-  // Chargement paresseux au premier export (économise 1-2s d'ouverture).
-  // `integrity` (SRI sha384) : recalculer si la version change via
-  // `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
+  // Chargement paresseux au premier export (économise 1-2s d'ouverture). `integrity` (SRI sha384) : recalculer si la version change via `curl -s <url> |
+  // openssl dgst -sha384 -binary | openssl base64 -A`.
   const PDF_LIB_URLS = [
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', integrity: 'sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
-    // Chemins relatifs à index.html, même origine que la page : pas de SRI
-    // nécessaire (une compromission serait déjà celle du dépôt lui-même).
+    // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
     { src: 'js/pdf-fonts.js?v=0.67' },
     { src: 'js/pdf-fonts-extra.js?v=0.67' },
   ];
@@ -27,8 +23,7 @@ const PdfExport = (function () {
       document.head.appendChild(s);
     });
   }
-  // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à
-  // l'exécution, donc doivent s'exécuter après pdfmake.min.js/vfs_fonts.min.js.
+  // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc doivent s'exécuter après pdfmake.min.js/vfs_fonts.min.js.
   async function ensurePdfLibsLoaded() {
     if (!pdfLibsPromise) {
       pdfLibsPromise = (async () => {
@@ -39,41 +34,29 @@ const PdfExport = (function () {
   }
 
   const PX_TO_PT = 72 / 96;
-  // Doit correspondre à .tiptap { font-size: 14px } (css/editor-v2.css) :
-  // 14 × 0.75 = 10.5pt, la taille de tout texte sans taille inline explicite.
+  // Doit correspondre à .tiptap { font-size: 14px } (css/editor-v2.css) : 14 × 0.75 = 10.5pt, la taille de tout texte sans taille inline explicite.
   const DEFAULT_FONT_SIZE = 10.5;
-  // .tiptap { line-height: 1.42 }. `lineHeight` de pdfmake multiplie
-  // l'interligne par défaut de Roboto (≈1.171875 pour 11pt) - diviser par ce
-  // ratio annule cet interligne natif avant d'appliquer le nôtre.
+  // .tiptap { line-height: 1.42 }. `lineHeight` de pdfmake multiplie l'interligne par défaut de Roboto (≈1.171875 pour 11pt) - diviser par ce ratio annule
+  // cet interligne natif avant d'appliquer le nôtre.
   const EDITOR_LINE_HEIGHT_RATIO = 1.42;
   const PDFMAKE_DEFAULT_LINE_RATIO = 1.171875;
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
   const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
   const A4_HEIGHT_PT = 841.89;
-  // Notes de bas de page : collectées par inlineRuns quelle que soit sa
-  // profondeur d'appel (cellule/colonne/corps) - variables de module plutôt
-  // qu'un paramètre traversant tableFrom/twoColumnsFrom/cellLineToPdfObject.
-  // Remises à zéro au début de chaque buildPdfContentFromRoot racine (une
-  // fois par passe de mesure/rendu, cf. isTopLevel), jamais une seule fois au
-  // niveau module.
+  // Notes de bas de page : collectées par inlineRuns à toute profondeur d'appel (cellule/colonne/corps) - variables de module plutôt qu'un paramètre
+  // traversant tableFrom/twoColumnsFrom/cellLineToPdfObject. Remises à zéro à chaque buildPdfContentFromRoot racine (une fois par passe, cf. isTopLevel).
   let footnoteCounter = 0;
   let footnoteEntries = [];
-  // Bande fixe (pas dynamique par page - pdfmake ne le permet pas) réservée
-  // en pied de page pour ~4 lignes de note à 8pt ; un empilement extrême de
-  // notes très longues sur une page peut la déborder (limite assumée).
+  // Bande fixe (pas dynamique par page - pdfmake ne le permet pas) réservée en pied de page pour ~4 lignes de note à 8pt ; un empilement extrême de notes
+  // très longues sur une page peut la déborder (limite assumée).
   const FOOTNOTE_BAND_PT = 4 * 8 * 1.15 + 8; // ≈ 4 lignes à 8pt + le filet séparateur
-  // left/top d'une image en calque sont relatifs au padding de `.tiptap`
-  // (= marge de page en Aperçu A4), mais l'hôte de mesure PDF a un padding
-  // nul - soustrait une seule fois avant toute comparaison/interpolation.
+  // left/top d'une image en calque sont relatifs au padding de `.tiptap` (= marge de page en Aperçu A4), mais l'hôte de mesure PDF a un padding nul -
+  // soustrait une seule fois avant toute comparaison/interpolation.
   const A4_PREVIEW_PADDING_PX = PAGE_MARGIN_PT / PX_TO_PT;
 
-  // ProseMirror pose `white-space: break-spaces` (l'espace avant un retour à
-  // la ligne compte dans la largeur de cette ligne), pas `normal` comme
-  // pdfmake (l'espace dépasse sans compter, un mot de plus peut tenir) - sans
-  // compensation pdfmake calait un mot de trop par ligne vs l'éditeur, plus
-  // visible en colonne étroite. Corrigé en retranchant la largeur d'un espace
-  // (mesurée une fois, mise en cache) de chaque largeur d'habillage.
+  // ProseMirror pose `white-space: break-spaces` (l'espace avant un retour à la ligne compte dans la largeur), pas `normal` comme pdfmake (l'espace dépasse
+  // sans compter, un mot de plus peut tenir) - compensé en retranchant la largeur d'un espace (mesurée une fois, mise en cache) de chaque largeur d'habillage.
   let cachedSpaceWidthPt = null;
   function spaceWidthPt() {
     if (cachedSpaceWidthPt !== null) return cachedSpaceWidthPt;
@@ -96,8 +79,7 @@ const PdfExport = (function () {
     return Number.isFinite(n) ? Math.max(6, Math.min(72, n * (value && String(value).endsWith('px') ? PX_TO_PT : 1))) : fallback;
   }
 
-  // Police web-safe -> police pdfmake réellement embarquée (pdfmake ne peut
-  // jamais utiliser une police système) : équivalents libres à métrique identique.
+  // Police web-safe -> police pdfmake réellement embarquée (pdfmake ne peut jamais utiliser une police système) : équivalents libres à métrique identique.
   const FONT_FAMILY_MAP = {
     'arial': 'Arimo', 'helvetica': 'Arimo',
     'times new roman': 'Tinos', 'times': 'Tinos',
@@ -117,10 +99,8 @@ const PdfExport = (function () {
     out.decoration = list;
   }
 
-  // pdfmake n'interprète pas `rgb(r,g,b)` (rend en noir, sans erreur) - or
-  // c'est la forme que le navigateur renvoie pour tout style inline posé en
-  // hexa une fois repassé par le DOM. Convertit vers l'hexa ; laisse passer
-  // un nom de couleur CSS ou un hexa déjà présent.
+  // pdfmake n'interprète pas `rgb(r,g,b)` (rend en noir, sans erreur) - or c'est la forme que le navigateur renvoie pour tout style inline posé en hexa une
+  // fois repassé par le DOM. Convertit vers l'hexa ; laisse passer un nom de couleur CSS ou un hexa déjà présent.
   function cssColorToHex(value) {
     if (!value) return null;
     const v = value.trim();
@@ -130,8 +110,7 @@ const PdfExport = (function () {
     return '#' + hex(m[1]) + hex(m[2]) + hex(m[3]);
   }
 
-  // Style hérité d'un nœud DOM -> attributs de "run" pdfmake. Point de
-  // passage unique pour tout texte, où qu'il vive dans le schéma.
+  // Style hérité d'un nœud DOM -> attributs de "run" pdfmake. Point de passage unique pour tout texte, où qu'il vive dans le schéma.
   function inheritedStyle(node, parent) {
     const style = node.nodeType === 1 ? (node.getAttribute('style') || '') : '';
     const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); };
@@ -156,21 +135,16 @@ const PdfExport = (function () {
     return out;
   }
 
-  // Alignement réel : TipTap (extension-text-align) pose toujours un style
-  // inline `text-align`, jamais de classe - pas de repli ql-align-*/attribut
-  // legacy align="" à gérer ici (aucune des deux formes ne peut exister dans
-  // du HTML produit par cet éditeur).
+  // Alignement réel : TipTap (extension-text-align) pose toujours un style inline `text-align`, jamais de classe - pas de repli ql-align-*/attribut legacy
+  // align="" à gérer ici (aucune des deux formes ne peut exister dans du HTML produit par cet éditeur).
   function alignment(node) {
     const style = (node.getAttribute && node.getAttribute('style')) || '';
     const match = style.match(/text-align\s*:\s*(left|center|right|justify)/i);
     return match ? match[1].toLowerCase() : undefined;
   }
 
-  // Construit le contenu pdfmake d'un sommaire à partir des blocs-titre déjà
-  // rencontrés - texte et niveau toujours connus dès cet appel, mais PAS le
-  // numéro de page (dépend d'une 1ère passe de mise en page, cf.
-  // resolveNativePdfContent) : chaque entrée réserve sa propre cellule vide,
-  // patchée après coup.
+  // Construit le contenu pdfmake d'un sommaire à partir des blocs-titre déjà rencontrés - texte et niveau toujours connus dès cet appel, mais PAS le numéro
+  // de page (dépend d'une 1ère passe de mise en page, cf. resolveNativePdfContent) : chaque entrée réserve sa propre cellule vide, patchée après coup.
   function buildTocStack(headingBlocks) {
     const title = { text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
     if (!headingBlocks.length) {
@@ -192,18 +166,14 @@ const PdfExport = (function () {
     return { stack: [title].concat(lines), pageNumberCells };
   }
 
-  // Indentation réelle d'un bloc, mesurée dans un hôte .tiptap hors-écran
-  // (hérite le CSS des listes/citations) plutôt que devinée. 'box' (LI) :
-  // bord de la boîte (le marqueur est ajouté à part par listMarkerFor).
-  // 'text' : premier caractère rendu, capture aussi un padding/bordure propre.
+  // Indentation réelle d'un bloc, mesurée dans un hôte .tiptap hors-écran (hérite le CSS des listes/citations) plutôt que devinée. 'box' (LI) : bord de la
+  // boîte (le marqueur est ajouté à part par listMarkerFor). 'text' : premier caractère rendu, capture aussi un padding/bordure propre.
   function measureIndentPt(node, mode) {
     const host = node.closest('.pdf-measure-host');
     if (!host) return 0;
     const hostLeft = host.getBoundingClientRect().left;
-    // Neutralise une contamination par un flottement CSS (image "au cœur du
-    // texte") débordant d'un frère précédent, qui décalerait sinon la mesure
-    // comme un faux retrait sémantique fixé pour tout le paragraphe. Ne
-    // touche que la mesure des paragraphes suivants (retiré aussitôt après).
+    // Neutralise une contamination par un flottement CSS (image "au cœur du texte") débordant d'un frère précédent, qui décalerait sinon la mesure comme un
+    // faux retrait sémantique fixé pour tout le paragraphe. Ne touche que la mesure des paragraphes suivants (retiré aussitôt après).
     const previousClear = node.style.clear;
     node.style.clear = 'both';
     let leftPx;
@@ -215,9 +185,8 @@ const PdfExport = (function () {
       });
       const textNode = walker.nextNode();
       if (!textNode) { node.style.clear = previousClear; return 0; }
-      // Neutralise temporairement l'alignement du bloc pendant la mesure -
-      // un bloc centré/aligné à droite pousse son texte loin du bord gauche
-      // du large hôte de mesure, ce qui n'est PAS un retrait réel.
+      // Neutralise temporairement l'alignement du bloc pendant la mesure - un bloc centré/aligné à droite pousse son texte loin du bord gauche du large hôte
+      // de mesure, ce qui n'est PAS un retrait réel.
       const previousAlign = node.style.textAlign;
       node.style.textAlign = 'left';
       const range = document.createRange();
@@ -230,13 +199,11 @@ const PdfExport = (function () {
     return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
   }
 
-  // Attache `root` hors-écran avec la classe .tiptap (scopée à la classe
-  // seule, pas #editor-container .tiptap, pour ne pas dépendre du conteneur réel).
+  // Attache `root` hors-écran avec la classe .tiptap (scopée à la classe seule, pas #editor-container .tiptap, pour ne pas dépendre du conteneur réel).
   function attachMeasureHost(root, widthPx) {
     root.classList.add('pdf-measure-host', 'tiptap');
-    // min-height:0 en inline l'emporte sur .tiptap { min-height: 200px } (zone
-    // cliquable de l'éditeur vide) : sans lui, mesurer la hauteur totale de
-    // `root` plafonne à 200px quel que soit le contenu réel.
+    // min-height:0 en inline l'emporte sur .tiptap { min-height: 200px } (zone cliquable de l'éditeur vide) : sans lui, mesurer la hauteur totale de `root`
+    // plafonne à 200px quel que soit le contenu réel.
     root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + (widthPx || CONTENT_WIDTH_PX) + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(root);
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
@@ -245,12 +212,8 @@ const PdfExport = (function () {
   function pdfImageFromNode(node) {
     const widthPx = parseFloat(node.style.width) || 320;
     const image = { image: node.getAttribute('src') };
-    // Image liée à une #Variable Attachments : boîte width×height fixe,
-    // mais chaque ligne Grist y insère une image de ratio différent - `fit`
-    // (pdfmake) la met à l'échelle sans la déformer, contrairement à `width`
-    // seul. `width` est toujours posé en plus (jamais lu par pdfmake dans ce
-    // cas, mais lu plus loin par le bracketing de position d'une image en
-    // calque, qui deviendrait NaN sans lui).
+    // Image liée à une #Variable Attachments : boîte width×height fixe, mais chaque ligne Grist y insère une image de ratio différent - `fit` (pdfmake) la
+    // met à l'échelle sans la déformer. `width` reste posé en plus (jamais lu par pdfmake ici, mais lu par le bracketing d'image en calque, sinon NaN).
     image.width = Math.max(15, widthPx * PX_TO_PT);
     if (node.hasAttribute('data-var-table')) {
       const heightPx = parseFloat(node.style.height) || 240;
@@ -260,26 +223,18 @@ const PdfExport = (function () {
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     const layer = node.getAttribute('data-layer') || 'normal';
     if (layer !== 'normal' && node.style.position === 'absolute') {
-      // Position réelle résolue plus tard par ancrage/interpolation (une
-      // formule directe depuis le pixel `top` n'a aucune notion de
-      // pagination PDF). Garde une référence au nœud DOM réel (encore
-      // attaché à l'hôte de mesure) pour mesurer sa position par rapport aux
-      // blocs de texte voisins.
+      // Position réelle résolue plus tard par ancrage/interpolation (une formule directe depuis le pixel `top` n'a aucune notion de pagination PDF). Garde
+      // une référence au nœud DOM réel (encore attaché à l'hôte de mesure) pour mesurer sa position par rapport aux blocs de texte voisins.
       image._pendingImgNode = node;
-      // Conservé jusqu'à la relocation dans content[] : pdfmake peint
-      // content[] séquentiellement, "devant" et "derrière" n'ont donc pas la
-      // même direction d'insertion par rapport à leur bloc-ancre.
+      // Conservé jusqu'à la relocation dans content[] : pdfmake peint content[] séquentiellement, "devant" et "derrière" n'ont donc pas la même direction
+      // d'insertion par rapport à leur bloc-ancre.
       image._pendingLayer = layer;
-      // Placeholder écrasé une fois l'ancrage résolu : sans absolutePosition,
-      // pdfmake traite ce bloc comme un élément de flux et lui réserve sa
-      // propre hauteur dès la première passe de mesure, gonflant à tort la
-      // position mesurée de tous les blocs suivants (constaté : ~46pt d'écart
-      // correspondant exactement à la hauteur d'une image en attente).
+      // Placeholder écrasé une fois l'ancrage résolu : sans absolutePosition, pdfmake traite ce bloc comme un élément de flux et lui réserve sa propre
+      // hauteur dès la 1ère passe de mesure, gonflant à tort la position mesurée des blocs suivants (~46pt d'écart, exactement la hauteur de l'image).
       image.absolutePosition = { x: 0, y: 0 };
     } else {
       const align = node.getAttribute('data-align');
-      // gauche/droite = habillage (float CSS) géré par floatedImageParagraphFrom
-      // (colonne image + colonne texte), pas par `alignment` de pdfmake (qui
+      // gauche/droite = habillage (float CSS) géré par floatedImageParagraphFrom (colonne image + colonne texte), pas par `alignment` de pdfmake (qui
       // n'aurait fait qu'aligner l'image seule, sans habiller le texte autour).
       if (align === 'left' || align === 'right') {
         image._floatAlign = align;
@@ -292,29 +247,23 @@ const PdfExport = (function () {
     return image;
   }
 
-  // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" - un
-  // objet { image: ... } glissé dans le texte n'est pas une syntaxe pdfmake
-  // valide (silencieusement ignoré). Les images rencontrées sont accumulées
-  // à part (`images`) pour être ajoutées par l'appelant comme blocs propres.
+  // IMPORTANT : ne retourne jamais d'image dans ce tableau de "runs" - un objet { image: ... } glissé dans le texte n'est pas une syntaxe pdfmake valide
+  // (silencieusement ignoré). Les images rencontrées sont accumulées à part (`images`) pour être ajoutées par l'appelant comme blocs propres.
   function inlineRuns(node, parentStyle, images) {
     const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE });
     if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [{ text: node.nodeValue, ...style }] : [];
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
     if (node.classList.contains('page-break-marker')) return [];
-    // Ne devrait normalement jamais être rencontré ici : ReaderMode.preview
-    // résout déjà chaque badge en texte simple avant ce module - gardé par robustesse.
+    // Ne devrait normalement jamais être rencontré ici : ReaderMode.preview résout déjà chaque badge en texte simple avant ce module - gardé par robustesse.
     if (node.classList.contains('var-badge')) return [{ text: node.textContent || '', ...style }];
-    // Contrairement à .var-badge, aucune valeur réelle n'existe avant que
-    // pdfmake choisisse le numéro de page final - marqueur résolu plus tard
-    // par resolvePageNumberPlaceholders à chaque callback header/footer natif.
+    // Contrairement à .var-badge, aucune valeur réelle n'existe avant que pdfmake choisisse le numéro de page final - marqueur résolu plus tard par
+    // resolvePageNumberPlaceholders à chaque callback header/footer natif.
     if (node.classList.contains('page-number-badge')) {
       return [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }];
     }
     if (node.classList.contains('smart-chip')) return [{ text: node.textContent || '', ...style }];
-    // Le numéro (contrairement à .page-number-badge) n'a aucune dépendance à
-    // la pagination - assigné immédiatement via un compteur de module (remis
-    // à 0 une fois par passe) plutôt qu'un paramètre à faire traverser
-    // tableFrom/twoColumnsFrom/cellLineToPdfObject, correct à toute profondeur.
+    // Le numéro (contrairement à .page-number-badge) n'a aucune dépendance à la pagination - assigné immédiatement via un compteur de module (remis à 0 une
+    // fois par passe) plutôt qu'un paramètre à faire traverser tableFrom/twoColumnsFrom/cellLineToPdfObject, correct à toute profondeur.
     if (node.classList.contains('footnote-ref-marker')) {
       footnoteCounter += 1;
       footnoteEntries.push({ number: footnoteCounter, text: node.getAttribute('data-note-text') || '' });
@@ -323,16 +272,14 @@ const PdfExport = (function () {
     if (node.tagName === 'IMG') {
       if (images && !node.hasAttribute('data-pdf-skip') && (node.getAttribute('src') || '').startsWith('data:')) {
         images.push(pdfImageFromNode(node));
-        // Marqueur de position (jamais un run pdfmake valide) : permet à
-        // blockFrom de reconstituer l'ordre réel texte/image d'origine -
-        // sans lui une image "au cœur du texte" sautait en fin de paragraphe.
+        // Marqueur de position (jamais un run pdfmake valide) : permet à blockFrom de reconstituer l'ordre réel texte/image d'origine - sans lui une image
+        // "au cœur du texte" sautait en fin de paragraphe.
         return [{ _imageMarker: true }];
       }
       return [];
     }
-    // data-pdf-measure-filler : <br> injecté juste pour donner une hauteur
-    // réelle à un bloc vraiment vide dans l'hôte de mesure, jamais un vrai
-    // retour à la ligne saisi par l'utilisateur - ne produit aucun run.
+    // data-pdf-measure-filler : <br> injecté juste pour donner une hauteur réelle à un bloc vraiment vide dans l'hôte de mesure, jamais un vrai retour à la
+    // ligne saisi par l'utilisateur - ne produit aucun run.
     if (node.tagName === 'BR') return node.hasAttribute('data-pdf-measure-filler') ? [] : [{ text: '\n', ...style }];
     let runs = [];
     let sawLineBlock = false;
@@ -344,9 +291,8 @@ const PdfExport = (function () {
     });
     return runs;
   }
-  // Comme inlineRuns, mais ignore les <ul>/<ol> DIRECTS - une sous-liste
-  // imbriquée doit produire SES PROPRES blocs (un par <li>), pas être
-  // aplatie dans le texte du <li> parent.
+  // Comme inlineRuns, mais ignore les <ul>/<ol> DIRECTS - une sous-liste imbriquée doit produire SES PROPRES blocs (un par <li>), pas être aplatie dans le
+  // texte du <li> parent.
   function inlineRunsExcludingNestedLists(node, parentStyle, images) {
     const style = inheritedStyle(node, parentStyle);
     let runs = [];
@@ -356,17 +302,12 @@ const PdfExport = (function () {
     });
     return runs;
   }
-  // inlineRuns glisse un marqueur `{_imageMarker:true}` pour que blockFrom()
-  // reconstitue l'ordre réel texte/image ; tout autre appelant doit le
-  // retirer, un objet sans `text` ni `image` fait planter pdfmake.
+  // inlineRuns glisse un marqueur `{_imageMarker:true}` pour que blockFrom() reconstitue l'ordre réel texte/image ; tout autre appelant doit le retirer, un
+  // objet sans `text` ni `image` fait planter pdfmake.
   function stripImageMarkers(runs) { return runs.filter(r => !r._imageMarker); }
 
-  // 'circle'/'square' n'utilisent pas les vrais glyphes Unicode ○/▪ : vérifié
-  // (décodage du PDF via pdf.js) que pdfmake/PDFKit n'embarque les polices
-  // TTF qu'en encodage WinAnsi - tout caractère au-delà de U+00FF ressort en
-  // glyphe invisible. '°' reste dans cette plage et se lit comme un cercle
-  // creux ; aucun caractère WinAnsi ne lit comme un carré, d'où '*' plutôt
-  // qu'un '#' qui entrerait en collision visuelle avec les badges #Variable.
+  // 'circle'/'square' n'utilisent pas les vrais glyphes Unicode ○/▪ : vérifié (décodage PDF via pdf.js) que pdfmake/PDFKit n'embarque les TTF qu'en WinAnsi -
+  // tout caractère au-delà de U+00FF ressort invisible. '°' reste dans cette plage (cercle creux) ; '*' pour le carré, pas '#' (collision avec #Variable).
   const BULLET_MARKERS = { disc: '• ', circle: '° ', square: '* ' };
   function listMarkerFor(node) {
     const parent = node.parentElement;
@@ -374,8 +315,7 @@ const PdfExport = (function () {
       const items = Array.from(parent.children).filter(c => c.tagName === 'LI');
       const start = parseInt(parent.getAttribute('start') || '1', 10) || 1;
       const n = start + (items.indexOf(node) === -1 ? 0 : items.indexOf(node));
-      // Réutilise la même conversion chiffre→lettre/romain que la
-      // numérotation des titres plutôt que d'en réécrire une.
+      // Réutilise la même conversion chiffre→lettre/romain que la numérotation des titres plutôt que d'en réécrire une.
       const numberStyle = parent.getAttribute('data-number-style');
       if (numberStyle === 'alpha') return HeadingNumbering.formatCounterValue(n, 'lower-alpha') + '. ';
       if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
@@ -385,9 +325,8 @@ const PdfExport = (function () {
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
   }
 
-  // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de
-  // police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) :
-  // un rectangle + une coche ne dépendent d'aucune police embarquée.
+  // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) : un
+  // rectangle + une coche ne dépendent d'aucune police embarquée.
   const TASK_BOX_PT = 8;
   function taskCheckboxCanvas(checked, style) {
     const rect = { type: 'rect', x: 0, y: 0, w: TASK_BOX_PT, h: TASK_BOX_PT, r: style === 'classic' ? 0.5 : 1.6, lineWidth: 1 };
@@ -400,8 +339,7 @@ const PdfExport = (function () {
     return [Object.assign({}, rect, { lineColor: '#98a2b3' })];
   }
 
-  // Reflète la règle CSS text-decoration:line-through, qu'inheritedStyle ne
-  // peut pas lire (style inline d'un nœud seulement, jamais une règle externe).
+  // Reflète la règle CSS text-decoration:line-through, qu'inheritedStyle ne peut pas lire (style inline d'un nœud seulement, jamais une règle externe).
   function taskListRuns(node, runs) {
     const parent = node.parentElement;
     const checked = node.getAttribute('data-checked') === 'true';
@@ -419,8 +357,7 @@ const PdfExport = (function () {
     return !!(parent && parent.getAttribute('data-type') === 'taskList');
   }
 
-  // Structure `columns` commune aux deux points d'insertion d'un item de
-  // liste de tâches : case dans une colonne étroite, texte dans le reste.
+  // Structure `columns` commune aux deux points d'insertion d'un item de liste de tâches : case dans une colonne étroite, texte dans le reste.
   function taskListColumns(node, runs, align) {
     const checked = node.getAttribute('data-checked') === 'true';
     const style = (node.parentElement && node.parentElement.getAttribute('data-tasklist-style')) || 'accentStrike';
@@ -434,17 +371,14 @@ const PdfExport = (function () {
 
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR|IMG)$/i.test(node.tagName)); }
 
-  // Repli de robustesse : un nœud dont la construction pdfmake lève une
-  // exception dégrade en texte brut plutôt que d'annuler tout l'export.
+  // Repli de robustesse : un nœud dont la construction pdfmake lève une exception dégrade en texte brut plutôt que d'annuler tout l'export.
   function fallbackTextBlock(node, pageBreakBefore) {
     const text = ((node && node.textContent) || '').trim();
     return { text: text || ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pageBreakBefore ? { pageBreak: 'before' } : {}) };
   }
 
-  // Le navigateur COLLAPSE les espaces/retours en tout début/fin de bloc -
-  // pdfmake prend le texte tel quel. Sans ce trim, un espace ou retour ligne
-  // superflu en tête/fin de paragraphe (fréquent après une image ou un saut
-  // de ligne) produit un décalage visible dans un texte centré/justifié.
+  // Le navigateur COLLAPSE les espaces/retours en tout début/fin de bloc - pdfmake prend le texte tel quel. Sans ce trim, un espace ou retour ligne superflu
+  // en tête/fin de paragraphe (fréquent après une image ou un saut de ligne) produit un décalage visible dans un texte centré/justifié.
   function trimEdgeWhitespace(runs) {
     while (runs.length && !/[^ \t\n\r\f\v]/.test(runs[0].text)) runs.shift();
     if (runs.length) runs[0] = Object.assign({}, runs[0], { text: runs[0].text.replace(/^[ \t\n\r\f\v]+/, '') });
@@ -453,9 +387,8 @@ const PdfExport = (function () {
     return runs;
   }
 
-  // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake :
-  // <p>/<div>/<h1-6> direct = sa propre ligne ; <ul>/<ol> direct = une ligne
-  // par <li> (récursif) ; tout le reste s'accumule dans un groupe "inline".
+  // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne ; <ul>/<ol> direct = une ligne par
+  // <li> (récursif) ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
@@ -475,11 +408,8 @@ const PdfExport = (function () {
     });
     flushPending();
   }
-  // Rattache une image en calque à `obj` comme ancre locale : dans une
-  // cellule, le paragraphe qui l'héberge est la référence la plus proche, pas
-  // besoin de bracketing. Pas de correction A4_PREVIEW_PADDING_PX ici : la
-  // cellule a son propre position:relative, seule la différence avec le
-  // paragraphe-conteneur compte (jamais un absolu page-relative).
+  // Rattache une image en calque à `obj` comme ancre locale : dans une cellule, le paragraphe hôte est la référence la plus proche, pas besoin de bracketing.
+  // Pas de correction A4_PREVIEW_PADDING_PX ici : la cellule a son propre position:relative, seule la différence avec le conteneur compte.
   function attributeNestedPendingImages(images, before, obj, containerNode, rootRect, nestedPending) {
     if (!nestedPending || !rootRect) return;
     for (let i = before; i < images.length; i += 1) {
@@ -498,9 +428,8 @@ const PdfExport = (function () {
       nestedPending.push(entry);
     }
   }
-  // Image "au coeur du texte" (flux normal, non en calque) alignée gauche/
-  // droite - cible de l'habillage `columns` (cf. floatedImageParagraphFrom),
-  // par opposition à une image en calque ou sans alignement gauche/droite.
+  // Image "au coeur du texte" (flux normal, non en calque) alignée gauche/ droite - cible de l'habillage `columns` (cf. floatedImageParagraphFrom), par
+  // opposition à une image en calque ou sans alignement gauche/droite.
   function findFloatImageIn(node) {
     return Array.from(node.querySelectorAll('img.editor-image')).find(img => {
       const align = img.getAttribute('data-align');
@@ -520,8 +449,8 @@ const PdfExport = (function () {
       return obj;
     }
     const node = line;
-    // Même chemin d'habillage que le flux principal (floatedImageParagraphFrom),
-    // avec la largeur RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine page.
+    // Même chemin d'habillage que le flux principal (floatedImageParagraphFrom), avec la largeur RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine
+    // page.
     if (/^(P|DIV)$/.test(node.tagName)) {
       const floatImgEl = findFloatImageIn(node);
       if (floatImgEl) {
@@ -547,9 +476,8 @@ const PdfExport = (function () {
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
-  // Une cellule multi-lignes devient un stack pdfmake ; sinon le texte reste
-  // à plat, sauf si des images ont été trouvées (pdfmake n'accepte pas
-  // d'image au milieu d'un tableau de `text`, elle atterrit après le texte).
+  // Une cellule multi-lignes devient un stack pdfmake ; sinon le texte reste à plat, sauf si des images ont été trouvées (pdfmake n'accepte pas d'image au
+  // milieu d'un tableau de `text`, elle atterrit après le texte).
   function cellContentFrom(cell, cellWidthPt, rootRect) {
     const lines = [];
     collectCellLines(cell, lines);
@@ -581,11 +509,8 @@ const PdfExport = (function () {
     return result;
   }
 
-  // Largeurs mesurées sur le rendu réel (le <col> de @tiptap ne porte qu'un
-  // minimum px, pas un pourcentage exploitable) ; largeur de CONTENU (pas la
-  // boîte entière, tableFrom applique déjà son propre padding pdfmake) ;
-  // mesurée sur le premier enfant de bloc, l'arrondi de table-layout:fixed
-  // rend un simple soustrait padding+bordure imprécis d'~1px.
+  // Largeurs mesurées sur le rendu réel (le <col> de @tiptap ne porte qu'un minimum px, pas un pourcentage exploitable), largeur de CONTENU (pas la boîte
+  // entière, tableFrom applique déjà son padding pdfmake), mesurée sur le 1er enfant de bloc - un simple soustrait padding+bordure est imprécis d'~1px.
   function measuredColumnWidthsPx(table, columnCount) {
     const firstRow = table.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
     if (!firstRow) return null;
@@ -616,10 +541,8 @@ const PdfExport = (function () {
       const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
       return sum + span;
     }, 0)));
-    // Padding de cellule mesuré sur le CSS réel, pas une constante
-    // approximative (un ancien "4pt/3pt" arrondi creusait un écart mesurable
-    // avec l'éditeur) - sert au budget de largeur ET à layout.paddingLeft/Right,
-    // un seul chiffre plutôt que deux valeurs qui pourraient diverger.
+    // Padding de cellule mesuré sur le CSS réel, pas une constante approximative (un ancien "4pt/3pt" arrondi creusait un écart mesurable avec l'éditeur) -
+    // sert au budget de largeur ET à layout.paddingLeft/Right, un seul chiffre plutôt que deux valeurs qui pourraient diverger.
     const firstCell = rawRows.length ? cellsOf(rawRows[0])[0] : null;
     const cellCs = firstCell ? getComputedStyle(firstCell) : null;
     const cellPadLeftPt = cellCs ? (parseFloat(cellCs.paddingLeft) || 0) * PX_TO_PT : 4.5;
@@ -628,18 +551,15 @@ const PdfExport = (function () {
     const cellPadBottomPt = cellCs ? (parseFloat(cellCs.paddingBottom) || 0) * PX_TO_PT : 3;
     const availableWidthPt = CONTENT_WIDTH_PT;
     const minColWidthPt = 12;
-    // pdfmake ajoute paddingLeft+paddingRight à chaque colonne EN PLUS de
-    // `widths` (vérifié en décodant le PDF généré) - retiré avant de répartir
-    // pour que le total rendu retombe exactement sur la largeur de page.
+    // pdfmake ajoute paddingLeft+paddingRight à chaque colonne EN PLUS de `widths` (vérifié en décodant le PDF généré) - retiré avant de répartir pour que le
+    // total rendu retombe exactement sur la largeur de page.
     const cellPaddingPt = cellPadLeftPt + cellPadRightPt;
     const usableForColumnsPt = Math.max(minColWidthPt * columnCount, availableWidthPt - columnCount * cellPaddingPt);
     const measuredPx = measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
-    // Cible de répartition : la largeur réelle du tableau si elle tient dans
-    // la page, pas systématiquement la pleine largeur - un tableau rétréci
-    // par l'utilisateur redevenait pleine largeur à l'export (bug confirmé).
-    // usableForColumnsPt reste la limite au-delà de laquelle réduire quand même.
+    // Cible de répartition : la largeur réelle du tableau si elle tient dans la page, pas systématiquement la pleine largeur - un tableau rétréci par
+    // l'utilisateur redevenait pleine largeur à l'export (bug confirmé). usableForColumnsPt reste la limite au-delà de laquelle réduire quand même.
     const targetTotalPt = measuredSum > 0 ? Math.min(measuredSum, usableForColumnsPt) : usableForColumnsPt;
     let widths;
     if (measuredPt && measuredSum > 0) {
@@ -655,13 +575,11 @@ const PdfExport = (function () {
     } else {
       widths = Array(columnCount).fill(Math.max(minColWidthPt, usableForColumnsPt / columnCount));
     }
-    // spaceWidthPt() retranché par colonne, après la répartition (pas dans le
-    // budget total avant répartition, qui la diluerait au prorata de chaque
-    // colonne) : compense white-space:break-spaces. ×1.5 vérifié par
-    // recherche dichotomique - ×1 laissait encore, de justesse, un mot de trop tenir.
+    // spaceWidthPt() retranché par colonne, après la répartition (pas dans le budget total avant répartition, qui la diluerait au prorata de chaque colonne)
+    // : compense white-space:break-spaces. ×1.5 vérifié par recherche dichotomique - ×1 laissait encore, de justesse, un mot de trop tenir.
     widths = widths.map(w => Math.max(minColWidthPt, w - spaceWidthPt() * 1.5));
-    // Images en calque imbriquées dans une cellule, portées sur `table._nestedPending`,
-    // remontées jusqu'à buildPdfContentFromRoot (même résolution que le top-level).
+    // Images en calque imbriquées dans une cellule, portées sur `table._nestedPending`, remontées jusqu'à buildPdfContentFromRoot (même résolution que le
+    // top-level).
     const tableNestedPending = [];
     const body = rawRows.map(row => {
       const output = [];
@@ -672,8 +590,7 @@ const PdfExport = (function () {
         try { content = cellContentFrom(cell, cellWidthPt, rootRect); }
         catch (e) { console.warn('[PdfExport] cellule de tableau ignorée (structure inattendue), repli en texte brut :', e); content = { text: (cell.textContent || '').trim() || ' ' }; }
         if (content._nestedPending) { tableNestedPending.push(...content._nestedPending); delete content._nestedPending; }
-        // Pas de margin propre à la cellule : le seul inset est layout.paddingLeft/
-        // Right/Top/Bottom ci-dessous, déjà compté dans usableForColumnsPt.
+        // Pas de margin propre à la cellule : le seul inset est layout.paddingLeft/ Right/Top/Bottom ci-dessous, déjà compté dans usableForColumnsPt.
         const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
@@ -697,9 +614,8 @@ const PdfExport = (function () {
     return table;
   }
 
-  // Zone 2 colonnes : mesure la chrome CSS réelle (padding/bordure/largeur)
-  // en clonant la zone dans un hôte hors-écran, plutôt que de deviner ces
-  // valeurs. Colonnes toujours 50/50 (flex: 1 1 0), pas de ratio ajustable.
+  // Zone 2 colonnes : mesure la chrome CSS réelle (padding/bordure/largeur) en clonant la zone dans un hôte hors-écran, plutôt que de deviner ces valeurs.
+  // Colonnes toujours 50/50 (flex: 1 1 0), pas de ratio ajustable.
   async function twoColumnsFrom(node, pageBreakBefore, rootRect) {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
@@ -726,8 +642,7 @@ const PdfExport = (function () {
     const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
     const zoneChromeLeftPt = leftPt(zoneClone);
     const colOwnInsetLeft = [measuredCols[0] ? leftPt(measuredCols[0]) : 0, measuredCols[1] ? leftPt(measuredCols[1]) : 0];
-    // Pas de compensation spaceWidthPt() ici (contrairement à tableFrom) :
-    // measureTextWidthPt mesure directement la largeur de texte réelle, déjà
+    // Pas de compensation spaceWidthPt() ici (contrairement à tableFrom) : measureTextWidthPt mesure directement la largeur de texte réelle, déjà
     // suffisamment stricte - en ajouter une ici calait un mot de moins que l'éditeur.
     const colOwnInsetRight = [
       measuredCols[0] ? rightPt(measuredCols[0]) : 0,
@@ -738,17 +653,14 @@ const PdfExport = (function () {
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
     ];
     document.body.removeChild(measureHost);
-    // Séquentiel (pas Promise.all) : footnoteCounter/footnoteEntries sont un
-    // état de module, deux appels en parallèle peuvent s'entrelacer si l'un
-    // attend un décodage d'image et corrompre la numérotation des notes
-    // (bug confirmé, cf. AUDIT_CODE.md §4). Jamais plus de 2 colonnes, coût négligeable.
+    // Séquentiel (pas Promise.all) : footnoteCounter/footnoteEntries sont un état de module, deux appels en parallèle peuvent s'entrelacer si l'un attend un
+    // décodage d'image et corrompre la numérotation des notes (bug confirmé, cf. AUDIT_CODE.md §4). Jamais plus de 2 colonnes, coût négligeable.
     const columns = [];
     for (let colIdx = 0; colIdx < colNodes.length; colIdx += 1) {
       const col = colNodes[colIdx];
       const colAlign = alignment(col);
-      // Largeur réelle de cette colonne, pour que l'hôte de mesure interne
-      // de htmlToPdfContent habille une image flottante à la bonne largeur
-      // plutôt qu'à la pleine largeur de page.
+      // Largeur réelle de cette colonne, pour que l'hôte de mesure interne de htmlToPdfContent habille une image flottante à la bonne largeur plutôt qu'à la
+      // pleine largeur de page.
       const colWidthPt = colIdx === 0 ? leftWidth : rightWidth;
       let blocks;
       try { blocks = await htmlToPdfContent(col.innerHTML, false, colWidthPt); }
@@ -783,12 +695,8 @@ const PdfExport = (function () {
       }
       columns.push(blocks);
     }
-    // Chaque colonne résout ses images via son propre appel imbriqué à
-    // htmlToPdfContent, reconstruit dans un sous-arbre détaché dont l'origine
-    // est le début de la colonne : imgTopPx y reste relatif à .tiptap alors
-    // que containerTopPx y est local (~0), donc on soustrait la position Y
-    // réelle de la colonne. Pas de correction équivalente pour X : le left
-    // CSS brut est déjà la distance depuis .tiptap, valable dans les deux cas.
+    // Chaque colonne résout ses images via son propre appel imbriqué à htmlToPdfContent, dans un sous-arbre détaché dont l'origine est son propre début :
+    // imgTopPx reste relatif à .tiptap alors que containerTopPx y est local (~0), donc on soustrait la position Y réelle de la colonne (pas besoin pour X).
     const nestedPending = [];
     columns.forEach((colBlocks, colIdx) => {
       const pending = colBlocks._pendingImages || [];
@@ -811,8 +719,7 @@ const PdfExport = (function () {
     return block;
   }
 
-  // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de
-  // retrouver le même nœud dans un clone de `root`.
+  // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.
   function nodePathTo(root, target) {
     const path = [];
     let cur = target;
@@ -829,9 +736,8 @@ const PdfExport = (function () {
     for (const idx of path) { if (!cur) return null; cur = cur.childNodes[idx]; }
     return cur;
   }
-  // Retire, à chaque niveau entre `marker` et `root`, tout ce qui suit -
-  // laisse un arbre ne contenant que ce qui précède marker, tout en
-  // conservant les éléments ancêtres pour ce qu'ils contiennent avant.
+  // Retire, à chaque niveau entre `marker` et `root`, tout ce qui suit - laisse un arbre ne contenant que ce qui précède marker, tout en conservant les
+  // éléments ancêtres pour ce qu'ils contiennent avant.
   function removeAfter(root, marker) {
     let node = marker;
     while (node !== root) {
@@ -850,9 +756,8 @@ const PdfExport = (function () {
       node = parent;
     }
   }
-  // Tous les mots du texte de `node` (encore attaché à l'hôte de mesure,
-  // donc réellement mis en page par le float CSS), avec la position Y
-  // réelle de la ligne sur laquelle chacun tombe.
+  // Tous les mots du texte de `node` (encore attaché à l'hôte de mesure, donc réellement mis en page par le float CSS), avec la position Y réelle de la ligne
+  // sur laquelle chacun tombe.
   function collectWords(node) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const words = [];
@@ -875,9 +780,8 @@ const PdfExport = (function () {
     }
     return words;
   }
-  // Extrait les runs pdfmake du texte de `node` entre startCut/endCut
-  // ({textNode,offset} ou null = jusqu'au bord) - clone `node` puis tronque,
-  // sans jamais modifier `node` lui-même (rappelable sur d'autres plages).
+  // Extrait les runs pdfmake du texte de `node` entre startCut/endCut ({textNode,offset} ou null = jusqu'au bord) - clone `node` puis tronque, sans jamais
+  // modifier `node` lui-même (rappelable sur d'autres plages).
   function extractRunsBetweenRaw(node, startCut, endCut) {
     const clone = node.cloneNode(true);
     if (endCut) {
@@ -896,21 +800,15 @@ const PdfExport = (function () {
     return trimEdgeWhitespace(extractRunsBetweenRaw(node, startCut, endCut));
   }
 
-  // Étire une ligne jusqu'à `targetWidthPt` en répartissant l'écart entre
-  // chaque mot (characterSpacing pdfmake n'agit qu'entre caractères d'un même
-  // run, jamais en bordure) ; `lineWords` = sous-ensemble de collectWords().
+  // Étire une ligne jusqu'à `targetWidthPt` en répartissant l'écart entre chaque mot (characterSpacing pdfmake n'agit qu'entre caractères d'un même run,
+  // jamais en bordure) ; `lineWords` = sous-ensemble de collectWords().
   function buildJustifiedLine(node, lineWords, startCut, endCut, targetWidthPt) {
     const gaps = lineWords.length - 1;
-    // Pas (dernier mot.right - premier mot.left) : le paragraphe est déjà
-    // justifié en CSS dans l'éditeur, donc la ligne RENDUE est déjà étirée -
-    // la mesurer directement fausserait extraPt vers 0. Somme plutôt la
-    // largeur propre de chaque mot (jamais affectée par le justify) plus un
-    // espace normal par intervalle (spaceWidthPt()).
+    // Pas (dernier mot.right - premier mot.left) : le paragraphe est déjà justifié en CSS, donc la ligne RENDUE est déjà étirée - la mesurer directement
+    // fausserait extraPt vers 0. Somme plutôt la largeur propre de chaque mot (jamais affectée par le justify) plus un espace normal par intervalle.
     const naturalWidthPt = lineWords.reduce((sum, w) => sum + (w.right - w.left), 0) * PX_TO_PT + gaps * spaceWidthPt();
-    // Viser exactement targetWidthPt laisse un écart nul avec pdfmake : un
-    // sous-pixel d'arrondi suffit alors à faire recouper la ligne (un mot
-    // bascule sur une ligne en trop). Un léger sous-étirement invisible vaut
-    // mieux que ce risque.
+    // Viser exactement targetWidthPt laisse un écart nul avec pdfmake : un sous-pixel d'arrondi suffit alors à faire recouper la ligne (un mot bascule sur
+    // une ligne en trop). Un léger sous-étirement invisible vaut mieux que ce risque.
     const SAFETY_MARGIN_PT = 2;
     const extraPt = gaps > 0 ? Math.max(0, (targetWidthPt - SAFETY_MARGIN_PT) - naturalWidthPt) / gaps : 0;
     if (gaps <= 0 || extraPt < 0.01) {
@@ -932,34 +830,25 @@ const PdfExport = (function () {
     return trimEdgeWhitespace(runs);
   }
 
-  // pdfmake n'étire (justify) qu'une ligne coupée par son propre wordwrap -
-  // le texte à côté de l'image reste donc un seul bloc auto-wrappé, au prix
-  // d'un risque assumé : sa coupure de ligne peut différer du rendu éditeur.
+  // pdfmake n'étire (justify) qu'une ligne coupée par son propre wordwrap - le texte à côté de l'image reste donc un seul bloc auto-wrappé, au prix d'un
+  // risque assumé : sa coupure de ligne peut différer du rendu éditeur.
 
-  // Reproduit le float CSS via les `columns` natifs de pdfmake : colonne
-  // image + colonne texte restante. Le paragraphe se découpe en 3 segments -
-  // avant l'image (pleine largeur), à hauteur de l'image (largeur réduite,
-  // auto-wrappé), après (pleine largeur) - les frontières viennent de la
-  // position mesurée, pas la coupure interne du segment 2. Limité au même
-  // paragraphe que l'image ; `null` si le paragraphe ne contient que l'image.
+  // Reproduit le float CSS via les `columns` natifs de pdfmake : colonne image + colonne texte restante. Le paragraphe se découpe en 3 segments (avant/à
+  // hauteur/après l'image) selon la position mesurée, pas une coupure interne. Limité au même paragraphe que l'image ; `null` s'il ne contient que l'image.
   function floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt) {
     const images = [];
     const runs = trimEdgeWhitespace(stripImageMarkers(inlineRuns(node, { fontSize: DEFAULT_FONT_SIZE }, images)));
     const floatImg = images.find(img => img._floatAlign);
     if (!floatImg || !runs.length) return null;
     const align = floatImg._floatAlign;
-    // Alignement du paragraphe, distinct de `align` (le côté du flottement) :
-    // blockFrom() applique normalement `alignment` lui-même, mais cette
-    // fonction retourne avant ce point (chemin séparé pour l'habillage) -
-    // sans le reporter ici, l'alignement était silencieusement perdu.
+    // Alignement du paragraphe, distinct de `align` (le côté du flottement) : blockFrom() applique normalement `alignment` lui-même, mais cette fonction
+    // retourne avant ce point (chemin séparé pour l'habillage) - sans le reporter ici, l'alignement était silencieusement perdu.
     const textAlign = alignment(node);
     const imgNode = floatImg._sourceImgNode;
     delete floatImg._floatAlign;
     delete floatImg._sourceImgNode;
-    // Largeur disponible : celle de la page par défaut, mais surchargeable
-    // par l'appelant (cellule de tableau, colonne 2-colonnes) - sinon une
-    // image flottante nichée dans un espace plus étroit habillait comme si
-    // elle disposait de la pleine largeur de page.
+    // Largeur disponible : celle de la page par défaut, mais surchargeable par l'appelant (cellule de tableau, colonne 2-colonnes) - sinon une image
+    // flottante nichée dans un espace plus étroit habillait comme si elle disposait de la pleine largeur de page.
     const pageWidthPt = availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
@@ -980,22 +869,18 @@ const PdfExport = (function () {
 
     const words = collectWords(node);
     const imgRect = imgNode.getBoundingClientRect();
-    // Tolérance généreuse (pas 0.5px) sur les deux frontières : une frontière
-    // stricte au demi-pixel s'est avérée trop fragile (sous-pixels de rendu
-    // qui varient d'un navigateur à l'autre). ~20% d'une hauteur de ligne à 10.5pt.
+    // Tolérance généreuse (pas 0.5px) sur les deux frontières : une frontière stricte au demi-pixel s'est avérée trop fragile (sous-pixels de rendu qui
+    // varient d'un navigateur à l'autre). ~20% d'une hauteur de ligne à 10.5pt.
     const BOUNDARY_TOLERANCE_PX = 4;
-    // Premier mot dont la ligne commence au niveau (ou après) le haut de
-    // l'image - ce qui précède est sur des lignes terminées avant le flottement.
+    // Premier mot dont la ligne commence au niveau (ou après) le haut de l'image - ce qui précède est sur des lignes terminées avant le flottement.
     let besideStart = words.length;
     for (let w = 0; w < words.length; w += 1) { if (words[w].top >= imgRect.top - BOUNDARY_TOLERANCE_PX) { besideStart = w; break; } }
-    // Premier mot, à partir de besideStart, dont la ligne commence au niveau
-    // (ou après) le bas de l'image. +tolérance ici (pas -) pour repousser le
-    // seuil vers le bas plutôt que de classer "en dessous" trop de lignes.
+    // Premier mot, à partir de besideStart, dont la ligne commence au niveau (ou après) le bas de l'image. +tolérance ici (pas -) pour repousser le seuil
+    // vers le bas plutôt que de classer "en dessous" trop de lignes.
     let besideEnd = words.length;
     for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
     if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
-    // Regroupe des mots consécutifs (même Y à 2px près) en lignes - permet de
-    // calculer un étirement justify précis ligne par ligne (buildJustifiedLine).
+    // Regroupe des mots consécutifs (même Y à 2px près) en lignes - permet de calculer un étirement justify précis ligne par ligne (buildJustifiedLine).
     const groupIntoLines = wordsSlice => {
       const lines = [];
       wordsSlice.forEach(w => {
@@ -1012,17 +897,14 @@ const PdfExport = (function () {
     let pendingPageBreak = pageBreakBefore;
     if (besideStart > 0) {
       if (textAlign === 'justify') {
-        // Texte "avant" TOUJOURS suivi du texte "à côté" - même sa propre
-        // dernière ligne doit donc s'étirer (ce n'est jamais la fin réelle
-        // du paragraphe).
+        // Texte "avant" TOUJOURS suivi du texte "à côté" - même sa propre dernière ligne doit donc s'étirer (ce n'est jamais la fin réelle du paragraphe).
         const beforeLines = groupIntoLines(words.slice(0, besideStart));
         let cursor = null;
         beforeLines.forEach((line, li) => {
           const isLastLine = li === beforeLines.length - 1;
           const endCut = isLastLine ? besideStartCut : { textNode: beforeLines[li + 1][0].textNode, offset: beforeLines[li + 1][0].start };
-          // Retranche la marge droite (spaceWidthPt()) posée juste dessous :
-          // sans elle, l'étirement calculé dépasse le bloc réel et pdfmake
-          // recoupe un mot sur une ligne en trop.
+          // Retranche la marge droite (spaceWidthPt()) posée juste dessous : sans elle, l'étirement calculé dépasse le bloc réel et pdfmake recoupe un mot
+          // sur une ligne en trop.
           const lineRuns = buildJustifiedLine(node, line, cursor, endCut, pageWidthPt - spaceWidthPt());
           const block = { text: lineRuns.length ? lineRuns : ' ', margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
           if (li === 0 && pendingPageBreak) { block.pageBreak = 'before'; pendingPageBreak = false; }
@@ -1041,9 +923,8 @@ const PdfExport = (function () {
     }
     let besideContent;
     if (textAlign === 'justify') {
-      // Chaque ligne "à côté" est étirée, sauf si c'est à la fois la dernière
-      // ligne et qu'il n'y a pas de texte "après" : la vraie dernière ligne
-      // du paragraphe n'est jamais étirée (même convention que le CSS).
+      // Chaque ligne "à côté" est étirée, sauf si c'est à la fois la dernière ligne et qu'il n'y a pas de texte "après" : la vraie dernière ligne du
+      // paragraphe n'est jamais étirée (même convention que le CSS).
       const besideLines = groupIntoLines(words.slice(besideStart, besideEnd));
       let cursor = besideStartCut;
       besideContent = besideLines.map((line, li) => {
@@ -1075,10 +956,8 @@ const PdfExport = (function () {
     return blocks;
   }
 
-  // Poursuit l'habillage sur un paragraphe suivant sans image propre, mais
-  // sous le flottement d'un frère précédent (`carry`, préparé par blockFrom) -
-  // simple décalage de marge. Retourne { blocks, stillActive } (le frère
-  // suivant doit être vérifié à son tour), ou `null` si déjà sous l'image.
+  // Poursuit l'habillage sur un paragraphe suivant sans image propre, mais sous le flottement d'un frère précédent (`carry`, préparé par blockFrom) - simple
+  // décalage de marge. Retourne { blocks, stillActive } (le frère suivant doit être vérifié à son tour), ou `null` si déjà sous l'image.
   function wrapParagraphBesideCarriedFloat(node, carry) {
     const words = collectWords(node);
     if (!words.length) return null;
@@ -1128,17 +1007,15 @@ const PdfExport = (function () {
     return { blocks, stillActive: !hasAfter };
   }
 
-  // État transmis à blockFrom() pour le(s) frère(s) suivant(s) quand une
-  // image flottante déborde encore verticalement son propre paragraphe.
+  // État transmis à blockFrom() pour le(s) frère(s) suivant(s) quand une image flottante déborde encore verticalement son propre paragraphe.
   function makeFloatCarry(imgRect, align, imageWidthPt, availableWidthPt) {
     const pageWidthPt = availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT;
     const gapPt = 12 * PX_TO_PT;
     return { imgBottom: imgRect.bottom, align, imageWidthPt, remainingWidthPt: Math.max(40, pageWidthPt - imageWidthPt - gapPt), gapPt };
   }
 
-  // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un
-  // paragraphe contenant une image produit un bloc de texte ET un bloc image
-  // séparés (pdfmake ne supporte pas d'image réellement "en ligne").
+  // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un paragraphe contenant une image produit un bloc de texte ET un bloc image séparés
+  // (pdfmake ne supporte pas d'image réellement "en ligne").
   function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
@@ -1149,11 +1026,8 @@ const PdfExport = (function () {
         const floated = floatedImageParagraphFrom(node, pageBreakBefore, availableWidthPt);
         if (floated) {
           const arr = Array.isArray(floated) ? floated : [floated];
-          // Le flottement se poursuit-il sur le(s) frère(s) suivant(s) ?
-          // Mesuré depuis le <img> réel plutôt que de changer la signature de
-          // retour de floatedImageParagraphFrom. Si le dernier bloc n'a pas
-          // de `columns` (texte déjà revenu sous l'image dans ce paragraphe),
-          // le flottement est épuisé, rien à reporter.
+          // Le flottement se poursuit-il sur le(s) frère(s) suivant(s) ? Mesuré depuis le <img> réel plutôt que de changer la signature de retour de
+          // floatedImageParagraphFrom. Si le dernier bloc n'a pas de `columns` (texte déjà revenu sous l'image), le flottement est épuisé, rien à reporter.
           const lastBlock = arr[arr.length - 1];
           if (lastBlock && !lastBlock.columns) {
             arr._floatCarry = null;
@@ -1176,15 +1050,13 @@ const PdfExport = (function () {
       }
     }
     const images = [];
-    // Sous-liste imbriquée (Tab pour imbriquer, cf. js/editor.js) : exclue du
-    // texte de ce <li>, traitée plus bas comme ses propres blocs.
+    // Sous-liste imbriquée (Tab pour imbriquer, cf. js/editor.js) : exclue du texte de ce <li>, traitée plus bas comme ses propres blocs.
     const nestedLists = tag === 'LI' ? Array.from(node.children).filter(c => /^(UL|OL)$/.test(c.tagName)) : [];
     const rawRuns = nestedLists.length
       ? inlineRunsExcludingNestedLists(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images)
       : inlineRuns(node, { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }, images);
-    // Image "au cœur du texte" sans alignement : reconstitue plusieurs blocs
-    // pdfmake successifs (texte, image, texte...) dans l'ordre réel du
-    // document - pdfmake ne sait pas faire une image réellement en ligne.
+    // Image "au cœur du texte" sans alignement : reconstitue plusieurs blocs pdfmake successifs (texte, image, texte...) dans l'ordre réel du document -
+    // pdfmake ne sait pas faire une image réellement en ligne.
     if ((tag === 'P' || tag === 'DIV') && rawRuns.some(r => r._imageMarker)) {
       const indentPtInline = measureIndentPt(node, 'text');
       const alignInline = alignment(node);
@@ -1205,10 +1077,8 @@ const PdfExport = (function () {
       segments.forEach(seg => {
         if (seg.image) {
           blocks.push(seg.image);
-          // Cf. commentaire équivalent plus bas (repli si
-          // floatedImageParagraphFrom a échoué) : une image gauche/droite
-          // qui atterrit malgré tout ici doit pouvoir reporter son
-          // habillage sur le(s) frère(s) suivant(s).
+          // Cf. commentaire équivalent plus bas (repli si floatedImageParagraphFrom a échoué) : une image gauche/droite qui atterrit malgré tout ici doit
+          // pouvoir reporter son habillage sur le(s) frère(s) suivant(s).
           if (seg.image._floatAlign) {
             const imgRect = seg.image._sourceImgNode.getBoundingClientRect();
             blocks._floatCarry = makeFloatCarry(imgRect, seg.image._floatAlign, seg.image.width, availableWidthPt);
@@ -1228,9 +1098,8 @@ const PdfExport = (function () {
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
     const blocks = [];
     const indentPt = measureIndentPt(node, (tag === 'LI' || /^H[1-6]$/.test(tag)) ? 'box' : 'text');
-    // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul
-    // { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en
-    // page. Marge droite = spaceWidthPt() : compense white-space:break-spaces.
+    // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en page. Marge
+    // droite = spaceWidthPt() : compense white-space:break-spaces.
     const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
     if (/^H[1-6]$/.test(tag)) {
@@ -1251,11 +1120,8 @@ const PdfExport = (function () {
       }
     }
     if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
-    // Un paragraphe sans aucun texte (ex. ne contenant qu'une image) n'a pas
-    // besoin du bloc-texte de repli `text: ' '` : dans l'éditeur il s'effondre
-    // à hauteur nulle, le pousser quand même ajoutait une ligne vide fictive
-    // qui décalait tout le contenu suivant (et faussait l'ancrage des images
-    // en calque voisines, cf. resolvePendingImageAnchors).
+    // Un paragraphe sans aucun texte (ex. ne contenant qu'une image) n'a pas besoin du bloc-texte de repli `text: ' '` : dans l'éditeur il s'effondre à
+    // hauteur nulle, le pousser quand même décalait tout le contenu suivant (et faussait l'ancrage des images voisines, cf. resolvePendingImageAnchors).
     if (runs.length || !images.length) {
       if (pageBreakBefore) block.pageBreak = 'before';
       blocks.push(block);
@@ -1264,9 +1130,8 @@ const PdfExport = (function () {
     }
     images.forEach(img => {
       blocks.push(img);
-      // Image flottante seule dans son paragraphe (aucun texte à côté) : le
-      // flottement doit quand même pouvoir se reporter sur le(s) frère(s)
-      // suivant(s), cf. wrapParagraphBesideCarriedFloat.
+      // Image flottante seule dans son paragraphe (aucun texte à côté) : le flottement doit quand même pouvoir se reporter sur le(s) frère(s) suivant(s), cf.
+      // wrapParagraphBesideCarriedFloat.
       if (img._floatAlign) {
         const imgRect = img._sourceImgNode.getBoundingClientRect();
         blocks._floatCarry = makeFloatCarry(imgRect, img._floatAlign, img.width, availableWidthPt);
@@ -1282,33 +1147,23 @@ const PdfExport = (function () {
 
   async function buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel) {
     const blocks = [];
-    // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée -
-    // sert uniquement à mesurer la position RENDUE réelle des blocs voisins
-    // d'une image en calque (cf. résolution d'ancrage plus bas), pas besoin
-    // ailleurs.
+    // Parallèle à `blocks` : le nœud DOM top-level source de chaque entrée - sert uniquement à mesurer la position RENDUE réelle des blocs voisins d'une
+    // image en calque (cf. résolution d'ancrage plus bas), pas besoin ailleurs.
     const sourceNodes = [];
     const headingBlocks = []; const tocBlocks = []; const footnoteBlocks = [];
-    // Remis à zéro seulement au vrai appel top-level : cette fonction est
-    // aussi appelée imbriquée par colonne (twoColumnsFrom) - sans ce
-    // garde-fou, la 2e colonne effaçait la note de la 1ère. Variables de
-    // module (pas des paramètres) pour continuer la numérotation à toute profondeur.
+    // Remis à zéro seulement au vrai appel top-level : cette fonction est aussi appelée imbriquée par colonne (twoColumnsFrom) - sans ce garde-fou, la 2e
+    // colonne effaçait la note de la 1ère. Variables de module (pas des paramètres) pour continuer la numérotation à toute profondeur.
     if (isTopLevel) {
       footnoteCounter = 0;
       footnoteEntries = [];
     }
-    // Images en calque imbriquées (cellule de tableau, colonne 2-colonnes) -
-    // accumulées à part de resolvePendingImageAnchors (qui ne voit que les
-    // blocs top-level) : tableFrom/twoColumnsFrom posent un `_nestedPending`
-    // sur leur bloc, récolté ici puis fusionné dans content._pendingImages,
-    // même mécanisme de résolution que le top-level.
+    // Images en calque imbriquées (cellule de tableau, colonne 2-colonnes) - accumulées à part de resolvePendingImageAnchors (qui ne voit que le top-level) :
+    // tableFrom/twoColumnsFrom posent un `_nestedPending` sur leur bloc, récolté ici puis fusionné dans content._pendingImages, même résolution.
     const nestedPendingAll = [];
     const rootRect = root.getBoundingClientRect();
     let pendingPageBreak = false;
-    // Habillage d'une image flottante qui déborde encore verticalement une
-    // fois son paragraphe hôte terminé - transmis au(x) frère(s) suivant(s)
-    // via blockFrom tant qu'ils restent des <p>/<div> simples ; remis à null
-    // dès que le prochain contenu est une structure plus complexe (tableau,
-    // titre, liste...).
+    // Habillage d'une image flottante qui déborde encore verticalement une fois son paragraphe hôte terminé - transmis au(x) frère(s) suivant(s) via
+    // blockFrom tant qu'ils restent des <p>/<div> simples ; remis à null dès qu'arrive une structure plus complexe (tableau, titre, liste...).
     let floatCarry = null;
     const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
     const visit = async node => {
@@ -1321,19 +1176,16 @@ const PdfExport = (function () {
         push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false; floatCarry = null;
         return;
       }
-      // Pas de branche dédiée pour un <table> : le HTML sérialisé
-      // (Editor.getHTML()) ne porte jamais le wrapper de défilement ajouté en
-      // édition live, un <table> y est donc un enfant direct, déjà couvert
-      // par isBlock()/blockFrom() ci-dessous.
+      // Pas de branche dédiée pour un <table> : le HTML sérialisé (Editor.getHTML()) ne porte jamais le wrapper de défilement ajouté en édition live, un
+      // <table> y est donc un enfant direct, déjà couvert par isBlock()/blockFrom() ci-dessous.
       if (node.classList.contains('two-columns-zone')) {
         const footnoteCheckpoint = footnoteEntries.length;
         let zoneBlock;
         try { zoneBlock = await twoColumnsFrom(node, pendingPageBreak, rootRect); }
         catch (e) { console.warn('[PdfExport] zone 2 colonnes ignorée (structure inattendue), repli en texte brut :', e); zoneBlock = fallbackTextBlock(node, pendingPageBreak); }
         if (zoneBlock && zoneBlock._nestedPending) { nestedPendingAll.push(...zoneBlock._nestedPending); delete zoneBlock._nestedPending; }
-        // Note(s) trouvée(s) n'importe où dans cette zone : rattachées au
-        // bloc top-level englobant, suffisant pour savoir sur quelle page
-        // placer le texte de la note.
+        // Note(s) trouvée(s) n'importe où dans cette zone : rattachées au bloc top-level englobant, suffisant pour savoir sur quelle page placer le texte de
+        // la note.
         if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: zoneBlock, number: fe.number, text: fe.text })));
         push(zoneBlock, node);
         pendingPageBreak = false; floatCarry = null;
@@ -1345,9 +1197,8 @@ const PdfExport = (function () {
         try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect, floatCarry); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
         floatCarry = (produced && produced._floatCarry) || null;
-        // Attache toute note trouvée dans ce nœud au premier bloc produit :
-        // plusieurs blocs pour un seul nœud source atterrissent presque
-        // toujours sur la même page, précision suffisante ici.
+        // Attache toute note trouvée dans ce nœud au premier bloc produit : plusieurs blocs pour un seul nœud source atterrissent presque toujours sur la
+        // même page, précision suffisante ici.
         const newFootnotes = footnoteEntries.length > footnoteCheckpoint ? footnoteEntries.slice(footnoteCheckpoint) : null;
         produced.forEach((b, i) => {
           if (b && b._nestedPending) { nestedPendingAll.push(...b._nestedPending); delete b._nestedPending; }
@@ -1360,10 +1211,8 @@ const PdfExport = (function () {
       for (const child of Array.from(node.childNodes)) { await visit(child); }
     };
     for (const child of Array.from(root.childNodes)) { await visit(child); }
-    // Repli si structure de titres inattendue : le tocBlock garde son stack
-    // par défaut (titre "Sommaire" seul, posé à sa création) plutôt que de
-    // faire échouer tout l'export - même granularité de repli que blockFrom
-    // pour un bloc de contenu.
+    // Repli si structure de titres inattendue : le tocBlock garde son stack par défaut (titre "Sommaire" seul, posé à sa création) plutôt que de faire
+    // échouer tout l'export - même granularité de repli que blockFrom pour un bloc de contenu.
     tocBlocks.forEach(tocBlock => {
       try {
         const built = buildTocStack(headingBlocks);
@@ -1375,41 +1224,32 @@ const PdfExport = (function () {
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
     content._footnoteBlocks = footnoteBlocks;
-    // Repli : images en calque laissées à leur placeholder plutôt que de
-    // faire échouer tout l'export si l'ancrage échoue.
+    // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll); }
     catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = nestedPendingAll; }
     return content;
   }
 
-  // Une image en calque est positionnée par glisser n'importe où dans
-  // l'éditeur, sans lien avec l'endroit où son <img> vit dans le HTML -
-  // ancrer sur le bloc précédent/suivant ne suffit donc pas. On cherche
-  // plutôt, parmi tous les blocs top-level mesurables, ceux dont la position
-  // rendue encadre le plus étroitement celle de l'image, recalculé à
-  // l'export à partir du HTML final.
+  // Une image en calque est positionnée par glisser n'importe où dans l'éditeur, sans lien avec l'endroit où son <img> vit dans le HTML - ancrer sur le bloc
+  // précédent/suivant ne suffit donc pas. On cherche plutôt, parmi tous les blocs top-level mesurables, ceux qui encadrent le plus étroitement l'image.
   function resolvePendingImageAnchors(rootRect, blocks, sourceNodes) {
     const pending = [];
-    // Un paragraphe ne contenant QUE l'image produit un bloc-texte compagnon
-    // fantôme à hauteur quasi nulle, qui pouvait par coïncidence qualifier
-    // comme ancre - exclu de `measurable`, comme le bloc image lui-même.
+    // Un paragraphe ne contenant QUE l'image produit un bloc-texte compagnon fantôme à hauteur quasi nulle, qui pouvait par coïncidence qualifier comme ancre
+    // - exclu de `measurable`, comme le bloc image lui-même.
     const pendingHostNodes = new Set(blocks.map((b, i) => (b && b._pendingImgNode) ? sourceNodes[i] : null).filter(Boolean));
     const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !pendingHostNodes.has(node));
-    // Une image nichée avec du texte réel autour a une meilleure référence
-    // que le bracketing générique : le début de son propre paragraphe.
-    // Prioritaire sur le bracketing générique quand disponible.
+    // Une image nichée avec du texte réel autour a une meilleure référence que le bracketing générique : le début de son propre paragraphe. Prioritaire sur
+    // le bracketing générique quand disponible.
     const hostToOwnTextBlock = new Map();
     blocks.forEach((b, i) => {
       if (b && !b._pendingImgNode && sourceNodes[i] && !hostToOwnTextBlock.has(sourceNodes[i])) hostToOwnTextBlock.set(sourceNodes[i], b);
     });
-    // Tolérance au demi-pixel : sous-pixels de rendu de police d'un
-    // navigateur à l'autre, pas une erreur de logique.
+    // Tolérance au demi-pixel : sous-pixels de rendu de police d'un navigateur à l'autre, pas une erreur de logique.
     const BOUNDARY_EPS_PX = 0.5;
     blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
-      // Ramène au référentiel sans padding utilisé par tout le reste de
-      // cette fonction (mesures prises dans l'hôte de mesure).
+      // Ramène au référentiel sans padding utilisé par tout le reste de cette fonction (mesures prises dans l'hôte de mesure).
       const imgTopPx = imgRect.top - rootRect.top - A4_PREVIEW_PADDING_PX;
       const imgBottomPx = imgRect.bottom - rootRect.top - A4_PREVIEW_PADDING_PX;
       const imgLeftPx = imgRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
@@ -1423,30 +1263,23 @@ const PdfExport = (function () {
         const r = node.getBoundingClientRect();
         const top = r.top - rootRect.top;
         const bottom = r.bottom - rootRect.top;
-        // Qualifie comme ancre seulement si le bloc ENTIER (haut et bas, pas
-        // juste son sommet) se termine avant/commence après l'image - sinon
-        // le paragraphe qui contient l'image (texte avant et après) qualifiait
-        // à tort comme sa propre ancre "au-dessus".
+        // Qualifie comme ancre seulement si le bloc ENTIER (haut et bas, pas juste son sommet) se termine avant/commence après l'image - sinon le paragraphe
+        // qui contient l'image (texte avant et après) qualifiait à tort comme sa propre ancre "au-dessus".
         if (bottom <= imgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; above = other; }
         if (top >= imgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; below = other; }
       });
-      // parentArray : tableau dans lequel l'image et son ancre vivent toutes
-      // les deux, utilisé par resolveNativePdfContent pour relocaliser
-      // l'image à côté de son ancre sans dépendre d'un tableau top-level codé en dur.
+      // parentArray : tableau dans lequel l'image et son ancre vivent toutes les deux, utilisé par resolveNativePdfContent pour relocaliser l'image à côté de
+      // son ancre sans dépendre d'un tableau top-level codé en dur.
       pending.push({ image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx, aboveTopPx, belowTopPx, container, containerTopPx, parentArray: blocks });
     });
     return pending;
   }
 
-  // isTopLevel=true pour le flux principal (titres numérotés/sommaire) ;
-  // false pour une colonne 2-colonnes. availableWidthPt : largeur réelle si
-  // différente de la pleine page (colonne reconstruite en hôte de mesure séparé).
+  // isTopLevel=true pour le flux principal (titres numérotés/sommaire) ; false pour une colonne 2-colonnes. availableWidthPt : largeur réelle si différente
+  // de la pleine page (colonne reconstruite en hôte de mesure séparé).
   //
-  // Un bloc vide s'effondre à hauteur nulle en mesure hors-écran, alors que
-  // ProseMirror y insère un <br> décoratif (absent de Editor.getHTML()) -
-  // plusieurs lignes vides consécutives se mesuraient à la même position,
-  // biaisant le bracketing voisin. Corrigé en injectant le même <br
-  // data-pdf-measure-filler> avant mesure (sans effet sur le texte final).
+  // Un bloc vide s'effondre à hauteur nulle en mesure hors-écran, alors que ProseMirror y insère un <br> décoratif (absent de Editor.getHTML()) - plusieurs
+  // lignes vides consécutives se mesuraient à la même position, biaisant le bracketing voisin. Corrigé en injectant le même filler avant mesure.
   function insertTrailingBreaksForEmptyBlocks(root) {
     root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => {
       if (!el.hasChildNodes()) {
@@ -1471,10 +1304,8 @@ const PdfExport = (function () {
     const widthPx = availableWidthPt != null ? availableWidthPt / PX_TO_PT : null;
     const detachMeasureHost = attachMeasureHost(root, widthPx);
     try {
-      // Attend le décodage de chaque <img> de ce root précis avant toute
-      // mesure (getBoundingClientRect() sur une image en hauteur auto a
-      // besoin du ratio intrinsèque réel) - un simple pré-chauffage du cache
-      // navigateur sur un élément séparé s'est avéré insuffisamment fiable.
+      // Attend le décodage de chaque <img> de ce root précis avant toute mesure (getBoundingClientRect() sur une image en hauteur auto a besoin du ratio
+      // intrinsèque réel) - un simple pré-chauffage du cache navigateur sur un élément séparé s'est avéré insuffisamment fiable.
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
       return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel);
     } finally {
@@ -1482,11 +1313,8 @@ const PdfExport = (function () {
     }
   }
 
-  // pdfmake ne sait embarquer que du JPEG/PNG (SVG et WEBP le font bloquer
-  // indéfiniment ou lever "Unknown image format") - rastérise donc en PNG
-  // via un aller-retour <img>/<canvas>, quel que soit le format source. Cas
-  // fréquent : les CDN d'images renvoient couramment du WEBP par négociation
-  // de contenu même pour une URL en ".png".
+  // pdfmake ne sait embarquer que du JPEG/PNG (SVG et WEBP le font bloquer indéfiniment ou lever "Unknown image format") - rastérise donc en PNG via un
+  // aller-retour <img>/<canvas>, quel que soit le format source. Cas fréquent : un CDN renvoie du WEBP par négociation de contenu même pour une URL en ".png".
   function rasterizeDataUri(dataUri) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -1502,10 +1330,8 @@ const PdfExport = (function () {
       img.src = dataUri;
     });
   }
-  // pdfmake exige une image en data URI base64 : un simple src http(s)://...
-  // (upload Grist ou URL externe) n'est jamais rendu, silencieusement. En cas
-  // d'échec (réseau, CORS...), marque l'image à ignorer plutôt que de faire
-  // planter tout l'export.
+  // pdfmake exige une image en data URI base64 : un simple src http(s)://... (upload Grist ou URL externe) n'est jamais rendu, silencieusement. En cas
+  // d'échec (réseau, CORS...), marque l'image à ignorer plutôt que de faire planter tout l'export.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html || '';
@@ -1527,10 +1353,8 @@ const PdfExport = (function () {
         }
         if (!/^data:image\/(png|jpe?g);/.test(src)) src = await rasterizeDataUri(src);
         img.setAttribute('src', src);
-        // Décode ICI, avant resérialisation : une hauteur `auto` a besoin du
-        // ratio intrinsèque, connu seulement une fois décodée - sinon
-        // floatedImageParagraphFrom mesurait `imgRect.bottom` trop tôt.
-        // `decode()` pré-chauffe aussi le cache pour le <img> reparsé plus tard.
+        // Décode ICI, avant resérialisation : une hauteur `auto` a besoin du ratio intrinsèque, connu seulement une fois décodée - sinon
+        // floatedImageParagraphFrom mesurait `imgRect.bottom` trop tôt. `decode()` pré-chauffe aussi le cache pour le <img> reparsé plus tard.
         await img.decode().catch(() => {});
       } catch (e) {
         console.warn('[PdfExport] image ignorée dans le PDF vectoriel (conversion impossible) :', img.getAttribute('src'), e);
@@ -1540,17 +1364,12 @@ const PdfExport = (function () {
     return wrapper.innerHTML;
   }
 
-  // `headerFooterChunks` threadé à l'identique dans les deux passes (mesure
-  // et rendu réel) : sinon la hauteur de page disponible diffère entre elles
-  // et un titre/image pourrait changer de page entre mesure et rendu final.
+  // `headerFooterChunks` threadé à l'identique dans les deux passes (mesure et rendu réel) : sinon la hauteur de page disponible diffère entre elles et un
+  // titre/image pourrait changer de page entre mesure et rendu final.
   function buildNativeDocDefinition(content, filename, headerFooterChunks) {
     const hf = headerFooterChunks || { enabled: false, topExtraPt: 0, bottomExtraPt: 0 };
-    // `content._footnoteBlocks` est posé par buildPdfContentFromRoot à CHAQUE
-    // appel (passe de mesure ET passe finale, cf. resolveNativePdfContent) -
-    // cette condition est donc IDENTIQUE aux deux appels de cette fonction
-    // pour un même document, invariant déjà exigé par topExtraPt/bottomExtraPt
-    // (même marge aux deux passes, sans quoi la pagination mesurée ne
-    // correspondrait plus au document final).
+    // `content._footnoteBlocks` est posé par buildPdfContentFromRoot à CHAQUE appel (mesure ET finale, cf. resolveNativePdfContent) - cette condition est
+    // donc IDENTIQUE aux deux appels, invariant déjà exigé par topExtraPt/bottomExtraPt (même marge aux deux passes, sinon la pagination mesurée dérive).
     const hasFootnotes = (content._footnoteBlocks || []).length > 0;
     const topMarginPt = PAGE_MARGIN_PT + (hf.topExtraPt || 0);
     const bottomMarginPt = PAGE_MARGIN_PT + (hf.bottomExtraPt || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
@@ -1560,8 +1379,7 @@ const PdfExport = (function () {
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
-    // pdfmake appelle header/footer par page au moment de peindre - "première
-    // page différente" se résout ici (currentPage === 1), pas dans
+    // pdfmake appelle header/footer par page au moment de peindre - "première page différente" se résout ici (currentPage === 1), pas dans
     // buildHeaderFooterPdfChunks qui se contente de préparer les 2 variantes.
     if (hf.enabled && (hf.header.default || hf.header.first)) {
       doc.header = (currentPage, pageCount) => {
@@ -1570,10 +1388,8 @@ const PdfExport = (function () {
         return { margin: [PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5, PAGE_MARGIN_PT, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
       };
     }
-    // Le pied de page doit exister même sans en-tête/pied configuré par
-    // l'utilisateur dès qu'il y a au moins une note : le texte des notes est
-    // ajouté après le contenu utilisateur dans le même stack, en réutilisant
-    // le callback natif déjà appelé une fois par page.
+    // Le pied de page doit exister même sans en-tête/pied configuré par l'utilisateur dès qu'il y a au moins une note : le texte des notes est ajouté après
+    // le contenu utilisateur dans le même stack, en réutilisant le callback natif déjà appelé une fois par page.
     if ((hf.enabled && (hf.footer.default || hf.footer.first)) || hasFootnotes) {
       const footnoteByPage = content._footnoteByPage || {};
       doc.footer = (currentPage, pageCount) => {
@@ -1596,40 +1412,27 @@ const PdfExport = (function () {
     return doc;
   }
 
-  // Convertit une image en calque en `absolutePosition` pdfmake, interpolée
-  // entre les blocs-ancre au-dessus/en-dessous (repli sur une seule ancre, ou
-  // purement local si aucune n'est résolue). `layer` choisit l'ancre de
-  // référence pour Y quand les deux tombent sur des pages différentes -
-  // doit être la même que pour la relocation dans content[] : "devant"
-  // préfère l'ancre du dessous, "derrière" celle du dessus.
+  // Convertit une image en calque en `absolutePosition` pdfmake, interpolée entre les blocs-ancre au-dessus/en-dessous (repli sur une seule ancre, ou local
+  // si aucune résolue). `layer` choisit l'ancre de référence pour Y sur pages différentes - même ordre que la relocation : "devant" préfère le dessous.
   function resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer) {
     const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
     const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : PAGE_MARGIN_PT;
-    // imgLeftPx est page-relative pour le flux principal et une colonne
-    // 2-colonnes (aucun des deux ne pose son propre position:relative). Une
-    // cellule de tableau EN a un (cf. attributeNestedPendingImages) :
-    // containerLeftPx/containerLeft signalent ce cas et pilotent X en
-    // différence locale au conteneur plutôt que la formule page-relative,
-    // qui donnait une position n'importe où sur la page.
+    // imgLeftPx est page-relative pour le flux principal et une colonne 2-colonnes (aucun des deux n'a son propre position:relative). Une cellule de tableau
+    // EN a un (cf. attributeNestedPendingImages) : containerLeftPx/containerLeft signalent ce cas et pilotent X en local au conteneur, pas en page-relative.
     const xPt = a.containerLeftPx != null && a.containerLeft != null
       ? a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT
       : PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
     let yPt;
-    // Référence locale prioritaire sur le bracketing générique quand
-    // disponible : plus précise, fondée sur le début du paragraphe qui
-    // héberge l'image elle-même plutôt qu'une extrapolation depuis un bloc externe éloigné.
+    // Référence locale prioritaire sur le bracketing générique quand disponible : plus précise, fondée sur le début du paragraphe qui héberge l'image
+    // elle-même plutôt qu'une extrapolation depuis un bloc externe éloigné.
     if (a.containerTop != null) {
       yPt = a.containerTop + (a.imgTopPx - a.containerTopPx) * PX_TO_PT;
     } else if (a.aboveTop != null && a.belowTop != null && a.abovePage === a.belowPage && a.belowTopPx !== a.aboveTopPx) {
       const fraction = (a.imgTopPx - a.aboveTopPx) / (a.belowTopPx - a.aboveTopPx);
       yPt = a.aboveTop + fraction * (a.belowTop - a.aboveTop);
     } else {
-      // Au-dessus/en-dessous existent mais sur des pages différentes : le delta
-      // en px entre l'image et l'une ou l'autre ancre traverserait la coupure,
-      // mélangeant deux pages dont pdfmake réinitialise l'origine Y (constaté :
-      // image projetée au-dessus du haut de page). Repli délibérément sans
-      // extrapolation (delta 0, au ras de l'ancre choisie) - même ordre de
-      // préférence que la relocation : "devant" sur le dessous, "derrière" sur le dessus.
+      // Au-dessus/en-dessous existent mais sur des pages différentes : le delta en px traverserait la coupure, mélangeant deux pages dont pdfmake réinitialise
+      // l'origine Y (image projetée hors-page). Repli sans extrapolation (delta 0) - même ordre que la relocation : "devant" sur le dessous.
       const crossesPage = a.aboveTop != null && a.belowTop != null && a.abovePage !== a.belowPage;
       if (layer === 'front' && a.belowTop != null) yPt = a.belowTop + (crossesPage ? 0 : (a.imgTopPx - a.belowTopPx) * PX_TO_PT);
       else if (layer === 'front' && a.aboveTop != null) yPt = a.aboveTop + (a.imgTopPx - a.aboveTopPx) * PX_TO_PT;
@@ -1637,47 +1440,32 @@ const PdfExport = (function () {
       else if (layer !== 'front' && a.belowTop != null) yPt = a.belowTop + (a.imgTopPx - a.belowTopPx) * PX_TO_PT;
       else yPt = effectiveTopMarginPt + a.imgTopPx * PX_TO_PT;
     }
-    // Filet de sécurité : qu'elle vienne d'une extrapolation sur une seule
-    // ancre ou d'une ancre elle-même mal choisie (bracketing par proximité de
-    // pixels, cf. resolvePendingImageAnchors - une ancre peut être plus
-    // proche visuellement dans l'aperçu continu hors-écran tout en tombant,
-    // une fois paginée, sur une page différente de celle où l'image sera
-    // relocalisée), `yPt` peut dépasser la page réelle - image invisible.
-    // Toujours ramenée dans la zone de contenu (sous l'en-tête, au-dessus du
-    // pied de page) plutôt que perdue hors-page.
+    // Filet de sécurité : une extrapolation sur une seule ancre, ou une ancre mal choisie (bracketing par proximité de pixels, cf. resolvePendingImageAnchors
+    // - plus proche dans l'aperçu continu hors-écran mais paginée sur une autre page que l'image), peut faire dépasser `yPt` de la page - image invisible.
     const imgHeightPt = Number.isFinite(a.imgHeightPx) ? Math.max(0, a.imgHeightPx) * PX_TO_PT : 0;
     const maxYPt = A4_HEIGHT_PT - effectiveBottomMarginPt - imgHeightPt;
     yPt = Math.min(Math.max(yPt, effectiveTopMarginPt), Math.max(effectiveTopMarginPt, maxYPt));
     return { x: xPt, y: yPt };
   }
 
-  // S'il y a un sommaire et/ou des images en calque en attente, une 1ère
-  // passe de mesure (.getBuffer(), jamais montrée) donne les vraies
-  // page/position des blocs-ancre. Le contenu est reconstruit : numéros de
-  // page reportés dans le sommaire ; images en attente reçoivent leur
-  // absolutePosition et sont relocalisées à côté de l'ancre dans leur
-  // tableau (pdfmake compose un absolutePosition sur la page courante au
-  // moment où il traite l'entrée, pas la page indiquée par y).
+  // S'il y a un sommaire et/ou des images en calque en attente, une 1ère passe de mesure (.getBuffer(), jamais montrée) donne les vraies page/position des
+  // blocs-ancre : le contenu est reconstruit (numéros de page dans le sommaire ; images relocalisées à côté de leur ancre - pdfmake peint sur la page courante).
   async function resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks) {
     let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
     const hasPendingImages = (content._pendingImages || []).length > 0;
     const hasFootnotes = (content._footnoteBlocks || []).length > 0;
-    // Marge haute réelle de cette passe - doit être identique à celle de la
-    // passe réelle pour que la pagination mesurée ici corresponde exactement
-    // au document final.
+    // Marge haute réelle de cette passe - doit être identique à celle de la passe réelle pour que la pagination mesurée ici corresponde exactement au
+    // document final.
     const topMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
-    // Doit suivre exactement la même formule que buildNativeDocDefinition
-    // (bottomMarginPt) - sert de plancher au filet de sécurité anti-débordement
-    // de resolveImageAbsolutePosition, doit donc matcher la vraie marge basse rendue.
+    // Doit suivre exactement la même formule que buildNativeDocDefinition (bottomMarginPt) - sert de plancher au filet de sécurité anti-débordement de
+    // resolveImageAbsolutePosition, doit donc matcher la vraie marge basse rendue.
     const bottomMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     if (hasToc || hasPendingImages || hasFootnotes) {
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename, headerFooterChunks)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
-      // Capturé avant de reconstruire : fb.block.positions devient obsolète
-      // dès que htmlToPdfContent recrée des objets neufs. Le numéro de chaque
-      // note est déjà définitif dès la 1ère passe (numérotation continue) -
-      // seule sa page avait besoin d'être mesurée.
+      // Capturé avant de reconstruire : fb.block.positions devient obsolète dès que htmlToPdfContent recrée des objets neufs. Le numéro de chaque note est
+      // déjà définitif dès la 1ère passe (numérotation continue) - seule sa page avait besoin d'être mesurée.
       const footnotePageNumbers = (content._footnoteBlocks || []).map(fb => (fb.block.positions && fb.block.positions[0] && fb.block.positions[0].pageNumber) || null);
       const resolvedAnchors = (content._pendingImages || []).map(p => {
         const aboveResolved = p.above && p.above.positions && p.above.positions[0];
@@ -1687,9 +1475,8 @@ const PdfExport = (function () {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
           containerTop: containerResolved ? containerResolved.top : null, containerTopPx: p.containerTopPx,
-          // Seules les images imbriquées dans une cellule posent containerLeft/
-          // containerLeftPx (cf. attributeNestedPendingImages) - pilote le
-          // calcul de X en cellule-relatif dans resolveImageAbsolutePosition.
+          // Seules les images imbriquées dans une cellule posent containerLeft/ containerLeftPx (cf. attributeNestedPendingImages) - pilote le calcul de X en
+          // cellule-relatif dans resolveImageAbsolutePosition.
           containerLeft: containerResolved ? containerResolved.left : null, containerLeftPx: p.containerLeftPx,
           hadAbove: !!p.above, hadBelow: !!p.below,
           imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, imgHeightPx: p.imgHeightPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
@@ -1699,9 +1486,8 @@ const PdfExport = (function () {
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
       });
-      // Regroupe chaque note par la page réelle de son appel (mesurée
-      // ci-dessus) - consommé par le callback doc.footer natif de pdfmake
-      // pour placer le texte au pied de la bonne page.
+      // Regroupe chaque note par la page réelle de son appel (mesurée ci-dessus) - consommé par le callback doc.footer natif de pdfmake pour placer le texte
+      // au pied de la bonne page.
       const footnoteByPage = {};
       (content._footnoteBlocks || []).forEach((fb, i) => {
         const pageNum = footnotePageNumbers[i];
@@ -1715,10 +1501,8 @@ const PdfExport = (function () {
         p.image.absolutePosition = resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer);
         delete p.image._pendingImgNode;
         delete p.image._pendingLayer;
-        // pdfmake peint content[] dans l'ordre (une entrée plus tardive
-        // recouvre les précédentes) : "devant" doit finir aussi tard que
-        // possible (ancré sur le bloc du dessous, inséré après) pour recouvrir
-        // le texte proche ; "derrière" l'inverse (ancré au-dessus, inséré avant).
+        // pdfmake peint content[] dans l'ordre (une entrée plus tardive recouvre les précédentes) : "devant" doit finir aussi tard que possible (ancré sur le
+        // bloc du dessous, inséré après) pour recouvrir le texte proche ; "derrière" l'inverse (ancré au-dessus, inséré avant).
         let anchorBlock = null; let insertAfter = true;
         if (layer === 'front') {
           if (a.belowTop != null) { anchorBlock = p.below; insertAfter = true; }
@@ -1727,11 +1511,8 @@ const PdfExport = (function () {
           if (a.aboveTop != null) { anchorBlock = p.above; insertAfter = false; }
           else if (a.belowTop != null) { anchorBlock = p.below; insertAfter = false; }
         }
-        // Repli sur le "container" (paragraphe hôte, cf. raccourci local des
-        // images imbriquées dans une cellule - pas de bracketing above/below
-        // disponible dans ce cas) - même logique devant/derrière que ci-
-        // dessus : "devant" doit finir peint APRÈS son texte hôte (recouvre),
-        // "derrière" doit finir peint AVANT (recouvert).
+        // Repli sur le "container" (paragraphe hôte des images imbriquées dans une cellule - pas de bracketing above/below disponible) - même logique
+        // devant/derrière que ci-dessus : "devant" doit finir peint APRÈS son texte hôte (recouvre), "derrière" doit finir peint AVANT (recouvert).
         if (!anchorBlock && p.container) { anchorBlock = p.container; insertAfter = layer === 'front'; }
         if (!anchorBlock) return;
         const arr = p.parentArray || content;
@@ -1743,10 +1524,8 @@ const PdfExport = (function () {
         arr.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
       });
     }
-    // Filet de sécurité résiduel : une image dont ni bracket ni container n'a
-    // pu être résolu garderait sinon son absolutePosition placeholder
-    // (0,0) indéfiniment, coincée au coin de la page. Repli : aucune position
-    // absolue, rendue en flux normal - pas au pixel près, mais visible au bon endroit.
+    // Filet de sécurité résiduel : une image dont ni bracket ni container n'a pu être résolu garderait sinon son absolutePosition placeholder (0,0)
+    // indéfiniment, coincée au coin de la page. Repli : aucune position absolue, rendue en flux normal - pas au pixel près, mais visible au bon endroit.
     stripUnresolvedPendingImages(content);
     return content;
   }
@@ -1764,18 +1543,14 @@ const PdfExport = (function () {
     if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
-  // Numéro de page (en-tête/pied de page, incrément 2.2) - pure, aucun accès
-  // au DOM/à pdfmake.
+  // Numéro de page (en-tête/pied de page, incrément 2.2) - pure, aucun accès au DOM/à pdfmake.
   function formatPageNumberText(format, currentPage, pageCount) {
     if (format === 'page-n') return 'Page ' + currentPage;
     if (format === 'n-slash-total') return currentPage + '/' + pageCount;
     return String(currentPage);
   }
-  // Clone-et-parcours remplaçant chaque run marqué `_pendingPageNumber` par
-  // son texte résolu pour la page en cours - appelé à chaque invocation du
-  // callback header/footer natif de pdfmake. currentPage/pageCount sont déjà
-  // connus à ce stade, contrairement au sommaire/images en calque ça ne
-  // nécessite pas de 2e passe de mesure.
+  // Clone-et-parcours remplaçant chaque run marqué `_pendingPageNumber` par son texte résolu - appelé à chaque invocation du callback header/footer natif.
+  // currentPage/pageCount sont déjà connus à ce stade, contrairement au sommaire/images en calque : pas besoin d'une 2e passe de mesure.
   function resolvePageNumberPlaceholders(node, currentPage, pageCount) {
     if (Array.isArray(node)) return node.map(n => resolvePageNumberPlaceholders(n, currentPage, pageCount));
     if (!node || typeof node !== 'object') return node;
@@ -1791,40 +1566,30 @@ const PdfExport = (function () {
     return out;
   }
 
-  // Convertit les 4 fragments d'en-tête/pied (déjà résolus) en contenu
-  // pdfmake une seule fois - réutilisé par les deux appels de
-  // buildNativeDocDefinition (passe de mesure jetable et passe réelle) pour
-  // que la pagination calculée pendant la mesure jetable corresponde
-  // exactement au document final. Marge haute/basse fixe (HF_MAX_ZONE_HEIGHT_PT),
-  // pas la hauteur réellement rendue - même plafond que l'éditeur (60px), pour
-  // une pagination identique quelle que soit la longueur du texte d'en-tête/pied.
+  // Convertit les 4 fragments d'en-tête/pied (déjà résolus) en contenu pdfmake une seule fois - réutilisé par les 2 appels de buildNativeDocDefinition
+  // (mesure jetable + réelle) pour une pagination identique. Marge fixe (HF_MAX_ZONE_HEIGHT_PT, même plafond que l'éditeur, 60px), pas la hauteur rendue.
   const HEADER_FOOTER_GAP_PT = 10; // espace entre le contenu en-tête/pied et le corps du document
   const HF_MAX_ZONE_HEIGHT_PT = 60 * PX_TO_PT;
   async function buildHeaderFooterPdfChunks(headerFooterData) {
     const empty = { enabled: false, differentFirstPage: false, header: { default: null, first: null }, footer: { default: null, first: null }, topExtraPt: 0, bottomExtraPt: 0 };
     if (!headerFooterData || !headerFooterData.enabled) return empty;
     async function resolveZone(html) {
-      // Teste aussi <img : sinon un en-tête/pied ne contenant qu'une image
-      // était traité à tort comme "zone vide" et abandonné avant d'atteindre htmlToPdfContent.
+      // Teste aussi <img : sinon un en-tête/pied ne contenant qu'une image était traité à tort comme "zone vide" et abandonné avant d'atteindre
+      // htmlToPdfContent.
       if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return { content: null, heightPt: 0 };
-      // Une image d'en-tête/pied dont le src est une URL externe (pas encore
-      // une data URI) n'apparaissait jamais dans le PDF : ce même traitement
+      // Une image d'en-tête/pied dont le src est une URL externe (pas encore une data URI) n'apparaissait jamais dans le PDF : ce même traitement
       // (inlineEditorImagesAsDataUri) n'était appliqué qu'au corps du document, jamais ici.
       html = await inlineEditorImagesAsDataUri(html);
       const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
-      // Filet de sécurité : une image en calque n'a pas de résolution de
-      // position dans un en-tête/pied (pas de passe de mesure dédiée) - l'UI
-      // verrouille déjà cette option en édition, mais un gabarit existant
-      // pourrait quand même en contenir une. Repli en flux normal.
+      // Filet de sécurité : une image en calque n'a pas de résolution de position dans un en-tête/pied (pas de passe de mesure dédiée) - l'UI verrouille déjà
+      // cette option en édition, mais un gabarit existant pourrait quand même en contenir une. Repli en flux normal.
       stripUnresolvedPendingImages(content);
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
       insertTrailingBreaksForEmptyBlocks(measureRoot);
       const detach = attachMeasureHost(measureRoot, CONTENT_WIDTH_PX);
-      // measureRoot est un arbre DOM séparé du root de htmlToPdfContent
-      // ci-dessus (reparsing indépendant) : son propre décodage d'image doit
-      // être attendu séparément, sinon une image mesure une hauteur proche
-      // de 0 et la marge réservée devient plus petite que ce que pdfmake peint réellement.
+      // measureRoot est un arbre DOM séparé du root de htmlToPdfContent ci-dessus (reparsing indépendant) : son propre décodage d'image doit être attendu
+      // séparément, sinon une image mesure une hauteur proche de 0 et la marge réservée devient plus petite que ce que pdfmake peint réellement.
       await Promise.all(Array.from(measureRoot.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
       const heightPt = measureRoot.getBoundingClientRect().height * PX_TO_PT;
       detach();
@@ -1835,10 +1600,8 @@ const PdfExport = (function () {
     const headerFirst = differentFirstPage ? await resolveZone(headerFooterData.header && headerFooterData.header.first) : { content: null, heightPt: 0 };
     const footerDefault = await resolveZone(headerFooterData.footer && headerFooterData.footer.default);
     const footerFirst = differentFirstPage ? await resolveZone(headerFooterData.footer && headerFooterData.footer.first) : { content: null, heightPt: 0 };
-    // Une seule hauteur de marge par zone : la marge de page ne peut pas
-    // varier d'une page à l'autre chez pdfmake, donc "page 1 différente" ne
-    // change que le contenu - le plus grand des deux fragments dimensionne
-    // la marge des deux variantes.
+    // Une seule hauteur de marge par zone : la marge de page ne peut pas varier d'une page à l'autre chez pdfmake, donc "page 1 différente" ne change que le
+    // contenu - le plus grand des deux fragments dimensionne la marge des deux variantes.
     const headerHeightPt = (headerDefault.content || headerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
     const footerHeightPt = (footerDefault.content || footerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
     return {
@@ -1851,10 +1614,8 @@ const PdfExport = (function () {
     };
   }
 
-  // #Variable des 4 fragments d'en-tête/pied résolus ici, au même niveau que
-  // le corps (pas plus bas dans la chaîne) pour que getNativePdfBlob reste
-  // appelable avec du HTML déjà résolu, sans avoir besoin d'un vrai
-  // enregistrement Grist à ce niveau.
+  // #Variable des 4 fragments d'en-tête/pied résolus ici, au même niveau que le corps (pas plus bas dans la chaîne) pour que getNativePdfBlob reste appelable
+  // avec du HTML déjà résolu, sans avoir besoin d'un vrai enregistrement Grist à ce niveau.
   async function resolveHeaderFooterVariables(headerFooterData, currentTableId, record) {
     if (!headerFooterData || !headerFooterData.enabled) return headerFooterData;
     const resolveZone = html => (html ? ReaderMode.preview(html, currentTableId, record) : html);
@@ -1874,15 +1635,12 @@ const PdfExport = (function () {
 
   async function buildNativePdfDocDefinition(resolvedHtml, filename, headerFooterData) {
     if (!window.pdfMake || !window.pdfMake.createPdf) throw new Error('La bibliothèque pdfmake n’est pas disponible.');
-    // Attend que Roboto (police de mesure) soit réellement chargée avant
-    // toute mesure : un export lancé tôt mesurerait sur une police de repli
-    // aux métriques différentes, assez pour faire basculer une ligne d'un
-    // côté ou l'autre d'une frontière fine (habillage autour d'une image).
+    // Attend que Roboto (police de mesure) soit réellement chargée avant toute mesure : un export lancé tôt mesurerait sur une police de repli aux métriques
+    // différentes, assez pour faire basculer une ligne d'un côté ou l'autre d'une frontière fine (habillage autour d'une image).
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* repli silencieux */ } }
     const inlinedHtml = await inlineEditorImagesAsDataUri(resolvedHtml);
-    // Repli : export sans en-tête/pied plutôt que d'échouer entièrement si
-    // leur contenu (potentiellement modifié en dehors de l'éditeur) est
-    // dans un état inattendu.
+    // Repli : export sans en-tête/pied plutôt que d'échouer entièrement si leur contenu (potentiellement modifié en dehors de l'éditeur) est dans un état
+    // inattendu.
     let headerFooterChunks;
     try { headerFooterChunks = await buildHeaderFooterPdfChunks(headerFooterData); }
     catch (e) {
@@ -1908,27 +1666,21 @@ const PdfExport = (function () {
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
-    // Qualités non-vectorielles : cf. js/pdf-export-alt.js (isolées, actuellement
-    // désactivées dans l'UI - encore peu robustes).
+    // Qualités non-vectorielles : cf. js/pdf-export-alt.js (isolées, actuellement désactivées dans l'UI - encore peu robustes).
     if (quality === 'browser-print') { await PdfExportAlt.exportViaBrowserPrint(resolvedHtml, filename); return; }
     if (quality === 'low' || quality === 'ultra') {
       const { container, opt } = PdfExportAlt.buildRasterContainerAndOptions(resolvedHtml, filename, quality);
       try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
       return;
     }
-    // En-tête/pied de page : uniquement le chemin vectoriel natif - ni
-    // l'impression navigateur ni les qualités raster n'ont de notion de
-    // header/footer natif de page.
+    // En-tête/pied de page : uniquement le chemin vectoriel natif - ni l'impression navigateur ni les qualités raster n'ont de notion de header/footer natif
+    // de page.
     const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
-  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js
-  // onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
-  // resolveHeaderFooterVariables que exportCurrentRecord, appelée une fois
-  // par ligne. Volontairement limité au vectoriel : 'browser-print' ouvre
-  // une boîte de dialogue par ligne (inutilisable sans surveillance) et les
-  // qualités raster n'ont pas de variante "retourne un blob".
+  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
+  // resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);

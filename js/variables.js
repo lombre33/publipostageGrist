@@ -1,10 +1,8 @@
-// Variables — badges #Variable + autocomplétion, sur @tiptap/suggestion.
-// Popup : classes CSS #autocomplete-box/.ac-item/.selected (css/style.css),
-// créée dynamiquement ici plutôt que déclarée dans index.html.
+// Variables — badges #Variable + autocomplétion, sur @tiptap/suggestion. Popup : classes CSS #autocomplete-box/.ac-item/.selected (css/style.css), créée
+// dynamiquement ici plutôt que déclarée dans index.html.
 const Variables = (function () {
-  // Touche de déclenchement configurable (panneau Réglages), lue directement
-  // depuis localStorage. Un seul caractère attendu (contrôlé par le <select>
-  // du panneau) - tout le reste retombe sur '#' par défaut.
+  // Touche de déclenchement configurable (panneau Réglages), lue directement depuis localStorage. Un seul caractère attendu (contrôlé par le <select> du
+  // panneau) - tout le reste retombe sur '#' par défaut.
   function triggerChar() {
     try {
       const v = localStorage.getItem('pp_trigger_char');
@@ -15,19 +13,14 @@ const Variables = (function () {
   let acItemsBox = null;
   let currentItems = [];
   let selectedIndex = 0;
-  // Une colonne ajoutée après le chargement du widget n'apparaissait jamais
-  // dans #Variable (refreshSchema n'est appelé qu'une fois, à init()). Ce
-  // flag déclenche un seul rafraîchissement par session de saisie plutôt
-  // qu'à chaque frappe. Partagé entre le déclencheur de l'éditeur et celui
-  // du champ Nom de fichier PDF (jamais actifs en même temps).
+  // Une colonne ajoutée après le chargement du widget n'apparaissait jamais dans #Variable (refreshSchema n'est appelé qu'une fois, à init()). Ce flag
+  // déclenche un seul rafraîchissement par session de saisie plutôt qu'à chaque frappe, partagé entre le déclencheur de l'éditeur et celui du nom de fichier PDF.
   let schemaRefreshedForSession = false;
 
-  // Onglet actif du panneau `#` (l'onglet Nom de fichier PDF n'a pas cet
-  // onglet). Toujours 'variables' par défaut à l'ouverture.
+  // Onglet actif du panneau `#` (l'onglet Nom de fichier PDF n'a pas cet onglet). Toujours 'variables' par défaut à l'ouverture.
   let activeTab = 'variables';
-  // 4 chips fixes, jamais issues de GristAPI - `kind:'chip'` distingue ces
-  // entrées d'une #Variable. `i18nKey` est résolu à l'affichage (displayKey),
-  // pour rester réactif à un changement de langue en cours de session.
+  // 4 chips fixes, jamais issues de GristAPI - `kind:'chip'` distingue ces entrées d'une #Variable. `i18nKey` est résolu à l'affichage (displayKey), pour
+  // rester réactif à un changement de langue en cours de session.
   const SMART_CHIP_ITEMS = [
     { key: 'Note de bas de page', i18nKey: 'chips.footnote', kind: 'chip', chipKind: 'footnote' },
     { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
@@ -35,9 +28,8 @@ const Variables = (function () {
     { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
   ];
   function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
-  // Dernières props reçues de @tiptap/suggestion - permet de rejouer
-  // updateItems() depuis un clic sur un onglet, qui n'est pas un évènement
-  // du plugin Suggestion et ne fournit donc pas ces props lui-même.
+  // Dernières props reçues de @tiptap/suggestion - permet de rejouer updateItems() depuis un clic sur un onglet, qui n'est pas un évènement du plugin
+  // Suggestion et ne fournit donc pas ces props lui-même.
   let latestProps = null;
 
   function ensureBox() {
@@ -56,8 +48,7 @@ const Variables = (function () {
     tabChips.textContent = I18n.t('panel.tabChips');
     tabChips.dataset.tab = 'chips';
     [tabVariables, tabChips].forEach(tab => {
-      // mousedown+preventDefault (pas click) : évite qu'un blur du focus
-      // éditeur en cours ne perturbe le changement d'onglet.
+      // mousedown+preventDefault (pas click) : évite qu'un blur du focus éditeur en cours ne perturbe le changement d'onglet.
       tab.addEventListener('mousedown', e => {
         e.preventDefault();
         if (activeTab === tab.dataset.tab) return;
@@ -74,15 +65,12 @@ const Variables = (function () {
     return acBox;
   }
 
-  // Source des items selon l'onglet actif - centralisé pour être appelé à la
-  // fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le
-  // clic sur un onglet.
+  // Source des items selon l'onglet actif - centralisé pour être appelé à la fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur
+  // un onglet.
   function computeItems(query) {
     const q = (query || '').toLowerCase();
     if (activeTab === 'chips') {
-      // Note de bas de page exclue en édition d'en-tête/pied : cette zone
-      // est répétée sur chaque page, sans repère de page physique auquel
-      // ancrer une note.
+      // Note de bas de page exclue en édition d'en-tête/pied : cette zone est répétée sur chaque page, sans repère de page physique auquel ancrer une note.
       const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
       return items.filter(v => displayKey(v).toLowerCase().includes(q));
     }
@@ -97,16 +85,13 @@ const Variables = (function () {
   function currentTabEl(tabName) {
     return acBox && acBox.querySelector('.ac-tab[data-tab="' + tabName + '"]');
   }
-  // Le champ "Nom de fichier PDF" réutilise ce même acBox mais n'a pas
-  // l'onglet Chips (aucun nœud ProseMirror à y insérer) - masqué plutôt que
-  // retiré du DOM.
+  // Le champ "Nom de fichier PDF" réutilise ce même acBox mais n'a pas l'onglet Chips (aucun nœud ProseMirror à y insérer) - masqué plutôt que retiré du DOM.
   function setTabsVisible(visible) {
     const tabs = ensureBox().querySelector('.ac-tabs');
     if (tabs) tabs.style.display = visible ? '' : 'none';
   }
 
-  // Un survol à la souris met aussi à jour la sélection (pas seulement les
-  // flèches du clavier), pour qu'Entrée suive réellement l'item survolé.
+  // Un survol à la souris met aussi à jour la sélection (pas seulement les flèches du clavier), pour qu'Entrée suive réellement l'item survolé.
   function render(items, onPick) {
     ensureBox();
     ['variables', 'chips'].forEach(t => { const el = currentTabEl(t); if (el) el.classList.toggle('active', t === activeTab); });
@@ -130,9 +115,8 @@ const Variables = (function () {
     box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
   }
 
-  // La fonction command() n'est fournie par @tiptap/suggestion que dans les
-  // props d'onStart/onUpdate, jamais celles d'onKeyDown - mémorisée ici pour
-  // être réutilisée depuis onKeyDown et depuis un survol/clic souris (render).
+  // La fonction command() n'est fournie par @tiptap/suggestion que dans les props d'onStart/onUpdate, jamais celles d'onKeyDown - mémorisée ici pour être
+  // réutilisée depuis onKeyDown et depuis un survol/clic souris (render).
   let latestCommand = null;
 
   function updateItems(props) {
@@ -148,11 +132,8 @@ const Variables = (function () {
 
   function hide() { if (acBox) acBox.style.display = 'none'; }
 
-  // Objet de rendu attendu par @tiptap/suggestion : onStart/onUpdate à
-  // chaque frappe après le déclencheur, onKeyDown pour intercepter
-  // flèches/Entrée/Échap (return true = "j'ai géré, n'envoie pas ça à
-  // l'éditeur"), onExit quand le déclencheur n'est plus actif (curseur
-  // sorti, espace tapé, etc.).
+  // Objet de rendu attendu par @tiptap/suggestion : onStart/onUpdate à chaque frappe après le déclencheur, onKeyDown pour intercepter flèches/Entrée/Échap
+  // (return true = "j'ai géré, n'envoie pas ça à l'éditeur"), onExit quand le déclencheur n'est plus actif (curseur sorti, espace tapé, etc.).
   function suggestionRender() {
     return {
       onStart(props) { updateItems(props); },
@@ -169,9 +150,8 @@ const Variables = (function () {
     };
   }
 
-  // Reçoit les classes Extension/Suggestion en paramètre plutôt que de les
-  // importer elle-même : évite un second import() dynamique redondant,
-  // editor.js les a déjà chargées au même moment.
+  // Reçoit les classes Extension/Suggestion en paramètre plutôt que de les importer elle-même : évite un second import() dynamique redondant, editor.js les a
+  // déjà chargées au même moment.
   function createExtension(Extension, Suggestion) {
     return Extension.create({
       name: 'varBadgeSuggestion',
@@ -179,40 +159,29 @@ const Variables = (function () {
         return [
           Suggestion({
             editor: this.editor,
-            // Redéfinissable dans le panneau Réglages ; un changement n'a
-            // effet qu'après rechargement de la page (ce `char` est un
-            // littéral capturé une seule fois ici, à la construction de
-            // l'éditeur - cf. triggerChar() ci-dessus).
+            // Redéfinissable dans le panneau Réglages ; un changement n'a effet qu'après rechargement de la page (ce `char` est un littéral capturé une seule
+            // fois ici, à la construction de l'éditeur - cf. triggerChar() ci-dessus).
             char: triggerChar(),
-            // GristAPI, const racine chargée avant ce script, visible par
-            // identifiant nu - jamais window.GristAPI (ne s'y attache pas).
+            // GristAPI, const racine chargée avant ce script, visible par identifiant nu - jamais window.GristAPI (ne s'y attache pas).
             items: ({ query }) => computeItems(query),
-            // Async : une variable d'une autre table peut exiger de configurer
-            // une règle de correspondance avant insertion (ensureLinkConfigured
-            // plus bas). `range` reste valide pendant l'attente (position
-            // ProseMirror pure, pas liée au focus DOM).
+            // Async : une variable d'une autre table peut exiger de configurer une règle de correspondance avant insertion (ensureLinkConfigured plus bas).
+            // `range` reste valide pendant l'attente (position ProseMirror pure, pas liée au focus DOM).
             command: ({ editor, range, props }) => {
-              // Chip (note de bas de page / date / heure / email) : jamais de
-              // colonne/table à lier, insertion synchrone directe contrairement
-              // à la branche #Variable ci-dessous. La note de bas de page
-              // ouvre en plus immédiatement son popup d'édition de texte.
+              // Chip (note de bas de page / date / heure / email) : jamais de colonne/table à lier, insertion synchrone directe contrairement à la branche
+              // #Variable ci-dessous. La note de bas de page ouvre en plus immédiatement son popup d'édition de texte.
               if (props.kind === 'chip') {
                 if (props.chipKind === 'footnote') {
                   const id = 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                   editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id, text: '' } }).run();
-                  // Retrouve la position réelle du nœud fraîchement inséré par
-                  // son id plutôt que de faire confiance à `range.from` après
-                  // coup - un utilisateur a signalé la note insérée sans que
-                  // la popup ne s'ouvre, jamais reproduit localement, ce
-                  // balayage retire la dépendance suspectée.
+                  // Retrouve la position réelle du nœud fraîchement inséré par son id plutôt que de faire confiance à `range.from` après coup (jamais
+                  // reproduit localement, mais ce balayage retire la dépendance suspectée d'une note insérée sans que la popup ne s'ouvre).
                   let insertedPos = null;
                   editor.state.doc.descendants((node, pos) => {
                     if (insertedPos != null) return false;
                     if (node.type.name === 'footnoteRef' && node.attrs.id === id) { insertedPos = pos; return false; }
                     return true;
                   });
-                  // `Editor` (chargé après ce fichier) n'est résolu qu'à
-                  // l'exécution de ce callback, pas à l'analyse de ce fichier.
+                  // `Editor` (chargé après ce fichier) n'est résolu qu'à l'exécution de ce callback, pas à l'analyse de ce fichier.
                   if (insertedPos != null) Editor.openFootnoteEditorAt(insertedPos);
                   else console.warn('[variables] note de bas de page insérée mais introuvable ensuite (id=' + id + ') - popup non ouverte.');
                 } else {
@@ -233,11 +202,8 @@ const Variables = (function () {
     });
   }
 
-  // Champ "Nom de fichier PDF" : un <input> plein texte, pas de
-  // @tiptap/suggestion possible (pas un contenteditable) - réutilise le même
-  // acBox/currentItems/selectedIndex que l'éditeur (jamais actifs ensemble).
-  // `filenameInputState` distingue l'origine de la popup, car `latestCommand`
-  // est partagé entre les deux champs.
+  // Champ "Nom de fichier PDF" : un <input> plein texte, pas de @tiptap/suggestion possible (pas un contenteditable) - réutilise le même
+  // acBox/currentItems/selectedIndex que l'éditeur (jamais actifs ensemble). `filenameInputState` distingue l'origine, `latestCommand` étant partagé.
   let filenameInputState = null;
   function checkForFilenameTrigger(el) {
     const caret = el.selectionStart;
@@ -245,11 +211,8 @@ const Variables = (function () {
     const text = el.value.slice(0, caret);
     const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_]*)$'));
     if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
-    // Même rafraîchissement "une fois par session" que le déclencheur de
-    // l'éditeur, déclenché dès le 1er caractère tapé après # - sans ça,
-    // chercher une colonne toute juste ajoutée ne trouverait jamais rien
-    // puisque la branche !items.length ci-dessous fermerait le popup avant
-    // d'avoir eu la chance de rafraîchir.
+    // Même rafraîchissement "une fois par session" que le déclencheur de l'éditeur, déclenché dès le 1er caractère tapé après # - sans ça, chercher une
+    // colonne toute juste ajoutée ne trouverait jamais rien, la branche !items.length ci-dessous fermant le popup avant d'avoir pu rafraîchir.
     if (!schemaRefreshedForSession) {
       schemaRefreshedForSession = true;
       GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
@@ -267,10 +230,8 @@ const Variables = (function () {
     position(() => el.getBoundingClientRect());
     ensureBox().style.display = 'flex';
   }
-  // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut
-  // "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ) -
-  // insérer directement "#Cle" en texte, sans badge (un <input> ne peut de
-  // toute façon pas contenir de HTML), est donc suffisant.
+  // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ) - insérer
+  // directement "#Cle" en texte, sans badge (un <input> ne peut de toute façon pas contenir de HTML), est donc suffisant.
   function insertFilenameVariable(item) {
     const state = filenameInputState;
     if (!state) return;
@@ -285,15 +246,12 @@ const Variables = (function () {
     el.setSelectionRange(newCaret, newCaret);
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  // À appeler depuis main.js une fois le champ de nom de fichier PDF présent
-  // dans le DOM (indépendant de createExtension, qui ne concerne que
-  // l'éditeur).
+  // À appeler depuis main.js une fois le champ de nom de fichier PDF présent dans le DOM (indépendant de createExtension, qui ne concerne que l'éditeur).
   function initFilenameInput(el) {
     if (!el) return;
     el.addEventListener('input', () => checkForFilenameTrigger(el));
     el.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') checkForFilenameTrigger(el); });
-    // Un <input> ne passe jamais par @tiptap/suggestion - navigation clavier
-    // gérée ici à la main, même logique que suggestionRender() ci-dessus.
+    // Un <input> ne passe jamais par @tiptap/suggestion - navigation clavier gérée ici à la main, même logique que suggestionRender() ci-dessus.
     el.addEventListener('keydown', e => {
       if (!filenameInputState || !acBox || acBox.style.display !== 'flex') return;
       if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, latestCommand); }
@@ -301,15 +259,13 @@ const Variables = (function () {
       else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); latestCommand(currentItems[selectedIndex]); }
       else if (e.key === 'Escape') { e.preventDefault(); hide(); filenameInputState = null; }
     });
-    // Un clic sur un item de la popup (mousedown, déjà en preventDefault()
-    // dans render() ci-dessus) s'exécute avant le blur du champ - ce filet de
-    // sécurité (délai court) couvre les cas où le focus partirait quand même (ex. Échap ailleurs).
+    // Un clic sur un item de la popup (mousedown, déjà en preventDefault() dans render() ci-dessus) s'exécute avant le blur du champ - ce filet de sécurité
+    // (délai court) couvre les cas où le focus partirait quand même (ex. Échap ailleurs).
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }
 
-  // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même
-  // un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans
-  // format reste en revanche `String(val)` brut.
+  // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans format
+  // reste en revanche `String(val)` brut.
   function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
     if (Array.isArray(val)) return val.join(', ');
@@ -325,8 +281,7 @@ const Variables = (function () {
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
-  // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable
-  // par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
+  // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
   // Retourne { value } ou { error } (déjà formaté "[ERREUR: ...]").
   async function resolveRawValueWithRule(varTable, varColumn, rule, record) {
     if (rule.mode === 'singleton') {
@@ -350,9 +305,8 @@ const Variables = (function () {
     if (!record) return { value: null };
     if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
     if (varTable === resolvedTableId) {
-      // `record` vient de grist.onRecord, encodage Attachments non garanti
-      // identique à fetchRowById - resolveAttachmentIds force `forceRawFetch`
-      // pour repasser par ce dernier ; resolveVariable n'active jamais l'option.
+      // `record` vient de grist.onRecord, encodage Attachments non garanti identique à fetchRowById - resolveAttachmentIds force `forceRawFetch` pour
+      // repasser par ce dernier ; resolveVariable n'active jamais l'option.
       if (opts && opts.forceRawFetch && record.id != null) {
         try {
           const row = await GristAPI.fetchRowById(varTable, record.id);
@@ -383,16 +337,14 @@ const Variables = (function () {
     }
   }
 
-  // Une cellule Attachments encode sa liste façon Grist (['L', id1, id2]) ;
-  // aplatit récursivement pour n'en garder que les nombres, le marqueur 'L'
-  // et toute imbrication disparaissent naturellement.
+  // Une cellule Attachments encode sa liste façon Grist (['L', id1, id2]) ; aplatit récursivement pour n'en garder que les nombres, le marqueur 'L' et toute
+  // imbrication disparaissent naturellement.
   function flattenToNumbers(value) {
     if (value == null) return [];
     if (Array.isArray(value)) return value.flatMap(flattenToNumbers);
     if (typeof value === 'number') return [value];
-    // Filet de sécurité pour une forme différente de l'encodage liste brut
-    // (ex. objet métadonnée {id, fileName, ...}), jamais rencontrée en
-    // conditions réelles pour l'instant.
+    // Filet de sécurité pour une forme différente de l'encodage liste brut (ex. objet métadonnée {id, fileName, ...}), jamais rencontrée en conditions
+    // réelles pour l'instant.
     if (value && typeof value === 'object' && typeof value.id === 'number') return [value.id];
     return [];
   }
@@ -407,13 +359,11 @@ const Variables = (function () {
     }
   }
 
-  // --- Configuration des correspondances entre tables (à l'insertion +
-  // panneau de gestion), dans une modale séparée (#link-rules-modal, cf.
-  // index.html) plutôt qu'un volet repliable dédié pour ce seul besoin.
+  // --- Configuration des correspondances entre tables (à l'insertion + panneau de gestion), dans une modale séparée (#link-rules-modal, cf. index.html)
+  // plutôt qu'un volet repliable dédié pour ce seul besoin.
 
-  // Signale dans le libellé qu'une colonne est une Référence (et vers quelle
-  // table) - sans ça, rien dans la modale n'indique qu'une colonne stocke en
-  // réalité un identifiant de ligne plutôt qu'un texte.
+  // Signale dans le libellé qu'une colonne est une Référence (et vers quelle table) - sans ça, rien dans la modale n'indique qu'une colonne stocke en réalité
+  // un identifiant de ligne plutôt qu'un texte.
   function describeColumnOption(tableId, colId) {
     const type = GristAPI.getColumnType(tableId, colId);
     if (type && type.indexOf('Ref:') === 0) return I18n.t('linkConfig.reference', { col: colId, table: type.slice(4) });
@@ -427,9 +377,8 @@ const Variables = (function () {
     const source = rule.colonneSource === 'id' ? rowIdLabel : rule.colonneSource;
     return `${cible} = ${source}`;
   }
-  // Si la variable vient d'une autre table sans règle encore configurée,
-  // ouvre la modale et enregistre la règle avant l'insertion. Retourne false
-  // si l'utilisateur annule (rien n'est alors inséré).
+  // Si la variable vient d'une autre table sans règle encore configurée, ouvre la modale et enregistre la règle avant l'insertion. Retourne false si
+  // l'utilisateur annule (rien n'est alors inséré).
   async function ensureLinkConfigured(item) {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!currentTableId || item.table === currentTableId) return true;
@@ -440,9 +389,8 @@ const Variables = (function () {
     refreshLinkRulesPanel();
     return true;
   }
-  // Partagée par l'insertion (existingRule=null, auto-détectée si une seule
-  // colonne Référence candidate existe) et le panneau de gestion (règle
-  // existante à modifier). Résout {mode, colonneCible, colonneSource} ou null.
+  // Partagée par l'insertion (existingRule=null, auto-détectée si une seule colonne Référence candidate existe) et le panneau de gestion (règle existante à
+  // modifier). Résout {mode, colonneCible, colonneSource} ou null.
   async function showLinkConfigModal(targetTable, currentTableId, existingRule) {
     const modal = document.getElementById('link-config-modal');
     if (!modal) return null;
@@ -461,46 +409,35 @@ const Variables = (function () {
     title.textContent = `${currentTableId} → ${targetTable}`;
     cibleLabel.textContent = targetTable;
     sourceLabel.textContent = currentTableId;
-    // Un placeholder désactivé en 1ère position force un choix explicite -
-    // sans lui, un <select> non touché par l'utilisateur reste silencieusement
-    // sur "Identifiant de ligne" (1ère option), ce qui peut produire une règle
-    // qui a l'air valide mais compare deux identifiants de ligne sans rapport.
+    // Un placeholder désactivé en 1ère position force un choix explicite - sans lui, un <select> non touché par l'utilisateur reste silencieusement sur
+    // "Identifiant de ligne" (1ère option), ce qui peut produire une règle qui a l'air valide mais compare deux identifiants de ligne sans rapport.
     const placeholder = `<option value="" disabled selected>${I18n.t('linkConfig.columnPlaceholder')}</option>`;
     const rowIdOption = `<option value="id">${I18n.t('linkConfig.rowId')}</option>`;
-    // HtmlSanitize.clean() en filet de sécurité : colId/nom de table viennent
-    // du schéma Grist réel, normalement déjà contraints à des identifiants
-    // valides par l'UI standard de Grist - mais rien ne le garantit si l'un
-    // d'eux est un jour créé via l'API REST Grist en contournant cette UI
-    // (cf. AUDIT_CODE.md §3.2).
+    // HtmlSanitize.clean() en filet de sécurité : colId/nom de table viennent du schéma Grist réel, normalement déjà contraints à des identifiants valides
+    // par l'UI standard - mais rien ne le garantit si l'un d'eux est créé via l'API REST Grist en contournant cette UI (cf. AUDIT_CODE.md §3.2).
     selectCible.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join(''));
     selectSource.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join(''));
 
-    // Par défaut, mode "match" (le cas normal) - "singleton" doit être un
-    // choix actif, pas un état par défaut dans lequel on tombe sans le
-    // réaliser.
+    // Par défaut, mode "match" (le cas normal) - "singleton" doit être un choix actif, pas un état par défaut dans lequel on tombe sans le réaliser.
     let initialMode = existingRule ? existingRule.mode : 'match';
     let initialCible = existingRule ? existingRule.colonneCible : '';
     let initialSource = existingRule ? existingRule.colonneSource : '';
     if (!existingRule) {
-      // Sens direct : la table courante a une colonne Référence vers la
-      // table cible (ex. "Commandes" -> "Clients" en consultant Commandes).
+      // Sens direct : la table courante a une colonne Référence vers la table cible (ex. "Commandes" -> "Clients" en consultant Commandes).
       const forwardCandidates = await GristAPI.findReferenceColumns(currentTableId, targetTable);
       if (forwardCandidates.length === 1) {
         initialCible = 'id'; initialSource = forwardCandidates[0];
       } else {
-        // Sens inverse (cas le plus courant en pratique) : la table cible a
-        // une colonne Référence vers la table courante (ex. on consulte un
-        // "Employé" et on veut ses "Congés", où c'est Congés.Employe qui
-        // référence Employés, pas l'inverse).
+        // Sens inverse (cas le plus courant en pratique) : la table cible a une colonne Référence vers la table courante (ex. on consulte un "Employé" et on
+        // veut ses "Congés", où c'est Congés.Employe qui référence Employés, pas l'inverse).
         const reverseCandidates = await GristAPI.findReferenceColumns(targetTable, currentTableId);
         if (reverseCandidates.length === 1) { initialCible = reverseCandidates[0]; initialSource = 'id'; }
       }
     }
     if (initialCible) selectCible.value = initialCible;
     if (initialSource) selectSource.value = initialSource;
-    // Le cas rare ("ligne fixe") est un lien texte plutôt qu'un choix à
-    // égalité avec le cas normal - `currentMode` remplace les radios,
-    // togglé par les 2 boutons-liens.
+    // Le cas rare ("ligne fixe") est un lien texte plutôt qu'un choix à égalité avec le cas normal - `currentMode` remplace les radios, togglé par les 2
+    // boutons-liens.
     let currentMode = initialMode;
     function applyModeVisibility() {
       matchFields.hidden = currentMode !== 'match';
@@ -514,9 +451,8 @@ const Variables = (function () {
       if (!selectCible.value || !selectSource.value) return null;
       return { mode: 'match', colonneCible: selectCible.value, colonneSource: selectSource.value };
     }
-    // Aperçu en direct : calcule ce que la règle en cours de saisie donnerait
-    // pour la ligne actuellement sélectionnée. .is-good (bulle verte) ne
-    // marque que les issues positives, le reste reste neutre.
+    // Aperçu en direct : calcule ce que la règle en cours de saisie donnerait pour la ligne actuellement sélectionnée. .is-good (bulle verte) ne marque que
+    // les issues positives, le reste reste neutre.
     async function updatePreview() {
       if (!preview) return;
       preview.classList.remove('is-good');
@@ -577,19 +513,15 @@ const Variables = (function () {
       btnCancel.addEventListener('click', onCancel);
     });
   }
-  // Modèles dont le contenu contient au moins un badge #Variable pointant
-  // vers `tableCible` - recherche brute sur l'attribut sérialisé, pas besoin
-  // d'un DOMParser complet. Utilisé pour avertir avant de supprimer une
-  // règle encore utilisée ailleurs.
+  // Modèles dont le contenu contient au moins un badge #Variable pointant vers `tableCible` - recherche brute sur l'attribut sérialisé, pas besoin d'un
+  // DOMParser complet. Utilisé pour avertir avant de supprimer une règle encore utilisée ailleurs.
   function findTemplatesUsingTable(tableCible) {
     const templates = (typeof Templates !== 'undefined' && Templates.getCached) ? Templates.getCached() : [];
     const needle = 'data-table="' + tableCible + '"';
     return templates.filter(tpl => tpl.contenu && tpl.contenu.indexOf(needle) !== -1);
   }
-  // Panneau de gestion (modale #link-rules-modal, cf. index.html) : liste
-  // les tables déjà configurées, avec un bouton pour modifier ou supprimer
-  // chaque règle. Appelée au démarrage et à chaque ouverture de la modale
-  // (cf. js/main.js).
+  // Panneau de gestion (modale #link-rules-modal, cf. index.html) : liste les tables déjà configurées, avec un bouton pour modifier ou supprimer chaque
+  // règle. Appelée au démarrage et à chaque ouverture de la modale (cf. js/main.js).
   function refreshLinkRulesPanel() {
     const list = document.getElementById('link-rules-list');
     if (!list) return;

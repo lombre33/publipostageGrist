@@ -1,20 +1,14 @@
-// Éditeur — TipTap/ProseMirror.
-// Script classique (pas type="module") : TipTap/ProseMirror chargés via
-// import() dynamique dans init(), pour garder le partage de portée globale
-// avec GristAPI/Templates/ReaderMode. Les nœuds/extensions personnalisés
-// (classes TipTap disponibles seulement après cet import) sont construits
-// par des fonctions createXxx(...) plutôt que déclarés en haut de fichier.
+// Éditeur — TipTap/ProseMirror. Script classique (pas type="module") : TipTap/ProseMirror chargés via import() dynamique dans init(), pour garder le partage
+// de portée globale avec GristAPI/Templates/ReaderMode ; nœuds/extensions construits par des createXxx(...) (classes TipTap indisponibles avant cet import).
 const Editor = (function () {
   let editor = null;
   let floatingUi = null;
-  // Nécessaire pour recréer une NodeSelection après tr.setNodeMarkup()
-  // (remplace le nœud) - cf. patchNodeAndReselect.
+  // Nécessaire pour recréer une NodeSelection après tr.setNodeMarkup() (remplace le nœud) - cf. patchNodeAndReselect.
   let NodeSelectionClass = null;
   let currentAlign = 'left';
   let TextSelectionClass = null;
 
-  // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur,
-  // contenu affiché échangé via setContent).
+  // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur, contenu affiché échangé via setContent).
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
   let mainDocSnapshot = null;
   function emptyHeaderFooterData() {
@@ -22,9 +16,8 @@ const Editor = (function () {
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
-  // Partagé par updateAttrs/updateSelectedImage/updateSelectedBadge :
-  // setNodeMarkup() remplace le nœud, donc la NodeSelection doit être
-  // recréée explicitement dessus (sinon retombe en curseur texte).
+  // Partagé par updateAttrs/updateSelectedImage/updateSelectedBadge : setNodeMarkup() remplace le nœud, donc la NodeSelection doit être recréée explicitement
+  // dessus (sinon retombe en curseur texte).
   function patchNodeAndReselect(ed, pos, newAttrs) {
     const { state, view } = ed;
     const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
@@ -61,8 +54,7 @@ const Editor = (function () {
     editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
   }
 
-  // Menu listant les colonnes Attachments : insère un placeholder lié à la
-  // #Variable (résolu en vraie image en mode Lecture/export).
+  // Menu listant les colonnes Attachments : insère un placeholder lié à la #Variable (résolu en vraie image en mode Lecture/export).
   let imageVarPickerBox = null;
   function ensureImageVarPickerBox() {
     if (imageVarPickerBox) return imageVarPickerBox;
@@ -92,10 +84,8 @@ const Editor = (function () {
         const item = document.createElement('div');
         item.className = 'v2-image-var-picker-item';
         item.textContent = v.key;
-        // mousedown (pas click) + preventDefault : évite que le blur du
-        // focus éditeur en cours (déclenché par ce clic) ne referme/perturbe
-        // la sélection avant que insertImage n'ait pu s'exécuter - même
-        // précaution que ac-item (variables.js:render, mousedown+preventDefault).
+        // mousedown (pas click) + preventDefault : évite que le blur du focus éditeur en cours (déclenché par ce clic) ne referme/perturbe la sélection avant
+        // que insertImage n'ait pu s'exécuter - même précaution que ac-item (variables.js:render, mousedown+preventDefault).
         item.addEventListener('mousedown', event => {
           event.preventDefault();
           editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
@@ -111,10 +101,8 @@ const Editor = (function () {
     box.style.display = 'block';
   }
 
-  // Popup d'édition d'une note de bas de page. Une seule active à la fois :
-  // ouvrir une note en valide une autre déjà ouverte (commitFootnotePopup).
-  // Se ferme UNIQUEMENT via une action explicite (OK/Supprimer/Échap/autre
-  // note) - jamais au clic extérieur, source de 3 régressions successives.
+  // Popup d'édition d'une note de bas de page. Une seule active à la fois : ouvrir une note en valide une autre déjà ouverte (commitFootnotePopup). Se ferme
+  // UNIQUEMENT via une action explicite (OK/Supprimer/Échap/autre note) - jamais au clic extérieur, source de 3 régressions successives.
   let footnotePopupBox = null;
   let footnotePopupPos = null;
   function ensureFootnotePopupBox() {
@@ -160,10 +148,8 @@ const Editor = (function () {
     const tr = editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { text: box._textarea.value }));
     editor.view.dispatch(tr);
   }
-  // Retire le nœud footnoteRef lui-même (pas seulement son texte) - lu via
-  // getPos()-équivalent au moment du clic (footnotePopupPos), jamais une
-  // position mise en cache d'avant : le document a pu changer entre
-  // l'ouverture et ce clic (texte tapé ailleurs, etc.).
+  // Retire le nœud footnoteRef lui-même (pas seulement son texte) - lu via getPos()-équivalent au moment du clic (footnotePopupPos), jamais une position mise
+  // en cache d'avant : le document a pu changer entre l'ouverture et ce clic (texte tapé ailleurs, etc.).
   function deleteFootnotePopupNode() {
     const box = footnotePopupBox;
     const pos = footnotePopupPos;
@@ -184,8 +170,7 @@ const Editor = (function () {
     }
     footnotePopupPos = pos;
     box._textarea.value = node.attrs.text || '';
-    // Bornée à la zone visible (jamais hors champ) ; toute erreur de mesure
-    // retombe sur un positionnement générique plutôt que de bloquer l'ouverture.
+    // Bornée à la zone visible (jamais hors champ) ; toute erreur de mesure retombe sur un positionnement générique plutôt que de bloquer l'ouverture.
     try {
       const dom = editor.view.nodeDOM(pos);
       const anchor = (dom && dom.getBoundingClientRect) ? dom : editor.view.dom;
@@ -194,8 +179,7 @@ const Editor = (function () {
       const boxHeightEstimate = 130;
       let left = rect.left + window.scrollX;
       let top = rect.bottom + window.scrollY + 4;
-      // Math.max garantit maxLeft/Top >= minLeft/Top même dans un panneau
-      // très étroit, pour ne jamais clamper à une position pire que l'origine.
+      // Math.max garantit maxLeft/Top >= minLeft/Top même dans un panneau très étroit, pour ne jamais clamper à une position pire que l'origine.
       const minLeft = window.scrollX + 4;
       const minTop = window.scrollY + 4;
       const maxLeft = Math.max(minLeft, window.scrollX + window.innerWidth - boxWidth - 8);
@@ -212,14 +196,12 @@ const Editor = (function () {
       box.style.top = '30%';
     }
     box.style.display = 'block';
-    // setTimeout(...,0), pas un appel synchrone : le mousedown déclencheur
-    // fait reprendre le focus sur .tiptap par ProseMirror juste après le
-    // retour de cette fonction - un focus() synchrone ici serait écrasé.
+    // setTimeout(...,0), pas un appel synchrone : le mousedown déclencheur fait reprendre le focus sur .tiptap par ProseMirror juste après le retour de cette
+    // fonction - un focus() synchrone ici serait écrasé.
     setTimeout(() => { box._textarea.focus(); }, 0);
   }
 
-  // Image collée depuis le presse-papiers, convertie en data URI (forme
-  // requise par pdf-export.js) avant insertion.
+  // Image collée depuis le presse-papiers, convertie en data URI (forme requise par pdf-export.js) avant insertion.
   function readFileAsDataUri(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -239,9 +221,8 @@ const Editor = (function () {
     await insertImageAtDefaultSize(dataUri);
   }
 
-  // Touche de déclenchement configurable (panneau Réglages) - lue
-  // directement depuis localStorage, même clé que js/variables.js (pas de
-  // dépendance de module croisée pour une simple lecture, cf. son en-tête).
+  // Touche de déclenchement configurable (panneau Réglages) - lue directement depuis localStorage, même clé que js/variables.js (pas de dépendance de module
+  // croisée pour une simple lecture, cf. son en-tête).
   function varBadgeTriggerChar() {
     try {
       const v = localStorage.getItem('pp_trigger_char');
@@ -249,9 +230,8 @@ const Editor = (function () {
     } catch (e) { return '#'; }
   }
 
-  // Badge de variable #Variable — nœud "atome" en ligne, non éditable au
-  // caractère près (contenteditable="false") : <span class="var-badge"
-  // data-table data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
+  // Badge de variable #Variable — nœud "atome" en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
+  // data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
   function createVarBadgeNode(Node, mergeAttributes) {
     return Node.create({
       name: 'varBadge',
@@ -260,17 +240,11 @@ const Editor = (function () {
       atom: true,
       selectable: true,
       addAttributes() {
-        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap rend
-        // CHAQUE attribut par défaut comme un attribut HTML bare
-        // (table="..."/column="..."/key="...") EN PLUS des data-table/
-        // data-column/data-key posés à la main dans renderHTML ci-dessous -
-        // un doublon constaté en conditions réelles. Ces attributs ne
-        // doivent exister QUE dans le JSON interne du nœud ProseMirror.
+        // renderHTML: () => ({}) sur chaque attribut : sans ça, TipTap rend aussi CHAQUE attribut par défaut comme attribut HTML bare (table="...") EN PLUS
+        // des data-table/data-column/data-key posés à la main ci-dessous - doublon. Ces attributs ne doivent exister que dans le JSON interne du nœud.
         const noBareRender = { default: null, renderHTML: () => ({}) };
-        // `format` : { type:'number', style, decimals, currency, words } ou
-        // { type:'date', preset } - choisi via la barre flottante (cf.
-        // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a
-        // rien réglé (comportement historique, String(val) brut).
+        // `format` : { type:'number', style, decimals, currency, words } ou { type:'date', preset } - choisi via la barre flottante (cf.
+        // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a rien réglé (comportement historique, String(val) brut).
         return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender };
       },
       parseHTML() {
@@ -290,16 +264,14 @@ const Editor = (function () {
           'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la
-        // touche de déclenchement configurée, rétroactif sans migration.
+        // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
         return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
       },
     });
   }
 
-  // Badge de numéro de page - même schéma que VarBadge. Le libellé rendu
-  // dans l'éditeur n'est qu'un espace réservé visuel (format choisi),
-  // résolu en vrai numéro seulement à l'export/l'aperçu paginé.
+  // Badge de numéro de page - même schéma que VarBadge. Le libellé rendu dans l'éditeur n'est qu'un espace réservé visuel (format choisi), résolu en vrai
+  // numéro seulement à l'export/l'aperçu paginé.
   function createPageNumberBadgeNode(Node, mergeAttributes) {
     const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
     return Node.create({
@@ -324,10 +296,8 @@ const Editor = (function () {
     });
   }
 
-  // Chip intelligent - date/heure/email, même schéma que VarBadge. Jamais
-  // de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
-  // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour
-  // signaler "valeur calculée, pas une colonne Grist".
+  // Chip intelligent - date/heure/email, même schéma que VarBadge. Jamais de vraie valeur dans l'éditeur (résolu en mode Lecture/export, cf.
+  // js/reader-mode.js:resolveSmartChips) - vert plutôt que bleu pour signaler "valeur calculée, pas une colonne Grist".
   function createSmartChipNode(Node, mergeAttributes) {
     const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email' };
     function labelFor(kind) {
@@ -353,9 +323,8 @@ const Editor = (function () {
     });
   }
 
-  // Note de bas de page - nœud atome portant le texte en attribut (`text`,
-  // texte brut). Numérotation continue sur tout le document via le seul
-  // compteur CSS `footnote-ref` (cf. editor-v2.css), jamais compté en JS.
+  // Note de bas de page - nœud atome portant le texte en attribut (`text`, texte brut). Numérotation continue sur tout le document via le seul compteur CSS
+  // `footnote-ref` (cf. editor-v2.css), jamais compté en JS.
   function createFootnoteRefNode(Node, mergeAttributes) {
     return Node.create({
       name: 'footnoteRef',
@@ -377,8 +346,7 @@ const Editor = (function () {
           class: 'footnote-ref-marker', contenteditable: 'false',
           'data-note-id': node.attrs.id, 'data-note-text': node.attrs.text,
         });
-        // Contenu texte vide à dessein : le chiffre vient de
-        // `::before { content: counter(footnote-ref) }` (editor-v2.css).
+        // Contenu texte vide à dessein : le chiffre vient de `::before { content: counter(footnote-ref) }` (editor-v2.css).
         return ['sup', attrs];
       },
       addNodeView() {
@@ -387,9 +355,8 @@ const Editor = (function () {
           marker.className = 'footnote-ref-marker';
           marker.addEventListener('mousedown', event => {
             event.preventDefault();
-            // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via
-            // un gestionnaire posé sur .tiptap (un ancêtre) - la bloquer
-            // casserait la sélection au clic donc la suppression au clavier.
+            // PAS de stopPropagation() : ProseMirror sélectionne ce nœud via un gestionnaire posé sur .tiptap (un ancêtre) - la bloquer casserait la
+            // sélection au clic donc la suppression au clavier.
             const pos = getPos();
             if (typeof pos === 'number') openFootnoteEditorAt(pos);
           });
@@ -399,9 +366,8 @@ const Editor = (function () {
     });
   }
 
-  // Augmente la marque 'textStyle' via addGlobalAttributes (comme
-  // FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part
-  // (TextStyle, câblée dans init()), sinon ProseMirror lève une erreur.
+  // Augmente la marque 'textStyle' via addGlobalAttributes (comme FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part (TextStyle, câblée
+  // dans init()), sinon ProseMirror lève une erreur.
   function createFontSizeExtension(Extension) {
     return Extension.create({
       name: 'fontSize',
@@ -509,8 +475,7 @@ const Editor = (function () {
     });
   }
 
-  // Style de case à cocher - augmente 'taskList'. Rendu réel en CSS
-  // (data-tasklist-style), cette extension ne fait que sérialiser le choix.
+  // Style de case à cocher - augmente 'taskList'. Rendu réel en CSS (data-tasklist-style), cette extension ne fait que sérialiser le choix.
   function createTaskListStyleExtension(Extension) {
     return Extension.create({
       name: 'taskListStyle',
@@ -529,8 +494,7 @@ const Editor = (function () {
     });
   }
 
-  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor
-  // que le surlignage de texte (lu par pdf-export.js:tableFrom, pas inheritedStyle).
+  // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor que le surlignage de texte (lu par pdf-export.js:tableFrom, pas inheritedStyle).
   function withCellBackground(CellExtension) {
     return CellExtension.extend({
       addAttributes() {
@@ -544,8 +508,7 @@ const Editor = (function () {
       },
     });
   }
-  // Applique à toutes les cellules touchées par la sélection (CellSelection
-  // reconnue par duck-typing sur `forEachCell`, pas un instanceof).
+  // Applique à toutes les cellules touchées par la sélection (CellSelection reconnue par duck-typing sur `forEachCell`, pas un instanceof).
   function setCellsBackground(nodeEditor, color) {
     const { state, view } = nodeEditor;
     const { selection } = state;
@@ -560,12 +523,8 @@ const Editor = (function () {
     nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
   }
 
-  // Zone 2 colonnes - paire de nœuds imbriqués.
-  // `isolating: true` : empêche backspace/suppr de fusionner la zone avec le
-  // paragraphe voisin.
-  // Tab/Shift-Tab : court-circuitent l'indentation de liste en premier
-  // (sinon l'extension Table l'emporte sur StarterKit pour une liste en
-  // cellule), sinon déplacent le curseur d'une colonne à l'autre ou en sortent.
+  // Zone 2 colonnes - paire de nœuds imbriqués. `isolating: true` empêche backspace/suppr de fusionner la zone avec le paragraphe voisin. Tab/Shift-Tab
+  // court-circuitent d'abord l'indentation de liste (Table sinon l'emporte sur StarterKit en cellule), sinon déplacent/sortent le curseur de colonne.
   function findTwoColumnsContext($from) {
     let columnDepth = -1;
     for (let d = $from.depth; d > 0; d -= 1) {
@@ -583,8 +542,7 @@ const Editor = (function () {
         return {
           Tab: ({ editor: ed }) => {
             if (ed.isActive('listItem')) {
-              // Toujours consommé, même en cas d'échec du sink : jamais de
-              // repli sur un changement de cellule/colonne.
+              // Toujours consommé, même en cas d'échec du sink : jamais de repli sur un changement de cellule/colonne.
               ed.commands.sinkListItem('listItem');
               return true;
             }
@@ -631,9 +589,8 @@ const Editor = (function () {
     });
   }
 
-  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) :
-  // reconstruire l'EditorState avec les mêmes plugins réinitialise leur état
-  // (dont l'historique) sans recréer la vue ni perdre le document.
+  // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) : reconstruire l'EditorState avec les mêmes plugins réinitialise leur état (dont
+  // l'historique) sans recréer la vue ni perdre le document.
   function createClearHistoryExtension(Extension, EditorState) {
     return Extension.create({
       name: 'clearHistory',
@@ -664,8 +621,7 @@ const Editor = (function () {
       isolating: true,
       addAttributes() {
         return {
-          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser,
-          // sérialisée en variable CSS --layout-left.
+          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser, sérialisée en variable CSS --layout-left.
           layoutLeft: {
             default: 50,
             parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
@@ -688,11 +644,8 @@ const Editor = (function () {
           }).run(),
         };
       },
-      // dom = wrapper externe (ancre la poignée en absolu) englobant
-      // contentDOM (les 2 colonnes gérées par ProseMirror) et la poignée,
-      // hors contentDOM pour éviter qu'une reconciliation future la retire.
-      // --layout-left posé sur le wrapper (hérite vers le bas uniquement,
-      // la poignée ne le verrait pas si posé sur contentDOM).
+      // dom = wrapper externe (ancre la poignée en absolu) englobant contentDOM (les 2 colonnes) et la poignée, hors contentDOM pour éviter qu'une future
+      // réconciliation la retire. --layout-left posé sur le wrapper (hérite vers le bas ; la poignée ne le verrait pas posé sur contentDOM).
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('div');
@@ -742,10 +695,8 @@ const Editor = (function () {
               return true;
             },
             destroy: () => document.removeEventListener('mousemove', onMove),
-            // Sans ça, ProseMirror voit la mutation de style pendant le
-            // glisser (hors transaction) comme inattendue et recrée le
-            // NodeView - le wrapper devient alors détaché avant le mouseup,
-            // et le commit final s'applique à un nœud fantôme.
+            // Sans ça, ProseMirror voit la mutation de style pendant le glisser (hors transaction) comme inattendue et recrée le NodeView - le wrapper
+            // devient alors détaché avant le mouseup, et le commit final s'applique à un nœud fantôme.
             ignoreMutation: () => true,
           };
         };
@@ -754,13 +705,11 @@ const Editor = (function () {
     return { TwoColumnsColumn, TwoColumnsZone };
   }
 
-  // Image - nœud atome en ligne : `layer` (normal/devant/derrière),
-  // `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({})
-  // - le nœud construit lui-même la chaîne `style` complète ci-dessous.
+  // Image - nœud atome en ligne : `layer` (normal/devant/derrière), `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({}) - le nœud
+  // construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
     const noBareRender = () => ({});
-    // `height` n'est posé que pour une image liée à une variable
-    // (placeholder de taille fixe, mode "contain" côté rendu).
+    // `height` n'est posé que pour une image liée à une variable (placeholder de taille fixe, mode "contain" côté rendu).
     function styleFor(a) {
       const parts = [];
       if (a.width) parts.push(`width: ${a.width}`);
@@ -789,8 +738,7 @@ const Editor = (function () {
           opacity: { default: 1, parseHTML: el => (el.style.opacity !== '' ? parseFloat(el.style.opacity) : 1), renderHTML: noBareRender },
           align: { default: null, parseHTML: el => el.getAttribute('data-align') || null, renderHTML: noBareRender },
           wrap: { default: 'inline', parseHTML: el => el.getAttribute('data-wrap') || 'inline', renderHTML: noBareRender },
-          // Posés ensemble : transforment ce nœud en placeholder de #Variable
-          // Attachments (jamais de vraie image dans l'éditeur).
+          // Posés ensemble : transforment ce nœud en placeholder de #Variable Attachments (jamais de vraie image dans l'éditeur).
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
           varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
@@ -799,8 +747,7 @@ const Editor = (function () {
       parseHTML() { return [{ tag: 'img.editor-image' }]; },
       renderHTML({ node }) {
         const a = node.attrs;
-        // Placeholder lié à une variable : `src` reste vide (résolu au
-        // rendu/export par js/reader-mode.js:resolveVariableImages).
+        // Placeholder lié à une variable : `src` reste vide (résolu au rendu/export par js/reader-mode.js:resolveVariableImages).
         const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
         if (a.align) attrs['data-align'] = a.align;
         if (a.varTable) {
@@ -813,8 +760,7 @@ const Editor = (function () {
       addCommands() {
         return { insertImage: attrs => ({ chain }) => chain().insertContent({ type: this.name, attrs }).run() };
       },
-      // NodeView : les poignées sont de vrais enfants DOM du wrapper,
-      // positionnées en pur CSS.
+      // NodeView : les poignées sont de vrais enfants DOM du wrapper, positionnées en pur CSS.
       addNodeView() {
         return ({ node, editor: nodeEditor, getPos }) => {
           const wrap = document.createElement('span');
@@ -824,10 +770,8 @@ const Editor = (function () {
           img.draggable = false;
           wrap.appendChild(img);
 
-          // Placeholder de #Variable : <span> superposé (icône +
-          // "#Table.Colonne") plutôt que de compter sur le rendu natif d'un
-          // <img src="">. Le <img> reste dans le DOM, invisible, pour
-          // continuer à porter width/height (poignées, toolbar flottante).
+          // Placeholder de #Variable : <span> superposé (icône + "#Table.Colonne") plutôt que de compter sur le rendu natif d'un <img src="">. Le <img> reste
+          // dans le DOM, invisible, pour continuer à porter width/height (poignées, toolbar flottante).
           const varLabel = document.createElement('span');
           varLabel.className = 'editor-image-var-label';
           wrap.appendChild(varLabel);
@@ -843,19 +787,16 @@ const Editor = (function () {
             h.addEventListener('mousedown', event => startResize(event, corner));
           });
           moveHandle.addEventListener('mousedown', startMove);
-          // Une fois DÉJÀ sélectionnée, permet de glisser directement au
-          // clic sur l'image (pas seulement sur la poignée de déplacement) -
-          // le tout premier clic suit le chemin normal de sélection ProseMirror.
+          // Une fois DÉJÀ sélectionnée, permet de glisser directement au clic sur l'image (pas seulement sur la poignée de déplacement) - le tout premier
+          // clic suit le chemin normal de sélection ProseMirror.
           img.addEventListener('mousedown', event => {
             if (!wrap.classList.contains('editor-image-layered')) return;
             if (!wrap.classList.contains('editor-image-selected')) return;
             startMove(event);
           });
 
-          // Le z-index négatif ("derrière le texte") est posé sur l'<img>
-          // seule, pas le wrapper : sinon la poignée de déplacement (enfant
-          // du wrapper) serait entraînée derrière le texte avec lui,
-          // devenant impossible à re-sélectionner une fois cachée.
+          // Le z-index négatif ("derrière le texte") est posé sur l'<img> seule, pas le wrapper : sinon la poignée de déplacement (enfant du wrapper) serait
+          // entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
           function applyAttrs(attrs) {
             const isVarBox = !!attrs.varTable;
             img.src = isVarBox ? '' : (attrs.src || '');
@@ -874,9 +815,8 @@ const Editor = (function () {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';
               wrap.style.top = (attrs.top || 0) + 'px';
-              // Largeur explicite (pas de shrink-to-fit implicite) : dans
-              // une cellule de tableau étroite, le shrink-to-fit par défaut
-              // s'effondre à 0 quand l'image approche la largeur du bloc englobant.
+              // Largeur explicite (pas de shrink-to-fit implicite) : dans une cellule de tableau étroite, le shrink-to-fit par défaut s'effondre à 0 quand
+              // l'image approche la largeur du bloc englobant.
               wrap.style.width = attrs.width || '';
             } else {
               wrap.style.position = ''; wrap.style.left = ''; wrap.style.top = ''; wrap.style.width = '';
@@ -887,11 +827,8 @@ const Editor = (function () {
           }
           applyAttrs(node.attrs);
 
-          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni
-          // via selectNode/deselectNode de la NodeView (peu fiable après un
-          // setNodeMarkup, qui remplace le nœud) : centralisé dans
-          // wireImageFloatingToolbar.check(), qui recalcule l'état à chaque
-          // transaction depuis editor.isActive('editorImage').
+          // Le retour visuel de sélection (classe CSS) n'est pas géré ici ni via selectNode/deselectNode (peu fiable après un setNodeMarkup qui remplace le
+          // nœud) : centralisé dans wireImageFloatingToolbar.check(), qui recalcule l'état à chaque transaction depuis editor.isActive('editorImage').
           function updateAttrs(patch) {
             const pos = getPos();
             if (typeof pos !== 'number') return;
@@ -900,9 +837,8 @@ const Editor = (function () {
             patchNodeAndReselect(nodeEditor, pos, Object.assign({}, current.attrs, patch));
           }
 
-          // Attributs COURANTS - jamais `node.attrs` directement : ce
-          // paramètre de closure ne reflète que le premier rendu de cette
-          // NodeView, seul `update(updatedNode)` reçoit le nœud frais.
+          // Attributs COURANTS - jamais `node.attrs` directement : ce paramètre de closure ne reflète que le premier rendu de cette NodeView, seul
+          // `update(updatedNode)` reçoit le nœud frais.
           function currentAttrs() {
             const pos = getPos();
             const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
@@ -919,10 +855,8 @@ const Editor = (function () {
               startWidth: rect.width, startHeight: rect.height,
               signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
               isVarBox: !!attrsNow.varTable,
-              // En calque, `wrap` a une largeur explicite (cf. applyAttrs) ;
-              // sans la faire grandir aussi pendant le glisser (pas seulement
-              // à la fin), `.editor-image { max-width:100% }` plafonnerait
-              // l'<img> à l'ancienne largeur du wrap.
+              // En calque, `wrap` a une largeur explicite (cf. applyAttrs) ; sans la faire grandir aussi pendant le glisser (pas seulement à la fin),
+              // `.editor-image { max-width:100% }` plafonnerait l'<img> à l'ancienne largeur du wrap.
               isLayered: attrsNow.layer !== 'normal',
             };
             document.addEventListener('mousemove', onResizeMove);
@@ -931,8 +865,7 @@ const Editor = (function () {
           function onResizeMove(event) {
             if (!resizeState) return;
             let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.signX);
-            // En en-tête/pied, la poignée bute sur le plafond mais reste
-            // utilisable (rétrécir reste toujours libre).
+            // En en-tête/pied, la poignée bute sur le plafond mais reste utilisable (rétrécir reste toujours libre).
             width = clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
             if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
@@ -1011,9 +944,8 @@ const Editor = (function () {
     });
   }
 
-  // Numérotation des titres - configuration persistée comme un nœud dans le
-  // contenu plutôt qu'une colonne Grist séparée (évite une migration de
-  // schéma). Attribut nommé `numberingStyle` pas `style` (collision HTML).
+  // Numérotation des titres - configuration persistée comme un nœud dans le contenu plutôt qu'une colonne Grist séparée (évite une migration de schéma).
+  // Attribut nommé `numberingStyle` pas `style` (collision HTML).
   function createHeadingNumberingConfigNode(Node) {
     return Node.create({
       name: 'headingNumberingConfig',
@@ -1031,9 +963,8 @@ const Editor = (function () {
       },
       addCommands() {
         return {
-          // Un seul nœud de config par document : cherche parmi les enfants
-          // directs (doc.forEach), sinon l'insère en tête. `dispatch` peut
-          // être absent (mode "can-run") - ne muter `tr` que s'il est présent.
+          // Un seul nœud de config par document : cherche parmi les enfants directs (doc.forEach), sinon l'insère en tête. `dispatch` peut être absent (mode
+          // "can-run") - ne muter `tr` que s'il est présent.
           setHeadingNumberingStyle: numberingStyle => ({ tr, state, dispatch }) => {
             let foundPos = null;
             state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') foundPos = pos; });
@@ -1048,9 +979,8 @@ const Editor = (function () {
     });
   }
 
-  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder
-  // statique (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche
-  // un aperçu vivant via un NodeView, isolé du modèle par `ignoreMutation`.
+  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder statique (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu
+  // vivant via un NodeView, isolé du modèle par `ignoreMutation`.
   function createTocNode(Node) {
     return Node.create({
       name: 'toc',
@@ -1087,18 +1017,15 @@ const Editor = (function () {
     });
   }
 
-  // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ;
-  // partagé entre clampOverflowingTables et l'alignement des images en calque.
+  // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en calque.
   function editorContentWidthPx(currentEditor) {
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
     return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
   }
 
-  // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde
-  // `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ;
-  // on gèle donc la largeur rendue de chaque colonne "auto" dès le premier
-  // redimensionnement, pour libérer le `width` exact du tableau.
+  // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on gèle donc
+  // la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
   function backfillAutoColumnWidths(currentEditor) {
     const { state, view } = currentEditor;
     let tr = null;
@@ -1127,9 +1054,8 @@ const Editor = (function () {
   }
 
   const DEFAULT_COL_PX = 25;
-  // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à
-  // min-width) : rétrécit après coup les colonnes redimensionnées quand le
-  // tableau dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
+  // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à min-width) : rétrécit après coup les colonnes redimensionnées quand le tableau
+  // dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
   function clampOverflowingTables(currentEditor) {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
@@ -1141,9 +1067,8 @@ const Editor = (function () {
       if (node.type.name !== 'table') return true;
       const firstRow = node.firstChild;
       if (!firstRow) return false;
-      // Calculé sur la première ligne, mais appliqué à TOUTES : sinon
-      // prosemirror-tables (largeur cohérente par colonne exigée) annule la
-      // correction pour la réaligner sur les lignes non corrigées.
+      // Calculé sur la première ligne, mais appliqué à TOUTES : sinon prosemirror-tables (largeur cohérente par colonne exigée) annule la correction pour la
+      // réaligner sur les lignes non corrigées.
       let total = 0;
       firstRow.forEach(cellNode => {
         const span = cellNode.attrs.colspan || 1;
@@ -1167,14 +1092,12 @@ const Editor = (function () {
     if (tr) currentEditor.view.dispatch(tr);
   }
 
-  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée
-  // dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
+  // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
     el.className = className;
     el.innerHTML = innerHTML;
-    // mousedown+preventDefault : évite de perdre le focus/la sélection
-    // ProseMirror avant que l'action ne s'exécute.
+    // mousedown+preventDefault : évite de perdre le focus/la sélection ProseMirror avant que l'action ne s'exécute.
     el.addEventListener('mousedown', (event) => {
       const btn = event.target.closest('button[data-action]');
       if (!btn) return;
@@ -1207,11 +1130,8 @@ const Editor = (function () {
     };
   }
 
-  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable)
-  // ne se ferment normalement que sur un changement RÉEL de sélection
-  // ProseMirror - un clic hors de `.tiptap` ET hors `.v2-floating-toolbar`
-  // les referme toutes, pour les cas où aucun évènement ProseMirror ne se
-  // déclenche (ex. clic sur "Mode lecture").
+  // Filet de sécurité : les toolbars contextuelles (tableau/image/variable) ne se ferment normalement que sur un changement réel de sélection ProseMirror -
+  // un clic hors de `.tiptap` ET hors `.v2-floating-toolbar` les referme toutes, pour les cas sans évènement ProseMirror (ex. clic sur "Mode lecture").
   const floatingContextPanels = [];
   function hideFloatingContextToolbars() { floatingContextPanels.forEach(p => p.hide()); }
   document.addEventListener('mousedown', (event) => {
@@ -1233,8 +1153,7 @@ const Editor = (function () {
     openDropdownPanel = null;
   });
 
-  // Grille de nuances + case "personnalisé"/"aucune", partagée entre police,
-  // surlignage et fond de cellule. `onPick`/`onNone` reçoivent une chaîne déjà
+  // Grille de nuances + case "personnalisé"/"aucune", partagée entre police, surlignage et fond de cellule. `onPick`/`onNone` reçoivent une chaîne déjà
   // focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes.
   function createColorDropdown(presets, { noneLabel, onPick, onNone, withSavedSelection }) {
     const swatches = presets.map(c => `<button data-action="pick:${c}" style="background:${c}" title="${c}"></button>`).join('');
@@ -1256,12 +1175,8 @@ const Editor = (function () {
     return panel;
   }
   function closeDropdownPanel() { if (openDropdownPanel) { openDropdownPanel.hide(); openDropdownPanel = null; } }
-  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas
-  // click) : même raison que la toolbar de tableau/image, éviter de perdre
-  // la sélection ProseMirror avant que le panneau ne s'ouvre. `getSelection`
-  // capture la sélection AU MOMENT du clic (avant que le panneau ne vole le
-  // focus) - restaurée par `withSavedSelection` quand une couleur est
-  // effectivement choisie, potentiellement bien après ce clic initial.
+  // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas click), comme la toolbar tableau/image, pour ne pas perdre la sélection avant
+  // l'ouverture. `getSelection` capture la sélection AU MOMENT du clic, restaurée par `withSavedSelection` quand une couleur est vraiment choisie.
   function wireDropdownButton(btn, panel, captureSelection) {
     if (!btn) return;
     btn.addEventListener('mousedown', (event) => {
@@ -1282,9 +1197,8 @@ const Editor = (function () {
     if (el) el.style.color = color || '';
   }
 
-  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la
-  // sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la
-  // position du curseur, pas la sélection réellement visée par l'utilisateur.
+  // Un menu/panneau flottant vole le focus au clic - sans mémoriser la sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la position du
+  // curseur, pas la sélection réellement visée par l'utilisateur.
   function createSelectionPreserver() {
     let savedSelection = null;
     const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
@@ -1297,12 +1211,10 @@ const Editor = (function () {
     return { captureSelection, withSavedSelection };
   }
 
-  // Couleur de police / surlignage : bouton "appliquer" (réapplique la
-  // dernière couleur choisie) + bouton chevron séparé (menu de nuances).
+  // Couleur de police / surlignage : bouton "appliquer" (réapplique la dernière couleur choisie) + bouton chevron séparé (menu de nuances).
   function wireColorPickers() {
     const { captureSelection, withSavedSelection } = createSelectionPreserver();
-    // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix"
-    // - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
+    // "Aucune couleur" appliquée n'est jamais mémorisée comme "dernier choix" - un clic rapide sur l'icône doit toujours appliquer une VRAIE couleur.
     let lastTextColor = TEXT_COLOR_PRESETS[0];
     let lastHighlightColor = FILL_COLOR_PRESETS[0];
     const wireQuickApply = (id, fn) => {
@@ -1330,8 +1242,7 @@ const Editor = (function () {
     wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
   }
 
-  // Toolbar de gestion de tableau : panneau flottant, visible seulement
-  // curseur dans une cellule, ancré sur le <table> réel.
+  // Toolbar de gestion de tableau : panneau flottant, visible seulement curseur dans une cellule, ancré sur le <table> réel.
   function wireTableFloatingToolbar() {
     const buttons = [
       ['row-before', 'rowBefore', I18n.t('table.rowBefore')],
@@ -1367,8 +1278,7 @@ const Editor = (function () {
       };
       (commands[action] || (() => {}))();
     });
-    // Pas de sélection à restaurer ici : setCellsBackground lit
-    // editor.state.selection directement (persiste indépendamment du focus DOM).
+    // Pas de sélection à restaurer ici : setCellsBackground lit editor.state.selection directement (persiste indépendamment du focus DOM).
     const fillPanel = createColorDropdown(FILL_COLOR_PRESETS, {
       noneLabel: I18n.t('colorDropdown.none'),
       withSavedSelection: fn => fn(null),
@@ -1377,17 +1287,15 @@ const Editor = (function () {
     });
     floatingContextPanels.push(panel);
     const check = () => {
-      // editor.isActive(...) ne change pas seul quand le focus quitte
-      // l'éditeur - vérifier hasFocus() explicitement pour fermer le
-      // panneau au clic hors de l'éditeur.
+      // editor.isActive(...) ne change pas seul quand le focus quitte l'éditeur - vérifier hasFocus() explicitement pour fermer le panneau au clic hors de
+      // l'éditeur.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
       if (!editor.isActive('table')) { panel.hide(); return; }
       const { $from } = editor.state.selection;
       let tableDepth = -1;
       for (let d = $from.depth; d > 0; d--) { if ($from.node(d).type.name === 'table') { tableDepth = d; break; } }
       if (tableDepth === -1) { panel.hide(); return; }
-      // nodeDOM d'une table renvoie le wrapper (.tableWrapper de
-      // prosemirror-tables), pas le <table> - redescend dessus pour l'ancrage.
+      // nodeDOM d'une table renvoie le wrapper (.tableWrapper de prosemirror-tables), pas le <table> - redescend dessus pour l'ancrage.
       const dom = editor.view.nodeDOM($from.before(tableDepth));
       if (!dom) { panel.hide(); return; }
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
@@ -1399,8 +1307,7 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Toolbar flottante d'image : zoom, taille d'origine, alignement, wrap,
-  // opacité, calque, suppression.
+  // Toolbar flottante d'image : zoom, taille d'origine, alignement, wrap, opacité, calque, suppression.
   function wireImageFloatingToolbar() {
     const html = [
       `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
@@ -1421,12 +1328,8 @@ const Editor = (function () {
       `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
     ].join('');
 
-    // Exige une VRAIE NodeSelection (`.node`), pas juste editor.isActive()
-    // qui reste vrai pour une simple sélection de texte traversant la
-    // position DOM de l'image. Duck-typing sur `.node` plutôt que
-    // `instanceof NodeSelectionClass` : un clic réel sur l'image produit une
-    // sélection créée en interne par prosemirror-view qui échoue cet
-    // instanceof (deux exemplaires distincts du module prosemirror-state).
+    // Exige une VRAIE NodeSelection (`.node`), pas juste editor.isActive() qui reste vrai pour une simple sélection de texte traversant l'image. Duck-typing
+    // sur `.node` plutôt que `instanceof NodeSelectionClass` : un clic réel échoue cet instanceof (deux exemplaires distincts du module prosemirror-state).
     function selectedImageNode() {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'editorImage') ? node : null;
@@ -1444,8 +1347,7 @@ const Editor = (function () {
       patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
     }
 
-    // En flux normal, alignement classique ; en calque, réaligne sur le
-    // bord du conteneur (margin:auto n'a aucun effet en position:absolute).
+    // En flux normal, alignement classique ; en calque, réaligne sur le bord du conteneur (margin:auto n'a aucun effet en position:absolute).
     function alignOrSnap(align) {
       const node = selectedImageNode();
       if (!node) return;
@@ -1456,17 +1358,15 @@ const Editor = (function () {
       if (!img) return;
       const imgWidthPx = img.getBoundingClientRect().width;
       const containerWidthPx = editorContentWidthPx(editor);
-      // `left` est stocké depuis le bord de la boîte de padding, mais
-      // l'alignement vise le bord du texte - décalage explicite du padding.
+      // `left` est stocké depuis le bord de la boîte de padding, mais l'alignement vise le bord du texte - décalage explicite du padding.
       const rootCs = getComputedStyle(editor.view.dom);
       const padLeft = parseFloat(rootCs.paddingLeft) || 0;
       const left = align === 'left' ? padLeft : align === 'center' ? padLeft + Math.max(0, (containerWidthPx - imgWidthPx) / 2) : padLeft + Math.max(0, containerWidthPx - imgWidthPx);
       updateSelectedImage({ left: Math.round(left) });
     }
 
-    // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton
-    // fixe le calque visé. Au premier passage en calque, initialise
-    // left/top depuis la position RENDUE actuelle pour éviter un saut visuel.
+    // Sélecteur explicite à 3 états (normal/devant/derrière), chaque bouton fixe le calque visé. Au premier passage en calque, initialise left/top depuis la
+    // position RENDUE actuelle pour éviter un saut visuel.
     function setLayer(target) {
       const node = selectedImageNode();
       if (!node) return;
@@ -1479,10 +1379,8 @@ const Editor = (function () {
         if (img) {
           const imgRect = img.getBoundingClientRect();
           const rootRect = editor.view.dom.getBoundingClientRect();
-          // Pas de soustraction de padding : left/top sont appliqués tels
-          // quels en CSS depuis le bord de la boîte de padding (styleFor()),
-          // qui ne bouge pas avec le padding - contrairement à la zone de
-          // contenu, seule affectée si on avait retranché le padding ici.
+          // Pas de soustraction de padding : left/top sont appliqués tels quels en CSS depuis le bord de la boîte de padding (styleFor()), qui ne bouge pas
+          // avec le padding - contrairement à la zone de contenu, seule affectée si on avait retranché le padding ici.
           patch.left = Math.round(imgRect.left - rootRect.left);
           patch.top = Math.round(imgRect.top - rootRect.top);
         }
@@ -1494,10 +1392,8 @@ const Editor = (function () {
       const selNode = selectedImageNode();
       if (!selNode) return;
       const attrs = selNode.attrs;
-      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en tête
-      // de fichier) : zoom avant/reset restent utilisables (poignées aussi,
-      // cf. startResize) - juste bornés à la taille max, jamais bloqués.
-      // zoom-out n'a besoin d'aucun plafond (il ne fait que rétrécir).
+      // Plafond en mode en-tête/pied (cf. clampWidthForHfMaxSize, en tête de fichier) : zoom avant/reset restent utilisables (poignées aussi, cf.
+      // startResize) - juste bornés à la taille max, jamais bloqués. zoom-out n'a besoin d'aucun plafond (il ne fait que rétrécir).
       const clampedWidth = widthPx => {
         const dom = selectedImageDom();
         return dom ? clampWidthForHfMaxSize(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
@@ -1511,11 +1407,8 @@ const Editor = (function () {
         'align-right': () => alignOrSnap('right'),
         wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
         'layer-normal': () => setLayer('normal'),
-        // Verrouillé en mode en-tête/pied (cf. syncState ci-dessous pour le
-        // grisage visuel) - garde-fou en plus du CSS pointer-events:none, au
-        // cas où : pdf-export.js ne résout pas encore la position d'une
-        // image en calque à l'intérieur d'un en-tête/pied (pas de mesure en
-        // 2 passes pour cette zone, contrairement au flux principal).
+        // Verrouillé en mode en-tête/pied (cf. syncState pour le grisage visuel) - garde-fou en plus du CSS pointer-events:none : pdf-export.js ne résout
+        // pas encore la position d'une image en calque dans un en-tête/pied (pas de mesure en 2 passes pour cette zone, contrairement au flux principal).
         'layer-front': () => { if (!hfMode) setLayer('front'); },
         'layer-behind': () => { if (!hfMode) setLayer('behind'); },
         delete: () => {
@@ -1542,21 +1435,17 @@ const Editor = (function () {
       setActive('layer-normal', !attrs.layer || attrs.layer === 'normal');
       setActive('layer-front', attrs.layer === 'front');
       setActive('layer-behind', attrs.layer === 'behind');
-      // Cf. commentaire sur 'layer-front'/'layer-behind' dans onAction
-      // ci-dessus : calque non résolu par pdf-export.js à l'intérieur d'un
-      // en-tête/pied, grisé pendant tout le mode (même classe/mécanisme que
-      // le reste de la toolbar, cf. .v2-hf-locked dans css/toolbar-v2.css).
+      // Cf. commentaire sur 'layer-front'/'layer-behind' dans onAction ci-dessus : calque non résolu par pdf-export.js à l'intérieur d'un en-tête/pied, grisé
+      // pendant tout le mode (même classe/mécanisme que le reste de la toolbar, cf. .v2-hf-locked dans css/toolbar-v2.css).
       const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
       setLockedBtn('layer-front', !!hfMode);
       setLockedBtn('layer-behind', !!hfMode);
     }
 
-    // Sélection visuelle recalculée ici (pas via selectNode/deselectNode,
-    // peu fiable après un setNodeMarkup) : source de vérité unique.
+    // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
     floatingContextPanels.push(panel);
     const check = () => {
-      // Un blur réel ne change pas seul la sélection ProseMirror - sans
-      // cette garde, une 'transaction' suivante rouvrirait le panneau.
+      // Un blur réel ne change pas seul la sélection ProseMirror - sans cette garde, une 'transaction' suivante rouvrirait le panneau.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
@@ -1571,9 +1460,8 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Barre flottante de formatage nombre/date d'une bulle #Variable (même
-  // modèle que l'image). Le type de colonne Grist choisit le sous-panneau
-  // affiché ; une colonne Texte/Référence n'a rien à formater, barre cachée.
+  // Barre flottante de formatage nombre/date d'une bulle #Variable (même modèle que l'image). Le type de colonne Grist choisit le sous-panneau affiché ; une
+  // colonne Texte/Référence n'a rien à formater, barre cachée.
   function wireVariableFloatingToolbar() {
     const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
@@ -1689,8 +1577,7 @@ const Editor = (function () {
     editor.on('transaction', check);
   }
 
-  // Teste en avance le fetch() que pdf-export.js refera à l'export (même URL) ;
-  // avertit si un CORS permissif manque, sans bloquer l'insertion déjà faite.
+  // Teste en avance le fetch() que pdf-export.js refera à l'export (même URL) ; avertit si un CORS permissif manque, sans bloquer l'insertion déjà faite.
   async function warnIfImageUrlNotExportable(src) {
     if (!src || src.startsWith('data:')) return;
     try {
@@ -1703,9 +1590,8 @@ const Editor = (function () {
     }
   }
 
-  // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment
-  // voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du
-  // document principal à la toute première entrée).
+  // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du document
+  // principal à la toute première entrée).
   function enterHeaderFooterMode(zone, variant) {
     if (!editor) return;
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
@@ -1733,27 +1619,22 @@ const Editor = (function () {
     renderPaginationOverlay();
   }
 
-  // Appelé par main.js avant Save/Export/Lecture - sans ça editor.getHTML()
-  // renverrait le fragment d'en-tête/pied actuellement chargé, pas le document.
+  // Appelé par main.js avant Save/Export/Lecture - sans ça editor.getHTML() renverrait le fragment d'en-tête/pied actuellement chargé, pas le document.
   function exitHeaderFooterModeIfActive() {
     if (hfMode) exitHeaderFooterMode();
   }
-  // Note de bas de page masquée en zone en-tête/pied : répétée sur chaque page,
-  // aucune page physique à laquelle l'ancrer (le pipeline PDF ne les résout que
+  // Note de bas de page masquée en zone en-tête/pied : répétée sur chaque page, aucune page physique à laquelle l'ancrer (le pipeline PDF ne les résout que
   // depuis le corps principal).
   function isEditingHeaderFooter() { return !!hfMode; }
 
-  // Reflète le brouillon EN COURS (zone/variante actuellement affichée
-  // comprise) sans devoir sortir du mode - les appelants réels (Save/Export)
-  // appellent de toute façon exitHeaderFooterModeIfActive() juste avant,
-  // mais un appel pendant que le mode est encore actif reste cohérent.
+  // Reflète le brouillon EN COURS (zone/variante actuellement affichée comprise) sans devoir sortir du mode - les appelants réels (Save/Export) appellent de
+  // toute façon exitHeaderFooterModeIfActive() juste avant, mais un appel pendant que le mode est encore actif reste cohérent.
   function getHeaderFooterData() {
     if (hfMode && editor) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     return headerFooterDraft;
   }
 
-  // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js
-  // appelle exitHeaderFooterModeIfActive juste avant).
+  // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js appelle exitHeaderFooterModeIfActive juste avant).
   function setHeaderFooterData(data) {
     const empty = emptyHeaderFooterData();
     headerFooterDraft = data && typeof data === 'object'
@@ -1762,8 +1643,7 @@ const Editor = (function () {
           footer: Object.assign({}, empty.footer, data.footer),
         })
       : empty;
-    // Assaini ici : seul point d'entrée d'un en-tête/pied venant de la colonne
-    // Grist (modifiable par un autre collaborateur sans ouvrir ce widget).
+    // Assaini ici : seul point d'entrée d'un en-tête/pied venant de la colonne Grist (modifiable par un autre collaborateur sans ouvrir ce widget).
     headerFooterDraft.header.default = HtmlSanitize.clean(headerFooterDraft.header.default);
     headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
     headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
@@ -1771,10 +1651,8 @@ const Editor = (function () {
     renderPaginationOverlay();
   }
 
-  // Pastille flottante d'édition d'en-tête/pied, sticky en haut de
-  // #editor-container, visible seulement pendant l'édition (hfMode actif).
-  // On y entre en cliquant une zone de marge posée par renderPaginationOverlay,
-  // pas via un bouton de toolbar. Construite une fois puis resynchronisée.
+  // Pastille flottante d'édition d'en-tête/pied, sticky en haut de #editor-container, visible seulement pendant l'édition (hfMode actif). On y entre en
+  // cliquant une zone de marge posée par renderPaginationOverlay, pas via un bouton de toolbar. Construite une fois puis resynchronisée.
   function renderHfPill() {
     const container = document.getElementById('editor-container');
     if (!container) return;
@@ -1817,8 +1695,7 @@ const Editor = (function () {
         else renderHfPill();
       });
       pill.querySelector('#v2-hf-btn-done').addEventListener('click', () => exitHeaderFooterMode());
-      // mousedown+preventDefault (pas click) : un simple click perdrait la
-      // sélection ProseMirror avant l'exécution de la commande.
+      // mousedown+preventDefault (pas click) : un simple click perdrait la sélection ProseMirror avant l'exécution de la commande.
       pill.querySelectorAll('#v2-hf-pagenum-flyout .v2-hover-row').forEach(row => {
         row.addEventListener('mousedown', (event) => {
           event.preventDefault();
@@ -1832,20 +1709,17 @@ const Editor = (function () {
     pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
   }
 
-  // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge
-  // 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
+  // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .tiptap en Aperçu A4
   const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
 
-  // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le
-  // 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête
-  // d'une ligne mesurerait 200px).
+  // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête d'une
+  // ligne mesurerait 200px).
   function measureHtmlHeightPx(html) {
-    // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte
-    // mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
+    // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
     if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
     const host = document.createElement('div');
     host.className = 'tiptap';
@@ -1857,10 +1731,8 @@ const Editor = (function () {
     return h;
   }
 
-  // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte
-  // .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en
-  // deux), pas du pixel comme pdfmake. Retourne le bloc après lequel insérer
-  // la coupure (afterEl), pour poser un margin-bottom réel dessus.
+  // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en deux), pas du
+  // pixel comme pdfmake. Retourne le bloc après lequel insérer la coupure (afterEl), pour poser un margin-bottom réel dessus.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
     let consumed = 0;
@@ -1884,8 +1756,7 @@ const Editor = (function () {
     return breaks;
   }
 
-  // Résout chaque badge .page-number-badge en son texte réel pour cette page
-  // (même conversion que formatPageNumberText côté pdf-export.js, dupliquée).
+  // Résout chaque badge .page-number-badge en son texte réel pour cette page (même conversion que formatPageNumberText côté pdf-export.js, dupliquée).
   function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
     const host = document.createElement('div');
     host.innerHTML = html || '';
@@ -1900,8 +1771,7 @@ const Editor = (function () {
   let paginationEdgeTopEl = null;
   let paginationEdgeBottomEl = null;
   let paginationRecomputeTimer = null;
-  // Feuille de style dédiée (règles `:nth-child`), pas un style inline : un
-  // style posé directement sur un nœud ProseMirror est silencieusement annulé
+  // Feuille de style dédiée (règles `:nth-child`), pas un style inline : un style posé directement sur un nœud ProseMirror est silencieusement annulé
   // (ProseMirror répare toute mutation DOM qu'il n'a pas produite lui-même).
   let paginationMarginStyleEl = null;
   function ensurePaginationMarginStyle() {
@@ -1927,12 +1797,8 @@ const Editor = (function () {
     clearPageBreakMargins();
   }
 
-  // Zones de marge cliquables (façon Google Docs/Word) : un clic appelle
-  // enterHeaderFooterMode(zone, variant). Début/fin de document ont un vrai
-  // espace en flux normal (`.v2-page-edge-spacer`, jamais enfant de `.tiptap`
-  // lui-même - cf. mémoire project_quill_mutation_observer). Les limites
-  // intermédiaires n'ont pas d'espace naturel, donc restent de purs overlays
-  // `position:absolute` posés dans l'espace réservé par margin-bottom.
+  // Zones de marge cliquables (façon Google Docs/Word) : un clic appelle enterHeaderFooterMode(zone, variant). Début/fin de document ont un vrai espace en
+  // flux (`.v2-page-edge-spacer`, jamais enfant de `.tiptap`) ; les limites intermédiaires restent de purs overlays absolus dans la marge réservée.
   function ensureEdgeZone(pageSheet, tiptapEl, pos) {
     if (pos === 'top' && !paginationEdgeTopEl) {
       paginationEdgeTopEl = document.createElement('div');
@@ -1947,8 +1813,8 @@ const Editor = (function () {
   }
   function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
     const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
-    // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte)
-    // serait traitée à tort comme vide (même correctif que resolveZone, pdf-export.js).
+    // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte) serait traitée à tort comme vide (même correctif que resolveZone,
+    // pdf-export.js).
     const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
@@ -1984,8 +1850,7 @@ const Editor = (function () {
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
-    // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer
-    // d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
+    // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
     clearPageBreakMargins();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
     const totalPages = breaks.length + 1;
@@ -2000,9 +1865,8 @@ const Editor = (function () {
     const tiptapWidth = tiptapEl.getBoundingClientRect().width;
     const tiptapRect = tiptapEl.getBoundingClientRect();
 
-    // Une bande par frontière entre 2 pages (repère "— Page N —" par défaut
-    // sans en-tête/pied) ; espace réservé via `:nth-child` externe, pas un
-    // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
+    // Une bande par frontière entre 2 pages (repère "— Page N —" par défaut sans en-tête/pied) ; espace réservé via `:nth-child` externe, pas un style inline
+    // sur `afterEl` (même piège que paginationMarginStyleEl).
     const marginRules = [];
     const tiptapChildren = Array.from(tiptapEl.children);
     breaks.forEach((brk, i) => {
@@ -2038,8 +1902,7 @@ const Editor = (function () {
       seam.style.left = tiptapOffsetLeft + 'px';
       seam.style.width = tiptapWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
-      // Écrit la feuille à chaque itération : la coupure suivante doit voir
-      // l'effet des marges déjà posées avant de mesurer sa propre position.
+      // Écrit la feuille à chaque itération : la coupure suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
       const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
       marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + brk.remainingPx) + 'px; }');
       ensurePaginationMarginStyle().textContent = marginRules.join('\n');
@@ -2054,8 +1917,7 @@ const Editor = (function () {
     set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
     set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
     set('v2-btn-align-right', 'alignRight'); set('v2-btn-align-justify', 'alignJustify');
-    // v2-btn-align-main : icône initiale, resynchronisée dès le premier appel
-    // de syncToolbarState avec l'alignement réel du curseur.
+    // v2-btn-align-main : icône initiale, resynchronisée dès le premier appel de syncToolbarState avec l'alignement réel du curseur.
     set('v2-btn-align-main', 'alignLeft');
     set('v2-btn-bullet', 'bulletList');
     set('v2-btn-bullet-disc', 'bulletDisc'); set('v2-btn-bullet-circle', 'bulletCircle'); set('v2-btn-bullet-square', 'bulletSquare');
@@ -2073,8 +1935,7 @@ const Editor = (function () {
     set('v2-font-chip-caret', 'caretDown');
   }
 
-  // Retour visuel d'état actif, recalculé à chaque sélection/transaction
-  // (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
+  // Retour visuel d'état actif, recalculé à chaque sélection/transaction (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
   function syncToolbarState() {
     const setActive = (id, isActive) => { const el = document.getElementById(id); if (el) el.classList.toggle('is-active', !!isActive); };
     setActive('v2-btn-bold', editor.isActive('bold'));
@@ -2085,8 +1946,7 @@ const Editor = (function () {
     setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
     setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
     setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
-    // Bouton principal du groupe survol "Alignement" : montre toujours
-    // l'alignement réel du curseur, relu par son propre clic pour le réappliquer.
+    // Bouton principal du groupe survol "Alignement" : montre toujours l'alignement réel du curseur, relu par son propre clic pour le réappliquer.
     const aligns = ['left', 'center', 'right', 'justify'];
     currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
     const alignMain = document.getElementById('v2-btn-align-main');
@@ -2108,15 +1968,15 @@ const Editor = (function () {
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
-    // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque devant/derrière est bloqué plus bas.
+    // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque
+    // devant/derrière est bloqué plus bas.
     const inHfMode = !!hfMode;
     const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
     setLocked('v2-btn-table', inHfMode);
     setLocked('v2-btn-two-columns', inHfMode);
     setLocked('v2-btn-page-break', inHfMode);
     setLocked('v2-btn-toc', inHfMode);
-    // Numérotation seule verrouillée : un niveau de titre garde un sens dans
-    // un en-tête/pied, la numérotation (titres du flux principal seul) non.
+    // Numérotation seule verrouillée : un niveau de titre garde un sens dans un en-tête/pied, la numérotation (titres du flux principal seul) non.
     setLocked('v2-numbering-seg', inHfMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
@@ -2135,8 +1995,7 @@ const Editor = (function () {
     const textStyleAttrs = editor.getAttributes('textStyle');
     setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
-    // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap
-    // dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
+    // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
     // "Police"/"Taille" vide qui ne montrait jamais rien par défaut.
     const fontChipVal = document.getElementById('v2-font-chip-val');
     if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
@@ -2183,8 +2042,7 @@ const Editor = (function () {
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
-      // Ne consomme que si le presse-papiers contient réellement une image ;
-      // un collage de texte normal suit le traitement natif de ProseMirror.
+      // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       editorProps: {
         handlePaste(view, event) {
           const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
@@ -2231,9 +2089,8 @@ const Editor = (function () {
       content: '',
     });
 
-    // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay
-    // relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en Aperçu A4
-    // pour que les zones d'en-tête/pied restent visuellement collées au corps.
+    // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en
+    // Aperçu A4 pour que les zones d'en-tête/pied restent visuellement collées au corps.
     const pageSheet = document.createElement('div');
     pageSheet.className = 'v2-page-sheet';
     editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
@@ -2250,9 +2107,8 @@ const Editor = (function () {
     return editor;
   }
 
-  // Une seule instance, une seule toolbar : chaque bouton appelle directement
-  // une commande TipTap sur la sélection réelle, jamais besoin de savoir
-  // "suis-je dans une cellule/colonne" avant d'agir.
+  // Une seule instance, une seule toolbar : chaque bouton appelle directement une commande TipTap sur la sélection réelle, jamais besoin de savoir "suis-je
+  // dans une cellule/colonne" avant d'agir.
   function wireToolbar() {
     applyToolbarIcons();
     const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
@@ -2264,15 +2120,12 @@ const Editor = (function () {
     bind('v2-btn-align-center', () => editor.chain().focus().setTextAlign('center').run());
     bind('v2-btn-align-right', () => editor.chain().focus().setTextAlign('right').run());
     bind('v2-btn-align-justify', () => editor.chain().focus().setTextAlign('justify').run());
-    // Bouton principal du groupe survol - réapplique l'alignement qu'il
-    // montre actuellement (currentAlign, tenu à jour par syncToolbarState) ;
-    // les 4 boutons ci-dessus vivent maintenant dans le panneau révélé au
-    // survol (cf. index.html .v2-hover-flyout), inchangés sinon.
+    // Bouton principal du groupe survol - réapplique l'alignement qu'il montre actuellement (currentAlign, tenu à jour par syncToolbarState) ; les 4 boutons
+    // ci-dessus vivent maintenant dans le panneau révélé au survol (cf. index.html .v2-hover-flyout), inchangés sinon.
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
     bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
-    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette
-    // "Options au survol") - crée la liste si le curseur n'y est pas encore,
-    // sinon change juste le style de la liste existante à cet endroit.
+    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette "Options au survol") - crée la liste si le curseur n'y est pas encore, sinon
+    // change juste le style de la liste existante à cet endroit.
     const applyBulletStyle = (style) => {
       const chain = editor.chain().focus();
       if (!editor.isActive('bulletList')) chain.toggleBulletList();
@@ -2297,8 +2150,7 @@ const Editor = (function () {
     bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
     bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
     bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
-    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState)
-    // plutôt qu'un masquage complet du bouton.
+    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState) plutôt qu'un masquage complet du bouton.
     bind('v2-btn-outdent', () => editor.chain().focus().liftListItem('listItem').run());
     bind('v2-btn-indent', () => editor.chain().focus().sinkListItem('listItem').run());
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
@@ -2320,11 +2172,8 @@ const Editor = (function () {
     wireCompactFontSizeControls();
   }
 
-  // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent
-  // portés par un <select> caché comme source de vérité, le flyout ne fait
-  // que poser sa valeur puis redéclencher 'change' - pas de capture/
-  // restauration de sélection nécessaire (un <span>/<button> ne vole jamais
-  // le focus comme l'ouverture d'un <select> natif).
+  // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent portés par un <select> caché comme source de vérité, le flyout se contente de
+  // poser sa valeur puis redéclencher 'change' - pas de restauration de sélection nécessaire (un <span>/<button> ne vole jamais le focus comme un <select>).
   function wireHeadingMenu() {
     const headerSelect = document.getElementById('v2-header-select');
     const flyout = document.getElementById('v2-heading-flyout');
@@ -2337,9 +2186,8 @@ const Editor = (function () {
         });
       });
     }
-    // Réglage de document, pas de sélection : le data-attribute est posé
-    // avant de dispatcher la commande pour que le rafraîchissement synchrone
-    // du sommaire (déclenché par elle) lise déjà la bonne valeur.
+    // Réglage de document, pas de sélection : le data-attribute est posé avant de dispatcher la commande pour que le rafraîchissement synchrone du sommaire
+    // (déclenché par elle) lise déjà la bonne valeur.
     const select = document.getElementById('v2-heading-numbering-select');
     if (!select) return;
     select.addEventListener('change', () => {
@@ -2355,16 +2203,14 @@ const Editor = (function () {
       select.dispatchEvent(new Event('change'));
       syncActiveNum();
     }));
-    // Lu à la volée à chaque survol : la valeur peut aussi changer sans
-    // passer par ici (chargement d'un modèle pose select.value directement).
+    // Lu à la volée à chaque survol : la valeur peut aussi changer sans passer par ici (chargement d'un modèle pose select.value directement).
     const group = document.getElementById('v2-heading-group');
     if (group) group.addEventListener('mouseenter', syncActiveNum);
     syncActiveNum();
   }
 
-  // Un <select>, contrairement à un <button>, vole le focus dès le
-  // pointerdown (avant 'change') - la sélection à mettre en forme doit donc
-  // être capturée à ce moment puis restaurée avant d'appliquer la commande.
+  // Un <select>, contrairement à un <button>, vole le focus dès le pointerdown (avant 'change') - la sélection à mettre en forme doit donc être capturée à ce
+  // moment puis restaurée avant d'appliquer la commande.
   function wireSelectionDependentSelects() {
     const { captureSelection, withSavedSelection } = createSelectionPreserver();
     const bindSelect = (id, onChange) => {
@@ -2427,10 +2273,8 @@ const Editor = (function () {
     return style;
   }
 
-  // Signale les badges #Variable dont la table/colonne n'existe plus : simple
-  // classe+title sur le <span> rendu, jamais un attribut du nœud (dépend d'un
-  // état externe, pas du contenu) - ProseMirror peut reconstruire ce span à
-  // tout moment, donc rejoué à chaque déclencheur pertinent plutôt que posé une fois.
+  // Signale les badges #Variable dont la table/colonne n'existe plus : simple classe+title sur le <span> rendu, jamais un attribut du nœud (dépend d'un état
+  // externe, pas du contenu) - ProseMirror peut reconstruire ce span à tout moment, donc rejoué à chaque déclencheur pertinent plutôt que posé une fois.
   function refreshVariableBadgeValidity() {
     if (!editor) return;
     editor.view.dom.querySelectorAll('span.var-badge').forEach(el => {
@@ -2450,22 +2294,18 @@ const Editor = (function () {
   function setHTML(html) {
     if (!editor) return;
     editor.commands.setContent(html || '', { emitUpdate: false });
-    // Sans ça l'historique Annuler/Rétablir s'accumule à travers les
-    // changements de modèle : un Annuler après chargement pouvait faire
-    // réapparaître le contenu d'un modèle précédent (bug confirmé).
+    // Sans ça l'historique Annuler/Rétablir s'accumule à travers les changements de modèle : un Annuler après chargement pouvait faire réapparaître le
+    // contenu d'un modèle précédent (bug confirmé).
     editor.commands.clearHistory();
     editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
-    // Force un rafraîchissement du NodeView du sommaire : son premier rendu
-    // (pendant setContent) a eu lieu avant que headingStyle soit posé ci-dessus.
+    // Force un rafraîchissement du NodeView du sommaire : son premier rendu (pendant setContent) a eu lieu avant que headingStyle soit posé ci-dessus.
     editor.view.dispatch(editor.state.tr);
-    // Le dispatch ci-dessus ne déclenche pas onUpdate (pas de changement réel),
-    // donc clampOverflowingTables ne tourne pas seul pour un tableau déjà trop
+    // Le dispatch ci-dessus ne déclenche pas onUpdate (pas de changement réel), donc clampOverflowingTables ne tourne pas seul pour un tableau déjà trop
     // large importé - appelé explicitement ici pour couvrir ce cas.
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     renderPaginationOverlay();
-    // Vérification immédiate (schéma en cache) puis après rafraîchissement
-    // explicite (couvre une table/colonne supprimée entretemps).
+    // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps).
     refreshVariableBadgeValidity();
     GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));

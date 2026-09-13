@@ -2,15 +2,11 @@
 console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), 'v1.2.0');
 
 const GristAPI = (function () {
-  // Tables internes de bookkeeping du widget (modèles, règles de correspon-
-  // dance entre tables) - jamais des tables "métier" de l'utilisateur, donc
-  // exclues de _tables/getAllVariables/tout sélecteur de table présenté à
-  // l'utilisateur (sans quoi elles polluaient la liste d'autocomplétion #
-  // et les sélecteurs de table cible du panneau de liaison).
+  // Tables internes de bookkeeping du widget (modèles, règles de correspondance entre tables) - jamais des tables "métier" de l'utilisateur, donc exclues de
+  // _tables/getAllVariables/tout sélecteur de table présenté à l'utilisateur (sans quoi elles polluaient l'autocomplétion # et les sélecteurs de liaison).
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
-  // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") -
-  // une colonne à formule déclenchée (capture qui a réellement déclenché le
+  // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") - une colonne à formule déclenchée (capture qui a réellement déclenché le
   // calcul, `user.Email`), vidée après chaque lecture.
   const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
   let _tables = [];
@@ -28,9 +24,8 @@ const GristAPI = (function () {
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
-      // Ne pas ajouter columns:[...] sans revalider en Grist réel : ça a déjà
-      // cassé toute la résolution #Variable (change mappings.tableId, dont
-      // dépend la détection de table courante).
+      // Ne pas ajouter columns:[...] sans revalider en Grist réel : ça a déjà cassé toute la résolution #Variable (change mappings.tableId, dont dépend la
+      // détection de table courante).
       grist.ready({ requiredAccess: 'full' });
       console.log('[GristAPI] grist.ready({requiredAccess: "full"}) appelé avec succès.');
     } catch (e) {
@@ -45,9 +40,8 @@ const GristAPI = (function () {
       grist.onRecord(function (record, mappings) {
         const receivedAt = new Date();
         const rowId = record && record.id != null ? record.id : null;
-        // Ne jamais logger `record`/`mappings` en entier : une ligne de ce
-        // widget contient typiquement des données personnelles (RGPD). Seul
-        // l'ID de ligne, déjà visible dans l'UI Grist, est loggé.
+        // Ne jamais logger `record`/`mappings` en entier : une ligne de ce widget contient typiquement des données personnelles (RGPD). Seul l'ID de ligne,
+        // déjà visible dans l'UI Grist, est loggé.
         console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
         _currentRecord = record;
         _currentMappings = mappings || null;
@@ -55,9 +49,8 @@ const GristAPI = (function () {
           console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
         }
 
-        // Notifier immédiatement à chaque événement de sélection. La détection
-        // du tableId peut nécessiter des appels async et ne doit pas retarder
-        // le rendu du mode lecture ni bloquer les événements suivants.
+        // Notifier immédiatement à chaque événement de sélection. La détection du tableId peut nécessiter des appels async et ne doit pas retarder le rendu
+        // du mode lecture ni bloquer les événements suivants.
         const mappedTableId = mappings && mappings.tableId
           ? String(mappings.tableId).trim()
           : null;
@@ -94,8 +87,7 @@ const GristAPI = (function () {
       console.warn('[GristAPI] onOptions non disponible:', e);
     }
 
-    // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà
-    // l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
+    // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
     try {
       if (typeof grist.getOptions === 'function') {
         const seedOptions = await grist.getOptions();
@@ -189,8 +181,7 @@ const GristAPI = (function () {
       const tables = await grist.docApi.listTables();
       _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
-      // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit
-      // dans un objet temporaire, remplacé d'un coup pour éviter un schéma
+      // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit dans un objet temporaire, remplacé d'un coup pour éviter un schéma
       // vidé-mais-pas-repeuplé pendant les allers-retours réseau.
       const nextColumnsByTable = {};
       await Promise.all(_tables.map(async t => {
@@ -210,9 +201,8 @@ const GristAPI = (function () {
     await refreshColumnTypes();
   }
 
-  // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale
-  // dans la modale de liaison qu'une colonne est une Référence, pour que
-  // l'utilisateur la compare à l'Identifiant de ligne, pas à une colonne texte.
+  // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale dans la modale de liaison qu'une colonne est une Référence, pour que l'utilisateur
+  // la compare à l'Identifiant de ligne, pas à une colonne texte.
   async function refreshColumnTypes() {
     _columnTypesByTable = {};
     try {
@@ -307,10 +297,8 @@ const GristAPI = (function () {
     return row;
   }
 
-  // Toutes les lignes d'une table sous forme de tableau d'objets {colonne:
-  // valeur} (au lieu du format colonnaire de fetchTable) - utilisé par la
-  // résolution "match"/"singleton" des règles de liaison, qui compare
-  // plusieurs lignes à la fois, contrairement à fetchRowById.
+  // Toutes les lignes d'une table sous forme de tableau d'objets {colonne: valeur} (au lieu du format colonnaire de fetchTable) - utilisé par la résolution
+  // "match"/"singleton" des règles de liaison, qui compare plusieurs lignes à la fois, contrairement à fetchRowById.
   async function fetchTableRows(tableId) {
     const data = await grist.docApi.fetchTable(tableId);
     const ids = data && data.id ? data.id : [];
@@ -323,11 +311,8 @@ const GristAPI = (function () {
     return rows;
   }
 
-  // Table de bookkeeping stockant, pour chaque table cible référencée via #
-  // depuis une autre table, comment en trouver la bonne ligne : "singleton"
-  // (une seule ligne pertinente) ou "match" (comparer ColonneCible de la
-  // table cible à ColonneSource de la table courante - "id" désigne
-  // l'identifiant de ligne Grist). Créée à la volée au premier besoin.
+  // Table de bookkeeping stockant, pour chaque table cible référencée via # depuis une autre table, comment en trouver la bonne ligne : "singleton" (une
+  // seule ligne pertinente) ou "match" (comparer ColonneCible à ColonneSource, "id" désignant l'identifiant de ligne Grist). Créée à la volée au 1er besoin.
   async function ensureLinksTableExists() {
     const tables = await grist.docApi.listTables();
     if (tables.includes(LINKS_TABLE_NAME)) return;
@@ -370,9 +355,8 @@ const GristAPI = (function () {
     return Object.keys(_linkRulesByTable).map(t => Object.assign({ tableCible: t }, _linkRulesByTable[t]));
   }
 
-  // Upsert (une seule règle par table cible) - écrase la précédente si l'utilisateur
-  // reconfigure une table déjà liée (depuis le panneau de gestion, ou en réinsérant
-  // la variable après une modification de schéma).
+  // Upsert (une seule règle par table cible) - écrase la précédente si l'utilisateur reconfigure une table déjà liée (depuis le panneau de gestion, ou en
+  // réinsérant la variable après une modification de schéma).
   async function saveLinkRule(tableCible, rule) {
     await ensureLinksTableExists();
     const columns = {
@@ -399,10 +383,8 @@ const GristAPI = (function () {
     delete _linkRulesByTable[tableCible];
   }
 
-  // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré),
-  // getAccessToken() renvoie un baseUrl avec un host interne injoignable
-  // (ex. 0.0.0.0). Corrigé en réutilisant l'origine de document.referrer
-  // (la page Grist qui embarque ce widget en iframe).
+  // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré), getAccessToken() renvoie un baseUrl avec un host interne injoignable (ex.
+  // 0.0.0.0). Corrigé en réutilisant l'origine de document.referrer (la page Grist qui embarque ce widget en iframe).
   function fixBaseUrl(baseUrl) {
     try {
       const url = new URL(baseUrl);
@@ -419,8 +401,8 @@ const GristAPI = (function () {
     return baseUrl;
   }
 
-  // Jeton d'accès court terme (quelques minutes) réutilisé pour les appels REST
-  // d'upload/téléchargement de pièces jointes, avec marge de sécurité avant expiration.
+  // Jeton d'accès court terme (quelques minutes) réutilisé pour les appels REST d'upload/téléchargement de pièces jointes, avec marge de sécurité avant
+  // expiration.
   async function getAccessTokenCached() {
     const now = Date.now();
     if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
@@ -431,8 +413,7 @@ const GristAPI = (function () {
     return _tokenCache;
   }
 
-  // Récupère les id de pièces jointes déjà connus, pour pouvoir repérer la
-  // nouvelle après upload (cf. uploadAttachment).
+  // Récupère les id de pièces jointes déjà connus, pour pouvoir repérer la nouvelle après upload (cf. uploadAttachment).
   async function knownAttachmentIds() {
     try {
       const data = await grist.docApi.fetchTable('_grist_Attachments');
@@ -443,11 +424,8 @@ const GristAPI = (function () {
     }
   }
 
-  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS
-  // sur POST /attachments, même avec un domaine valide : le navigateur bloque
-  // la requête en mode 'cors' normal. On repère la pièce jointe nouvellement
-  // créée en comparant les id de _grist_Attachments avant/après, lue via le
-  // pont RPC du plugin, jamais soumis à CORS.
+  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS sur POST /attachments, même avec un domaine valide : le navigateur bloque la
+  // requête en mode 'cors' normal. On repère la pièce jointe créée en comparant les id de _grist_Attachments avant/après, via le pont RPC (jamais soumis à CORS).
   async function findNewAttachmentId(beforeIds, fileName) {
     for (let attempt = 0; attempt < 10; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 400));
@@ -477,9 +455,8 @@ const GristAPI = (function () {
     const url = `${info.baseUrl}/attachments?auth=${info.token}`;
     const beforeIds = await knownAttachmentIds();
     try {
-      // mode: 'no-cors' — le navigateur envoie quand même la requête (l'upload a
-      // bien lieu côté serveur) mais la réponse devient opaque : impossible d'y
-      // lire l'identifiant créé, d'où la recherche via findNewAttachmentId ensuite.
+      // mode: 'no-cors' — le navigateur envoie quand même la requête (l'upload a bien lieu côté serveur) mais la réponse devient opaque : impossible d'y lire
+      // l'identifiant créé, d'où la recherche via findNewAttachmentId ensuite.
       await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
     } catch (e) {
       throw new Error('Échec réseau vers ' + info.baseUrl + '/attachments (' + e.message + ')');
@@ -495,19 +472,15 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${attachmentId}/download?auth=${info.token}`;
   }
 
-  // Email utilisateur (chip #Variable) : le jeton de getAccessTokenCached()
-  // renvoie toujours "anon@getgrist.com" (identité scopée au document, pas
-  // la session navigateur). Contournement : une formule DÉCLENCHÉE sur
-  // `user.Email`, dans une table interne dédiée, attribue la vraie valeur à
-  // qui déclenche le calcul (ici, une ligne ajoutée puis aussitôt retirée).
+  // Email utilisateur (chip #Variable) : le jeton de getAccessTokenCached() renvoie toujours "anon@getgrist.com" (identité scopée au document, pas la session
+  // navigateur). Contournement : une formule DÉCLENCHÉE sur `user.Email`, dans une table interne dédiée, attribue la vraie valeur (ligne ajoutée puis retirée).
   async function ensureUserProbeTable() {
     const tables = await grist.docApi.listTables();
     if (tables.includes(USER_PROBE_TABLE_NAME)) return;
     await grist.docApi.applyUserActions([
       ['AddTable', USER_PROBE_TABLE_NAME, [
-        // recalcWhen:0 = RecalcWhen.DEFAULT (nouvelles lignes ou changement
-        // de recalcDeps) ; recalcDeps:null car seule la création de ligne
-        // doit déclencher le calcul.
+        // recalcWhen:0 = RecalcWhen.DEFAULT (nouvelles lignes ou changement de recalcDeps) ; recalcDeps:null car seule la création de ligne doit déclencher
+        // le calcul.
         { id: 'Email', type: 'Text', isFormula: false, formula: 'user.Email', recalcWhen: 0, recalcDeps: null },
       ]],
     ]);
@@ -526,24 +499,19 @@ const GristAPI = (function () {
       _userEmailCache = email;
       return email;
     } finally {
-      // Nettoyage best-effort - une ligne orpheline ici n'est pas grave (la
-      // table reste de toute façon interne/invisible), mais mieux vaut ne
-      // rien laisser trainer à chaque appel.
+      // Nettoyage best-effort - une ligne orpheline ici n'est pas grave (la table reste de toute façon interne/invisible), mais mieux vaut ne rien laisser
+      // trainer à chaque appel.
       grist.docApi.applyUserActions([['RemoveRecord', USER_PROBE_TABLE_NAME, rowId]]).catch(() => {});
     }
   }
 
-  // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de
-  // mappage de droite - cf. columns: [...] dans grist.ready() plus haut.
+  // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de mappage de droite - cf. columns: [...] dans grist.ready() plus haut.
   function getPdfAttachmentColumnId() {
     return _currentMappings && _currentMappings.pdfAttachment ? _currentMappings.pdfAttachment : null;
   }
 
-  // Enregistre un PDF déjà généré (Blob) dans la colonne mappée, sur la ligne
-  // actuellement sélectionnée. ['L', attachmentId] REMPLACE la liste de
-  // pièces jointes de la cellule (pas d'ajout) : une seule pièce jointe pour
-  // ce widget dans cette colonne, toujours la plus récemment exportée -
-  // l'ancienne devient orpheline et Grist la purge de lui-même.
+  // Enregistre un PDF déjà généré (Blob) dans la colonne mappée, sur la ligne actuellement sélectionnée. ['L', attachmentId] REMPLACE la liste de pièces
+  // jointes de la cellule (pas d'ajout) : une seule pièce jointe, toujours la plus récente - l'ancienne devient orpheline et Grist la purge de lui-même.
   async function saveAttachmentToMappedColumn(blob, filename) {
     const colId = getPdfAttachmentColumnId();
     if (!colId) throw new Error('Aucune colonne Pièce Jointe n’est mappée pour le PDF (panneau de configuration du widget, à droite).');
@@ -558,9 +526,8 @@ const GristAPI = (function () {
     return attachmentId;
   }
 
-  // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès
-  // expire après quelques minutes, donc le src ne doit jamais être conservé tel quel
-  // dans le HTML enregistré — seul data-attachment-id est persistant.
+  // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès expire après quelques minutes, donc le src ne doit jamais être
+  // conservé tel quel dans le HTML enregistré — seul data-attachment-id est persistant.
   async function hydrateAttachmentImages(root) {
     if (!root || !root.querySelectorAll) return;
     const images = Array.from(root.querySelectorAll('img.editor-image[data-source="attachment"][data-attachment-id]'));

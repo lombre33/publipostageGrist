@@ -1,16 +1,8 @@
-// Traduction FR/EN de l'interface (panneau Réglages > Langue) - IIFE
-// classique, chargée en tout premier (avant
-// variable-format.js/variables.js/editor.js/main.js/settings.js) pour que
-// ceux-ci puissent lire I18n.getLang()/I18n.t() comme un global nu déjà
-// prêt, même schéma de dépendance implicite par ordre de <script> que
-// GristAPI/Editor/Variables partout ailleurs dans ce projet.
+// Traduction FR/EN de l'interface (panneau Réglages > Langue) - IIFE classique, chargée en tout premier (avant variable-format.js/variables.js/editor.js/
+// main.js/settings.js) pour qu'ils lisent I18n.getLang()/I18n.t() comme un global nu déjà prêt, même schéma de dépendance implicite par ordre de <script>.
 //
-// MAINTENANCE (demande explicite de l'utilisateur) : chaque entrée porte fr
-// ET en côte à côte dans le même objet littéral - impossible de modifier
-// l'un sans voir l'autre juste en dessous. `t()` avertit dans la console
-// (pas d'échec silencieux) si une clé existe mais que sa traduction 'en'
-// n'a pas été renseignée : filet de sécurité si un futur texte français est
-// ajouté/modifié sans que son pendant anglais suive.
+// MAINTENANCE (demande explicite) : chaque entrée porte fr ET en côte à côte dans le même objet littéral - impossible de modifier l'un sans voir l'autre.
+// `t()` avertit en console (pas d'échec silencieux) si une traduction 'en' manque - filet de sécurité si un futur texte français ajouté sans son pendant.
 const I18n = (function () {
   const STRINGS = {
     // --- Bandeau du haut : cluster modèle / actions ---
@@ -316,10 +308,8 @@ const I18n = (function () {
     applyTranslations();
   }
 
-  // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup
-  // par un module qui ne connaît pas I18n) et applique les 4 variantes
-  // d'attribut de traduction déclarative - le texte français d'origine reste
-  // en dur dans le HTML comme repli si ce fichier n'a pas encore chargé.
+  // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup par un module qui ne connaît pas I18n) et applique les 4 variantes d'attribut de
+  // traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si ce fichier n'a pas encore chargé.
   function applyTranslations(root) {
     const scope = root || document;
     scope.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
@@ -328,12 +318,8 @@ const I18n = (function () {
     scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder'))); });
   }
 
-  // Applique tout de suite (pas seulement lors d'un futur setLang) : ce
-  // script est placé après tout le HTML du bandeau/des modales dans
-  // index.html (les <script> sont en fin de <body>), donc le DOM à
-  // traduire existe déjà à ce point - un utilisateur ayant déjà choisi EN
-  // lors d'une session précédente voit l'anglais dès l'ouverture, pas
-  // seulement après avoir rouvert le panneau Réglages.
+  // Applique tout de suite (pas seulement lors d'un futur setLang) : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont en
+  // fin de <body>), donc le DOM à traduire existe déjà - un utilisateur ayant déjà choisi EN voit l'anglais dès l'ouverture, pas après avoir rouvert Réglages.
   document.documentElement.lang = lang;
   applyTranslations();
 
