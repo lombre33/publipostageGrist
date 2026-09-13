@@ -23,6 +23,32 @@ const HeaderFooterPreview = (function () {
     return Math.min(widthPx, maxWidthPx);
   }
 
+  // La zone d'édition reste visuellement bornée (cf. #editor-container.hf-editing .tiptap { max-height: 60px; overflow: hidden } dans editor-v2.css) mais
+  // rien n'empêchait jusqu'ici de continuer à taper indéfiniment au-delà - le surplus, invisible ici, débordait aussi de la vraie bande réservée dans le PDF/
+  // l'aperçu paginé (hauteur fixe, cf. HF_MAX_ZONE_HEIGHT_PT dans pdf-export.js), chevauchant le corps du document. Posée une seule fois juste avant un
+  // setContent() de bascule (entrée en mode, changement de zone/variante) : le contenu déjà présent dans un modèle existant (créé avant cette limite) n'est
+  // jamais lui-même annulé à l'affichage - seule une frappe qui l'agrandit ENCORE l'est.
+  let suppressHeightGuardOnce = false;
+  function enforceZoneHeightLimit(ed, transaction) {
+    if (suppressHeightGuardOnce) { suppressHeightGuardOnce = false; return; }
+    if (!hfMode || !ed || !transaction || !transaction.docChanged) return;
+    // Ne bloque que les transactions qui AGRANDISSENT le document (frappe, collage, saut de ligne) - une transaction qui réduit ou ne change pas la taille
+    // (suppression, mise en forme) reste toujours autorisée, y compris quand le contenu était déjà trop long avant.
+    if (transaction.before.content.size >= transaction.doc.content.size) return;
+    const dom = ed.view.dom;
+    if (dom.scrollHeight <= dom.clientHeight + 1) return;
+    // `commands.undo()` rejoue tout le GROUPE d'historique proche dans le temps (ProseMirror regroupe les transactions rapprochées, ex. plusieurs
+    // caractères tapés à la suite) - sur-corrige en supprimant bien plus que la seule frappe fautive. Annule PRÉCISÉMENT cette transaction en
+    // reconstruisant son inverse à partir de ses propres steps (même technique que prosemirror-history en interne), en dehors de l'historique
+    // (addToHistory: false) pour qu'un Ctrl+Z ultérieur ignore cette frappe rejetée comme si elle n'avait jamais eu lieu.
+    const invertTr = ed.state.tr;
+    for (let i = transaction.steps.length - 1; i >= 0; i--) {
+      invertTr.step(transaction.steps[i].invert(transaction.docs[i]));
+    }
+    invertTr.setMeta('addToHistory', false);
+    ed.view.dispatch(invertTr);
+  }
+
   // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du document
   // principal à la toute première entrée).
   function enterHeaderFooterMode(zone, variant) {
@@ -31,6 +57,7 @@ const HeaderFooterPreview = (function () {
     else mainDocSnapshot = editor.getHTML();
     headerFooterDraft.enabled = true;
     hfMode = { zone, variant };
+    suppressHeightGuardOnce = true;
     editor.commands.setContent(headerFooterDraft[zone][variant] || '');
     const container = document.getElementById('editor-container');
     if (container) container.classList.add('hf-editing');
@@ -345,7 +372,7 @@ const HeaderFooterPreview = (function () {
   }
 
   return {
-    setEditor, getHfMode, clampWidthForHfMaxSize,
+    setEditor, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
     enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData, renderHfPill,
     schedulePaginationRecompute, renderPaginationOverlay,

@@ -253,7 +253,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor }) => { backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
+      onUpdate: ({ editor: updatedEditor, transaction }) => { HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction); backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       editorProps: {
         handlePaste(view, event) {

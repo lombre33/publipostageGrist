@@ -116,6 +116,56 @@
     });
   });
 
+  cases.push({
+    id: 'hf_zone_height_limit_blocks_overflow',
+    // Bug réel (signalé par l'utilisateur) : la zone d'édition reste visuellement
+    // bornée (CSS max-height: 60px + overflow: hidden) mais rien n'empêchait de
+    // continuer à taper indéfiniment au-delà - le surplus, invisible ici, débordait
+    // aussi de la vraie bande réservée (hauteur fixe) dans le PDF/l'aperçu paginé,
+    // chevauchant le corps du document.
+    description: 'Appuyer sur Entrée en boucle dans une zone en-tête/pied ne fait plus grandir le contenu au-delà de l\'espace réellement disponible',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+      await h.sleep(80);
+      const zone = document.querySelector('.v2-hf-zone');
+      if (!zone) return { pass: false, notes: 'zone introuvable' };
+      zone.click();
+      await h.sleep(100);
+      await h.focusAtEnd();
+      for (let i = 0; i < 30; i += 1) { document.execCommand('insertParagraph'); await h.sleep(15); }
+      const dom = EditorCore.getEditor().view.dom;
+      const pass = dom.scrollHeight <= dom.clientHeight + 1;
+      return { pass, notes: JSON.stringify({ scrollHeight: dom.scrollHeight, clientHeight: dom.clientHeight, html: Editor.getHTML() }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_height_limit_preserves_existing_overflowing_content',
+    // Un modèle existant créé AVANT cette limite peut déjà dépasser 60px de
+    // contenu - l'entrée en mode édition ne doit jamais le tronquer elle-même,
+    // seule une frappe qui l'agrandit ENCORE doit être bloquée.
+    description: 'Un en-tête déjà trop long (modèle existant) n\'est pas tronqué à l\'entrée en mode édition, une suppression y reste possible',
+    run: async (h) => {
+      await h.resetEditor();
+      const longHeader = '<p>Ligne un déjà longue</p><p>Ligne deux déjà longue</p><p>Ligne trois déjà longue</p><p>Ligne quatre déjà longue</p>';
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: longHeader, first: '' }, footer: { default: '', first: '' } });
+      await h.sleep(80);
+      const zone = document.querySelector('.v2-hf-zone');
+      if (!zone) return { pass: false, notes: 'zone introuvable' };
+      zone.click();
+      await h.sleep(100);
+      const afterEnter = Editor.getHTML();
+      const preserved = afterEnter.includes('Ligne un') && afterEnter.includes('Ligne quatre');
+      await h.focusAtEnd();
+      document.execCommand('delete');
+      await h.sleep(30);
+      const afterDelete = Editor.getHTML();
+      const deleteAllowed = afterDelete.length < afterEnter.length;
+      return { pass: preserved && deleteAllowed, notes: JSON.stringify({ afterEnter, afterDelete }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();
