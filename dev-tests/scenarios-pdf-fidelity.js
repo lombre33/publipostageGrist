@@ -157,6 +157,44 @@
   });
 
   cases.push({
+    id: 'pdffid_twocolumns_text_top_matches_editor_grid',
+    // Bug réel (signalé par l'utilisateur, confirmé sur du texte SEUL - pas une image) : twoColumnsFrom mesurait le chrome (padding+bordure) propre à
+    // CHAQUE colonne en largeur (colOwnInsetLeft/Right, leftPt/rightPt) mais jamais en hauteur - la marge intérieure du stack de colonne restait codée en
+    // dur à [.., 0, .., 0] (haut/bas toujours 0), alors que .two-columns-column a bien son propre padding+bordure sur TOUS les côtés (css/style.css). Tout
+    // le contenu d'une colonne (texte ET image en calque, décalage identique mesuré sur les deux) atterrissait donc plus haut que sa vraie position -
+    // trouvé en comparant, pour un simple bloc de texte, sa position réelle dans l'éditeur (grille page, cf. HeaderFooterPreview.computePageGridPosition)
+    // à sa position résolue dans le PDF. Corrigé avec topPt/bottomPt (symétriques à leftPt/rightPt) appliqués au stack de colonne.
+    description: 'La position Y d\'un texte dans une colonne 2-colonnes correspond à sa grille page réelle dans l\'éditeur (±6pt - résidu de rendu police/interligne pdfmake vs navigateur, cf. mémoire table-cell)',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await h.sleep(50);
+      await h.focusAtEnd();
+      document.getElementById('v2-btn-two-columns').click();
+      await h.sleep(80);
+      const ed = EditorCore.getEditor();
+      const colP = h.tiptap().querySelectorAll('.two-columns-zone > .two-columns-column')[1].querySelector('p');
+      ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
+      ed.commands.focus();
+      await h.sleep(50);
+      await h.typeText('XXXXXXXXXX texte de colonne pour verifier le chrome haut/bas');
+      await h.sleep(50);
+      const textP = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('p');
+      const grid = HeaderFooterPreview.computePageGridPosition(textP);
+      const PAGE_MARGIN_PT = 28.35;
+      const expected = { x: PAGE_MARGIN_PT + grid.pageLeftPt, y: PAGE_MARGIN_PT + grid.pageTopPt };
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const textBlock = h.findTextBlocks(result.content, b => h.blockPlainText(b).includes('XXXXXXXXXX'))[0];
+      if (!textBlock || !textBlock.positions || !textBlock.positions.length) return { pass: false, notes: 'texte introuvable dans le PDF' };
+      const actual = textBlock.positions[0];
+      const deltaY = actual.top - expected.y;
+      const pass = Math.abs(deltaY) < 6;
+      return { pass, notes: JSON.stringify({ expected, actual: { left: actual.left, top: actual.top }, deltaY }) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_layered_image_absolute_position',
     // Depuis le passage à la grille page (data-page-index/left/top-pt, capturée directement dans l'éditeur - cf. computePageGridPosition), la position
     // PDF n'est plus dérivée de left/top CSS mais lue telle quelle sur ces attributs : nécessite Aperçu A4 (sinon aucune grille n'est capturée, repli sur

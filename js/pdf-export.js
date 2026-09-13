@@ -641,6 +641,13 @@ const PdfExport = (function () {
     const measuredCols = Array.from(zoneClone.querySelectorAll(':scope > .two-columns-column'));
     const leftPt = el => { const cs = getComputedStyle(el); return ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0)) * PX_TO_PT; };
     const rightPt = el => { const cs = getComputedStyle(el); return ((parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0)) * PX_TO_PT; };
+    // Symétriques à leftPt/rightPt mais jamais mesurés avant ce correctif : le chrome propre à CHAQUE colonne (padding+bordure, css/style.css
+    // .two-columns-column) n'était compté ni en haut ni en bas (marge intérieure de colonne toujours codée en dur à 0, cf. plus bas) - seul le chrome de la
+    // ZONE (zoneChromeLeftPt, 12.75/3.75 codés en dur) était compté. Décalait TOUT le contenu d'une colonne (texte ET image en calque, vérifié identique
+    // sur les deux) de la hauteur de ce chrome manquant (~5-9pt selon le CSS courant) - signalé par l'utilisateur, confirmé par comparaison position réelle
+    // de l'éditeur (grille page) vs position résolue dans le PDF pour un simple bloc de texte, pas seulement l'image.
+    const topPt = el => { const cs = getComputedStyle(el); return ((parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.borderTopWidth) || 0)) * PX_TO_PT; };
+    const bottomPt = el => { const cs = getComputedStyle(el); return ((parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0)) * PX_TO_PT; };
     const measureTextWidthPt = el => {
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
@@ -659,6 +666,8 @@ const PdfExport = (function () {
       measuredCols[0] ? rightPt(measuredCols[0]) : 0,
       measuredCols[1] ? rightPt(measuredCols[1]) : 0,
     ];
+    const colOwnInsetTop = [measuredCols[0] ? topPt(measuredCols[0]) : 0, measuredCols[1] ? topPt(measuredCols[1]) : 0];
+    const colOwnInsetBottom = [measuredCols[0] ? bottomPt(measuredCols[0]) : 0, measuredCols[1] ? bottomPt(measuredCols[1]) : 0];
     const colOuterWidthPt = [
       measuredCols[0] ? measuredCols[0].getBoundingClientRect().width * PX_TO_PT : leftWidth,
       measuredCols[1] ? measuredCols[1].getBoundingClientRect().width * PX_TO_PT : rightWidth,
@@ -708,8 +717,8 @@ const PdfExport = (function () {
     }
     const block = {
       columns: [
-        { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], 0, colOwnInsetRight[0], 0] }] },
-        { width: colOuterWidthPt[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], 0, colOwnInsetRight[1], 0] }] },
+        { width: colOuterWidthPt[0], stack: [{ stack: columns[0], margin: [colOwnInsetLeft[0], colOwnInsetTop[0], colOwnInsetRight[0], colOwnInsetBottom[0]] }] },
+        { width: colOuterWidthPt[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], colOwnInsetTop[1], colOwnInsetRight[1], colOwnInsetBottom[1]] }] },
       ],
       columnGap: columnGapPt,
       margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
