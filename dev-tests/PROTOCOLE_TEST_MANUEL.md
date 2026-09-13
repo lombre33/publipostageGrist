@@ -31,13 +31,25 @@ Chaque fonctionnalité doit donc être vérifiée aux **3 étages**, dans l'ordr
    mise en page (texte, position, tailles) — pixel perfect, pas "à peu près".
 3. **Export PDF vectoriel** — le PDF généré reproduit à nouveau EXACTEMENT la même mise en page.
 
-**Constat structurel actuel (2026-09-13)** : la suite automatisée (`dev-tests/scenarios-*.js`,
-89 cas) couvre bien l'étage 1 (état DOM/éditeur) et partiellement l'étage 3 (structure du
-`docDefinition` pdfmake, pas un rendu pixel réel) — mais **l'étage 2 (mode Lecture) n'a
-aujourd'hui AUCUNE couverture automatisée**, alors que c'est un moteur de rendu séparé, avec ses
-propres bugs déjà rencontrés (ex. `project_toc_and_heading_numbering` : bug de portée CSS
-spécifique au mode Lecture, jamais visible dans l'éditeur). C'est probablement la plus grosse
-zone aveugle actuelle — à traiter en priorité (cf. Prochaines étapes en fin de document).
+**Mise à jour 2026-09-14** : l'étage 2 a maintenant une première couverture automatisée réelle -
+`dev-tests/scenarios-readmode-fidelity.js` (groupe `readModeFidelity`, 14 cas), comparant la
+position RENDUE d'un même repère entre l'éditeur et le mode Lecture (texte, image inline, image en
+calque dans 3 contextes, tableau, 2-colonnes, en-tête/pied, note de bas de page). A immédiatement
+trouvé un vrai bug dès son premier lancement (listes trop indentées en mode Lecture - padding-left
+manquant sur `.reader-content ul/ol`, cf. `dev-tests/BUGS.md` Bug 4, volontairement non corrigé le
+jour de sa découverte). Reste à couvrir : numérotation de titres/sommaire, chips intelligents,
+couleur/surlignage, formats de police - cf. `dev-tests/README.md` pour la méthodologie complète.
+
+**Constat structurel antérieur (2026-09-13, partiellement résolu ci-dessus)** : la suite automatisée
+(`dev-tests/scenarios-*.js`, 89 cas à l'époque) couvrait bien l'étage 1 (état DOM/éditeur) et
+partiellement l'étage 3 (structure du `docDefinition` pdfmake, pas un rendu pixel réel - **ce
+dernier point est aussi résolu depuis** par `scenarios-pdf-ground-truth.js`, qui décode les octets
+réels du PDF via pdf.js plutôt que de lire les métadonnées `.positions[]`/`.absolutePosition` de
+pdfmake, jugées peu fiables pour du texte centré/aligné à droite ou une image en calque avec un
+alignement résiduel - cf. ce même fichier) — mais **l'étage 2 (mode Lecture) n'avait AUCUNE
+couverture automatisée**, alors que c'est un moteur de rendu séparé, avec ses propres bugs déjà
+rencontrés (ex. `project_toc_and_heading_numbering` : bug de portée CSS spécifique au mode Lecture,
+jamais visible dans l'éditeur). Partiellement comblé, cf. la mise à jour ci-dessus.
 
 Un HTML de test unique regroupant beaucoup de cas (cf. §9, modèles de test) permet de dérouler
 les étages 2 et 3 une seule fois sur un document dense plutôt que de re-créer le contenu à
@@ -374,15 +386,22 @@ bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
-Par ordre de valeur probable :
-1. **Combler l'étage 2 (mode Lecture)** — actuellement zéro couverture automatisée alors que
-   c'est un moteur de rendu séparé. Un nouveau fichier `scenarios-readmode-fidelity.js` pourrait
-   comparer, pour un sous-ensemble représentatif de cas déjà couverts en éditeur (formatage,
-   tableau, image, 2-colonnes, en-tête/pied), le DOM produit par `ReaderMode.preview()`/`render()`
-   au DOM de l'éditeur.
-2. **Vrai test de redimensionnement de colonne de tableau** (glisser réel + vérification de
+**Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
+(`scenarios-readmode-fidelity.js`, cf. mise à jour en tête de document) ; étage 3 rendu fiable pour
+le texte centré/aligné à droite et les images en calque (`scenarios-pdf-ground-truth.js`, décodage
+réel du PDF via pdf.js).
+
+Par ordre de valeur probable pour la suite :
+1. **Étendre `readModeFidelity`** : numérotation de titres/sommaire (mécanisme CSS counters, risque
+   de divergence si `.reader-content[data-heading-style]` et `.tiptap[data-heading-style]` ne
+   restent pas parfaitement synchronisées), chips intelligents (date/heure/email - la VALEUR peut
+   légitimement différer d'un instant à l'autre, vérifier plutôt le format/la position), couleur de
+   texte/surlignage, familles de police réelles.
+2. **Corriger Bug 4** (`dev-tests/BUGS.md`) puis repasser `readmode_list_indent_position` au vert -
+   correctif d'une ligne CSS déjà identifié, volontairement non appliqué le jour de sa découverte.
+3. **Vrai test de redimensionnement de colonne de tableau** (glisser réel + vérification de
    largeur en éditeur ET en PDF), symétrique à ce qui existe déjà pour la 2-colonnes.
-3. **Copier/coller d'image** et **simulation Attachments Grist** dans le harnais de test —
+4. **Copier/coller d'image** et **simulation Attachments Grist** dans le harnais de test —
    aujourd'hui seule l'insertion par URL est automatisée.
-4. Un test de non-régression sur le **temps de chargement** (mesurer `performance.now()` entre
+5. Un test de non-régression sur le **temps de chargement** (mesurer `performance.now()` entre
    la navigation et `Widget prêt.`, alerter si un changement futur le dégrade significativement).

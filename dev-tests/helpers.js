@@ -9,6 +9,93 @@ window.TestHelpers = (function () {
 
   function tiptap() { return document.querySelector('.tiptap'); }
 
+  // --- Étage 2 : mode Lecture (js/reader-mode.js) ---
+  // Rend `html` dans #reader-container en appelant directement ReaderMode.render (même contournement
+  // que exportPdfContent ci-dessous pour PdfExport : on saute le wrapper main.js:renderReader, qui a
+  // besoin d'un vrai `record` Grist introuvable en local, et on passe un `record` factice minimal -
+  // suffisant puisqu'on ne teste jamais ici la RÉSOLUTION de #Variable, seulement la FIDÉLITÉ de mise
+  // en page HTML/CSS entre l'éditeur et ce second moteur de rendu indépendant). Force les deux
+  // conteneurs visibles simultanément (jamais le cas en usage réel, où main.js:switchMode bascule
+  // l'un OU l'autre en `display:none`) - sans layout réel des deux côtés, getBoundingClientRect() ne
+  // peut rien mesurer sur le conteneur caché.
+  async function renderReaderMode(html, headerFooterData) {
+    const readerContainer = document.getElementById('reader-container');
+    const editorContainer = document.getElementById('editor-container');
+    readerContainer.style.display = 'block';
+    editorContainer.style.display = 'block';
+    const hf = headerFooterData || { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+    await ReaderMode.render(html, null, { id: 1 }, hf);
+    return readerContainer.querySelector('.reader-content');
+  }
+
+  // Pose/retire la classe a4-preview sur LES DEUX conteneurs à la fois (cf. commentaire
+  // renderReaderMode) - main.js:switchMode le fait aussi pour les deux ensemble en usage réel.
+  function setA4Preview(on) {
+    document.getElementById('editor-container').classList.toggle('a4-preview', !!on);
+    document.getElementById('reader-container').classList.toggle('a4-preview', !!on);
+  }
+
+  // Cherche, dans un conteneur donné, le premier élément dont le texte contient `text` - même
+  // stratégie de repérage "par contenu" que findTextBlocks côté PDF (predicate sur le texte visible),
+  // pour comparer un même repère entre éditeur et mode Lecture sans dépendre d'une structure DOM
+  // identique entre les deux (ils ne le sont pas : classes, wrappers différents).
+  function findByText(container, text, selector) {
+    return Array.from(container.querySelectorAll(selector || '*')).find(el => el.children.length === 0 && (el.textContent || '').includes(text));
+  }
+
+  // Même principe que compareEditorReaderPosition mais pour une image (pas de texte à chercher) -
+  // repérée par son `src` (un data URI de test est déjà unique en pratique) ou, à défaut, la 1ère
+  // image trouvée de chaque côté.
+  function compareEditorReaderImage(srcContains, tolerancePx) {
+    tolerancePx = tolerancePx != null ? tolerancePx : 2;
+    const findImg = root => srcContains
+      ? Array.from(root.querySelectorAll('img')).find(img => (img.getAttribute('src') || '').includes(srcContains))
+      : root.querySelector('img.editor-image, img');
+    const editorEl = findImg(tiptap());
+    const readerEl = findImg(document.querySelector('.reader-content'));
+    if (!editorEl || !readerEl) return { found: false, editorFound: !!editorEl, readerFound: !!readerEl };
+    const tiptapRect = tiptap().getBoundingClientRect();
+    const readerRect = document.querySelector('.reader-content').getBoundingClientRect();
+    const eRect = editorEl.getBoundingClientRect();
+    const rRect = readerEl.getBoundingClientRect();
+    const editorRel = { left: eRect.left - tiptapRect.left, top: eRect.top - tiptapRect.top, width: eRect.width, height: eRect.height };
+    const readerRel = { left: rRect.left - readerRect.left, top: rRect.top - readerRect.top, width: rRect.width, height: rRect.height };
+    const deltaLeft = readerRel.left - editorRel.left;
+    const deltaTop = readerRel.top - editorRel.top;
+    const deltaWidth = readerRel.width - editorRel.width;
+    const deltaHeight = readerRel.height - editorRel.height;
+    const pass = Math.abs(deltaLeft) <= tolerancePx && Math.abs(deltaTop) <= tolerancePx && Math.abs(deltaWidth) <= tolerancePx && Math.abs(deltaHeight) <= tolerancePx;
+    return { found: true, pass, editorRel, readerRel, deltaLeft, deltaTop, deltaWidth, deltaHeight };
+  }
+
+  // Compare la position/taille RENDUES d'un même repère (retrouvé par texte) entre l'éditeur et le
+  // mode Lecture - la paire de fonctions "vérité terrain" pour l'étage 2, symétrique à
+  // extractPdfGroundTruth pour l'étage 3. `tolerancePx` par défaut généreux (2px) : ce sont deux
+  // moteurs CSS/DOM distincts avec leurs propres marges d'arrondi, pas une identité bit à bit comme
+  // deux mesures du même DOM.
+  function compareEditorReaderPosition(text, opts) {
+    opts = opts || {};
+    const selector = opts.selector || '*';
+    const tolerancePx = opts.tolerancePx != null ? opts.tolerancePx : 2;
+    const editorEl = findByText(tiptap(), text, selector);
+    const readerEl = findByText(document.querySelector('.reader-content'), text, selector);
+    if (!editorEl || !readerEl) return { found: false, editorFound: !!editorEl, readerFound: !!readerEl };
+    const tiptapRect = tiptap().getBoundingClientRect();
+    const readerRect = document.querySelector('.reader-content').getBoundingClientRect();
+    const eRect = editorEl.getBoundingClientRect();
+    const rRect = readerEl.getBoundingClientRect();
+    // Position relative au conteneur de CHAQUE côté (pas au viewport) : les deux conteneurs ne sont
+    // pas forcément alignés à l'écran (padding/centrage différents), seule la position RELATIVE à
+    // leur propre page compte pour juger la fidélité de mise en page.
+    const editorRel = { left: eRect.left - tiptapRect.left, top: eRect.top - tiptapRect.top, width: eRect.width, height: eRect.height };
+    const readerRel = { left: rRect.left - readerRect.left, top: rRect.top - readerRect.top, width: rRect.width, height: rRect.height };
+    const deltaLeft = readerRel.left - editorRel.left;
+    const deltaTop = readerRel.top - editorRel.top;
+    const deltaWidth = readerRel.width - editorRel.width;
+    const pass = Math.abs(deltaLeft) <= tolerancePx && Math.abs(deltaTop) <= tolerancePx && Math.abs(deltaWidth) <= tolerancePx;
+    return { found: true, pass, editorRel, readerRel, deltaLeft, deltaTop, deltaWidth };
+  }
+
   // Repart d'un document vide à chaque scénario - Editor.setHTML() est le
   // VRAI chemin de production (pas une affectation innerHTML directe, cf.
   // mémoire projet sur ce piège précis avec Quill/le MutationObserver -
@@ -336,5 +423,6 @@ window.TestHelpers = (function () {
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth,
+    renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,
   };
 })();

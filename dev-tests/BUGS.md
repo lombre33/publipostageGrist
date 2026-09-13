@@ -1,4 +1,4 @@
-# Anomalies trouvées — état au 2026-09-12
+# Anomalies trouvées — état au 2026-09-14 (mis à jour)
 
 Historique : les 2 premières anomalies ci-dessous ont été trouvées en
 construisant la suite de tests automatisés (`dev-tests/`, ~76 scénarios).
@@ -189,3 +189,48 @@ utilitaire) à ces 5 points d'appel. Revérifié : suite complète (~85 tests)
 + génération d'un vrai blob PDF (`PdfExport.getNativePdfBlobForRecord`) sur
 un document combinant image "au cœur du texte", image habillée gauche, ET
 image dans une cellule de tableau - sans erreur.
+
+---
+
+## Bug 4 — Mode Lecture : listes trop indentées (padding-left manquant sur `.reader-content ul/ol`) : **TROUVÉ, NON CORRIGÉ À DESSEIN (2026-09-14)**
+
+**Sévérité : moyenne.** Trouvé en construisant `dev-tests/scenarios-readmode-fidelity.js` (nouvelle
+suite comblant l'angle mort "étage 2" documenté dans `PROTOCOLE_TEST_MANUEL.md`) - premier vrai
+résultat de cette suite, dès son premier lancement.
+
+### Ce qui est cassé
+
+`css/editor-v2.css:23` définit `.tiptap ul, .tiptap ol { margin: 0; padding-left: 1.4em; }` (19.6px
+à la taille de police par défaut), mais **aucune règle équivalente `.reader-content ul`/`.reader-content
+ol` n'existe** - le mode Lecture retombe donc sur le padding par défaut du navigateur (40px sur
+Chrome). Une liste (à puces ou numérotée) apparaît donc plus indentée en mode Lecture qu'en éditeur,
+et l'écart **se cumule à chaque niveau d'imbrication** (mesuré : 40,8px de trop pour une liste à 2
+niveaux, soit ~20,4px de trop par niveau).
+
+Confirmé que ce n'est PAS un problème de structure HTML (identique dans les deux :
+`<ul><li><p>...</p><ul><li>...</li></ul></li></ul>` des deux côtés) - uniquement un padding-left
+divergent, vérifié directement via `getComputedStyle` sur l'élément `<ul>` de chaque côté.
+
+**N'affecte PAS l'export PDF** : `js/pdf-export.js` mesure l'indentation d'une liste sur un hôte
+cloné portant la classe `.tiptap` (jamais `.reader-content`), donc le PDF continue de correspondre à
+l'éditeur. Seul le mode Lecture (aperçu visible entre l'édition et l'export, 2ᵉ des 3 moteurs de
+rendu du projet) diverge.
+
+### Repro
+
+1. Créer une liste à puces avec au moins un niveau d'indentation (Tab sur un élément).
+2. Comparer visuellement l'éditeur et le mode Lecture (bouton "Lecture") sur le même document.
+
+### Correction envisagée (non appliquée ce soir, sur consigne explicite "pas de nouveau fix")
+
+Ajouter dans `css/editor-v2.css`, à proximité de la ligne 23 : `.reader-content ul, .reader-content
+ol { margin: 0; padding-left: 1.4em; }` - symétrique exact de la règle `.tiptap` existante. Correctif
+a priori sûr et localisé (une ligne CSS), mais **volontairement non appliqué** dans cette session
+(consigne : le code actuel est celui publié en Alpha le lendemain matin, aucun nouveau correctif).
+
+### État du test
+
+`dev-tests/scenarios-readmode-fidelity.js:readmode_list_indent_position` **échoue actuellement, en
+connaissance de cause** - documente ce bug plutôt que de le cacher. La suite `readModeFidelity` n'est
+donc pas encore 100% verte : **1 échec attendu et documenté** (celui-ci), à corriger dès que le
+correctif ci-dessus sera appliqué (puis revérifier que le test passe).

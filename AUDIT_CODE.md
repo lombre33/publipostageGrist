@@ -7,6 +7,8 @@
 **Mise à jour 2026-09-12 (soir)** : l'ancienne version V1 (Quill.js, historique) a été entièrement retirée du dépôt — elle avait atteint la parité fonctionnelle et n'était plus maintenue. L'arborescence `v2/` a été aplatie à la racine du dépôt (`v2/js/` → `js/`, `v2/css/` → `css/`, `v2/dev-tests/` → `dev-tests/`, `v2/templates-gallery/` → `templates-gallery/`, `v2/index.html` → `index.html`) : il n'existe plus qu'une seule version, un seul point d'entrée, une seule URL GitHub Pages. Ce même jour, régression critique trouvée et corrigée : la touche **Entrée ne scindait plus aucun bloc, dans aucun contexte** (paragraphe, liste...) — cause racine : l'import map ne couvrait pas les sous-chemins `@tiptap/pm/*` que le bundle esm.sh de `@tiptap/core` importe via des URLs absolues, chargeant une deuxième instance de `prosemirror-model` distincte de celle partagée par le reste du code (cf. §5 et le commit de correction). Les 4 échecs de tests listés plus loin comme « limitation connue du harnais » étaient en réalité CE bug réel, à tort écartés comme faux positifs — leçon retenue : ne plus classer un échec de test comme limitation d'outillage sans avoir isolé la cause avec un test indépendant du mécanisme suspecté.
 **Référence externe** : « Contributing Guide — Grist.Gouv Widgets » (guide officiel DINUM/ANCT pour la contribution de widgets à l'instance souveraine Grist.Gouv, fourni par l'utilisateur, dernière mise à jour juillet 2026) — voir §8 pour la mise en regard détaillée.
 
+**Mise à jour 2026-09-14** : passe d'audit complémentaire dédiée **performance/optimisation** (jamais couverte en détail jusqu'ici, cf. nouveau §12) et **hygiène du code mort/CSS** (relecture ciblée, au-delà du seul exemple `.ql-editor` déjà repéré manuellement — le retrait de la V1 le 2026-09-12 a laissé beaucoup plus de résidus `.ql-*` dans `css/style.css` qu'initialement supposé, cf. nouveau §13). Egalement corrigés le même jour, en amont de cet audit et hors de son périmètre propre (voir l'historique de session pour le détail) : un bug réel de positionnement d'image en calque (alignement de paragraphe hérité appliqué à tort à une image `absolutePosition`, mécanisme V1/Quill supprimé plutôt que patché) et un garde-fou ajouté contre une image glissée hors de la page physique. Nouvelle suite de tests `dev-tests/scenarios-readmode-fidelity.js` comblant partiellement l'angle mort "mode Lecture" déjà documenté dans `dev-tests/PROTOCOLE_TEST_MANUEL.md` — a immédiatement trouvé un vrai bug (listes trop indentées en mode Lecture, cf. `dev-tests/BUGS.md` Bug 4), **volontairement non corrigé** ce soir-là (consigne explicite : le code alors en place devait être publié en Alpha le lendemain matin sans nouveau correctif). Plan de fonctionnalités Beta consolidé dans `planning/ROADMAP.md`.
+
 ## Comment lire ce rapport
 
 Chaque constat porte un niveau de priorité :
@@ -29,7 +31,9 @@ Aucun **Bloquant** n'a été trouvé (rien n'empêche le fonctionnement actuel).
 | Qualité de code (redondance, structure) | 0 | ~~6~~ **1** *(5 corrigées le 2026-09-12 : dédup. editor.js/pdf-export.js, robustesse, code mort ; reste : découpage structurel des 2 gros fichiers)* | 8 | 4 |
 | Fichiers / publication / conformité au guide Grist.Gouv | 0 | ~~3~~ **2** *(README créé le 2026-09-12)* | 4 | 0 |
 | Accessibilité (RGAA) | 0 | ~~1~~ **0** *(modales corrigées le 2026-09-13)* | 1 | 1 |
-| **Total** | **0** | ~~22~~ **3 restants** (19 corrigés) | **16** | **5** |
+| **Performance/optimisation** (nouveau 2026-09-14, cf. §12) | 0 | 2 | 6 | 2 |
+| **Code mort / hygiène CSS** (approfondi 2026-09-14, cf. §13) | 0 | 0 | ~15 (surtout résidus `.ql-*`) | ~10 |
+| **Total** | **0** | ~~22~~ **5 restants** (19 corrigés) | **~37** | **~17** |
 
 **Corrigé le 2026-09-12** (voir détail §2.2/§3.1/§3.2/§4/§5/§6.2) : fuite RGPD en console, XSS
 en-tête/pied de page, XSS `document.write()`, XSS modale de liaison entre tables, intégrité SRI sur
@@ -374,3 +378,316 @@ délibérément reportée.
 Mise à jour du 2026-09-12 : ce rapport reflète les correctifs déjà appliqués (voir mentions "✅
 CORRIGÉ" ci-dessus) suite à validation explicite de l'utilisateur. Toutes les autres sections
 décrivent l'état constaté lors de l'audit initial, non encore traité.
+
+**Mise à jour du 2026-09-14** : voir §12 (performance) et §13 (code mort/CSS) pour la passe
+complémentaire de ce jour — **rien n'a été corrigé pour ces deux nouvelles sections** (audit pur,
+consigne explicite de ne pas toucher au code publié en Alpha le lendemain). Priorités ajoutées à la
+liste ci-dessus, par ordre de ratio gain/effort décroissant :
+6. **`css/roboto-fonts.css` en WOFF2 au lieu de TTF brut** (§12.1.1) — le point le plus impactant de
+   l'audit performance, gain de plusieurs centaines de Ko sur le premier rendu, aucun risque
+   fonctionnel, aucun outil de build à mettre en place.
+7. **Paralléliser les 14 `import()` séquentiels de `js/editor.js:init()`** (§12.1.2) — `Promise.all`,
+   gain potentiel important sur le temps d'ouverture du widget, changement mécanique sans risque.
+8. **Retirer les résidus CSS `.ql-*` de `css/style.css`** (§13.1) — bien plus étendu que le seul exemple
+   initialement repéré (~80 lignes sur 405, la moitié du fichier), aucun risque (vérifié mort par grep
+   exhaustif), purement cosmétique mais pertinent pour la lisibilité avant une revue Grist.Gouv (§8.2).
+9. Les autres constats Moyen/Mineur de §12 (redondance `listTables()`, double mesure DOM de la 2ᵉ passe
+   PDF, `computePageGridPosition` qui recalcule deux fois les sauts de page) et de §13 (résidus CSS V2
+   internes §13.2, chaînes de fonctions mortes "PJ"/"colonne image dédiée" §13.3) — aucun n'est urgent,
+   à traiter au fil de l'eau.
+10. **Fonctionnalités Beta** : voir `planning/ROADMAP.md` (nouveau, 2026-09-14) pour le plan consolidé
+    des demandes fonctionnelles de l'utilisateur, avec un fichier de conception dédié par grosse
+    fonctionnalité dans `planning/`.
+
+---
+
+## 12. Performance et optimisation (nouveau 2026-09-14)
+
+*Périmètre volontairement distinct du reste de cet audit — jamais couvert en profondeur jusqu'ici.
+Méthode : lecture ciblée du chargement initial, du pipeline de mesure/pagination, du moteur d'export
+PDF, et recherche systématique des écouteurs d'évènements globaux. Aucune mesure chronométrée réelle —
+estimations déduites de la lecture du code. Échelle de priorité identique au reste du rapport, avec
+**Info** ajouté pour les points vérifiés déjà corrects (à ne pas re-signaler par erreur dans un futur
+audit).*
+
+### 12.0 Synthèse
+
+| # | Constat | Fichier:ligne(s) | Priorité |
+|---|---|---|---|
+| 12.1 | `css/roboto-fonts.css` (566 Ko) embarque du TrueType brut en base64 au lieu de WOFF2 | `css/roboto-fonts.css:7-32`, `index.html:75` | **Important** |
+| 12.2 | 14 `await import()` séquentiels au démarrage de l'éditeur (effet cascade réseau) | `js/editor.js:216-231` | **Important** |
+| 12.3 | `GristAPI.init()` puis `Editor.init()` attendus en série alors qu'ils sont indépendants | `js/main.js:539-540` | Mineur |
+| 12.4 | Bibliothèques PDF déjà chargées paresseusement (premier export seulement) | `js/pdf-export.js:4-14` | Info — déjà bien fait |
+| 12.5 | `ensurePdfLibsLoaded` charge 6 scripts strictement en série, dont 2 non nécessaires au seul export vectoriel actif | `js/pdf-export.js:6-14,27-34` | Mineur |
+| 12.6 | `font-display: block` sur des polices déjà embarquées en local | `css/roboto-fonts.css:11,18,25,32` | Cosmétique |
+| 12.7 | `computePageGridPosition` recalcule les sauts de page deux fois de suite | `js/header-footer-preview.js:319-330` | Mineur-Moyen |
+| 12.8 | Pagination déjà débouncée (200 ms) sur la frappe | `js/header-footer-preview.js:243-246` | Info — déjà bien fait |
+| 12.9 | `resolvePendingImageAnchors` en O(images × blocs) | `js/pdf-export.js:1266-1323` | Mineur |
+| 12.10 | La 2ᵉ passe de `resolveNativePdfContent` refait toute la mesure DOM depuis zéro | `js/pdf-export.js:1568` | Moyen |
+| 12.11 | ~4-8 cycles clone/mesure hors-écran par export (2-colonnes + tableau) | `js/pdf-export.js:635-751,1339-1361` | Moyen |
+| 12.12 | 4 zones en-tête/pied résolues en série sans nécessité (pas d'état partagé contrairement aux colonnes) | `js/pdf-export.js:1712-1715,1739-1744` | Mineur-Moyen |
+| 12.13 | Images dupliquées (même `src`) re-téléchargées/re-rastérisées séparément | `js/pdf-export.js:1382-1412` | Mineur |
+| 12.14 | Export en lot (ZIP) et 2-colonnes volontairement séquentiels — vérifiés justifiés (état de module partagé) | `js/main.js:240-251`, `js/pdf-export.js:686-688` | Info — justifié |
+| 12.15 | Listeners `document`/`window` : tous posés une seule fois, aucune accumulation trouvée | tout `js/` | Info — bonne hygiène |
+| 12.16 | `mouseup {once:true}` non nettoyé par `destroy()` si un glisser est interrompu | `js/editor-nodes.js:636-637,668-669,700-703` | Mineur |
+| 12.17 | `grist.docApi.listTables()` appelé 3 fois séparément, dont 2 au même démarrage | `js/grist-api.js:181,317,478` | Moyen |
+| 12.18 | `refreshSchema` parallélise déjà correctement ses `fetchTable` | `js/grist-api.js:187` | Info — bonne pratique |
+| 12.19 | `pdf-fonts.js`/`pdf-fonts-extra.js` en TTF brut — contrainte réelle de pdfmake, pas un oubli | `js/pdf-fonts.js`, `js/pdf-fonts-extra.js` | Info — justifié |
+| 12.20 | 5 familles de police non-Roboto chargées en bloc même si le document n'utilise que Roboto | `js/pdf-fonts-extra.js` | Mineur |
+| 12.21 | `console.log` sur chaque évènement `onRecord` | `js/grist-api.js:45` | Cosmétique |
+
+### 12.1 Chargement initial
+
+**[Important] §12.1 `roboto-fonts.css` en TTF brut plutôt que WOFF2.** Chargé en tout premier `<link>`
+du `<head>` (`index.html:75`, avant tout le reste du CSS) — donc bloquant pour le premier rendu. 566 Ko
+pour 4 `@font-face` seulement, chacune en `data:font/truetype;base64,...` : le TrueType n'est pas
+compressé pour le web (contrairement à WOFF2/Brotli, ~5-8× plus petit) et le base64 ajoute ~33 % de
+surcharge. Un jeu de 4 `.woff2` équivalent pèserait vraisemblablement moins de 100 Ko. **Différence
+avec `js/pdf-fonts*.js`** (§12.19) : ces fichiers-là sont réellement contraints au TTF par pdfmake
+(qui embarque les tables de glyphes directement dans le PDF, ne peut pas décompresser du WOFF2) — ce
+n'est PAS le cas de `roboto-fonts.css`, une police CSS classique que le navigateur sait nativement lire
+en WOFF2. Suggestion : reconvertir via `fonttools`/`woff2_compress` (hors ligne, pas d'outil de build
+permanent nécessaire), aucun changement fonctionnel.
+
+**[Important] §12.2 Cascade de 14 `import()` dynamiques séquentiels.** `js/editor.js:216-231`
+(`init()`, une fois par session) attend chaque `await import('@tiptap/...')` avant de lancer le
+suivant, alors qu'aucune dépendance d'ordre réelle n'existe entre eux (chacun affecte une variable
+locale distincte, aucun n'est utilisé avant la ligne 254). Sur une connexion avec 50-150 ms de latence
+vers `esm.sh` (cache froid), cela peut ajouter 1 à 2 secondes avant que l'éditeur n'apparaisse.
+Suggestion : `Promise.all([import(...), import(...), ...])`, changement mécanique sans risque.
+
+**[Mineur] §12.3** `GristAPI.init()` et `Editor.init()` (`js/main.js:539-540`) sont indépendants
+(vérifié : `Editor.init()` n'appelle jamais `GristAPI` dans son propre corps) mais attendus en série —
+pourraient démarrer en parallèle pour superposer leurs latences réseau respectives au lieu de les
+additionner.
+
+**[Info — déjà bien fait] §12.4** Bibliothèques PDF (pdfmake/vfs_fonts/html2pdf/JSZip + polices,
+~1,8 Mo) confirmées chargées paresseusement, uniquement au premier export réel (`ensurePdfLibsLoaded`,
+déclenchée depuis `js/pdf-export.js:1758,1798`) — exactement le pattern recommandé, déjà en place.
+
+**[Mineur] §12.5** Les 6 bibliothèques PDF sont chargées strictement en série
+(`js/pdf-export.js:27-34`), y compris `html2pdf.bundle.min.js` et `jszip.min.js` qui n'ont aucune
+dépendance d'ordre entre eux ni avec pdfmake — et qui, aujourd'hui, ne servent à AUCUN chemin actif
+(qualités raster/impression désactivées dans l'UI ; export en lot ZIP est le seul utilisateur réel de
+JSZip). Un simple export unitaire vectoriel télécharge donc ces 2 bibliothèques pour rien, retardant en
+plus `pdf-fonts.js`/`pdf-fonts-extra.js` (1,77 Mo) qui pourraient démarrer plus tôt. Suggestion :
+séparer en groupes (cœur vectoriel / JSZip / html2pdf) et paralléliser les groupes indépendants.
+
+**[Cosmétique] §12.6** `font-display: block` (`css/roboto-fonts.css:11,18,25,32`) n'a plus d'utilité
+réelle une fois la police déjà embarquée en local (pas de requête réseau à "attendre") — `swap`/
+`optional` donnerait la même garantie sans le risque théorique de texte invisible.
+
+### 12.2 Coût de mesure/reflow à l'exécution
+
+**[Mineur-Moyen] §12.7** `computePageGridPosition` (`js/header-footer-preview.js:319-330`) appelle
+`renderPaginationOverlay()` (qui calcule déjà les sauts de page en interne) PUIS recalcule les mêmes
+sauts de page une seconde fois via `computePageBreaks` — travail dupliqué à chaque glisser d'image en
+calque, action "aligner"/"calque devant-derrière", et une fois par image à migrer au chargement d'un
+document ancien. Suggestion : faire retourner les `breaks` déjà calculés par `renderPaginationOverlay`
+plutôt que de les recalculer. Non urgent (actions ponctuelles, pas la frappe).
+
+**[Info — déjà bien fait] §12.8** La pagination est déjà débouncée à 200 ms sur la frappe
+(`schedulePaginationRecompute`, `js/header-footer-preview.js:243-246`) — les appels non débouncés
+correspondent tous à des actions discrètes (entrer/sortir du mode en-tête/pied, charger un modèle),
+jamais à un flux de frappe continu. Confirmé correct.
+
+**[Mineur] §12.9** `resolvePendingImageAnchors` (`js/pdf-export.js:1266-1323`) est en O(images en
+calque × blocs mesurables) — pas de "layout thrashing" au sens strict (aucune écriture intercalée entre
+les lectures), mais un coût qui grossit avec le nombre d'images en calque simultanées. Risque faible en
+pratique (fonctionnalité secondaire, documents avec beaucoup d'images en calque rares).
+
+**[Info — justifié] §12.10 bis** L'écriture-puis-lecture dans la boucle de `renderPaginationOverlay`
+(`js/header-footer-preview.js:435-474`) est un "layout thrashing" explicitement voulu et commenté :
+chaque coupure de page dépend réellement de la marge appliquée par la précédente, le lot ne peut pas
+être batché sans changer le résultat. Confirmé justifié.
+
+### 12.3 Coût du pipeline d'export PDF
+
+**[Info — nécessaire] §12.10** L'architecture à deux passes de `resolveNativePdfContent`
+(`js/pdf-export.js:1513-1568`, déclenchée seulement si sommaire/images en calque en attente/notes de
+bas de page) sert à connaître les numéros de page réels que pdfmake attribuera — information qui
+n'existe qu'après la propre pagination de pdfmake, impossible à connaître à l'avance sans réimplémenter
+son algorithme. Confirmé fondamentalement nécessaire pour ces 3 fonctionnalités, déjà limité aux seuls
+documents qui en ont besoin.
+
+**[Moyen] §12.10** Quand cette double passe se déclenche, la 2ᵉ passe rappelle intégralement
+`htmlToPdfContent` (`js/pdf-export.js:1568`) — reconstruit un nouveau `root`, réattache hors-écran,
+redécode toutes les images, relance toute la mesure DOM récursive — alors que la GÉOMÉTRIE du document
+n'a pas changé entre les deux passes (même HTML, même largeur), seule l'info de pagination pdfmake
+diffère. Le travail de mesure DOM (le plus coûteux) est donc entièrement dupliqué. Suggestion (refactor
+non trivial) : séparer mesure DOM et construction d'objets pdfmake pour réutiliser les mesures déjà
+faites en 1ʳᵉ passe.
+
+**[Moyen] §12.11** Pour un document avec une zone 2-colonnes et un tableau, environ **4 cycles**
+clone/attache/mesure/détache hors-écran par export (dont 1 `cloneNode(true)` dans `twoColumnsFrom`
+rien que pour mesurer le chrome CSS de la zone) — ~8 si la double passe de §12.10 se déclenche aussi.
+`tableFrom`, en comparaison, mesure directement sans clone séparé — bonne pratique déjà en place à ce
+niveau précis. Le traitement séquentiel (pas parallèle) des 2 colonnes est confirmé justifié (état de
+module partagé `footnoteCounter`, cf. §4 de ce rapport).
+
+**[Mineur-Moyen] §12.12** Contrairement aux 2 colonnes (état partagé réel), les 4 zones en-tête/pied
+(`js/pdf-export.js:1712-1715,1739-1744`) n'ont AUCUN état de module partagé entre elles (les notes de
+bas de page ne sont jamais résolues en en-tête/pied) — pourtant résolues en série sans raison. Bon
+contre-exemple au sein du même fichier : le réflexe de paralléliser existe (`refreshSchema`, §12.18)
+mais n'est pas appliqué uniformément partout où ce serait pourtant sans risque.
+
+**[Mineur] §12.13** `inlineEditorImagesAsDataUri` (`js/pdf-export.js:1382-1412`) ne déduplique jamais
+par `src` — une même image répétée plusieurs fois dans un document relance sa propre conversion/
+rastérisation canvas à chaque occurrence. Suggestion : mémoïser par `src` dans une `Map` locale à
+l'appel.
+
+**[Info — justifié] §12.14** L'export en lot (ZIP, `js/main.js:240-251`) reste volontairement
+séquentiel pour la même raison que les 2 colonnes (état de module partagé `footnoteCounter`/
+`footnoteEntries`) — paralléliser mélangerait les notes de bas de page entre lignes Grist différentes,
+un risque plus grave encore. Confirmé correct, donne aussi un indicateur de progression naturel.
+
+### 12.4 Mémoire et hygiène des écouteurs d'évènements
+
+**[Info — bonne hygiène] §12.15** Recherche exhaustive des `addEventListener` sur `document`/`window`
+dans tout `js/` : tous posés une seule fois (au niveau module ou dans `init()`, jamais reposés à
+l'ouverture répétée d'une toolbar/d'un mode/d'un modèle) — aucune accumulation trouvée sur les
+scénarios réalistes (ouverture répétée de la barre d'outils image, entrée/sortie répétée du mode
+en-tête/pied, changement de modèle répété).
+
+**[Mineur] §12.16** `js/editor-nodes.js:636-637,668-669` posent un `mouseup {once:true}` non retiré par
+`destroy()` (`js/editor-nodes.js:700-703`, qui ne nettoie que les `mousemove`). Aucun souci en usage
+normal (`{once:true}` s'auto-nettoie au relâchement), mais si le NodeView est détruit PENDANT un
+glisser (ex. Ctrl+Z en plein déplacement), le listener orphelin reste posé sur `document` jusqu'au
+prochain relâchement de bouton n'importe où sur la page. Suggestion : ajouter le nettoyage manquant à
+`destroy()` par cohérence.
+
+### 12.5 Calculs redondants
+
+**[Moyen] §12.17** `grist.docApi.listTables()` appelé 3 fois séparément (`js/grist-api.js:181,317,478`),
+dont 2 systématiquement en séquence au même démarrage (`refreshSchema()` puis `ensureLinksTableExists()`
+dans le même `init()`) — la 2ᵉ refait un aller-retour réseau identique à une information déjà obtenue
+2 lignes plus haut, jamais conservée. Coût : un aller-retour réseau supplémentaire à CHAQUE ouverture du
+widget. Suggestion : conserver la liste brute lors de `refreshSchema()` et la réutiliser.
+
+**[Info — bonne pratique] §12.18** `refreshSchema` parallélise déjà correctement ses `fetchTable` via
+`Promise.all` (`js/grist-api.js:187`, commenté explicitement "latence = le plus lent, pas la somme") —
+bon exemple à conserver, contraste utile avec §12.12/§12.17.
+
+### 12.6 Autres constats
+
+**[Info — justifié] §12.19** `pdf-fonts.js`/`pdf-fonts-extra.js` en TTF brut (166 Ko + 1,6 Mo) : une
+vraie contrainte de pdfmake (embarque les glyphes directement dans le flux PDF, ne peut pas
+désempaqueter du WOFF2), pas un oubli — voir la distinction avec §12.1 (`roboto-fonts.css`, qui n'a
+elle aucune excuse).
+
+**[Mineur] §12.20** `pdf-fonts-extra.js` pose inconditionnellement les 20 entrées (5 familles × 4
+styles) dès son exécution, même si le document exporté n'utilise que Roboto (police par défaut) — coût
+systématique (une fois par session, pas répété) même quand inutile. Suggestion (non urgente) : découper
+par famille et ne charger que celles réellement référencées dans le document.
+
+**[Cosmétique] §12.21** `console.log` sur chaque `onRecord` (`js/grist-api.js:45`) — coût individuel
+négligeable, bruit de console sur une session longue avec beaucoup de navigation. Sans lien avec le
+point RGPD déjà traité en §3.1 (celui-ci ne loggue que `rowId`, pas de donnée personnelle).
+
+**Conclusion §12** : le point le plus impactant et le plus simple à corriger est §12.1 (police CSS en
+WOFF2). §12.2 (parallélisation des imports) a le second meilleur ratio gain/effort. Les points liés au
+pipeline PDF (§12.7, §12.10-12.12, §12.17) sont réels mais de moindre ampleur et/ou plus coûteux à
+corriger proprement — à traiter sans urgence. Une part importante de ce qui aurait pu sembler
+"suspect" à la lecture s'est révélée, à vérification, être un choix délibéré déjà correctement
+implémenté (§12.4, §12.8, §12.14, §12.18, §12.19) — cohérent avec l'historique de correctifs déjà
+documenté dans ce rapport.
+
+---
+
+## 13. Code mort et hygiène CSS (approfondi 2026-09-14)
+
+*L'audit du 2026-09-12/13 avait déjà cherché du code mort dans `editor.js`/`pdf-export.js` (§5.1,
+conclusion "aucun trouvé") mais n'avait jamais passé `css/style.css` au crible ligne à ligne — cette
+passe comble ce trou, déclenchée par la découverte manuelle d'une règle `.ql-editor` (V1/Quill) morte
+pendant la session du 2026-09-13/14. Méthode : `grep` exhaustif sur TOUT le dépôt (jamais limité au
+fichier d'origine) pour chaque candidat "mort" — un sélecteur/une fonction n'est classé mort que si sa
+recherche à travers `index.html` + tous les `js/*.js` + `dev-tests/*.js` ne renvoie aucun autre résultat
+que sa propre définition.*
+
+### 13.1 Résidus V1 (Quill.js) dans `css/style.css` — bien plus étendu que le seul exemple déjà repéré
+
+Confirmé par `grep -rn "ql-" js/*.js index.html` → 0 classe réelle référencée nulle part. Mais
+**`css/style.css` contient environ 80 lignes de sélecteurs `.ql-*` sur 405** (la moitié du fichier) :
+
+| Bloc mort | Lignes | Priorité |
+|---|---|---|
+| `#editor-container.a4-preview .ql-editor` | `css/style.css:166` | Mineur *(exemple initial déjà repéré manuellement)* |
+| `.ql-editor`, `.ql-toolbar.ql-snow`, pickers/traits/remplissages `.ql-snow`, états hover/active | `css/style.css:174-187` | Mineur |
+| `.ql-toolbar .ql-formats`, `.ql-page-break`, `.ql-insert-*`, `.ql-undo/.ql-redo svg` | `css/style.css:212-224,236` | Mineur |
+| Numérotation de titres : branche `.ql-editor[data-heading-style]` d'un sélecteur groupé (la branche `.reader-content[...]` reste vivante) — doublon exact de la règle déjà correcte et scopée à `.tiptap` seul dans `css/editor-v2.css:295-319` | `css/style.css:300-331` | Cosmétique (comportement inchangé si retiré) |
+| Pickers Taille/Police Quill (5 polices × plusieurs règles chacune) | `css/style.css:383-405` | Mineur |
+
+Suggestion : supprimer l'intégralité (aucun risque, vérifié par grep global) ; pour la numérotation de
+titres, retirer la duplication au profit de la version déjà correcte d'`editor-v2.css`.
+
+### 13.2 Résidus d'anciennes itérations V2 elles-mêmes (sans rapport avec Quill)
+
+Le point le plus substantiel manqué par l'audit du 2026-09-12/13 (qui n'avait jamais lu `style.css`
+ligne à ligne). Chacun vérifié par recherche globale, pas seulement dans le fichier CSS :
+
+| Résidu | Remplacé par | Lignes mortes |
+|---|---|---|
+| Ancien panneau repliable nom-modèle/nom-fichier (`.toolbar-panel`, `#btn-toggle-panel`, `.compact-select`, `.field-hint`) | `.title-cluster`/`.v2-pdf-filename-cluster` (`css/toolbar-v2.css`) | `css/style.css:53,91-94,123-128` |
+| Mode "Code HTML" (édition brute) entièrement retiré (2 seuls modes restants : édition/lecture) | — (fonctionnalité retirée, pas remplacée) | `css/style.css:112-114,117-120` |
+| Infobulle par libellé au survol (`.btn-text`) | mécanisme `[data-tip]` — **le remplacement est documenté par le code lui-même** (`css/toolbar-v2.css:30`) | `css/style.css:65-73` |
+| Système d'édition de tableau V1 maison (`.editable-table`, `.table-context-toolbar`, `.table-col-resize-handle`, `body.resizing-table-column`) | `@tiptap/extension-table` natif (`.tableWrapper`/`.selectedCell`/`.column-resize-handle`, posées par `prosemirror-tables` lui-même — pas du code applicatif, donc pas "mortes" elles) | `css/style.css:190-193,195-209,237-238,242-276` (~45 lignes) |
+| Ancienne barre d'outils flottante image (Quill) : `.editor-image-toolbar`, `.editor-image-opacity`, `.editor-image-anchor`, `body.resizing-editor-image` | `.v2-floating-toolbar` (`js/floating-toolbars.js`) | `css/style.css:339-360,371-373,378-379` |
+| Résidus isolés : `.v2-hover-vsep`, `.v2-format-chip-icon`, `.two-columns-marker` | — | `css/editor-v2.css:404,463-464`, `css/style.css:229,234` |
+| Icône "blockquote" du dictionnaire (`js/icons.js:21`) jamais demandée — aucun bouton "Citation" nulle part dans l'UI | — | `js/icons.js:21` *(voir `planning/feature-content-blocks.md` : probable fonctionnalité manquante plutôt qu'un vrai déchet — le RENDU blockquote reste actif, seul le bouton d'accès manque)* |
+
+Priorité : Mineur/Cosmétique pour l'ensemble (aucun impact fonctionnel, ~130 lignes CSS mortes au
+total entre §13.1 et §13.2).
+
+### 13.3 Chaînes de fonctions JS entièrement inatteignables (au-delà de simples exports inutilisés)
+
+Deux fonctionnalités avec une implémentation complète côté `js/grist-api.js`/`js/templates.js` mais
+**aucun point d'entrée UI** :
+- **"Enregistrer l'export PDF dans une pièce jointe"** : `saveAttachmentToMappedColumn`,
+  `getPdfAttachmentColumnId` (`js/grist-api.js:509,515`), `uploadAttachment` (`js/grist-api.js:450`,
+  transitivement mort) — aucun `#btn-save-attachment` dans `index.html`, aucun appelant nulle part.
+  *(Rappel `AUDIT_CODE.md` déjà existant : ce mécanisme avait été volontairement retiré de l'UI par le
+  passé pour une raison de casse de la résolution `#Variable`, cf. mémoire projet — cohérent avec ce
+  constat, pas une régression.)*
+- **"Colonne pièce-jointe dédiée par image insérée"** : `createImageColumn`, `attachImage`
+  (`js/templates.js:26,36`) — jamais appelées, l'insertion réelle d'image en V2 passe exclusivement par
+  URL ou par variable liée à une colonne PJ déjà existante.
+
+Priorité : Mineur — du code de MUTATION de document (via `applyUserActions`) resté mort, dans un module
+qui demande déjà l'accès `'full'` (§2.1) : surface à auditer pour rien. Suggestion : supprimer, ou
+documenter explicitement comme scaffold (à la manière de `js/mailto-export.js`, déjà annoté ainsi).
+
+### 13.4 Propriétés exportées mais jamais consommées hors de leur propre module
+
+Même classe de problème que `getCurrentOptions`/`getCurrentMappings` déjà retirés le 2026-09-12 — liste
+complète (vérifiée sur TOUS les modules cette fois, pas seulement `grist-api.js`) :
+`EditorCore.hideFloatingContextToolbars`, `PdfExport.getNativePdfBlob`, `GristAPI.detectTableId`,
+`GristAPI.getAttachmentDownloadUrl`, `HeaderFooterPreview.enterHeaderFooterMode`/
+`.exitHeaderFooterMode`/`.renderHfPill`, `MainToolbar.applyToolbarIcons`/`.wireHeadingMenu`/
+`.wireSelectionDependentSelects`/`.wireCompactFontSizeControls`, `PdfExportAlt.getQualityPreset`,
+`VariableFormat.numberToWordsFr`/`.numberToWordsEn` — toutes ont un usage interne réel (pas du code
+mort à proprement parler), seule leur présence dans l'API PUBLIQUE du module est superflue. Priorité :
+Cosmétique.
+
+**Cas particulier `Settings.getTriggerChar`** : jamais appelée nulle part (ni interne au-delà de peupler
+son propre `<select>`, ni externe) — son commentaire documente que la clé `localStorage` est relue
+directement ailleurs, mais cite `js/variables.js`/`js/editor.js` alors que **3 copies indépendantes** de
+cette même lecture existent aujourd'hui (`js/editor-nodes.js:6-11`, `js/variables.js:6-11`,
+`js/reader-mode.js:326-328`) — le commentaire est à corriger (3 sites, pas 2, et `editor.js` a bougé
+vers `editor-nodes.js` depuis le découpage de §5.1). Priorité : Cosmétique, mais utile à corriger pour
+la lisibilité.
+
+### 13.5 Commentaires de référence croisée obsolètes (conséquence du découpage `editor.js`, §5.1)
+
+Le découpage recommandé par l'audit du 2026-09-12 (`editor.js` 2480 → 383 lignes, réparti dans
+`editor-nodes.js`/`floating-toolbars.js`/`header-footer-preview.js`/`main-toolbar.js`) a laissé
+plusieurs commentaires ailleurs dans le dépôt (`css/editor-v2.css`, `css/toolbar-v2.css`, `js/i18n.js`,
+`js/reader-mode.js`) pointant encore vers `js/editor.js` pour des fonctions qui ont déménagé — une
+dizaine d'occurrences au total (détail dans le rapport source de cette passe, disponible sur demande).
+Priorité : Cosmétique/Mineur — aucun impact d'exécution, mais coût réel de navigation pour un futur
+relecteur (pertinent pour le critère "lisibilité sans IA" du guide Grist.Gouv, §8.2).
+
+### 13.6 Rappel (déjà connu, non nouveau)
+
+`Templates.TABLE_NAME` reste toujours recopié en dur à 2 endroits (`js/grist-api.js:7`,
+`dev-tests/grist-stub.js:44`) au lieu d'être réutilisé — déjà signalé en §3.3, toujours pas corrigé au
+2026-09-14, aucune régression, juste un rappel de non-traitement.

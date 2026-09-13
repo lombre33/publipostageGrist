@@ -34,6 +34,8 @@ apparaît) :
 | Fichier modifié | Groupe(s) à lancer |
 |---|---|
 | `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity` ET `pdfGroundTruth`** (points d'entrée export communs à tout - `pdfGroundTruth` en particulier couvre tout changement touchant la position d'une image en calque ou l'alignement d'un paragraphe) |
+| `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
+| `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur) |
 | `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips` |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée) |
@@ -71,7 +73,7 @@ const files = [
   'scenarios-formatting', 'scenarios-lists', 'scenarios-tables',
   'scenarios-twocolumns', 'scenarios-nesting', 'scenarios-images',
   'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
-  'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth',
+  'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth', 'scenarios-readmode-fidelity',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
 const results = await TestRunner.runAll(EditorTestSuites);
@@ -156,6 +158,31 @@ en est l'exemple de référence (matrice contexte × alignement × type d'ancre,
 32 cas). `.positions[]`/`.absolutePosition` restent fiables pour du texte
 aligné à GAUCHE en une seule ligne (cas déjà couvert par
 `scenarios-pdf-fidelity.js`, pas besoin de tout migrer).
+
+## Étage 2 (mode Lecture) — `scenarios-readmode-fidelity.js`, comble un angle mort documenté
+
+`PROTOCOLE_TEST_MANUEL.md` documentait depuis longtemps un angle mort : `js/reader-mode.js` est un
+**3ᵉ moteur de rendu indépendant** (ni l'éditeur TipTap ni pdfmake) avec ses propres règles CSS
+(`.reader-content`, censées être symétriques à `.tiptap`) - et avait déjà causé un vrai bug par le
+passé (image en calque "collée en haut à gauche" en Lecture, `.reader-content` sans
+`position:relative`). Ce moteur n'avait **aucune** couverture automatisée avant le 2026-09-14.
+
+`TestHelpers.renderReaderMode(html, headerFooterData)` (dev-tests/helpers.js) appelle
+`ReaderMode.render` directement (même contournement que `exportPdfContent` pour `PdfExport` : un
+`record` factice minimal, on ne teste jamais ici la résolution de `#Variable`, seulement la fidélité
+HTML/CSS) et force les deux conteneurs (`#editor-container`/`#reader-container`) visibles
+simultanément pour pouvoir mesurer les deux. `TestHelpers.compareEditorReaderPosition(texte)` /
+`compareEditorReaderImage(srcContains)` retrouvent un même repère des deux côtés (par contenu texte,
+ou par `src` d'image) et comparent la position RENDUE (`getBoundingClientRect`, relative à chaque
+conteneur) - jamais une structure DOM interne, qui peut légitimement différer entre les deux moteurs
+tant que le RENDU final concorde.
+
+**A immédiatement trouvé un vrai bug dès son premier lancement** (cf. `dev-tests/BUGS.md` Bug 4) :
+`.reader-content ul`/`ol` n'a pas l'équivalent du `padding-left: 1.4em` de `.tiptap` - une liste
+imbriquée rend visiblement plus indentée en mode Lecture qu'en éditeur (l'écart se cumule par
+niveau). Volontairement non corrigé dans le même lot que sa découverte (cf. le commentaire du test
+`readmode_list_indent_position` et Bug 4 pour le correctif tout prêt) - `readModeFidelity` n'est donc
+pas encore 100% vert, ce qui est attendu et documenté, pas un signal d'échec de la suite elle-même.
 
 ## Pourquoi `_test-harness.html` n'est pas commité
 
