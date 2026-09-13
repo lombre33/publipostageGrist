@@ -1269,29 +1269,40 @@ const PdfExport = (function () {
     blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
+      // Repère BRUT (sans le -A4_PREVIEW_PADDING_PX ci-dessous), utilisé UNIQUEMENT pour le bracketing above/below juste en dessous : comparer un imgTopPx
+      // déjà décalé de -37px à des bottom/top de candidats qui ne le sont pas rendait le bracketing "au-dessus" ~37px trop strict (ratait une ancre
+      // pourtant juste au-dessus, cas réel et fréquent : image posée juste après une seule ligne de texte) et le bracketing "en-dessous" ~37px trop
+      // permissif (l'asymétrie inverse) - bug découvert en reproduisant le cas le plus basique qui soit (2 colonnes, texte, image juste en dessous).
+      const rawImgTopPx = imgRect.top - rootRect.top;
+      const rawImgBottomPx = imgRect.bottom - rootRect.top;
       // Ramène au référentiel sans padding utilisé par tout le reste de cette fonction (mesures prises dans l'hôte de mesure).
-      const imgTopPx = imgRect.top - rootRect.top - A4_PREVIEW_PADDING_PX;
-      const imgBottomPx = imgRect.bottom - rootRect.top - A4_PREVIEW_PADDING_PX;
+      const imgTopPx = rawImgTopPx - A4_PREVIEW_PADDING_PX;
+      const imgBottomPx = rawImgBottomPx - A4_PREVIEW_PADDING_PX;
       const imgLeftPx = imgRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
       const hostNode = sourceNodes[idx];
       const container = hostToOwnTextBlock.get(hostNode) || null;
       const containerTopPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().top - rootRect.top) : null;
       const containerLeftPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().left - rootRect.left) : null;
-      let above = null, aboveTopPx = -Infinity;
-      let below = null, belowTopPx = Infinity;
+      let above = null, aboveTopPx = -Infinity, aboveLeftPx = null;
+      let below = null, belowTopPx = Infinity, belowLeftPx = null;
       measurable.forEach(({ block: other, node }) => {
         if (!node || !node.getBoundingClientRect) return;
         const r = node.getBoundingClientRect();
         const top = r.top - rootRect.top;
         const bottom = r.bottom - rootRect.top;
+        const left = r.left - rootRect.left;
         // Qualifie comme ancre seulement si le bloc ENTIER (haut et bas, pas juste son sommet) se termine avant/commence après l'image - sinon le paragraphe
-        // qui contient l'image (texte avant et après) qualifiait à tort comme sa propre ancre "au-dessus".
-        if (bottom <= imgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; above = other; }
-        if (top >= imgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; below = other; }
+        // qui contient l'image (texte avant et après) qualifiait à tort comme sa propre ancre "au-dessus". Comparaison sur les repères BRUTS (rawImgTopPx/
+        // rawImgBottomPx) des deux côtés - jamais mélanger un côté ajusté à l'autre brut.
+        if (bottom <= rawImgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; aboveLeftPx = left; above = other; }
+        if (top >= rawImgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; belowLeftPx = left; below = other; }
       });
       // parentArray : tableau dans lequel l'image et son ancre vivent toutes les deux, utilisé par resolveNativePdfContent pour relocaliser l'image à côté de
       // son ancre sans dépendre d'un tableau top-level codé en dur.
-      pending.push({ image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx, aboveTopPx, belowTopPx, container, containerTopPx, containerLeftPx, parentArray: blocks });
+      pending.push({
+        image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx,
+        aboveTopPx, belowTopPx, aboveLeftPx, belowLeftPx, container, containerTopPx, containerLeftPx, parentArray: blocks,
+      });
     });
     return pending;
   }
@@ -1438,10 +1449,26 @@ const PdfExport = (function () {
   function resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer) {
     const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
     const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : PAGE_MARGIN_PT;
-    // containerLeftPx/containerLeft (posées par attributeNestedPendingImages, cellule de tableau) pilotent X en local au conteneur, sinon page-relative.
-    const xPt = a.containerLeftPx != null && a.containerLeft != null
-      ? a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT
-      : PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    // X suit exactement la même structure que Y ci-dessous (container prioritaire, puis interpolation above+below, puis repli sur une seule ancre, puis
+    // page-relatif générique) - sans ça, une image ancrée "au-dessus"/"en-dessous" (pas "container") recevait un imgLeftPx déjà converti au référentiel de
+    // la colonne/cellule (par twoColumnsFrom/attributeNestedPendingImages) mais réinterprété à tort par le repli page-relatif, donnant un X hors-page.
+    let xPt;
+    if (a.containerLeftPx != null && a.containerLeft != null) {
+      xPt = a.containerLeft + (a.imgLeftPx - a.containerLeftPx) * PX_TO_PT;
+    } else if (a.aboveLeft != null && a.belowLeft != null && a.abovePage === a.belowPage && a.belowLeftPx !== a.aboveLeftPx) {
+      const fractionX = (a.imgLeftPx - a.aboveLeftPx) / (a.belowLeftPx - a.aboveLeftPx);
+      xPt = a.aboveLeft + fractionX * (a.belowLeft - a.aboveLeft);
+    } else if (layer === 'front' && a.belowLeft != null) {
+      xPt = a.belowLeft + (a.imgLeftPx - a.belowLeftPx) * PX_TO_PT;
+    } else if (layer === 'front' && a.aboveLeft != null) {
+      xPt = a.aboveLeft + (a.imgLeftPx - a.aboveLeftPx) * PX_TO_PT;
+    } else if (layer !== 'front' && a.aboveLeft != null) {
+      xPt = a.aboveLeft + (a.imgLeftPx - a.aboveLeftPx) * PX_TO_PT;
+    } else if (layer !== 'front' && a.belowLeft != null) {
+      xPt = a.belowLeft + (a.imgLeftPx - a.belowLeftPx) * PX_TO_PT;
+    } else {
+      xPt = PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+    }
     let yPt;
     // Référence locale prioritaire sur le bracketing générique quand disponible : plus précise, fondée sur le début du paragraphe qui héberge l'image
     // elle-même plutôt qu'une extrapolation depuis un bloc externe éloigné.
@@ -1503,12 +1530,17 @@ const PdfExport = (function () {
         return {
           aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
           belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
+          // aboveLeft/belowLeft (comme aboveTop/belowTop) : sans eux, resolveImageAbsolutePosition n'avait pour X que "container" ou le repli page-relatif
+          // générique - une image ancrée "au-dessus"/"en-dessous" (pas "container") dans une colonne/cellule recevait un X déjà converti au référentiel de
+          // la colonne (par twoColumnsFrom) réinterprété à tort comme page-relatif, donnant un X aberrant (mesuré : hors-page).
+          aboveLeft: aboveResolved ? aboveResolved.left : null, belowLeft: belowResolved ? belowResolved.left : null,
           containerTop: containerResolved ? containerResolved.top : null, containerTopPx: p.containerTopPx,
           // Seules les images imbriquées dans une cellule posent containerLeft/ containerLeftPx (cf. attributeNestedPendingImages) - pilote le calcul de X en
           // cellule-relatif dans resolveImageAbsolutePosition.
           containerLeft: containerResolved ? containerResolved.left : null, containerLeftPx: p.containerLeftPx,
           hadAbove: !!p.above, hadBelow: !!p.below,
-          imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, imgHeightPx: p.imgHeightPx, aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx,
+          imgTopPx: p.imgTopPx, imgLeftPx: p.imgLeftPx, imgHeightPx: p.imgHeightPx,
+          aboveTopPx: p.aboveTopPx, belowTopPx: p.belowTopPx, aboveLeftPx: p.aboveLeftPx, belowLeftPx: p.belowLeftPx,
         };
       });
       content = await htmlToPdfContent(inlinedHtml, true);

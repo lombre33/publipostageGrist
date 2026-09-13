@@ -575,6 +575,79 @@
     },
   });
 
+  // Matrice exhaustive contexte × type d'ancre pour une image en calque juste après du texte réel - le point aveugle qui a laissé passer un bug réel cette
+  // session : les tests existants ne croisaient jamais "au-dessus" (image seule dans son propre paragraphe, pas de partage avec le texte) avec une
+  // vérification X (seul Y était vérifié pour ce type d'ancre). Root cause trouvée : le bracketing above/below (resolvePendingImageAnchors) comparait un
+  // imgTopPx déjà décalé de -A4_PREVIEW_PADDING_PX à des bottom/top de candidats qui ne l'étaient pas - ~37px d'écart, assez pour rater une ancre "au-dessus"
+  // pourtant juste au-dessus dès que le texte précédent ne fait qu'une ligne (cas le plus basique qui soit). Corrigé en comparant systématiquement des
+  // repères bruts des deux côtés dans le bracketing ; le X manquant pour above/below (2e cause, X toujours absent pour ce type d'ancre) corrigé séparément
+  // dans resolveImageAbsolutePosition (nouvelle branche symétrique à Y).
+  async function insertLayeredImageAfterAnchor(h, context, anchorType) {
+    await h.resetEditor();
+    document.getElementById('editor-container').classList.add('a4-preview');
+    await h.focusAtEnd();
+    let hostP;
+    if (context === 'tableCell') {
+      document.getElementById('v2-btn-table').click();
+      await h.sleep(80);
+      const cells = h.tiptap().querySelectorAll('table td');
+      hostP = cells[cells.length - 1].querySelector('p');
+    } else {
+      document.getElementById('v2-btn-two-columns').click();
+      await h.sleep(80);
+      const colIdx = context === 'twoColumnsLeft' ? 0 : 1;
+      hostP = h.tiptap().querySelectorAll('.two-columns-zone > .two-columns-column')[colIdx].querySelector('p');
+    }
+    const ed = EditorCore.getEditor();
+    ed.commands.setTextSelection(ed.view.posAtDOM(hostP, 0));
+    ed.commands.focus();
+    await h.sleep(50);
+    await h.typeText('XXXXXXXXXX texte ancre');
+    if (anchorType === 'above') { ed.commands.enter(); await h.sleep(60); }
+    const origPrompt = window.prompt;
+    window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    document.getElementById('v2-btn-image').click();
+    await h.sleep(120);
+    window.prompt = origPrompt;
+    const container = context === 'tableCell'
+      ? h.tiptap().querySelectorAll('table td')[h.tiptap().querySelectorAll('table td').length - 1]
+      : h.tiptap().querySelectorAll('.two-columns-column')[context === 'twoColumnsLeft' ? 0 : 1];
+    const img = container.querySelector('img.editor-image');
+    await h.selectAtomNode(img);
+    await h.sleep(80);
+    const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+    if (!frontBtn) return { html: null };
+    frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await h.sleep(100);
+    return { html: Editor.getHTML() };
+  }
+
+  ['twoColumnsLeft', 'twoColumnsRight', 'tableCell'].forEach(context => {
+    ['container', 'above'].forEach(anchorType => {
+      cases.push({
+        id: 'pdffid_matrix_' + context + '_' + anchorType,
+        description: 'Matrice image en calque : contexte=' + context + ', ancre=' + anchorType + ' - alignée avec son texte en X ET en Y',
+        run: async (h) => {
+          const { html } = await insertLayeredImageAfterAnchor(h, context, anchorType);
+          if (!html) return { pass: false, notes: 'toolbar image non trouvée' };
+          const result = await h.exportPdfContent(html, null);
+          const images = h.findImages(result.content);
+          if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
+          const abs = images[0].absolutePosition;
+          if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+          const textBlock = h.findTextBlocks(result.content, b => h.blockPlainText(b).includes('XXXXXXXXXX'))[0];
+          if (!textBlock || !textBlock.positions || !textBlock.positions.length) return { pass: false, notes: 'texte ancre introuvable dans le PDF' };
+          const textLeft = textBlock.positions[0].left;
+          const textTop = textBlock.positions[0].top;
+          const deltaX = abs.x - textLeft;
+          // Y : l'image doit atterrir au niveau du texte ou juste après (jamais avant - ni ~28-40pt, la marge de page, symptôme du bug "collé en haut").
+          const pass = Math.abs(deltaX) < 3 && abs.y >= textTop - 3 && abs.y < textTop + 200;
+          return { pass, notes: JSON.stringify({ imageAbs: abs, textLeft, textTop, deltaX }) };
+        },
+      });
+    });
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFidelity = cases;
 })();
