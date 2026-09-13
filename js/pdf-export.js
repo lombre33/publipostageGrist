@@ -1264,8 +1264,12 @@ const PdfExport = (function () {
     blocks.forEach((b, i) => {
       if (b && !b._pendingImgNode && sourceNodes[i] && !hostToOwnTextBlock.has(sourceNodes[i])) hostToOwnTextBlock.set(sourceNodes[i], b);
     });
-    // Tolérance au demi-pixel : sous-pixels de rendu de police d'un navigateur à l'autre, pas une erreur de logique.
-    const BOUNDARY_EPS_PX = 0.5;
+    // Tolérance de rendu : sous-pixels de police/line-height d'un navigateur à l'autre, pas une erreur de logique - initialement 0.5px, mesuré insuffisant
+    // (cas réel : un paragraphe de plusieurs lignes centrées débordait son ancre de 1.25px, ratant le bracketing "au-dessus" du tout au tout et faisant
+    // retomber l'image sur le repli générique page-relatif - une erreur de fraction de pixel en cascadait une de ~150pt). Le cas le plus courant qui soit
+    // (image tout juste insérée puis passée en calque "devant" juste après un paragraphe) place son top QUASIMENT exactement au bord bas de ce paragraphe
+    // par construction (setLayer initialise depuis la position rendue courante) - un peu de marge ici est largement justifiée, pas un pis-aller ponctuel.
+    const BOUNDARY_EPS_PX = 5;
     blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
