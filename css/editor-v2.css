@@ -191,8 +191,16 @@
 /* `.v2-page-sheet` (enfant réel de js/editor.js:init(), enveloppant `.tiptap` une seule fois) porte maintenant le fond/liseré "papier" au lieu de `.tiptap`
    lui-même : les zones d'en-tête/pied, `.tiptap` et le pied de page apparaissaient comme 3 cartes SÉPARÉES, alors qu'à l'export ce sera UNE SEULE page
    continue. `.tiptap` garde son padding (marge de page simulée) mais perd son fond/liseré, devenant un bloc transparent sur le fond blanc du sheet parent.
-   Hors Aperçu A4, `.v2-page-sheet` reste totalement neutre - l'édition "classique" est inchangée. */
-#editor-container.a4-preview .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+   Hors Aperçu A4, `.v2-page-sheet` reste totalement neutre - l'édition "classique" est inchangée. Pas de `max-width: 100%` : un widget Grist étroit ferait
+   alors RÉTRÉCIR toute la page en dessous de 793.71px - `#editor-container` a déjà `overflow: auto` (défilement horizontal), donc rien ne l'exige, et un
+   décalage éditeur/PDF bien réel (repéré par l'utilisateur) en dépendait. Nuance importante : la position CAPTURÉE d'une image en calque (data-page-
+   left/top-pt) ne change PAS avec ce rétrécissement (elle est ancrée à `.two-columns-zone`/à la page, dont le coin haut-gauche ne bouge pas non plus quand
+   seule la LARGEUR se réduit - vérifié empiriquement). Ce qui casse, c'est que la colonne DROITE elle-même (limite en `%`, donc dépendante de la largeur du
+   conteneur) se rapproche du bord gauche de la zone quand celle-ci rétrécit, alors que l'image garde son offset ABSOLU depuis ce même bord gauche - la
+   colonne "vient à la rencontre" de l'image, qui semble alors décalée vers la droite DANS l'éditeur par rapport à ce que montrera le PDF (toujours à
+   l'échelle réelle). Ce n'était donc pas la donnée exportée qui était fausse, mais l'aperçu éditeur lui-même qui mentait dès qu'il rendait en dessous de
+   793.71px. */
+#editor-container.a4-preview .v2-page-sheet { box-sizing: border-box; width: 793.71px; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 #editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: 37.33px; background: transparent; box-shadow: none; }
 /* En mode édition d'en-tête/pied (.hf-editing), ce même `.tiptap` affiche temporairement le contenu de l'en-tête/pied - le padding vertical de 37.33px
    ci-dessus simule la marge de PAGE pour le document PRINCIPAL, mais n'a aucun sens ici (c'est déjà le contenu de la marge elle-même). Padding vertical
@@ -212,7 +220,8 @@
    #editor-container, jamais sur #reader-container. Mêmes valeurs que .tiptap ci-dessus ; pas de règle .tableWrapper/col équivalente ici, propres au
    redimensionnement de tableau de l'éditeur TipTap (absent en lecture, simple HTML résolu). */
 #reader-container.a4-preview { background: #eef1f5; }
-#reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+/* Pas de `max-width: 100%` ici non plus, même raison que `.v2-page-sheet` ci-dessus : #reader-container a déjà `overflow: auto` (css/style.css). */
+#reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
 /* === Aperçu paginé réel - éditeur (cf. js/editor.js:renderPaginationOverlay) === Deux natures d'éléments : les espaceurs de bord (`.v2-page-edge-spacer`,
    en flux normal, frères de `.tiptap`) réservent un vrai espace au début/à la fin du document pour l'en-tête de la page 1/le pied de la dernière page,
