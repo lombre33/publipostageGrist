@@ -274,6 +274,39 @@
     },
   });
 
+  ['table', 'twoColumns'].forEach(container => {
+    cases.push({
+      id: 'img_layer_toggle_no_jump_in_' + container,
+      // Bug réel (signalé par l'utilisateur) : dans une cellule de tableau (position:relative CSS), setLayer() calculait left/top depuis .tiptap alors que
+      // le navigateur les applique depuis la cellule (son propre ancêtre positionné réel) - l'image sautait hors de la zone de texte à l'affichage.
+      description: 'Passer une image en calque "devant" dans un(e) ' + container + ' ne la fait pas sauter visuellement',
+      run: async (h) => {
+        await h.resetEditor();
+        await h.focusAtEnd();
+        document.getElementById(container === 'table' ? 'v2-btn-table' : 'v2-btn-two-columns').click();
+        await h.sleep(80);
+        const ed = EditorCore.getEditor();
+        const hostP = container === 'table' ? h.tiptap().querySelector('table td p') : h.tiptap().querySelector('.two-columns-column p');
+        ed.commands.setTextSelection(ed.view.posAtDOM(hostP, 0));
+        ed.commands.focus();
+        await h.sleep(50);
+        const img = await insertImageViaToolbar(h);
+        const beforeRect = img.getBoundingClientRect();
+        await h.selectAtomNode(img);
+        await h.sleep(80);
+        const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+        if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+        frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(100);
+        const wrap = h.tiptap().querySelector('.editor-image-view');
+        if (!wrap) return { pass: false, notes: 'wrapper calque introuvable après le basculement' };
+        const afterRect = wrap.getBoundingClientRect();
+        const jump = Math.hypot(afterRect.top - beforeRect.top, afterRect.left - beforeRect.left);
+        return { pass: jump < 10, notes: JSON.stringify({ before: { top: beforeRect.top, left: beforeRect.left }, after: { top: afterRect.top, left: afterRect.left }, jump }) };
+      },
+    });
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();

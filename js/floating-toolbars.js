@@ -211,9 +211,8 @@ const FloatingToolbars = (function () {
         const img = dom && dom.querySelector && dom.querySelector('img');
         if (img) {
           const imgRect = img.getBoundingClientRect();
-          const rootRect = editor.view.dom.getBoundingClientRect();
-          // Pas de soustraction de padding : left/top sont appliqués tels quels en CSS depuis le bord de la boîte de padding (styleFor()), qui ne bouge pas
-          // avec le padding - contrairement à la zone de contenu, seule affectée si on avait retranché le padding ici.
+          // offsetParent du wrapper (pas toujours .tiptap - une cellule de tableau en est un elle-même) : sinon l'image saute à l'affichage.
+          const rootRect = (dom.offsetParent || editor.view.dom).getBoundingClientRect();
           patch.left = Math.round(imgRect.left - rootRect.left);
           patch.top = Math.round(imgRect.top - rootRect.top);
         }

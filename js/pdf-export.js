@@ -710,8 +710,8 @@ const PdfExport = (function () {
       const pending = colBlocks._pendingImages || [];
       if (pending.length) {
         const colRect = colNodes[colIdx].getBoundingClientRect();
-        const colOffsetTopPx = colRect.top - rootRect.top;
-        const colOffsetLeftPx = colRect.left - rootRect.left;
+        const colOffsetTopPx = colRect.top - rootRect.top - A4_PREVIEW_PADDING_PX;
+        const colOffsetLeftPx = colRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
         pending.forEach(p => {
           if (p.container || p.above || p.below) {
             p.imgTopPx -= colOffsetTopPx;

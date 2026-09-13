@@ -283,6 +283,48 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_image_above_anchor_in_column_not_stuck_at_page_top',
+    // Bug réel (signalé par l'utilisateur, avec capture PDF) : une image en calque SEULE dans son propre paragraphe, précédée de texte réel dans la MÊME
+    // colonne (ancre "au-dessus" trouvée, pas de conteneur partagé), atterrissait quand même collée en haut de page - colOffsetTopPx (twoColumnsFrom)
+    // n'incluait pas le même A4_PREVIEW_PADDING_PX que imgTopPx, faussant le delta local à la colonne d'un montant constant.
+    description: 'Une image en calque après du texte dans la même colonne (ancre "au-dessus") atterrit sur son paragraphe, pas collée en haut de page',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      document.getElementById('v2-btn-two-columns').click();
+      await h.sleep(80);
+      const ed = EditorCore.getEditor();
+      const colP = h.tiptap().querySelectorAll('.two-columns-zone > .two-columns-column')[1].querySelector('p');
+      ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
+      ed.commands.focus();
+      await h.sleep(50);
+      await h.typeText('Texte de colonne droite pour ancrage, assez long pour occuper plusieurs lignes dans cette colonne etroite.');
+      document.execCommand('insertParagraph');
+      const origPrompt = window.prompt;
+      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      document.getElementById('v2-btn-image').click();
+      await h.sleep(120);
+      window.prompt = origPrompt;
+      const img = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('img.editor-image');
+      await h.selectAtomNode(img);
+      await h.sleep(80);
+      const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+      if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+      frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      // "Collé en haut" (bug) donnait ~28pt ; le texte qui précède dans la même colonne place la vraie ancre bien plus bas.
+      const pass = abs.y > 100;
+      return { pass, notes: 'abs=' + JSON.stringify(abs) + ' html=' + html };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_layered_image_x_position_differs_by_column',
     // Bug réel (découvert pendant le même audit) : le X d'une image en calque
     // dans une colonne 2-colonnes utilisait toujours la formule générique
