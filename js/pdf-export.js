@@ -712,11 +712,19 @@ const PdfExport = (function () {
     columns.forEach((colBlocks, colIdx) => {
       const pending = colBlocks._pendingImages || [];
       if (pending.length) {
-        const colRect = colNodes[colIdx].getBoundingClientRect();
+        const colNode = colNodes[colIdx];
+        const colRect = colNode.getBoundingClientRect();
+        // container/above/belowTopPx|LeftPx sont mesurés dans l'isolat de htmlToPdfContent(col.innerHTML,...), qui ne contient QUE les enfants de la
+        // colonne - son propre padding/bordure (css/style.css : 6px + 1px) n'y existe pas, ces ancres sont donc relatives au DÉBUT DU CONTENU, pas au bord
+        // de la boîte de la colonne. colRect (getBoundingClientRect) mesure la boîte de bordure - sans ce décalage, l'image atterrissait ~7px (~5pt) trop
+        // à gauche/haut par rapport au texte (léger mais visible, signalé par l'utilisateur après le premier correctif offsetParent).
+        const colCs = getComputedStyle(colNode);
+        const colContentTop = colRect.top + (parseFloat(colCs.paddingTop) || 0) + (parseFloat(colCs.borderTopWidth) || 0);
+        const colContentLeft = colRect.left + (parseFloat(colCs.paddingLeft) || 0) + (parseFloat(colCs.borderLeftWidth) || 0);
         pending.forEach(p => {
           if (p.container || p.above || p.below) {
-            p.imgTopPx += A4_PREVIEW_PADDING_PX + (zoneRect.top - colRect.top);
-            p.imgLeftPx += A4_PREVIEW_PADDING_PX + (zoneRect.left - colRect.left);
+            p.imgTopPx += A4_PREVIEW_PADDING_PX + (zoneRect.top - colContentTop);
+            p.imgLeftPx += A4_PREVIEW_PADDING_PX + (zoneRect.left - colContentLeft);
           } else {
             // Aucune ancre : repli générique page-relatif (resolveImageAbsolutePosition) - ramène à la position réelle de la zone dans le document.
             p.imgTopPx += zoneRect.top - rootRect.top;

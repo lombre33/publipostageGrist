@@ -332,6 +332,53 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_image_x_aligned_with_anchor_text_in_column',
+    // Bug réel (signalé par l'utilisateur après le premier correctif offsetParent) : l'image restait décalée horizontalement de quelques points par rapport
+    // au texte qu'elle est censée surplomber - `.two-columns-column` a son propre padding+bordure (css/style.css, 6px+1px) qui n'existe pas dans l'isolat
+    // de htmlToPdfContent(col.innerHTML,...) utilisé pour mesurer container/above/belowTopPx|LeftPx (relatifs au DÉBUT DU CONTENU, pas à la boîte de la
+    // colonne) - twoColumnsFrom comparait à tort ces ancres à colRect (boîte de BORDURE), décalant l'image d'environ ce padding+bordure (~7px ≈ 5pt).
+    description: 'Une image en calque juste après du texte dans une colonne reste alignée horizontalement avec ce texte (±2pt), pas décalée par le padding de la colonne',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await h.focusAtEnd();
+      document.getElementById('v2-btn-two-columns').click();
+      await h.sleep(80);
+      const ed = EditorCore.getEditor();
+      const colP = h.tiptap().querySelectorAll('.two-columns-zone > .two-columns-column')[1].querySelector('p');
+      ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
+      ed.commands.focus();
+      await h.sleep(50);
+      await h.typeText('XXXXXXXXXX');
+      document.execCommand('insertParagraph');
+      const origPrompt = window.prompt;
+      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      document.getElementById('v2-btn-image').click();
+      await h.sleep(120);
+      window.prompt = origPrompt;
+      const img = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('img.editor-image');
+      await h.selectAtomNode(img);
+      await h.sleep(80);
+      const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
+      if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
+      frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const result = await h.exportPdfContent(html, null);
+      const images = h.findImages(result.content);
+      if (!images.length) return { pass: false, notes: 'image absente du PDF : ' + html };
+      const abs = images[0].absolutePosition;
+      if (!abs) return { pass: false, notes: 'absolutePosition absente : ' + JSON.stringify(images[0]) };
+      const textBlock = h.findTextBlocks(result.content, b => h.blockPlainText(b).includes('XXXXXXXXXX'))[0];
+      if (!textBlock || !textBlock.positions || !textBlock.positions.length) return { pass: false, notes: 'texte ancre introuvable dans le PDF' };
+      const textLeft = textBlock.positions[0].left;
+      const deltaXPt = abs.x - textLeft;
+      const pass = Math.abs(deltaXPt) < 2;
+      return { pass, notes: JSON.stringify({ imageX: abs.x, textLeft, deltaXPt }) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_layered_image_x_position_differs_by_column',
     // Bug réel (découvert pendant le même audit) : le X d'une image en calque
     // dans une colonne 2-colonnes utilisait toujours la formule générique
