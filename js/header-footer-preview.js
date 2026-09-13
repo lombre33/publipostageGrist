@@ -34,8 +34,7 @@ const HeaderFooterPreview = (function () {
     editor.commands.setContent(headerFooterDraft[zone][variant] || '');
     const container = document.getElementById('editor-container');
     if (container) container.classList.add('hf-editing');
-    // Temporaire (étape 2/5 du découpage) : redevient MainToolbar.syncToolbarState() à l'étape 5, quand main-toolbar.js existera.
-    Editor.syncToolbarState();
+    MainToolbar.syncToolbarState();
     renderHfPill();
     renderPaginationOverlay();
   }
@@ -48,7 +47,7 @@ const HeaderFooterPreview = (function () {
     mainDocSnapshot = null;
     const container = document.getElementById('editor-container');
     if (container) container.classList.remove('hf-editing');
-    Editor.syncToolbarState();
+    MainToolbar.syncToolbarState();
     renderHfPill();
     renderPaginationOverlay();
   }
