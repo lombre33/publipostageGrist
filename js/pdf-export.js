@@ -659,6 +659,16 @@ const PdfExport = (function () {
     const leftWidth = measuredCols[0] ? measureTextWidthPt(measuredCols[0]) : fallbackWidth;
     const rightWidth = measuredCols[1] ? measureTextWidthPt(measuredCols[1]) : fallbackWidth;
     const zoneChromeLeftPt = leftPt(zoneClone);
+    // La zone a aussi sa propre marge CSS (css/editor-v2.css : `.two-columns-zone { margin: 6px 0; }`), DISTINCTE de son padding/bordure déjà mesurés par
+    // topPt/bottomPt ci-dessous - jamais comptée avant ce correctif, ce qui décalait tout le contenu de la zone de ~4.5pt vers le HAUT dans le PDF par
+    // rapport à l'éditeur (confirmé par comparaison avec computePageGridPosition sur un simple bloc de texte, cf. mémoire page-grid-positioning).
+    const zoneCs = getComputedStyle(zoneClone);
+    const zoneMarginTopPt = (parseFloat(zoneCs.marginTop) || 0) * PX_TO_PT;
+    const zoneMarginBottomPt = (parseFloat(zoneCs.marginBottom) || 0) * PX_TO_PT;
+    // Mesurés ICI (zoneClone est encore attaché à measureHost) : getComputedStyle sur un nœud déjà détaché (après le removeChild plus bas) renvoie
+    // padding/bordure à 0, pas les vraies valeurs - piège rencontré en implémentant ce correctif.
+    const zoneOwnTopPt = topPt(zoneClone) + zoneMarginTopPt;
+    const zoneOwnBottomPt = bottomPt(zoneClone) + zoneMarginBottomPt;
     const colOwnInsetLeft = [measuredCols[0] ? leftPt(measuredCols[0]) : 0, measuredCols[1] ? leftPt(measuredCols[1]) : 0];
     // Pas de compensation spaceWidthPt() ici (contrairement à tableFrom) : measureTextWidthPt mesure directement la largeur de texte réelle, déjà
     // suffisamment stricte - en ajouter une ici calait un mot de moins que l'éditeur.
@@ -721,7 +731,7 @@ const PdfExport = (function () {
         { width: colOuterWidthPt[1], stack: [{ stack: columns[1], margin: [colOwnInsetLeft[1], colOwnInsetTop[1], colOwnInsetRight[1], colOwnInsetBottom[1]] }] },
       ],
       columnGap: columnGapPt,
-      margin: [zoneChromeLeftPt, 12.75, 0, 3.75],
+      margin: [zoneChromeLeftPt, zoneOwnTopPt, 0, zoneOwnBottomPt],
     };
     if (pageBreakBefore) block.pageBreak = 'before';
     // .two-columns-zone (node) a son propre position:relative (css/style.css, règle générique non scopée) : c'est le vrai offsetParent d'une image en

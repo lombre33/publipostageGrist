@@ -164,7 +164,12 @@
     // le contenu d'une colonne (texte ET image en calque, décalage identique mesuré sur les deux) atterrissait donc plus haut que sa vraie position -
     // trouvé en comparant, pour un simple bloc de texte, sa position réelle dans l'éditeur (grille page, cf. HeaderFooterPreview.computePageGridPosition)
     // à sa position résolue dans le PDF. Corrigé avec topPt/bottomPt (symétriques à leftPt/rightPt) appliqués au stack de colonne.
-    description: 'La position Y d\'un texte dans une colonne 2-colonnes correspond à sa grille page réelle dans l\'éditeur (±6pt - résidu de rendu police/interligne pdfmake vs navigateur, cf. mémoire table-cell)',
+    // Second correctif, même famille (signalé à nouveau par l'utilisateur sur le même scénario réel, PDF "312") : un résidu de ~4.5pt subsistait après le
+    // correctif ci-dessus, d'abord attribué à tort à un écart de rendu police/interligne pdfmake-vs-navigateur (cf. mémoire table-cell) - en réalité
+    // `.two-columns-zone` a AUSSI sa propre marge CSS (`margin: 6px 0`, css/editor-v2.css), distincte de son padding/bordure déjà mesurés, et jamais prise
+    // en compte dans `twoColumnsFrom` (qui codait en dur 12.75/3.75 = padding+bordure seuls). Mesurée dynamiquement maintenant - la tolérance ci-dessous
+    // est resserrée en conséquence (ne PAS la relâcher à nouveau sans revérifier que ce n'est pas cette même régression qui revient).
+    description: 'La position Y d\'un texte dans une colonne 2-colonnes correspond exactement à sa grille page réelle dans l\'éditeur',
     run: async (h) => {
       await h.resetEditor();
       document.getElementById('editor-container').classList.add('a4-preview');
@@ -181,7 +186,7 @@
       await h.sleep(50);
       const textP = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('p');
       const grid = HeaderFooterPreview.computePageGridPosition(textP);
-      const PAGE_MARGIN_PT = 28.35;
+      const PAGE_MARGIN_PT = 28;
       const expected = { x: PAGE_MARGIN_PT + grid.pageLeftPt, y: PAGE_MARGIN_PT + grid.pageTopPt };
       const html = Editor.getHTML();
       const result = await h.exportPdfContent(html, null);
@@ -189,7 +194,7 @@
       if (!textBlock || !textBlock.positions || !textBlock.positions.length) return { pass: false, notes: 'texte introuvable dans le PDF' };
       const actual = textBlock.positions[0];
       const deltaY = actual.top - expected.y;
-      const pass = Math.abs(deltaY) < 6;
+      const pass = Math.abs(deltaY) < 1.5;
       return { pass, notes: JSON.stringify({ expected, actual: { left: actual.left, top: actual.top }, deltaY }) };
     },
   });
