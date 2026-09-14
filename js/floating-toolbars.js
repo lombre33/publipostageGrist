@@ -306,11 +306,10 @@ const FloatingToolbars = (function () {
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
     EditorCore.registerFloatingPanel(panel);
     const check = () => {
-      // Un blur réel ne change pas seul la sélection ProseMirror - sans cette garde, une 'transaction' suivante rouvrirait le panneau. Le curseur clavier
-      // posé sur le slider d'opacité (data-role="opacity") compte comme un blur réel de l'éditeur (focus DOM déplacé) : sans l'exception `panel.el.
-      // contains(document.activeElement)`, chaque glissement du slider (updateSelectedImage -> transaction -> check()) refermait le panneau lui-même en
-      // plein milieu du geste - bug réel, pas juste théorique (même piège que le panneau #Variable nombre/date, cf. wireVariableFloatingToolbar).
-      if (!editor.view.hasFocus() && !panel.el.contains(document.activeElement)) { panel.hide(); return; }
+      // PAS de garde hasFocus() ici (contrairement à wireTableFloatingToolbar) : ce panneau contient un vrai contrôle de formulaire (slider d'opacité,
+      // data-role="opacity") - cf. commentaire détaillé équivalent dans wireVariableFloatingToolbar sur pourquoi hasFocus()/document.activeElement sont
+      // invérifiables de façon fiable au moment où l'utilisateur interagit avec un contrôle natif. La fermeture "clic hors du panneau" reste déjà gérée
+      // ailleurs (hideFloatingContextToolbars, js/editor-core.js) ; ici, seule la sélection réelle (image toujours sélectionnée ou non) décide.
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
       const dom = editor.view.nodeDOM(editor.state.selection.from);
@@ -422,12 +421,14 @@ const FloatingToolbars = (function () {
     }
 
     const check = () => {
-      // PAS juste "cf. commentaire équivalent dans wireTableFloatingToolbar" ici : ce panneau contient de vrais contrôles de formulaire (select nb
-      // décimales/format de date, input devise) - cliquer dessus déplace réellement le focus DOM hors de l'éditeur (contrairement à un <button>, protégé
-      // par mousedown+preventDefault dans createFloatingPanel). Sans l'exception ci-dessous, choisir une option (onInput -> updateSelectedBadge ->
-      // transaction -> check()) refermait le panneau à l'instant même du choix - même piège que le slider d'opacité de la toolbar image, cf. commentaire
-      // équivalent dans wireImageFloatingToolbar.
-      if (!editor.view.hasFocus() && !panel.el.contains(document.activeElement)) { panel.hide(); return; }
+      // PAS de garde hasFocus()/document.activeElement ici, contrairement à un premier correctif tenté puis insuffisant : ce panneau contient de vrais
+      // contrôles de formulaire (select nb décimales/format de date, input devise) - cliquer dessus déplace bien le focus DOM hors de l'éditeur (mesuré :
+      // editor.view.hasFocus() devient faux), MAIS le <select> lui-même ne reçoit pas forcément le focus DOM de façon fiable/synchrone pour autant (mesuré
+      // via instrumentation focusin/focusout : le blur de l'éditeur est immédiat, le focusin sur le <select> n'arrive parfois jamais) - `panel.el.
+      // contains(document.activeElement)` était donc un filet insuffisant, le panneau se refermait quand même à l'instant précis où le menu déroulant
+      // natif commençait tout juste à s'ouvrir (symptôme rapporté : "la liste apparaît une micro-seconde puis disparaît"). La fermeture "clic hors du
+      // panneau" reste déjà gérée ailleurs (hideFloatingContextToolbars, js/editor-core.js, basée sur la CIBLE du mousedown, pas sur le focus résultant -
+      // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
       const node = selectedVarBadgeNode();
       if (!node) { panel.hide(); return; }
       const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);

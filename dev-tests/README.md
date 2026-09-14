@@ -36,7 +36,7 @@ apparaît) :
 | `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity` ET `pdfGroundTruth`** (points d'entrée export communs à tout - `pdfGroundTruth` en particulier couvre tout changement touchant la position d'une image en calque ou l'alignement d'un paragraphe) |
 | `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
 | `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
-| `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur) |
+| `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
 | `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips` |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée) |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
@@ -73,6 +73,7 @@ const files = [
   'scenarios-formatting', 'scenarios-lists', 'scenarios-tables',
   'scenarios-twocolumns', 'scenarios-nesting', 'scenarios-images',
   'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
+  'scenarios-varformat',
   'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth', 'scenarios-readmode-fidelity',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');

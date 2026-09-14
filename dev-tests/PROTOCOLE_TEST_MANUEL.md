@@ -352,7 +352,34 @@ bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
 
 ---
 
-## 11. Performance et robustesse
+## 11. Barre flottante de formatage nombre/date d'une bulle `#Variable`
+
+**Couverture automatisée** : `dev-tests/scenarios-varformat.js` (groupe `varFormat`, 4 cas) - cf.
+`dev-tests/BUGS.md` Bug 5 (bloquant, corrigé le 2026-09-14 : le panneau se refermait dès qu'on
+touchait un de ses `<select>`/`<input>`, un premier correctif s'étant révélé insuffisant). La suite
+automatisée reproduit la CONDITION du bug (focus qui quitte l'éditeur) de façon fiable, mais PAS le
+geste utilisateur exact (cliquer réellement un `<select>` natif n'est pas fidèlement simulable en
+automatisation, cf. root cause dans BUGS.md) - ce protocole manuel reste donc le seul filet qui
+exerce le VRAI clic natif.
+
+### Protocole (à rejouer après tout changement dans `js/floating-toolbars.js` ou `js/editor-core.js`)
+1. Insérer une `#Variable` sur une colonne Nombre, la sélectionner (clic dessus) — la barre
+   flottante FR/US/—/décimales/devise/lettres doit apparaître au-dessus.
+2. Cliquer le sélecteur "nb décimales" et choisir une valeur (ex. "2") — le menu déroulant doit
+   rester ouvert le temps du choix (pas de fermeture "flash"), la barre doit rester affichée
+   ENSUITE, et le nombre de décimales doit bien s'appliquer (vérifiable en rebasculant en mode
+   Lecture avec une ligne Grist réelle, ou en rouvrant la bulle).
+3. Même vérification pour le champ "Devise" (taper un symbole) et, sur une colonne Date, le
+   sélecteur "format de date".
+4. Cliquer ensuite AILLEURS dans la page (hors de l'éditeur et hors de la barre flottante, ex. le
+   nom du modèle) — la barre doit bien se refermer (ne pas rester affichée indéfiniment - garde-fou
+   contre une sur-correction du Bug 5).
+5. Même vérification sur la barre flottante d'une image en calque (slider d'opacité) : glisser le
+   curseur doit modifier l'opacité en direct sans que la barre ne se referme pendant le geste.
+
+---
+
+## 12. Performance et robustesse
 
 **Couverture automatisée** : aucune.
 
@@ -368,7 +395,7 @@ bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
 
 ---
 
-## 12. Revue rapide des derniers commits
+## 13. Revue rapide des derniers commits
 
 À faire systématiquement après une série de correctifs, avant de les considérer terminés :
 1. Relire le diff des fichiers touchés — chercher une logique dupliquée qui aurait dû être

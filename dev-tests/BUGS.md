@@ -232,3 +232,61 @@ règle `.tiptap` existante, comme envisagé. Vérifié : `readmode_list_indent_p
 
 `dev-tests/scenarios-readmode-fidelity.js:readmode_list_indent_position` passe désormais. La suite
 `readModeFidelity` est 100% verte.
+
+---
+
+## Bug 5 — Barre flottante nombre/date d'une bulle #Variable : les `<select>`/`<input>` ne réagissaient pas : **CORRIGÉ (2026-09-14)**
+
+**Sévérité : bloquante.** Rapporté par l'utilisateur en usage réel Grist. Aucune suite `dev-tests` ne
+couvrait `wireVariableFloatingToolbar` (`js/floating-toolbars.js`) avant ce bug - angle mort complet,
+comblé par `dev-tests/scenarios-varformat.js`.
+
+### Ce qui est cassé
+
+Le panneau (nb décimales, format de date, devise) se refermait à l'instant même où on interagissait
+avec un de ses propres `<select>`/`<input>` - symptôme précis rapporté : "la liste apparaît une
+micro-seconde puis disparaît".
+
+### Root cause (en deux temps - le premier correctif s'est révélé insuffisant)
+
+Chaque panneau flottant (`check()`, appelé sur tout `selectionUpdate`/`transaction` ProseMirror) se
+refermait dès que `editor.view.hasFocus()` devenait faux, pour se fermer proprement au clic ailleurs
+dans la page. Un `<button>` échappe à cette règle via `mousedown`+`preventDefault()` (garde le focus
+sur l'éditeur, cf. `createFloatingPanel`), mais un `<select>`/`<input>` n'a jamais ce traitement -
+cliquer dessus déplace réellement le focus DOM hors de l'éditeur.
+
+**Premier correctif tenté (insuffisant)** : tolérer `panel.el.contains(document.activeElement)` en plus
+de `hasFocus()`. Ne suffisait pas : instrumentation (écoute `focusin`/`focusout`/`mousedown` sur
+`document`) a montré que le `<select>` ne reçoit PAS toujours le focus DOM de façon fiable/synchrone au
+moment du clic (le `focusout` de l'éditeur est immédiat, le `focusin` sur le `<select>` n'arrive
+parfois jamais - `document.activeElement` retombait alors sur `<body>`) - `document.activeElement`
+est donc invérifiable pour ce cas précis. `check()` refermait donc quand même le panneau à l'instant
+précis où le menu déroulant natif commençait tout juste à s'ouvrir.
+
+### Correction appliquée
+
+Suppression complète de la garde `hasFocus()`/`document.activeElement` dans `check()` pour les deux
+panneaux concernés (barre nombre/date `#Variable` ET barre image, qui a un slider d'opacité exposé au
+même piège) - la fermeture "clic hors du panneau" est déjà assurée ailleurs, de façon fiable, par
+`hideFloatingContextToolbars` (`js/editor-core.js`), basée sur la CIBLE du `mousedown` et non sur le
+focus qui en résulte. `check()` ne décide plus de fermer que sur la sélection réelle (bulle/image
+toujours sélectionnée ou non).
+
+### Repro (ne fonctionne PAS de façon fiable via un clic scripté - cf. test)
+
+1. Insérer une variable `#Variable` sur une colonne Nombre ou Date, la sélectionner.
+2. Cliquer le sélecteur "nb décimales" ou "format de date" dans la barre flottante qui apparaît.
+3. Avant correctif : le menu se referme quasi instantanément. Après correctif : reste ouvert, le choix
+   s'applique normalement.
+
+### État du test
+
+`dev-tests/scenarios-varformat.js` (nouvelle suite, 4 cas) :
+`varfmt_number_decimals_select_keeps_panel_open`, `varfmt_date_preset_select_keeps_panel_open`,
+`varfmt_currency_input_keeps_panel_open` (les 3 reproduisent la condition via un `blur()` explicite de
+l'éditeur - un clic scripté sur le `<select>` ne reproduit pas le focus réel de façon fiable en
+automatisation, cf. root cause ci-dessus) et `varfmt_panel_still_hides_on_real_outside_click`
+(garde-fou : un vrai clic hors du panneau doit quand même le refermer). Vérifiés un par un contre
+l'ANCIEN code (réintroduit temporairement) : les 3 premiers échouent bien sans le correctif, le 4e
+reste vert dans les deux cas - suite discriminante confirmée, pas des tests vides. Suite complète
+`varFormat` 4/4 verte avec le correctif.
