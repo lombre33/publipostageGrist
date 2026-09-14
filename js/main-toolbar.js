@@ -82,6 +82,7 @@ const MainToolbar = (function () {
     set('v2-btn-table', 'table');
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
+    set('v2-btn-comment', 'comment');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -212,6 +213,7 @@ const MainToolbar = (function () {
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
+    bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
 

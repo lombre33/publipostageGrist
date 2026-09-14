@@ -27,6 +27,7 @@ const Icons = (function () {
     // Pointillés + folios, évoque le sommaire imprimé classique - l'ancienne icône (lignes puces + texte) était trop proche visuellement du bouton "Liste"
     // juste à côté. Les "points de suite" sont des tracés de longueur nulle (h.01) : avec stroke-linecap="round" ça se peint comme un simple point.
     toc: '<path d="M4 6h5M4 12h5M4 18h5"/><path d="M11.5 6h.01M14 6h.01M16.5 6h.01M11.5 12h.01M14 12h.01M11.5 18h.01"/><text x="18.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">1</text><text x="18.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">2</text><text x="18.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">3</text>',
+    comment: '<path d="M4 5h16v11H9l-4 3.5V16H4z"/><path d="M8 9h8M8 12.5h5"/>',
     indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
     outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
     // 3 styles de case à cocher, différenciés par la forme - le rendu réel dans le document dépend de data-tasklist-style (CSS + taskCheckboxCanvas côté

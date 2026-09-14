@@ -105,6 +105,24 @@ const I18n = (function () {
     'insert.pageBreak.aria': { fr: 'Insérer un saut de page (forcé à l’export PDF)', en: 'Insert a page break (forced on PDF export)' },
     'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
+    'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },
+    'insert.comment.aria': { fr: 'Ajouter un commentaire sur le texte sélectionné', en: 'Add a comment on the selected text' },
+
+    // --- Commentaires (js/comments.js) ---
+    'comments.selectTextFirst': { fr: 'Sélectionnez du texte avant d’ajouter un commentaire.', en: 'Select some text before adding a comment.' },
+    'comments.saveTemplateFirst': { fr: 'Enregistrez d’abord le modèle avant d’ajouter un commentaire.', en: 'Save the template first before adding a comment.' },
+    'comments.resolvedBadge': { fr: 'Résolu', en: 'Resolved' },
+    'comments.activeBadge': { fr: 'Commentaire', en: 'Comment' },
+    'comments.close': { fr: 'Fermer', en: 'Close' },
+    'comments.anonymous': { fr: 'Anonyme', en: 'Anonymous' },
+    'comments.replyPlaceholder': { fr: 'Répondre…', en: 'Reply…' },
+    'comments.firstMessagePlaceholder': { fr: 'Écrivez un commentaire…', en: 'Write a comment…' },
+    'comments.post': { fr: 'Publier', en: 'Post' },
+    'comments.reply': { fr: 'Répondre', en: 'Reply' },
+    'comments.resolve': { fr: 'Résoudre', en: 'Resolve' },
+    'comments.reopen': { fr: 'Rouvrir', en: 'Reopen' },
+    'comments.deleteThread': { fr: 'Supprimer', en: 'Delete' },
+    'comments.confirmDelete': { fr: 'Supprimer ce fil de commentaires ?', en: 'Delete this comment thread?' },
     'history.undo': { fr: 'Annuler', en: 'Undo' },
     'history.redo': { fr: 'Rétablir', en: 'Redo' },
 
@@ -150,6 +168,8 @@ const I18n = (function () {
     'status.newTemplateReady': { fr: 'Nouveau modèle prêt.', en: 'New template ready.' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
+    'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },
+    'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours...', en: 'Generating PDF...' },
@@ -172,6 +192,10 @@ const I18n = (function () {
     'status.noColumnsDefined': { fr: 'Ce template ne définit aucune colonne.', en: 'This template defines no columns.' },
     'status.tableCreationError': { fr: 'Échec de la création de la table « {table} ».', en: 'Failed to create table “{table}”.' },
     'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} colonne(s), modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} column(s), template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
+
+    // --- Auto-save (bandeau de conflit, main.js) ---
+    'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
+    'autosave.conflict.reload': { fr: 'Recharger la dernière version', en: 'Reload latest version' },
 
     // --- Confirmations / invites (main.js) ---
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
