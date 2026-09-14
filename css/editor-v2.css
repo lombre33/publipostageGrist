@@ -338,6 +338,13 @@
 .tiptap .footnote-ref-marker, .reader-content .footnote-ref-marker { counter-increment: footnote-ref; color: #146c43; font-weight: 600; cursor: pointer; }
 .tiptap .footnote-ref-marker::before, .reader-content .footnote-ref-marker::before { content: counter(footnote-ref); }
 
+/* Effet DISCRET à dessein (demande explicite) : un simple soulignement + fond très pâle, jamais un bloc plein comme .smart-chip - un commentaire ne doit
+   pas dominer visuellement le texte qu'il annote, juste le signaler. SEULEMENT `.tiptap` (jamais `.reader-content`) : un commentaire est un artefact
+   d'édition/collaboration, invisible en Lecture/export - cf. commentaire d'en-tête, js/comments.js. Résolu : gris et discret, jamais complètement invisible
+   (on doit pouvoir encore le retrouver/le rouvrir), à l'inverse de --accent qui reste réservé aux marques ACTIVES. */
+.tiptap .comment-mark { background: #fff3cf; border-bottom: 2px solid #f0c36d; cursor: pointer; }
+.tiptap .comment-mark-resolved { background: transparent; border-bottom: 2px solid var(--text-faint); }
+
 /* Popup d'édition du texte d'une note (js/editor.js:ensureFootnotePopupBox) - harmonisé avec le reste du chrome V2, mêmes jetons que #v2-image-var-picker
    (var(--surface)/var(--border-strong)/var(--font-ui)), jamais la teinte verte des chips (réservée au CONTENU des bulles, pas au chrome). */
 #v2-footnote-popup { position: absolute; z-index: 2000; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 8px; width: 240px; font-family: var(--font-ui); }
@@ -354,6 +361,30 @@
 #v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent); border-color: var(--accent); color: #fff; }
 #v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-hover); }
+
+/* Carte de commentaire (js/comments.js) - même chrome/jetons que #v2-footnote-popup, en plus large (fil de discussion + réponse) - inspirée de Google Docs
+   (demande explicite) : bandeau d'état en tête, messages empilés, réponse + actions en pied. Ferme UNIQUEMENT via le × (même leçon que le popup de note :
+   fermer au clic extérieur a déjà causé 3 régressions sur ce projet). */
+#v2-comment-popup { position: absolute; z-index: 2000; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 10px; width: 280px; font-family: var(--font-ui); }
+#v2-comment-popup .v2-comment-popup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+#v2-comment-popup .v2-comment-popup-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #8a6d00; background: #fff3cf; border-radius: 4px; padding: 2px 6px; }
+#v2-comment-popup .v2-comment-popup-badge.is-resolved { color: var(--text-muted); background: var(--surface-sunken); }
+#v2-comment-popup .v2-comment-popup-close { border: none; background: none; font-size: 18px; line-height: 1; color: var(--text-faint); cursor: pointer; padding: 0 2px; }
+#v2-comment-popup .v2-comment-popup-close:hover { color: var(--text); }
+#v2-comment-popup .v2-comment-popup-list { max-height: 220px; overflow-y: auto; margin-bottom: 6px; }
+#v2-comment-popup .v2-comment-popup-message { padding: 6px 0; border-bottom: 1px solid var(--border); }
+#v2-comment-popup .v2-comment-popup-message:last-child { border-bottom: none; }
+#v2-comment-popup .v2-comment-popup-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+#v2-comment-popup .v2-comment-popup-text { font-size: 12.5px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+#v2-comment-popup .v2-comment-popup-reply { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 5px 6px; resize: vertical; }
+#v2-comment-popup .v2-comment-popup-reply:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
+#v2-comment-popup .v2-comment-popup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+#v2-comment-popup .v2-comment-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+#v2-comment-popup .v2-comment-popup-actions button:hover { background: var(--surface-sunken); }
+#v2-comment-popup button.v2-comment-popup-post { background: var(--accent); border-color: var(--accent); color: #fff; margin-right: auto; }
+#v2-comment-popup button.v2-comment-popup-post:hover { background: var(--accent-hover); }
+#v2-comment-popup button.v2-comment-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
+#v2-comment-popup button.v2-comment-popup-delete:hover { background: var(--danger-soft); }
 
 /* Onglets du panneau `#` (js/variables.js:ensureBox) - Variables (par défaut) / Chips. #autocomplete-box reste défini dans css/style.css (partagé V1, qui
    n'a pas ces onglets) - restructuré ici en colonne flex (JS bascule son display en 'flex') pour que .ac-tabs reste fixe pendant que .ac-items défile seul.
