@@ -306,8 +306,11 @@ const FloatingToolbars = (function () {
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
     EditorCore.registerFloatingPanel(panel);
     const check = () => {
-      // Un blur réel ne change pas seul la sélection ProseMirror - sans cette garde, une 'transaction' suivante rouvrirait le panneau.
-      if (!editor.view.hasFocus()) { panel.hide(); return; }
+      // Un blur réel ne change pas seul la sélection ProseMirror - sans cette garde, une 'transaction' suivante rouvrirait le panneau. Le curseur clavier
+      // posé sur le slider d'opacité (data-role="opacity") compte comme un blur réel de l'éditeur (focus DOM déplacé) : sans l'exception `panel.el.
+      // contains(document.activeElement)`, chaque glissement du slider (updateSelectedImage -> transaction -> check()) refermait le panneau lui-même en
+      // plein milieu du geste - bug réel, pas juste théorique (même piège que le panneau #Variable nombre/date, cf. wireVariableFloatingToolbar).
+      if (!editor.view.hasFocus() && !panel.el.contains(document.activeElement)) { panel.hide(); return; }
       document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
       if (!selectedImageNode()) { panel.hide(); return; }
       const dom = editor.view.nodeDOM(editor.state.selection.from);
@@ -419,8 +422,12 @@ const FloatingToolbars = (function () {
     }
 
     const check = () => {
-      // Cf. commentaire équivalent dans wireTableFloatingToolbar.
-      if (!editor.view.hasFocus()) { panel.hide(); return; }
+      // PAS juste "cf. commentaire équivalent dans wireTableFloatingToolbar" ici : ce panneau contient de vrais contrôles de formulaire (select nb
+      // décimales/format de date, input devise) - cliquer dessus déplace réellement le focus DOM hors de l'éditeur (contrairement à un <button>, protégé
+      // par mousedown+preventDefault dans createFloatingPanel). Sans l'exception ci-dessous, choisir une option (onInput -> updateSelectedBadge ->
+      // transaction -> check()) refermait le panneau à l'instant même du choix - même piège que le slider d'opacité de la toolbar image, cf. commentaire
+      // équivalent dans wireImageFloatingToolbar.
+      if (!editor.view.hasFocus() && !panel.el.contains(document.activeElement)) { panel.hide(); return; }
       const node = selectedVarBadgeNode();
       if (!node) { panel.hide(); return; }
       const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
