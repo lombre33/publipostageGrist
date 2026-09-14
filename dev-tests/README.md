@@ -125,6 +125,18 @@ façon inattendue après une session de debug prolongée dans le même onglet,
 ouvrir un onglet neuf avant de conclure à une régression (cf. mémoire
 `project_stale_tab_module_corruption`, même famille de piège).
 
+**`window.innerWidth`/`innerHeight` peuvent valoir `0` tant que le panneau Browser
+n'est pas ACTIVEMENT affiché à l'utilisateur** (constaté 2026-09-14 : 5 faux positifs
+- `img_resize_corner_*`, `twocol_resize_grip` - qui mesurent une largeur avant/après un
+glisser ; l'utilisateur a confirmé RAS en conditions réelles). `tabs_select` (mettre un
+onglet au premier plan) et même un onglet tout neuf ne suffisent PAS à corriger ça - seul
+le fait que le panneau lui-même soit visible dans l'interface compte. Un `screenshot`
+peut pourtant rendre visuellement correct pendant ce temps (mesure indépendante) - ne pas
+s'y fier comme preuve que `getBoundingClientRect()` est fiable. Avant de conclure à un bug
+sur un test qui mesure une largeur/hauteur réelle (redimensionnement, glisser une
+poignée...), vérifier `window.innerWidth` en premier ; s'il vaut `0`, le test n'a rien
+mesuré de valide, quel que soit son verdict.
+
 ## `.positions[]`/`.absolutePosition` (métadonnées pdfmake) ne sont PAS la vérité terrain — utiliser `h.extractPdfGroundTruth` pour tout ce qui est centré/aligné-droite/en calque
 
 `exportPdfContent` lit `.positions[]` et `.absolutePosition` directement sur
