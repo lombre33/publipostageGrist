@@ -122,7 +122,10 @@ const Templates = (function () {
           nomFichierPDF: data.NomFichierPDF ? data.NomFichierPDF[i] : '',
           headerFooter: safeParseHeaderFooter(data.HeaderFooter ? data.HeaderFooter[i] : null),
           marginsMm: safeParseMargins(data.Margins ? data.Margins[i] : null),
-          estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i])
+          estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i]),
+          // Utilisé par js/main.js (auto-save) pour détecter qu'une autre personne a enregistré ce même modèle entre deux vérifications - jamais affiché
+          // tel quel à l'utilisateur.
+          dateModif: data.DateModif ? data.DateModif[i] : null,
         });
       }
     } catch (e) {
@@ -157,6 +160,8 @@ const Templates = (function () {
     templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
   }
 
+  // Renvoie { id, dateModif } (pas juste l'id) : js/main.js (auto-save) a besoin de connaître le DateModif qu'IL vient d'écrire, pour le distinguer d'un
+  // DateModif différent constaté plus tard (preuve qu'quelqu'un d'autre a enregistré ce modèle entre-temps).
   async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
@@ -171,14 +176,14 @@ const Templates = (function () {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]
       ]);
-      return id;
+      return { id, dateModif: now };
     } else {
       const result = await grist.docApi.applyUserActions([
         ['AddRecord', TABLE_NAME, null, columns]
       ]);
       const newId = result.retValues[0];
       currentTemplateId = newId;
-      return newId;
+      return { id: newId, dateModif: now };
     }
   }
 

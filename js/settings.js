@@ -92,6 +92,9 @@ const Settings = (function () {
         PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { [side]: v }));
         syncMarginInputs();
         Editor.refreshLayout();
+        // Événement DOM plutôt qu'un appel direct : ce module n'a aucune raison de connaître js/main.js (auto-save). main.js écoute cet événement pour
+        // marquer le brouillon "modifié" - sans ça, changer uniquement les marges sans toucher au texte ne déclenchait jamais d'auto-save.
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
       });
     });
 

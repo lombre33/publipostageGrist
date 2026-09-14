@@ -14,6 +14,8 @@
   const readerContainer = document.getElementById('reader-container');
   const btnEdit = document.getElementById('btn-mode-edit');
   const btnRead = document.getElementById('btn-mode-read');
+  const conflictBanner = document.getElementById('autosave-conflict-banner');
+  const conflictReloadBtn = document.getElementById('autosave-conflict-reload');
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -90,6 +92,9 @@
     // ne repassait pas explicitement par "Mode édition" puis "Mode lecture" (le changement de modèle semblait alors "ne rien faire" en mode Lecture).
     if (currentMode === 'read') renderReader();
     syncDefaultTemplateButton();
+    // DERNIÈRE ligne de cette fonction (pas avant) : Editor.setHTML()/setHeaderFooterData() juste au-dessus déclenchent leurs propres transactions
+    // ProseMirror, donc leur propre `editor.on('update')` - sans ça, charger un modèle se marquerait lui-même "modifié" aux yeux de l'auto-save.
+    resetAutosaveState(tpl);
   }
 
   // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer. Le renommage ne touche que l'affichage local
@@ -137,7 +142,7 @@
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
-    const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
+    const { id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -149,6 +154,10 @@
     if (String(id) !== String(savedId)) {
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
     }
+    // Un enregistrement manuel explicite tranche tout conflit auto-save en cours en faveur de CETTE version (cf. autosaveTick) - pas besoin de recharger.
+    autosaveDirty = false;
+    autosaveLastKnownDateModif = dateModif;
+    hideConflictBanner();
     setStatus(I18n.t('status.templateSaved'));
   }
 
@@ -168,6 +177,90 @@
     await refreshTemplateList();
     onNew();
     setStatus(I18n.t('status.templateDeleted'));
+  }
+
+  // === Auto-save (V1) ===
+  // Enregistre automatiquement le modèle en cours toutes les AUTOSAVE_INTERVAL_MS, mais SEULEMENT s'il y a eu une modification depuis le dernier
+  // enregistrement (autosaveDirty) ET qu'un modèle existant est déjà chargé (jamais de création automatique - un modèle tout juste créé doit toujours
+  // passer par un premier Enregistrer manuel, cf. onSave). Objectif : réduire la fenêtre de perte en cas de fermeture inattendue, PAS remplacer
+  // Enregistrer - et réduire la fenêtre de collision si quelqu'un d'autre modifie le même modèle en même temps (moins de temps sans écrire = moins de
+  // chances qu'un écrasement silencieux couvre beaucoup de travail).
+  //
+  // Détection de conflit : à chaque vérification, on compare le DateModif réellement présent dans Grist à celui qu'on a nous-mêmes écrit en dernier
+  // (autosaveLastKnownDateModif). Un écart révèle qu'une autre personne (ou un autre onglet) a enregistré ce même modèle entre-temps - l'auto-save se
+  // gèle alors (n'écrase plus rien tout seul) et affiche un bandeau proposant de recharger. Un Enregistrer MANUEL reste toujours possible pendant ce
+  // temps et tranche explicitement en faveur de la version locale (cf. onSave) - un choix conscient de l'utilisateur, jamais fait à sa place.
+  const AUTOSAVE_INTERVAL_MS = 2500;
+  let autosaveDirty = false;
+  let autosaveLastKnownDateModif = null;
+  let autosaveConflictActive = false;
+  let autosaveConflictTpl = null;
+  let autosaveTimer = null;
+
+  function markAutosaveDirty() { autosaveDirty = true; }
+
+  function resetAutosaveState(tpl) {
+    autosaveDirty = false;
+    autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
+    hideConflictBanner();
+  }
+
+  function showConflictBanner(remoteTpl) {
+    autosaveConflictActive = true;
+    autosaveConflictTpl = remoteTpl;
+    if (conflictBanner) conflictBanner.style.display = '';
+  }
+
+  function hideConflictBanner() {
+    autosaveConflictActive = false;
+    autosaveConflictTpl = null;
+    if (conflictBanner) conflictBanner.style.display = 'none';
+  }
+
+  async function autosaveTick() {
+    if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
+    if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
+    const id = Templates.getCurrentId();
+    if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
+    let fresh;
+    try { fresh = await Templates.loadAll(); }
+    catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
+    const remoteTpl = fresh.find(t => String(t.id) === String(id));
+    if (remoteTpl && autosaveLastKnownDateModif && remoteTpl.dateModif && remoteTpl.dateModif !== autosaveLastKnownDateModif) {
+      showConflictBanner(remoteTpl);
+      return;
+    }
+    if (!autosaveDirty) return;
+    // getHTML() renverrait le fragment en-tête/pied actuellement chargé, pas le document principal (cf. header-footer-preview.js) - on saute ce tick
+    // plutôt que de forcer une sortie de ce mode toutes les ~2-3s (bien plus perturbant que d'attendre le tick suivant).
+    if (Editor.isEditingHeaderFooter()) return;
+    const nom = templateNameInput ? templateNameInput.value.trim() : '';
+    if (!nom) return; // même garde que le bouton Enregistrer manuel
+    try {
+      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
+      autosaveLastKnownDateModif = dateModif;
+      autosaveDirty = false;
+      setStatus(I18n.t('status.autosaved'));
+    } catch (e) {
+      console.error('[main] auto-save : échec d’enregistrement', e);
+      // autosaveDirty reste true - retenté au prochain tick.
+    }
+  }
+
+  function startAutosaveLoop() {
+    if (autosaveTimer) return;
+    autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
+  }
+
+  function wireAutosaveConflictBanner() {
+    if (!conflictReloadBtn) return;
+    conflictReloadBtn.addEventListener('click', () => {
+      if (!autosaveConflictTpl) return;
+      const tpl = autosaveConflictTpl;
+      loadTemplateIntoEditor(tpl);
+      refreshTemplateList();
+      setStatus(I18n.t('status.autosaveConflictReloaded'));
+    });
   }
 
   async function renderReader(record, recordTableId) {
@@ -738,6 +831,14 @@
   async function init() {
     try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     await Editor.init();
+    // 'update' (pas 'transaction') : ne fire que si le DOCUMENT a réellement changé (docChanged), jamais pour un simple déplacement de curseur/sélection -
+    // cf. section "Auto-save" plus haut. Couvre aussi l'édition en-tête/pied (même instance d'éditeur, contenu échangé via setContent).
+    EditorCore.getEditor().on('update', markAutosaveDirty);
+    if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
+    if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
+    // Émis par js/settings.js à chaque saisie dans les 4 champs de marge (onglet Réglages) - sans lui, changer uniquement les marges sans toucher au
+    // texte ne marquait jamais le brouillon "modifié" et l'auto-save ne l'enregistrait donc jamais.
+    document.addEventListener('pp:marginsChanged', markAutosaveDirty);
     GristAPI.onRecord(async function (record, tableId) {
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
@@ -775,6 +876,8 @@
     decorateSaveButtonShortcut();
     I18n.onChange(decorateSaveButtonShortcut);
     Variables.initFilenameInput(pdfFilenameInput);
+    wireAutosaveConflictBanner();
+    startAutosaveLoop();
     await switchMode('edit');
     setStatus(I18n.t('status.ready'));
   }

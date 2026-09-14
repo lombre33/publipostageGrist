@@ -194,6 +194,8 @@ const I18n = (function () {
     'status.newTemplateReady': { fr: 'Nouveau modèle prêt.', en: 'New template ready.' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
+    'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },
+    'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
     'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : il s’ouvrira automatiquement.', en: 'Default template set: it will open automatically.' },
     'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré.', en: 'Default template cleared.' },
@@ -221,6 +223,10 @@ const I18n = (function () {
     'status.noColumnsDefined': { fr: 'Ce template ne définit aucune colonne.', en: 'This template defines no columns.' },
     'status.tableCreationError': { fr: 'Échec de la création de la table « {table} ».', en: 'Failed to create table “{table}”.' },
     'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} colonne(s), modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} column(s), template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
+
+    // --- Auto-save (bandeau de conflit, main.js) ---
+    'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
+    'autosave.conflict.reload': { fr: 'Recharger la dernière version', en: 'Reload latest version' },
 
     // --- Confirmations / invites (main.js) ---
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
