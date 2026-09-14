@@ -159,14 +159,17 @@
       exportOperationInProgress = true;
       const btnSingle = document.getElementById('btn-export-pdf');
       const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
+      const btnDocx = document.getElementById('v2-btn-export-docx');
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
+      setExportControlLocked(btnDocx, true);
       try {
         await fn(...args);
       } finally {
         exportOperationInProgress = false;
         setExportControlLocked(btnSingle, false);
         setExportControlLocked(btnBatch, false);
+        setExportControlLocked(btnDocx, false);
       }
     };
   }
@@ -184,6 +187,21 @@
     } catch (e) {
       console.error(e);
       setStatus(I18n.t('status.pdfGenerationError'), true);
+    }
+  }
+
+  // V1 - portée volontairement plus modeste que le PDF (cf. en-tête js/docx-export.js) : pas de sélecteur de qualité, un seul mode d'export.
+  async function onExportDocx() {
+    Editor.exitHeaderFooterModeIfActive();
+    const record = GristAPI.getCurrentRecord();
+    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    setStatus(I18n.t('status.docxGenerating'));
+    try {
+      await DocxExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), Editor.getHeaderFooterData());
+      setStatus(I18n.t('status.docxGenerated'));
+    } catch (e) {
+      console.error(e);
+      setStatus(I18n.t('status.docxGenerationError'), true);
     }
   }
 
@@ -553,6 +571,7 @@
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(onExportPdfBatch));
+    document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
