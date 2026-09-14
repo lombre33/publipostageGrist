@@ -160,9 +160,11 @@
       const btnSingle = document.getElementById('btn-export-pdf');
       const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
       const btnDocx = document.getElementById('v2-btn-export-docx');
+      const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
       setExportControlLocked(btnDocx, true);
+      setExportControlLocked(btnDocxBatch, true);
       try {
         await fn(...args);
       } finally {
@@ -170,6 +172,7 @@
         setExportControlLocked(btnSingle, false);
         setExportControlLocked(btnBatch, false);
         setExportControlLocked(btnDocx, false);
+        setExportControlLocked(btnDocxBatch, false);
       }
     };
   }
@@ -275,6 +278,67 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = sanitizeFilenamePart(tableId) + '-export-pdf.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus(failed
+      ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
+      : I18n.t('status.batchExportDone', { ok }));
+  }
+
+  // Même schéma que onExportPdfBatch - réutilise JSZip via PdfExport.ensurePdfLibsLoaded (docx-export.js n'embarque pas sa propre déclaration CDN/SRI
+  // pour cette lib déjà chargée ailleurs, cf. commentaire équivalent en tête de ce fichier pour le PDF).
+  async function onExportDocxBatch() {
+    Editor.exitHeaderFooterModeIfActive();
+    const tableId = currentTableId || GristAPI.getCurrentTableId();
+    if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
+    let rows;
+    try { rows = await GristAPI.fetchTableRows(tableId); }
+    catch (e) {
+      console.error('[main] export DOCX en lot : échec de lecture de la table', e);
+      setStatus(I18n.t('status.cannotReadRows'), true);
+      return;
+    }
+    if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
+    const proceed = window.confirm(I18n.t('confirm.batchExport', { count: rows.length, table: tableId }));
+    if (!proceed) return;
+
+    setStatus(I18n.t('status.loadingPdfLibs'));
+    try { await PdfExport.ensurePdfLibsLoaded(); }
+    catch (e) {
+      console.error('[main] export DOCX en lot : échec de chargement de JSZip', e);
+      setStatus(I18n.t('status.pdfLibsLoadError'), true);
+      return;
+    }
+
+    const html = Editor.getHTML();
+    const filenameTemplate = getPdfFilenameTemplate();
+    const headerFooterData = Editor.getHeaderFooterData();
+    const zip = new JSZip();
+    const usedNames = new Set();
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
+      try {
+        const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
+        const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
+        zip.file(uniqueZipFilename(base, usedNames) + '.docx', blob);
+        ok++;
+      } catch (e) {
+        console.error('[main] export DOCX en lot : échec pour la ligne', rows[i].id, e);
+        failed++;
+      }
+    }
+    if (!ok) { setStatus(I18n.t('status.exportError'), true); return; }
+
+    setStatus(I18n.t('status.zipCompressing'));
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilenamePart(tableId) + '-export-docx.zip';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -572,6 +636,7 @@
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(onExportPdfBatch));
     document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
+    document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(onExportDocxBatch));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
