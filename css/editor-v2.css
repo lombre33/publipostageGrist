@@ -20,7 +20,7 @@
 .tiptap h1 { font-size: 24pt; } .tiptap h2 { font-size: 20pt; }
 .tiptap h3 { font-size: 16pt; } .tiptap h4 { font-size: 14pt; }
 .tiptap h5 { font-size: 13pt; } .tiptap h6 { font-size: 12pt; }
-.tiptap ul, .tiptap ol { margin: 0; padding-left: 1.4em; }
+.tiptap ul, .tiptap ol, .reader-content ul, .reader-content ol { margin: 0; padding-left: 1.4em; }
 /* Puces = les MÊMES caractères que l'export PDF (js/pdf-export.js BULLET_MARKERS), pas le rendu natif ○/■ du navigateur ('°'/'*' étant la seule plage de
    caractères que les polices embarquées peuvent réellement afficher en PDF). Ces 3 valeurs DOIVENT rester identiques à BULLET_MARKERS - si l'un des deux
    fichiers change, l'autre doit suivre. */

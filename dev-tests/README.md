@@ -177,12 +177,10 @@ ou par `src` d'image) et comparent la position RENDUE (`getBoundingClientRect`, 
 conteneur) - jamais une structure DOM interne, qui peut légitimement différer entre les deux moteurs
 tant que le RENDU final concorde.
 
-**A immédiatement trouvé un vrai bug dès son premier lancement** (cf. `dev-tests/BUGS.md` Bug 4) :
-`.reader-content ul`/`ol` n'a pas l'équivalent du `padding-left: 1.4em` de `.tiptap` - une liste
-imbriquée rend visiblement plus indentée en mode Lecture qu'en éditeur (l'écart se cumule par
-niveau). Volontairement non corrigé dans le même lot que sa découverte (cf. le commentaire du test
-`readmode_list_indent_position` et Bug 4 pour le correctif tout prêt) - `readModeFidelity` n'est donc
-pas encore 100% vert, ce qui est attendu et documenté, pas un signal d'échec de la suite elle-même.
+**A immédiatement trouvé un vrai bug dès son premier lancement** (cf. `dev-tests/BUGS.md` Bug 4,
+corrigé le même jour) : `.reader-content ul`/`ol` n'avait pas l'équivalent du `padding-left: 1.4em` de
+`.tiptap` - une liste imbriquée rendait visiblement plus indentée en mode Lecture qu'en éditeur (l'écart
+se cumulait par niveau). `readModeFidelity` est maintenant 100% vert.
 
 ## Pourquoi `_test-harness.html` n'est pas commité
 

@@ -192,7 +192,7 @@ image dans une cellule de tableau - sans erreur.
 
 ---
 
-## Bug 4 — Mode Lecture : listes trop indentées (padding-left manquant sur `.reader-content ul/ol`) : **TROUVÉ, NON CORRIGÉ À DESSEIN (2026-09-14)**
+## Bug 4 — Mode Lecture : listes trop indentées (padding-left manquant sur `.reader-content ul/ol`) : **CORRIGÉ (2026-09-14)**
 
 **Sévérité : moyenne.** Trouvé en construisant `dev-tests/scenarios-readmode-fidelity.js` (nouvelle
 suite comblant l'angle mort "étage 2" documenté dans `PROTOCOLE_TEST_MANUEL.md`) - premier vrai
@@ -221,16 +221,14 @@ rendu du projet) diverge.
 1. Créer une liste à puces avec au moins un niveau d'indentation (Tab sur un élément).
 2. Comparer visuellement l'éditeur et le mode Lecture (bouton "Lecture") sur le même document.
 
-### Correction envisagée (non appliquée ce soir, sur consigne explicite "pas de nouveau fix")
+### Correction appliquée
 
-Ajouter dans `css/editor-v2.css`, à proximité de la ligne 23 : `.reader-content ul, .reader-content
-ol { margin: 0; padding-left: 1.4em; }` - symétrique exact de la règle `.tiptap` existante. Correctif
-a priori sûr et localisé (une ligne CSS), mais **volontairement non appliqué** dans cette session
-(consigne : le code actuel est celui publié en Alpha le lendemain matin, aucun nouveau correctif).
+`css/editor-v2.css:23` : `.tiptap ul, .tiptap ol { ... }` étendu à `.tiptap ul, .tiptap ol,
+.reader-content ul, .reader-content ol { margin: 0; padding-left: 1.4em; }` - symétrique exact de la
+règle `.tiptap` existante, comme envisagé. Vérifié : `readmode_list_indent_position` passe désormais
+(delta 0), suite `readModeFidelity` complète 15/15.
 
 ### État du test
 
-`dev-tests/scenarios-readmode-fidelity.js:readmode_list_indent_position` **échoue actuellement, en
-connaissance de cause** - documente ce bug plutôt que de le cacher. La suite `readModeFidelity` n'est
-donc pas encore 100% verte : **1 échec attendu et documenté** (celui-ci), à corriger dès que le
-correctif ci-dessus sera appliqué (puis revérifier que le test passe).
+`dev-tests/scenarios-readmode-fidelity.js:readmode_list_indent_position` passe désormais. La suite
+`readModeFidelity` est 100% verte.

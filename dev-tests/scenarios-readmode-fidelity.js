@@ -62,15 +62,14 @@
     },
   });
 
-  // BUG RÉEL TROUVÉ EN CONSTRUISANT CE TEST (2026-09-14, non corrigé à dessein - cf. dev-tests/BUGS.md Bug 4) : `.tiptap ul, .tiptap ol { padding-left:
-  // 1.4em }` (css/editor-v2.css:23) n'a PAS d'équivalent `.reader-content ul/ol` - le mode Lecture retombe donc sur le padding par défaut du navigateur
-  // (40px, contre 19.6px pour .tiptap à 14px de base) pour CHAQUE niveau de liste. Confirmé : la structure HTML générée est identique entre les deux
-  // (`<ul><li><p>...</p><ul><li>...` dans les deux), l'écart vient uniquement de ce padding-left manquant - il se cumule à chaque niveau d'imbrication
-  // (20.4px de trop par niveau, mesuré : 40.8px de trop pour ce test à 2 niveaux). N'affecte PAS l'export PDF (js/pdf-export.js mesure l'indentation sur un
-  // hôte cloné avec la classe `.tiptap`, jamais `.reader-content`) - uniquement le mode Lecture visible entre l'édition et l'export.
+  // Régression réelle trouvée EN CONSTRUISANT ce test, corrigée le même jour (cf. dev-tests/BUGS.md Bug 4) : `.tiptap ul, .tiptap ol { padding-left: 1.4em }`
+  // (css/editor-v2.css:23) n'avait pas d'équivalent `.reader-content ul/ol` - le mode Lecture retombait sur le padding par défaut du navigateur (40px,
+  // contre 19.6px pour .tiptap à 14px de base) pour CHAQUE niveau de liste, cumulatif à chaque imbrication. N'affectait pas l'export PDF (js/pdf-export.js
+  // mesure l'indentation sur un hôte cloné avec la classe `.tiptap`, jamais `.reader-content`) - uniquement le mode Lecture. Corrigé en étendant la règle
+  // `.tiptap` à `.reader-content` (même ligne CSS) - garder ce test pour éviter une régression future de cette même règle.
   cases.push({
     id: 'readmode_list_indent_position',
-    description: 'Une liste à puces indentée (niveau 2) est positionnée identiquement en éditeur et en mode Lecture (ÉCHEC CONNU - cf. commentaire ci-dessus et dev-tests/BUGS.md Bug 4)',
+    description: 'Une liste à puces indentée (niveau 2) est positionnée identiquement en éditeur et en mode Lecture',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();

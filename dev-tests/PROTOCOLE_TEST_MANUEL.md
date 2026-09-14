@@ -32,13 +32,13 @@ Chaque fonctionnalité doit donc être vérifiée aux **3 étages**, dans l'ordr
 3. **Export PDF vectoriel** — le PDF généré reproduit à nouveau EXACTEMENT la même mise en page.
 
 **Mise à jour 2026-09-14** : l'étage 2 a maintenant une première couverture automatisée réelle -
-`dev-tests/scenarios-readmode-fidelity.js` (groupe `readModeFidelity`, 14 cas), comparant la
+`dev-tests/scenarios-readmode-fidelity.js` (groupe `readModeFidelity`, 15 cas), comparant la
 position RENDUE d'un même repère entre l'éditeur et le mode Lecture (texte, image inline, image en
-calque dans 3 contextes, tableau, 2-colonnes, en-tête/pied, note de bas de page). A immédiatement
-trouvé un vrai bug dès son premier lancement (listes trop indentées en mode Lecture - padding-left
-manquant sur `.reader-content ul/ol`, cf. `dev-tests/BUGS.md` Bug 4, volontairement non corrigé le
-jour de sa découverte). Reste à couvrir : numérotation de titres/sommaire, chips intelligents,
-couleur/surlignage, formats de police - cf. `dev-tests/README.md` pour la méthodologie complète.
+calque dans 3 contextes, tableau, 2-colonnes, en-tête/pied, note de bas de page, numérotation de
+titre). A immédiatement trouvé un vrai bug dès son premier lancement (listes trop indentées en mode
+Lecture - padding-left manquant sur `.reader-content ul/ol`, cf. `dev-tests/BUGS.md` Bug 4), **corrigé
+le même jour** - suite 100% verte. Reste à couvrir : sommaire, chips intelligents, couleur/surlignage,
+formats de police - cf. `dev-tests/README.md` pour la méthodologie complète.
 
 **Constat structurel antérieur (2026-09-13, partiellement résolu ci-dessus)** : la suite automatisée
 (`dev-tests/scenarios-*.js`, 89 cas à l'époque) couvrait bien l'étage 1 (état DOM/éditeur) et
@@ -392,16 +392,13 @@ le texte centré/aligné à droite et les images en calque (`scenarios-pdf-groun
 réel du PDF via pdf.js).
 
 Par ordre de valeur probable pour la suite :
-1. **Étendre `readModeFidelity`** : numérotation de titres/sommaire (mécanisme CSS counters, risque
-   de divergence si `.reader-content[data-heading-style]` et `.tiptap[data-heading-style]` ne
-   restent pas parfaitement synchronisées), chips intelligents (date/heure/email - la VALEUR peut
-   légitimement différer d'un instant à l'autre, vérifier plutôt le format/la position), couleur de
-   texte/surlignage, familles de police réelles.
-2. **Corriger Bug 4** (`dev-tests/BUGS.md`) puis repasser `readmode_list_indent_position` au vert -
-   correctif d'une ligne CSS déjà identifié, volontairement non appliqué le jour de sa découverte.
-3. **Vrai test de redimensionnement de colonne de tableau** (glisser réel + vérification de
+1. **Étendre `readModeFidelity`** : sommaire/TOC (le marqueur de numérotation de titre est déjà
+   couvert, `readmode_heading_numbering_marker_match` - reste le sommaire lui-même), chips
+   intelligents (date/heure/email - la VALEUR peut légitimement différer d'un instant à l'autre,
+   vérifier plutôt le format/la position), couleur de texte/surlignage, familles de police réelles.
+2. **Vrai test de redimensionnement de colonne de tableau** (glisser réel + vérification de
    largeur en éditeur ET en PDF), symétrique à ce qui existe déjà pour la 2-colonnes.
-4. **Copier/coller d'image** et **simulation Attachments Grist** dans le harnais de test —
+3. **Copier/coller d'image** et **simulation Attachments Grist** dans le harnais de test —
    aujourd'hui seule l'insertion par URL est automatisée.
-5. Un test de non-régression sur le **temps de chargement** (mesurer `performance.now()` entre
+4. Un test de non-régression sur le **temps de chargement** (mesurer `performance.now()` entre
    la navigation et `Widget prêt.`, alerter si un changement futur le dégrade significativement).
