@@ -217,7 +217,7 @@ const Editor = (function () {
     // des extensions plus bas) - chargés en parallèle plutôt qu'en 14 `await` séquentiels : un `import()` est une requête réseau vers esm.sh, la cascade
     // ajoutait jusqu'à 1-2s au démarrage sur une connexion lente/cache froid (audit de performance 2026-09-14).
     const [
-      { Editor: TiptapEditor, Extension, Node, mergeAttributes },
+      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes },
       { StarterKit },
       { TextAlign },
       { TextStyle },
@@ -257,6 +257,7 @@ const Editor = (function () {
     const PageNumberBadge = EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes);
     const SmartChip = EditorNodes.createSmartChipNode(Node, mergeAttributes);
     const FootnoteRef = EditorNodes.createFootnoteRefNode(Node, mergeAttributes);
+    const CommentMark = EditorNodes.createCommentMark(Mark, mergeAttributes);
     const FontSize = EditorNodes.createFontSizeExtension(Extension);
     const TextColor = EditorNodes.createTextColorExtension(Extension);
     const HighlightColor = EditorNodes.createHighlightExtension(Extension);
@@ -304,6 +305,7 @@ const Editor = (function () {
         PageNumberBadge,
         SmartChip,
         FootnoteRef,
+        CommentMark,
         Variables.createExtension(Extension, Suggestion),
         Table.configure({ resizable: true }),
         TableRow,
@@ -337,6 +339,8 @@ const Editor = (function () {
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
+    Comments.setEditor(editor);
+    Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);
     editor.on('transaction', MainToolbar.syncToolbarState);
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);

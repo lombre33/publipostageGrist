@@ -146,6 +146,40 @@ const EditorNodes = (function () {
     });
   }
 
+  // Commentaire - une MARQUE (pas un nœud) : contrairement à une note de bas de page (un point unique), un commentaire s'attache à une PORTÉE de texte
+  // existant, exactement comme gras/italique - ProseMirror la déplace/étend/découpe automatiquement au fil des modifications, sans code de suivi à écrire
+  // à la main (cf. js/comments.js pour le pourquoi de ce choix face à un vrai suivi de modifications). Le FIL de discussion (auteur, texte, réponses) vit
+  // dans la table Grist Publipostage_Commentaires (js/comments.js) - seul un identifiant y est stocké, pour relier la portée de texte à SON fil. `resolved`
+  // en revanche vit ICI, dans le document lui-même (pas dans Grist) : c'est une propriété de CETTE portée de texte précise, pas du message échangé - la
+  // garder dans le document la fait voyager gratuitement avec le reste (auto-save, Annuler/Rétablir, export) sans re-synchronisation à écrire.
+  // `excludes: ''` (au lieu du défaut - le nom de la marque elle-même) : sans ça, une deuxième marque commentaire (id différent) posée sur une portée qui
+  // chevauche une première ferait disparaître la première au lieu de les superposer - deux fils de discussion indépendants doivent pouvoir coexister sur un
+  // chevauchement, comme le fait l'exemple officiel ProseMirror pour ce même besoin.
+  function createCommentMark(Mark, mergeAttributes) {
+    return Mark.create({
+      name: 'commentMark',
+      excludes: '',
+      inclusive: false,
+      addAttributes() {
+        return {
+          id: { default: null, renderHTML: attrs => ({ 'data-comment-id': attrs.id }) },
+          resolved: {
+            default: false,
+            parseHTML: el => el.getAttribute('data-resolved') === 'true',
+            renderHTML: attrs => ({ 'data-resolved': attrs.resolved ? 'true' : 'false' }),
+          },
+        };
+      },
+      parseHTML() {
+        return [{ tag: 'span.comment-mark', getAttrs: el => ({ id: el.getAttribute('data-comment-id'), resolved: el.getAttribute('data-resolved') === 'true' }) }];
+      },
+      renderHTML({ HTMLAttributes }) {
+        const cls = 'comment-mark' + (HTMLAttributes['data-resolved'] === 'true' ? ' comment-mark-resolved' : '');
+        return ['span', mergeAttributes(HTMLAttributes, { class: cls }), 0];
+      },
+    });
+  }
+
   // Augmente la marque 'textStyle' via addGlobalAttributes (comme FontFamily/Color officiels) - 'textStyle' doit être enregistrée à part (TextStyle, câblée
   // dans init()), sinon ProseMirror lève une erreur.
   function createFontSizeExtension(Extension) {
@@ -920,7 +954,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode,
+    createVarBadgeNode, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,

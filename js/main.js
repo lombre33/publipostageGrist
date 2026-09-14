@@ -83,6 +83,7 @@
       pdfFilenameInput.hidden = !pdfFilenameInput.value.trim();
     }
     Templates.setCurrentId(tpl ? tpl.id : null);
+    Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
     // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant qu'on
