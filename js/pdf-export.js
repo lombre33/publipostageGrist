@@ -1709,10 +1709,15 @@ const PdfExport = (function () {
       return { content, heightPt };
     }
     const differentFirstPage = !!headerFooterData.differentFirstPage;
-    const headerDefault = await resolveZone(headerFooterData.header && headerFooterData.header.default);
-    const headerFirst = differentFirstPage ? await resolveZone(headerFooterData.header && headerFooterData.header.first) : { content: null, heightPt: 0 };
-    const footerDefault = await resolveZone(headerFooterData.footer && headerFooterData.footer.default);
-    const footerFirst = differentFirstPage ? await resolveZone(headerFooterData.footer && headerFooterData.footer.first) : { content: null, heightPt: 0 };
+    const emptyZone = { content: null, heightPt: 0 };
+    // Les 4 zones sont indépendantes (chacune son propre hôte de mesure hors-écran, cf. resolveZone plus haut) - contrairement à twoColumnsFrom, aucun état
+    // de module partagé de type footnoteCounter ici (les notes de bas de page ne sont jamais résolues en en-tête/pied), donc rien n'imposait le séquentiel.
+    const [headerDefault, headerFirst, footerDefault, footerFirst] = await Promise.all([
+      resolveZone(headerFooterData.header && headerFooterData.header.default),
+      differentFirstPage ? resolveZone(headerFooterData.header && headerFooterData.header.first) : Promise.resolve(emptyZone),
+      resolveZone(headerFooterData.footer && headerFooterData.footer.default),
+      differentFirstPage ? resolveZone(headerFooterData.footer && headerFooterData.footer.first) : Promise.resolve(emptyZone),
+    ]);
     // Une seule hauteur de marge par zone : la marge de page ne peut pas varier d'une page à l'autre chez pdfmake, donc "page 1 différente" ne change que le
     // contenu - le plus grand des deux fragments dimensionne la marge des deux variantes.
     const headerHeightPt = (headerDefault.content || headerFirst.content) ? HF_MAX_ZONE_HEIGHT_PT : 0;
@@ -1732,17 +1737,18 @@ const PdfExport = (function () {
   async function resolveHeaderFooterVariables(headerFooterData, currentTableId, record) {
     if (!headerFooterData || !headerFooterData.enabled) return headerFooterData;
     const resolveZone = html => (html ? ReaderMode.preview(html, currentTableId, record) : html);
+    // Les 4 zones sont des lectures indépendantes (aucune n'écrit d'état partagé) - parallélisées comme buildHeaderFooterPdfChunks ci-dessus, même raison.
+    const [headerDefault, headerFirst, footerDefault, footerFirst] = await Promise.all([
+      resolveZone(headerFooterData.header && headerFooterData.header.default),
+      resolveZone(headerFooterData.header && headerFooterData.header.first),
+      resolveZone(headerFooterData.footer && headerFooterData.footer.default),
+      resolveZone(headerFooterData.footer && headerFooterData.footer.first),
+    ]);
     return {
       enabled: true,
       differentFirstPage: !!headerFooterData.differentFirstPage,
-      header: {
-        default: await resolveZone(headerFooterData.header && headerFooterData.header.default),
-        first: await resolveZone(headerFooterData.header && headerFooterData.header.first),
-      },
-      footer: {
-        default: await resolveZone(headerFooterData.footer && headerFooterData.footer.default),
-        first: await resolveZone(headerFooterData.footer && headerFooterData.footer.first),
-      },
+      header: { default: headerDefault, first: headerFirst },
+      footer: { default: footerDefault, first: footerFirst },
     };
   }
 

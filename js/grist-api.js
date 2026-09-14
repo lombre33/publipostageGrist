@@ -12,6 +12,14 @@ const GristAPI = (function () {
   let _tables = [];
   let _columnsByTable = {};
   let _columnTypesByTable = {};
+  // Liste BRUTE (tables internes incluses) de listTables(), mémorisée pour éviter de la redemander à chaque ensureXxxTableExists() - `_tables` ci-dessus
+  // les exclut déjà, inutilisable ici. Tenue à jour manuellement après un AddTable réussi (cf. listAllTablesCached/ensureLinksTableExists/
+  // ensureUserProbeTable) pour ne jamais répondre "table absente" pour une table qu'on vient nous-mêmes de créer dans la même session.
+  let _rawTables = null;
+  async function listAllTablesCached() {
+    if (!_rawTables) _rawTables = (await grist.docApi.listTables()) || [];
+    return _rawTables;
+  }
   let _linkRulesByTable = {};
   let _currentRecord = null;
   let _currentMappings = null;
@@ -178,8 +186,8 @@ const GristAPI = (function () {
 
   async function refreshSchema() {
     try {
-      const tables = await grist.docApi.listTables();
-      _tables = (tables || []).filter(t => INTERNAL_TABLES.indexOf(t) === -1);
+      _rawTables = (await grist.docApi.listTables()) || [];
+      _tables = _rawTables.filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
       // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit dans un objet temporaire, remplacé d'un coup pour éviter un schéma
       // vidé-mais-pas-repeuplé pendant les allers-retours réseau.
@@ -314,7 +322,7 @@ const GristAPI = (function () {
   // Table de bookkeeping stockant, pour chaque table cible référencée via # depuis une autre table, comment en trouver la bonne ligne : "singleton" (une
   // seule ligne pertinente) ou "match" (comparer ColonneCible à ColonneSource, "id" désignant l'identifiant de ligne Grist). Créée à la volée au 1er besoin.
   async function ensureLinksTableExists() {
-    const tables = await grist.docApi.listTables();
+    const tables = await listAllTablesCached();
     if (tables.includes(LINKS_TABLE_NAME)) return;
     try {
       await grist.docApi.applyUserActions([
@@ -325,6 +333,7 @@ const GristAPI = (function () {
           { id: 'ColonneSource', type: 'Text' }
         ]]
       ]);
+      _rawTables.push(LINKS_TABLE_NAME);
     } catch (e) {
       console.error('[GristAPI] Erreur création table de liaison', e);
     }
@@ -413,59 +422,6 @@ const GristAPI = (function () {
     return _tokenCache;
   }
 
-  // Récupère les id de pièces jointes déjà connus, pour pouvoir repérer la nouvelle après upload (cf. uploadAttachment).
-  async function knownAttachmentIds() {
-    try {
-      const data = await grist.docApi.fetchTable('_grist_Attachments');
-      return new Set(data && data.id ? data.id : []);
-    } catch (e) {
-      console.warn('[GristAPI] lecture _grist_Attachments impossible:', e);
-      return new Set();
-    }
-  }
-
-  // Certaines instances Grist auto-hébergées n'envoient pas d'en-têtes CORS sur POST /attachments, même avec un domaine valide : le navigateur bloque la
-  // requête en mode 'cors' normal. On repère la pièce jointe créée en comparant les id de _grist_Attachments avant/après, via le pont RPC (jamais soumis à CORS).
-  async function findNewAttachmentId(beforeIds, fileName) {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      try {
-        const data = await grist.docApi.fetchTable('_grist_Attachments');
-        if (!data || !data.id) continue;
-        const candidates = [];
-        for (let i = 0; i < data.id.length; i++) {
-          if (!beforeIds.has(data.id[i])) candidates.push({ id: data.id[i], fileName: data.fileName ? data.fileName[i] : '' });
-        }
-        if (!candidates.length) continue;
-        const exactMatch = candidates.filter(c => c.fileName === fileName);
-        const pool = exactMatch.length ? exactMatch : candidates;
-        return pool.reduce((max, c) => (c.id > max.id ? c : max), pool[0]).id;
-      } catch (e) {
-        console.warn('[GristAPI] findNewAttachmentId: échec de lecture', e);
-      }
-    }
-    return null;
-  }
-
-  async function uploadAttachment(file) {
-    if (!file) throw new Error('Fichier manquant pour l’upload.');
-    const info = await getAccessTokenCached();
-    const formData = new FormData();
-    formData.append('upload', file, file.name || 'image');
-    const url = `${info.baseUrl}/attachments?auth=${info.token}`;
-    const beforeIds = await knownAttachmentIds();
-    try {
-      // mode: 'no-cors' — le navigateur envoie quand même la requête (l'upload a bien lieu côté serveur) mais la réponse devient opaque : impossible d'y lire
-      // l'identifiant créé, d'où la recherche via findNewAttachmentId ensuite.
-      await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
-    } catch (e) {
-      throw new Error('Échec réseau vers ' + info.baseUrl + '/attachments (' + e.message + ')');
-    }
-    const id = await findNewAttachmentId(beforeIds, file.name || 'image');
-    if (!id) throw new Error('Upload envoyé mais la pièce jointe n’a pas pu être confirmée dans le document (vérifiez si elle y apparaît malgré tout).');
-    return id;
-  }
-
   async function getAttachmentDownloadUrl(attachmentId) {
     if (!attachmentId) return '';
     const info = await getAccessTokenCached();
@@ -475,7 +431,7 @@ const GristAPI = (function () {
   // Email utilisateur (chip #Variable) : le jeton de getAccessTokenCached() renvoie toujours "anon@getgrist.com" (identité scopée au document, pas la session
   // navigateur). Contournement : une formule DÉCLENCHÉE sur `user.Email`, dans une table interne dédiée, attribue la vraie valeur (ligne ajoutée puis retirée).
   async function ensureUserProbeTable() {
-    const tables = await grist.docApi.listTables();
+    const tables = await listAllTablesCached();
     if (tables.includes(USER_PROBE_TABLE_NAME)) return;
     await grist.docApi.applyUserActions([
       ['AddTable', USER_PROBE_TABLE_NAME, [
@@ -484,6 +440,7 @@ const GristAPI = (function () {
         { id: 'Email', type: 'Text', isFormula: false, formula: 'user.Email', recalcWhen: 0, recalcDeps: null },
       ]],
     ]);
+    _rawTables.push(USER_PROBE_TABLE_NAME);
   }
   let _userEmailCache = null;
   async function getCurrentUserEmail() {
@@ -503,27 +460,6 @@ const GristAPI = (function () {
       // trainer à chaque appel.
       grist.docApi.applyUserActions([['RemoveRecord', USER_PROBE_TABLE_NAME, rowId]]).catch(() => {});
     }
-  }
-
-  // Colonne Pièce Jointe (table de l'utilisateur) choisie via le panneau de mappage de droite - cf. columns: [...] dans grist.ready() plus haut.
-  function getPdfAttachmentColumnId() {
-    return _currentMappings && _currentMappings.pdfAttachment ? _currentMappings.pdfAttachment : null;
-  }
-
-  // Enregistre un PDF déjà généré (Blob) dans la colonne mappée, sur la ligne actuellement sélectionnée. ['L', attachmentId] REMPLACE la liste de pièces
-  // jointes de la cellule (pas d'ajout) : une seule pièce jointe, toujours la plus récente - l'ancienne devient orpheline et Grist la purge de lui-même.
-  async function saveAttachmentToMappedColumn(blob, filename) {
-    const colId = getPdfAttachmentColumnId();
-    if (!colId) throw new Error('Aucune colonne Pièce Jointe n’est mappée pour le PDF (panneau de configuration du widget, à droite).');
-    if (!_currentRecord || _currentRecord.id == null) throw new Error('Aucune ligne sélectionnée.');
-    const tableId = _currentTableId;
-    if (!tableId) throw new Error('Table du document introuvable.');
-    const file = new File([blob], filename, { type: 'application/pdf' });
-    const attachmentId = await uploadAttachment(file);
-    await grist.docApi.applyUserActions([
-      ['UpdateRecord', tableId, _currentRecord.id, { [colId]: ['L', attachmentId] }]
-    ]);
-    return attachmentId;
   }
 
   // Rafraîchit le src des images de pièces jointes dans un DOM donné : le jeton d'accès expire après quelques minutes, donc le src ne doit jamais être
@@ -549,5 +485,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, uploadAttachment, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getPdfAttachmentColumnId, saveAttachmentToMappedColumn, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();

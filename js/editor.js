@@ -213,22 +213,42 @@ const Editor = (function () {
 
 
   async function init() {
-    const { Editor: TiptapEditor, Extension, Node, mergeAttributes } = await import('@tiptap/core');
-    const { StarterKit } = await import('@tiptap/starter-kit');
-    const { TextAlign } = await import('@tiptap/extension-text-align');
-    const { TextStyle } = await import('@tiptap/extension-text-style');
-    const { FontFamily } = await import('@tiptap/extension-font-family');
-    const { Suggestion } = await import('@tiptap/suggestion');
-    const { Table } = await import('@tiptap/extension-table');
-    const { TableRow } = await import('@tiptap/extension-table-row');
-    const { TableCell } = await import('@tiptap/extension-table-cell');
-    const { TableHeader } = await import('@tiptap/extension-table-header');
-    const { TaskList } = await import('@tiptap/extension-task-list');
-    const { TaskItem } = await import('@tiptap/extension-task-item');
-    const { computePosition, offset, flip, shift, autoUpdate } = await import('@floating-ui/dom');
+    // Les 14 modules ci-dessous n'ont aucune dépendance d'ordre entre eux (chacun n'alimente que sa propre variable, aucun n'est lu avant la construction
+    // des extensions plus bas) - chargés en parallèle plutôt qu'en 14 `await` séquentiels : un `import()` est une requête réseau vers esm.sh, la cascade
+    // ajoutait jusqu'à 1-2s au démarrage sur une connexion lente/cache froid (audit de performance 2026-09-14).
+    const [
+      { Editor: TiptapEditor, Extension, Node, mergeAttributes },
+      { StarterKit },
+      { TextAlign },
+      { TextStyle },
+      { FontFamily },
+      { Suggestion },
+      { Table },
+      { TableRow },
+      { TableCell },
+      { TableHeader },
+      { TaskList },
+      { TaskItem },
+      { computePosition, offset, flip, shift, autoUpdate },
+      { NodeSelection, TextSelection, EditorState },
+    ] = await Promise.all([
+      import('@tiptap/core'),
+      import('@tiptap/starter-kit'),
+      import('@tiptap/extension-text-align'),
+      import('@tiptap/extension-text-style'),
+      import('@tiptap/extension-font-family'),
+      import('@tiptap/suggestion'),
+      import('@tiptap/extension-table'),
+      import('@tiptap/extension-table-row'),
+      import('@tiptap/extension-table-cell'),
+      import('@tiptap/extension-table-header'),
+      import('@tiptap/extension-task-list'),
+      import('@tiptap/extension-task-item'),
+      import('@floating-ui/dom'),
+      import('prosemirror-state'),
+    ]);
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     let EditorStateClass;
-    const { NodeSelection, TextSelection, EditorState } = await import('prosemirror-state');
     EditorCore.setNodeSelectionClass(NodeSelection);
     EditorCore.setTextSelectionClass(TextSelection);
     EditorStateClass = EditorState;

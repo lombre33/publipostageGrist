@@ -1,6 +1,6 @@
 /* Publipostage Grist – stylesheet. Référencé par index.html (mode édition) et par reader-mode.js (mode lecture via #reader-container). */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
-/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour garantir que .ql-editor/
+/* Roboto (regular/italic/bold/bold-italic) : voir css/roboto-fonts.css, lié séparément avant cette feuille. Auto-hébergée pour garantir que l'éditeur/
    #reader-container utilisent EXACTEMENT les mêmes fichiers que ceux embarqués dans le PDF par pdfmake - sinon le texte ne coupe pas ses lignes pareil. */
 
 /* === Design tokens === --font-ui n'est appliqué qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
@@ -39,8 +39,8 @@ body { display:flex; flex-direction:column; }
    hauteur de la fenêtre, c'est TOUTE LA PAGE qui gagnait sa barre de défilement (barre d'outils comprise) au lieu du défilement interne prévu sur
    #editor-container. #app reproduit le même schéma flex-column contraint que body, pour que ce soit #editor-container qui défile, jamais la page. */
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
-/* Bandeau compact (maximiser la hauteur dispo pour l'éditeur) : UNE seule ligne toujours visible (.bar-row) + un second volet (#toolbar-panel) replié par
-   défaut pour les champs texte rarement modifiés. Tous les id de bouton/input sont INCHANGÉS : main.js les cible toujours pareil. */
+/* Bandeau compact (maximiser la hauteur dispo pour l'éditeur) : UNE seule ligne toujours visible (.bar-row). Tous les id de bouton/input sont INCHANGÉS :
+   main.js les cible toujours pareil. */
 #toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
 .bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
@@ -50,7 +50,6 @@ body { display:flex; flex-direction:column; }
   padding: 4px 8px; height: 28px;
 }
 .template-select { max-width: 160px; }
-.compact-select { max-width: 118px; }
 #toolbar-top button {
   font-family: var(--font-ui); font-weight: 600; font-size: 13px;
   display: inline-flex; align-items: center;
@@ -60,17 +59,6 @@ body { display:flex; flex-direction:column; }
   transition: background .12s ease, border-color .12s ease;
 }
 #toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
-/* Icône seule par défaut, libellé texte révélé au survol/focus (place minimale au repos, information complète accessible sans clic). Une largeur max de 160px
-   suffit large à tous les libellés de ce bandeau. */
-#toolbar-top button .btn-text, .a4-toggle .btn-text {
-  display:inline-block; max-width:0; opacity:0; overflow:hidden; white-space:nowrap;
-  transition: max-width .16s ease, opacity .1s ease, margin-left .16s ease;
-  vertical-align: middle;
-}
-#toolbar-top button:hover .btn-text, #toolbar-top button:focus-visible .btn-text,
-.a4-toggle:hover .btn-text, .a4-toggle:focus-within .btn-text {
-  max-width: 160px; opacity: 1; margin-left: 6px;
-}
 .a4-toggle { position:relative; display: inline-flex; align-items: center; height:28px; padding:0 7px; border:1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
 .a4-toggle:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
 .a4-toggle input { position:absolute; width:1px; height:1px; opacity:0; }
@@ -84,14 +72,8 @@ body { display:flex; flex-direction:column; }
 #btn-save-as::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='9' y='9' width='11' height='11' rx='1.5'/%3E%3Cpath d='M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'/%3E%3C/svg%3E"); }
 #btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 #btn-export-pdf::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3'/%3E%3C/svg%3E"); }
-/* Enregistrer dans PJ : trombone. */
-#btn-save-attachment::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12.5 12.5 21a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8'/%3E%3C/svg%3E"); }
 #btn-mode-edit::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E"); }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
-/* Bouton de bascule du volet #toolbar-panel (nom du modèle / nom de fichier PDF) : chevron qui pivote à 180° quand le volet est ouvert (aria-expanded, posé
-   par main.js). */
-#btn-toggle-panel::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); transition: transform .15s ease; }
-#btn-toggle-panel[aria-expanded="true"]::before { transform: rotate(180deg); }
 /* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de la règle générique #toolbar-top button ci-dessus (même compte d'ID que la règle
    générique + type "button" s'annuleraient sinon en cas d'égalité). */
 #toolbar-top #btn-save { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
@@ -107,25 +89,6 @@ body { display:flex; flex-direction:column; }
 #toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
-/* Bouton "Code HTML" (mode avancé) : délibérément À PART du groupe segmenté Édition/Lecture ci-dessus (pas dans .mode-toggle) et visuellement discret (pas de
-   fond, texte atténué) - un onglet qu'on découvre en le cherchant, pas une 3e option mise sur un pied d'égalité avec les deux premières. */
-#toolbar-top .html-mode-btn { background: transparent; border-style: dashed; color: var(--text-muted, #6b7280); font-family: 'Courier New', monospace; }
-#toolbar-top .html-mode-btn:hover { color: var(--text); border-color: var(--text-muted, #6b7280); }
-#toolbar-top .html-mode-btn.active { background: var(--surface-sunken); color: var(--accent); border-color: var(--accent); border-style: solid; }
-/* Onglet Code HTML : textarea pleine hauteur + bandeau d'avertissement fixe (pas une modale qu'on ferme et oublie) rappelant les deux limites : pas
-   d'aller-retour garanti vers l'éditeur classique, export vectoriel best-effort pour du HTML non produit par l'éditeur. */
-#html-source-container { display:flex; flex-direction:column; flex:1; min-height:0; }
-.html-source-warning { flex:none; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5b12; font-size:.82em; line-height:1.4; }
-#html-source-textarea { flex:1; min-height:0; width:100%; box-sizing:border-box; border:0; padding:14px 18px; resize:none; font-family:'Courier New', monospace; font-size:.85em; line-height:1.5; color:#1b2430; background:#fff; }
-#html-source-textarea:focus { outline:none; }
-/* Volet replié par défaut ([hidden] posé dans le HTML, togglé par main.js) : nom du modèle + nom de fichier PDF, moins souvent consultés que le reste du
-   bandeau - la spécificité de [hidden] doit dépasser celle de .toolbar-panen {display:flex} ci-dessous, d'où le doublement du sélecteur de classe. */
-.toolbar-panel { display:flex; flex-wrap:wrap; gap:10px 16px; padding:8px 10px; border-top:1px solid var(--border); background: var(--surface-sunken); }
-.toolbar-panel.toolbar-panel[hidden] { display:none; }
-.toolbar-panel-field { display:flex; flex-direction:column; gap:2px; flex:1; min-width:220px; }
-.toolbar-panel-field label { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); }
-.toolbar-panel-field input { width:100%; box-sizing:border-box; }
-.field-hint { font-size:10.5px; color: var(--text-faint); line-height:1.35; }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
 /* Variable #Variable dont la table/colonne référencée n'existe plus - posé/retiré par refreshVariableBadgeValidity() à chaque mise à jour (purement visuel,
    rien de persisté). Le message d'erreur vit dans l'attribut `title` natif (infobulle système, sans JS de popup dédié). */
@@ -158,122 +121,22 @@ body { display:flex; flex-direction:column; }
 .link-rules-empty { font-size:12px; color: var(--text-faint); margin:0; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 #editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
-/* Aperçu format A4 (case #toggle-a4-preview) : contraint .ql-editor à la largeur de contenu réelle d'une page PDF A4 (595.28pt - 2×28pt de marge, converti
-   en px standard 96/72 = 719.04px) - utile pour positionner une image en calque, dont la position n'est fidèle que si l'éditeur et le PDF font retomber le
-   texte au même endroit. CORRECTIF : `width` doit être la largeur TOTALE (page + marges), sinon le `padding` la retranche EN PLUS et le texte retombe sur
-   ~645px au lieu de 719.04px. Largeur totale = 719.04px + 2×37.33px de marge = 793.71px. Purement visuel. */
 #editor-container.a4-preview { background: var(--surface-sunken); }
-#editor-container.a4-preview .ql-editor { width: 793.71px; max-width: 100%; margin: 0 auto; padding: 37.33px; background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 4px 16px rgba(20,28,46,.10); }
 /* z-index:0 (en plus de position:relative) : force #reader-container à établir son PROPRE contexte d'empilement local - sans ça son fond opaque se peint
    APRÈS (par-dessus) toute image en calque "derrière le texte" (z-index négatif), la rendant invisible et lui volant ses clics. */
 #reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 
-/* === Éditeur Quill === */
-/* position:relative : sert de repère aux poignées de redimensionnement et aux images en calque devant/derrière le texte. z-index:0 : force .ql-editor à
-   établir son PROPRE contexte d'empilement, même raison que #reader-container ci-dessus (sinon une image "derrière le texte" devient invisible). */
-.ql-editor { position:relative; z-index:0; min-height:240px; font-size: 14px; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
-.ql-toolbar.ql-snow { background: var(--surface); border-color: var(--border); font-family: var(--font-ui); padding: 7px 10px; }
-.ql-snow .ql-picker { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); }
-.ql-snow .ql-stroke { stroke: var(--text); }
-.ql-snow .ql-fill { fill: var(--text); }
-.ql-snow.ql-toolbar button:hover, .ql-snow .ql-toolbar button:hover,
-.ql-snow.ql-toolbar button.ql-active, .ql-snow .ql-toolbar button.ql-active,
-.ql-snow.ql-toolbar .ql-picker-label:hover, .ql-snow .ql-picker-label.ql-active {
-  color: var(--accent);
-}
-.ql-snow.ql-toolbar button:hover .ql-stroke, .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke: var(--accent); }
-.ql-snow.ql-toolbar button:hover .ql-fill, .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: var(--accent); }
-.ql-toolbar.ql-snow .ql-formats { margin-right: 10px; padding-right: 10px; border-right: 1px solid var(--border); }
-.ql-toolbar.ql-snow .ql-formats:last-child { border-right: 0; margin-right: 0; }
-
-/* === Tableaux éditables === */
-.editable-table { display:inline-block; margin: 8px 0; }
-.editable-table table { border-collapse: collapse; table-layout: fixed; width: 100%; }
-.editable-table th, .editable-table td { border:1px solid #999; padding:6px 8px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-.editable-table th { background:#eef3f8; }
-/* Même langage visuel que .editor-image-toolbar (pastille sombre flottante à icônes) pour une barre contextuelle cohérente entre image et tableau. */
-.table-context-toolbar { display:none; position:absolute; align-items:center; background: var(--dark-bg); border: 1px solid var(--dark-border); padding:5px; box-shadow: var(--shadow-float); border-radius: 10px; gap:2px; z-index:50; }
-.table-context-toolbar.visible { display:flex; flex-wrap:wrap; }
-.table-context-toolbar button {
-  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; color: var(--dark-text-muted); cursor: pointer;
-  font-size: 0; position: relative;
-}
-.table-context-toolbar button svg { width: 15px; height: 15px; }
-.table-context-toolbar button:hover { background: var(--dark-bg-raised); color: var(--dark-text); }
-.table-context-toolbar button[data-tip]:hover::after {
-  content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
-  background: #0c1324; color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
-  padding: 4px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; z-index: 1;
-}
 #reader-container table { width:100%; border-collapse:collapse; }
 #reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
-.ql-toolbar .ql-formats { display: inline-flex; align-items: center; flex-wrap: nowrap; }
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc { display: inline-flex; align-items: center; width: auto; }
-/* Boutons "large" injectés par editor.js (icône SVG + libellé) : page-break, tableau, 2 colonnes, image, image URL, sommaire. Même gabarit que les icon-btn
-   Quill voisins, mais avec du texte. */
-.ql-toolbar .ql-page-break, .ql-toolbar .ql-insert-table, .ql-toolbar .ql-insert-two-columns, .ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url, .ql-toolbar .ql-insert-toc {
-  height: 30px; padding: 0 9px; gap: 6px; border-radius: var(--radius-sm);
-  font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text);
-}
-.ql-toolbar .ql-page-break:hover, .ql-toolbar .ql-insert-table:hover, .ql-toolbar .ql-insert-two-columns:hover, .ql-toolbar .ql-insert-toc:hover { background: var(--surface-sunken); }
-.ql-toolbar .ql-insert-image, .ql-toolbar .ql-insert-image-url { color: var(--accent); }
-.ql-toolbar .ql-insert-image:hover, .ql-toolbar .ql-insert-image-url:hover { background: var(--accent-soft); }
-.ql-toolbar .ql-page-break svg, .ql-toolbar .ql-insert-table svg, .ql-toolbar .ql-insert-two-columns svg, .ql-toolbar .ql-insert-image svg, .ql-toolbar .ql-insert-image-url svg, .ql-toolbar .ql-insert-toc svg { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
-.ql-toolbar .ql-undo svg, .ql-toolbar .ql-redo svg { width: 16px; height: 16px; vertical-align: -3px; }
 /* margin/padding volontairement réduits au minimum : cette "chrome" d'édition n'existe pas côté PDF (twoColumnsFrom pose une marge calibrée pour matcher
    CETTE valeur) - un padding plus généreux gonflait la zone dans l'éditeur sans contrepartie dans le PDF, décalant tout ce qui suit. */
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
-.two-columns-marker { position: absolute; top: 3px; left: 8px; font-size: .68em; line-height: 1; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; user-select: none; pointer-events: none; }
 .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 22px; height: 40px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; user-select: none; touch-action: none; display: flex; align-items: center; justify-content: center; }
 .two-columns-resize-grip::before { content: ''; width: 6px; height: 32px; border-radius: 3px; background: var(--border); }
 .two-columns-resize-grip:hover::before, .two-columns-resize-grip:active::before { background: var(--accent); }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
-#reader-container .two-columns-marker { display: none; }
 #reader-container .two-columns-resize-grip { display: none; }
-.ql-toolbar .ql-formats > .ql-page-break, .ql-toolbar .ql-formats > .ql-insert-table, .ql-toolbar .ql-formats > .ql-insert-two-columns, .ql-toolbar .ql-formats > .ql-insert-image, .ql-toolbar .ql-formats > .ql-insert-image-url, .ql-toolbar .ql-formats > .ql-insert-toc { display: inline-flex !important; align-items: center; flex: 0 0 auto; float: none !important; clear: none !important; width: auto !important; margin: 0 !important; white-space: nowrap; }
-.editable-table tr:first-child > th, .editable-table tr:first-child > td { position: relative; }
-.editable-table td, .editable-table th { text-align: inherit; }
-
-/* === Slider de redimensionnement de colonnes (v1.8.2) === Poignee sur toute la hauteur de la cellule d'en-tete (ancree en position:relative), pour une
-   cible de drag large et stable - curseur ew-resize, z-index eleve, grip central (::after) qui rend le slider visible et cliquable. */
-.table-col-resize-handle {
-  position: absolute;
-  top: 0;
-  right: -1px;
-  width: 10px;
-  height: 100%;
-  cursor: ew-resize;
-  z-index: 30;
-  box-sizing: border-box;
-  background: transparent;
-  user-select: none;
-  touch-action: none;
-  border-right: 2px solid rgba(44,123,229,.45);
-}
-.table-col-resize-handle::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 4px;
-  height: 22px;
-  background: #2c7be5;
-  border-radius: 2px;
-  opacity: 0.55;
-  transition: opacity .15s ease, height .15s ease, background .15s ease;
-}
-.editable-table tr:first-child > th:hover .table-col-resize-handle::after,
-.editable-table tr:first-child > td:hover .table-col-resize-handle::after {
-  opacity: 1;
-  height: 32px;
-  background: #1f5dbf;
-}
-body.resizing-table-column { cursor: ew-resize; user-select: none; }
-body.resizing-table-column * { cursor: ew-resize !important; }
 
 /* === Saut de page forcé === */
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
@@ -297,38 +160,39 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 #reader-container .toc-marker { display: none; user-select: none; }
 #reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
 
-/* Numérotation automatique des titres H1-H6, pilotée par le data-attribute data-heading-style posé sur .ql-editor ou sur .reader-content (PAS
-   #reader-container lui-même : .reader-content est le seul VRAI parent direct des titres) - un pur compteur CSS (::before), à l'image des puces/numéros de
-   liste (cf. listMarkerFor dans pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF). Cascade sur 3 styles (décimal -> alpha -> romain),
-   qui se répète au-delà de h3. Uniquement les titres de PREMIER NIVEAU du flux principal (`>`) : un titre dans un tableau/une colonne n'est pas numéroté. */
-.ql-editor[data-heading-style], .reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
-.ql-editor[data-heading-style] > h1, .reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
-.ql-editor[data-heading-style] > h2, .reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
-.ql-editor[data-heading-style] > h3, .reader-content[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
-.ql-editor[data-heading-style] > h4, .reader-content[data-heading-style] > h4 { counter-reset: h5c h6c; counter-increment: h4c; }
-.ql-editor[data-heading-style] > h5, .reader-content[data-heading-style] > h5 { counter-reset: h6c; counter-increment: h5c; }
-.ql-editor[data-heading-style] > h6, .reader-content[data-heading-style] > h6 { counter-increment: h6c; }
+/* Numérotation automatique des titres H1-H6 en mode Lecture, pilotée par le data-attribute data-heading-style posé sur .reader-content (PAS #reader-container
+   lui-même : .reader-content est le seul VRAI parent direct des titres) - un pur compteur CSS (::before), à l'image des puces/numéros de liste (cf.
+   listMarkerFor dans pdf-export.js, qui MESURE ce même ::before pour le reproduire dans le PDF). L'équivalent éditeur (`.tiptap[data-heading-style]`) vit
+   dans css/editor-v2.css - les deux DOIVENT rester en phase (mêmes 3 styles décimal/alpha/romain, même cascade au-delà de h3). Uniquement les titres de
+   PREMIER NIVEAU du flux principal (`>`) : un titre dans un tableau/une colonne n'est pas numéroté. */
+.reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
+.reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
+.reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
+.reader-content[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
+.reader-content[data-heading-style] > h4 { counter-reset: h5c h6c; counter-increment: h4c; }
+.reader-content[data-heading-style] > h5 { counter-reset: h6c; counter-increment: h5c; }
+.reader-content[data-heading-style] > h6 { counter-increment: h6c; }
 
-.ql-editor[data-heading-style="numeric"] > h1::before, .reader-content[data-heading-style="numeric"] > h1::before { content: counter(h1c, decimal) ") "; }
-.ql-editor[data-heading-style="numeric"] > h2::before, .reader-content[data-heading-style="numeric"] > h2::before { content: counter(h2c, lower-alpha) ") "; }
-.ql-editor[data-heading-style="numeric"] > h3::before, .reader-content[data-heading-style="numeric"] > h3::before { content: counter(h3c, upper-roman) ") "; }
-.ql-editor[data-heading-style="numeric"] > h4::before, .reader-content[data-heading-style="numeric"] > h4::before { content: counter(h4c, decimal) ") "; }
-.ql-editor[data-heading-style="numeric"] > h5::before, .reader-content[data-heading-style="numeric"] > h5::before { content: counter(h5c, lower-alpha) ") "; }
-.ql-editor[data-heading-style="numeric"] > h6::before, .reader-content[data-heading-style="numeric"] > h6::before { content: counter(h6c, upper-roman) ") "; }
+.reader-content[data-heading-style="numeric"] > h1::before { content: counter(h1c, decimal) ") "; }
+.reader-content[data-heading-style="numeric"] > h2::before { content: counter(h2c, lower-alpha) ") "; }
+.reader-content[data-heading-style="numeric"] > h3::before { content: counter(h3c, upper-roman) ") "; }
+.reader-content[data-heading-style="numeric"] > h4::before { content: counter(h4c, decimal) ") "; }
+.reader-content[data-heading-style="numeric"] > h5::before { content: counter(h5c, lower-alpha) ") "; }
+.reader-content[data-heading-style="numeric"] > h6::before { content: counter(h6c, upper-roman) ") "; }
 
-.ql-editor[data-heading-style="alpha"] > h1::before, .reader-content[data-heading-style="alpha"] > h1::before { content: counter(h1c, lower-alpha) ") "; }
-.ql-editor[data-heading-style="alpha"] > h2::before, .reader-content[data-heading-style="alpha"] > h2::before { content: counter(h2c, upper-roman) ") "; }
-.ql-editor[data-heading-style="alpha"] > h3::before, .reader-content[data-heading-style="alpha"] > h3::before { content: counter(h3c, decimal) ") "; }
-.ql-editor[data-heading-style="alpha"] > h4::before, .reader-content[data-heading-style="alpha"] > h4::before { content: counter(h4c, lower-alpha) ") "; }
-.ql-editor[data-heading-style="alpha"] > h5::before, .reader-content[data-heading-style="alpha"] > h5::before { content: counter(h5c, upper-roman) ") "; }
-.ql-editor[data-heading-style="alpha"] > h6::before, .reader-content[data-heading-style="alpha"] > h6::before { content: counter(h6c, decimal) ") "; }
+.reader-content[data-heading-style="alpha"] > h1::before { content: counter(h1c, lower-alpha) ") "; }
+.reader-content[data-heading-style="alpha"] > h2::before { content: counter(h2c, upper-roman) ") "; }
+.reader-content[data-heading-style="alpha"] > h3::before { content: counter(h3c, decimal) ") "; }
+.reader-content[data-heading-style="alpha"] > h4::before { content: counter(h4c, lower-alpha) ") "; }
+.reader-content[data-heading-style="alpha"] > h5::before { content: counter(h5c, upper-roman) ") "; }
+.reader-content[data-heading-style="alpha"] > h6::before { content: counter(h6c, decimal) ") "; }
 
-.ql-editor[data-heading-style="roman"] > h1::before, .reader-content[data-heading-style="roman"] > h1::before { content: counter(h1c, upper-roman) ") "; }
-.ql-editor[data-heading-style="roman"] > h2::before, .reader-content[data-heading-style="roman"] > h2::before { content: counter(h2c, decimal) ") "; }
-.ql-editor[data-heading-style="roman"] > h3::before, .reader-content[data-heading-style="roman"] > h3::before { content: counter(h3c, lower-alpha) ") "; }
-.ql-editor[data-heading-style="roman"] > h4::before, .reader-content[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
-.ql-editor[data-heading-style="roman"] > h5::before, .reader-content[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
-.ql-editor[data-heading-style="roman"] > h6::before, .reader-content[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
+.reader-content[data-heading-style="roman"] > h1::before { content: counter(h1c, upper-roman) ") "; }
+.reader-content[data-heading-style="roman"] > h2::before { content: counter(h2c, decimal) ") "; }
+.reader-content[data-heading-style="roman"] > h3::before { content: counter(h3c, lower-alpha) ") "; }
+.reader-content[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
+.reader-content[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
+.reader-content[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
 
 /* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
@@ -336,70 +200,16 @@ body.resizing-table-column * { cursor: ew-resize !important; }
 
 /* === Images de l'éditeur : sélection, resize et repositionnement === */
 .editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
-.editor-image:hover, .editor-image.editor-image-active { outline-color: #1f5dbf; }
-.editor-image.editor-image-floating { cursor: move; }
-/* position:fixed est indispensable : sans elle, top/left posés en JS (coordonnées viewport via getBoundingClientRect) n'ont aucun effet et la barre retombe
-   dans le flux normal, tout en bas du document (dernier enfant de <body>). */
-.editor-image-toolbar { display: none; align-items: center; position: fixed; z-index: 10000; padding: 5px; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 10px; box-shadow: var(--shadow-float); white-space: nowrap; }
-.editor-image-toolbar.visible { display: flex; }
-.editor-image-toolbar button { width: 30px; height: 30px; min-width: 30px; padding: 0; margin: 0; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--dark-text-muted); background: transparent; cursor: pointer; position: relative; }
-.editor-image-toolbar button svg { width: 15px; height: 15px; }
-.editor-image-toolbar button:hover { background: var(--dark-bg-raised); color: var(--dark-text); }
-.editor-image-toolbar button:disabled { opacity: .3; cursor: not-allowed; }
-.editor-image-toolbar button:disabled:hover { background: transparent; color: var(--dark-text-muted); }
-.editor-image-toolbar button.active { background: var(--accent); color: #fff; }
-.editor-image-toolbar button.editor-image-toolbar-danger:hover { background: var(--danger); color: #fff; }
-.editor-image-toolbar button[data-tip]:hover::after {
-  content: attr(data-tip); position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
-  background: #0c1324; color: #fff; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
-  padding: 4px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; z-index: 1;
-}
-.editor-image-toolbar-sep { display: inline-block; width: 1px; height: 18px; background: var(--dark-border); margin: 0 3px; vertical-align: middle; flex: none; }
-.editor-image-opacity { display: inline-flex; align-items: center; gap: 6px; color: var(--dark-text-muted); font-size: 12px; padding: 0 6px; vertical-align: middle; }
-.editor-image-opacity svg { width: 14px; height: 14px; flex: none; }
-.editor-image-opacity input[type="range"] { width: 60px; vertical-align: middle; accent-color: var(--accent); }
+.editor-image:hover { outline-color: #1f5dbf; }
 /* Poignées volontairement grandes et contrastées : ce sont elles qui portent le redimensionnement libre, les boutons zoom +/- n'étant qu'un raccourci en
-   +/-25%. position:fixed : ces poignées vivent dans document.body, hors de .ql-editor, pour échapper à la reconciliation DOM de Quill. */
+   +/-25%. position:fixed : ces poignées vivent dans document.body, hors de l'éditeur, pour échapper à la réconciliation DOM de TipTap. */
 .editor-image-handle { position: fixed; z-index: 9999; display: none; width: 14px; height: 14px; margin: -8px; border: 2px solid var(--accent); border-radius: 3px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: nwse-resize; }
 .editor-image-handle:hover { background: var(--accent-soft); }
 .editor-image-handle-nw { cursor: nwse-resize; }
 .editor-image-handle-ne { cursor: nesw-resize; }
 .editor-image-handle-sw { cursor: nesw-resize; }
 .editor-image-handle-se { cursor: nwse-resize; }
-/* Marqueur d'ancrage des images devant/derrière le texte : reste cliquable par-dessus tout (comme les poignées) pour resélectionner une image que le flux
-   normal du texte recouvre autrement complètement une fois désélectionnée. */
-.editor-image-anchor { position: fixed; z-index: 10001; width: 20px; height: 20px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); color: var(--accent); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
-.editor-image-anchor svg { width: 12px; height: 12px; }
-.editor-image-anchor:hover { background: var(--accent); color: #fff; }
 .editor-image[data-align="left"] { display: block; margin-left: 0; margin-right: auto; }
 .editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
 .editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
 .editor-image[data-wrap="block"] { display: block; }
-body.resizing-editor-image { cursor: nwse-resize; user-select: none; }
-body.resizing-editor-image * { user-select: none; }
-
-/* === Pickers Taille/Police (tailles réelles en pt + polices web-safe) - remplacent la liste petit/normal/grand/énorme de Quill par défaut, dont le CSS ne
-   connaît que CES valeurs précises - sans ce qui suit, les nouvelles valeurs n'affichent aucun texte. Une seule règle générique attr(data-value) suffit. */
-.ql-snow .ql-picker.ql-size .ql-picker-label::before,
-.ql-snow .ql-picker.ql-size .ql-picker-item::before {
-  content: attr(data-value);
-}
-.ql-snow .ql-picker.ql-size .ql-picker-label:not([data-value])::before,
-.ql-snow .ql-picker.ql-size .ql-picker-item:not([data-value])::before {
-  content: 'Normal';
-}
-.ql-snow .ql-picker.ql-font .ql-picker-label::before,
-.ql-snow .ql-picker.ql-font .ql-picker-item::before {
-  content: attr(data-value);
-}
-.ql-snow .ql-picker.ql-font .ql-picker-label:not([data-value])::before,
-.ql-snow .ql-picker.ql-font .ql-picker-item:not([data-value])::before {
-  content: 'Roboto';
-}
-/* Aperçu visuel : chaque option du picker "Police" s'affiche dans sa propre police (CSS n'autorise pas de attr() générique pour font-family, une règle
-   explicite par police est donc nécessaire ici - seulement 5, cf. la liste volontairement restreinte choisie pour cette fonctionnalité). */
-.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Arial"] { font-family: Arial, Helvetica, sans-serif; }
-.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Times New Roman"] { font-family: 'Times New Roman', Times, serif; }
-.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Georgia"] { font-family: Georgia, serif; }
-.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Courier New"] { font-family: 'Courier New', Courier, monospace; }
-.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Calibri"] { font-family: Calibri, sans-serif; }
