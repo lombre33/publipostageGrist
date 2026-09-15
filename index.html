@@ -110,7 +110,7 @@
       </label>
       <span class="bar-sep"></span>
       <span class="v2-hover-group" id="v2-quality-group">
-        <button type="button" id="v2-btn-quality" aria-label="Qualité d'export PDF" data-tip="Qualité PDF" data-i18n-aria="toolbar.quality.aria" data-i18n-tip="toolbar.quality.tip"></button>
+        <button type="button" id="v2-btn-quality" aria-label="Qualité d'export PDF" data-i18n-aria="toolbar.quality.aria"></button>
         <select id="v2-pdf-quality" aria-label="Qualité d'export PDF" data-i18n-aria="toolbar.quality.aria" hidden>
           <option value="native" selected data-i18n="quality.native">Vectoriel (par défaut)</option>
           <option value="browser-print" disabled data-i18n="quality.browserPrint">Impr. navigateur (bientôt)</option>
@@ -118,6 +118,7 @@
           <option value="ultra" disabled data-i18n="quality.ultra">Ultra HD (bientôt)</option>
         </select>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-quality-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="toolbar.quality.tip">Qualité PDF</span>
           <span class="v2-hover-row" data-quality="native" data-i18n="quality.native">Vectoriel (par défaut)</span>
           <span class="v2-hover-row v2-hover-row-disabled" data-quality="browser-print" data-i18n="quality.browserPrint">Impr. navigateur (bientôt)</span>
           <span class="v2-hover-row v2-hover-row-disabled" data-quality="low" data-i18n="quality.low">Basse qualité (bientôt)</span>
@@ -128,8 +129,9 @@
         </span>
       </span>
       <span class="v2-hover-group" id="v2-export-pdf-group">
-        <button id="btn-export-pdf" aria-label="Exporter en PDF" data-tip="Exporter en PDF" data-i18n-aria="toolbar.exportPdf" data-i18n-tip="toolbar.exportPdf"></button>
+        <button id="btn-export-pdf" aria-label="Exporter en PDF" data-i18n-aria="toolbar.exportPdf"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-export-pdf-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
           <span class="v2-hover-row" id="v2-btn-export-pdf-batch" data-i18n="toolbar.exportPdfBatch">Exporter toutes les lignes (ZIP)…</span>
         </span>
       </span>
