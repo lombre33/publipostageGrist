@@ -14,6 +14,11 @@
 .title-cluster button.rename-btn:hover, .title-cluster button.rename-btn:focus-visible { color: var(--text); background: var(--surface-sunken); }
 /* Crayon de renommage : délibérément plus petit/discret que celui du mode Édition pour ne pas laisser croire aux deux boutons la même fonction. */
 #toolbar-top #btn-rename-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
+/* Étoile "modèle par défaut" : même gabarit discret que le crayon de renommage. Contour uniquement à l'état inactif ; l'état actif (.is-default) passe en
+   couleur accent plutôt que de changer de tracé, pour rester lisible même en tout petit. */
+#toolbar-top #btn-set-default-template::before { width: 12px; height: 12px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); }
+#toolbar-top #btn-set-default-template.is-default { color: var(--accent); background: var(--accent-soft); }
+#toolbar-top #btn-set-default-template:disabled { opacity: .4; cursor: default; }
 
 /* === Cluster "actions document" (Nouveau/Enregistrer/Dupliquer/Supprimer/Tables liées) === Juste un regroupement par ESPACEMENT (gap), sans boîte visuelle
    autour (un encadré gris testé puis retiré, pas dans le style du reste de l'app). Enregistrer/Supprimer/Exporter restent distingués par COULEUR. */

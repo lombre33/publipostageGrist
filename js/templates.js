@@ -40,6 +40,25 @@ const Templates = (function () {
     }
   }
 
+  // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
+  // que HeaderFooter ci-dessus.
+  let defaultColumnChecked = false;
+  async function ensureDefaultColumn() {
+    if (defaultColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('EstParDefaut' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'EstParDefaut', { type: 'Bool', isFormula: false, label: 'Modèle par défaut' }]
+        ]);
+      }
+      defaultColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne EstParDefaut', e);
+    }
+  }
+
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
   function safeParseHeaderFooter(json) {
@@ -59,6 +78,7 @@ const Templates = (function () {
   async function loadAll() {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
+    await ensureDefaultColumn();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
@@ -68,7 +88,8 @@ const Templates = (function () {
           nom: data.Nom[i],
           contenu: data.Contenu[i],
           nomFichierPDF: data.NomFichierPDF ? data.NomFichierPDF[i] : '',
-          headerFooter: safeParseHeaderFooter(data.HeaderFooter ? data.HeaderFooter[i] : null)
+          headerFooter: safeParseHeaderFooter(data.HeaderFooter ? data.HeaderFooter[i] : null),
+          estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i])
         });
       }
     } catch (e) {
@@ -83,6 +104,25 @@ const Templates = (function () {
   function getCurrentId() { return currentTemplateId; }
 
   function setCurrentId(id) { currentTemplateId = id; }
+
+  function getDefaultId() {
+    const found = templatesCache.find(t => t.estParDefaut);
+    return found ? found.id : null;
+  }
+
+  // id = null retire le modèle par défaut sans en redéfinir un autre. Un seul modèle par défaut à la fois : les autres sont explicitement repassés à false
+  // plutôt que laissés tels quels, pour ne jamais se retrouver avec deux "par défaut" après un enchaînement d'appels.
+  async function setDefault(id) {
+    await ensureTableExists();
+    await ensureDefaultColumn();
+    const actions = [];
+    templatesCache.forEach(t => {
+      if (t.estParDefaut && String(t.id) !== String(id)) actions.push(['UpdateRecord', TABLE_NAME, t.id, { EstParDefaut: false }]);
+    });
+    if (id != null) actions.push(['UpdateRecord', TABLE_NAME, id, { EstParDefaut: true }]);
+    if (actions.length) await grist.docApi.applyUserActions(actions);
+    templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
+  }
 
   async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData) {
     await ensureTableExists();
@@ -110,5 +150,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, TABLE_NAME };
 })();

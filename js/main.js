@@ -34,9 +34,36 @@
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
-      opt.textContent = t.nom;
+      opt.textContent = t.estParDefaut ? (t.nom + ' ★') : t.nom;
       templateSelect.appendChild(opt);
     });
+  }
+
+  // Reflète si le modèle actuellement chargé est le modèle par défaut - rappelé après chaque changement de modèle et après le clic sur le bouton lui-même,
+  // jamais mis à jour "à la main" ailleurs pour ne jamais désynchroniser l'icône de l'état réel.
+  function syncDefaultTemplateButton() {
+    const btn = document.getElementById('btn-set-default-template');
+    if (!btn) return;
+    const currentId = Templates.getCurrentId();
+    const isDefault = currentId != null && String(Templates.getDefaultId()) === String(currentId);
+    btn.classList.toggle('is-default', isDefault);
+    btn.disabled = currentId == null;
+  }
+
+  function wireDefaultTemplateButton() {
+    const btn = document.getElementById('btn-set-default-template');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const currentId = Templates.getCurrentId();
+      if (!currentId) return;
+      const wasDefault = String(Templates.getDefaultId()) === String(currentId);
+      await Templates.setDefault(wasDefault ? null : currentId);
+      await refreshTemplateList();
+      templateSelect.value = currentId;
+      syncDefaultTemplateButton();
+      setStatus(wasDefault ? I18n.t('status.defaultTemplateCleared') : I18n.t('status.defaultTemplateSet'));
+    });
+    syncDefaultTemplateButton();
   }
 
   function loadTemplateIntoEditor(tpl) {
@@ -58,6 +85,7 @@
     // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant qu'on
     // ne repassait pas explicitement par "Mode édition" puis "Mode lecture" (le changement de modèle semblait alors "ne rien faire" en mode Lecture).
     if (currentMode === 'read') renderReader();
+    syncDefaultTemplateButton();
   }
 
   // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer. Le renommage ne touche que l'affichage local
@@ -109,6 +137,7 @@
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
+    syncDefaultTemplateButton();
     setStatus(I18n.t('status.templateSaved'));
   }
 
@@ -545,6 +574,10 @@
       if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
     });
     await refreshTemplateList();
+    // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
+    // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
+    const defaultTemplateId = Templates.getDefaultId();
+    if (defaultTemplateId != null) templateSelect.value = defaultTemplateId;
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
     document.getElementById('btn-new').addEventListener('click', onNew);
@@ -559,6 +592,7 @@
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
+    wireDefaultTemplateButton();
     wirePdfFilenameToggle();
     wireQualityDropdown();
     Settings.wireSettingsModal();
