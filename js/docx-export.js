@@ -187,7 +187,12 @@ const DocxExport = (function () {
     if (node.tagName === 'IMG') {
       if (node.hasAttribute('data-pdf-skip')) return [];
       const imgData = await docxImageDataFrom(node);
-      return imgData ? [new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height } })] : [];
+      if (!imgData) return [];
+      // docx.js régénère un compteur wp:docPr/id FRAIS (démarrant à 1) à chaque ImageRun plutôt que d'en partager un seul pour tout le document (bug de la
+      // librairie, vérifié dans son propre bundle) : sans id explicite ici, deux images obtiennent toutes les deux id="1", ce que Word refuse d'ouvrir sans
+      // le signaler comme contenu illisible. altText.id fournit un id unique par image du document.
+      ctx.imageIdCounter += 1;
+      return [new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } })];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
     let out = [];
@@ -328,7 +333,10 @@ const DocxExport = (function () {
       }
       tableRows.push(new docx.TableRow({ children: tableCells }));
     }
-    return new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA } });
+    // columnWidths pilote le <w:tblGrid> (déclaration structurelle des colonnes) - SANS lui, docx.js retombe sur son propre défaut interne
+    // (100 twips/colonne, vérifié dans son bundle), incohérent avec les largeurs réelles posées ci-dessus sur chaque TableCell.width. Un <w:tblGrid> qui ne
+    // correspond pas aux tcW réels est un tableau non conforme (Word peut le signaler comme contenu à réparer).
+    return new docx.Table({ rows: tableRows, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, columnWidths: colWidthsTwip });
   }
 
   const NO_BORDER = { style: 'none', size: 0, color: 'FFFFFF' };
@@ -352,7 +360,8 @@ const DocxExport = (function () {
         borders: NO_BORDERS,
       }));
     }
-    return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS });
+    // Même correctif que tableBlockFrom : columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs réelles des cellules.
+    return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
   }
 
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
@@ -485,7 +494,7 @@ const DocxExport = (function () {
   }
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
-    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0 };
+    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0 };
     const detachMeasureHost = attachMeasureHost(root);
     let bodyBlocks;
     try {
