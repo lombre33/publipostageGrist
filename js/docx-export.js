@@ -1,13 +1,20 @@
-// Export DOCX — V1, volontairement plus modeste que l'export PDF vectoriel (js/pdf-export.js). DOCX est un format qui SE REFLOW (police/zoom/imprimante du
-// lecteur), contrairement à une page PDF figée : reproduire la fidélité pixel-près de pdf-export.js (grille page, images en calque bracketées/interpolées)
-// n'aurait pas de sens ici et irait contre l'usage réel d'un .docx (un document qu'on continue d'ÉDITER dans Word/LibreOffice). Portée V1, assumée :
-//  - Toute image (y compris "en calque devant/derrière" dans l'éditeur) devient une image EN LIGNE, dans l'ordre du document - aucune position absolue.
-//  - Listes à puces/numérotées : marqueur texte littéral ("1. ", "a. ", "• "...), comme pdf-export.js - pas la numérotation automatique native Word
-//    (qui permettrait de renuméroter après suppression d'un item, mais demanderait de câbler numbering.xml pour un gain marginal ici).
+// Export DOCX — Beta, volontairement plus modeste que l'export PDF vectoriel (js/pdf-export.js). DOCX est un format qui SE REFLOW (police/zoom/imprimante
+// du lecteur), contrairement à une page PDF figée : reproduire la fidélité pixel-près de pdf-export.js (grille page, images en calque bracketées/
+// interpolées) n'aurait pas de sens ici et irait contre l'usage réel d'un .docx (un document qu'on continue d'ÉDITER dans Word/LibreOffice).
+//
+// Écarts avec la V1 (cf. historique git pour le détail) : les listes utilisent maintenant la numérotation Word native (numbering.xml - une <ul>/<ol>
+// renumérote correctement après suppression/ajout d'un item, contrairement à un marqueur texte figé) ; les colonnes de tableau sont mesurées sur le rendu
+// réel (comme pdf-export.js) au lieu d'une répartition à parts égales ; export en lot (ZIP, une ligne = un .docx) ajouté, cf. js/main.js:onExportDocxBatch.
+//
+// Portée encore volontairement réduite, assumée :
+//  - Toute image (y compris "en calque devant/derrière" dans l'éditeur) devient une image EN LIGNE, dans l'ordre du document - aucune position absolue
+//    (le format DOCX autorise une ancre page-relative, mais ça n'aurait de sens que figé comme le PDF - contradictoire avec le reflow qui fait l'intérêt
+//    même d'un .docx).
+//  - Case à cocher : glyphe Unicode littéral (☑/☐), pas de case à cocher Word native (content control `w:sdt` - mécanisme bien plus lourd, sans lien avec
+//    numbering.xml utilisé pour le reste des listes).
 //  - Sommaire : liste statique (marqueur + texte), jamais un vrai champ Word TOC (qui demanderait "Mettre à jour les champs" côté utilisateur).
 //  - Polices : jamais embarquées (contrairement au PDF) - Word résout "Roboto"/"Arial"... sur les polices RÉELLEMENT installées chez le lecteur, avec repli
 //    silencieux si absentes. Comportement normal d'un document éditable, pas un bug.
-//  - Pas d'export en lot (ZIP) - une ligne Grist à la fois, cf. js/main.js:onExportPdfBatch pour l'équivalent PDF si utile plus tard.
 // En échange, DOCX offre nativement des choses que pdf-export.js doit simuler : vraies notes de bas de page, vrais champs numéro de page/nombre de pages,
 // vrai style "Titre 1..6" (repris par le volet de navigation Word).
 const DocxExport = (function () {
@@ -199,21 +206,26 @@ const DocxExport = (function () {
     return out;
   }
 
-  function listMarkerText(li) {
-    const parent = li.parentElement;
-    if (parent && parent.tagName === 'OL') {
-      const items = Array.from(parent.children).filter(c => c.tagName === 'LI');
-      const start = parseInt(parent.getAttribute('start') || '1', 10) || 1;
-      const n = start + Math.max(0, items.indexOf(li));
-      const numberStyle = parent.getAttribute('data-number-style');
-      if (numberStyle === 'alpha') return HeadingNumbering.formatCounterValue(n, 'lower-alpha') + '. ';
-      if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
-      return n + '. ';
-    }
-    const bulletStyle = parent && parent.getAttribute('data-bullet-style');
-    return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
+  // Numérotation Word native (numbering.xml) : CHAQUE <ul>/<ol> du document reçoit sa PROPRE référence dédiée (jamais partagée, même entre deux listes du
+  // même style) - un seul niveau (0) suffit alors par référence, l'indentation visuelle des niveaux imbriqués étant déjà posée par ailleurs via `depth`
+  // (une sous-liste = une autre référence, tout aussi indépendante). Ça évite tout le problème classique "instance"/redémarrage de compteur de
+  // numbering.xml : chaque référence démarre naturellement à 1 (ou `start`) puisqu'elle n'est jamais réutilisée ailleurs dans le document.
+  function orderedLevelFormat(numberStyle) {
+    if (numberStyle === 'alpha') return docx.LevelFormat.LOWER_LETTER;
+    if (numberStyle === 'roman') return docx.LevelFormat.LOWER_ROMAN;
+    return docx.LevelFormat.DECIMAL;
   }
-  function isTaskListItem(li) { return !!(li.parentElement && li.parentElement.getAttribute('data-type') === 'taskList'); }
+  function registerListNumbering(listEl, depth, ctx) {
+    ctx.numberingCounter += 1;
+    const reference = 'list-' + ctx.numberingCounter;
+    const indentLeft = INDENT_STEP_TWIP * (depth + 1);
+    const paragraphStyle = { paragraph: { indent: { left: indentLeft, hanging: 260 } } };
+    const level = listEl.tagName === 'OL'
+      ? { level: 0, format: orderedLevelFormat(listEl.getAttribute('data-number-style')), text: '%1.', start: parseInt(listEl.getAttribute('start') || '1', 10) || 1, style: paragraphStyle }
+      : { level: 0, format: docx.LevelFormat.BULLET, text: (BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc).trim(), style: paragraphStyle };
+    ctx.numberingConfigs.push({ reference, levels: [level] });
+    return reference;
+  }
   function taskMarkerText(li) { return li.getAttribute('data-checked') === 'true' ? '☑ ' : '☐ '; }
   // Reflète taskListRuns, js/pdf-export.js : un item coché barre son texte (gris), sauf pour les styles 'classic'/'accentPlain' (case cochée, texte normal).
   function taskItemBaseStyle(li) {
@@ -223,51 +235,93 @@ const DocxExport = (function () {
     return { size: DEFAULT_HALF_PT, strike: true, color: '98A2B3' };
   }
 
-  // Une <li> -> un Paragraph (marqueur littéral + son propre contenu inline, sans les sous-listes) ; une sous-liste imbriquée directe -> ses propres
-  // paragraphes juste après, indentés un cran de plus. Aplati dans le même ordre que l'affichage (comme collectCellLines, js/pdf-export.js), pas de vraie
-  // imbrication Word (non nécessaire ici - cf. commentaire d'en-tête sur les listes).
+  // Une <li> -> un Paragraph (marqueur natif Word `numbering:` OU, pour une case à cocher, marqueur littéral + son propre contenu inline sans les
+  // sous-listes) ; une sous-liste imbriquée directe -> ses propres paragraphes juste après, indentés un cran de plus. Aplati dans le même ordre que
+  // l'affichage (comme collectCellLines, js/pdf-export.js), pas de vraie imbrication Word (non nécessaire ici - cf. commentaire d'en-tête sur les listes).
   async function listBlocksFrom(listEl, depth, ctx, pageBreakBefore) {
     const items = Array.from(listEl.children).filter(c => c.tagName === 'LI');
+    const isTask = listEl.getAttribute('data-type') === 'taskList';
+    const numberingRef = isTask ? null : registerListNumbering(listEl, depth, ctx);
     let blocks = [];
     for (const [i, li] of items.entries()) {
-      const isTask = isTaskListItem(li);
-      const marker = isTask ? taskMarkerText(li) : listMarkerText(li);
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
       const runs = await inlineNodesExcludingNestedLists(li, baseStyle, ctx);
       const align = paragraphAlignment(li);
-      blocks.push(new docx.Paragraph({
-        children: [new docx.TextRun({ text: marker })].concat(runs.length ? runs : [new docx.TextRun('')]),
-        indent: { left: INDENT_STEP_TWIP * (depth + 1) },
+      const opts = {
         alignment: align,
         spacing: { after: 40 },
         pageBreakBefore: !!(pageBreakBefore && depth === 0 && i === 0),
-      }));
+      };
+      if (isTask) {
+        opts.children = [new docx.TextRun({ text: taskMarkerText(li) })].concat(runs.length ? runs : [new docx.TextRun('')]);
+        opts.indent = { left: INDENT_STEP_TWIP * (depth + 1) };
+      } else {
+        opts.children = runs.length ? runs : [new docx.TextRun('')];
+        opts.numbering = { reference: numberingRef, level: 0 };
+      }
+      blocks.push(new docx.Paragraph(opts));
       const nested = Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName));
       for (const sub of nested) blocks = blocks.concat(await listBlocksFrom(sub, depth + 1, ctx));
     }
     return blocks;
   }
 
-  // Table réelle du document (pas l'émulation 2-colonnes, cf. twoColumnsBlockFrom) - largeurs de colonnes réparties à parts égales (contrairement à
-  // pdf-export.js, qui mesure les largeurs réelles rendues : DOCX reflow de toute façon au changement de police/imprimante côté lecteur, une répartition
-  // égale est une simplification honnête plutôt qu'une fausse précision qui ne survivrait pas la première réouverture dans Word).
+  const PX_TO_TWIP = 15; // 1440 twips/pouce ÷ 96px/pouce
+  // Repli si le tableau n'est pas dans le DOM attaché au moment de l'appel (ex. zone en-tête/pied - hors périmètre de la mesure, cf. buildDocxDocument) :
+  // répartition à parts égales, exactement comme la V1.
+  function equalColumnWidthsTwip(columnCount) { return new Array(columnCount).fill(Math.floor(CONTENT_WIDTH_TWIP / columnCount)); }
+  // Port de measuredColumnWidthsPx, js/pdf-export.js : largeur de CONTENU (pas la boîte entière) mesurée sur le rendu réel du 1er enfant de bloc de chaque
+  // cellule de la 1ère ligne - le <col> de @tiptap ne porte qu'un minimum px, jamais un pourcentage exploitable.
+  function measuredColumnWidthsPx(tableEl, columnCount) {
+    if (!tableEl.isConnected) return null;
+    const firstRow = tableEl.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
+    if (!firstRow) return null;
+    const cells = Array.from(firstRow.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
+    if (!cells.length) return null;
+    const widths = [];
+    cells.forEach(cell => {
+      const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
+      const contentEl = cell.querySelector(':scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol');
+      let perCol;
+      if (contentEl) {
+        perCol = contentEl.getBoundingClientRect().width / span;
+      } else {
+        const cs = getComputedStyle(cell);
+        const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+        perCol = (cell.getBoundingClientRect().width - inset) / span;
+      }
+      for (let i = 0; i < span; i += 1) widths.push(perCol);
+    });
+    while (widths.length < columnCount) widths.push(0);
+    return widths.slice(0, columnCount);
+  }
+  // Table réelle du document (pas l'émulation 2-colonnes, cf. twoColumnsBlockFrom). Largeurs mesurées sur le rendu réel (comme pdf-export.js), avec une
+  // marge de cellule Word par défaut (2×108 twips, jamais incluse dans une mesure de CONTENU) rajoutée pour que la largeur totale demandée à Word colle à
+  // ce qui a été mesuré.
+  const WORD_DEFAULT_CELL_MARGIN_TWIP = 216;
   async function tableBlockFrom(tableEl, ctx) {
     const rows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr'));
     if (!rows.length) return null;
     const firstRowCells = Array.from(rows[0].children).filter(c => /^(TD|TH)$/i.test(c.tagName));
     const columnCount = firstRowCells.reduce((sum, c) => sum + (parseInt(c.getAttribute('colspan') || '1', 10) || 1), 0) || 1;
-    const colWidthTwip = Math.floor(CONTENT_WIDTH_TWIP / columnCount);
+    const measuredPx = measuredColumnWidthsPx(tableEl, columnCount);
+    const colWidthsTwip = (measuredPx && measuredPx.every(w => w > 0))
+      ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
+      : equalColumnWidthsTwip(columnCount);
     const tableRows = [];
     for (const tr of rows) {
       const cells = Array.from(tr.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
       const tableCells = [];
+      let colIndex = 0;
       for (const cell of cells) {
         const span = parseInt(cell.getAttribute('colspan') || '1', 10) || 1;
         const rowSpan = parseInt(cell.getAttribute('rowspan') || '1', 10) || 1;
+        const width = colWidthsTwip.slice(colIndex, colIndex + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
+        colIndex += span;
         const children = await blocksFromContainer(cell, ctx);
         tableCells.push(new docx.TableCell({
           children: children.length ? children : [new docx.Paragraph('')],
-          width: { size: colWidthTwip * span, type: docx.WidthType.DXA },
+          width: { size: width, type: docx.WidthType.DXA },
           columnSpan: span > 1 ? span : undefined,
           rowSpan: rowSpan > 1 ? rowSpan : undefined,
         }));
@@ -421,10 +475,23 @@ const DocxExport = (function () {
     return blocksFromContainer(root, ctx, false);
   }
 
+  // Attaché hors-écran avec la classe .tiptap (comme attachMeasureHost, js/pdf-export.js) le temps du parcours : measuredColumnWidthsPx a besoin d'un
+  // rendu réel, jamais possible sur un <div> détaché du document.
+  function attachMeasureHost(root) {
+    root.classList.add('tiptap');
+    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP) + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    document.body.appendChild(root);
+    return () => { if (root.parentNode) root.parentNode.removeChild(root); };
+  }
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
-    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [] };
-    const bodyBlocks = await blocksFromContainer(root, ctx, true);
+    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0 };
+    const detachMeasureHost = attachMeasureHost(root);
+    let bodyBlocks;
+    try {
+      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      bodyBlocks = await blocksFromContainer(root, ctx, true);
+    } finally { detachMeasureHost(); }
 
     const differentFirstPage = !!(headerFooterData && headerFooterData.enabled && headerFooterData.differentFirstPage);
     const sectionProps = {
@@ -447,7 +514,9 @@ const DocxExport = (function () {
         if (footerFirstBlocks.length) section.footers = Object.assign({}, section.footers, { first: new docx.Footer({ children: footerFirstBlocks }) });
       }
     }
-    return new docx.Document({ sections: [section], footnotes: ctx.footnotes });
+    const doc = { sections: [section], footnotes: ctx.footnotes };
+    if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
+    return new docx.Document(doc);
   }
 
   function downloadBlob(blob, filename) {

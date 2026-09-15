@@ -29,6 +29,7 @@ const I18n = (function () {
     'toolbar.exportPdf': { fr: 'Exporter en PDF', en: 'Export to PDF' },
     'toolbar.exportPdfBatch': { fr: 'Exporter toutes les lignes (ZIP)…', en: 'Export all rows (ZIP)…' },
     'toolbar.exportDocx': { fr: 'Exporter en DOCX (bêta)…', en: 'Export to DOCX (beta)…' },
+    'toolbar.exportDocxBatch': { fr: 'Exporter toutes les lignes en DOCX (ZIP)…', en: 'Export all rows to DOCX (ZIP)…' },
     'toolbar.pdfFilename.tip': { fr: 'Nom du fichier PDF', en: 'PDF file name' },
     'toolbar.pdfFilename.aria': { fr: 'Nom de fichier PDF personnalisé', en: 'Custom PDF file name' },
     'toolbar.pdfFilename.placeholder': { fr: 'Nom de fichier PDF (variables #… autorisées)', en: 'PDF file name (#… variables allowed)' },
