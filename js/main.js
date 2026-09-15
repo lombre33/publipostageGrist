@@ -422,7 +422,7 @@
     const flyout = document.getElementById('v2-quality-flyout');
     const trigger = document.getElementById('v2-btn-quality');
     if (!select || !flyout || !trigger) return;
-    const rows = flyout.querySelectorAll('.v2-hover-row');
+    const rows = flyout.querySelectorAll('.v2-hover-row[data-quality]');
     const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
     rows.forEach(row => {
       if (row.classList.contains('v2-hover-row-disabled')) return;
