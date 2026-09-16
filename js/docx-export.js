@@ -182,9 +182,27 @@ const DocxExport = (function () {
   // arriver ici) : repli sur l'image en ligne classique dans ce cas.
   // marge + décalage = même formule que p.image.absolutePosition, js/pdf-export.js : la position est relative au CONTENU (dans les marges), pas au bord
   // brut de la page - il faut donc rajouter la marge avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
+  // Alignement gauche/droite (data-align, cf. css/editor-v2.css `.tiptap img.editor-image[data-align="left/right"] { float }`) : HABILLAGE réel, le texte
+  // contourne l'image des DEUX côtés d'un même paragraphe - un cas totalement différent du calque (qui ne touche jamais le texte). 'center' n'en a pas
+  // besoin (déjà un simple bloc centré, aucun flottant nécessaire). Pas de position à mesurer/capturer ici : `align` (jeton, pas une coordonnée) suffit à
+  // Word pour recréer le même flottement - la seule inconnue est de quel côté le texte doit continuer à couler (wrap.side, opposé au bord d'alignement).
+  // Ancré relatif à la marge de PAGE (pas "column") : correct pour un paragraphe du corps principal (le seul cas rencontré/rapporté) ; une image alignée
+  // À L'INTÉRIEUR d'une colonne 2-colonnes ou d'une cellule de tableau s'ancrerait quand même à la marge de la PAGE entière - limite connue, non traitée
+  // ici (Word n'ancre pas nativement un flottant relatif à une cellule de tableau).
+  function docxAlignFloatingOptionsFrom(imgNode, uniqueId) {
+    const align = imgNode.getAttribute('data-align');
+    if (align !== 'left' && align !== 'right') return null;
+    return {
+      zIndex: 1000 + uniqueId,
+      wrap: { type: docx.TextWrappingType.SQUARE, side: align === 'right' ? docx.TextWrappingSide.LEFT : docx.TextWrappingSide.RIGHT },
+      horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.MARGIN, align: align === 'right' ? docx.HorizontalPositionAlign.RIGHT : docx.HorizontalPositionAlign.LEFT },
+      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PARAGRAPH, align: docx.VerticalPositionAlign.TOP },
+    };
+  }
+
   function docxFloatingOptionsFrom(imgNode, uniqueId, ctx) {
     const layer = imgNode.getAttribute('data-layer');
-    if (layer !== 'front' && layer !== 'behind') return null;
+    if (layer !== 'front' && layer !== 'behind') return docxAlignFloatingOptionsFrom(imgNode, uniqueId);
     const pageIndex = imgNode.hasAttribute('data-page-index') ? parseInt(imgNode.getAttribute('data-page-index'), 10) : null;
     const pageLeftPt = imgNode.hasAttribute('data-page-left-pt') ? parseFloat(imgNode.getAttribute('data-page-left-pt')) : null;
     const pageTopPt = imgNode.hasAttribute('data-page-top-pt') ? parseFloat(imgNode.getAttribute('data-page-top-pt')) : null;
