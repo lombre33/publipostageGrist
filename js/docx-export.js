@@ -189,17 +189,20 @@ const DocxExport = (function () {
   // Ancré relatif à la marge de PAGE (pas "column") : correct pour un paragraphe du corps principal (le seul cas rencontré/rapporté) ; une image alignée
   // À L'INTÉRIEUR d'une colonne 2-colonnes ou d'une cellule de tableau s'ancrerait quand même à la marge de la PAGE entière - limite connue, non traitée
   // ici (Word n'ancre pas nativement un flottant relatif à une cellule de tableau).
+  // verticalPosition relatif au PARAGRAPHE (pas à la LIGNE, essayé puis abandonné - vérifié dans un vrai .docx ouvert dans Google Docs : relativeFrom
+  // ="line" n'y est pas respecté, l'image restait plaquée en haut du paragraphe entier). "paragraph" est universellement supporté ; pour qu'il tombe
+  // pile à la bonne hauteur même quand l'image est insérée après plusieurs lignes de texte, paragraphBlockFrom DÉCOUPE le paragraphe HTML en plusieurs
+  // paragraphes Word au point d'insertion de l'image (cf. splitRunsAtFloatedImages/__docxSplitBefore) - "haut du paragraphe" tombe alors exactement là où
+  // l'image apparaît dans le texte, sans dépendre du support de "line" par le lecteur.
   function docxAlignFloatingOptionsFrom(imgNode, uniqueId) {
     const align = imgNode.getAttribute('data-align');
     if (align !== 'left' && align !== 'right') return null;
     return {
       zIndex: 1000 + uniqueId,
+      __isAlignFloat: true,
       wrap: { type: docx.TextWrappingType.SQUARE, side: align === 'right' ? docx.TextWrappingSide.LEFT : docx.TextWrappingSide.RIGHT },
       horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.MARGIN, align: align === 'right' ? docx.HorizontalPositionAlign.RIGHT : docx.HorizontalPositionAlign.LEFT },
-      // relativeFrom "line" (pas "paragraph") : un vrai float CSS démarre à la LIGNE où il est rencontré dans le flux, pas forcément en haut du
-      // paragraphe entier - une image insérée après plusieurs lignes de texte (comme le cas rapporté) se retrouvait plaquée en haut du paragraphe dans
-      // Word au lieu de rester à la hauteur où elle apparaît réellement dans l'éditeur.
-      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.LINE, align: docx.VerticalPositionAlign.TOP },
+      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PARAGRAPH, align: docx.VerticalPositionAlign.TOP },
     };
   }
 
@@ -271,7 +274,11 @@ const DocxExport = (function () {
       const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
       const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
       if (floatingOptions) runOptions.floating = floatingOptions;
-      return [new docx.ImageRun(runOptions)];
+      const imgRun = new docx.ImageRun(runOptions);
+      // Marque ce run pour paragraphBlockFrom : cf. splitRunsAtFloatedImages ci-dessous (Google Docs ne respecte pas relativeFrom="line", d'où le
+      // découpage en paragraphes Word plutôt qu'un ancrage à la ligne).
+      if (floatingOptions && floatingOptions.__isAlignFloat) imgRun.__docxSplitBefore = true;
+      return [imgRun];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
     let out = [];
@@ -446,8 +453,21 @@ const DocxExport = (function () {
   }
 
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
-  // <p>/<div>/<h1-6> -> un seul Paragraph. Titre : marqueur littéral ("1) "...) IDENTIQUE à pdf-export.js/reader-mode (cohérence entre les 3 exports) posé
-  // en texte, en PLUS du style Word natif "Titre N" (repris par le volet de navigation/un futur sommaire réel si l'utilisateur en construit un dans Word).
+  // Découpe un tableau de runs en groupes, un nouveau groupe démarrant à chaque run marqué __docxSplitBefore (image habillée gauche/droite, cf.
+  // docxAlignFloatingOptionsFrom) - jamais en tête (une coupure avant le tout premier run ne servirait à rien, cf. paragraphBlockFrom).
+  function splitRunsAtFloatedImages(runsArr) {
+    const groups = [];
+    let current = [];
+    for (const run of runsArr) {
+      if (run && run.__docxSplitBefore && current.length) { groups.push(current); current = []; }
+      current.push(run);
+    }
+    groups.push(current);
+    return groups;
+  }
+  // <p>/<div>/<h1-6> -> un ou plusieurs Paragraph (cf. splitRunsAtFloatedImages ci-dessus). Titre : marqueur littéral ("1) "...) IDENTIQUE à
+  // pdf-export.js/reader-mode (cohérence entre les 3 exports) posé en texte, en PLUS du style Word natif "Titre N" (repris par le volet de navigation/un
+  // futur sommaire réel si l'utilisateur en construit un dans Word).
   // `pageBreakBefore` DOIT passer par le constructeur (option native, cf. IParagraphPropertiesOptionsBase) - un Paragraph déjà construit n'est pas
   // mutable de l'extérieur.
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore) {
@@ -458,17 +478,21 @@ const DocxExport = (function () {
     // color:'auto' - même raison que inheritedRunStyle ci-dessus : ce marqueur ("1) ", "2) "...) est un TextRun à part, jamais passé par
     // inheritedRunStyle/runOpts, donc pas concerné par son propre défaut de couleur - sans ça il hériterait quand même du bleu du style Word "Titre N".
     const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
-    const opts = {
-      children: children.length ? children : [new docx.TextRun('')],
-      alignment: align,
-      // after:0 - `.tiptap p/h1-6` n'ont aucune marge propre (margin:0, cf. css/editor-v2.css) ; l'espacement visuel vient des paragraphes vides que
-      // l'utilisateur insère lui-même, jamais d'une marge automatique. line/lineRule : cf. LINE_SPACING_240THS ci-dessus.
-      spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
-      pageBreakBefore: !!pageBreakBefore,
-    };
-    if (isHeading) { opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]]; ctx.headingBlocks.push({ level: parseInt(node.tagName.slice(1), 10), text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim() }); }
-    if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: 400 }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
-    return new docx.Paragraph(opts);
+    if (isHeading) ctx.headingBlocks.push({ level: parseInt(node.tagName.slice(1), 10), text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim() });
+    const groups = splitRunsAtFloatedImages(children);
+    return groups.map((groupChildren, i) => {
+      const opts = {
+        children: groupChildren.length ? groupChildren : [new docx.TextRun('')],
+        alignment: align,
+        // after:0 - `.tiptap p/h1-6` n'ont aucune marge propre (margin:0, cf. css/editor-v2.css) ; l'espacement visuel vient des paragraphes vides que
+        // l'utilisateur insère lui-même, jamais d'une marge automatique. line/lineRule : cf. LINE_SPACING_240THS ci-dessus.
+        spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
+        pageBreakBefore: !!(i === 0 && pageBreakBefore),
+      };
+      if (isHeading) opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]];
+      if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: 400 }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
+      return new docx.Paragraph(opts);
+    });
   }
 
   function buildTocParagraphs(headingBlocks) {
@@ -527,8 +551,8 @@ const DocxExport = (function () {
         continue;
       }
       if (/^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName)) {
-        const block = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak);
-        blocks.push(block);
+        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak);
+        blocks.push(...items);
         pendingPageBreak = false;
         continue;
       }
