@@ -159,22 +159,43 @@ const DocxExport = (function () {
   }
 
   // Image "en calque" (devant/derrière le texte, cf. js/editor-nodes.js) : construit l'ancrage flottant Word natif (wp:anchor, positionné PAGE de bord à
-  // bord) à partir de la position "grille page" déjà capturée dans l'éditeur (Aperçu A4) - même donnée que js/pdf-export.js:_pageGrid, lue ici directement
-  // depuis les attributs DOM plutôt que reconstruite. `null` si l'image n'est pas en calque, ou en calque mais SANS position grille-page (document ancien,
-  // ou positionnée hors Aperçu A4) : reconstruire l'ancien système d'ancrage/bracketing textuel pour DOCX est hors périmètre pour l'instant - repli sur
-  // l'image en ligne classique dans ce cas.
-  // marge + décalage capturé = même formule que p.image.absolutePosition, js/pdf-export.js : la position enregistrée est relative au CONTENU (dans les
-  // marges), pas au bord brut de la page - il faut donc rajouter la marge avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
-  function docxFloatingOptionsFrom(imgNode, uniqueId) {
+  // bord). Deux sources de position, par ordre de préférence :
+  //  1. La position "grille page" déjà capturée dans l'éditeur (Aperçu A4) - même donnée que js/pdf-export.js:_pageGrid, lue ici directement depuis les
+  //     attributs DOM plutôt que reconstruite. La plus fiable : connue explicitement, aucune mesure à refaire.
+  //  2. À défaut (jamais positionnée via l'Aperçu A4, ex. `left`/`top` posés à la main sur un document plus ancien - cas réel rencontré), mesure DIRECTE
+  //     du rendu réel : `imgNode` est encore attaché au host de mesure (cf. attachMeasureHost/buildDocxDocument) au moment de cet appel, donc
+  //     getBoundingClientRect() donne sa position vraie par rapport au coin du contenu - MÊME dans un contexte imbriqué (colonne/cellule), sans ancrage/
+  //     bracketing textuel à reconstruire. Repose sur `ctx.measureRoot` (posé une fois par buildDocxDocument) plutôt que `imgNode.style.left/top`
+  //     brut, qui ne serait juste que pour une image directement enfant de la racine (pas dans une colonne/cellule).
+  //     Limite assumée : suppose l'image proche du haut de la 1ère page (cas dominant en pratique - logo/tampon d'en-tête) puisque rien ici ne fait de
+  //     pagination réelle ; plus bas dans un document qui reflow, l'ancrage ne suivra pas parfaitement - même compromis inhérent au flottant DOCX que la
+  //     voie 1, jamais pire que le repli en image en ligne (qui perdait la position purement et simplement).
+  // `null` uniquement si l'image n'est pas en calque, ou en calque sans AUCUNE des deux sources disponible (image détachée du DOM, cas qui ne devrait pas
+  // arriver ici) : repli sur l'image en ligne classique dans ce cas.
+  // marge + décalage = même formule que p.image.absolutePosition, js/pdf-export.js : la position est relative au CONTENU (dans les marges), pas au bord
+  // brut de la page - il faut donc rajouter la marge avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
+  function docxFloatingOptionsFrom(imgNode, uniqueId, ctx) {
     const layer = imgNode.getAttribute('data-layer');
     if (layer !== 'front' && layer !== 'behind') return null;
     const pageIndex = imgNode.hasAttribute('data-page-index') ? parseInt(imgNode.getAttribute('data-page-index'), 10) : null;
     const pageLeftPt = imgNode.hasAttribute('data-page-left-pt') ? parseFloat(imgNode.getAttribute('data-page-left-pt')) : null;
     const pageTopPt = imgNode.hasAttribute('data-page-top-pt') ? parseFloat(imgNode.getAttribute('data-page-top-pt')) : null;
-    if (!Number.isFinite(pageIndex) || !Number.isFinite(pageLeftPt) || !Number.isFinite(pageTopPt)) return null;
+    let leftPt, topPt;
+    if (Number.isFinite(pageIndex) && Number.isFinite(pageLeftPt) && Number.isFinite(pageTopPt)) {
+      leftPt = pageLeftPt;
+      topPt = pageTopPt;
+    } else if (ctx.measureRoot && imgNode.isConnected) {
+      const rootRect = ctx.measureRoot.getBoundingClientRect();
+      const imgRect = imgNode.getBoundingClientRect();
+      const pxToPt = PX_TO_TWIP / TWIPS_PER_PT;
+      leftPt = (imgRect.left - rootRect.left) * pxToPt;
+      topPt = (imgRect.top - rootRect.top) * pxToPt;
+    } else {
+      return null;
+    }
     const marginPt = PAGE_MARGIN_TWIP / TWIPS_PER_PT;
-    const xEmu = Math.round((marginPt + pageLeftPt) * EMU_PER_PT);
-    const yEmu = Math.round((marginPt + pageTopPt) * EMU_PER_PT);
+    const xEmu = Math.round((marginPt + leftPt) * EMU_PER_PT);
+    const yEmu = Math.round((marginPt + topPt) * EMU_PER_PT);
     return {
       behindDocument: layer === 'behind',
       zIndex: 1000 + uniqueId, // unique par image, comme altText.id ci-dessus - évite de dépendre du repli par défaut de docx.js (hauteur de l'image).
@@ -219,7 +240,7 @@ const DocxExport = (function () {
       // le signaler comme contenu illisible. altText.id fournit un id unique par image du document.
       ctx.imageIdCounter += 1;
       const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
-      const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter);
+      const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
       if (floatingOptions) runOptions.floating = floatingOptions;
       return [new docx.ImageRun(runOptions)];
     }
@@ -523,7 +544,7 @@ const DocxExport = (function () {
   }
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
-    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0 };
+    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
     const detachMeasureHost = attachMeasureHost(root);
     let bodyBlocks;
     try {
