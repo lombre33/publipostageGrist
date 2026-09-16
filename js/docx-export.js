@@ -55,6 +55,11 @@ const DocxExport = (function () {
   const INDENT_STEP_TWIP = 360; // ~0.25" par niveau de liste imbriquée, valeur par défaut standard Word.
   const BULLET_MARKERS = { disc: '• ', circle: '○ ', square: '▪ ' }; // vrais glyphes Unicode : contrairement à pdfmake (WinAnsi seul), les polices Word les rendent nativement.
   const EMU_PER_PT = 12700; // 1pt = 1/72in, 1in = 914400 EMU (unité native des positions/tailles de dessin OOXML) => 914400/72.
+  // .tiptap { line-height: 1.42 } (css/editor-v2.css) - même ratio que EDITOR_LINE_HEIGHT_RATIO, js/pdf-export.js. w:spacing/@line s'exprime en 240èmes de
+  // ligne quand lineRule="auto" (240 = interligne simple) : posé sur chaque paragraphe généré pour que les sauts de ligne à l'intérieur d'un paragraphe qui
+  // wrap correspondent à l'éditeur, au lieu de l'interligne par défaut du style Word "Normal".
+  const EDITOR_LINE_HEIGHT_RATIO = 1.42;
+  const LINE_SPACING_240THS = Math.round(240 * EDITOR_LINE_HEIGHT_RATIO);
 
   function cssColorHex(value) {
     if (!value) return null;
@@ -78,7 +83,10 @@ const DocxExport = (function () {
     const css = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)', 'i')); return m && m[1].trim(); };
     const tag = node.nodeType === 1 ? node.tagName : '';
     const out = Object.assign({}, parent);
-    if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_HALF_PT[tag]; }
+    // 'auto' (pas de couleur explicite dans le HTML) plutôt que de laisser le style Word natif "Titre N" imposer SA propre couleur par défaut (accent du
+    // thème, souvent bleu) - un titre de l'éditeur n'a pas de couleur particulière, il hérite du même noir que le corps du texte (.tiptap { color:... }).
+    // `css('color')` juste en dessous garde la priorité si le titre a explicitement une couleur choisie par l'utilisateur.
+    if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_HALF_PT[tag]; out.color = 'auto'; }
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') out.underline = { type: 'single' };
@@ -304,7 +312,9 @@ const DocxExport = (function () {
       const align = paragraphAlignment(li);
       const opts = {
         alignment: align,
-        spacing: { after: 40 },
+        // after:0 - `.tiptap li` n'a aucune marge propre (seuls ul/ol sont resetés à 0, cf. css/editor-v2.css ; li hérite de ce 0). line/lineRule :
+        // même interligne que l'éditeur à l'intérieur d'un item qui wrap sur plusieurs lignes, cf. LINE_SPACING_240THS ci-dessus.
+        spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
         pageBreakBefore: !!(pageBreakBefore && depth === 0 && i === 0),
       };
       if (isTask) {
@@ -424,11 +434,15 @@ const DocxExport = (function () {
     const align = paragraphAlignment(node);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
-    const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName] } : {}))].concat(runs) : runs;
+    // color:'auto' - même raison que inheritedRunStyle ci-dessus : ce marqueur ("1) ", "2) "...) est un TextRun à part, jamais passé par
+    // inheritedRunStyle/runOpts, donc pas concerné par son propre défaut de couleur - sans ça il hériterait quand même du bleu du style Word "Titre N".
+    const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
     const opts = {
       children: children.length ? children : [new docx.TextRun('')],
       alignment: align,
-      spacing: { after: 120 },
+      // after:0 - `.tiptap p/h1-6` n'ont aucune marge propre (margin:0, cf. css/editor-v2.css) ; l'espacement visuel vient des paragraphes vides que
+      // l'utilisateur insère lui-même, jamais d'une marge automatique. line/lineRule : cf. LINE_SPACING_240THS ci-dessus.
+      spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
       pageBreakBefore: !!pageBreakBefore,
     };
     if (isHeading) { opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]]; ctx.headingBlocks.push({ level: parseInt(node.tagName.slice(1), 10), text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim() }); }
