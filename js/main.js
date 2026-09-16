@@ -71,6 +71,9 @@
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
     // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
     Editor.exitHeaderFooterModeIfActive();
+    // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
+    // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
+    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
     Editor.setHTML(tpl ? tpl.contenu : '');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
@@ -133,7 +136,7 @@
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
-    const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData());
+    const savedId = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -214,7 +217,7 @@
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
-      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData());
+      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       console.error(e);
@@ -229,7 +232,7 @@
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     setStatus(I18n.t('status.docxGenerating'));
     try {
-      await DocxExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), Editor.getHeaderFooterData());
+      await DocxExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
       setStatus(I18n.t('status.docxGenerated'));
     } catch (e) {
       console.error(e);
@@ -283,6 +286,7 @@
     const html = Editor.getHTML();
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
+    const marginsPt = PageLayout.getMarginsPt();
     const zip = new JSZip();
     const usedNames = new Set();
     let ok = 0;
@@ -290,7 +294,7 @@
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
-        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
+        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsPt);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
         zip.file(uniqueZipFilename(base, usedNames) + '.pdf', blob);
         ok++;
@@ -344,6 +348,7 @@
     const html = Editor.getHTML();
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
+    const marginsTwip = PageLayout.getMarginsTwip();
     const zip = new JSZip();
     const usedNames = new Set();
     let ok = 0;
@@ -351,7 +356,7 @@
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
-        const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
+        const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsTwip);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
         zip.file(uniqueZipFilename(base, usedNames) + '.docx', blob);
         ok++;

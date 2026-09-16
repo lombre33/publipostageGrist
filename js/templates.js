@@ -40,6 +40,24 @@ const Templates = (function () {
     }
   }
 
+  // Marges de page (haut/droite/bas/gauche, mm) - même migration idempotente que HeaderFooter ci-dessus.
+  let marginsColumnChecked = false;
+  async function ensureMarginsColumn() {
+    if (marginsColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('Margins' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'Margins', { type: 'Text', isFormula: false, label: 'Marges de page' }]
+        ]);
+      }
+      marginsColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne Margins', e);
+    }
+  }
+
   // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
   // que HeaderFooter ci-dessus.
   let defaultColumnChecked = false;
@@ -75,10 +93,24 @@ const Templates = (function () {
     }
   }
 
+  // Défaut identique à PageLayout.DEFAULT_MARGIN_MM (js/page-layout.js) - dupliqué plutôt qu'importé, même tolérance que safeParseHeaderFooter ci-dessus.
+  // DOIT convertir exactement vers 28pt (l'ancienne marge codée en dur) pour qu'un modèle sans réglage propre reste pixel-identique à avant.
+  function safeParseMargins(json) {
+    const DEFAULT_MARGIN_MM = 28 * 25.4 / 72;
+    const empty = { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM };
+    if (!json) return empty;
+    try {
+      return Object.assign(empty, JSON.parse(json));
+    } catch (e) {
+      return empty;
+    }
+  }
+
   async function loadAll() {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureDefaultColumn();
+    await ensureMarginsColumn();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
@@ -89,6 +121,7 @@ const Templates = (function () {
           contenu: data.Contenu[i],
           nomFichierPDF: data.NomFichierPDF ? data.NomFichierPDF[i] : '',
           headerFooter: safeParseHeaderFooter(data.HeaderFooter ? data.HeaderFooter[i] : null),
+          marginsMm: safeParseMargins(data.Margins ? data.Margins[i] : null),
           estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i])
         });
       }
@@ -124,11 +157,16 @@ const Templates = (function () {
     templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
   }
 
-  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData) {
+  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
+    await ensureMarginsColumn();
     const now = new Date().toISOString();
-    const columns = { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now, HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)) };
+    const columns = {
+      Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,
+      HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
+      Margins: JSON.stringify(marginsData || safeParseMargins(null)),
+    };
     if (id) {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]

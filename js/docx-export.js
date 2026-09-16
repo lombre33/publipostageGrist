@@ -44,9 +44,20 @@ const DocxExport = (function () {
   const TWIPS_PER_PT = 20;
   const A4_WIDTH_TWIP = 11906;
   const A4_HEIGHT_TWIP = 16838;
-  const PAGE_MARGIN_TWIP = 28 * TWIPS_PER_PT;
   const HF_DISTANCE_TWIP = 20 * TWIPS_PER_PT;
-  const CONTENT_WIDTH_TWIP = A4_WIDTH_TWIP - 2 * PAGE_MARGIN_TWIP;
+  // Marges de page (twip) - variables de module plutôt que des constantes : réglées par setPageMarginsTwip() une fois par export, à partir des marges du
+  // modèle courant (js/page-layout.js). 28pt (560 twip) sur les 4 côtés = comportement d'avant PageLayout, repli si l'appelant ne fournit aucune marge.
+  let marginTopTwip = 560, marginRightTwip = 560, marginBottomTwip = 560, marginLeftTwip = 560;
+  let CONTENT_WIDTH_TWIP = A4_WIDTH_TWIP - marginLeftTwip - marginRightTwip;
+
+  function setPageMarginsTwip(marginsTwip) {
+    const m = marginsTwip || {};
+    marginTopTwip = Number.isFinite(m.top) ? m.top : 560;
+    marginRightTwip = Number.isFinite(m.right) ? m.right : 560;
+    marginBottomTwip = Number.isFinite(m.bottom) ? m.bottom : 560;
+    marginLeftTwip = Number.isFinite(m.left) ? m.left : 560;
+    CONTENT_WIDTH_TWIP = A4_WIDTH_TWIP - marginLeftTwip - marginRightTwip;
+  }
   const DEFAULT_HALF_PT = 21; // 10.5pt - doit correspondre à DEFAULT_FONT_SIZE, js/pdf-export.js
   // *2 (demi-points) des mêmes tailles que HEADING_SIZES, js/pdf-export.js - `heading:` (style Word natif) fixe déjà une taille par défaut, mais on la
   // resurcharge pour rester visuellement identique à l'éditeur/PDF plutôt que de dépendre du thème Word de l'utilisateur.
@@ -225,9 +236,8 @@ const DocxExport = (function () {
     } else {
       return null;
     }
-    const marginPt = PAGE_MARGIN_TWIP / TWIPS_PER_PT;
-    const xEmu = Math.round((marginPt + leftPt) * EMU_PER_PT);
-    const yEmu = Math.round((marginPt + topPt) * EMU_PER_PT);
+    const xEmu = Math.round((marginLeftTwip / TWIPS_PER_PT + leftPt) * EMU_PER_PT);
+    const yEmu = Math.round((marginTopTwip / TWIPS_PER_PT + topPt) * EMU_PER_PT);
     return {
       behindDocument: layer === 'behind',
       zIndex: 1000 + uniqueId, // unique par image, comme altText.id ci-dessus - évite de dépendre du repli par défaut de docx.js (hauteur de l'image).
@@ -360,6 +370,7 @@ const DocxExport = (function () {
   }
 
   const PX_TO_TWIP = 15; // 1440 twips/pouce ÷ 96px/pouce
+  const MM_TO_TWIP = 1440 / 25.4; // même conversion que PageLayout.MM_TO_TWIP, js/page-layout.js (pas de dépendance croisée, simple constante dupliquée)
   // Repli si le tableau n'est pas dans le DOM attaché au moment de l'appel (ex. zone en-tête/pied - hors périmètre de la mesure, cf. buildDocxDocument) :
   // répartition à parts égales, exactement comme la V1.
   function equalColumnWidthsTwip(columnCount) { return new Array(columnCount).fill(Math.floor(CONTENT_WIDTH_TWIP / columnCount)); }
@@ -432,11 +443,19 @@ const DocxExport = (function () {
   // Émulation par tableau borderless 1 ligne/2 cellules (même principe que le "table trick" utilisé par la plupart des générateurs DOCX pour simuler des
   // colonnes - Word n'a pas de notion de "section de 2 colonnes locale à un bloc", seulement des colonnes de SECTION entière). Largeurs lues depuis
   // --layout-left (variable CSS posée par TipTap, cf. js/editor-nodes.js), pas mesurées : pas de mise en page réelle en dehors du navigateur ici.
+  // --layout-left-mm (posé UNIQUEMENT quand la colonne a été réglée en mm, cf. js/editor-nodes.js:renderHTML) prime sur le pourcentage quand présent :
+  // conversion directe, exacte, sans repasser par un pourcentage déjà arrondi.
   async function twoColumnsBlockFrom(zoneEl, ctx) {
     const cols = Array.from(zoneEl.querySelectorAll(':scope > .two-columns-column'));
     if (cols.length !== 2) return null;
-    const leftPercent = parseFloat(zoneEl.style.getPropertyValue('--layout-left')) || 50;
-    const leftTwip = Math.round(CONTENT_WIDTH_TWIP * leftPercent / 100);
+    const leftMm = parseFloat(zoneEl.style.getPropertyValue('--layout-left-mm'));
+    let leftTwip;
+    if (Number.isFinite(leftMm)) {
+      leftTwip = Math.round(leftMm * MM_TO_TWIP);
+    } else {
+      const leftPercent = parseFloat(zoneEl.style.getPropertyValue('--layout-left')) || 50;
+      leftTwip = Math.round(CONTENT_WIDTH_TWIP * leftPercent / 100);
+    }
     const rightTwip = CONTENT_WIDTH_TWIP - leftTwip;
     const widths = [leftTwip, rightTwip];
     const cells = [];
@@ -624,7 +643,7 @@ const DocxExport = (function () {
     const sectionProps = {
       page: {
         size: { width: A4_WIDTH_TWIP, height: A4_HEIGHT_TWIP },
-        margin: { top: PAGE_MARGIN_TWIP, bottom: PAGE_MARGIN_TWIP, left: PAGE_MARGIN_TWIP, right: PAGE_MARGIN_TWIP, header: HF_DISTANCE_TWIP, footer: HF_DISTANCE_TWIP },
+        margin: { top: marginTopTwip, bottom: marginBottomTwip, left: marginLeftTwip, right: marginRightTwip, header: HF_DISTANCE_TWIP, footer: HF_DISTANCE_TWIP },
       },
       titlePage: differentFirstPage,
     };
@@ -654,7 +673,8 @@ const DocxExport = (function () {
     URL.revokeObjectURL(url);
   }
 
-  async function getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
+  async function getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
+    setPageMarginsTwip(marginsTwip);
     await ensureDocxLibLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
@@ -663,9 +683,9 @@ const DocxExport = (function () {
     const blob = await docx.Packer.toBlob(doc);
     return { blob, filename };
   }
-  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
+  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
-    const { blob, filename } = await getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
+    const { blob, filename } = await getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip);
     downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }
 

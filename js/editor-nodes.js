@@ -386,17 +386,29 @@ const EditorNodes = (function () {
       isolating: true,
       addAttributes() {
         return {
-          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser, sérialisée en variable CSS --layout-left.
+          // Largeur (%) de la colonne gauche, clampée 20-80 au glisser, sérialisée en variable CSS --layout-left. Reste la SEULE source de vérité tant
+          // que layoutLeftMm est absent (mode pourcentage, comportement historique).
           layoutLeft: {
             default: 50,
             parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
+            renderHTML: () => ({}),
+          },
+          // Largeur ABSOLUE (mm) de la colonne gauche - `null` = mode pourcentage (défaut, comportement inchangé). Non-null = mode mm : layoutLeft devient
+          // une valeur DÉRIVÉE (recalculée depuis layoutLeftMm/PageLayout.getContentWidthMm() à chaque rendu), jamais la source de vérité elle-même.
+          layoutLeftMm: {
+            default: null,
+            parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left-mm')); return Number.isFinite(v) ? v : null; },
             renderHTML: () => ({}),
           },
         };
       },
       parseHTML() { return [{ tag: 'div.two-columns-zone' }]; },
       renderHTML({ HTMLAttributes, node }) {
-        return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style: `--layout-left: ${node.attrs.layoutLeft || 50}%` }), 0];
+        const mm = node.attrs.layoutLeftMm;
+        const style = Number.isFinite(mm)
+          ? `--layout-left: ${(mm / PageLayout.getContentWidthMm()) * 100}%; --layout-left-mm: ${mm}mm`
+          : `--layout-left: ${node.attrs.layoutLeft || 50}%`;
+        return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style }), 0];
       },
       addCommands() {
         return {
@@ -423,32 +435,122 @@ const EditorNodes = (function () {
           grip.title = I18n.t('twoColumns.resizeGrip');
           wrap.appendChild(grip);
 
-          const applyLayout = attrs => wrap.style.setProperty('--layout-left', (attrs.layoutLeft || 50) + '%');
+          // En mode mm (layoutLeftMm non-null), layoutLeft n'est qu'une valeur DÉRIVÉE de layoutLeftMm/largeur de contenu courante - recalculée à chaque
+          // applyLayout plutôt que lue telle quelle, pour rester juste si les marges de page changent (onglet Réglages) pendant que ce nœud est affiché.
+          const effectivePercent = attrs => Number.isFinite(attrs.layoutLeftMm)
+            ? (attrs.layoutLeftMm / PageLayout.getContentWidthMm()) * 100
+            : (attrs.layoutLeft || 50);
+          const applyLayout = attrs => wrap.style.setProperty('--layout-left', effectivePercent(attrs) + '%');
           applyLayout(node.attrs);
 
           let dragging = false;
+          let dragMoved = false;
           function onMove(event) {
             const rect = wrap.getBoundingClientRect();
             if (!rect.width) return;
+            dragMoved = true;
             const left = ((event.clientX - rect.left) / rect.width) * 100;
             wrap.style.setProperty('--layout-left', Math.max(20, Math.min(80, left)) + '%');
           }
           function onUp() {
             dragging = false;
             document.removeEventListener('mousemove', onMove);
-            const finalLeft = Math.round(parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50);
+            if (!dragMoved) return; // simple clic (pas un glisser) - laisse le handler `click` du grip ouvrir le popover mm.
+            const finalLeftPercent = Math.max(20, Math.min(80, parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50));
             const pos = getPos();
             if (typeof pos !== 'number') return;
             const { state, view } = nodeEditor;
             const current = state.doc.nodeAt(pos);
             if (!current) return;
-            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeft: finalLeft })));
+            const newAttrs = Object.assign({}, current.attrs, { layoutLeft: Math.round(finalLeftPercent) });
+            // Reste en mode mm après un glisser (ne repasse pas silencieusement en mode pourcentage) : reconvertit la position finale en mm.
+            if (Number.isFinite(current.attrs.layoutLeftMm)) {
+              newAttrs.layoutLeftMm = Math.round(finalLeftPercent / 100 * PageLayout.getContentWidthMm());
+            }
+            view.dispatch(state.tr.setNodeMarkup(pos, undefined, newAttrs));
           }
           grip.addEventListener('mousedown', event => {
             event.preventDefault(); event.stopPropagation();
-            dragging = true;
+            dragging = true; dragMoved = false;
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp, { once: true });
+          });
+
+          // Clic (pas glisser) sur la poignée : popover de saisie exacte en mm - la précision requise pour un usage d'impression (ex. une grille de
+          // badges au mm près) n'est pas atteignable au glisser à la souris seul.
+          let popover = null;
+          function closePopover() {
+            if (!popover) return;
+            popover.remove();
+            popover = null;
+            document.removeEventListener('mousedown', onDocMouseDown, true);
+          }
+          function onDocMouseDown(event) {
+            if (popover && !popover.contains(event.target)) closePopover();
+          }
+          function commitMm(value) {
+            const pos = getPos();
+            if (typeof pos !== 'number') return;
+            const { state, view } = nodeEditor;
+            const current = state.doc.nodeAt(pos);
+            if (!current) return;
+            const contentWidthMm = PageLayout.getContentWidthMm();
+            const clamped = Math.max(10, Math.min(contentWidthMm - 10, value));
+            const pct = (clamped / contentWidthMm) * 100;
+            view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeftMm: clamped, layoutLeft: Math.round(pct) })));
+          }
+          function currentNodeAttrs() {
+            const pos = getPos();
+            if (typeof pos !== 'number') return node.attrs;
+            const current = nodeEditor.state.doc.nodeAt(pos);
+            return current ? current.attrs : node.attrs;
+          }
+          function openPopover() {
+            if (popover) { closePopover(); return; }
+            const currentAttrs = currentNodeAttrs();
+            popover = document.createElement('div');
+            popover.className = 'two-columns-mm-popover';
+            const label = document.createElement('label');
+            label.textContent = I18n.t('twoColumns.widthMmLabel');
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '10';
+            input.step = '1';
+            input.value = Number.isFinite(currentAttrs.layoutLeftMm)
+              ? Math.round(currentAttrs.layoutLeftMm)
+              : Math.round(effectivePercent(currentAttrs) / 100 * PageLayout.getContentWidthMm());
+            label.appendChild(input);
+            popover.appendChild(label);
+            wrap.appendChild(popover);
+            input.focus();
+            input.select();
+            // `settled` évite qu'Escape committe quand même : retirer le popover du DOM déclenche un blur natif sur l'input encore focus, qui sans ce
+            // garde-fou rappellerait commitAndClose() une seconde fois (Escape est censé annuler, pas valider).
+            let settled = false;
+            function commitAndClose() {
+              if (settled) return;
+              settled = true;
+              const v = parseFloat(input.value);
+              if (Number.isFinite(v)) commitMm(v);
+              closePopover();
+            }
+            function cancelAndClose() {
+              settled = true;
+              closePopover();
+            }
+            input.addEventListener('keydown', event => {
+              if (event.key === 'Enter') { event.preventDefault(); commitAndClose(); }
+              else if (event.key === 'Escape') { event.preventDefault(); cancelAndClose(); }
+            });
+            input.addEventListener('blur', commitAndClose);
+            // Capture (pas bubble) : doit voir le mousedown AVANT que le blur de l'input ne ferme déjà le popover, sinon un clic sur le fond de l'éditeur
+            // rouvrirait/fermerait de façon incohérente.
+            setTimeout(() => document.addEventListener('mousedown', onDocMouseDown, true), 0);
+          }
+          grip.addEventListener('click', event => {
+            event.preventDefault(); event.stopPropagation();
+            if (dragMoved) return; // déjà traité par onUp ci-dessus.
+            openPopover();
           });
 
           return {
@@ -459,7 +561,7 @@ const EditorNodes = (function () {
               if (!dragging) applyLayout(updatedNode.attrs);
               return true;
             },
-            destroy: () => document.removeEventListener('mousemove', onMove),
+            destroy: () => { document.removeEventListener('mousemove', onMove); closePopover(); },
             // Sans ça, ProseMirror voit la mutation de style pendant le glisser (hors transaction) comme inattendue et recrée le NodeView - le wrapper
             // devient alors détaché avant le mouseup, et le commit final s'applique à un nœud fantôme.
             ignoreMutation: () => true,

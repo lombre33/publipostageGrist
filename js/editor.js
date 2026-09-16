@@ -391,12 +391,21 @@ const Editor = (function () {
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
+  // Force la reconciliation de tous les NodeViews (dispatch sans changement réel de document) - même technique que la ligne 381 ci-dessus (sommaire).
+  // Appelé après un changement de marges de page (js/page-layout.js) pour que les zones 2-colonnes en mode mm (--layout-left dérivé de la largeur de
+  // contenu courante) se redessinent immédiatement, sans attendre une frappe/action qui déclencherait onUpdate pour une autre raison.
+  function refreshLayout() {
+    if (!editor) return;
+    editor.view.dispatch(editor.state.tr);
+  }
+
   return {
     init, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData,
     setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     refreshPaginationPreview: HeaderFooterPreview.renderPaginationOverlay,
+    refreshLayout,
     openFootnoteEditorAt,
     isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter,
   };

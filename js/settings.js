@@ -23,15 +23,36 @@ const Settings = (function () {
     const triggerSelect = document.getElementById('settings-trigger-char');
     const reloadNotice = document.getElementById('settings-trigger-reload-notice');
     const reloadBtn = document.getElementById('settings-trigger-reload-btn');
+    // Réglage PAR MODÈLE (pas global comme langue/touche ci-dessus) : brouillon dans PageLayout, persisté seulement au prochain "Enregistrer" - même
+    // philosophie que l'en-tête/pied de page (js/header-footer-preview.js).
+    const marginInputs = {
+      top: document.getElementById('settings-margin-top'),
+      right: document.getElementById('settings-margin-right'),
+      bottom: document.getElementById('settings-margin-bottom'),
+      left: document.getElementById('settings-margin-left'),
+    };
     if (!openBtn || !modal || !closeBtn) return;
 
     openBtn.addEventListener('click', () => {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
       if (triggerSelect) triggerSelect.value = getTriggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
+      const margins = PageLayout.getMarginsMm();
+      Object.keys(marginInputs).forEach(side => { if (marginInputs[side]) marginInputs[side].value = Math.round(margins[side] * 10) / 10; });
       modal.style.display = 'flex';
     });
     closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+
+    Object.keys(marginInputs).forEach(side => {
+      const input = marginInputs[side];
+      if (!input) return;
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        if (!Number.isFinite(v) || v < 0) return;
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { [side]: v }));
+        Editor.refreshLayout();
+      });
+    });
 
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
