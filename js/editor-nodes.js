@@ -434,6 +434,14 @@ const EditorNodes = (function () {
           grip.className = 'two-columns-resize-grip';
           grip.title = I18n.t('twoColumns.resizeGrip');
           wrap.appendChild(grip);
+          // Bouton dédié, indépendant de la poignée de glisser (pas de clic-sans-bouger ambigu à détecter) : ouvre un popover avec les DEUX largeurs
+          // (gauche saisissable, droite affichée en direct) plutôt qu'un seul champ ambigu ("largeur de QUOI ?").
+          const mmButton = document.createElement('button');
+          mmButton.type = 'button';
+          mmButton.className = 'two-columns-mm-button';
+          mmButton.title = I18n.t('twoColumns.widthMmButton');
+          mmButton.textContent = 'mm';
+          wrap.appendChild(mmButton);
 
           // En mode mm (layoutLeftMm non-null), layoutLeft n'est qu'une valeur DÉRIVÉE de layoutLeftMm/largeur de contenu courante - recalculée à chaque
           // applyLayout plutôt que lue telle quelle, pour rester juste si les marges de page changent (onglet Réglages) pendant que ce nœud est affiché.
@@ -444,18 +452,15 @@ const EditorNodes = (function () {
           applyLayout(node.attrs);
 
           let dragging = false;
-          let dragMoved = false;
           function onMove(event) {
             const rect = wrap.getBoundingClientRect();
             if (!rect.width) return;
-            dragMoved = true;
             const left = ((event.clientX - rect.left) / rect.width) * 100;
             wrap.style.setProperty('--layout-left', Math.max(20, Math.min(80, left)) + '%');
           }
           function onUp() {
             dragging = false;
             document.removeEventListener('mousemove', onMove);
-            if (!dragMoved) return; // simple clic (pas un glisser) - laisse le handler `click` du grip ouvrir le popover mm.
             const finalLeftPercent = Math.max(20, Math.min(80, parseFloat(wrap.style.getPropertyValue('--layout-left')) || 50));
             const pos = getPos();
             if (typeof pos !== 'number') return;
@@ -471,13 +476,13 @@ const EditorNodes = (function () {
           }
           grip.addEventListener('mousedown', event => {
             event.preventDefault(); event.stopPropagation();
-            dragging = true; dragMoved = false;
+            dragging = true;
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp, { once: true });
           });
 
-          // Clic (pas glisser) sur la poignée : popover de saisie exacte en mm - la précision requise pour un usage d'impression (ex. une grille de
-          // badges au mm près) n'est pas atteignable au glisser à la souris seul.
+          // Popover du bouton "mm" (séparé de la poignée, cf. mmButton ci-dessus) : deux valeurs affichées (gauche saisissable, droite = le reste de la
+          // largeur de contenu, recalculée en direct) - plus clair qu'un seul champ dont on ne sait pas s'il décrit la colonne de gauche ou de droite.
           let popover = null;
           function closePopover() {
             if (!popover) return;
@@ -486,7 +491,7 @@ const EditorNodes = (function () {
             document.removeEventListener('mousedown', onDocMouseDown, true);
           }
           function onDocMouseDown(event) {
-            if (popover && !popover.contains(event.target)) closePopover();
+            if (popover && !popover.contains(event.target) && event.target !== mmButton) closePopover();
           }
           function commitMm(value) {
             const pos = getPos();
@@ -508,29 +513,46 @@ const EditorNodes = (function () {
           function openPopover() {
             if (popover) { closePopover(); return; }
             const currentAttrs = currentNodeAttrs();
+            const contentWidthMm = PageLayout.getContentWidthMm();
+            const startLeftMm = Number.isFinite(currentAttrs.layoutLeftMm)
+              ? currentAttrs.layoutLeftMm
+              : Math.round(effectivePercent(currentAttrs) / 100 * contentWidthMm);
+
             popover = document.createElement('div');
             popover.className = 'two-columns-mm-popover';
-            const label = document.createElement('label');
-            label.textContent = I18n.t('twoColumns.widthMmLabel');
-            const input = document.createElement('input');
-            input.type = 'number';
-            input.min = '10';
-            input.step = '1';
-            input.value = Number.isFinite(currentAttrs.layoutLeftMm)
-              ? Math.round(currentAttrs.layoutLeftMm)
-              : Math.round(effectivePercent(currentAttrs) / 100 * PageLayout.getContentWidthMm());
-            label.appendChild(input);
-            popover.appendChild(label);
+            const leftLabel = document.createElement('label');
+            leftLabel.textContent = I18n.t('twoColumns.widthMmLeftLabel');
+            const leftInput = document.createElement('input');
+            leftInput.type = 'number';
+            leftInput.min = '10';
+            leftInput.step = '1';
+            leftInput.value = Math.round(startLeftMm);
+            leftLabel.appendChild(leftInput);
+            const rightLabel = document.createElement('label');
+            rightLabel.textContent = I18n.t('twoColumns.widthMmRightLabel');
+            const rightDisplay = document.createElement('span');
+            rightDisplay.className = 'two-columns-mm-computed';
+            rightLabel.appendChild(rightDisplay);
+            popover.appendChild(leftLabel);
+            popover.appendChild(rightLabel);
             wrap.appendChild(popover);
-            input.focus();
-            input.select();
+
+            const refreshRightDisplay = () => {
+              const v = parseFloat(leftInput.value);
+              rightDisplay.textContent = Number.isFinite(v) ? Math.round(contentWidthMm - v) : '—';
+            };
+            refreshRightDisplay();
+            leftInput.addEventListener('input', refreshRightDisplay);
+            leftInput.focus();
+            leftInput.select();
+
             // `settled` évite qu'Escape committe quand même : retirer le popover du DOM déclenche un blur natif sur l'input encore focus, qui sans ce
             // garde-fou rappellerait commitAndClose() une seconde fois (Escape est censé annuler, pas valider).
             let settled = false;
             function commitAndClose() {
               if (settled) return;
               settled = true;
-              const v = parseFloat(input.value);
+              const v = parseFloat(leftInput.value);
               if (Number.isFinite(v)) commitMm(v);
               closePopover();
             }
@@ -538,18 +560,17 @@ const EditorNodes = (function () {
               settled = true;
               closePopover();
             }
-            input.addEventListener('keydown', event => {
+            leftInput.addEventListener('keydown', event => {
               if (event.key === 'Enter') { event.preventDefault(); commitAndClose(); }
               else if (event.key === 'Escape') { event.preventDefault(); cancelAndClose(); }
             });
-            input.addEventListener('blur', commitAndClose);
+            leftInput.addEventListener('blur', commitAndClose);
             // Capture (pas bubble) : doit voir le mousedown AVANT que le blur de l'input ne ferme déjà le popover, sinon un clic sur le fond de l'éditeur
             // rouvrirait/fermerait de façon incohérente.
             setTimeout(() => document.addEventListener('mousedown', onDocMouseDown, true), 0);
           }
-          grip.addEventListener('click', event => {
+          mmButton.addEventListener('click', event => {
             event.preventDefault(); event.stopPropagation();
-            if (dragMoved) return; // déjà traité par onUp ci-dessus.
             openPopover();
           });
 

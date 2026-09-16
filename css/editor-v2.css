@@ -111,14 +111,26 @@
 .tiptap .two-columns-zone-outer { position: relative; }
 .tiptap .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 14px; height: 32px; transform: translate(-50%, -50%); border-radius: 4px; background: var(--accent, #2f6fed); cursor: ew-resize; opacity: 0; transition: opacity .15s ease; z-index: 5; }
 .tiptap .two-columns-zone-outer:hover .two-columns-resize-grip { opacity: 1; }
-/* Popover mm (clic sur la poignée, pas glisser) - même position horizontale que la poignée (juste en dessous), même famille visuelle que les autres
-   petits panneaux flottants du projet (#autocomplete-box/.v2-hover-flyout : fond blanc, liseré, ombre portée légère). */
+/* Bouton "mm" - séparé de la poignée de glisser ci-dessus (pas d'ambiguïté clic/glisser à détecter) : juste au-dessus d'elle, même déclenchement au
+   survol de la zone. */
+.tiptap .two-columns-mm-button {
+  position: absolute; top: calc(50% - 26px); left: var(--layout-left, 50%); transform: translateX(-50%);
+  display: flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border: none; border-radius: 4px;
+  background: var(--accent, #2f6fed); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 5;
+}
+.tiptap .two-columns-zone-outer:hover .two-columns-mm-button { opacity: 1; }
+/* Popover du bouton "mm" ci-dessus - même position horizontale (juste en dessous de la poignée), même famille visuelle que les autres petits panneaux
+   flottants du projet (#autocomplete-box/.v2-hover-flyout : fond blanc, liseré, ombre portée légère). Deux lignes (gauche saisissable, droite calculée) -
+   pas un champ isolé dont on ne sait pas s'il décrit la colonne de gauche ou de droite. */
 .two-columns-mm-popover {
   position: absolute; top: calc(50% + 22px); left: var(--layout-left, 50%); transform: translateX(-50%);
-  display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: #fff; border: 1px solid var(--border-strong, #c3cad6);
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: #fff; border: 1px solid var(--border-strong, #c3cad6);
   border-radius: 6px; box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: #3a4452; white-space: nowrap;
 }
+.two-columns-mm-popover label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .two-columns-mm-popover input { width: 56px; padding: 3px 5px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; }
+.two-columns-mm-computed { display: inline-block; width: 56px; padding: 3px 5px; text-align: right; color: var(--text-faint, #6b7684); }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
 /* NodeView de l'image (js/editor.js:createEditorImageNode) - structure DIFFÉRENTE du HTML sérialisé (qui pose position/left/top/data-align/data-wrap
