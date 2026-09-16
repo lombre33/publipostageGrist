@@ -561,6 +561,15 @@ const DocxExport = (function () {
         pendingPageBreak = false;
         continue;
       }
+      // <img> DIRECTEMENT enfant du conteneur (pas dans un <p> - ex. une image en calque insérée hors flux, cf. js/editor-nodes.js) : sans cette branche,
+      // ce nœud tombait dans le repli générique juste en dessous ("creuser dedans"), qui recurse sur ses ENFANTS - une image n'en a aucun, elle
+      // disparaissait donc silencieusement de l'export (trouvé en comparant l'éditeur au .docx généré sur templates-gallery/test-images-tableaux).
+      if (node.tagName === 'IMG') {
+        const runs = await inlineNodesFrom(node, { size: DEFAULT_HALF_PT }, ctx);
+        if (runs.length) blocks.push(new docx.Paragraph({ children: runs, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!pendingPageBreak }));
+        pendingPageBreak = false;
+        continue;
+      }
       // Nœud non reconnu (wrapper générique...) : on continue de creuser dedans plutôt que d'ignorer tout son contenu.
       const nested = await blocksFromContainer(node, ctx, false);
       blocks.push(...nested);
