@@ -54,6 +54,7 @@ const DocxExport = (function () {
   const HEADING_LEVEL = { H1: 'HEADING_1', H2: 'HEADING_2', H3: 'HEADING_3', H4: 'HEADING_4', H5: 'HEADING_5', H6: 'HEADING_6' };
   const INDENT_STEP_TWIP = 360; // ~0.25" par niveau de liste imbriquée, valeur par défaut standard Word.
   const BULLET_MARKERS = { disc: '• ', circle: '○ ', square: '▪ ' }; // vrais glyphes Unicode : contrairement à pdfmake (WinAnsi seul), les polices Word les rendent nativement.
+  const EMU_PER_PT = 12700; // 1pt = 1/72in, 1in = 914400 EMU (unité native des positions/tailles de dessin OOXML) => 914400/72.
 
   function cssColorHex(value) {
     if (!value) return null;
@@ -157,6 +158,31 @@ const DocxExport = (function () {
     return { data, type, width: Math.round(widthPx), height: Math.max(1, Math.round(widthPx * ratio)) };
   }
 
+  // Image "en calque" (devant/derrière le texte, cf. js/editor-nodes.js) : construit l'ancrage flottant Word natif (wp:anchor, positionné PAGE de bord à
+  // bord) à partir de la position "grille page" déjà capturée dans l'éditeur (Aperçu A4) - même donnée que js/pdf-export.js:_pageGrid, lue ici directement
+  // depuis les attributs DOM plutôt que reconstruite. `null` si l'image n'est pas en calque, ou en calque mais SANS position grille-page (document ancien,
+  // ou positionnée hors Aperçu A4) : reconstruire l'ancien système d'ancrage/bracketing textuel pour DOCX est hors périmètre pour l'instant - repli sur
+  // l'image en ligne classique dans ce cas.
+  // marge + décalage capturé = même formule que p.image.absolutePosition, js/pdf-export.js : la position enregistrée est relative au CONTENU (dans les
+  // marges), pas au bord brut de la page - il faut donc rajouter la marge avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
+  function docxFloatingOptionsFrom(imgNode, uniqueId) {
+    const layer = imgNode.getAttribute('data-layer');
+    if (layer !== 'front' && layer !== 'behind') return null;
+    const pageIndex = imgNode.hasAttribute('data-page-index') ? parseInt(imgNode.getAttribute('data-page-index'), 10) : null;
+    const pageLeftPt = imgNode.hasAttribute('data-page-left-pt') ? parseFloat(imgNode.getAttribute('data-page-left-pt')) : null;
+    const pageTopPt = imgNode.hasAttribute('data-page-top-pt') ? parseFloat(imgNode.getAttribute('data-page-top-pt')) : null;
+    if (!Number.isFinite(pageIndex) || !Number.isFinite(pageLeftPt) || !Number.isFinite(pageTopPt)) return null;
+    const marginPt = PAGE_MARGIN_TWIP / TWIPS_PER_PT;
+    const xEmu = Math.round((marginPt + pageLeftPt) * EMU_PER_PT);
+    const yEmu = Math.round((marginPt + pageTopPt) * EMU_PER_PT);
+    return {
+      behindDocument: layer === 'behind',
+      zIndex: 1000 + uniqueId, // unique par image, comme altText.id ci-dessus - évite de dépendre du repli par défaut de docx.js (hauteur de l'image).
+      horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: xEmu },
+      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: yEmu },
+    };
+  }
+
   // Équivalent de inlineRuns (js/pdf-export.js), en composants docx (TextRun/ImageRun/FootnoteReferenceRun) au lieu de "runs" pdfmake. Asynchrone (une image
   // a besoin d'être téléchargée) - parcours séquentiel, largement suffisant vu le nombre d'images réaliste dans un document de publipostage.
   async function inlineNodesFrom(node, parentStyle, ctx) {
@@ -192,7 +218,10 @@ const DocxExport = (function () {
       // librairie, vérifié dans son propre bundle) : sans id explicite ici, deux images obtiennent toutes les deux id="1", ce que Word refuse d'ouvrir sans
       // le signaler comme contenu illisible. altText.id fournit un id unique par image du document.
       ctx.imageIdCounter += 1;
-      return [new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } })];
+      const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
+      const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter);
+      if (floatingOptions) runOptions.floating = floatingOptions;
+      return [new docx.ImageRun(runOptions)];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
     let out = [];
