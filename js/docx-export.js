@@ -196,7 +196,10 @@ const DocxExport = (function () {
       zIndex: 1000 + uniqueId,
       wrap: { type: docx.TextWrappingType.SQUARE, side: align === 'right' ? docx.TextWrappingSide.LEFT : docx.TextWrappingSide.RIGHT },
       horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.MARGIN, align: align === 'right' ? docx.HorizontalPositionAlign.RIGHT : docx.HorizontalPositionAlign.LEFT },
-      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PARAGRAPH, align: docx.VerticalPositionAlign.TOP },
+      // relativeFrom "line" (pas "paragraph") : un vrai float CSS démarre à la LIGNE où il est rencontré dans le flux, pas forcément en haut du
+      // paragraphe entier - une image insérée après plusieurs lignes de texte (comme le cas rapporté) se retrouvait plaquée en haut du paragraphe dans
+      // Word au lieu de rester à la hauteur où elle apparaît réellement dans l'éditeur.
+      verticalPosition: { relative: docx.VerticalPositionRelativeFrom.LINE, align: docx.VerticalPositionAlign.TOP },
     };
   }
 
