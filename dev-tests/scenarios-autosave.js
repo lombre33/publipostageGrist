@@ -241,6 +241,49 @@
     },
   });
 
+  cases.push({
+    id: 'autosave_no_false_conflict_for_lone_editor',
+    // Régression réelle signalée par Antoine : Templates.save() renvoyait la chaîne ISO brute qu'il venait lui-même d'écrire (new Date().toISOString()),
+    // alors que Templates.loadAll() relit ce même DateModif via grist.docApi.fetchTable() - si Grist ne redonne pas cette chaîne à l'identique (un
+    // DateTime réel se représente en interne comme un timestamp numérique), autosaveTick() comparait deux représentations différentes d'un seul et même
+    // instant avec `!==` et affichait le bandeau, sans que personne d'autre n'ait jamais touché au modèle. Différence-clé avec tous les scénarios de
+    // conflit ci-dessus (qui simulent un second utilisateur via remoteWrite) : ici AUCUN remoteWrite n'est appelé, le client est seul du début à la fin.
+    description: "Un client seul (aucun remoteWrite) ne doit jamais voir le bandeau « modifié ailleurs » apparaître après ses propres enregistrements, manuels ou automatiques",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'AutoSave sans faux conflit solo', '<p>Version initiale</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      if (bannerVisible()) return { pass: false, notes: 'bandeau déjà affiché juste après le tout premier enregistrement manuel' };
+
+      // Un tick de vérification de conflit sans la moindre modification entre-temps : déjà suffisant pour révéler un mismatch de représentation, puisque
+      // autosaveLastKnownDateModif vient d'être réécrit avec la valeur renvoyée par ce premier save().
+      await waitTicks(h, 1);
+      const bannerAfterFirstTick = bannerVisible();
+
+      // Second enregistrement MANUEL (le cas exact rapporté : Enregistrer, continuer à taper, Enregistrer encore) - exercise onSave(), qui réécrit
+      // autosaveLastKnownDateModif une seconde fois.
+      await h.focusAtEnd();
+      await h.typeText(' puis une frappe locale');
+      await h.clickButton('btn-save');
+      await h.sleep(400);
+      const bannerAfterSecondManualSave = bannerVisible();
+
+      // Puis un vrai tick d'auto-save après une nouvelle frappe, pour couvrir aussi le chemin autosaveTick() (pas seulement onSave()) - deux
+      // enregistrements réels consécutifs par le MÊME client, sans jamais qu'un autre utilisateur n'intervienne.
+      await h.focusAtEnd();
+      await h.typeText(' puis encore une frappe');
+      await waitTicks(h, 1);
+      const bannerAfterAutosaveTick = bannerVisible();
+
+      const pass = !bannerAfterFirstTick && !bannerAfterSecondManualSave && !bannerAfterAutosaveTick;
+      return {
+        pass,
+        notes: 'bandeau après 1er tick=' + bannerAfterFirstTick + ', après 2e Enregistrer manuel=' + bannerAfterSecondManualSave
+          + ', après tick auto-save suivant=' + bannerAfterAutosaveTick,
+      };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosave = cases;
 })();

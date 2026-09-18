@@ -181,8 +181,31 @@ const Templates = (function () {
     templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
   }
 
+  // Relit le DateModif RÉELLEMENT stocké par Grist pour cette ligne, plutôt que de faire confiance à la chaîne ISO qu'on vient nous-mêmes d'envoyer :
+  // rien ne garantit que Grist redonne cette même chaîne telle quelle sur une lecture ultérieure (une colonne DateTime peut très bien être représentée
+  // différemment en interne - timestamp numérique, etc.). js/main.js (autosaveTick) compare la valeur renvoyée par save() à une valeur lue plus tard via
+  // loadAll()/fetchTable() : si les deux ne sont pas exprimées dans la MÊME représentation, la comparaison stricte y voit un faux conflit dès le tick
+  // suivant n'importe quel enregistrement, même seul sur le document. Toujours passer par cette même lecture (fetchTable) des deux côtés élimine le
+  // problème quelle que soit la représentation interne réelle de Grist. Défensif : un souci ici (colonne absente, ligne introuvable, requête en échec) ne
+  // doit jamais faire échouer un enregistrement par ailleurs réussi - on retombe alors sur la chaîne ISO d'origine plutôt que de lever.
+  async function readBackDateModif(rowId, fallback) {
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      const idx = data.id.indexOf(rowId);
+      if (idx === -1 || !data.DateModif) {
+        console.error('Relecture DateModif après enregistrement : ligne ou colonne introuvable, valeur locale conservée');
+        return fallback;
+      }
+      return data.DateModif[idx];
+    } catch (e) {
+      console.error('Erreur relecture DateModif après enregistrement', e);
+      return fallback;
+    }
+  }
+
   // Renvoie { id, dateModif } (pas juste l'id) : js/main.js (auto-save) a besoin de connaître le DateModif qu'IL vient d'écrire, pour le distinguer d'un
-  // DateModif différent constaté plus tard (preuve qu'quelqu'un d'autre a enregistré ce modèle entre-temps).
+  // DateModif différent constaté plus tard (preuve qu'quelqu'un d'autre a enregistré ce modèle entre-temps). dateModif vient d'une relecture Grist
+  // (readBackDateModif), pas de la chaîne ISO envoyée - cf. commentaire de cette fonction.
   async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
@@ -198,14 +221,16 @@ const Templates = (function () {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]
       ]);
-      return { id, dateModif: now };
+      const dateModif = await readBackDateModif(id, now);
+      return { id, dateModif };
     } else {
       const result = await grist.docApi.applyUserActions([
         ['AddRecord', TABLE_NAME, null, columns]
       ]);
       const newId = result.retValues[0];
       currentTemplateId = newId;
-      return { id: newId, dateModif: now };
+      const dateModif = await readBackDateModif(newId, now);
+      return { id: newId, dateModif };
     }
   }
 

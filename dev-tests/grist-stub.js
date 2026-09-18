@@ -48,6 +48,24 @@
 
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
 
+  // Grist représente en réalité un DateTime comme un timestamp Unix NUMÉRIQUE (secondes depuis
+  // l'epoch, cf. documentation/grist-data-format.md du projet grist-core) - jamais la chaîne ISO que
+  // ce widget envoie côté client (cf. js/templates.js:save, `new Date().toISOString()`). Un stub qui
+  // se contentait de stocker cette chaîne telle quelle (passthrough intégral, sans coercion d'aucune
+  // sorte) ne pouvait STRUCTURELLEMENT jamais faire apparaître un écart de représentation entre
+  // l'écriture et une relecture ultérieure - ce qui a rendu invisible un vrai bug de production
+  // (bandeau "modifié ailleurs" affiché à un utilisateur seul sur son document, cf. js/main.js
+  // autosaveTick). Spécifique à Publipostage_Modeles.DateModif : les colonnes de ce fichier sont
+  // pré-déclarées à la main plutôt que passer par setVariables, pas besoin d'un système de type
+  // général pour corriger ce point précis.
+  function coerceDateModif(value) {
+    if (value == null) return value;
+    if (typeof value === 'number') return value; // déjà à la forme Grist (ex. déjà coercée par un appel précédent)
+    const ms = new Date(value).getTime();
+    if (Number.isNaN(ms)) return value; // non parseable : passthrough, comme une vraie colonne Grist recevrait une valeur "mismatch"
+    return Math.floor(ms / 1000); // secondes entières depuis l'epoch, jamais des millisecondes (cf. doc citée ci-dessus)
+  }
+
   function setVariables(tableId, columns) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
     if (state.tables.indexOf(tableId) === -1) state.tables.push(tableId);
@@ -113,7 +131,7 @@
         table.id.push(newId);
         Object.keys(fields).forEach(k => {
           if (!table[k]) table[k] = table.id.map(() => null);
-          table[k][table.id.length - 1] = fields[k];
+          table[k][table.id.length - 1] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
         });
         retValues.push(newId);
       } else if (type === 'UpdateRecord') {
@@ -122,7 +140,10 @@
         const table = state.rows[tableId];
         if (table) {
           const idx = table.id.indexOf(rowId);
-          if (idx !== -1) Object.keys(fields).forEach(k => { if (!table[k]) table[k] = table.id.map(() => null); table[k][idx] = fields[k]; });
+          if (idx !== -1) Object.keys(fields).forEach(k => {
+            if (!table[k]) table[k] = table.id.map(() => null);
+            table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
+          });
         }
         retValues.push(null);
       } else if (type === 'RemoveRecord' || type === 'BulkRemoveRecord') {
@@ -163,7 +184,7 @@
     if (idx === -1) return;
     Object.keys(fields).forEach(k => {
       if (!table[k]) table[k] = table.id.map(() => null);
-      table[k][idx] = fields[k];
+      table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
     });
   }
 
