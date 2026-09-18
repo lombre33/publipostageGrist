@@ -88,23 +88,27 @@ Un modèle *est* un document ou *est* un email, décidé à sa création ; il n'
 sur un modèle chargé. Concrètement :
 
 - Le `#template-select` existant liste les deux familles dans **deux `<optgroup>`** :
-  « Documents » et « Emails », chaque entrée préfixée d'une pastille de type.
-- Le bouton « Nouveau modèle » (déjà un `.v2-hover-group` avec un flyout, `index.html:91`) gagne une
-  ligne : `Nouveau document` / `Nouvel email` / `Créer à partir d'un template…`.
-- Charger un modèle email reconfigure toute la chrome (toolbar, cluster d'export, champs
-  destinataires, feuille A4) — via une classe sur `#app` (`app--email` / `app--document`), pas via
-  un second conteneur d'édition.
+  « Documents » et « Emails ».
+- Le bouton « Nouveau modèle » (déjà un `.v2-hover-group` avec un flyout, `index.html:91`) — le
+  SEUL endroit de l'app où l'on choisit le type à la création — gagne deux lignes en tête :
+  `Nouveau document` / `Nouvel email`, avant le `Créer à partir d'un template…` déjà existant.
+  Aucun nouveau composant : le flyout existe déjà, il ne fait que s'allonger. Voir la maquette,
+  artboard « Création — choix du type ».
+- Charger un modèle email reconfigure la chrome existante (toolbar, deuxième `.bar-row` À/Objet/Cc,
+  feuille A4) via une classe sur `#app` (`app--email` / `app--document`) — même mécanisme que
+  `currentMode` pour Édition/Lecture, pas un second conteneur d'édition.
 
 **Pourquoi c'est ma recommandation :** ça colle au modèle de données déjà décidé (deux tables Grist
 distinctes), ça colle au modèle mental (« je crée un modèle d'email »), et surtout **ça n'ajoute
-aucune rangée d'UI permanente** — argument décisif vu que le fil UI/UX a déjà relevé une barre
-d'outils à ~30 boutons sur 2 rangées à 1440 px et 5 rangées à 420 px, dans un panneau Grist souvent
-étroit.
+aucune rangée d'UI permanente** dans le cas document (la deuxième `.bar-row` n'apparaît qu'en
+chargeant un modèle email) — argument décisif vu que le fil UI/UX a déjà relevé une barre d'outils
+à ~30 boutons sur 2 rangées à 1440 px et 5 rangées à 420 px, dans un panneau Grist souvent étroit.
 
-**Le coût honnête :** le type n'est visible que via la pastille du modèle sélectionné. Un utilisateur
-qui ouvre le widget sur un modèle email doit comprendre *tout de suite* pourquoi sa toolbar a
-maigri. Mitigation : un bandeau de type discret mais explicite au-dessus du corps (cf. §4.1), pas
-seulement une pastille de 8 px.
+**Le coût honnête :** le type n'est explicite qu'au moment de la création (flyout) et via
+l'optgroup du sélecteur ensuite — pas de rappel permanent une fois le modèle chargé. Antoine a
+tranché contre tout nouveau bandeau explicatif (§0) ; le signal reste la deuxième `.bar-row` qui
+apparaît et les boutons de mise en forme qui se grisent, cohérent avec le reste de l'app où changer
+de mode change déjà l'écran sans bandeau d'explication (`Édition`/`Lecture`).
 
 ### Option B — Deux onglets de premier niveau `Documents | Emails`
 
@@ -330,5 +334,6 @@ et la « carte enveloppe » de la première version de ce document sont abandonn
 **un modèle d'email garde le bouton « Exporter en PDF »** existant (l'export croisé email→PDF est
 permis, PDF→email ne l'est pas — relation déjà actée dans `js/mailto-export.js`).
 
-La maquette visuelle (canvas, écrans Édition/Lecture) est à jour de ces réponses :
-https://claude.ai/artifact/TiZzpjqNSLJ7FaX5BzDLZK
+La maquette visuelle (canvas, 3 écrans : Édition, Lecture, Création) est à jour de ces réponses :
+https://claude.ai/artifact/TiZzpjqNSLJ7FaX5BzDLZK — l'artboard « Création » montre précisément où
+le type (document/email) se choisit, seule question qui n'était pas encore visible sur la maquette.
