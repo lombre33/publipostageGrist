@@ -160,9 +160,18 @@ async function runGroup(name, probeExpr) {
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,
   // pas un délai arbitraire.
-  // `EditorCore` est un `const` top-level d'un script classique : il vit dans la portée lexicale
-  // globale, PAS comme propriété de `window` - `window.EditorCore` vaut donc toujours undefined.
+  // Deux attentes, pas une. `EditorCore` est un `const` top-level d'un script classique : il vit dans
+  // la portée lexicale globale, PAS comme propriété de `window` (`window.EditorCore` vaut toujours
+  // undefined). Mais son existence ne suffit pas : l'éditeur existe déjà en 0x0 pendant que
+  // main.js:init() finit de tourner, et `document.execCommand('insertText')` renvoie false tant qu'il
+  // n'a pas sa vraie taille - des scénarios de frappe échouent alors avec des notes vides, ce qui
+  // ressemble à une régression. Le seul signal fiable est le "Widget prêt." posé par la TOUTE
+  // DERNIÈRE ligne de init().
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
   // .a4-preview n'est jamais posée toute seule dans le harnais (piège documenté, README) : toute
   // mesure pixel dépend d'elle.
   await page.evaluate(() => { document.getElementById('editor-container').classList.add('a4-preview'); });

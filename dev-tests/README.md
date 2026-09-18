@@ -70,6 +70,13 @@ CI. **Un navigateur neuf par groupe**, à dessein : ce README documente plus bas
 des fuites d'état entre suites, un processus par groupe rend chaque verdict
 indépendant de l'ordre de lancement.
 
+Il attend **« Widget prêt. »** dans `#status-msg` avant de charger le moindre
+scénario, et pas seulement l'existence de l'éditeur : `.tiptap` existe déjà en
+0×0 pendant que `main.js:init()` tourne encore, et `execCommand('insertText')`
+renvoie `false` tant que l'éditeur n'a pas sa vraie taille - les scénarios qui
+tapent du texte échouent alors avec des notes de diagnostic vides, ce qui
+ressemble à une régression sans en être une.
+
 Deux options utiles :
 
 - `--port 8899` si 8843 est déjà pris (plusieurs runs en parallèle).
