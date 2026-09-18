@@ -405,6 +405,9 @@
       editorContainer.classList.toggle('a4-preview', toggle.checked);
       readerContainer.classList.toggle('a4-preview', toggle.checked);
       if (label) label.classList.toggle('checked', toggle.checked);
+      // Le facteur d'ajustement n'a de sens qu'en Aperçu A4 : applyPageFitZoom le retire de lui-même quand la classe disparaît. Avant la pagination,
+      // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
+      refreshPageFitZoom();
       Editor.refreshPaginationPreview();
     };
     toggle.addEventListener('change', sync);
@@ -439,6 +442,47 @@
     const group = trigger.closest('.v2-hover-group');
     if (group) group.addEventListener('mouseenter', syncActiveRow);
     syncActiveRow();
+  }
+
+  // Ajustement automatique de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css). Réduit la feuille juste ce qu'il faut pour
+  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de MIN_FIT_ZOOM, sous
+  // lequel le texte deviendrait illisible - le défilement horizontal reprend alors la main, comme avant. Aucun contrôle ajouté dans la barre d'outils :
+  // quand la feuille tient déjà, le facteur vaut 1 et rien ne change.
+  const A4_SHEET_WIDTH_PX = 793.71; // même valeur que .v2-page-sheet / .reader-content en Aperçu A4 (css/editor-v2.css)
+  const MIN_FIT_ZOOM = 0.5;
+  function applyPageFitZoom(container) {
+    if (!container) return;
+    if (!container.classList.contains('a4-preview')) { container.style.removeProperty('--pp-fit-zoom'); return; }
+    // clientWidth exclut déjà la barre de défilement verticale ; le padding du conteneur, lui, encadre la feuille et doit être retiré à la main.
+    const cs = getComputedStyle(container);
+    const available = container.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+    if (!(available > 0)) return;
+    const raw = available / A4_SHEET_WIDTH_PX;
+    const zoom = raw >= 1 ? 1 : Math.max(MIN_FIT_ZOOM, raw);
+    // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
+    const next = String(Math.round(zoom * 1000) / 1000);
+    if (container.style.getPropertyValue('--pp-fit-zoom') === next) return;
+    container.style.setProperty('--pp-fit-zoom', next);
+    return true;
+  }
+
+  function refreshPageFitZoom() {
+    const editorChanged = applyPageFitZoom(editorContainer);
+    const readerChanged = applyPageFitZoom(readerContainer);
+    // Les bandes de pagination sont positionnées à partir de mesures réelles : un changement de facteur les rend caduques tant qu'on n'a pas recalculé.
+    if (editorChanged && currentMode === 'edit') Editor.refreshPaginationPreview();
+    if (readerChanged && currentMode === 'read') renderReader();
+  }
+
+  function wirePageFitZoom() {
+    refreshPageFitZoom();
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => refreshPageFitZoom());
+      if (editorContainer) ro.observe(editorContainer);
+      if (readerContainer) ro.observe(readerContainer);
+    } else {
+      window.addEventListener('resize', refreshPageFitZoom);
+    }
   }
 
   // Raccourci clavier Ctrl+S / Cmd+S : enregistre le modèle courant, exactement comme le bouton Enregistrer (même onSave(), donc mêmes contrôles - nom
@@ -719,6 +763,7 @@
     Settings.wireSettingsModal();
     wireModalAccessibility();
     wireSaveShortcut();
+    wirePageFitZoom();
     decorateSaveButtonShortcut();
     I18n.onChange(decorateSaveButtonShortcut);
     Variables.initFilenameInput(pdfFilenameInput);

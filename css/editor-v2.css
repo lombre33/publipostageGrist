@@ -545,3 +545,16 @@
 
 /* Panneau Réglages (js/settings.js) - même overlay plein écran, même raison de le garder sur un ID distinct (encore une modale séparée). */
 #settings-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+
+/* === Ajustement automatique de la page à la largeur disponible === Dans un panneau Grist étroit, la feuille A4 (793.71px + marges de l'espace de travail)
+   dépasse le conteneur : elle restait atteignable au défilement horizontal, mais lire un document en le faisant glisser de gauche à droite n'a aucun sens.
+   `zoom` plutôt que `transform: scale()` : `zoom` participe à la mise en page (le conteneur voit la taille réduite, donc plus de débordement horizontal) et
+   les coordonnées de souris restent correctes, là où `transform` laisse un fantôme à la taille d'origine et décale le curseur de ProseMirror.
+   Volontairement jamais au-dessus de 1 : la feuille ne doit pas grossir sur un grand écran, sa largeur est celle d'une vraie page A4.
+   Posé sur la feuille ET sur la surcouche de pagination (ses bandes sont positionnées dans le même repère), jamais sur #editor-container lui-même, dont
+   clientWidth sert justement à calculer le facteur. */
+#editor-container.a4-preview .v2-page-sheet,
+#editor-container.a4-preview .v2-pagination-overlay,
+#reader-container.a4-preview .reader-content,
+#reader-container.a4-preview .v2-page-edge-spacer,
+#reader-container.a4-preview .v2-pagination-overlay { zoom: var(--pp-fit-zoom, 1); }

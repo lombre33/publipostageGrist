@@ -15,6 +15,14 @@ const ReaderMode = (function () {
   const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, js/pdf-export.js
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, js/pdf-export.js
 
+  // Même rôle que layoutZoom() dans js/header-footer-preview.js (copie volontairement locale, comme tout ce module) : les rectangles mesurés DANS la
+  // feuille sont en pixels écran, déjà multipliés par le zoom d'ajustement, alors que pageContentHeightPx et offsetTop sont en pixels de mise en page.
+  function layoutZoom(el) {
+    const sheet = el && el.closest ? el.closest('.reader-content') : null;
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(z) && z > 0) ? z : 1;
+  }
+
   function measureHtmlHeightPx(html) {
     if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
     const host = document.createElement('div');
@@ -30,12 +38,13 @@ const ReaderMode = (function () {
   }
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
+    const zoom = layoutZoom(rootEl);
     const offsets = [];
     let consumed = 0;
     Array.from(rootEl.children).forEach((child, index) => {
       const rect = child.getBoundingClientRect();
-      const top = rect.top - rootRect.top;
-      const height = rect.height;
+      const top = (rect.top - rootRect.top) / zoom;
+      const height = rect.height / zoom;
       if (child.classList.contains('page-break-marker')) {
         offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
@@ -123,7 +132,9 @@ const ReaderMode = (function () {
     const marginRules = [];
     const wrapperOffsetTop = wrapper.offsetTop;
     const wrapperOffsetLeft = wrapper.offsetLeft;
-    const wrapperWidth = wrapper.getBoundingClientRect().width;
+    const zoom = layoutZoom(wrapper);
+    // offsetWidth plutôt que le rectangle : déjà en pixels de mise en page, sans division ni erreur d'arrondi.
+    const wrapperWidth = wrapper.offsetWidth;
     // Même modèle que l'aperçu éditeur (js/header-footer-preview.js:renderPaginationOverlay), au lieu des deux modèles divergents d'avant : une bande est
     // créée pour CHAQUE frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied, comme dans l'éditeur - le mode Lecture n'en montrait alors
     // aucune), elle COMMENCE à la frontière au lieu de finir dessus, et l'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier
@@ -146,7 +157,7 @@ const ReaderMode = (function () {
       overlay.appendChild(seam);
       seam.style.left = wrapperOffsetLeft + 'px';
       seam.style.width = wrapperWidth + 'px';
-      const seamHeight = seam.getBoundingClientRect().height;
+      const seamHeight = seam.getBoundingClientRect().height / zoom;
       const el = wrapperChildren[offset.afterIndex];
       // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
       // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
@@ -158,7 +169,7 @@ const ReaderMode = (function () {
       // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut donc
       // rajouter remainingPx à la main pour retrouver la vraie frontière.
       const rootRect = wrapper.getBoundingClientRect();
-      const boundaryTop = el ? (el.getBoundingClientRect().bottom - rootRect.top + offset.remainingPx) : offset.top;
+      const boundaryTop = el ? ((el.getBoundingClientRect().bottom - rootRect.top) / zoom + offset.remainingPx) : offset.top;
       seam.style.top = (wrapperOffsetTop + boundaryTop) + 'px';
     });
   }

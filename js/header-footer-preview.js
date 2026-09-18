@@ -173,6 +173,17 @@ const HeaderFooterPreview = (function () {
 
   // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête d'une
   // ligne mesurerait 200px).
+  // Facteur `zoom` effectif de la feuille (ajustement automatique à la largeur disponible, cf. js/main.js:applyPageFitZoom). Indispensable pour toute
+  // mesure faite avec getBoundingClientRect() DANS la feuille : ces rectangles sont en pixels ÉCRAN, donc déjà multipliés par le zoom, alors que
+  // pageContentHeightPx, offsetTop/offsetLeft et les styles inline posés sur les bandes sont tous en pixels de MISE EN PAGE. Sans cette division, toutes
+  // les coupures de page tombent au mauvais endroit dès que la feuille est réduite. Repli sur 1 : navigateur sans `zoom`, feuille absente, ou Aperçu A4
+  // décoché - trois cas où la feuille n'est de toute façon pas réduite.
+  function layoutZoom(el) {
+    const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(z) && z > 0) ? z : 1;
+  }
+
   function measureHtmlHeightPx(html) {
     // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
     if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
@@ -190,10 +201,11 @@ const HeaderFooterPreview = (function () {
   // pixel comme pdfmake. Retourne le bloc après lequel insérer la coupure (afterEl), pour poser un margin-bottom réel dessus.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
+    const zoom = layoutZoom(tiptapEl);
     let consumed = 0;
     let lastBlock = null;
     Array.from(tiptapEl.children).forEach(child => {
-      const height = child.getBoundingClientRect().height;
+      const height = child.getBoundingClientRect().height / zoom;
       if (child.classList.contains('page-break-marker')) {
         breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
@@ -349,8 +361,10 @@ const HeaderFooterPreview = (function () {
       pageStartTop = nextSibling ? nextSibling.getBoundingClientRect().top : lastBreak.afterEl.getBoundingClientRect().bottom;
     }
     const elRect = el.getBoundingClientRect();
-    const rawLeftPt = (elRect.left - pageStartLeft) / PT_TO_PX;
-    const rawTopPt = (elRect.top - pageStartTop) / PT_TO_PX;
+    // Les deux termes sont des rectangles écran : leur différence est en pixels écran, à ramener en pixels de mise en page avant la conversion en points.
+    const gridZoom = layoutZoom(tiptapEl);
+    const rawLeftPt = ((elRect.left - pageStartLeft) / gridZoom) / PT_TO_PX;
+    const rawTopPt = ((elRect.top - pageStartTop) / gridZoom) / PT_TO_PX;
     // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà, -PAGE_MARGIN_PT) donnerait un point
     // de grille qui, une fois exporté (PAGE_MARGIN_PT + pageTopPt/pageLeftPt), tombe à une coordonnée PDF négative : invisible/coupée dans le PDF alors que
     // le navigateur, lui, continue de l'afficher en entier (ni `.tiptap` ni `.v2-page-sheet` ne la découpe visuellement) - l'éditeur mentait sur ce qui sera
@@ -429,8 +443,10 @@ const HeaderFooterPreview = (function () {
     // de texte laisserait deux bandes blanches sur les côtés, à l'aplomb des marges. Corrige au passage un double décalage : la bande était déjà rentrée
     // des marges de page, et `.v2-page-band-header/footer` y rajoute son propre padding de marge - un en-tête de couture était donc indenté deux fois plus
     // loin que celui de la page 1. Le mode Lecture ne souffrait pas de ce défaut, sa bande couvrant déjà toute la feuille.
+    const zoom = layoutZoom(tiptapEl);
     const sheetOffsetLeft = pageSheet.offsetLeft;
-    const sheetWidth = pageSheet.getBoundingClientRect().width;
+    // offsetWidth plutôt que le rectangle : déjà en pixels de mise en page, sans division ni erreur d'arrondi.
+    const sheetWidth = pageSheet.offsetWidth;
     const tiptapRect = tiptapEl.getBoundingClientRect();
 
     // Une bande par frontière entre 2 pages (repère "— Page N —" par défaut sans en-tête/pied) ; espace réservé via `:nth-child` externe, pas un style inline
@@ -469,13 +485,13 @@ const HeaderFooterPreview = (function () {
       paginationOverlayEl.appendChild(seam);
       seam.style.left = sheetOffsetLeft + 'px';
       seam.style.width = sheetWidth + 'px';
-      const seamHeight = seam.getBoundingClientRect().height;
+      const seamHeight = seam.getBoundingClientRect().height / zoom;
       // Écrit la feuille à chaque itération : la coupure suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
       const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
       marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + brk.remainingPx) + 'px; }');
       ensurePaginationMarginStyle().textContent = marginRules.join('\n');
       const afterRect = brk.afterEl.getBoundingClientRect();
-      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top) + brk.remainingPx) + 'px';
+      seam.style.top = (tiptapEl.offsetTop + (afterRect.bottom - tiptapRect.top) / zoom + brk.remainingPx) + 'px';
     });
   }
 
