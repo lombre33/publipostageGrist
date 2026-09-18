@@ -133,8 +133,8 @@
    pas un champ isolé dont on ne sait pas s'il décrit la colonne de gauche ou de droite. */
 .two-columns-mm-popover {
   position: absolute; top: calc(50% + 22px); left: var(--layout-left, 50%); transform: translateX(-50%);
-  display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: #fff; border: 1px solid var(--border-strong, #c3cad6);
-  border-radius: 6px; box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: #3a4452; white-space: nowrap;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6);
+  border-radius: 6px; box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: var(--text, #3a4452); white-space: nowrap;
 }
 .two-columns-mm-popover label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .two-columns-mm-popover input { width: 56px; padding: 3px 5px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; }
@@ -215,7 +215,7 @@
    largeur TOTALE (page + marges), le `padding` simulant la marge de page vient s'y RETRANCHER : 719.04px de contenu + 2×37.33px = 793.71px. `box-sizing:
    border-box` est INDISPENSABLE : sans lui le padding s'AJOUTE à `width`, et la zone de contenu réelle fait alors 793.71px (~10% de trop), d'où un texte qui
    ne coupe pas au même endroit qu'à l'export - la V1 en profitait sans le savoir via le CSS de Quill, absent ici. Purement visuel. */
-#editor-container.a4-preview { background: #eef1f5; }
+#editor-container.a4-preview { background: var(--pp-page-gutter, #eef1f5); }
 /* `.v2-page-sheet` (enfant réel de js/editor.js:init(), enveloppant `.tiptap` une seule fois) porte maintenant le fond/liseré "papier" au lieu de `.tiptap`
    lui-même : les zones d'en-tête/pied, `.tiptap` et le pied de page apparaissaient comme 3 cartes SÉPARÉES, alors qu'à l'export ce sera UNE SEULE page
    continue. `.tiptap` garde son padding (marge de page simulée) mais perd son fond/liseré, devenant un bloc transparent sur le fond blanc du sheet parent.
@@ -247,7 +247,7 @@
 /* Même aperçu A4, en mode Lecture (#reader-container/.reader-content) - la case #v2-toggle-a4-preview ne posait jusqu'ici la classe `a4-preview` que sur
    #editor-container, jamais sur #reader-container. Mêmes valeurs que .tiptap ci-dessus ; pas de règle .tableWrapper/col équivalente ici, propres au
    redimensionnement de tableau de l'éditeur TipTap (absent en lecture, simple HTML résolu). */
-#reader-container.a4-preview { background: #eef1f5; }
+#reader-container.a4-preview { background: var(--pp-page-gutter, #eef1f5); }
 /* Pas de `max-width: 100%` ici non plus, même raison que `.v2-page-sheet` ci-dessus : #reader-container a déjà `overflow: auto` (css/style.css). */
 #reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; margin: 0 auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
@@ -446,24 +446,24 @@
    l'utilisateur) - l'identification se fait via le `title` natif (tooltip au survol), déjà présent sur chaque bouton. */
 /* Pas de contour gris permanent (signalé trop lourd par l'utilisateur) - le bouton reste "nu" au repos, un fond + une bordure discrète n'apparaissent qu'au
    survol (même traitement que les boutons indenter/désindenter, repris ici comme LE style par défaut plutôt qu'un cas particulier). */
-#v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0; cursor: pointer; color: #3a4452; }
+#v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 #v2-toolbar button svg { width: 16px; height: 16px; }
 #v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 /* État actif (ex. gras appliqué là où est le curseur) - absent jusqu'ici, cf. Editor.syncToolbarState dans js/editor.js. */
 #v2-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 /* Indenter/désindenter : sans effet hors d'une liste, donc grisés plutôt que masqués quand inapplicables (Editor.syncToolbarState) - un peu plus petits pour
    ne pas concurrencer visuellement gras/italique/etc. */
-#v2-toolbar button.v2-btn-discreet { width: 26px; height: 26px; color: #6b7684; }
+#v2-toolbar button.v2-btn-discreet { width: 26px; height: 26px; color: var(--text-muted, #6b7684); }
 #v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
 #v2-toolbar select { border: 1px solid transparent; border-radius: 4px; padding: 3px 6px; font-size: 12.5px; background: transparent; }
-#v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: #fff; }
+#v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
 /* Groupe "bouton principal + variantes au survol" (alignement/puces/numérotation) - le bouton principal reste l'action rapide par défaut ; le survol du
    groupe révèle .v2-hover-flyout SANS écart de hitbox car il touche directement le bas du bouton (top:100%, aucune marge). */
 .v2-hover-group { position: relative; display: inline-flex; }
 .v2-hover-flyout {
   position: absolute; top: 100%; left: 0; display: flex; gap: 3px; padding: 4px;
-  background: #fff; border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
+  background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
   box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 15;
   opacity: 0; visibility: hidden; transform: translateY(-4px);
   transition: opacity .12s ease, transform .12s ease;
@@ -479,7 +479,7 @@
 /* Rappel non-cliquable de l'action du bouton principal, en tête du flyout - remplace l'infobulle [data-tip] du bouton (retirée), qui se superposait à ce
    même flyout au survol. Un seul panneau porte maintenant les deux informations, empilées et lisibles. */
 .v2-hover-flyout-label { display: block; padding: 6px 9px 3px; font-size: 11px; font-weight: 600; color: var(--text-faint, #98a2b3); white-space: nowrap; }
-.v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: #3a4452; cursor: pointer; white-space: nowrap; }
+.v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: var(--text, #3a4452); cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
@@ -518,7 +518,7 @@
 
 /* Fond de cellule (toolbar flottante de tableau) - resté un bouton UNIQUE (pas de "dernier choix" à appliquer d'un clic direct, jamais demandé pour ce
    contrôle) : classe dédiée pour ne pas hériter du split ci-dessus, garde sa pastille de couleur courante (contexte différent, moins central). */
-.v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; color: #3a4452; }
+.v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; color: var(--text, #3a4452); }
 .v2-fill-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-fill-chip svg { width: 14px; height: 14px; }
 .v2-fill-bar { width: 14px; height: 3px; border-radius: 1px; background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
@@ -528,7 +528,7 @@
 /* `width: auto` + `flex-shrink: 0` - bug PRÉEXISTANT touchant aussi l'ancien chip "Police" : `#v2-toolbar button` pose `width: 30px`, et un chip n'a jamais
    redéfini `width` (le cascade s'applique par PROPRIÉTÉ, la spécificité ne sert à rien pour une propriété non redéclarée). Chip ET valeur écrasés à quelques
    pixels dès que la barre manque de place - flex-shrink:0 seul ne suffisait pas depuis une base de 30px déjà fausse. */
-.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: #3a4452; font-family: inherit; flex-shrink: 0; }
+.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: var(--text, #3a4452); font-family: inherit; flex-shrink: 0; }
 .v2-format-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-format-chip-icon { display: inline-flex; }
 .v2-format-chip-icon svg { width: 14px; height: 14px; }
@@ -537,25 +537,25 @@
 .v2-format-chip-caret svg { width: 10px; height: 10px; }
 .v2-stepper { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid transparent; border-radius: 5px; overflow: hidden; }
 .v2-stepper:hover { border-color: var(--border, #d7dde3); }
-.v2-stepper button { border: none; border-radius: 0; background: transparent; cursor: pointer; color: #3a4452; padding: 0; }
+.v2-stepper button { border: none; border-radius: 0; background: transparent; cursor: pointer; color: var(--text, #3a4452); padding: 0; }
 .v2-stepper button:hover { background: var(--surface-sunken, #f2f4f7); }
 #v2-size-minus, #v2-size-plus { width: 20px; font-size: 15px; font-weight: 700; line-height: 1; }
 .v2-stepper-val { width: 46px; font-size: 11.5px; font-weight: 700; }
-.v2-format-panel { display: none; position: absolute; top: 0; left: 0; z-index: 2000; background: #fff; border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px; min-width: 168px; max-height: 260px; overflow-y: auto; }
+.v2-format-panel { display: none; position: absolute; top: 0; left: 0; z-index: 2000; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px; min-width: 168px; max-height: 260px; overflow-y: auto; }
 .v2-format-panel.visible { display: block; }
-.v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: 5px; background: none; cursor: pointer; font-size: 12.5px; color: #3a4452; font-family: inherit; }
+.v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: 5px; background: none; cursor: pointer; font-size: 12.5px; color: var(--text, #3a4452); font-family: inherit; }
 .v2-format-panel button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-format-panel button.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 
 /* Menu déroulant de nuances (bouton couleur ci-dessus) - grille de pastilles + case "personnalisé" (ouvre le sélecteur natif, cf. .v2-color-dropdown-native)
    + case "aucune" optionnelle. */
-.v2-color-dropdown { display: none; position: absolute; top: 0; left: 0; z-index: 2000; background: #fff; border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 8px; }
+.v2-color-dropdown { display: none; position: absolute; top: 0; left: 0; z-index: 2000; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 8px; }
 .v2-color-dropdown.visible { display: block; }
 .v2-color-grid { display: grid; grid-template-columns: repeat(8, 20px); gap: 5px; }
 .v2-color-grid button { width: 20px; height: 20px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .1); padding: 0; cursor: pointer; }
 .v2-color-grid button:hover { transform: scale(1.12); }
 .v2-color-dropdown-footer { display: flex; gap: 5px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border, #d7dde3); }
-.v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: #fff; cursor: pointer; font-size: 12px; color: #3a4452; white-space: nowrap; }
+.v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: var(--surface, #fff); cursor: pointer; font-size: 12px; color: var(--text, #3a4452); white-space: nowrap; }
 .v2-color-dropdown-footer button svg { width: 13px; height: 13px; }
 .v2-color-dropdown-footer button:hover { background: var(--surface-sunken, #f2f4f7); }
 /* Sélecteur natif caché mais réellement cliquable via .click() (pas display:none, qui empêche l'ouverture programmatique du picker dans la plupart des
@@ -564,9 +564,9 @@
 
 /* Toolbar contextuelle flottante (tableau, image...) - positionnée par @floating-ui/dom, ancrée dans document.body plutôt que #editor-container pour éviter
    tout souci de contexte d'empilement avec un ancêtre (cf. mémoire project_stacking_context_trap). */
-.v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: 2000; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border, #d7dde3); border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
+.v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: 2000; gap: 2px; padding: 3px; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
 .v2-floating-toolbar.visible { display: flex; }
-.v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: #3a4452; }
+.v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 .v2-floating-toolbar button svg { width: 15px; height: 15px; }
 .v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
 /* État actif (ex. le calque courant du sélecteur normal/devant/derrière) - même traitement que la toolbar principale, essentiel pour voir lequel des 3 est actif. */

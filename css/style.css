@@ -34,6 +34,58 @@
      l'éditeur comme une pile de feuilles distinctes. Assez haute pour se voir, assez basse pour ne pas repousser tout le document. */
   --pp-page-gap: 28px;
   --pp-page-gutter: #e4e8ef;
+  /* Voile des modales - variabilisé pour que le thème sombre puisse l'assombrir. */
+  --pp-scrim: rgba(15, 23, 42, .45);
+}
+
+/* === Thème sombre === Ne concerne QUE le chrome de l'application (barre du haut, plan de travail autour de la page, modales, panneaux flottants). La PAGE
+   elle-même reste blanche avec son texte sombre, dans les deux thèmes : c'est du papier, et ses couleurs sont celles qui partent réellement au PDF/DOCX -
+   les inverser ferait mentir l'aperçu sur le document produit, exactement ce que ce widget cherche à éviter.
+   Deux points d'entrée, dans cet ordre : le choix explicite de l'utilisateur (`data-theme` sur <html>, cf. js/settings.js), et à défaut la préférence du
+   système. La requête média est neutralisée quand l'utilisateur a explicitement choisi le thème clair. */
+:root[data-theme="dark"] {
+  --bg: #171b23;
+  --surface: #1e2430;
+  --surface-sunken: #262e3c;
+  --border: #323b4b;
+  --border-strong: #465166;
+  --text: #e7ecf5;
+  --text-muted: #9aa6bb;
+  --text-faint: #7b869c;
+  --accent: #5b91f5;
+  --accent-hover: #74a3f7;
+  --accent-soft: #24324b;
+  --accent-soft-border: #35507d;
+  --danger: #f08a8a;
+  --danger-soft: #3a2426;
+  --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.45);
+  --pp-page-gutter: #10141b;
+  --pp-scrim: rgba(3, 6, 12, .62);
+}
+
+/* Même palette, appliquée d'après la préférence système - sauf si l'utilisateur a explicitement demandé le thème clair. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171b23;
+    --surface: #1e2430;
+    --surface-sunken: #262e3c;
+    --border: #323b4b;
+    --border-strong: #465166;
+    --text: #e7ecf5;
+    --text-muted: #9aa6bb;
+    --text-faint: #7b869c;
+    --accent: #5b91f5;
+    --accent-hover: #74a3f7;
+    --accent-soft: #24324b;
+    --accent-soft-border: #35507d;
+    --danger: #f08a8a;
+    --danger-soft: #3a2426;
+    --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.45);
+    --pp-page-gutter: #10141b;
+    --pp-scrim: rgba(3, 6, 12, .62);
+  }
 }
 
 /* === Typographie et mise en page de base === */
@@ -45,7 +97,7 @@ body { display:flex; flex-direction:column; }
 #app { display:flex; flex-direction:column; height:100%; min-height:0; }
 /* Bandeau compact (maximiser la hauteur dispo pour l'éditeur) : UNE seule ligne toujours visible (.bar-row). Tous les id de bouton/input sont INCHANGÉS :
    main.js les cible toujours pareil. */
-#toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: linear-gradient(180deg, #fff, #fbfcfe); font-family: var(--font-ui); }
+#toolbar-top { display:flex; flex-direction: column; border-bottom:1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
 .bar-row { display:flex; align-items:center; gap:5px; flex-wrap: wrap; padding:6px 10px; }
 .bar-sep { width:1px; align-self:stretch; margin:2px 2px; background: var(--border); flex:none; }
 #toolbar-top select, #toolbar-top input[type="text"] {
@@ -107,8 +159,8 @@ body { display:flex; flex-direction:column; }
 #autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
 #autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
-#link-config-modal { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
-.modal-content { background:#fff; border-radius:8px; padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
+#link-config-modal { position:fixed; inset:0; background:var(--pp-scrim); display:flex; align-items:center; justify-content:center; z-index:2000; }
+.modal-content { background:var(--surface); color:var(--text); border-radius:8px; padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
 .link-config-modal-content h3 { margin:0 0 10px; font-size:14px; }
 .link-config-mode { display:flex; flex-direction:column; gap:10px; margin-bottom:10px; font-size:13px; }
 .link-config-mode label { display:flex; flex-direction:column; }

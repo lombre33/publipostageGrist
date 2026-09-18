@@ -73,9 +73,9 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
-<link rel="stylesheet" href="css/style.css?v=0.71">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.66">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.21">
+<link rel="stylesheet" href="css/style.css?v=0.72">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.67">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.22">
 </head>
 <body>
 <div id="app">
@@ -307,6 +307,7 @@
     <h3 data-i18n="settings.title">Réglages</h3>
     <div class="settings-tabs" id="settings-tabs">
       <button type="button" class="settings-tab active" data-settings-tab="language" data-i18n="settings.tab.language">Langue</button>
+      <button type="button" class="settings-tab" data-settings-tab="theme" data-i18n="settings.tab.theme">Thème</button>
       <button type="button" class="settings-tab" data-settings-tab="triggerKey" data-i18n="settings.tab.triggerKey">Touche de déclenchement</button>
       <button type="button" class="settings-tab" data-settings-tab="pageMargins" data-i18n="settings.tab.pageMargins">Marges de page</button>
       <button type="button" class="settings-tab" data-settings-tab="credits" data-i18n="settings.tab.credits">Crédits</button>
@@ -316,6 +317,14 @@
       <div class="settings-radio-row">
         <label><input type="radio" name="settings-lang" value="fr"><span data-i18n="settings.language.fr">Français</span></label>
         <label><input type="radio" name="settings-lang" value="en"><span data-i18n="settings.language.en">Anglais</span></label>
+      </div>
+    </div>
+    <div class="settings-panel" data-settings-panel="theme" hidden>
+      <p class="settings-panel-intro" data-i18n="settings.theme.intro">Apparence de l'interface. La page du document reste blanche dans les deux thèmes : c'est elle qui part à l'impression.</p>
+      <div class="settings-radio-row">
+        <label><input type="radio" name="settings-theme" value="system"><span data-i18n="settings.theme.system">Système</span></label>
+        <label><input type="radio" name="settings-theme" value="light"><span data-i18n="settings.theme.light">Clair</span></label>
+        <label><input type="radio" name="settings-theme" value="dark"><span data-i18n="settings.theme.dark">Sombre</span></label>
       </div>
     </div>
     <div class="settings-panel" data-settings-panel="triggerKey" hidden>
@@ -374,6 +383,6 @@
 <script src="js/docx-export.js?v=0.12"></script>
 <script src="js/template-gallery.js?v=0.6"></script>
 <script src="js/settings.js?v=0.5"></script>
-<script src="js/main.js?v=0.36"></script>
+<script src="js/main.js?v=0.38"></script>
 </body>
 </html>

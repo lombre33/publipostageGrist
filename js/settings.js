@@ -1,8 +1,34 @@
-// Panneau Réglages - 3 onglets : Langue (I18n.setLang), Touche de déclenchement (localStorage, lu directement par variables.js/editor.js), Crédits
-// (statique). Même convention d'ouverture/fermeture que les autres modales (style.display, pas de fermeture au clic sur le fond).
+// Panneau Réglages - Langue (I18n.setLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, lu directement par
+// variables.js/editor.js), Marges de page (par modèle) et Crédits (statique). Même convention d'ouverture/fermeture que les autres modales (style.display, pas de fermeture au clic sur le fond).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const DEFAULT_TRIGGER_CHAR = '#';
+  const THEME_STORAGE = 'pp_theme';
+  const THEMES = ['system', 'light', 'dark'];
+
+  function getTheme() {
+    try {
+      const v = localStorage.getItem(THEME_STORAGE);
+      return THEMES.indexOf(v) !== -1 ? v : 'system';
+    } catch (e) { return 'system'; }
+  }
+
+  // `system` retire l'attribut plutôt que d'y écrire quoi que ce soit : la palette sombre bascule alors sur la seule requête média
+  // `prefers-color-scheme` (cf. css/style.css), sans qu'aucun code n'ait à observer le thème du système.
+  function applyTheme(theme) {
+    const value = THEMES.indexOf(theme) !== -1 ? theme : 'system';
+    if (value === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', value);
+  }
+
+  function setTheme(theme) {
+    const value = THEMES.indexOf(theme) !== -1 ? theme : 'system';
+    try { localStorage.setItem(THEME_STORAGE, value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
+    applyTheme(value);
+  }
+
+  // Appliqué dès le chargement de ce fichier, pas seulement à l'ouverture des Réglages : sinon l'app s'affiche en clair puis bascule, ce qui se voit.
+  applyTheme(getTheme());
 
   // js/variables.js et js/editor.js relisent la même clé indépendamment - exposé ici pour que ce fichier reste la référence documentée de la valeur par
   // défaut/nom de clé.
@@ -20,6 +46,7 @@ const Settings = (function () {
     const tabs = Array.from(document.querySelectorAll('.settings-tab'));
     const panels = Array.from(document.querySelectorAll('.settings-panel'));
     const langRadios = Array.from(document.querySelectorAll('input[name="settings-lang"]'));
+    const themeRadios = Array.from(document.querySelectorAll('input[name="settings-theme"]'));
     const triggerSelect = document.getElementById('settings-trigger-char');
     const reloadNotice = document.getElementById('settings-trigger-reload-notice');
     const reloadBtn = document.getElementById('settings-trigger-reload-btn');
@@ -35,6 +62,7 @@ const Settings = (function () {
 
     openBtn.addEventListener('click', () => {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
+      themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
       if (triggerSelect) triggerSelect.value = getTriggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
       syncMarginInputs();
@@ -79,6 +107,10 @@ const Settings = (function () {
       radio.addEventListener('change', () => { if (radio.checked) I18n.setLang(radio.value); });
     });
 
+    themeRadios.forEach(radio => {
+      radio.addEventListener('change', () => { if (radio.checked) setTheme(radio.value); });
+    });
+
     if (triggerSelect && reloadNotice && reloadBtn) {
       triggerSelect.addEventListener('change', () => {
         try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
@@ -90,5 +122,5 @@ const Settings = (function () {
     }
   }
 
-  return { getTriggerChar, wireSettingsModal };
+  return { getTriggerChar, getTheme, setTheme, wireSettingsModal };
 })();
