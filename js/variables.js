@@ -337,6 +337,36 @@ const Variables = (function () {
     }
   }
 
+  // Résout les #Variable d'un texte brut (pas de badge ProseMirror - même scan longest-match-first que ReaderMode.resolveFilename, sans sa sanitisation
+  // spécifique aux noms de fichier qui corromprait un objet d'email ou une adresse). Utilisé par les champs Objet/À/Cc/Cci du mode email (de simples
+  // <input>, cf. planning/feature-email-mode.md) au moment de "Créer l'email" (js/main.js).
+  async function resolveTextVariables(text, currentTableId, record) {
+    if (!text) return '';
+    const allVars = GristAPI.getAllVariables();
+    const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
+    const trigger = triggerChar();
+    const matches = [];
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === trigger) {
+        const rest = text.slice(i + 1);
+        const key = sortedKeys.find(k => rest.startsWith(k));
+        if (key) { matches.push({ start: i, key, end: i + 1 + key.length }); i += 1 + key.length; continue; }
+      }
+      i += 1;
+    }
+    if (!matches.length) return text;
+    const resolved = await Promise.all(matches.map(async m => {
+      const found = allVars.find(v => v.key === m.key);
+      try { return String((await resolveVariable(found.table, found.column, currentTableId, record)) || ''); }
+      catch (e) { return ''; }
+    }));
+    let result = ''; let lastEnd = 0;
+    matches.forEach((m, idx) => { result += text.slice(lastEnd, m.start) + resolved[idx]; lastEnd = m.end; });
+    result += text.slice(lastEnd);
+    return result;
+  }
+
   // Une cellule Attachments encode sa liste façon Grist (['L', id1, id2]) ; aplatit récursivement pour n'en garder que les nombres, le marqueur 'L' et toute
   // imbrication disparaissent naturellement.
   function flattenToNumbers(value) {
@@ -572,5 +602,5 @@ const Variables = (function () {
     });
   }
 
-  return { createExtension, resolveVariable, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
+  return { createExtension, resolveVariable, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
 })();

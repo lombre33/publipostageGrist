@@ -5,6 +5,9 @@
   let currentTableId = null;
   let latestRecord = null;
   let latestRecordTableId = null;
+  // Mode email (planning/feature-email-mode.md) : 'document' par défaut, y compris pour un modèle jamais chargé (avant le tout premier appel à
+  // loadTemplateIntoEditor) - ne devient 'email' que via un modèle dont TypeModele='email' ou onNewEmail().
+  let currentTypeModele = 'document';
 
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
@@ -16,6 +19,31 @@
   const btnRead = document.getElementById('btn-mode-read');
   const conflictBanner = document.getElementById('autosave-conflict-banner');
   const conflictReloadBtn = document.getElementById('autosave-conflict-reload');
+  const emailFieldsRow = document.getElementById('v2-email-fields-row');
+  const emailSubjectInput = document.getElementById('v2-email-subject');
+  const emailToInput = document.getElementById('v2-email-to');
+  const emailCcInput = document.getElementById('v2-email-cc');
+  const emailCciInput = document.getElementById('v2-email-cci');
+  const emailCciToggle = document.getElementById('v2-btn-toggle-cci');
+  const btnCreateEmail = document.getElementById('btn-create-email');
+
+  function getEmailFieldsFromInputs() {
+    return {
+      objet: emailSubjectInput ? emailSubjectInput.value.trim() : '',
+      destinataires: emailToInput ? emailToInput.value.trim() : '',
+      cc: emailCcInput ? emailCcInput.value.trim() : '',
+      cci: emailCciInput ? emailCciInput.value.trim() : '',
+    };
+  }
+
+  function wireCciToggle() {
+    if (!emailCciToggle || !emailCciInput) return;
+    emailCciToggle.addEventListener('click', () => {
+      emailCciInput.hidden = !emailCciInput.hidden;
+      emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
+      if (!emailCciInput.hidden) emailCciInput.focus();
+    });
+  }
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -68,7 +96,9 @@
     syncDefaultTemplateButton();
   }
 
-  function loadTemplateIntoEditor(tpl) {
+  // forcedTypeModele : n'a d'effet que pour tpl=null (nouveau modèle vide, cf. onNew/onNewEmail) - un tpl existant porte déjà son propre typeModele
+  // (Templates.loadAll()), jamais réécrit ici.
+  function loadTemplateIntoEditor(tpl, forcedTypeModele) {
     closeTemplateRenameEditor();
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
     // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
@@ -84,6 +114,20 @@
       // Reste visible si un nom est déjà configuré - éviter de cacher un réglage actif derrière le crayon (cf. wirePdfFilenameToggle).
       pdfFilenameInput.hidden = !pdfFilenameInput.value.trim();
     }
+    currentTypeModele = tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
+    if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
+    if (emailSubjectInput) emailSubjectInput.value = tpl ? (tpl.objet || '') : '';
+    if (emailToInput) emailToInput.value = tpl ? (tpl.destinataires || '') : '';
+    if (emailCcInput) emailCcInput.value = tpl ? (tpl.cc || '') : '';
+    if (emailCciInput) {
+      emailCciInput.value = tpl ? (tpl.cci || '') : '';
+      // Reste visible si une Cci est déjà configurée - même précaution que pdfFilenameInput ci-dessus.
+      emailCciInput.hidden = !emailCciInput.value.trim();
+      if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
+    }
+    MainToolbar.setEmailMode(currentTypeModele === 'email');
+    MainToolbar.syncToolbarState();
+    if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
     Templates.setCurrentId(tpl ? tpl.id : null);
     Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
@@ -139,6 +183,12 @@
     loadTemplateIntoEditor(null);
   }
 
+  // Même schéma qu'onNew() - seule différence, le 2e argument qui bascule le bandeau Objet/À/Cc/Cci et le verrouillage de la toolbar.
+  async function onNewEmail() {
+    templateSelect.value = '';
+    loadTemplateIntoEditor(null, 'email');
+  }
+
   async function onSave() {
     Editor.exitHeaderFooterModeIfActive();
     const id = Templates.getCurrentId();
@@ -146,7 +196,7 @@
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     let savedId, dateModif;
     try {
-      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm()));
+      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs()));
     } catch (e) {
       // Avant ce try/catch, un échec ici (ex. colonne Grist manquante) interrompait silencieusement la fonction : aucune erreur visible, la liste des
       // modèles/le statut n'étaient jamais mis à jour, et rien dans l'interface ne laissait deviner que "Enregistrer" n'avait rien enregistré.
@@ -283,7 +333,7 @@
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
     try {
-      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
+      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs());
       autosaveLastKnownDateModif = dateModif;
       autosaveDirty = false;
       updateSaveStatus();
@@ -364,10 +414,12 @@
       const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
       const btnDocx = document.getElementById('v2-btn-export-docx');
       const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
+      const btnEmail = document.getElementById('btn-create-email');
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
       setExportControlLocked(btnDocx, true);
       setExportControlLocked(btnDocxBatch, true);
+      setExportControlLocked(btnEmail, true);
       try {
         await fn(...args);
       } finally {
@@ -376,6 +428,7 @@
         setExportControlLocked(btnBatch, false);
         setExportControlLocked(btnDocx, false);
         setExportControlLocked(btnDocxBatch, false);
+        setExportControlLocked(btnEmail, false);
       }
     };
   }
@@ -393,6 +446,44 @@
     } catch (e) {
       console.error(e);
       setStatus(I18n.t('status.pdfGenerationError'), true);
+    }
+  }
+
+  // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: pour la ligne Grist courante et l'ouvre (même geste que les exports PDF/DOCX ci-
+  // dessus/dessous - un <a> synthétique plutôt que window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible).
+  // Le corps réutilise la résolution DÉJÀ FAITE par le mode Lecture (ReaderMode.render, mêmes bulles #Variable/chips que le PDF) plutôt que de la dupliquer -
+  // renderReader() ne fait que mettre à jour #reader-container, jamais visible tant que currentMode reste 'edit' (cf. switchMode).
+  async function onCreateEmail() {
+    Editor.exitHeaderFooterModeIfActive();
+    const record = GristAPI.getCurrentRecord();
+    if (!record) { alert(I18n.t('alert.noRecordForEmail')); return; }
+    const tableId = currentTableId || GristAPI.getCurrentTableId();
+    setStatus(I18n.t('status.emailGenerating'));
+    try {
+      const [subject, to, cc, bcc] = await Promise.all([
+        Variables.resolveTextVariables(emailSubjectInput ? emailSubjectInput.value : '', tableId, record),
+        Variables.resolveTextVariables(emailToInput ? emailToInput.value : '', tableId, record),
+        Variables.resolveTextVariables(emailCcInput ? emailCcInput.value : '', tableId, record),
+        Variables.resolveTextVariables(emailCciInput ? emailCciInput.value : '', tableId, record),
+      ]);
+      await renderReader(record, tableId);
+      const resolvedContent = readerContainer.querySelector('.reader-content');
+      const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
+      const url = MailtoExport.buildMailtoUrl({ to, cc, bcc, subject, bodyText });
+      const check = MailtoExport.checkUrlLength(url);
+      if (!check.safe && !window.confirm(I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }))) {
+        setStatus('');
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus(I18n.t('status.emailCreated'));
+    } catch (e) {
+      console.error('[main] échec de la création de l’email', e);
+      setStatus(I18n.t('status.emailCreationError'), true);
     }
   }
 
@@ -903,6 +994,15 @@
     EditorCore.getEditor().on('update', markAutosaveDirty);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
+    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => {
+      if (!el) return;
+      el.addEventListener('input', markAutosaveDirty);
+      // Même mécanisme #Variable, déjà éprouvé, que le champ "nom de fichier PDF" (texte brut - cf. commentaire CSS de #v2-email-fields-row) - pas de
+      // suggestion "Chips" ici (setTabsVisible(false) dans checkForFilenameTrigger), une note de bas de page/date/heure n'a aucun sens dans un objet ou une
+      // liste d'adresses.
+      Variables.initFilenameInput(el);
+    });
+    wireCciToggle();
     // Émis par js/settings.js à chaque saisie dans les 4 champs de marge (onglet Réglages) - sans lui, changer uniquement les marges sans toucher au
     // texte ne marquait jamais le brouillon "modifié" et l'auto-save ne l'enregistrait donc jamais.
     document.addEventListener('pp:marginsChanged', markAutosaveDirty);
@@ -920,6 +1020,10 @@
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
     document.getElementById('btn-new').addEventListener('click', onNew);
+    const btnNewDocument = document.getElementById('v2-btn-new-document');
+    const btnNewEmail = document.getElementById('v2-btn-new-email');
+    if (btnNewDocument) btnNewDocument.addEventListener('click', onNew);
+    if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
@@ -927,6 +1031,7 @@
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(onExportPdfBatch));
     document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
     document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(onExportDocxBatch));
+    if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();

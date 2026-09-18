@@ -69,6 +69,25 @@
 #pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
 #btn-toggle-pdf-filename::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 
+/* === Bandeau Objet/À/Cc/Cci du mode email (planning/feature-email-mode.md) === Sur une seule ligne pour limiter la hauteur prise (retour d'Antoine,
+   2026-09-18) - masqué par défaut (hidden), affiché uniquement par js/main.js quand le modèle courant est un modèle email. Les 4 champs sont de simples
+   <input type="text"> (pas des mini-éditeurs TipTap) : #Variable s'y insère en texte brut via Variables.initFilenameInput, MÊME mécanisme déjà éprouvé que
+   #pdf-filename-template ci-dessus - ces valeurs finissent de toute façon en texte brut dans une URL mailto:, une bulle riche n'y apporterait rien. */
+#v2-email-fields-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
+.v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
+.v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
+.v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
+.v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
+
+/* Bouton d'action de la bar-row 1, visible uniquement en mode email (js/main.js) - inséré après le bouton Exporter PDF existant, jamais à côté (il n'y a
+   qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email] il est déjà sur la
+   première ligne, donc pas besoin qu'il soit à côté de composer l'email" - retour d'Antoine). Compteur de caractères volontairement pas encore ajouté :
+   nécessite le contenu RÉSOLU (#Variable substituées pour la ligne courante), pas encore branché ici - cf. planning/feature-email-mode.md. */
+#btn-create-email { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
+#btn-create-email:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
 /* === Qualité PDF : bouton + panneau au survol (même mécanisme que les styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un <select>
    toujours affiché - js/main.js:onExportPdf lit encore v2-pdf-quality.value directement, inchangé. */
 /* Page (coin plié, même silhouette que l'icône "saut de page" - ancre ce bouton comme "propre au PDF/document") + petites barres ascendantes (niveaux de
