@@ -9,6 +9,22 @@ dans l'en-tête de [`js/mailto-export.js`](../js/mailto-export.js) — ce docume
 part de là. Rien n'est câblé aujourd'hui : `js/mailto-export.js` n'est référencé ni dans
 `index.html` ni dans `js/main.js`.
 
+## 0. Décisions confirmées par Antoine (2026-09-18)
+
+Les quatre questions de cadrage qui pouvaient remettre en cause `mailto:` comme technologie sont
+tranchées, toutes en faveur de la conception ci-dessous :
+
+| Question | Réponse | Conséquence |
+|---|---|---|
+| Volume | **Un email à la fois** (pas de lot en V1) | Confirme la voie (a) du §4.5 — `mailto:` convient tel quel, pas besoin de `.eml`/ZIP pour ce point |
+| Client mail cible | **Outlook bureau** | La jauge de longueur (§4.4) se dimensionne sur le plus strict des trois, pas sur une moyenne |
+| Mise en forme du corps | **Texte brut acceptable** (reconfirmé) | `mailto:` reste viable, rien à changer dans la conception |
+| Pièce jointe (PDF joint) | **Non** | `mailto:` reste valable ; pas de bifurcation vers `.eml`/API |
+
+Les quatre réponses confirment que `mailto:` est la bonne technologie pour ce besoin — aucune ne
+force à reconsidérer l'approche. Les points plus fins du §6 (Cc/Cci, saisie des `#Variable`,
+blocage vs alerte, option de structuration A/B/C, modèle par défaut) restent ouverts.
+
 ---
 
 ## 1. Le vrai problème de structuration : deux axes qu'on ne doit pas confondre
@@ -282,7 +298,7 @@ Non touchés : `pdf-export.js`, `docx-export.js`, `page-layout.js`, `header-foot
 3. **Dépassement de longueur** — avertissement seul (l'utilisateur décide) ou blocage du bouton ? La
    question devient plus délicate avec la jauge par ligne (§4.4) : que fait-on d'un lot où 3 lignes
    sur 40 dépassent ? Proposition : jamais de blocage dur, mais un bouton en état d'alerte explicite.
-4. **Le lot (§4.5)** — la question la plus structurante, à trancher avant de figer l'UI.
+4. ~~**Le lot (§4.5)**~~ — **tranché (§0) : un email à la fois, pas de lot en V1.**
 5. **Option A, B ou C (§2)** — ma recommandation est A, mais c'est un choix d'interface qui vous
    appartient.
 6. **Modèle email par défaut** — un modèle par défaut *par type*, ou un seul pour toute l'app ?
