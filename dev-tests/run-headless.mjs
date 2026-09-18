@@ -42,6 +42,7 @@ const GROUPS = {
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
   comments: 'scenarios-comments',
+  autosave: 'scenarios-autosave',
 };
 
 const argv = process.argv.slice(2);

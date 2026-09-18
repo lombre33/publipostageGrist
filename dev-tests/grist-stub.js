@@ -145,6 +145,32 @@
     return { retValues };
   }
 
+  // Simule l'écriture d'un AUTRE utilisateur/onglet directement dans les données (pas d'action journalisée : ce
+  // n'est pas une action de CE client) - utilisé par les scénarios de conflit d'auto-save pour changer le
+  // DateModif d'un modèle "sous les pieds" du client testé, sans passer par applyUserActions.
+  function remoteWrite(tableId, rowId, fields) {
+    const table = state.rows[tableId];
+    if (!table) return;
+    const idx = table.id.indexOf(rowId);
+    if (idx === -1) return;
+    Object.keys(fields).forEach(k => {
+      if (!table[k]) table[k] = table.id.map(() => null);
+      table[k][idx] = fields[k];
+    });
+  }
+
+  // Relit une ligne sous forme d'objet plain (pas la forme columnaire de fetchTable) - pratique pour asserter
+  // l'état final d'un test sans reconvertir soi-même.
+  function getRow(tableId, rowId) {
+    const table = state.rows[tableId];
+    if (!table) return null;
+    const idx = table.id.indexOf(rowId);
+    if (idx === -1) return null;
+    const row = { id: rowId };
+    Object.keys(table).forEach(k => { if (k !== 'id') row[k] = table[k][idx]; });
+    return row;
+  }
+
   window.grist = {
     ready: function () { /* no-op, cf. GristAPI.init() */ },
     onRecord: function (cb) { state.recordCallback = cb; },
@@ -160,5 +186,5 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions };
+  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow };
 })();

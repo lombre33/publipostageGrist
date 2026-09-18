@@ -191,11 +191,23 @@
   // gèle alors (n'écrase plus rien tout seul) et affiche un bandeau proposant de recharger. Un Enregistrer MANUEL reste toujours possible pendant ce
   // temps et tranche explicitement en faveur de la version locale (cf. onSave) - un choix conscient de l'utilisateur, jamais fait à sa place.
   const AUTOSAVE_INTERVAL_MS = 2500;
+  // Préférence PAR NAVIGATEUR (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document Grist : chacun choisit s'il veut de
+  // l'auto-save, indépendamment des autres personnes qui ouvrent le même widget.
+  const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
   let autosaveDirty = false;
   let autosaveLastKnownDateModif = null;
   let autosaveConflictActive = false;
   let autosaveConflictTpl = null;
   let autosaveTimer = null;
+
+  function isAutosaveEnabled() {
+    try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
+    catch (e) { return true; } // stockage indisponible (navigation privée, quota) : on se comporte comme si c'était activé plutôt que de le figer désactivé
+  }
+
+  function setAutosaveEnabled(enabled) {
+    try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* choix non persisté, reste actif pour cette session */ }
+  }
 
   function markAutosaveDirty() { autosaveDirty = true; }
 
@@ -218,6 +230,8 @@
   }
 
   async function autosaveTick() {
+    if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. v2-toggle-autosave) - aucun appel Grist tant que c'est le cas, pas seulement le
+    // dernier enregistrement sauté : ni le polling de conflit ni l'écriture elle-même ne doivent tourner en arrière-plan pendant que c'est éteint.
     if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     const id = Templates.getCurrentId();
@@ -250,6 +264,25 @@
   function startAutosaveLoop() {
     if (autosaveTimer) return;
     autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
+  }
+
+  // Bouton bascule (v2-toggle-autosave, façon v2-toggle-a4-preview) : la boucle setInterval tourne TOUJOURS une fois démarrée, seul autosaveTick()
+  // vérifie isAutosaveEnabled() en tout premier - décocher n'arrête donc pas un minuteur qu'il faudrait recréer à la réactivation, ça fait juste sauter
+  // le prochain tick, à un coût négligeable (une lecture localStorage toutes les 2.5s).
+  function wireAutosaveToggle() {
+    const toggle = document.getElementById('v2-toggle-autosave');
+    const label = toggle ? toggle.closest('.autosave-toggle') : null;
+    if (!toggle) return;
+    toggle.checked = isAutosaveEnabled();
+    if (label) label.classList.toggle('checked', toggle.checked);
+    toggle.addEventListener('change', () => {
+      setAutosaveEnabled(toggle.checked);
+      if (label) label.classList.toggle('checked', toggle.checked);
+      setStatus(I18n.t(toggle.checked ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
+      // Réactiver doit se comporter comme si on n'avait jamais coupé : un tick imminent ne doit pas croire qu'un DateModif jamais vérifié pendant la
+      // coupure est un conflit. resetAutosaveState() re-synchronise sur le modèle courant, exactement comme au chargement d'un modèle.
+      if (toggle.checked) resetAutosaveState(Templates.getCached().find(t => String(t.id) === String(Templates.getCurrentId())));
+    });
   }
 
   function wireAutosaveConflictBanner() {
@@ -877,6 +910,7 @@
     I18n.onChange(decorateSaveButtonShortcut);
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
+    wireAutosaveToggle();
     startAutosaveLoop();
     await switchMode('edit');
     setStatus(I18n.t('status.ready'));
