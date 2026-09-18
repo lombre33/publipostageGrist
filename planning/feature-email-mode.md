@@ -196,7 +196,7 @@ ci-dessous n'invente aucun composant — elle réutilise trois choses déjà dan
 ├──────────────────────────────────────────────────────────────┤
 │ Objet [ Relance facture #NumFacture ]                          │
 │ À [ #Email ]  Cc [ #EmailCompta ]  [+ Cci]                     │  ← bar-row 2 (nouvelle, MÊME
-│                        [Exporter en PDF][Composer l'email]     │     composant que bar-row 1)
+│                        [Exporter en PDF][Créer l'email]        │     composant que bar-row 1)
 ├──────────────────────────────────────────────────────────────┤
 │ Normal ▾│G I S̶│gauche…│•▾│#Variable│ [tableau][image][2-col]… │  ← #v2-toolbar : UNE seule
 │                                  boutons sans effet grisés    │     addition (#Variable), le
@@ -220,8 +220,8 @@ d'implémentation à assumer (§6.2).
 Le cluster « Exporter en PDF » reste affiché (l'export croisé est permis, §0) ; seul un nouveau
 bouton d'action email vient s'ajouter à côté, au même style que `#btn-export-pdf`
 (`css/style.css:148`, fond `var(--accent)`) — un bouton de plus dans un cluster existant, pas un
-nouveau langage visuel. Son libellé (`Composer l'email` ci-dessus, provisoire) reste à confirmer —
-voir la carte de choix envoyée avec ce document.
+nouveau langage visuel. Son libellé est **« Créer l'email »** (tranché par Antoine via la carte de
+choix, 2026-09-18, parmi Composer l'email / Nouveau message / Créer l'email / Rédiger l'email).
 
 Ce qui ne change pas du tout par rapport au mode document, contrairement à la version précédente de
 ce document : la feuille A4, l'aperçu A4, `#editor-container`/`.tiptap` tels quels. Antoine n'a pas
@@ -284,7 +284,7 @@ Le mode Lecture email affiche donc **exactement ce que le client mail recevra**,
 │ Bonjour Marie,                                                │     seulement si rempli)
 │ Sauf erreur de notre part, la facture F-2024-118…             │  ← #reader-container, texte brut
 ├──────────────────────────────────────────────────────────────┤
-│ 1 240 / 2 000 caractères          [Exporter en PDF][Composer l'email] │
+│ 1 240 / 2 000 caractères          [Exporter en PDF][Créer l'email]    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
