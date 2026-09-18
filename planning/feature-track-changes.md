@@ -164,28 +164,49 @@ normalement (réactivité Tiptap intacte). Les décorations (`suggestChanges()` 
 `props.decorations`) fonctionnent sans toucher `editorProps.decorations`, donc sans risque de conflit
 avec d'éventuelles décorations d'autres extensions de l'app réelle.
 
-**Confirmé, ce qui casse — bloquant à ce stade** : supprimer un **nœud de bloc entier** (une ligne de
-tableau, mais aussi un **simple paragraphe entier**, testé séparément) avec le suivi actif lève une
-exception non rattrapée : `TransformError: Invalid content for node table` (ligne de tableau) et
-`TransformError: Invalid content for node doc` (paragraphe entier). La suppression de **contenu
-textuel À L'INTÉRIEUR d'un bloc** (y compris dans une cellule de tableau) fonctionne normalement
-(marque `deletion` posée sur le texte). Cause probable : la transformation de la lib pose des marques
-sur du contenu INLINE, mais le modèle de contenu strict de `table`/`doc` (séquences de nœuds enfants
-précises) ne permet pas de représenter « ce nœud de bloc entier est en attente de suppression » de la
-même façon — la lib ne semble pas gérer ce cas dans cette version. Le crash est synchrone, avant tout
-`dispatch` (la transaction n'est jamais appliquée), donc le contenu n'est pas corrompu, mais
-l'exception remonte jusqu'à la console — inacceptable tel quel en production : un utilisateur qui
-sélectionne un paragraphe entier (ou une ligne de tableau) et appuie sur Suppr avec le suivi actif
-provoquerait cette erreur. **Sélectionner-tout-et-remplacer, une opération d'édition courante, est
-exactement ce cas.**
+**Deux bugs trouvés en testant, et corrigés dans le prototype (2026-09-18)** :
 
-**Conséquence** : `prosemirror-suggest-changes` n'est pas utilisable en l'état pour les suppressions de
-blocs entiers — soit un correctif/contournement est nécessaire (intercepter spécifiquement la
-suppression d'un nœud de bloc avant qu'elle atteigne la lib, et la traiter autrement, p. ex. transformer
-la suppression du nœud en suppression de tout son contenu textuel plutôt que du nœud lui-même), soit une
-autre lib/un DIY plus poussé est nécessaire pour ce cas précis. Reste une bonne base pour le texte
-courant (le cas le plus fréquent), mais **ne pas considérer le choix de lib comme validé** avant
-d'avoir résolu ce point — prochaine étape technique si le chantier continue.
+1. **Suppression d'un nœud de bloc entier → plantage.** Supprimer un **nœud de bloc entier** (une
+   ligne de tableau, mais aussi un **simple paragraphe entier**, testé séparément) avec le suivi actif
+   levait une exception non rattrapée : `TransformError: Invalid content for node table` (ligne de
+   tableau) et `TransformError: Invalid content for node doc` (paragraphe entier). La suppression de
+   **contenu textuel À L'INTÉRIEUR d'un bloc** (y compris dans une cellule de tableau) fonctionne
+   normalement (marque `deletion` posée sur le texte). Cause probable : la transformation de la lib
+   pose des marques sur du contenu INLINE, mais le modèle de contenu strict de `table`/`doc`
+   (séquences de nœuds enfants précises) ne permet pas de représenter « ce nœud de bloc entier est en
+   attente de suppression » de la même façon — la lib ne semble pas gérer ce cas dans cette version.
+   **Correctif appliqué (stade actuel, pas définitif)** : la transformation est maintenant entourée
+   d'un `try/catch` dans le pont Tiptap (`SuggestChangesBridge.dispatchTransaction`) ; en cas
+   d'exception, la transaction est **refusée entièrement** (jamais appliquée) plutôt que de planter la
+   page ou de laisser passer une suppression réelle non trackée en silence. Conséquence UX actuelle :
+   **un utilisateur ne peut plus supprimer un paragraphe ou une ligne de tableau entière tant que le
+   suivi est actif** (rien ne se passe, un message de diagnostic apparaît dans les logs du prototype) —
+   ce n'est plus un plantage, mais ce n'est pas encore une vraie prise en charge du cas.
+   Sélectionner-tout-et-remplacer, une opération d'édition courante, tombe dans ce cas.
+2. **« Tout accepter »/« tout refuser » ne retiraient pas les marques.** En comparant avec le code
+   source réel de la lib (`dist/withSuggestChanges.js`, l'intégration officielle que ce prototype
+   n'utilise pas directement), la garde du pont Tiptap ne testait que
+   `isSuggestChangesEnabled(state) && !tr.getMeta('history$')` avant de retransformer une transaction —
+   alors que `applySuggestions`/`revertSuggestions`/`applySuggestion`/`revertSuggestion` posent un
+   meta `{skip: true}` sur LEUR PROPRE transaction pour dire « ceci est déjà le résultat, ne le
+   re-transforme pas ». Sans ce test, le pont re-transformait la transaction d'acceptation elle-même en
+   NOUVELLES marques de suggestion (les `<ins>`/`<del>` survivaient à « tout accepter », juste avec un
+   nouvel id). **Corrigé** en alignant la garde sur celle de la lib
+   (`!('skip' in (tr.getMeta(suggestChangesKey) ?? {}))`).
+
+**Suite de tests automatisée** : `prototypes/test-suivi-modifications.mjs` (Playwright headless,
+autonome, `node prototypes/test-suivi-modifications.mjs`) couvre désormais 10 scénarios — initialisation,
+contenu de départ, saisie/suppression avec suivi actif/inactif, suppression de ligne de tableau et de
+paragraphe entiers (refusée sans plantage), suppression de texte de cellule, undo, et « tout accepter ».
+Les 10 passent après les deux correctifs ci-dessus.
+
+**Conséquence** : la marque non-destructive (option 2) et le stockage restent la bonne piste, mais
+**la suppression de bloc entier avec suivi actif reste une vraie limitation UX non résolue**, pas
+seulement un bug de plantage — un correctif complet (p. ex. convertir la suppression d'un nœud de bloc
+en suppression de tout son contenu textuel plutôt que du nœud lui-même, ou traiter le cas différemment
+avant qu'il atteigne la lib) reste à concevoir. **Ne pas considérer le choix de lib comme définitivement
+validé** avant d'avoir une vraie prise en charge de ce cas — prochaine étape technique si le chantier
+continue.
 
 ## Décision structurante n°4 — où stocker l'historique côté Grist ?
 

@@ -101,7 +101,7 @@
   import { TableCell } from '@tiptap/extension-table-cell'
   import { TableHeader } from '@tiptap/extension-table-header'
   import {
-    suggestChanges, toggleSuggestChanges, isSuggestChangesEnabled,
+    suggestChanges, suggestChangesKey, toggleSuggestChanges, isSuggestChangesEnabled,
     applySuggestions, revertSuggestions, applySuggestion, revertSuggestion,
     transformToSuggestionTransaction,
   } from '@handlewithcare/prosemirror-suggest-changes'
@@ -175,8 +175,33 @@
       // `this` (constaté en testant ce prototype : `editor` déstructuré de l'argument valait
       // undefined).
       const editor = this.editor
-      const enabled = isSuggestChangesEnabled(editor.state) && !transaction.getMeta('history$')
-      next(enabled ? transformToSuggestionTransaction(transaction, editor.state) : transaction)
+      // BUG CORRIGÉ (2026-09-18) : garde alignée sur celle de withSuggestChanges() dans le code
+      // source de la lib (dist/withSuggestChanges.js) - il manquait le test `'skip' in
+      // tr.getMeta(suggestChangesKey)`. Sans lui, "tout accepter"/"tout refuser" (qui posent ce
+      // meta pour dire « ceci EST déjà la transaction d'application, ne la re-transforme pas »)
+      // étaient réinterceptées et re-transformées en NOUVELLES marques de suggestion au lieu
+      // d'être appliquées telles quelles - constaté en testant : les marques ins/del survivaient à
+      // "tout accepter" avec un nouvel id. Le test history$ seul ne suffit pas : accepter/refuser
+      // n'est pas une opération d'historique.
+      const skipMeta = transaction.getMeta(suggestChangesKey)
+      const enabled = isSuggestChangesEnabled(editor.state)
+        && !transaction.getMeta('history$')
+        && !(skipMeta && 'skip' in skipMeta)
+      if (!enabled) { next(transaction); return }
+      // CORRECTIF (2026-09-18) : transformToSuggestionTransaction lève une exception non
+      // rattrapée sur la suppression d'un nœud de BLOC entier (paragraphe, ligne de tableau) -
+      // "Invalid content for node table/doc", constaté en testant ce prototype. On attrape
+      // l'exception et on REFUSE la transaction (elle n'est jamais appliquée) plutôt que de
+      // laisser planter la page ou de laisser passer une suppression réelle non trackée en
+      // silence - un suivi des modifications qui perd le suivi sans le dire serait pire que de
+      // bloquer temporairement ce cas. Ce n'est PAS le correctif définitif (l'utilisateur ne
+      // peut aujourd'hui plus rien supprimer en bloc tant que le suivi est actif), juste ce qui
+      // évite le crash le temps de creuser une vraie prise en charge des nœuds de bloc.
+      try {
+        next(transformToSuggestionTransaction(transaction, editor.state))
+      } catch (e) {
+        log('Transaction refusée (suppression de bloc entier non prise en charge par la lib) : ' + e.message)
+      }
     },
   })
 
