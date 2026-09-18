@@ -30,6 +30,10 @@
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
   --font-ui: 'Manrope', system-ui, sans-serif;
+  /* Gouttière entre deux pages de l'aperçu paginé (cf. .v2-page-seam-divider / .v2-page-break-line) : c'est elle qui fait lire le flux continu de
+     l'éditeur comme une pile de feuilles distinctes. Assez haute pour se voir, assez basse pour ne pas repousser tout le document. */
+  --pp-page-gap: 28px;
+  --pp-page-gutter: #e4e8ef;
 }
 
 /* === Typographie et mise en page de base === */

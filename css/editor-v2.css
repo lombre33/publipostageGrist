@@ -298,13 +298,24 @@
 
 .v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 4; }
 .v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
-.v2-page-band-header, .v2-page-band-footer { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); max-height: 76px; overflow: hidden; box-sizing: border-box; }
+/* Une bande de couture rejoue la frontière entre deux pages PHYSIQUES : ce qui reste de la page qui finit (son pied), puis une vraie gouttière, puis le
+   début de la page qui commence (son en-tete). Les deux zones gardent donc le fond "papier", et seule la gouttière laisse voir le fond de l'espace de
+   travail - c'est elle qui transforme le rouleau continu de `.tiptap` en pile de feuilles distinctes, comme dans Word ou Docs. */
+.v2-page-band-header, .v2-page-band-footer { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); max-height: 76px; overflow: hidden; box-sizing: border-box; background: #fff; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
-.v2-page-seam-divider { height: 0; border-top: 1px dashed #c3cad6; margin: 0 14px; }
+/* La gouttière elle-meme. Les deux ombres portées sortent vers l'INTÉRIEUR de la gouttière depuis chaque feuille (la tranche du bas de la page qui finit,
+   celle du haut de la page qui commence) ; les deux filets nets de 1px sont les bords de papier proprement dits. */
+.v2-page-seam-divider {
+  height: var(--pp-page-gap, 20px); margin: 0; border: 0; background: var(--pp-page-gutter, #eef1f5);
+  box-shadow: inset 0 1px 0 #c7cfdb, inset 0 -1px 0 #c7cfdb, inset 0 9px 9px -9px rgba(20, 28, 46, .30), inset 0 -9px 9px -9px rgba(20, 28, 46, .30);
+}
 /* Coupure de page automatique SANS en-tête/pied configuré (reste visible dès "beaucoup de lignes", pas seulement avec en-tête/pied ou saut forcé) - simple
    repère "— Page N —", pas de carte "page" (rien à afficher qui justifierait un fond blanc). */
-.v2-page-break-line { display: flex; align-items: center; gap: 10px; height: 20px; padding: 0 var(--pp-margin-right, 37.33px) 0 var(--pp-margin-left, 37.33px); }
-.v2-page-break-line::before, .v2-page-break-line::after { content: ''; flex: 1; border-top: 1px dashed #c3cad6; }
+.v2-page-break-line {
+  display: flex; align-items: center; justify-content: center; height: var(--pp-page-gap, 20px); padding: 0;
+  background: var(--pp-page-gutter, #eef1f5);
+  box-shadow: inset 0 1px 0 #c7cfdb, inset 0 -1px 0 #c7cfdb, inset 0 9px 9px -9px rgba(20, 28, 46, .30), inset 0 -9px 9px -9px rgba(20, 28, 46, .30);
+}
 .v2-page-break-label { font-size: 10px; font-weight: 600; color: #9aa2ad; white-space: nowrap; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }

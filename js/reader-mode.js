@@ -74,12 +74,15 @@ const ReaderMode = (function () {
   // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
   // peuvent recouvrir un peu de texte pile à la limite - résidu assumé).
   async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
-    if (!headerFooterData || !headerFooterData.enabled) return;
     if (!container.classList.contains('a4-preview')) return;
-    const differentFirstPage = !!headerFooterData.differentFirstPage;
-    const headerDefault = await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record);
+    // `hfEnabled` remplace l'ancien `return` sec quand aucun en-tête/pied n'est configuré : le mode Lecture ne montrait alors AUCUNE frontière de page,
+    // alors que l'éditeur y affiche son repère « Page N ». Un document sans en-tête/pied garde donc maintenant ses gouttières, mais pas d'espaceur de bord
+    // (rien à y afficher - une bande blanche vide flotterait au-dessus et en dessous de la feuille).
+    const hfEnabled = !!(headerFooterData && headerFooterData.enabled);
+    const differentFirstPage = hfEnabled && !!headerFooterData.differentFirstPage;
+    const headerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record) : null;
     const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record) : null;
-    const footerDefault = await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record);
+    const footerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record) : null;
     const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
@@ -92,59 +95,71 @@ const ReaderMode = (function () {
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
-    // Un saut de page forcé après peu de contenu doit réserver tout le reste de la page (même correctif que l'aperçu éditeur) - sans ça la couture suivante,
-    // et tout contenu positionné en absolu après elle, se retrouve décalé vers le haut par rapport à l'éditeur.
     const wrapperChildren = Array.from(wrapper.children);
-    const marginRules = offsets
-      .filter(o => o.remainingPx > 0 && wrapperChildren[o.afterIndex])
-      .map((o, i) => '.reader-content > *:nth-child(' + (o.afterIndex + 1) + ') { margin-bottom: ' + o.remainingPx + 'px; }');
-    if (marginRules.length) {
-      const styleEl = document.createElement('style');
-      styleEl.textContent = marginRules.join('\n');
-      wrapper.appendChild(styleEl);
-    }
-    const rootRect = wrapper.getBoundingClientRect();
-    offsets.forEach(o => {
-      const el = wrapperChildren[o.afterIndex];
-      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut donc
-      // rajouter remainingPx à la main pour retrouver la vraie frontière.
-      o.top = el ? (el.getBoundingClientRect().bottom - rootRect.top + o.remainingPx) : o.top;
-    });
 
     // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus récent peut avoir déjà repeint `container` pendant l'attente, `wrapper` ne serait
     // alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return;
 
-    const edgeTop = document.createElement('div');
-    edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
-    edgeTop.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
-    container.insertBefore(edgeTop, wrapper);
-    const edgeBottom = document.createElement('div');
-    edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-    edgeBottom.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
-    container.appendChild(edgeBottom);
+    if (headerForPage(1)) {
+      const edgeTop = document.createElement('div');
+      edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
+      edgeTop.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
+      container.insertBefore(edgeTop, wrapper);
+    }
+    if (footerForPage(totalPages)) {
+      const edgeBottom = document.createElement('div');
+      edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
+      edgeBottom.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
+      container.appendChild(edgeBottom);
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'v2-pagination-overlay';
     container.appendChild(overlay);
+    // <style> en display:none, donc sans effet de mise en page propre, et dernier enfant de .reader-content : il ne décale aucun `nth-child` déjà calculé.
+    const styleEl = document.createElement('style');
+    wrapper.appendChild(styleEl);
+    const marginRules = [];
     const wrapperOffsetTop = wrapper.offsetTop;
     const wrapperOffsetLeft = wrapper.offsetLeft;
     const wrapperWidth = wrapper.getBoundingClientRect().width;
+    // Même modèle que l'aperçu éditeur (js/header-footer-preview.js:renderPaginationOverlay), au lieu des deux modèles divergents d'avant : une bande est
+    // créée pour CHAQUE frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied, comme dans l'éditeur - le mode Lecture n'en montrait alors
+    // aucune), elle COMMENCE à la frontière au lieu de finir dessus, et l'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier
+    // bloc de la page. Sans cette réserve, la gouttière recouvrirait les dernières lignes de la page qui finit.
     offsets.forEach((offset, i) => {
       const pageEnding = i + 1; const pageStarting = i + 2;
       const footerText = footerForPage(pageEnding);
       const headerText = headerForPage(pageStarting);
-      if (!footerText && !headerText) return;
       const seam = document.createElement('div');
-      seam.className = 'v2-page-band v2-page-seam';
-      if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages); seam.appendChild(f); }
-      const divider = document.createElement('div'); divider.className = 'v2-page-seam-divider'; seam.appendChild(divider);
-      if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages); seam.appendChild(h); }
+      if (!footerText && !headerText) {
+        seam.className = 'v2-page-band v2-page-break-line';
+        const label = document.createElement('span'); label.className = 'v2-page-break-label'; label.textContent = 'Page ' + pageStarting;
+        seam.appendChild(label);
+      } else {
+        seam.className = 'v2-page-band v2-page-seam';
+        if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages); seam.appendChild(f); }
+        const divider = document.createElement('div'); divider.className = 'v2-page-seam-divider'; seam.appendChild(divider);
+        if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages); seam.appendChild(h); }
+      }
       overlay.appendChild(seam);
       seam.style.left = wrapperOffsetLeft + 'px';
       seam.style.width = wrapperWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
-      seam.style.top = (wrapperOffsetTop + offset.top - seamHeight) + 'px';
+      const el = wrapperChildren[offset.afterIndex];
+      // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
+      // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
+      // `.reader-content > *:nth-child(N)` et écrasait silencieusement la réserve dès que le dernier bloc d'une page était un paragraphe - la
+      // gouttière recouvrait alors une ligne de texte. Invisible avant, la règle n'étant posée que pour les sauts de page forcés, dont le bloc est
+      // un <div class="page-break-marker">, jamais un <p>.
+      if (el) marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + offset.remainingPx) + 'px; }');
+      styleEl.textContent = marginRules.join('\n');
+      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut donc
+      // rajouter remainingPx à la main pour retrouver la vraie frontière.
+      const rootRect = wrapper.getBoundingClientRect();
+      const boundaryTop = el ? (el.getBoundingClientRect().bottom - rootRect.top + offset.remainingPx) : offset.top;
+      seam.style.top = (wrapperOffsetTop + boundaryTop) + 'px';
     });
   }
 

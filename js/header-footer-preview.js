@@ -424,8 +424,13 @@ const HeaderFooterPreview = (function () {
     updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', 'Ajouter un en-tête');
     updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', 'Ajouter un pied de page');
 
-    const tiptapOffsetLeft = tiptapEl.offsetLeft;
-    const tiptapWidth = tiptapEl.getBoundingClientRect().width;
+    // Les bandes couvrent toute la largeur de la FEUILLE, pas de la colonne de texte : ce sont des frontières entre deux pages physiques, et depuis que la
+    // frontière se dessine comme une vraie gouttière (fond gris + tranche des deux feuilles, cf. css/editor-v2.css), une bande large de la seule colonne
+    // de texte laisserait deux bandes blanches sur les côtés, à l'aplomb des marges. Corrige au passage un double décalage : la bande était déjà rentrée
+    // des marges de page, et `.v2-page-band-header/footer` y rajoute son propre padding de marge - un en-tête de couture était donc indenté deux fois plus
+    // loin que celui de la page 1. Le mode Lecture ne souffrait pas de ce défaut, sa bande couvrant déjà toute la feuille.
+    const sheetOffsetLeft = pageSheet.offsetLeft;
+    const sheetWidth = pageSheet.getBoundingClientRect().width;
     const tiptapRect = tiptapEl.getBoundingClientRect();
 
     // Une bande par frontière entre 2 pages (repère "— Page N —" par défaut sans en-tête/pied) ; espace réservé via `:nth-child` externe, pas un style inline
@@ -462,8 +467,8 @@ const HeaderFooterPreview = (function () {
         }
       }
       paginationOverlayEl.appendChild(seam);
-      seam.style.left = tiptapOffsetLeft + 'px';
-      seam.style.width = tiptapWidth + 'px';
+      seam.style.left = sheetOffsetLeft + 'px';
+      seam.style.width = sheetWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height;
       // Écrit la feuille à chaque itération : la coupure suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
       const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
