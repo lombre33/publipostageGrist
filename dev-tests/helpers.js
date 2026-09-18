@@ -297,7 +297,9 @@ window.TestHelpers = (function () {
   // dernier docDefinition et force sa mise en page (getBase64) pour peupler
   // `.positions`/`.absolutePosition` sur les blocs - exactement l'effet de
   // bord déjà exploité par js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
-  async function exportPdfContent(html, headerFooterData) {
+  // `marginsPt` (optionnel) : les marges du modèle courant, telles que js/main.js les passe en usage réel (PageLayout.getMarginsPt()). Omis, l'export
+  // retombe sur 28pt partout - c'est ce que font tous les scénarios qui ne testent pas les marges, et ça doit le rester.
+  async function exportPdfContent(html, headerFooterData, marginsPt) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;
     const gens = [];
@@ -312,7 +314,7 @@ window.TestHelpers = (function () {
     let error = null;
     let blob = null;
     try {
-      const result = await PdfExport.getNativePdfBlobForRecord(html, null, {}, '', headerFooterData || null);
+      const result = await PdfExport.getNativePdfBlobForRecord(html, null, {}, '', headerFooterData || null, marginsPt || undefined);
       blob = result.blob;
     } catch (e) {
       error = e;

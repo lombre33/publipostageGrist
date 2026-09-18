@@ -37,11 +37,23 @@ const Settings = (function () {
       langRadios.forEach(r => { r.checked = (r.value === I18n.getLang()); });
       if (triggerSelect) triggerSelect.value = getTriggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
-      const margins = PageLayout.getMarginsMm();
-      Object.keys(marginInputs).forEach(side => { if (marginInputs[side]) marginInputs[side].value = Math.round(margins[side] * 10) / 10; });
+      syncMarginInputs();
       modal.style.display = 'flex';
     });
     closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+
+    // Recopie l'état RÉEL de PageLayout dans les 4 champs. PageLayout borne les marges (cf. MIN_CONTENT_MM) : sans cette recopie, un champ pouvait
+    // afficher 150 alors que la mise en page appliquait 137.4, et l'utilisateur n'avait aucun moyen de le savoir. Un champ dont l'affichage correspond
+    // déjà à la valeur retenue n'est pas réécrit - réécrire pendant la frappe déplacerait le curseur.
+    function syncMarginInputs() {
+      const margins = PageLayout.getMarginsMm();
+      Object.keys(marginInputs).forEach(side => {
+        const input = marginInputs[side];
+        if (!input) return;
+        const rounded = Math.round(margins[side] * 10) / 10;
+        if (parseFloat(input.value) !== rounded) input.value = rounded;
+      });
+    }
 
     Object.keys(marginInputs).forEach(side => {
       const input = marginInputs[side];
@@ -50,6 +62,7 @@ const Settings = (function () {
         const v = parseFloat(input.value);
         if (!Number.isFinite(v) || v < 0) return;
         PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { [side]: v }));
+        syncMarginInputs();
         Editor.refreshLayout();
       });
     });

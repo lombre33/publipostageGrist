@@ -163,12 +163,13 @@ const HeaderFooterPreview = (function () {
 
   // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
   const PT_TO_PX = 96 / 72;
-  // Doit matcher PAGE_MARGIN_PT dans js/pdf-export.js - utilisé uniquement pour empêcher une image en calque de sortir de la page physique (cf.
-  // computePageGridPosition), pas pour un calcul de mise en page.
-  const PAGE_MARGIN_PT = 28;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
-  const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .tiptap en Aperçu A4
-  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, pdf-export.js
+  // Marges de page RÉELLES du modèle courant (js/page-layout.js) - lues à chaque appel, jamais figées en constante : elles changent à chaud depuis
+  // l'onglet Réglages. Avant ce correctif, 37.33px (= 28pt) et 719.04px étaient codés en dur ici, si bien que la pagination affichée à l'écran (bandes
+  // de couture, "Saut de page") et la grille de page qui ancre les images en calque ignoraient PUREMENT ET SIMPLEMENT les marges du modèle : un modèle
+  // à 30mm de marge haute affichait encore la découpe d'un modèle à 9.9mm, et l'export PDF/DOCX plaçait l'image sur une autre page que l'éditeur.
+  function marginsPx() { return PageLayout.getMarginsPx(); }
+  function contentWidthPx() { return PageLayout.getContentWidthMm() * PageLayout.MM_TO_PX; }
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
 
   // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête d'une
@@ -190,7 +191,7 @@ const HeaderFooterPreview = (function () {
     const host = document.createElement('div');
     host.className = 'tiptap';
     host.innerHTML = html;
-    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx() + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(host);
     const h = host.getBoundingClientRect().height;
     document.body.removeChild(host);
@@ -311,7 +312,8 @@ const HeaderFooterPreview = (function () {
     const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    const mPx = marginsPx();
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
     return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, topExtraPx, bottomExtraPx, pageContentHeightPx };
   }
 
@@ -365,16 +367,21 @@ const HeaderFooterPreview = (function () {
     const gridZoom = layoutZoom(tiptapEl);
     const rawLeftPt = ((elRect.left - pageStartLeft) / gridZoom) / PT_TO_PX;
     const rawTopPt = ((elRect.top - pageStartTop) / gridZoom) / PT_TO_PX;
-    // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà, -PAGE_MARGIN_PT) donnerait un point
-    // de grille qui, une fois exporté (PAGE_MARGIN_PT + pageTopPt/pageLeftPt), tombe à une coordonnée PDF négative : invisible/coupée dans le PDF alors que
+    // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà de la marge de ce côté) donnerait un point
+    // de grille qui, une fois exporté (marge + pageTopPt/pageLeftPt), tombe à une coordonnée PDF négative : invisible/coupée dans le PDF alors que
     // le navigateur, lui, continue de l'afficher en entier (ni `.tiptap` ni `.v2-page-sheet` ne la découpe visuellement) - l'éditeur mentait sur ce qui sera
     // réellement imprimable (repéré par l'utilisateur : image "tout en haut de l'éditeur" ressortant rognée au PDF). Corrigé en repoussant l'élément dans le
     // DOM RÉEL (pas seulement la valeur retournée) jusqu'au bord physique dès qu'on le détecte ici - le seul point de passage commun aux 3 sites d'appel
     // (setLayer/alignOrSnap/glisser), qui lisent tous ensuite `el.offsetLeft`/`offsetTop` pour connaître le left/top brut à enregistrer, donc restent
     // automatiquement cohérents avec cette correction sans avoir à la dupliquer.
-    const minPt = -PAGE_MARGIN_PT;
-    const clampDeltaLeftPt = rawLeftPt < minPt ? minPt - rawLeftPt : 0;
-    const clampDeltaTopPt = rawTopPt < minPt ? minPt - rawTopPt : 0;
+    // Le bord physique de la page est à -marge du coin imprimable : avec des marges asymétriques (35mm à gauche, 30mm en haut...) les deux bornes
+    // diffèrent, et toutes deux diffèrent de l'ancien -28pt codé en dur (qui rognait une image parfaitement placée sous une grande marge, et en laissait
+    // sortir une sous une petite).
+    const marginsPtNow = PageLayout.getMarginsPt();
+    const minLeftPt = -marginsPtNow.left;
+    const minTopPt = -marginsPtNow.top;
+    const clampDeltaLeftPt = rawLeftPt < minLeftPt ? minLeftPt - rawLeftPt : 0;
+    const clampDeltaTopPt = rawTopPt < minTopPt ? minTopPt - rawTopPt : 0;
     if (clampDeltaLeftPt || clampDeltaTopPt) {
       const curLeftPx = parseFloat(el.style.left) || 0;
       const curTopPx = parseFloat(el.style.top) || 0;

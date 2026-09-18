@@ -37,8 +37,9 @@ apparaît) :
 | `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
 | `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
-| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips` |
-| `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée) |
+| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes |
+| `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) |
+| `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity` et `readModeFidelity` (la largeur de contenu est consommée par les deux) |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
@@ -131,7 +132,7 @@ const files = [
   'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
   'scenarios-varformat',
   'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth', 'scenarios-readmode-fidelity',
-  'scenarios-comments',
+  'scenarios-comments', 'scenarios-pagelayout',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
 const results = await TestRunner.runAll(EditorTestSuites);

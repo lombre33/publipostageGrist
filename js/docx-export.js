@@ -370,6 +370,7 @@ const DocxExport = (function () {
   }
 
   const PX_TO_TWIP = 15; // 1440 twips/pouce ÷ 96px/pouce
+  const GAP_PX = 16; // gouttière entre les 2 colonnes d'une zone twoColumnsZone - même valeur que PageLayout.COLUMN_GAP_PX (`gap: 16px`, css/editor-v2.css)
   const MM_TO_TWIP = 1440 / 25.4; // même conversion que PageLayout.MM_TO_TWIP, js/page-layout.js (pas de dépendance croisée, simple constante dupliquée)
   // Repli si le tableau n'est pas dans le DOM attaché au moment de l'appel (ex. zone en-tête/pied - hors périmètre de la mesure, cf. buildDocxDocument) :
   // répartition à parts égales, exactement comme la V1.
@@ -456,16 +457,24 @@ const DocxExport = (function () {
       const leftPercent = parseFloat(zoneEl.style.getPropertyValue('--layout-left')) || 50;
       leftTwip = Math.round(CONTENT_WIDTH_TWIP * leftPercent / 100);
     }
-    const rightTwip = CONTENT_WIDTH_TWIP - leftTwip;
-    const widths = [leftTwip, rightTwip];
+    // Colonne SÉPARATRICE, vide et sans bordure, à la largeur exacte de la gouttière CSS (`gap: 16px`, css/editor-v2.css). Sans elle, la colonne droite
+    // récupérait toute la place restante : le DOCX rendait 90mm là où l'éditeur et le PDF rendent 85.8mm, et les deux colonnes se touchaient dans Word.
+    const gapTwip = Math.round(GAP_PX * PX_TO_TWIP);
+    const rightTwip = CONTENT_WIDTH_TWIP - leftTwip - gapTwip;
+    const widths = [leftTwip, gapTwip, rightTwip];
     const cells = [];
     for (let i = 0; i < 2; i += 1) {
       const children = await blocksFromContainer(cols[i], ctx);
-      cells.push(new docx.TableCell({
+      const cell = new docx.TableCell({
         children: children.length ? children : [new docx.Paragraph('')],
-        width: { size: widths[i], type: docx.WidthType.DXA },
+        width: { size: i === 0 ? leftTwip : rightTwip, type: docx.WidthType.DXA },
         borders: NO_BORDERS,
-      }));
+        // Word applique sinon ses marges de cellule par défaut (108 twip de chaque côté) : la largeur ANNONCÉE ne serait pas la largeur du texte, et le
+        // chiffre en mm choisi par l'utilisateur redeviendrait faux d'environ 3.8mm par colonne.
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      });
+      cells.push(cell);
+      if (i === 0) cells.push(new docx.TableCell({ children: [new docx.Paragraph('')], width: { size: gapTwip, type: docx.WidthType.DXA }, borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 } }));
     }
     // Même correctif que tableBlockFrom : columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs réelles des cellules.
     return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });

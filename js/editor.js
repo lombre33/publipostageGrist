@@ -395,12 +395,15 @@ const Editor = (function () {
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
-  // Force la reconciliation de tous les NodeViews (dispatch sans changement réel de document) - même technique que la ligne 381 ci-dessus (sommaire).
-  // Appelé après un changement de marges de page (js/page-layout.js) pour que les zones 2-colonnes en mode mm (--layout-left dérivé de la largeur de
-  // contenu courante) se redessinent immédiatement, sans attendre une frappe/action qui déclencherait onUpdate pour une autre raison.
+  // Appelé après un changement de marges de page (js/page-layout.js). Les zones 2-colonnes, elles, n'ont plus rien à recalculer en JS : `--layout-left`
+  // porte désormais une LONGUEUR en mm en mode mm (cf. js/editor-nodes.js), que le moteur CSS réévalue tout seul quand le padding de `.tiptap` change.
+  // Reste ce que CSS ne peut pas faire : la pagination affichée dépend de la hauteur de contenu d'une page, donc des marges haut/bas - sans ce
+  // recalcul, les bandes de couture restaient figées sur la géométrie des marges PRÉCÉDENTES (le dispatch d'une transaction vide qui tenait lieu de
+  // rafraîchissement ici ne déclenchait ni onUpdate ni la moindre réconciliation de NodeView : il ne servait à rien).
   function refreshLayout() {
     if (!editor) return;
-    editor.view.dispatch(editor.state.tr);
+    clampOverflowingTables(editor);
+    HeaderFooterPreview.schedulePaginationRecompute();
   }
 
   return {

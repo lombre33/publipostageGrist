@@ -86,7 +86,11 @@
 #reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* La zone 2 colonnes en lecture héritait des règles génériques .two-columns-zone/.two-columns-column de ../css/style.css (pensées pour l'éditeur V1 - bordure
    pleine visible sur CHAQUE colonne, gap 18px et non 16, padding de colonne 6px et non 4px, d'où un texte qui ne coupe pas au même endroit qu'en édition). */
-#reader-container .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; padding: 0; }
+/* `border: 0` (et non la simple bordure transparente de css/style.css) : sous box-sizing:border-box, 1px de bordure de chaque côté ampute la boîte de
+   CONTENU de la grille - donc la base du `calc(100% - ...)` de la colonne droite - de 2px. Invisible tant que les deux colonnes étaient en %, mais dès
+   qu'une largeur est réglée en mm ces 2px font mentir le chiffre affiché à l'utilisateur, et l'éditeur (22px de chrome) et la lecture (2px) ne
+   tombaient plus sur la même largeur. */
+#reader-container .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; padding: 0; border: 0; }
 /* border:1px dashed TRANSPARENT, pas `border:none` : .tiptap réserve cette largeur de bordure même invisible au repos (visible qu'au survol EN ÉDITION) -
    `none` retire 1px à la boîte, assez pour décaler la coupure de ligne. Jamais survolable en lecture, mais la largeur réservée doit rester identique. */
 #reader-container .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
@@ -102,7 +106,11 @@
 .tiptap.resize-cursor { cursor: col-resize; }
 /* Grille (pas flex) : la largeur de la colonne gauche vient de la variable --layout-left (posée par la poignée de redimensionnement en édition, cf.
    js/editor.js:createTwoColumnsNodes, ou directement en style inline dans le HTML sérialisé) - la droite prend le reste, moins le gap. */
-.tiptap .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; }
+/* `padding: 0; border: 0` : la zone héritait sinon du `padding: 16px 10px 4px` + `border: 1px dashed` de css/style.css (styles de l'éditeur V1), soit
+   22px de largeur pris sur la boîte de contenu de la grille. Une colonne réglée à 60mm mesurait alors 57.7mm à l'écran et dans le PDF (qui mesure le
+   rendu réel) mais 60mm dans le DOCX (qui convertit le mm directement) - trois rendus, deux valeurs. Le liseré est conservé à l'identique en
+   `outline`, qui ne participe pas à la mise en page. */
+.tiptap .two-columns-zone { display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 16px); gap: 16px; margin: 6px 0; padding: 0; border: 0; outline: 1px dashed #8b98a5; outline-offset: -1px; }
 .tiptap .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap .two-columns-zone:hover .two-columns-column { border-color: #d0d7de; }
 .tiptap .two-columns-column > *:first-child { margin-top: 0; }

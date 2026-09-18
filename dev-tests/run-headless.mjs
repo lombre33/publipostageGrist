@@ -38,6 +38,7 @@ const GROUPS = {
   pdfFidelity: 'scenarios-pdf-fidelity',
   pdfGroundTruth: 'scenarios-pdf-ground-truth',
   readModeFidelity: 'scenarios-readmode-fidelity',
+  pageLayout: 'scenarios-pagelayout',
   comments: 'scenarios-comments',
 };
 
@@ -184,6 +185,13 @@ async function runGroup(name, probeExpr) {
   }
 
   await page.evaluate(() => { window.EditorTestSuites = {}; });
+  // Un groupe déclaré dans GROUPS dont le fichier n'existe pas sur la branche courante (une suite vivant encore sur une branche de travail, par ex.) est
+  // ANNONCÉ et sauté, pas transformé en exception : sinon un `node dev-tests/run-headless.mjs` sans argument sort en code 1 alors que tout ce qui existe
+  // est passé.
+  if (!existsSync(join(ROOT, 'dev-tests', `${GROUPS[name]}.js`))) {
+    await browser.close();
+    return { name, pass: 0, fail: 0, absent: true, consoleErrors };
+  }
   for (const f of [...DEV_FILES, GROUPS[name]]) {
     await page.addScriptTag({ url: `/dev-tests/${f}.js` });
   }
@@ -214,6 +222,7 @@ for (const g of groups) {
   process.stdout.write(`\n=== ${g} ===\n`);
   try {
     const r = await runGroup(g);
+    if (r.absent) { console.log(`  (dev-tests/${GROUPS[g]}.js absent de cette branche - groupe sauté)`); continue; }
     if (r.missing) { console.log(`  (groupe absent de EditorTestSuites - fichier dev-tests/${GROUPS[g]}.js non enregistré ?)`); continue; }
     totalPass += r.pass; totalFail += r.fail;
     console.log(r.report);

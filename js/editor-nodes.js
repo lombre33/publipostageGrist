@@ -421,14 +421,21 @@ const EditorNodes = (function () {
       addAttributes() {
         return {
           // Largeur (%) de la colonne gauche, clampée 20-80 au glisser, sérialisée en variable CSS --layout-left. Reste la SEULE source de vérité tant
-          // que layoutLeftMm est absent (mode pourcentage, comportement historique).
+          // que layoutLeftMm est absent (mode pourcentage, comportement historique). En mode mm, --layout-left porte une LONGUEUR ("60mm") et non plus un
+          // pourcentage : on ne la relit alors pas ici (layoutLeftMm fait foi), sans quoi "60mm" serait relu comme "60 %".
           layoutLeft: {
             default: 50,
-            parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left')); return Number.isFinite(v) ? v : 50; },
+            parseHTML: el => {
+              const raw = el.style.getPropertyValue('--layout-left');
+              const v = parseFloat(raw);
+              return (/%\s*$/.test(raw) && Number.isFinite(v)) ? v : 50;
+            },
             renderHTML: () => ({}),
           },
-          // Largeur ABSOLUE (mm) de la colonne gauche - `null` = mode pourcentage (défaut, comportement inchangé). Non-null = mode mm : layoutLeft devient
-          // une valeur DÉRIVÉE (recalculée depuis layoutLeftMm/PageLayout.getContentWidthMm() à chaque rendu), jamais la source de vérité elle-même.
+          // Largeur ABSOLUE (mm) de la colonne gauche - `null` = mode pourcentage (défaut, comportement inchangé). Non-null = mode mm : --layout-left est
+          // alors posée en MILLIMÈTRES, pas en pourcentage. La différence n'est pas cosmétique : un pourcentage s'applique à la boîte de CONTENU de la
+          // zone (amputée de son padding/bordure), donc "60mm" converti en % ne donnait 60mm nulle part - 57.7mm à l'écran et dans le PDF, 60mm dans le
+          // DOCX. Une longueur absolue vaut 60mm partout, et le moteur CSS la réévalue tout seul quand les marges de page changent, sans redessin JS.
           layoutLeftMm: {
             default: null,
             parseHTML: el => { const v = parseFloat(el.style.getPropertyValue('--layout-left-mm')); return Number.isFinite(v) ? v : null; },
@@ -440,7 +447,7 @@ const EditorNodes = (function () {
       renderHTML({ HTMLAttributes, node }) {
         const mm = node.attrs.layoutLeftMm;
         const style = Number.isFinite(mm)
-          ? `--layout-left: ${(mm / PageLayout.getContentWidthMm()) * 100}%; --layout-left-mm: ${mm}mm`
+          ? `--layout-left: ${mm}mm; --layout-left-mm: ${mm}mm`
           : `--layout-left: ${node.attrs.layoutLeft || 50}%`;
         return ['div', mergeAttributes(HTMLAttributes, { class: 'two-columns-zone', style }), 0];
       },
@@ -477,12 +484,13 @@ const EditorNodes = (function () {
           mmButton.textContent = 'mm';
           wrap.appendChild(mmButton);
 
-          // En mode mm (layoutLeftMm non-null), layoutLeft n'est qu'une valeur DÉRIVÉE de layoutLeftMm/largeur de contenu courante - recalculée à chaque
-          // applyLayout plutôt que lue telle quelle, pour rester juste si les marges de page changent (onglet Réglages) pendant que ce nœud est affiché.
-          const effectivePercent = attrs => Number.isFinite(attrs.layoutLeftMm)
-            ? (attrs.layoutLeftMm / PageLayout.getContentWidthMm()) * 100
-            : (attrs.layoutLeft || 50);
-          const applyLayout = attrs => wrap.style.setProperty('--layout-left', effectivePercent(attrs) + '%');
+          // En mode mm, --layout-left porte la longueur elle-même : plus rien à recalculer quand les marges de page changent (le CSS s'en charge), là où
+          // le pourcentage dérivé d'avant restait figé à sa valeur d'origine - Editor.refreshLayout() dispatchait une transaction vide qui ne déclenchait
+          // aucune réconciliation de NodeView, si bien que l'écran gardait l'ancien ratio pendant que getHTML() sérialisait déjà le nouveau.
+          const effectiveTrack = attrs => Number.isFinite(attrs.layoutLeftMm)
+            ? attrs.layoutLeftMm + 'mm'
+            : (attrs.layoutLeft || 50) + '%';
+          const applyLayout = attrs => wrap.style.setProperty('--layout-left', effectiveTrack(attrs));
           applyLayout(node.attrs);
 
           let dragging = false;
@@ -520,9 +528,13 @@ const EditorNodes = (function () {
           let popover = null;
           function closePopover() {
             if (!popover) return;
-            popover.remove();
+            // `remove()` sur un nœud que ProseMirror a déjà détaché en recréant la NodeView lève une exception : le blur de l'input, déclenché PAR ce
+            // détachement, rappelle closePopover alors que le popover n'a plus de parent. On remet `popover` à null d'abord, pour que ce second appel
+            // sorte tout de suite quoi qu'il arrive.
+            const el = popover;
             popover = null;
             document.removeEventListener('mousedown', onDocMouseDown, true);
+            if (el.parentNode) el.parentNode.removeChild(el);
           }
           function onDocMouseDown(event) {
             if (popover && !popover.contains(event.target) && event.target !== mmButton) closePopover();
@@ -534,7 +546,10 @@ const EditorNodes = (function () {
             const current = state.doc.nodeAt(pos);
             if (!current) return;
             const contentWidthMm = PageLayout.getContentWidthMm();
-            const clamped = Math.max(10, Math.min(contentWidthMm - 10, value));
+            // La gouttière (PageLayout.getColumnGapMm()) est prise sur la largeur de contenu comme n'importe quelle colonne : la borne haute doit la
+            // retrancher, sinon une saisie "largeur de contenu - 10" laisse une colonne droite NÉGATIVE.
+            const gapMm = PageLayout.getColumnGapMm();
+            const clamped = Math.max(10, Math.min(contentWidthMm - gapMm - 10, value));
             const pct = (clamped / contentWidthMm) * 100;
             view.dispatch(state.tr.setNodeMarkup(pos, undefined, Object.assign({}, current.attrs, { layoutLeftMm: clamped, layoutLeft: Math.round(pct) })));
           }
@@ -550,7 +565,7 @@ const EditorNodes = (function () {
             const contentWidthMm = PageLayout.getContentWidthMm();
             const startLeftMm = Number.isFinite(currentAttrs.layoutLeftMm)
               ? currentAttrs.layoutLeftMm
-              : Math.round(effectivePercent(currentAttrs) / 100 * contentWidthMm);
+              : Math.round((currentAttrs.layoutLeft || 50) / 100 * contentWidthMm);
 
             popover = document.createElement('div');
             popover.className = 'two-columns-mm-popover';
@@ -571,9 +586,12 @@ const EditorNodes = (function () {
             popover.appendChild(rightLabel);
             wrap.appendChild(popover);
 
+            // La colonne droite, c'est le reste de la largeur de contenu MOINS la gouttière - l'afficher sans la retrancher promettait 90mm là où
+            // l'éditeur, le PDF et le DOCX rendent 85.8mm.
+            const gapMm = PageLayout.getColumnGapMm();
             const refreshRightDisplay = () => {
               const v = parseFloat(leftInput.value);
-              rightDisplay.textContent = Number.isFinite(v) ? Math.round(contentWidthMm - v) : '—';
+              rightDisplay.textContent = Number.isFinite(v) ? Math.round(contentWidthMm - gapMm - v) : '—';
             };
             refreshRightDisplay();
             leftInput.addEventListener('input', refreshRightDisplay);

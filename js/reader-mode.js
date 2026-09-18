@@ -11,8 +11,10 @@ const ReaderMode = (function () {
   // entre scripts classiques). Plus simple ici : contenu statique déjà résolu, pas de débounce nécessaire.
   const PT_TO_PX = 96 / 72;
   const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
-  const A4_BASE_MARGIN_PX = 37.33; // doit matcher le padding de .reader-content en Aperçu A4 (css/editor-v2.css)
-  const A4_CONTENT_WIDTH_PX = 719.04; // même valeur que CONTENT_WIDTH_PX, js/pdf-export.js
+  // Mêmes valeurs que le padding de .reader-content en Aperçu A4 (css/editor-v2.css), mais lues à chaud depuis js/page-layout.js : codées en dur
+  // (37.33px / 719.04px), elles ignoraient les marges propres au modèle et paginaient le mode Lecture comme un modèle à 28pt de marge.
+  function marginsPx() { return PageLayout.getMarginsPx(); }
+  function contentWidthPx() { return PageLayout.getContentWidthMm() * PageLayout.MM_TO_PX; }
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, js/pdf-export.js
 
   // Même rôle que layoutZoom() dans js/header-footer-preview.js (copie volontairement locale, comme tout ce module) : les rectangles mesurés DANS la
@@ -30,7 +32,7 @@ const ReaderMode = (function () {
     host.innerHTML = html;
     // min-height:0 : .reader-content n'a pas le min-height:200px de .tiptap (css/editor-v2.css, propre à l'éditeur VIDE) - conservé quand même par
     // cohérence/robustesse avec la même mesure côté éditeur/export PDF.
-    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + A4_CONTENT_WIDTH_PX + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx() + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(host);
     const h = host.getBoundingClientRect().height;
     document.body.removeChild(host);
@@ -100,7 +102,8 @@ const ReaderMode = (function () {
     const footerHeightPx = Math.max(measureHtmlHeightPx(footerDefault), measureHtmlHeightPx(footerFirst));
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - 2 * A4_BASE_MARGIN_PX - topExtraPx - bottomExtraPx);
+    const mPx = marginsPx();
+    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
