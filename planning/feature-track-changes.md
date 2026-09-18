@@ -142,8 +142,50 @@ zones 2-colonnes ; les chips/badges de variable, atomiques et sans état interne
 
 *Recommandation* : l'option 2 est plus cohérente avec l'existant (pas de régression sur les
 commentaires) mais élargit la surface de patch à quasiment tous les modules de sortie — à évaluer par
-prototype avant de trancher, pas une décision à figer sur dossier. **C'est la première question que le
-prototype (section suivante) doit trancher empiriquement.**
+prototype avant de trancher, pas une décision à figer sur dossier.
+
+## Résultat du prototype (2026-09-18) — `prototypes/suivi-modifications.html`
+
+Prototype jetable, pas relié à `index.html` ni à Grist, réutilisant le même import map TipTap 3.31.3
+que l'app réelle. Intègre `@handlewithcare/prosemirror-suggest-changes@0.1.8` dans TipTap via son
+hook d'extension `dispatchTransaction` (`ExtensionManager#dispatchTransaction` de `@tiptap/core`,
+vérifié dans le code source réel) plutôt que via `editorProps.dispatchTransaction`, qui remplacerait
+entièrement le pipeline réactif de Tiptap (`onUpdate` cesserait de se déclencher — vérifié dans le
+code source : `editorProps.dispatchTransaction || this.dispatchTransaction.bind(this)`). Deux pièges
+d'intégration déjà rencontrés et corrigés : Tiptap 3.x n'a **aucun export `default`** (`StarterKit`,
+`Table`, etc. sont tous des exports nommés, contrairement à Tiptap 2.x) ; l'extension `Extension.create`
+lit `editor` via `this.editor` dans le hook `dispatchTransaction`, pas dans l'objet argument
+`{transaction, next}`.
+
+**Confirmé, ce qui marche** : la lib implémente bien l'option 2 (marque non-destructive), pas l'option
+1 — vérifié en tapant du texte (`<ins data-id="…">`) et en supprimant un mot (`<del data-id="…">` posé
+sur `paragraphe`, le mot reste physiquement dans le HTML). `onUpdate` continue de se déclencher
+normalement (réactivité Tiptap intacte). Les décorations (`suggestChanges()` fournit ses propres
+`props.decorations`) fonctionnent sans toucher `editorProps.decorations`, donc sans risque de conflit
+avec d'éventuelles décorations d'autres extensions de l'app réelle.
+
+**Confirmé, ce qui casse — bloquant à ce stade** : supprimer un **nœud de bloc entier** (une ligne de
+tableau, mais aussi un **simple paragraphe entier**, testé séparément) avec le suivi actif lève une
+exception non rattrapée : `TransformError: Invalid content for node table` (ligne de tableau) et
+`TransformError: Invalid content for node doc` (paragraphe entier). La suppression de **contenu
+textuel À L'INTÉRIEUR d'un bloc** (y compris dans une cellule de tableau) fonctionne normalement
+(marque `deletion` posée sur le texte). Cause probable : la transformation de la lib pose des marques
+sur du contenu INLINE, mais le modèle de contenu strict de `table`/`doc` (séquences de nœuds enfants
+précises) ne permet pas de représenter « ce nœud de bloc entier est en attente de suppression » de la
+même façon — la lib ne semble pas gérer ce cas dans cette version. Le crash est synchrone, avant tout
+`dispatch` (la transaction n'est jamais appliquée), donc le contenu n'est pas corrompu, mais
+l'exception remonte jusqu'à la console — inacceptable tel quel en production : un utilisateur qui
+sélectionne un paragraphe entier (ou une ligne de tableau) et appuie sur Suppr avec le suivi actif
+provoquerait cette erreur. **Sélectionner-tout-et-remplacer, une opération d'édition courante, est
+exactement ce cas.**
+
+**Conséquence** : `prosemirror-suggest-changes` n'est pas utilisable en l'état pour les suppressions de
+blocs entiers — soit un correctif/contournement est nécessaire (intercepter spécifiquement la
+suppression d'un nœud de bloc avant qu'elle atteigne la lib, et la traiter autrement, p. ex. transformer
+la suppression du nœud en suppression de tout son contenu textuel plutôt que du nœud lui-même), soit une
+autre lib/un DIY plus poussé est nécessaire pour ce cas précis. Reste une bonne base pour le texte
+courant (le cas le plus fréquent), mais **ne pas considérer le choix de lib comme validé** avant
+d'avoir résolu ce point — prochaine étape technique si le chantier continue.
 
 ## Décision structurante n°4 — où stocker l'historique côté Grist ?
 
