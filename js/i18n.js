@@ -195,13 +195,16 @@ const I18n = (function () {
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
     'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
-    'status.newTemplateReady': { fr: 'Nouveau modèle prêt.', en: 'New template ready.' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
     'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },
     // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
     // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe non enregistrée, brouillon jamais enregistré, conflit).
     'status.savedAt': { fr: 'Enregistré à {time}.', en: 'Saved at {time}.' },
+    // Cas "brouillon jamais enregistré" de updateSaveStatus() (Templates.getCurrentId() encore null) : sans ce message, le coin "info" restait
+    // simplement vide et rien n'expliquait pourquoi l'auto-save (qui ne crée jamais de modèle, cf. main.js:autosaveTick "if (!id) return") ne faisait
+    // rien pendant que l'utilisateur tapait. Même style d'alerte que templateNameRequired ci-dessus (même cause réelle : pas encore de nom/ligne Grist).
+    'status.unsavedTemplateWarning': { fr: 'Modèle non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.', en: 'Template not saved: name it and click Save to enable auto-save.' },
     'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
     'status.autosaveDisabled': { fr: 'Enregistrement automatique désactivé.', en: 'Auto-save turned off.' },
     'status.autosaveEnabled': { fr: 'Enregistrement automatique réactivé.', en: 'Auto-save turned back on.' },
@@ -323,6 +326,11 @@ const I18n = (function () {
 
     // --- Sommaire (placeholder avant résolution) ---
     'toc.placeholder': { fr: 'Sommaire (généré automatiquement à partir des titres)', en: 'Table of contents (generated automatically from headings)' },
+
+    // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
+    // qu'une chaîne figée (cf. commentaire à l'appel), donc pas besoin de I18n.onChange pour suivre un changement de langue en cours de session : ce
+    // n'est PAS affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
+    'editor.placeholder': { fr: 'Commencez à écrire votre modèle ici…', en: 'Start writing your template here…' },
 
     // --- Barre flottante de formatage nombre/date d'une bulle #Variable ---
     'varFmt.styleFr': { fr: 'Français : 1 234,56', en: 'French: 1 234,56' },

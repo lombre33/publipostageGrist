@@ -229,6 +229,7 @@ const Editor = (function () {
       { TableHeader },
       { TaskList },
       { TaskItem },
+      { Placeholder },
       { computePosition, offset, flip, shift, autoUpdate },
       { NodeSelection, TextSelection, EditorState },
     ] = await Promise.all([
@@ -244,6 +245,7 @@ const Editor = (function () {
       import('@tiptap/extension-table-header'),
       import('@tiptap/extension-task-list'),
       import('@tiptap/extension-task-item'),
+      import('@tiptap/extension-placeholder'),
       import('@floating-ui/dom'),
       import('prosemirror-state'),
     ]);
@@ -301,6 +303,13 @@ const Editor = (function () {
         TaskList,
         TaskItem.configure({ nested: false }),
         TaskListStyle,
+        // includeChildren volontairement PAS activé (défaut false) : un placeholder par cellule de tableau/colonne vide encombrerait l'écran de
+        // plusieurs textes gris à la fois - seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` en fonction (pas une
+        // chaîne figée à la construction) pour deux raisons à la fois : (1) l'extension relit cette fonction à CHAQUE recalcul de décoration (donc à
+        // chaque frappe/sélection), un simple I18n.t() dedans suit un changement de langue en cours de session sans avoir besoin de I18n.onChange ; (2)
+        // ce même éditeur sert aussi à éditer un en-tête/pied de page vide (contenu échangé via setContent, cf. header-footer-preview.js) - le message
+        // "Commencez à écrire votre modèle ici…" y serait trompeur (l'utilisateur n'édite pas le document principal), donc rien n'y est affiché.
+        Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
         VarBadge,
         PageNumberBadge,
         SmartChip,
@@ -343,6 +352,10 @@ const Editor = (function () {
     Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);
     editor.on('transaction', MainToolbar.syncToolbarState);
+    // Le placeholder (ci-dessus) relit I18n.t() à chaque recalcul de décoration, mais ce recalcul est piloté par ProseMirror (sur chaque transaction),
+    // jamais par I18n lui-même - changer de langue pendant que l'éditeur est vide ne redessine donc rien tout seul (aucune transaction n'a eu lieu).
+    // Un dispatch de transaction VIDE (mêmes idiome que setHTML plus bas) force ce recalcul sans toucher au document, juste pour ce cas précis.
+    I18n.onChange(() => { if (editor) editor.view.dispatch(editor.state.tr); });
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);
     return editor;
   }

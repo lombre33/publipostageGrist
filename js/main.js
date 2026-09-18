@@ -133,8 +133,10 @@
 
   async function onNew() {
     templateSelect.value = '';
+    // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
+    // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
+    // utile (juste après avoir cliqué "Nouveau modèle").
     loadTemplateIntoEditor(null);
-    setStatus(I18n.t('status.newTemplateReady'));
   }
 
   async function onSave() {
@@ -233,7 +235,11 @@
   // dire au coin "info" la vérité sur l'état ACTUEL plutôt que sur le dernier événement : "Enregistré à HH:MM" seulement quand tout ce qui a été tapé
   // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu).
   function updateSaveStatus() {
-    if (!Templates.getCurrentId() || !autosaveLastKnownDateModif) { setStatus(''); return; }
+    // Aucun modèle enregistré du tout (pas encore de ligne Grist) : autosaveTick() ne peut structurellement rien faire tant que ça dure (il refuse de
+    // CRÉER un modèle, cf. son "if (!id) return" plus bas) - un statut vide laissait croire, à tort, que tout allait bien pendant que rien n'était
+    // jamais protégé par l'auto-save. Même style d'alerte que templateNameRequired (onSave) : même cause réelle, pas encore de nom/ligne Grist.
+    if (!Templates.getCurrentId()) { setStatus(I18n.t('status.unsavedTemplateWarning'), true); return; }
+    if (!autosaveLastKnownDateModif) { setStatus(''); return; }
     if (autosaveDirty || autosaveConflictActive) { setStatus(''); return; }
     setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
   }
