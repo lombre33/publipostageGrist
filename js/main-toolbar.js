@@ -83,6 +83,7 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
+    set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -214,6 +215,9 @@ const MainToolbar = (function () {
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
+    // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
+    // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
+    bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
 

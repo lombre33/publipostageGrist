@@ -572,5 +572,5 @@ const Variables = (function () {
     });
   }
 
-  return { createExtension, resolveVariable, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput };
+  return { createExtension, resolveVariable, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
 })();

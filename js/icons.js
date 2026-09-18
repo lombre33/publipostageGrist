@@ -58,6 +58,9 @@ const Icons = (function () {
     fill: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
     caretDown: '<path d="M6 9l6 6 6-6"/>',
     noColor: '<circle cx="12" cy="12" r="8.5"/><path d="M5.5 5.5l13 13"/>',
+    // Symbole "#" : ouvre l'autocomplétion #Variable/chips déjà existante (js/variables.js) sans avoir à taper le déclencheur - même icône dans les deux
+    // modes (document et email), le bouton n'est pas propre au mode email.
+    variable: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();

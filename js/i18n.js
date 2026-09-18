@@ -113,6 +113,8 @@ const I18n = (function () {
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },
     'insert.comment.aria': { fr: 'Ajouter un commentaire sur le texte sélectionné', en: 'Add a comment on the selected text' },
+    'insert.variable.tip': { fr: 'Insérer une variable', en: 'Insert a variable' },
+    'insert.variable.aria': { fr: 'Insérer une variable (#Variable ou chip)', en: 'Insert a variable (#Variable or chip)' },
 
     // --- Commentaires (js/comments.js) ---
     'comments.selectTextFirst': { fr: 'Sélectionnez du texte avant d’ajouter un commentaire.', en: 'Select some text before adding a comment.' },
