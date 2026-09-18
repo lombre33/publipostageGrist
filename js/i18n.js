@@ -153,6 +153,14 @@ const I18n = (function () {
     'settings.credits.website': { fr: 'Site', en: 'Website' },
     'settings.credits.license': { fr: 'Licence', en: 'License' },
     'settings.credits.bio': { fr: 'Bio', en: 'Bio' },
+    'settings.credits.bioText': {
+      fr: 'Grist Factory conçoit des widgets libres pour Grist. Publipostage+ en est un : rédiger contrats, factures et courriers à partir de vos données, sans écrire une ligne de code.',
+      en: 'Grist Factory builds free and open-source widgets for Grist. Publipostage+ is one of them: write contracts, invoices and letters straight from your data, without a single line of code.',
+    },
+
+    // --- Mode Lecture : état vide (js/reader-mode.js:render, aucune ligne sélectionnée) ---
+    'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
+    'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
@@ -319,11 +327,18 @@ const I18n = (function () {
 
   function getLang() { return lang; }
 
+  // Abonnés notifiés après chaque changement de langue. Nécessaire pour les libellés qu'aucun attribut data-i18n-* ne peut porter parce qu'ils se
+  // composent à l'exécution (ex. l'infobulle « Enregistrer (⌘S) » du bouton Enregistrer, dont le raccourci dépend de la plateforme) : sans ce crochet,
+  // applyTranslations() les réécrirait à leur version brute au premier changement de langue.
+  const changeListeners = [];
+  function onChange(fn) { if (typeof fn === 'function') changeListeners.push(fn); }
+
   function setLang(next) {
     lang = next === 'en' ? 'en' : 'fr';
     try { localStorage.setItem('pp_lang', lang); } catch (e) { /* stockage indisponible - la langue ne survivra pas au rechargement, sans plus de conséquence */ }
     document.documentElement.lang = lang;
     applyTranslations();
+    changeListeners.forEach(fn => { try { fn(lang); } catch (e) { console.warn('[I18n] un abonné au changement de langue a levé une exception', e); } });
   }
 
   // Parcourt le DOM (ou un sous-arbre `root`, ex. un nœud injecté après coup par un module qui ne connaît pas I18n) et applique les 4 variantes d'attribut de
@@ -341,5 +356,5 @@ const I18n = (function () {
   document.documentElement.lang = lang;
   applyTranslations();
 
-  return { t, getLang, setLang, applyTranslations };
+  return { t, getLang, setLang, applyTranslations, onChange };
 })();

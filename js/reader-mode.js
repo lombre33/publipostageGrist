@@ -152,7 +152,17 @@ const ReaderMode = (function () {
   async function render(htmlContent, tableId, record, headerFooterData) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
-    if (!record) { container.innerHTML = '<p class="error-msg">Aucune ligne sélectionnée dans Grist.</p>'; return; }
+    // État vide : atteignable depuis js/main.js:renderReader(), qui appelle désormais render() avec record=null au lieu de retourner en silence (le mode
+    // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas de .error-msg ici : ce n'est pas une erreur, juste une étape
+    // que l'utilisateur n'a pas encore faite.
+    if (!record) {
+      container.innerHTML = '';
+      const empty = document.createElement('div'); empty.className = 'reader-empty';
+      const title = document.createElement('p'); title.className = 'reader-empty-title'; title.textContent = I18n.t('reader.empty.title');
+      const hint = document.createElement('p'); hint.className = 'reader-empty-hint'; hint.textContent = I18n.t('reader.empty.hint');
+      empty.appendChild(title); empty.appendChild(hint); container.appendChild(empty);
+      return;
+    }
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
     // <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);

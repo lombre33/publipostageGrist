@@ -166,7 +166,10 @@
     const html = Editor.getHTML();
     if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    if (!record) return;
+    // Sans ligne sélectionnée, on délègue quand même à ReaderMode.render() pour qu'il affiche son état vide. Avant, ce `return` sec laissait
+    // #reader-container littéralement vide : écran blanc sans explication, et le message prévu dans reader-mode.js était du code mort.
+    // Tous les appelants de renderReader() sont déjà conditionnés à currentMode === 'read', donc pas de rendu parasite en mode Édition.
+    if (!record) { await ReaderMode.render(Editor.getHTML(), tableId, null, Editor.getHeaderFooterData()); return; }
     if (!tableId) {
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
@@ -438,6 +441,35 @@
     syncActiveRow();
   }
 
+  // Raccourci clavier Ctrl+S / Cmd+S : enregistre le modèle courant, exactement comme le bouton Enregistrer (même onSave(), donc mêmes contrôles - nom
+  // obligatoire, sortie du mode en-tête/pied). Posé en capture sur `document` pour marcher où que soit le focus (éditeur TipTap, champ de nom, aperçu de
+  // template), et preventDefault() est indispensable : sans lui le navigateur ouvre sa propre boîte « Enregistrer la page », y compris dans l'iframe du
+  // widget Grist. Neutralisé pendant qu'une modale est ouverte : Ctrl+S y enregistrerait un modèle que l'utilisateur est justement en train de remplacer.
+  // Volontairement le SEUL raccourci applicatif ajouté ici - le reste du périmètre clavier est encore à cadrer.
+  function wireSaveShortcut() {
+    const anyModalOpen = () => Array.prototype.some.call(
+      document.querySelectorAll('#link-rules-modal, #link-config-modal, #template-gallery-modal, #template-preview-modal, #settings-modal'),
+      m => m.style.display && m.style.display !== 'none');
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 's' && event.key !== 'S') return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (anyModalOpen()) return;
+      event.preventDefault();
+      onSave();
+    }, true);
+  }
+
+  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) : impossible à écrire dans index.html, posé ici sur l'infobulle et
+  // l'aria-label du bouton Enregistrer. Re-appliqué à chaque changement de langue, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
+  function decorateSaveButtonShortcut() {
+    const btn = document.getElementById('btn-save');
+    if (!btn) return;
+    const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+    const label = `${I18n.t('toolbar.save')} (${isMac ? '⌘S' : 'Ctrl+S'})`;
+    btn.setAttribute('data-tip', label);
+    btn.setAttribute('aria-label', label);
+  }
+
   // Accessibilité RGAA des 5 modales du projet : role/aria-modal statiques, piège de focus (Tab/Shift+Tab), Échap, restauration du focus au ferme - générique
   // via MutationObserver sur leur propre style.display plutôt que de toucher chaque site d'ouverture/fermeture existant (zéro risque sur leur logique).
   function wireModalAccessibility() {
@@ -686,6 +718,9 @@
     wireQualityDropdown();
     Settings.wireSettingsModal();
     wireModalAccessibility();
+    wireSaveShortcut();
+    decorateSaveButtonShortcut();
+    I18n.onChange(decorateSaveButtonShortcut);
     Variables.initFilenameInput(pdfFilenameInput);
     await switchMode('edit');
     setStatus(I18n.t('status.ready'));

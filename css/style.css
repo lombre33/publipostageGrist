@@ -213,3 +213,15 @@ body { display:flex; flex-direction:column; }
 .editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
 .editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
 .editor-image[data-wrap="block"] { display: block; }
+
+/* === Mode Lecture : état vide (aucune ligne sélectionnée) ===
+   Rendu par js/reader-mode.js:render() quand record est null. Avant l'ajout de cet état, #reader-container restait littéralement vide dans ce cas : un
+   écran blanc sans la moindre indication de ce qu'il fallait faire. Volontairement neutre (pas de rouge/erreur) : ne rien avoir sélectionné n'est pas
+   une erreur, juste une étape qui manque. */
+.reader-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 240px; padding: 48px 24px; text-align: center; font-family: var(--font-ui); }
+.reader-empty-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.reader-empty-hint { margin: 0; max-width: 42ch; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+
+/* setStatus(msg, true) (js/main.js) pose cette classe sur #status-msg depuis toujours, mais AUCUNE règle ne la définissait : un message d'erreur
+   (« Nom du modèle requis. », « Erreur génération PDF. ») s'affichait exactement comme un message de succès, en gris. */
+#status-msg.error-msg { color: var(--danger); }
