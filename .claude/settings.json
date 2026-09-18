@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "AskUserQuestion"
+      "AskUserQuestion",
+      "WebFetch",
+      "WebSearch"
     ]
   }
 }
