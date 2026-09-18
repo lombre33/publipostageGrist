@@ -115,21 +115,23 @@ depuis `prosemirror-changeset` brut.
 
 ## Décision structurante n°3 — ancrage non-destructif ou suppression réelle + « fantôme » décoratif ?
 
-Deux architectures possibles pour représenter une suppression en attente :
+Deux architectures possibles pour représenter une suppression en attente (numérotées séparément du
+stockage Grist ci-dessous pour ne pas confondre les deux échelles de décision) :
 
-- **(a) Suppression réelle + fantôme décoratif** (patron `prosemirror-changeset`) : le texte est
-  réellement retiré de `docB` dès la frappe ; ce qui s'affiche barré à l'écran est une décoration
+- **Option 1 — suppression réelle + fantôme décoratif** (patron `prosemirror-changeset`) : le texte
+  est réellement retiré de `docB` dès la frappe ; ce qui s'affiche barré à l'écran est une décoration
   « widget » reconstruite depuis un instantané figé `docA`. Risque concret identifié : si le passage
   supprimé portait un `commentMark`, la marque disparaît immédiatement du document COURANT — un fil de
   discussion devient orphelin (introuvable par `findMarkRanges()`, qui scanne `docB`) tant que la
   suppression n'est pas formellement acceptée, alors même que le texte barré reste visible à l'écran.
-- **(b) Marque non-destructive** (`trackDeletion`, `excludes: ''` comme `commentMark`) : le texte
-  supprimé reste physiquement présent dans le document, simplement marqué et stylé barré — cohérent
-  avec l'architecture `commentMark` existante (pas d'orphelinage), mais oblige à faire connaître ce
-  texte « fantôme mais présent » à **tous** les consommateurs du document : chaque commande d'édition,
-  l'export PDF (`js/pdf-export.js`), l'export DOCX (`js/docx-export.js`), l'export mailto
-  (`js/mailto-export.js`), le mode Lecture (3ᵉ moteur de rendu indépendant, `js/reader-mode.js`) et
-  l'auto-save (le texte envoyé à Grist doit-il inclure les suppressions en attente ?).
+- **Option 2 — marque non-destructive** (`trackDeletion`, `excludes: ''` comme `commentMark`) : le
+  texte supprimé reste physiquement présent dans le document, simplement marqué et stylé barré —
+  cohérent avec l'architecture `commentMark` existante (pas d'orphelinage), mais oblige à faire
+  connaître ce texte « fantôme mais présent » à **tous** les consommateurs du document : chaque
+  commande d'édition, l'export PDF (`js/pdf-export.js`), l'export DOCX (`js/docx-export.js`), l'export
+  mailto (`js/mailto-export.js`), le mode Lecture (3ᵉ moteur de rendu indépendant,
+  `js/reader-mode.js`) et l'auto-save (le texte envoyé à Grist doit-il inclure les suppressions en
+  attente ?).
 
 Nœuds complexes (tableaux, images, sauts de page) : dans les deux architectures, la suppression d'un
 nœud entier se traite comme un seul changement (pas de diff granulaire à l'intérieur). Mais afficher le
@@ -138,39 +140,44 @@ fantôme déclenche une action sur un nœud qui n'existe plus réellement à cet
 un cas à couvrir par nœud custom réellement supprimable en bloc (tableaux, images, sauts de page,
 zones 2-colonnes ; les chips/badges de variable, atomiques et sans état interne, sont plus simples).
 
-*Recommandation* : l'option (b) est plus cohérente avec l'existant (pas de régression sur les
+*Recommandation* : l'option 2 est plus cohérente avec l'existant (pas de régression sur les
 commentaires) mais élargit la surface de patch à quasiment tous les modules de sortie — à évaluer par
-prototype avant de trancher, pas une décision à figer sur dossier.
+prototype avant de trancher, pas une décision à figer sur dossier. **C'est la première question que le
+prototype (section suivante) doit trancher empiriquement.**
 
 ## Décision structurante n°4 — où stocker l'historique côté Grist ?
 
 Le `Contenu` d'un modèle (`Publipostage_Modeles`) est déjà une colonne Texte unique, réécrite en
-**entier** à chaque `UpdateRecord`, y compris à chaque tick d'auto-save. C'est le contexte dans lequel
-juger les deux modèles :
+**entier** à chaque `UpdateRecord`, y compris à chaque tick d'auto-save. Trois modèles comparés :
 
-- **(a) Marques/attributs dans le HTML**, comme `commentMark` : pas de nouvelle table, ancrage
-  automatique par ProseMirror. Mais le HTML ne fait QUE grossir tant qu'un changement n'est pas
-  accepté/refusé (rien ne le compacte automatiquement aujourd'hui pour les commentaires non plus), et
-  chaque tick d'auto-save (2,5 s) réécrirait alors la **totalité** de cet historique cumulé, même pour
-  une frappe isolée — coût réseau proportionnel à tout l'historique, pas à l'édition. Risque concret :
-  `Templates.loadAll()`/`readBackDateModif()` ramènent **toute** la table à chaque tick, pour tous les
-  modèles ouverts — alourdir le `Contenu` d'UN modèle pénalise cette lecture pour toutes les sessions.
-  Si `Contenu` (déjà potentiellement lourd : images en base64, JSON marges/en-têtes) approchait la
-  limite documentée de 1 Mo par corps de requête API Grist, l'auto-save échouerait en boucle
-  silencieuse précisément quand il y a le plus d'historique à tracer.
-- **(b) Table compagnon** (façon `Publipostage_Commentaires`) : le `Contenu` reste borné à la taille du
-  document, indépendamment de la profondeur de l'historique ; un changement de statut
-  accepté/refusé/en attente se fait par un `UpdateRecord` ciblé sur SA ligne, sans toucher `Contenu`.
-  Nécessite quand même un petit identifiant d'ancrage dans le HTML (comme `CommentId`). Doit
-  impérativement être **batché** au rythme de l'auto-save (un lot par tick, jamais par caractère,
-  fusion des plages contiguës comme `findMarkRanges()` le fait déjà) pour ne pas exploser le nombre
-  d'`AddRecord` (limite de concurrence documentée : 10 requêtes API simultanées par document côté
-  Grist SaaS). Risque propre : orphelinage des lignes si leurs ancrages disparaissent lors d'un
-  écrasement de `Contenu` par un autre utilisateur.
+- **(a) Marques/attributs dans le HTML**, comme `commentMark` : pas de nouvelle colonne ni table,
+  ancrage automatique par ProseMirror. Mais le HTML ne fait QUE grossir tant qu'un changement n'est pas
+  accepté/refusé, et chaque tick d'auto-save réécrirait alors la totalité de cet historique cumulé même
+  pour une frappe isolée.
+- **(b) Table compagnon** (façon `Publipostage_Commentaires`) : écartée par Antoine (2026-09-18)
+  — « pas fan de la démultiplication des tables ».
+- **(c) Nouvelle colonne dans `Publipostage_Modeles`** (ex. `SuiviModifications`, JSON), écrite dans
+  le **même** `UpdateRecord` que `Contenu`/`DateModif`, jamais séparément : **retenu par Antoine
+  (2026-09-18)**.
 
-*Recommandation* : (b), pour les mêmes raisons qui ont motivé le choix de `Publipostage_Commentaires` —
-borne le coût de l'auto-save, isole les changements de statut du gros blob HTML. `prosemirror-changeset`
-peut alimenter aussi bien (a) que (b), le choix ci-dessus ne dépend pas de la lib retenue.
+(c) reprend l'essentiel des bénéfices de (b) sans nouvelle table : `Contenu` (donc le HTML/la
+sérialisation ProseMirror) ne porte pas l'historique, un changement de statut accepté/refusé peut se
+faire sans re-sérialiser tout le document, et l'écriture reste un `UpdateRecord` unique et atomique sur
+UNE ligne (pas deux écritures sur deux tables à synchroniser, donc pas de risque d'orphelinage
+inter-tables). Nécessite quand même un petit identifiant d'ancrage dans le HTML (comme `CommentId`)
+pour savoir où chaque entrée du JSON s'applique — un point commun à (b) et (c), pas contournable.
+Ne change PAS le coût déjà existant de `Templates.loadAll()`/`readBackDateModif()` (elles ramènent déjà
+toute la table, toutes colonnes, à chaque tick de 2,5 s) : une colonne de plus alourdit ce qui est déjà
+alourdi par `Contenu` (images en base64, JSON marges/en-têtes), sans changer la NATURE du risque —
+même limite de 1 Mo par requête API à surveiller (voir avertissement plus bas). Comme pour (b), le
+contenu de la colonne doit être **batché** au rythme de l'auto-save (un lot par tick, jamais par
+caractère) : c'est cette discipline — écrire `SuiviModifications` UNIQUEMENT dans le même
+`UpdateRecord` que `Contenu`/`DateModif`, au même rythme, jamais via un canal plus fréquent — qui
+détermine la fenêtre de perte en cas de conflit (voir section suivante).
+
+*Recommandation* : (c), conformément au choix d'Antoine. `prosemirror-changeset` (ou l'extension DIY
+retenue, décision n°2) peut alimenter cette colonne aussi bien qu'une table compagnon — le choix
+ci-dessus ne dépend pas de la lib.
 
 ⚠️ **Chiffres Grist non vérifiés en direct** (support.getgrist.com/community.getgrist.com bloqués
 depuis cet environnement pendant la recherche — à recouper manuellement) : limite de 1 Mo par requête
@@ -182,23 +189,34 @@ gristlabs/grist-core#898 ouvert et sans réponse chiffrée à ce jour).
 
 ## Enjeu transverse — pas de collaboration temps réel, donc pas de vraie fusion possible
 
+**Exigence d'Antoine (2026-09-18)** : l'édition simultanée ne doit « tout faire perdre au pire [que]
+les 3 dernières secondes maximum, même périmètre de risque que l'auto-save, pas plus ».
+
 Le mécanisme de conflit actuel (comparaison de `DateModif` au tick précédent, puis écriture) est un
 TOCTOU : deux utilisateurs qui éditent presque simultanément peuvent chacun passer le test « pas de
 conflit » puis s'écraser l'un l'autre, sans fusion, le perdant ne le découvrant qu'à son tick suivant
-(jusqu'à 2,5 s plus tard). C'est déjà toléré aujourd'hui pour de la prose ordinaire (perte des
-dernières frappes). Pour le suivi des modifications, l'enjeu est plus grave :
+(jusqu'à 2,5 s plus tard). C'est déjà toléré aujourd'hui pour de la prose ordinaire : le perdant ne
+perd que le brouillon local accumulé depuis SA dernière sauvegarde réussie, pas ce qui a déjà été
+persisté avant — chaque tick renouvelle `DateModif`, donc une collision non détectée au tick N est
+détectée au tick N+1 (2,5 s plus tard), elle ne peut pas se reproduire indéfiniment sans être vue.
 
-- Modèle (a) : un écrasement de `Contenu` détruit **tout** l'historique de suivi du perdant d'un coup
-  (pas seulement ses dernières frappes) — y compris des changements déjà acceptés/refusés.
-- Modèle (b) : les lignes de suivi survivent à l'écrasement (table séparée), mais risquent
-  l'orphelinage si leur ancrage a disparu de la version de `Contenu` qui l'emporte.
+**Avec le modèle (c) retenu ci-dessus (colonne `SuiviModifications` écrite dans le MÊME `UpdateRecord`
+que `Contenu`/`DateModif`, au même rythme), cette exigence est satisfaite par construction, à une
+condition stricte à ne pas relâcher en implémentation** : ne jamais laisser le suivi des modifications
+s'écrire plus souvent, ou indépendamment, du cycle d'auto-save existant. Tant que `SuiviModifications`
+voyage verrouillé sur le même `UpdateRecord` que `Contenu`, un conflit perdu fait perdre exactement la
+même fenêtre qu'aujourd'hui (le brouillon + son historique de suivi accumulés depuis la dernière
+sauvegarde réussie du perdant, borné par l'intervalle d'auto-save actuel) — pas « tout l'historique »
+comme une lecture naïve du risque pourrait le laisser craindre. C'est un argument de plus, indépendant
+de la préférence produit d'Antoine, en faveur du modèle (c) plutôt qu'une table compagnon écrite sur un
+cycle propre et potentiellement désynchronisé.
 
-Dans les deux cas, un outil censé produire un historique fiable et attribuable peut en perdre une
-partie silencieusement sur une simple coïncidence de calendrier — en tension directe avec l'objectif
-même de la fonctionnalité. Une vraie fusion demanderait un canal de collaboration temps réel
-(OT/CRDT, ce que `prosemirror-collab`/Yjs offrent) — changement structurel hors périmètre de ce
-cadrage. Piste d'atténuation partielle (pas une solution) : un indicateur « en cours d'édition par
-X » réduirait la fréquence des collisions sans les éliminer.
+Reste un point non résolu par cette discipline : la fusion elle-même n'existe toujours pas (dernier
+écrivain gagne, intégralement) — seule la TAILLE de ce qui peut être perdu est bornée. Une vraie fusion
+demanderait un canal de collaboration temps réel (OT/CRDT, ce que `prosemirror-collab`/Yjs offrent) —
+changement structurel hors périmètre de ce cadrage, et non demandé par Antoine. Piste d'atténuation
+partielle (pas nécessaire pour tenir l'exigence ci-dessus, juste pour réduire la fréquence des
+collisions) : un indicateur « en cours d'édition par X ».
 
 ## Enjeu transverse — historique Annuler/Rétablir
 
