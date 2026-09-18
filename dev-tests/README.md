@@ -292,6 +292,50 @@ sortait collée à gauche dans le `.docx` alors que l'éditeur, le mode Lecture 
 les trois. Cause : `alignment` est une propriété de **paragraphe** en OOXML (`w:jc`), jamais de run —
 l'image doit donc occuper son propre `<w:p>` centré (cf. `splitRunsAtFloatedImages`, `js/docx-export.js`).
 
+## Vérification transversale — marges de page et largeur de colonne mm (`scenarios-pagelayout.js`)
+
+Les marges de page (onglet Réglages, `js/page-layout.js`) et la largeur de colonne en mm d'une zone
+2-colonnes (poignée mm, `js/editor-nodes.js`) ont la particularité de traverser TOUS les étages du
+produit d'un coup : l'aperçu A4 (CSS), la pagination affichée à l'écran (`js/header-footer-preview.js`
+ET `js/reader-mode.js`, deux moteurs distincts), l'export PDF (`js/pdf-export.js`) et l'export DOCX
+(`js/docx-export.js`). Livrées les 15-16/09 mais jamais validées par Antoine ni couvertes par un test,
+elles ont été éprouvées le 2026-09-18 en comparant systématiquement la MÊME valeur aux 4 endroits, pas
+seulement en vérifiant qu'un réglage produit un effet quelque part - c'est cette comparaison croisée qui
+a fait sortir 6 défauts d'un coup, chacun invisible en lecture de code isolée d'un seul fichier.
+
+**A immédiatement trouvé 6 défauts réels dès son premier lancement** (10/12 scénarios rouges avant
+correctif, cf. commit `080842b`) :
+
+- La pagination affichée codait `37.33px` (28pt) et `719.04px` en dur : elle ignorait purement et
+  simplement les marges du modèle. Plus grave, `computePageGridPosition`
+  (`js/header-footer-preview.js`) ancre les images en calque sur cette même grille - l'export plaçait
+  donc une image sur une autre page que l'éditeur. Testé par `margins_screen_pagination_follows_margins`.
+- `Editor.refreshLayout()` dispatchait une transaction vide, qui ne déclenche NI `onUpdate` NI la
+  moindre réconciliation de NodeView dans ProseMirror : changer une marge ne redessinait rien tant
+  qu'aucune autre action ne le faisait par ailleurs. Testé par `cols_mm_survives_margin_change`.
+- Aucune borne haute sur les marges : deux marges opposées démesurées donnaient une largeur de
+  contenu NÉGATIVE (zone de saisie effondrée, largeurs négatives à l'export). Testé par
+  `margins_clamped_to_printable_page` et `margins_settings_field_shows_applied_value` (le champ
+  Réglages doit réafficher la valeur réellement retenue, pas la saisie refusée).
+- Une colonne réglée à 60mm mesurait 57.7mm à l'écran et dans le PDF (la conversion mm→% prenait la
+  largeur de PAGE pour base, alors que le % s'applique à la boîte de contenu de la zone, amputée de
+  22px de padding/bordure hérités des styles V1) mais 60mm dans le DOCX - trois moteurs, deux valeurs.
+  Testé par `cols_mm_rendered_width_is_exact`, `cols_mm_editor_matches_reader`,
+  `cols_mm_pdf_matches_screen`.
+- Le DOCX ne réservait pas la gouttière de 16px entre les deux colonnes : colonne droite à 90mm là où
+  l'écran et le PDF rendent 85.8mm, colonnes collées dans Word. Testé par `cols_mm_docx_matches_screen`.
+- Le popover "mm" annonçait une largeur de colonne droite qui ne tenait pas compte de cette même
+  gouttière. Testé par `cols_mm_popover_announces_real_widths`.
+
+Les marges elles-mêmes (padding de page, `<w:pgMar>`/`pageMargins` pdfmake) sont testées par
+`margins_preview_padding`, `margins_pdf_page_margins`, `margins_docx_page_margins`.
+
+**Piège de mesure propre à cette suite** : comparer des mm entre 4 moteurs de rendu différents
+(navigateur, pdfmake, docx.js) accumule de l'arrondi à chaque conversion - les tolérances des
+assertions (`near(a, b, tol)`, en général 0.5 à 1mm) sont volontairement plus larges que pour une
+comparaison écran/écran (`compareEditorReaderPosition` tolère 2px). Resserrer une tolérance sans
+mesurer d'abord l'écart réel produit des faux rouges.
+
 ## Pourquoi `_test-harness.html` n'est pas commité
 
 Ce fichier est une copie de `index.html` avec le script de l'API Grist
@@ -399,3 +443,12 @@ balises `<script>`/`<link>` de `index.html`.
   `scenarios-pdf-fidelity.js:pdffid_inline_image_position_in_paragraph` - voir
   `BUGS.md` (Bug 3) pour le détail. Non couvert : une telle image DANS une
   cellule de tableau garde l'ancien comportement (chemin de code séparé).
+- Marges de page et largeur de colonne mm (`js/page-layout.js`,
+  `js/editor-nodes.js`) : 6 défauts distincts, tous **corrigés** (commit
+  `080842b`) - la pagination affichée ignorait les marges du modèle (37.33px
+  codé en dur), `Editor.refreshLayout()` ne redessinait rien, aucune borne ne
+  protégeait la largeur de contenu (négative reproduite), une colonne réglée
+  en mm ne rendait pas la même largeur à l'écran/PDF/DOCX, la gouttière de
+  16px n'était pas réservée dans le DOCX. Voir la section dédiée
+  « Vérification transversale — marges de page et largeur de colonne mm »
+  ci-dessus pour le détail. Testé par `scenarios-pagelayout.js` (12 scénarios).

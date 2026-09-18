@@ -258,5 +258,35 @@ window.EditorTestSuites.pageLayout = (function () {
         };
       },
     },
+    {
+      id: 'cols_mm_popover_input_not_swallowed_by_editor_keymap',
+      description: 'Suppr/Retour arrière dans le champ mm ne sont pas interceptés par le clavier de l\'éditeur',
+      async run(h) {
+        // Le popover est un enfant DOM de la NodeView (donc DANS .tiptap, l'arbre contentEditable de ProseMirror) : sans stopPropagation() sur son
+        // keydown, un appui sur Suppr y remonte jusqu'au gestionnaire de ProseMirror, qui l'intercepte comme une commande d'édition du DOCUMENT
+        // (baseKeymap) et appelle preventDefault() - la touche semblait alors "ne rien faire" dans ce simple champ number. Repéré par l'utilisateur.
+        await setupA4(h, { top: 30, right: 25, bottom: 30, left: 35 });
+        Editor.setHTML(TWO_COL_HTML(60));
+        await h.sleep(400);
+        const btn = document.querySelector('.tiptap .two-columns-mm-button');
+        btn.click();
+        await h.sleep(200);
+        const input = document.querySelector('.two-columns-mm-popover input');
+        input.focus();
+        input.select();
+        // dispatchEvent renvoie `false` si un des gestionnaires en amont (ici : ProseMirror, si la propagation n'était pas coupée) a appelé
+        // preventDefault() - exactement le symptôme observé (la touche semble ignorée), sans dépendre du comportement natif de saisie du navigateur.
+        const del = new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', keyCode: 46, which: 46, bubbles: true, cancelable: true });
+        const back = new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true, cancelable: true });
+        const deletePrevented = !input.dispatchEvent(del);
+        const backspacePrevented = !input.dispatchEvent(back);
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await h.sleep(150);
+        return {
+          pass: !deletePrevented && !backspacePrevented,
+          notes: 'Suppr intercepte=' + deletePrevented + ', Retour arriere intercepte=' + backspacePrevented,
+        };
+      },
+    },
   ];
 })();

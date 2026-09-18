@@ -613,6 +613,12 @@ const EditorNodes = (function () {
               closePopover();
             }
             leftInput.addEventListener('keydown', event => {
+              // `wrap` (donc ce popover) vit DANS l'arbre contentEditable de ProseMirror (c'est le `dom` de cette NodeView) : sans stopPropagation, un
+              // keydown tapé ici remonte jusqu'au gestionnaire posé par ProseMirror sur .tiptap, qui l'intercepte comme une commande d'édition du
+              // DOCUMENT (baseKeymap: Suppr -> joinForward/selectNodeForward, etc.) et appelle preventDefault - la touche Suppr semblait alors mangée,
+              // sans jamais supprimer le caractère dans ce simple champ number. Repéré par l'utilisateur (Suppr inopérant dans ce champ précis, mais pas
+              // dans les autres champs de l'app - eux vivent hors de .tiptap, posés sur document.body par EditorCore.createFloatingPanel).
+              event.stopPropagation();
               if (event.key === 'Enter') { event.preventDefault(); commitAndClose(); }
               else if (event.key === 'Escape') { event.preventDefault(); cancelAndClose(); }
             });
