@@ -197,9 +197,14 @@ const I18n = (function () {
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
     'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },
+    // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
+    // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe non enregistrée, brouillon jamais enregistré, conflit).
+    'status.savedAt': { fr: 'Enregistré à {time}.', en: 'Saved at {time}.' },
     'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
     'status.autosaveDisabled': { fr: 'Enregistrement automatique désactivé.', en: 'Auto-save turned off.' },
     'status.autosaveEnabled': { fr: 'Enregistrement automatique réactivé.', en: 'Auto-save turned back on.' },
+    'status.autosaveError': { fr: 'Échec de l’enregistrement automatique.', en: 'Auto-save failed.' },
+    'status.saveError': { fr: 'Échec de l’enregistrement.', en: 'Save failed.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
     'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : il s’ouvrira automatiquement.', en: 'Default template set: it will open automatically.' },
     'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré.', en: 'Default template cleared.' },

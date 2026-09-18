@@ -142,7 +142,16 @@
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
-    const { id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
+    let savedId, dateModif;
+    try {
+      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm()));
+    } catch (e) {
+      // Avant ce try/catch, un échec ici (ex. colonne Grist manquante) interrompait silencieusement la fonction : aucune erreur visible, la liste des
+      // modèles/le statut n'étaient jamais mis à jour, et rien dans l'interface ne laissait deviner que "Enregistrer" n'avait rien enregistré.
+      console.error('[main] échec de l’enregistrement manuel', e);
+      setStatus(I18n.t('status.saveError'), true);
+      return;
+    }
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
@@ -158,7 +167,7 @@
     autosaveDirty = false;
     autosaveLastKnownDateModif = dateModif;
     hideConflictBanner();
-    setStatus(I18n.t('status.templateSaved'));
+    updateSaveStatus();
   }
 
   async function onSaveAs() {
@@ -209,12 +218,29 @@
     try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* choix non persisté, reste actif pour cette session */ }
   }
 
-  function markAutosaveDirty() { autosaveDirty = true; }
+  function markAutosaveDirty() { autosaveDirty = true; updateSaveStatus(); }
 
   function resetAutosaveState(tpl) {
     autosaveDirty = false;
     autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
     hideConflictBanner();
+    updateSaveStatus();
+  }
+
+  // Coin "info" de la barre d'outils (#status-msg, setStatus) - avant ceci, il affichait simplement le dernier message quel qu'il soit ("Modèle
+  // enregistré.", "PDF généré.", une erreur...) et le gardait affiché indéfiniment, y compris après de nouvelles frappes JAMAIS enregistrées : rien
+  // n'indiquait que ce message était devenu faux. Appelée après CHAQUE frappe (markAutosaveDirty) et après chaque sauvegarde/rechargement, elle fait
+  // dire au coin "info" la vérité sur l'état ACTUEL plutôt que sur le dernier événement : "Enregistré à HH:MM" seulement quand tout ce qui a été tapé
+  // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu).
+  function updateSaveStatus() {
+    if (!Templates.getCurrentId() || !autosaveLastKnownDateModif) { setStatus(''); return; }
+    if (autosaveDirty || autosaveConflictActive) { setStatus(''); return; }
+    setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
+  }
+
+  function formatSaveTime(iso) {
+    try { return new Date(iso).toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    catch (e) { return ''; }
   }
 
   function showConflictBanner(remoteTpl) {
@@ -254,10 +280,12 @@
       const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
       autosaveLastKnownDateModif = dateModif;
       autosaveDirty = false;
-      setStatus(I18n.t('status.autosaved'));
+      updateSaveStatus();
     } catch (e) {
       console.error('[main] auto-save : échec d’enregistrement', e);
-      // autosaveDirty reste true - retenté au prochain tick.
+      // autosaveDirty reste true - retenté au prochain tick. Affiché (pas seulement loggé) : un échec RÉPÉTÉ doit se voir dans le coin "info" plutôt que
+      // de laisser croire, en silence, que tout est enregistré alors que ça ne l'est plus depuis ce tick.
+      setStatus(I18n.t('status.autosaveError'), true);
     }
   }
 

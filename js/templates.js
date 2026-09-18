@@ -58,6 +58,26 @@ const Templates = (function () {
     }
   }
 
+  // Horodatage de dernière modification (auto-save, cf. js/main.js) - même migration idempotente que HeaderFooter ci-dessus. Manquait à l'origine : DateModif
+  // ne figurait QUE dans le AddTable de ensureTableExists (donc présent sur un document tout neuf), jamais ajoutée en migration sur un document existant -
+  // sur un tel document, save()/loadAll() écrivaient/lisaient une colonne qui n'a jamais existé, ce qui a empêché l'auto-save de fonctionner en pratique.
+  let dateModifColumnChecked = false;
+  async function ensureDateModifColumn() {
+    if (dateModifColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('DateModif' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'DateModif', { type: 'DateTime', isFormula: false, label: 'Dernière modification' }]
+        ]);
+      }
+      dateModifColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne DateModif', e);
+    }
+  }
+
   // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
   // que HeaderFooter ci-dessus.
   let defaultColumnChecked = false;
@@ -111,6 +131,7 @@ const Templates = (function () {
     await ensureHeaderFooterColumn();
     await ensureDefaultColumn();
     await ensureMarginsColumn();
+    await ensureDateModifColumn();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
@@ -166,6 +187,7 @@ const Templates = (function () {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
+    await ensureDateModifColumn();
     const now = new Date().toISOString();
     const columns = {
       Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,

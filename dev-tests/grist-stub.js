@@ -137,7 +137,15 @@
         }
         retValues.push(null);
       } else if (type === 'AddVisibleColumn' || type === 'AddColumn') {
-        retValues.push({ colId: action[2] });
+        // Ajoute VRAIMENT la colonne à la table (valeur null pour les lignes existantes) - avant ceci, cette action ne faisait que renvoyer un retValue
+        // sans toucher `state.rows`, ce qui masquait un vrai bug (colonne DateModif jamais migrée sur un document existant, cf. js/templates.js
+        // ensureDateModifColumn) : le stub se comportait comme si TOUTE colonne migrée existait déjà depuis toujours, puisque les tables internes
+        // ci-dessus la déclarent dès l'init. Un scénario qui veut tester un chemin de migration doit RETIRER la colonne de `state.rows` avant de jouer
+        // l'action qui la lit/l'écrit (cf. dev-tests/scenarios-autosave.js:autosave_date_modif_column_migrated_on_existing_document).
+        const colId = action[2];
+        const table = state.rows[tableId];
+        if (table && !(colId in table)) table[colId] = table.id.map(() => null);
+        retValues.push({ colId });
       } else {
         retValues.push(null);
       }
@@ -157,6 +165,13 @@
       if (!table[k]) table[k] = table.id.map(() => null);
       table[k][idx] = fields[k];
     });
+  }
+
+  // Retire une colonne d'une table - simule un document EXISTANT créé avant qu'une colonne donnée n'existe (ex. DateModif avant l'auto-save), pour tester
+  // le chemin de migration (ensureXColumn dans js/templates.js) plutôt que le cas "document déjà à jour" que l'init de ce stub représente par défaut.
+  function dropColumn(tableId, colId) {
+    const table = state.rows[tableId];
+    if (table) delete table[colId];
   }
 
   // Relit une ligne sous forme d'objet plain (pas la forme columnaire de fetchTable) - pratique pour asserter
@@ -186,5 +201,5 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow };
+  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
 })();
