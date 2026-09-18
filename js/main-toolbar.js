@@ -5,6 +5,10 @@ const MainToolbar = (function () {
   let editor = null;
   function setEditor(ed) { editor = ed; }
   let currentAlign = 'left';
+  // Mode email (planning/feature-email-mode.md) : posé par js/main.js quand le modèle courant est un modèle email - pas de module dédié, un simple drapeau
+  // relu à chaque syncToolbarState comme inHfMode ci-dessous (HeaderFooterPreview.getHfMode()).
+  let inEmailMode = false;
+  function setEmailMode(active) { inEmailMode = !!active; }
 
   // Menu listant les colonnes Attachments : insère un placeholder lié à la #Variable (résolu en vraie image en mode Lecture/export).
   let imageVarPickerBox = null;
@@ -133,6 +137,24 @@ const MainToolbar = (function () {
     setLocked('v2-btn-toc', inHfMode);
     // Numérotation seule verrouillée : un niveau de titre garde un sens dans un en-tête/pied, la numérotation (titres du flux principal seul) non.
     setLocked('v2-numbering-seg', inHfMode);
+    // Mode email : verrouille tout ce qui n'a aucun sens dans un mailto: (texte brut - cf. en-tête js/mailto-export.js). Titres, listes/retrait, commentaire,
+    // annuler/rétablir et #Variable restent actifs (liste exhaustive des USABLE de ce fichier) - tout le reste de la mise en forme est grisé, jamais retiré
+    // (règle d'Antoine). Les groupes à survol (alignement, image) sont verrouillés dans leur ENTIER (pointer-events hérite aux descendants, cf.
+    // css/toolbar-v2.css:208) pour bloquer aussi leur volet déroulant, pas seulement leur bouton visible.
+    setLocked('v2-btn-bold', inEmailMode);
+    setLocked('v2-btn-italic', inEmailMode);
+    setLocked('v2-btn-underline', inEmailMode);
+    setLocked('v2-btn-strike', inEmailMode);
+    setLocked('v2-align-group', inEmailMode);
+    setLocked('v2-size-stepper', inEmailMode);
+    setLocked('v2-font-chip', inEmailMode);
+    setLocked('v2-text-color-split', inEmailMode);
+    setLocked('v2-highlight-split', inEmailMode);
+    setLocked('v2-btn-table', inEmailMode);
+    setLocked('v2-btn-two-columns', inEmailMode);
+    setLocked('v2-image-group', inEmailMode);
+    setLocked('v2-btn-page-break', inEmailMode);
+    setLocked('v2-btn-toc', inEmailMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -319,7 +341,7 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
+    setEditor, setEmailMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
     wireSelectionDependentSelects, wireCompactFontSizeControls,
   };
 })();

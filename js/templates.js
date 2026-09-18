@@ -97,6 +97,31 @@ const Templates = (function () {
     }
   }
 
+  // Mode email (planning/feature-email-mode.md) : colonnes par table existante plutôt qu'une table dédiée (décision d'Antoine, 2026-09-18 - "pas fan de la
+  // démultiplication des tables"). TypeModele distingue un modèle email d'un modèle document ('document' par défaut - une ligne déjà existante sans cette
+  // colonne, ou avec une valeur vide, EST un modèle document : aucune migration de données à rejouer sur les modèles déjà créés). Les 4 autres colonnes n'ont
+  // de sens que pour un modèle email, mais restent présentes (vides) sur un modèle document plutôt que d'introduire un schéma conditionnel. Même migration
+  // idempotente que les colonnes ci-dessus, regroupées ici car introduites ensemble.
+  let emailColumnsChecked = false;
+  async function ensureEmailColumns() {
+    if (emailColumnsChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      const actions = [];
+      const addIfMissing = (id, type, label) => { if (!(id in data)) actions.push(['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false, label }]); };
+      addIfMissing('TypeModele', 'Text', 'Type de modèle');
+      addIfMissing('Destinataires', 'Text', 'Destinataires (À)');
+      addIfMissing('Cc', 'Text', 'Copie (Cc)');
+      addIfMissing('Cci', 'Text', 'Copie cachée (Cci)');
+      addIfMissing('Objet', 'Text', 'Objet de l\'email');
+      if (actions.length) await grist.docApi.applyUserActions(actions);
+      emailColumnsChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonnes mode email', e);
+    }
+  }
+
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
   function safeParseHeaderFooter(json) {
@@ -132,6 +157,7 @@ const Templates = (function () {
     await ensureDefaultColumn();
     await ensureMarginsColumn();
     await ensureDateModifColumn();
+    await ensureEmailColumns();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
@@ -144,6 +170,12 @@ const Templates = (function () {
           headerFooter: safeParseHeaderFooter(data.HeaderFooter ? data.HeaderFooter[i] : null),
           marginsMm: safeParseMargins(data.Margins ? data.Margins[i] : null),
           estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i]),
+          // Une ligne existante sans TypeModele (créée avant le mode email) est un modèle document - aucune migration de données à rejouer.
+          typeModele: (data.TypeModele && data.TypeModele[i]) || 'document',
+          destinataires: data.Destinataires ? data.Destinataires[i] : '',
+          cc: data.Cc ? data.Cc[i] : '',
+          cci: data.Cci ? data.Cci[i] : '',
+          objet: data.Objet ? data.Objet[i] : '',
           // Utilisé par js/main.js (auto-save) pour détecter qu'une autre personne a enregistré ce même modèle entre deux vérifications - jamais affiché
           // tel quel à l'utilisateur.
           dateModif: data.DateModif ? data.DateModif[i] : null,
@@ -206,16 +238,22 @@ const Templates = (function () {
   // Renvoie { id, dateModif } (pas juste l'id) : js/main.js (auto-save) a besoin de connaître le DateModif qu'IL vient d'écrire, pour le distinguer d'un
   // DateModif différent constaté plus tard (preuve qu'quelqu'un d'autre a enregistré ce modèle entre-temps). dateModif vient d'une relecture Grist
   // (readBackDateModif), pas de la chaîne ISO envoyée - cf. commentaire de cette fonction.
-  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData) {
+  // typeModele/emailFields : ajoutés pour le mode email (§ ensureEmailColumns ci-dessus) - optionnels, pour ne rien changer aux appels existants (mode
+  // document). emailFields = { destinataires, cc, cci, objet }, ignoré (colonnes laissées vides) pour un modèle document.
+  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
     await ensureDateModifColumn();
+    await ensureEmailColumns();
     const now = new Date().toISOString();
+    const email = emailFields || {};
     const columns = {
       Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,
       HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
       Margins: JSON.stringify(marginsData || safeParseMargins(null)),
+      TypeModele: typeModele,
+      Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
     };
     if (id) {
       await grist.docApi.applyUserActions([

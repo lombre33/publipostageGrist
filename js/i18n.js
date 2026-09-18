@@ -14,6 +14,8 @@ const I18n = (function () {
     'template.setDefault.tip': { fr: 'Modèle par défaut', en: 'Default template' },
     'template.setDefault.aria': { fr: 'Définir ce modèle comme modèle par défaut à l’ouverture', en: 'Set this template as the default one on open' },
     'toolbar.new': { fr: 'Nouveau modèle', en: 'New template' },
+    'toolbar.newDocument': { fr: 'Nouveau document', en: 'New document' },
+    'toolbar.newEmail': { fr: 'Nouvel email', en: 'New email' },
     'toolbar.newFromTemplate': { fr: 'Créer à partir d’un template…', en: 'Create from a template…' },
     'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
     'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },
@@ -363,6 +365,20 @@ const I18n = (function () {
     // --- Sommaire exporté en PDF (js/pdf-export.js:buildTocStack) ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
+
+    // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---
+    'email.to.label': { fr: 'À', en: 'To' },
+    'email.to.placeholder': { fr: 'Destinataires (#Variable ou adresses séparées par des virgules)', en: 'Recipients (#Variable or comma-separated addresses)' },
+    'email.cc.label': { fr: 'Cc', en: 'Cc' },
+    'email.cc.placeholder': { fr: 'Copie', en: 'Cc' },
+    'email.cci.label': { fr: 'Cci', en: 'Bcc' },
+    'email.cci.placeholder': { fr: 'Copie cachée', en: 'Bcc' },
+    'email.cci.show': { fr: '+ Cci', en: '+ Bcc' },
+    'email.subject.label': { fr: 'Objet', en: 'Subject' },
+    'email.subject.placeholder': { fr: 'Objet de l’email (#Variable autorisée)', en: 'Email subject (#Variable allowed)' },
+    'email.createButton': { fr: 'Créer l’email', en: 'Create email' },
+    'email.charCount': { fr: '{count} / {limit} caractères', en: '{count} / {limit} characters' },
+    'email.charCountOverLimit': { fr: '{count} / {limit} caractères — le message sera tronqué par votre logiciel de messagerie', en: '{count} / {limit} characters — your mail client will truncate the message' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

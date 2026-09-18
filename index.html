@@ -189,7 +189,7 @@
       <button id="v2-btn-underline" data-tip="Souligné" aria-label="Souligné" data-i18n-tip="fmt.underline" data-i18n-aria="fmt.underline"></button>
       <button id="v2-btn-strike" data-tip="Barré" aria-label="Barré" data-i18n-tip="fmt.strike" data-i18n-aria="fmt.strike"></button>
       <span class="v2-sep"></span>
-      <span class="v2-hover-group">
+      <span class="v2-hover-group" id="v2-align-group">
         <button id="v2-btn-align-main" data-tip="Alignement" aria-label="Alignement (survoler pour les options)" data-i18n-tip="align.main.tip" data-i18n-aria="align.main.aria"></button>
         <span class="v2-hover-flyout">
           <button id="v2-btn-align-left" data-tip="Aligner à gauche" aria-label="Aligner à gauche" data-i18n-tip="align.left" data-i18n-aria="align.left"></button>
@@ -224,7 +224,7 @@
       <button id="v2-btn-outdent" class="v2-btn-discreet" data-tip="Diminuer le retrait" aria-label="Diminuer le retrait" data-i18n-tip="indent.decrease" data-i18n-aria="indent.decrease"></button>
       <button id="v2-btn-indent" class="v2-btn-discreet" data-tip="Augmenter le retrait" aria-label="Augmenter le retrait" data-i18n-tip="indent.increase" data-i18n-aria="indent.increase"></button>
       <span class="v2-sep"></span>
-      <span class="v2-stepper" data-tip="Taille de police" data-i18n-tip="font.sizeTip">
+      <span class="v2-stepper" id="v2-size-stepper" data-tip="Taille de police" data-i18n-tip="font.sizeTip">
         <button type="button" id="v2-size-minus" aria-label="Diminuer la taille" data-i18n-aria="font.sizeDecrease">–</button>
         <button type="button" class="v2-stepper-val" id="v2-size-chip-val">10.5pt</button>
         <button type="button" id="v2-size-plus" aria-label="Augmenter la taille" data-i18n-aria="font.sizeIncrease">+</button>
@@ -234,7 +234,7 @@
         <span class="v2-format-chip-caret" id="v2-font-chip-caret"></span>
       </button>
       <span class="v2-sep"></span>
-      <span class="v2-color-split">
+      <span class="v2-color-split" id="v2-text-color-split">
         <button type="button" id="v2-btn-text-color" data-tip="Couleur de police" aria-label="Appliquer la dernière couleur de police" data-i18n-tip="color.text.tip" data-i18n-aria="color.text.aria">
           <span class="v2-color-split-icon" id="v2-text-color-icon">A</span>
         </button>
@@ -242,7 +242,7 @@
           <span class="v2-color-split-caret" id="v2-color-text-caret"></span>
         </button>
       </span>
-      <span class="v2-color-split">
+      <span class="v2-color-split" id="v2-highlight-split">
         <button type="button" id="v2-btn-highlight" data-tip="Surligner" aria-label="Appliquer le dernier surlignage" data-i18n-tip="color.highlight.tip" data-i18n-aria="color.highlight.aria">
           <span class="v2-color-split-icon" id="v2-highlight-icon"></span>
         </button>
@@ -372,10 +372,9 @@
 </div>
 <script src="js/html-sanitize.js?v=0.2"></script>
 <script src="js/grist-api.js?v=0.75"></script>
-<script src="js/templates.js?v=0.73"></script>
-<script src="js/templates-email.js?v=0.1"></script>
+<script src="js/templates.js?v=0.74"></script>
 <script src="js/reader-mode.js?v=0.85"></script>
-<script src="js/i18n.js?v=0.11"></script>
+<script src="js/i18n.js?v=0.12"></script>
 <script src="js/page-layout.js?v=0.2"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.7"></script>
@@ -385,7 +384,7 @@
 <script src="js/header-footer-preview.js?v=1.0"></script>
 <script src="js/editor-nodes.js?v=0.7"></script>
 <script src="js/floating-toolbars.js?v=0.7"></script>
-<script src="js/main-toolbar.js?v=0.3"></script>
+<script src="js/main-toolbar.js?v=0.4"></script>
 <script src="js/comments.js?v=0.2"></script>
 <script src="js/editor.js?v=1.1"></script>
 <script src="js/pdf-export-alt.js?v=0.1"></script>
