@@ -288,6 +288,11 @@ const DocxExport = (function () {
       // Marque ce run pour paragraphBlockFrom : cf. splitRunsAtFloatedImages ci-dessous (Google Docs ne respecte pas relativeFrom="line", d'où le
       // découpage en paragraphes Word plutôt qu'un ancrage à la ligne).
       if (floatingOptions && floatingOptions.__isAlignFloat) imgRun.__docxSplitBefore = true;
+      // data-align="center" : PAS un flottant (le texte ne contourne rien), mais l'image doit quand même être CENTRÉE - `.editor-image[data-align="center"]`
+      // vaut `display:block; margin:auto` dans l'éditeur ET dans le mode Lecture (css/style.css), et l'export PDF pose `alignment:'center'` sur le bloc image
+      // (js/pdf-export.js:pdfImageFromNode). Sans ce marqueur, DOCX était le seul des trois à la laisser collée à gauche : `alignment` est une propriété de
+      // PARAGRAPHE en OOXML (w:jc), pas de run, donc l'image doit occuper son propre <w:p> centré - ce que splitRunsAtFloatedImages fait ci-dessous.
+      if (!floatingOptions && node.getAttribute('data-align') === 'center') imgRun.__docxCenterBlock = true;
       return [imgRun];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
@@ -481,16 +486,26 @@ const DocxExport = (function () {
   }
 
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
-  // Découpe un tableau de runs en groupes, un nouveau groupe démarrant à chaque run marqué __docxSplitBefore (image habillée gauche/droite, cf.
-  // docxAlignFloatingOptionsFrom) - jamais en tête (une coupure avant le tout premier run ne servirait à rien, cf. paragraphBlockFrom).
+  // Découpe un tableau de runs en groupes -> un groupe = un <w:p>. Deux marqueurs, tous deux posés par inlineNodesFrom, tous deux pour la même raison de
+  // fond : `w:jc` (alignement) et `wp:anchor/verticalPosition` s'appliquent au PARAGRAPHE, jamais à un run - une image qui a besoin de son propre
+  // alignement ou de son propre point d'ancrage vertical a donc besoin de son propre paragraphe.
+  //  - __docxSplitBefore (image habillée gauche/droite) : ouvre un groupe, sans jamais couper en tête (une coupure avant le tout premier run ne
+  //    servirait à rien) - le texte qui SUIT l'image reste avec elle, c'est lui qui doit l'habiller.
+  //  - __docxCenterBlock (image centrée) : l'image est SEULE dans son groupe, centré - le texte autour d'elle garde son propre alignement, comme dans
+  //    l'éditeur où `display:block` la met sur sa propre ligne sans toucher aux lignes voisines.
+  // Chaque groupe porte `alignment: undefined` (= garder celui du paragraphe HTML d'origine) ou une valeur qui le remplace.
   function splitRunsAtFloatedImages(runsArr) {
     const groups = [];
-    let current = [];
+    let current = { runs: [], alignment: undefined };
+    const flush = () => { if (current.runs.length) groups.push(current); current = { runs: [], alignment: undefined }; };
     for (const run of runsArr) {
-      if (run && run.__docxSplitBefore && current.length) { groups.push(current); current = []; }
-      current.push(run);
+      if (run && run.__docxCenterBlock) { flush(); groups.push({ runs: [run], alignment: docx.AlignmentType.CENTER }); continue; }
+      if (run && run.__docxSplitBefore && current.runs.length) flush();
+      current.runs.push(run);
     }
-    groups.push(current);
+    // `!groups.length` : un paragraphe vide (<p></p>) n'a aucun run et doit quand même produire son <w:p> - c'est lui qui fait l'espacement vertical dans
+    // ce projet (aucune marge automatique, cf. spacing.after:0 ci-dessous).
+    if (current.runs.length || !groups.length) groups.push(current);
     return groups;
   }
   // <p>/<div>/<h1-6> -> un ou plusieurs Paragraph (cf. splitRunsAtFloatedImages ci-dessus). Titre : marqueur littéral ("1) "...) IDENTIQUE à
@@ -508,10 +523,11 @@ const DocxExport = (function () {
     const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
     if (isHeading) ctx.headingBlocks.push({ level: parseInt(node.tagName.slice(1), 10), text: ((marker || '') + (node.textContent || '')).replace(/\s+/g, ' ').trim() });
     const groups = splitRunsAtFloatedImages(children);
-    return groups.map((groupChildren, i) => {
+    return groups.map((group, i) => {
+      const groupChildren = group.runs;
       const opts = {
         children: groupChildren.length ? groupChildren : [new docx.TextRun('')],
-        alignment: align,
+        alignment: group.alignment !== undefined ? group.alignment : align,
         // after:0 - `.tiptap p/h1-6` n'ont aucune marge propre (margin:0, cf. css/editor-v2.css) ; l'espacement visuel vient des paragraphes vides que
         // l'utilisateur insère lui-même, jamais d'une marge automatique. line/lineRule : cf. LINE_SPACING_240THS ci-dessus.
         spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
@@ -594,7 +610,10 @@ const DocxExport = (function () {
       // disparaissait donc silencieusement de l'export (trouvé en comparant l'éditeur au .docx généré sur templates-gallery/test-images-tableaux).
       if (node.tagName === 'IMG') {
         const runs = await inlineNodesFrom(node, { size: DEFAULT_HALF_PT }, ctx);
-        if (runs.length) blocks.push(new docx.Paragraph({ children: runs, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!pendingPageBreak }));
+        // Même centrage que dans un <p> (cf. splitRunsAtFloatedImages) : ce paragraphe est construit à la main ici, il ne passe donc pas par
+        // paragraphBlockFrom et n'hériterait d'aucun alignement sans ça.
+        const centered = runs.some(r => r && r.__docxCenterBlock);
+        if (runs.length) blocks.push(new docx.Paragraph({ children: runs, alignment: centered ? docx.AlignmentType.CENTER : undefined, spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' }, pageBreakBefore: !!pendingPageBreak }));
         pendingPageBreak = false;
         continue;
       }
