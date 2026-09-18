@@ -566,7 +566,7 @@
         card.type = 'button';
         card.className = 'tpl-gallery-card';
         const tagsHtml = (entry.tags || []).map(t => `<span>${t}</span>`).join('');
-        card.innerHTML = `<img src="${TemplateGallery.resolveUrl(entry.screenshot)}" alt="${entry.name}"><span class="tpl-gallery-card-name">${entry.name}</span><span class="tpl-gallery-card-tags">${tagsHtml}</span>`;
+        card.innerHTML = `<img src="${TemplateGallery.resolveUrl(entry.screenshot, entry)}" alt="${entry.name}"><span class="tpl-gallery-card-name">${entry.name}</span><span class="tpl-gallery-card-tags">${tagsHtml}</span>`;
         card.addEventListener('click', () => openPreview(entry));
         grid.appendChild(card);
       });

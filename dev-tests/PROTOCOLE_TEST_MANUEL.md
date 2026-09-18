@@ -305,8 +305,10 @@ survols/menus déroulants/comportement de fermeture).
 
 ## 9. Modèles de test dédiés
 
-Deux modèles ajoutés à la galerie (`templates-gallery/`, tag `test`) pour dérouler rapidement une
-bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
+Trois modèles vivant dans `templates-gallery-dev/` — catalogue **séparé** de `templates-gallery/`,
+chargé en plus de celui-ci quand le dossier est présent, précisément pour qu'un déploiement live
+puisse ne pas le publier (cf. `templates-gallery-dev/README.md`). Ils servent à dérouler rapidement
+une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
 
 - **`test-mise-en-page`** ("Modèle de test — Texte & mise en page") : 3 paragraphes multi-lignes
   avec toutes les mises en forme de texte, tous les niveaux de titre + numérotation, un sommaire,

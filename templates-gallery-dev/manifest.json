@@ -1,0 +1,34 @@
+[
+  {
+    "id": "test-mise-en-page",
+    "name": "Test — Texte & mise en page",
+    "tags": [
+      "test"
+    ],
+    "screenshot": "test-mise-en-page/screenshot.svg",
+    "html": "test-mise-en-page/template.html",
+    "schema": "test-mise-en-page/schema.py"
+  },
+  {
+    "id": "test-images-tableaux",
+    "name": "Test — Images, tableaux & 2 colonnes",
+    "tags": [
+      "test"
+    ],
+    "screenshot": "test-images-tableaux/screenshot.svg",
+    "html": "test-images-tableaux/template.html",
+    "schema": "test-images-tableaux/schema.py"
+  },
+  {
+    "id": "vitrine-fonctionnalites",
+    "name": "Vitrine des fonctionnalités",
+    "tags": [
+      "démo",
+      "vitrine"
+    ],
+    "screenshot": "vitrine-fonctionnalites/screenshot.svg",
+    "html": "vitrine-fonctionnalites/template.html",
+    "schema": "vitrine-fonctionnalites/schema.py",
+    "headerFooter": "vitrine-fonctionnalites/headerfooter.json"
+  }
+]

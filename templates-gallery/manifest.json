@@ -2,7 +2,10 @@
   {
     "id": "facture",
     "name": "Facture",
-    "tags": ["facture", "vente"],
+    "tags": [
+      "facture",
+      "vente"
+    ],
     "screenshot": "facture/screenshot.svg",
     "html": "facture/template.html",
     "schema": "facture/schema.py"
@@ -10,7 +13,10 @@
   {
     "id": "contrat-prestation-services",
     "name": "Contrat de prestation de services",
-    "tags": ["contrat", "juridique"],
+    "tags": [
+      "contrat",
+      "juridique"
+    ],
     "screenshot": "contrat-prestation-services/screenshot.svg",
     "html": "contrat-prestation-services/template.html",
     "schema": "contrat-prestation-services/schema.py"
@@ -18,7 +24,10 @@
   {
     "id": "attestation",
     "name": "Attestation",
-    "tags": ["attestation", "administratif"],
+    "tags": [
+      "attestation",
+      "administratif"
+    ],
     "screenshot": "attestation/screenshot.svg",
     "html": "attestation/template.html",
     "schema": "attestation/schema.py"
@@ -26,34 +35,12 @@
   {
     "id": "courrier-relance",
     "name": "Courrier de relance",
-    "tags": ["relance", "facture"],
+    "tags": [
+      "relance",
+      "facture"
+    ],
     "screenshot": "courrier-relance/screenshot.svg",
     "html": "courrier-relance/template.html",
     "schema": "courrier-relance/schema.py"
-  },
-  {
-    "id": "test-mise-en-page",
-    "name": "Test — Texte & mise en page",
-    "tags": ["test"],
-    "screenshot": "test-mise-en-page/screenshot.svg",
-    "html": "test-mise-en-page/template.html",
-    "schema": "test-mise-en-page/schema.py"
-  },
-  {
-    "id": "test-images-tableaux",
-    "name": "Test — Images, tableaux & 2 colonnes",
-    "tags": ["test"],
-    "screenshot": "test-images-tableaux/screenshot.svg",
-    "html": "test-images-tableaux/template.html",
-    "schema": "test-images-tableaux/schema.py"
-  },
-  {
-    "id": "vitrine-fonctionnalites",
-    "name": "Vitrine des fonctionnalités",
-    "tags": ["démo", "vitrine"],
-    "screenshot": "vitrine-fonctionnalites/screenshot.svg",
-    "html": "vitrine-fonctionnalites/template.html",
-    "schema": "vitrine-fonctionnalites/schema.py",
-    "headerFooter": "vitrine-fonctionnalites/headerfooter.json"
   }
 ]

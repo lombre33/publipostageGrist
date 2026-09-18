@@ -106,6 +106,7 @@ publipostageGrist/
 │   ├── template-gallery.js       #   galerie de modèles pré-remplis
 │   └── main.js                   #   orchestration, câblage UI
 ├── templates-gallery/            # Modèles pré-remplis (HTML + schéma de table + aperçu)
+├── templates-gallery-dev/        # Modèles de test/démo - non publiés sur la version live
 ├── dev-tests/                    # Suite de tests automatisés (~90 scénarios)
 ├── README.md
 └── AUDIT_CODE.md
