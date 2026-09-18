@@ -42,6 +42,19 @@ document :**
   confirme et formalise la relation déjà actée dans l'en-tête de `js/mailto-export.js` : le cluster
   « Exporter en PDF » existant reste disponible pour un modèle email, il n'est pas remplacé |
 
+**Troisième lot de retours (même jour, sur la 2ᵉ version de la maquette) :**
+
+| Retour | Conséquence |
+|---|---|
+| Non-régression stricte : *« tu peux juste rajouter les éléments nouveaux, pas de changement sur les éléments déjà présents »* | Règle dure pour l'implémentation, pas seulement pour la maquette : le mode email n'ajoute que des éléments conditionnels (classe `app--email`, rangée `.bar-row` en plus) — aucune ligne de CSS/HTML existante ne change de valeur, y compris pour le mode document |
+| Ordre des champs : **Objet en premier, puis Destinataire et Cc qui se suivent** | Réordonne `Objet → À → Cc → [+Cci]`, pas `À → Objet → Cc` comme dans la 2ᵉ version (§4.1 revu) |
+| Couleur du bouton Cci : *« l'interface est principalement monochrome »* | Le bouton `+ Cci` perd son style accent (bleu) de la 2ᵉ version — même style neutre que les autres boutons discrets de la toolbar (`color:var(--text)`), l'accent reste réservé aux actions primaires (Enregistrer, Exporter, action email) |
+| Le bouton « #Variable » de la maquette est apprécié et doit être **réellement construit**, pour toute la toolbar (édition **et** document), pas seulement pensé pour l'email | Ajoute une portée au chantier : un vrai bouton toolbar qui ouvre l'autocomplétion `#` déjà existante (`js/variables.js`) sans avoir à taper le caractère déclencheur — utile partout, pas un artifice de maquette |
+| Pas de duplication de code : un seul éditeur/toolbar pour les deux types, seuls le style et l'activation des boutons + l'ajout Objet/Destinataire changent selon le mode | Confirme le plan déjà écrit en §4.2/§5 (`syncToolbarState`, `v2-hf-locked`) — formalisé ici comme contrainte dure, pas une préférence |
+| Nom du bouton d'action (`« Ouvrir le brouillon »`) | À trancher — voir la carte de choix envoyée après ce document |
+| Traductions anglaises | À ne pas oublier à l'implémentation (`js/i18n.js`) pour chaque nouveau libellé |
+| « C'est quoi l'icône d'horloge ? » | Bonne question — corrigée ci-dessous (§4.2) : c'était une erreur de conception de la maquette, pas une fonctionnalité déjà nommée ainsi dans l'app |
+
 ---
 
 ## 1. Le vrai problème de structuration : deux axes qu'on ne doit pas confondre
@@ -181,12 +194,13 @@ ci-dessous n'invente aucun composant — elle réutilise trois choses déjà dan
 ┌──────────────────────────────────────────────────────────────┐
 │ [Relance impayés ▾] [✎] [★]  [+][Enregistrer][🗑]  │Édition│Lecture│  ⚙ │  ← bar-row 1 (inchangée)
 ├──────────────────────────────────────────────────────────────┤
-│ À [ #Email          ]  Objet [ Relance facture #NumFacture ]  │
-│ Cc [ #EmailCompta    ]  [+ Cci]     [Exporter en PDF][Ouvrir le brouillon] │  ← bar-row 2 (nouvelle,
-├──────────────────────────────────────────────────────────────┤                MÊME composant que bar-row 1)
-│ Normal ▾│G I S̶│gauche…│•▾│#Var│ [tableau][image][2-col]…      │  ← #v2-toolbar INCHANGÉE, les
-│                                  boutons sans effet grisés    │     boutons sans effet grisés
-├──────────────────────────────────────────────────────────────┤     (v2-hf-locked), pas retirés
+│ Objet [ Relance facture #NumFacture ]                          │
+│ À [ #Email ]  Cc [ #EmailCompta ]  [+ Cci]                     │  ← bar-row 2 (nouvelle, MÊME
+│                        [Exporter en PDF][Composer l'email]     │     composant que bar-row 1)
+├──────────────────────────────────────────────────────────────┤
+│ Normal ▾│G I S̶│gauche…│•▾│#Variable│ [tableau][image][2-col]… │  ← #v2-toolbar : UNE seule
+│                                  boutons sans effet grisés    │     addition (#Variable), le
+├──────────────────────────────────────────────────────────────┤     reste grisé (v2-hf-locked)
 │ Bonjour #Prenom,                                              │
 │ Sauf erreur de notre part, la facture…                        │  ← #editor-container, INCHANGÉ
 ├──────────────────────────────────────────────────────────────┤
@@ -194,16 +208,20 @@ ci-dessous n'invente aucun composant — elle réutilise trois choses déjà dan
 └──────────────────────────────────────────────────────────────┘
 ```
 
-À, Objet et Cc sont donc toujours visibles (Cc affiché par défaut, comme demandé) ; seul Cci est
-révélé au clic, avec exactement le mécanisme déjà écrit pour le nom de fichier PDF (`hidden`
-retiré au clic, remis si le champ est vide au blur). Les bulles `#Variable` dans À/Objet/Cc/Cci
-(décidé au lieu d'un champ texte simple, §0) demandent que ces trois/quatre champs deviennent des
-mini-zones TipTap comme le corps, pas de vrais `<input>` — coût d'implémentation à assumer (§6.2).
+Objet, À et Cc sont donc toujours visibles, **Objet en tête puis À et Cc qui se suivent** (demandé
+explicitement — l'ordre de la 1ʳᵉ version de ce paragraphe, À/Objet/Cc, est abandonné) ; seul Cci
+est révélé au clic, avec exactement le mécanisme déjà écrit pour le nom de fichier PDF (`hidden`
+retiré au clic, remis si le champ est vide au blur), et en **style neutre** (pas d'accent bleu :
+l'interface est majoritairement monochrome, l'accent est réservé aux actions primaires). Les bulles
+`#Variable` dans Objet/À/Cc/Cci (décidé au lieu d'un champ texte simple, §0) demandent que ces
+trois/quatre champs deviennent des mini-zones TipTap comme le corps, pas de vrais `<input>` — coût
+d'implémentation à assumer (§6.2).
 
 Le cluster « Exporter en PDF » reste affiché (l'export croisé est permis, §0) ; seul un nouveau
-bouton « Ouvrir le brouillon » vient s'ajouter à côté, au même style que `#btn-export-pdf`
+bouton d'action email vient s'ajouter à côté, au même style que `#btn-export-pdf`
 (`css/style.css:148`, fond `var(--accent)`) — un bouton de plus dans un cluster existant, pas un
-nouveau langage visuel.
+nouveau langage visuel. Son libellé (`Composer l'email` ci-dessus, provisoire) reste à confirmer —
+voir la carte de choix envoyée avec ce document.
 
 Ce qui ne change pas du tout par rapport au mode document, contrairement à la version précédente de
 ce document : la feuille A4, l'aperçu A4, `#editor-container`/`.tiptap` tels quels. Antoine n'a pas
@@ -230,6 +248,23 @@ ou du texte riche venu d'un document Word dans le corps. Le sérialiseur texte l
 mais le modèle stocké porterait du HTML invisible et trompeur. Recommandation : en mode email,
 nettoyer au collage (`transformPastedHTML` de TipTap), pour que ce qu'on voit soit ce qui est stocké.
 
+**Correction sur la 2ᵉ version de la maquette : un seul bouton « #Variable », pas un bouton
+horloge séparé.** La question d'Antoine (« c'est quoi l'icône d'horloge ? ») a mis le doigt sur une
+erreur de conception : la maquette affichait deux boutons (`#Variable` et une icône horloge pour les
+« chips intelligents ») comme s'il s'agissait de deux mécanismes distincts. Or dans le code actuel,
+variables ET chips (date du jour, heure actuelle, email de l'utilisateur connecté, note de bas de
+page) partagent une seule et même autocomplétion déclenchée en tapant le caractère `#`
+(`js/variables.js:25-28` — chaque chip y est une entrée de la même liste que les colonnes Grist). Il
+n'existe donc qu'**un seul bouton à construire**, qui ouvre cette autocomplétion sans avoir à taper
+le déclencheur — l'horloge de la maquette est retirée.
+
+**Ce bouton devient une vraie fonctionnalité, pas un artifice de maquette.** Antoine l'a explicitement
+demandé sur toute la toolbar, mode document inclus (« l'éditeur est le même partout ») : comme
+`syncToolbarState`/`main-toolbar.js` pilotent une seule et même toolbar (§4 introduction, pas de
+duplication), l'ajouter au bouton toolbar partagé le rend disponible aux deux types de modèle sans
+travail supplémentaire — un item de portée en plus pour ce chantier, hors périmètre strict du mode
+email, mais gratuit une fois la toolbar déjà factorisée.
+
 ### 4.3 Mode Lecture : l'argument fort du mode email
 
 En mode document, la Lecture est un confort. En mode email, **c'est la garantie principale** : on
@@ -243,13 +278,13 @@ Le mode Lecture email affiche donc **exactement ce que le client mail recevra**,
 ┌──────────────────────────────────────────────────────────────┐
 │ [Relance impayés ▾]                          │Édition│Lecture│  ⚙ │
 ├──────────────────────────────────────────────────────────────┤
-│ À  marie.dupont@exemple.fr   Objet  Relance facture F-2024-118│  ← bar-row 2, valeurs résolues,
-│ Cc marie.compta@exemple.fr                                    │     mêmes champs qu'en édition
-├──────────────────────────────────────────────────────────────┤     (Cci révélé seulement si rempli)
-│ Bonjour Marie,                                                │
+│ Objet  Relance facture F-2024-118                             │  ← bar-row 2, valeurs résolues,
+│ À  marie.dupont@exemple.fr   Cc marie.compta@exemple.fr        │     mêmes champs et même ordre
+├──────────────────────────────────────────────────────────────┤     qu'en édition (Cci révélé
+│ Bonjour Marie,                                                │     seulement si rempli)
 │ Sauf erreur de notre part, la facture F-2024-118…             │  ← #reader-container, texte brut
 ├──────────────────────────────────────────────────────────────┤
-│ 1 240 / 2 000 caractères          [Exporter en PDF][Ouvrir le brouillon] │
+│ 1 240 / 2 000 caractères          [Exporter en PDF][Composer l'email] │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -302,15 +337,23 @@ elle vaut mieux d'être prise **avant** que l'UI se fige autour des limites de `
 
 ## 5. Découpage technique induit
 
+**Deux règles dures, non négociables (retours d'Antoine, §0) :**
+- **Non-régression stricte.** Le mode document ne change ni de markup ni de comportement.
+  Tout ajout est conditionnel (`app--email`, `inEmailMode`) ; rien n'est retiré ni modifié pour le
+  cas document. Seule exception assumée et voulue : le bouton `#Variable` (ci-dessous), qui
+  apparaît dans les deux modes parce que c'est la même toolbar partagée.
+- **Pas de duplication.** Un seul éditeur, une seule instance de toolbar, un seul `syncToolbarState`.
+  Le mode email ne clone rien : il ajoute une condition à ce qui existe déjà.
+
 | Fichier | Nature du travail |
 |---|---|
 | `js/mailto-export.js` | Implémenter les trois fonctions du squelette : sérialiseur HTML→texte, constructeur d'URL, mesure de longueur. Morceau **entièrement nouveau**, pas une extension de `pdf-export.js`. |
-| `js/email-mode.js` *(nouveau)* | Orchestration de l'écran email : champs enveloppe, jauge, bouton d'ouverture, rendu Lecture. `js/main.js` fait déjà 34 Ko, ne pas l'y empiler. |
+| `js/email-mode.js` *(nouveau)* | Orchestration de l'écran email : champs Objet/À/Cc/Cci, jauge, bouton d'action, rendu Lecture. `js/main.js` fait déjà 34 Ko, ne pas l'y empiler. |
 | `js/templates.js` | Paramétrer par table + schéma, instancier deux fois (§3). |
-| `js/main-toolbar.js` | Profil de toolbar « email » sur le patron `v2-hf-locked` existant (§4.2). |
-| `index.html` | Bloc `#email-fields`, lignes de type dans le flyout « Nouveau », classes `app--email` / `app--document` sur `#app`. |
+| `js/main-toolbar.js` | Profil de toolbar « email » sur le patron `v2-hf-locked` existant (§4.2) ; **et** nouveau bouton `#Variable` partagé (§4.2) qui ouvre l'autocomplétion de `js/variables.js` sans taper le déclencheur — celui-ci apparaît dans les DEUX modes, pas seulement email. |
+| `index.html` | Bloc `#email-fields`, deux lignes (`Nouveau document`/`Nouvel email`) dans le flyout « Nouveau » déjà existant, classes `app--email` / `app--document` sur `#app`, le bouton `#Variable` dans `#v2-toolbar` (partagé). |
 | `js/reader-mode.js` | Branche de rendu email (pas de pagination, pas d'en-tête/pied) — la résolution des `#Variable` et des chips est réutilisée telle quelle. |
-| `js/i18n.js` | Libellés des nouveaux contrôles, comme tout le reste de l'UI. |
+| `js/i18n.js` | Libellés des nouveaux contrôles **en français et en anglais** (les deux langues de l'app), comme tout le reste de l'UI. |
 
 Non touchés : `pdf-export.js`, `docx-export.js`, `page-layout.js`, `header-footer-preview.js`,
 `editor-nodes.js`. Le mode email **retire** des capacités, il n'en ajoute aucune au schéma TipTap.
