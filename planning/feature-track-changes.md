@@ -60,9 +60,8 @@ Le mode **« suggestion » façon Word/Google Docs** (insertions soulignées, su
 accepter/refuser par changement ou par lot) — ce qu'Antoine a probablement en tête — est un patron
 communautaire construit par-dessus `prosemirror-changeset`, pas un exemple clé-en-main.
 
-*Recommandation* : clarifier avec Antoine lequel des deux est visé (carte de décision envoyée à part).
-Le reste de ce document part de l'hypothèse « suggestion façon Word », plus cohérente avec l'usage
-facture/contrat de l'app, mais **à confirmer avant tout chiffrage**.
+**Tranché par Antoine (2026-09-18) : mode suggestion façon Word/Google Docs.** Le reste de ce document
+part de cette hypothèse.
 
 ## Décision structurante n°2 — extension payante Tiptap Pro ou solution DIY ?
 
@@ -88,9 +87,8 @@ l'architecture actuelle du widget** :
   base (confiance modérée — accès direct à tiptap.dev bloqué pendant cette recherche, à revérifier
   avant toute décision d'achat).
 
-*Conséquence* : sauf décision explicite de rouvrir la politique « pas de build » spécifiquement pour
-cette fonctionnalité (carte de décision envoyée à part), **le chantier est un DIY sur ProseMirror**,
-pas l'achat d'une extension.
+**Tranché par Antoine (2026-09-18) : on reste en DIY sur ProseMirror**, la politique « pas de build »
+n'est pas rouverte pour cette fonctionnalité — pas d'extension Tiptap Pro.
 
 ### Pistes DIY évaluées
 
@@ -243,11 +241,9 @@ pour :
 
 ## Questions ouvertes avec Antoine avant tout chiffrage d'effort
 
-1. UX cible : mode suggestion façon Word/Google Docs, ou mode « blame » façon exemple officiel
-   ProseMirror ? (carte de décision envoyée séparément)
-2. Politique « pas de build/pas de vendorisation » : confirmée y compris pour cette fonctionnalité
-   (donc extension Tiptap Pro écartée), ou à rouvrir spécifiquement ici ? (carte de décision envoyée
-   séparément)
+1. ~~UX cible~~ — **tranché 2026-09-18 : mode suggestion façon Word/Google Docs.**
+2. ~~Politique « pas de build/pas de vendorisation »~~ — **tranché 2026-09-18 : DIY sur ProseMirror,
+   pas de Tiptap Pro.**
 3. Attribution par auteur : l'app n'a pas de présence temps réel et l'identification utilisateur
    passe déjà par un détour asynchrone (`UserProbe`) — le suivi doit-il malgré tout distinguer les
    auteurs, ou un suivi anonyme/mono-auteur suffit-il pour un premier jet ?
