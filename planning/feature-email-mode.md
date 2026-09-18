@@ -22,8 +22,25 @@ tranchées, toutes en faveur de la conception ci-dessous :
 | Pièce jointe (PDF joint) | **Non** | `mailto:` reste valable ; pas de bifurcation vers `.eml`/API |
 
 Les quatre réponses confirment que `mailto:` est la bonne technologie pour ce besoin — aucune ne
-force à reconsidérer l'approche. Les points plus fins du §6 (Cc/Cci, saisie des `#Variable`,
-blocage vs alerte, option de structuration A/B/C, modèle par défaut) restent ouverts.
+force à reconsidérer l'approche.
+
+**Second lot de décisions (même jour), qui remplace plusieurs propositions initiales de ce
+document :**
+
+| Question | Réponse |
+|---|---|
+| Cc / Cci | **Cc affiché par défaut, Cci révélé au clic** (pas les deux repliés comme proposé) |
+| Saisie `#Variable` dans À/Objet | **Bulles `#Variable`** comme dans le corps (pas un champ texte simple comme proposé) |
+| Dépassement de longueur | Avertissement seul, jamais de blocage — proposition retenue |
+| Structuration (§2) | **Option A : propriété du modèle** — recommandation retenue |
+| Modèle par défaut | **Un par type** — proposition retenue |
+| UI générale | **« On récupère STRICTEMENT l'UI existante »** — voir §4 revu ci-dessous, qui remplace le
+  « bandeau de type » et la « carte enveloppe » de la première version par une réutilisation directe
+  des composants déjà présents dans l'app (rangée `.bar-row`, champs façon
+  `#pdf-filename-template`, verrouillage façon `v2-hf-locked`) |
+| Export croisé | **Un modèle d'email peut être exporté en PDF ; l'inverse reste impossible** —
+  confirme et formalise la relation déjà actée dans l'en-tête de `js/mailto-export.js` : le cluster
+  « Exporter en PDF » existant reste disponible pour un modèle email, il n'est pas remplacé |
 
 ---
 
@@ -142,58 +159,69 @@ c'est ce qui évite que les deux CRUD divergent au premier correctif.
 
 ## 4. L'écran du mode Email
 
-### 4.1 Mode Édition
+### 4.1 Mode Édition — révisé : rien de nouveau visuellement, seulement des rangées et des champs
+déjà utilisés ailleurs dans l'app
+
+Antoine a explicitement écarté le « bandeau de type » et la « carte enveloppe » de la version
+précédente de ce document : *« pour l'ui on récupère STRICTEMENT l'ui existante »*. La révision
+ci-dessous n'invente aucun composant — elle réutilise trois choses déjà dans le code :
+
+- une deuxième `.bar-row` (le conteneur qui structure déjà `#toolbar-top`, `css/style.css:101`),
+- des champs texte au style de `#pdf-filename-template` (`css/toolbar-v2.css:69` — bordure
+  `var(--border-strong)`, hauteur 28px, fond `var(--surface)`),
+  avec le même patron de révélation au clic que `btn-toggle-pdf-filename`/`wirePdfFilenameToggle`
+  (`js/main.js:553`) pour Cci,
+- le bouton « Exporter en PDF » existant, laissé tel quel (cf. §0, l'export croisé reste permis).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ [✉ Relance impayés ▾] [✎] [★]   [+][💾][⧉][🗑]  │ ✎ │ 👁 │   ⚙ │  ← barre du haut
+│ [Relance impayés ▾] [✎] [★]  [+][Enregistrer][🗑]  │Édition│Lecture│  ⚙ │  ← bar-row 1 (inchangée)
 ├──────────────────────────────────────────────────────────────┤
-│ Normal ▾ │ • ▾ │ ⇤ ⇥ │ #Variable │ ⏱ chip │ ↶ ↷              │  ← toolbar COURTE
+│ À [ #Email          ]  Objet [ Relance facture #NumFacture ]  │
+│ Cc [ #EmailCompta    ]  [+ Cci]     [Exporter en PDF][Ouvrir le brouillon] │  ← bar-row 2 (nouvelle,
+├──────────────────────────────────────────────────────────────┤                MÊME composant que bar-row 1)
+│ Normal ▾│G I S̶│gauche…│•▾│#Var│ [tableau][image][2-col]…      │  ← #v2-toolbar INCHANGÉE, les
+│                                  boutons sans effet grisés    │     boutons sans effet grisés
+├──────────────────────────────────────────────────────────────┤     (v2-hf-locked), pas retirés
+│ Bonjour #Prenom,                                              │
+│ Sauf erreur de notre part, la facture…                        │  ← #editor-container, INCHANGÉ
 ├──────────────────────────────────────────────────────────────┤
-│  ✉ Modèle d'email — le destinataire recevra du texte brut. ⓘ │  ← bandeau de type
-│ ┌──────────────────────────────────────────────────────────┐ │
-│ │ À      [ #Email                                        ] │ │
-│ │ Objet  [ Relance facture #NumFacture                   ] │ │  ← carte « enveloppe »
-│ │                                        + Cc / Cci        │ │
-│ └──────────────────────────────────────────────────────────┘ │
-│ ┌──────────────────────────────────────────────────────────┐ │
-│ │ Bonjour #Prenom,                                         │ │
-│ │                                                          │ │  ← corps, pleine largeur
-│ │ Sauf erreur de notre part, la facture…                    │ │     PAS de feuille A4
-│ └──────────────────────────────────────────────────────────┘ │
-│                                        1 240 / 2 000 car. ▓░ │  ← jauge de longueur
+│                                    1 240 / 2 000 caractères   │  ← texte dans #status-msg existant
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Ce qui disparaît par rapport au mode document, et pourquoi :
+À, Objet et Cc sont donc toujours visibles (Cc affiché par défaut, comme demandé) ; seul Cci est
+révélé au clic, avec exactement le mécanisme déjà écrit pour le nom de fichier PDF (`hidden`
+retiré au clic, remis si le champ est vide au blur). Les bulles `#Variable` dans À/Objet/Cc/Cci
+(décidé au lieu d'un champ texte simple, §0) demandent que ces trois/quatre champs deviennent des
+mini-zones TipTap comme le corps, pas de vrais `<input>` — coût d'implémentation à assumer (§6.2).
 
-- **La feuille A4** (`.v2-page-sheet.a4-preview`) et la case « Aperçu A4 » : un email n'a pas de page.
-  Le corps passe en pleine largeur fluide — bénéfice collatéral, c'est le seul écran de l'app qui ne
-  souffrira pas du rognage sous ~830 px relevé par le fil UI/UX.
-- **L'overlay de pagination**, les marges de page, l'en-tête/pied de page, le saut de page, le
-  sommaire : sans objet sans pagination.
-- **Le cluster d'export PDF/DOCX et le nom de fichier PDF**, remplacés par le bouton d'action email.
+Le cluster « Exporter en PDF » reste affiché (l'export croisé est permis, §0) ; seul un nouveau
+bouton « Ouvrir le brouillon » vient s'ajouter à côté, au même style que `#btn-export-pdf`
+(`css/style.css:148`, fond `var(--accent)`) — un bouton de plus dans un cluster existant, pas un
+nouveau langage visuel.
 
-### 4.2 La toolbar courte : masquer plutôt que griser
+Ce qui ne change pas du tout par rapport au mode document, contrairement à la version précédente de
+ce document : la feuille A4, l'aperçu A4, `#editor-container`/`.tiptap` tels quels. Antoine n'a pas
+demandé leur suppression et l'UI existante les gère déjà (une case à décocher, pas un nouvel état à
+inventer) — un email un peu plus large qu'une page A4 n'est pas un problème puisque `mailto:` n'a de
+toute façon aucune notion de page.
 
-`js/mailto-export.js` liste déjà les boutons sans effet possible en mailto (image, tableau,
-2-colonnes, saut de page, sommaire, gras/italique/souligné/barré, couleur, surlignage, police,
-taille, alignement) et les décrit comme « désactivés/grisés ».
+### 4.2 La toolbar : griser, pas masquer — réutilisation directe de `v2-hf-locked`
 
-**Je propose de les masquer, pas de les griser.** Griser laisse ~30 boutons à l'écran dont ~20
-morts : c'est exactement le défaut d'encombrement déjà identifié sur cette toolbar, aggravé. Restent
-visibles : titres, listes à puces/numérotées, retrait, `#Variable`, chips intelligents,
-annuler/rétablir — soit ~8 boutons, une seule rangée même en panneau étroit.
+Version précédente de ce document : proposait de **masquer** les boutons sans effet en mailto
+(image, tableau, 2-colonnes, saut de page, sommaire, gras/italique/souligné/barré, couleur,
+surlignage, police, taille, alignement — liste déjà dans l'en-tête de `js/mailto-export.js`), pour
+réduire l'encombrement. **Antoine a tranché l'inverse : les griser.**
 
-Le bandeau de type (§4.1) porte alors la pédagogie que le grisage était censé porter : une phrase
-plus un `ⓘ` qui explique en une infobulle que le protocole `mailto:` ne transporte que du texte brut.
+Le mécanisme technique existe déjà tel quel : `syncToolbarState` (`js/main-toolbar.js:121-133`) pose
+une classe de verrouillage sur des boutons selon un mode courant — c'est exactement ce que fait déjà
+le mode en-tête/pied avec `v2-hf-locked` (`opacity:.35; pointer-events:none`,
+`css/toolbar-v2.css:208`). Le mode email est le même patron, avec le même effet visuel — aucune
+nouvelle classe CSS à écrire, juste une nouvelle condition (`inEmailMode`) à côté de `inHfMode`
+dans `syncToolbarState`.
 
-Le mécanisme technique existe déjà : `syncToolbarState` (`js/main-toolbar.js:121-133`) sait poser une
-classe de verrouillage sur des boutons selon un mode courant — c'est ce que fait le mode
-en-tête/pied avec `v2-hf-locked`. Le mode email en est le même patron, avec `display:none` au lieu
-d'un grisage.
-
-**Un risque à traiter à part : le collage.** Masquer les boutons n'empêche pas de coller un tableau
+**Un risque à traiter à part : le collage.** Griser les boutons n'empêche pas de coller un tableau
 ou du texte riche venu d'un document Word dans le corps. Le sérialiseur texte l'aplatira à l'export,
 mais le modèle stocké porterait du HTML invisible et trompeur. Recommandation : en mode email,
 nettoyer au collage (`transformPastedHTML` de TipTap), pour que ce qu'on voit soit ce qui est stocké.
@@ -204,21 +232,20 @@ En mode document, la Lecture est un confort. En mode email, **c'est la garantie 
 édite dans un éditeur riche un contenu dont le rendu final est du texte plat. Sans aperçu, tout
 utilisateur écrira du gras et sera surpris chez le destinataire.
 
-Le mode Lecture email affiche donc **exactement ce que le client mail recevra** :
+Le mode Lecture email affiche donc **exactement ce que le client mail recevra**, dans
+`#reader-container` inchangé (même bascule `.mode-toggle` que le document) :
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ À       marie.dupont@exemple.fr                              │
-│ Objet   Relance facture F-2024-118                           │
+│ [Relance impayés ▾]                          │Édition│Lecture│  ⚙ │
 ├──────────────────────────────────────────────────────────────┤
-│ Bonjour Marie,                                               │
-│                                                              │
-│ Sauf erreur de notre part, la facture F-2024-118…            │  ← texte brut,
-│                                                              │     rendu tel quel
-│ - Montant : 1 240,00 €                                       │
-│ - Échéance : 12/03/2024                                      │
+│ À  marie.dupont@exemple.fr   Objet  Relance facture F-2024-118│  ← bar-row 2, valeurs résolues,
+│ Cc marie.compta@exemple.fr                                    │     mêmes champs qu'en édition
+├──────────────────────────────────────────────────────────────┤     (Cci révélé seulement si rempli)
+│ Bonjour Marie,                                                │
+│ Sauf erreur de notre part, la facture F-2024-118…             │  ← #reader-container, texte brut
 ├──────────────────────────────────────────────────────────────┤
-│ 1 240 / 2 000 caractères            [ Ouvrir le brouillon ]  │
+│ 1 240 / 2 000 caractères          [Exporter en PDF][Ouvrir le brouillon] │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -288,18 +315,20 @@ Non touchés : `pdf-export.js`, `docx-export.js`, `page-layout.js`, `header-foot
 
 ## 6. Ce qui doit être tranché avant de coder
 
-1. **Cc et Cci** — les deux, seulement Cc, ou aucun des deux en V1 ? Ils occupent de la place dans la
-   carte enveloppe et consomment le budget de 2 000 caractères. Proposition : les deux, mais repliés
-   derrière un lien « + Cc / Cci » (donc coût visuel nul tant qu'on ne s'en sert pas).
-2. **Saisie des `#Variable` dans À et Objet** — champ texte simple où l'on tape `#Colonne` (exactement
-   ce que fait déjà le champ « nom de fichier PDF », code de résolution existant et éprouvé), ou
-   vraies bulles `#Variable` comme dans le corps (plus joli et plus sûr, mais c'est un
-   `contenteditable` et une nouvelle intégration) ? Proposition : champ texte en V1.
-3. **Dépassement de longueur** — avertissement seul (l'utilisateur décide) ou blocage du bouton ? La
-   question devient plus délicate avec la jauge par ligne (§4.4) : que fait-on d'un lot où 3 lignes
-   sur 40 dépassent ? Proposition : jamais de blocage dur, mais un bouton en état d'alerte explicite.
-4. ~~**Le lot (§4.5)**~~ — **tranché (§0) : un email à la fois, pas de lot en V1.**
-5. **Option A, B ou C (§2)** — ma recommandation est A, mais c'est un choix d'interface qui vous
-   appartient.
-6. **Modèle email par défaut** — un modèle par défaut *par type*, ou un seul pour toute l'app ?
-   Proposition : un par type, sinon ouvrir le widget sur un email quand on vient faire un PDF.
+Tout est tranché. Pour mémoire (voir §0 pour le détail des réponses) :
+
+1. ~~**Cc et Cci**~~ — **tranché : Cc affiché par défaut, Cci révélé au clic.**
+2. ~~**Saisie des `#Variable` dans À et Objet**~~ — **tranché : bulles `#Variable`**, comme le corps.
+3. ~~**Dépassement de longueur**~~ — **tranché : avertissement seul, jamais de blocage.**
+4. ~~**Le lot (§4.5)**~~ — **tranché : un email à la fois, pas de lot en V1.**
+5. ~~**Option A, B ou C (§2)**~~ — **tranché : option A (propriété du modèle).**
+6. ~~**Modèle email par défaut**~~ — **tranché : un par type.**
+
+Un point n'avait pas été anticipé comme question et est arrivé directement en réponse : **l'UI doit
+rester strictement celle déjà existante** — pas de nouveau composant visuel (le « bandeau de type »
+et la « carte enveloppe » de la première version de ce document sont abandonnés, cf. §4.1 revu). Et
+**un modèle d'email garde le bouton « Exporter en PDF »** existant (l'export croisé email→PDF est
+permis, PDF→email ne l'est pas — relation déjà actée dans `js/mailto-export.js`).
+
+La maquette visuelle (canvas, écrans Édition/Lecture) est à jour de ces réponses :
+https://claude.ai/artifact/TiZzpjqNSLJ7FaX5BzDLZK
