@@ -8,6 +8,10 @@
   // Mode email (planning/feature-email-mode.md) : 'document' par défaut, y compris pour un modèle jamais chargé (avant le tout premier appel à
   // loadTemplateIntoEditor) - ne devient 'email' que via un modèle dont TypeModele='email' ou onNewEmail().
   let currentTypeModele = 'document';
+  // Valeurs BRUTES (gabarits #Variable) des 4 champs, capturées juste avant de passer en Lecture - le mode Lecture affiche des valeurs RÉSOLUES dans les
+  // MÊMES <input> (pas de duplication de zone, comme le reste de la bar-row 2/#v2-toolbar déjà partagée entre les deux modes) ; non-null uniquement pendant
+  // que le mode Lecture est actif, cf. updateEmailFieldsDisplay().
+  let emailFieldsRawCache = null;
 
   const statusMsg = document.getElementById('status-msg');
   const templateSelect = document.getElementById('template-select');
@@ -26,8 +30,24 @@
   const emailCciInput = document.getElementById('v2-email-cci');
   const emailCciToggle = document.getElementById('v2-btn-toggle-cci');
   const btnCreateEmail = document.getElementById('btn-create-email');
+  const emailCharCounter = document.getElementById('v2-email-char-counter');
+
+  // Résout Objet/À/Cc/Cci pour UNE ligne Grist donnée - partagé entre updateEmailFieldsDisplay (affichage Lecture), updateEmailLengthGauge (jauge §4.4) et
+  // onCreateEmail (construction réelle du mailto:), pour ne jamais faire diverger ces 3 résolutions.
+  async function resolveEmailFieldsForRecord(rawFields, tableId, record) {
+    const [objet, destinataires, cc, cci] = await Promise.all([
+      Variables.resolveTextVariables(rawFields.objet, tableId, record),
+      Variables.resolveTextVariables(rawFields.destinataires, tableId, record),
+      Variables.resolveTextVariables(rawFields.cc, tableId, record),
+      Variables.resolveTextVariables(rawFields.cci, tableId, record),
+    ]);
+    return { objet, destinataires, cc, cci };
+  }
 
   function getEmailFieldsFromInputs() {
+    // En Lecture, les <input> affichent des valeurs RÉSOLUES (cf. updateEmailFieldsDisplay) - jamais ce qu'il faut enregistrer (onSave via Ctrl+S,
+    // autosaveTick, qui ne vérifient pas currentMode). Le cache tient déjà les gabarits bruts dans cette même forme tant qu'il est non-null.
+    if (emailFieldsRawCache) return emailFieldsRawCache;
     return {
       objet: emailSubjectInput ? emailSubjectInput.value.trim() : '',
       destinataires: emailToInput ? emailToInput.value.trim() : '',
@@ -116,6 +136,10 @@
     }
     currentTypeModele = tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
     if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
+    // Un changement de modèle invalide tout cache de valeurs brutes en attente de restauration (cf. updateEmailFieldsDisplay) - reparti d'un état brut pour
+    // CE modèle, la résolution (si on est déjà en Lecture) est redemandée plus bas.
+    emailFieldsRawCache = null;
+    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => { if (el) el.readOnly = false; });
     if (emailSubjectInput) emailSubjectInput.value = tpl ? (tpl.objet || '') : '';
     if (emailToInput) emailToInput.value = tpl ? (tpl.destinataires || '') : '';
     if (emailCcInput) emailCcInput.value = tpl ? (tpl.cc || '') : '';
@@ -135,6 +159,8 @@
     // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant qu'on
     // ne repassait pas explicitement par "Mode édition" puis "Mode lecture" (le changement de modèle semblait alors "ne rien faire" en mode Lecture).
     if (currentMode === 'read') renderReader();
+    if (currentMode === 'read') updateEmailFieldsDisplay();
+    updateEmailLengthGauge();
     syncDefaultTemplateButton();
     // DERNIÈRE ligne de cette fonction (pas avant) : Editor.setHTML()/setHeaderFooterData() juste au-dessus déclenchent leurs propres transactions
     // ProseMirror, donc leur propre `editor.on('update')` - sans ça, charger un modèle se marquerait lui-même "modifié" aux yeux de l'auto-save.
@@ -386,13 +412,78 @@
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
     // Sans ligne sélectionnée, on délègue quand même à ReaderMode.render() pour qu'il affiche son état vide. Avant, ce `return` sec laissait
     // #reader-container littéralement vide : écran blanc sans explication, et le message prévu dans reader-mode.js était du code mort.
-    // Tous les appelants de renderReader() sont déjà conditionnés à currentMode === 'read', donc pas de rendu parasite en mode Édition.
+    // Note : onCreateEmail() (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps résolu sans changer de mode -
+    // sans risque, #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
     if (!record) { await ReaderMode.render(Editor.getHTML(), tableId, null, Editor.getHeaderFooterData()); return; }
     if (!tableId) {
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
+  }
+
+  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) - MÊMES <input>, jamais dupliqués (cf.
+  // emailFieldsRawCache ci-dessus). Sans ligne sélectionnée, garde les gabarits bruts affichés (rien à résoudre) plutôt qu'un champ vidé sans explication.
+  async function updateEmailFieldsDisplay() {
+    if (!emailFieldsRow || currentTypeModele !== 'email') return;
+    const inputs = [emailSubjectInput, emailToInput, emailCcInput, emailCciInput];
+    if (currentMode !== 'read') {
+      if (!emailFieldsRawCache) return; // déjà en état brut, rien à restaurer
+      const raw = emailFieldsRawCache;
+      emailFieldsRawCache = null;
+      if (emailSubjectInput) emailSubjectInput.value = raw.objet;
+      if (emailToInput) emailToInput.value = raw.destinataires;
+      if (emailCcInput) emailCcInput.value = raw.cc;
+      if (emailCciInput) emailCciInput.value = raw.cci;
+      inputs.forEach(el => { if (el) el.readOnly = false; });
+      return;
+    }
+    if (!emailFieldsRawCache) {
+      emailFieldsRawCache = getEmailFieldsFromInputs();
+      inputs.forEach(el => { if (el) el.readOnly = true; });
+    }
+    const record = latestRecord || GristAPI.getCurrentRecord();
+    if (!record) return;
+    const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
+    const raw = emailFieldsRawCache;
+    const resolved = await resolveEmailFieldsForRecord(raw, tableId, record);
+    // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser son
+    // travail avec ce résultat maintenant obsolète.
+    if (currentMode !== 'read' || emailFieldsRawCache !== raw) return;
+    if (emailSubjectInput) emailSubjectInput.value = resolved.objet;
+    if (emailToInput) emailToInput.value = resolved.destinataires;
+    if (emailCcInput) emailCcInput.value = resolved.cc;
+    if (emailCciInput) emailCciInput.value = resolved.cci;
+  }
+
+  // Jauge de longueur mailto: (§4.4 du document) - PERMANENTE, sur l'URL RÉSOLUE (to+cc+cci+objet+corps), pas sur le gabarit tapé (un accent/retour à la
+  // ligne coûte plus cher une fois encodé - cf. MailtoExport). Dépend de la ligne Grist sélectionnée : appelée à chaque changement de ligne, de modèle, ou
+  // de contenu (avec un debounce, cf. scheduleEmailLengthGauge) - jamais bloquante, juste informative.
+  let emailGaugeRunId = 0;
+  async function updateEmailLengthGauge() {
+    if (!emailCharCounter) return;
+    if (currentTypeModele !== 'email') { emailCharCounter.hidden = true; return; }
+    const runId = ++emailGaugeRunId;
+    const record = latestRecord || GristAPI.getCurrentRecord();
+    if (!record) { emailCharCounter.hidden = true; return; }
+    const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
+    const rawFields = getEmailFieldsFromInputs();
+    const resolvedFields = await resolveEmailFieldsForRecord(rawFields, tableId, record);
+    await renderReader(record, tableId);
+    if (runId !== emailGaugeRunId) return; // une résolution plus récente a déjà pris le relais
+    const resolvedContent = readerContainer.querySelector('.reader-content');
+    const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
+    const url = MailtoExport.buildMailtoUrl({ to: resolvedFields.destinataires, cc: resolvedFields.cc, bcc: resolvedFields.cci, subject: resolvedFields.objet, bodyText });
+    const check = MailtoExport.checkUrlLength(url);
+    emailCharCounter.hidden = false;
+    emailCharCounter.classList.toggle('is-over-limit', !check.safe);
+    emailCharCounter.textContent = I18n.t(check.safe ? 'email.charCount' : 'email.charCountOverLimit', { count: check.length, limit: check.limit });
+  }
+  let emailGaugeDebounceTimer = null;
+  function scheduleEmailLengthGauge() {
+    if (currentTypeModele !== 'email') return;
+    if (emailGaugeDebounceTimer) clearTimeout(emailGaugeDebounceTimer);
+    emailGaugeDebounceTimer = setTimeout(updateEmailLengthGauge, 500);
   }
 
   // Verrou anti-double-export : pdf-export.js utilise un état de module partagé pour numéroter les notes de bas de page - deux exports en parallèle
@@ -460,16 +551,11 @@
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     setStatus(I18n.t('status.emailGenerating'));
     try {
-      const [subject, to, cc, bcc] = await Promise.all([
-        Variables.resolveTextVariables(emailSubjectInput ? emailSubjectInput.value : '', tableId, record),
-        Variables.resolveTextVariables(emailToInput ? emailToInput.value : '', tableId, record),
-        Variables.resolveTextVariables(emailCcInput ? emailCcInput.value : '', tableId, record),
-        Variables.resolveTextVariables(emailCciInput ? emailCciInput.value : '', tableId, record),
-      ]);
+      const resolved = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
       await renderReader(record, tableId);
       const resolvedContent = readerContainer.querySelector('.reader-content');
       const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
-      const url = MailtoExport.buildMailtoUrl({ to, cc, bcc, subject, bodyText });
+      const url = MailtoExport.buildMailtoUrl({ to: resolved.destinataires, cc: resolved.cc, bcc: resolved.cci, subject: resolved.objet, bodyText });
       const check = MailtoExport.checkUrlLength(url);
       if (!check.safe && !window.confirm(I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }))) {
         setStatus('');
@@ -652,6 +738,8 @@
     editorContainer.style.display = mode === 'edit' ? 'block' : 'none';
     readerContainer.style.display = mode === 'read' ? 'block' : 'none';
     if (mode === 'read') await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
+    await updateEmailFieldsDisplay();
+    await updateEmailLengthGauge();
   }
 
   function wireA4PreviewToggle() {
@@ -992,11 +1080,13 @@
     // 'update' (pas 'transaction') : ne fire que si le DOCUMENT a réellement changé (docChanged), jamais pour un simple déplacement de curseur/sélection -
     // cf. section "Auto-save" plus haut. Couvre aussi l'édition en-tête/pied (même instance d'éditeur, contenu échangé via setContent).
     EditorCore.getEditor().on('update', markAutosaveDirty);
+    EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
     [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => {
       if (!el) return;
       el.addEventListener('input', markAutosaveDirty);
+      el.addEventListener('input', scheduleEmailLengthGauge);
       // Même mécanisme #Variable, déjà éprouvé, que le champ "nom de fichier PDF" (texte brut - cf. commentaire CSS de #v2-email-fields-row) - pas de
       // suggestion "Chips" ici (setTabsVisible(false) dans checkForFilenameTrigger), une note de bas de page/date/heure n'a aucun sens dans un objet ou une
       // liste d'adresses.
@@ -1011,6 +1101,8 @@
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
       if (tableId) currentTableId = tableId;
       if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
+      if (currentMode === 'read') await updateEmailFieldsDisplay();
+      await updateEmailLengthGauge();
     });
     await refreshTemplateList();
     // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre

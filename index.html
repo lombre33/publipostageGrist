@@ -76,7 +76,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.73">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.68">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.23">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.24">
 </head>
 <body>
 <div id="app">
@@ -146,6 +146,7 @@
         <button type="button" id="btn-toggle-pdf-filename" aria-label="Nom de fichier PDF personnalisé" data-tip="Nom du fichier PDF" data-i18n-aria="toolbar.pdfFilename.aria" data-i18n-tip="toolbar.pdfFilename.tip"></button>
         <input id="pdf-filename-template" type="text" placeholder="Nom de fichier PDF (variables #… autorisées)" data-i18n-placeholder="toolbar.pdfFilename.placeholder" hidden>
       </span>
+      <span id="v2-email-char-counter" class="v2-email-char-counter" hidden></span>
       <button type="button" id="btn-create-email" class="v2-email-create-btn" aria-label="Créer l'email" data-i18n="email.createButton" data-i18n-aria="email.createButton" hidden>Créer l'email</button>
       <span id="status-msg"></span>
       <button type="button" id="v2-btn-settings" data-tip="Réglages" aria-label="Réglages" data-i18n-tip="settings.tooltip" data-i18n-aria="settings.tooltip"></button>
@@ -407,6 +408,6 @@
 <script src="js/mailto-export.js?v=0.1"></script>
 <script src="js/template-gallery.js?v=0.6"></script>
 <script src="js/settings.js?v=0.6"></script>
-<script src="js/main.js?v=0.43"></script>
+<script src="js/main.js?v=0.44"></script>
 </body>
 </html>

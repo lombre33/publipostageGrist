@@ -81,10 +81,13 @@
 .v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
 .v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
 
-/* Bouton d'action de la bar-row 1, visible uniquement en mode email (js/main.js) - inséré après le bouton Exporter PDF existant, jamais à côté (il n'y a
-   qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email] il est déjà sur la
-   première ligne, donc pas besoin qu'il soit à côté de composer l'email" - retour d'Antoine). Compteur de caractères volontairement pas encore ajouté :
-   nécessite le contenu RÉSOLU (#Variable substituées pour la ligne courante), pas encore branché ici - cf. planning/feature-email-mode.md. */
+/* Compteur de longueur + bouton d'action de la bar-row 1, visibles uniquement en mode email (js/main.js) - insérés après le bouton Exporter PDF existant,
+   jamais à côté (il n'y a qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email]
+   il est déjà sur la première ligne, donc pas besoin qu'il soit à côté de composer l'email" - retour d'Antoine). Le compteur mesure la longueur de l'URL
+   mailto: RÉSOLUE (§4.4 du document) - jamais bloquant, juste informatif (rouge au-delà de MailtoExport.SAFE_URL_LENGTH).
+   */
+.v2-email-char-counter { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.v2-email-char-counter.is-over-limit { color: var(--danger); font-weight: 600; }
 #btn-create-email { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #btn-create-email:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
