@@ -35,13 +35,18 @@
   // au 1er chargement, seulement pour les actions déclenchées PENDANT un
   // test, cf. applyUserActions ci-dessous qui gère quand même AddTable/
   // AddRecord/UpdateRecord/RemoveRecord au cas où un test les exercerait).
-  state.rows.Publipostage_Modeles = columnarEmpty(['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter']);
+  // DateModif/Margins/EstParDefaut sont déclarées ICI plutôt que laissées apparaître au 1er
+  // UpdateRecord : `Templates.loadAll()` lit `data.DateModif` à CHAQUE tick d'auto-save (détection de
+  // conflit) et `ensureMarginsColumn()` teste `'Margins' in data` - une table sans ces clés envoie
+  // l'auto-save sur un chemin qu'un vrai document Grist ne prend jamais.
+  state.rows.Publipostage_Modeles = columnarEmpty(['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut']);
   state.rows.Publipostage_LiensTables = columnarEmpty(['TableCible', 'Mode', 'ColonneCible', 'ColonneSource']);
   state.rows.Publipostage_UserProbe = columnarEmpty(['Email']);
+  state.rows.Publipostage_Commentaires = columnarEmpty(['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']);
   state.rows._grist_Tables = columnarEmpty(['tableId']);
   state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type']);
 
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', '_grist_Tables', '_grist_Tables_column'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
 
   function setVariables(tableId, columns) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
@@ -79,7 +84,44 @@
     if (state.recordCallback) state.recordCallback(record, { tableId });
   }
 
+  // Journal de TOUTES les écritures passées par ce client. Indispensable pour l'auto-save : la
+  // promesse testée n'est pas seulement "le contenu finit par être enregistré" mais "rien n'est
+  // écrit tant que rien n'a changé" - une promesse qu'on ne peut vérifier qu'en comptant les
+  // écritures réelles, jamais en relisant l'état final (identique dans les deux cas).
+  state.actionLog = [];
+  function getActionLog() { return state.actionLog.slice(); }
+  function clearActionLog() { state.actionLog = []; }
+  // Compte les actions d'un type sur une table (ex: countActions('UpdateRecord', 'Publipostage_Modeles')).
+  function countActions(type, tableId) {
+    return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
+  }
+  function getRow(tableId, rowId) {
+    const table = state.rows[tableId];
+    if (!table) return null;
+    const idx = table.id.indexOf(rowId);
+    if (idx === -1) return null;
+    const out = { id: rowId };
+    Object.keys(table).forEach(k => { if (k !== 'id') out[k] = table[k][idx]; });
+    return out;
+  }
+  // Écrit DIRECTEMENT dans l'état, SANS passer par applyUserActions ni par le journal : c'est
+  // exactement ce que voit ce client quand QUELQU'UN D'AUTRE enregistre le même modèle depuis un
+  // autre onglet/poste. Le seul moyen honnête de tester la détection de conflit sans second
+  // navigateur.
+  function remoteWrite(tableId, rowId, fields) {
+    const table = state.rows[tableId];
+    if (!table) return false;
+    const idx = table.id.indexOf(rowId);
+    if (idx === -1) return false;
+    Object.keys(fields).forEach(k => {
+      if (!table[k]) table[k] = table.id.map(() => null);
+      table[k][idx] = fields[k];
+    });
+    return true;
+  }
+
   async function applyUserActions(actions) {
+    actions.forEach(a => state.actionLog.push(a));
     const retValues = [];
     actions.forEach(action => {
       const [type, tableId] = action;
@@ -143,5 +185,5 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions };
+  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, getRow, remoteWrite };
 })();

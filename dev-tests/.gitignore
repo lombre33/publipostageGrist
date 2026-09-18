@@ -1,0 +1,7 @@
+# Miroir local des dépendances CDN : régénéré par offline-deps.sh, jamais commité (cf. ce script).
+.offline-cache/node_modules/
+.offline-cache/esm/
+.offline-cache/umd/
+.offline-cache/entries/
+.offline-cache/esm-map.json
+.offline-cache/package-lock.json
