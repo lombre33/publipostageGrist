@@ -125,6 +125,7 @@ const MailtoExport = (function () {
           return;
         }
         if (child.tagName === 'IMG') return; // aucune image possible en texte brut mailto
+        if (child.tagName === 'STYLE' || child.tagName === 'SCRIPT') return; // jamais de contenu utilisateur, à ignorer partout où il peut apparaître
         out += inlineText(child);
       });
       return out;
@@ -168,6 +169,9 @@ const MailtoExport = (function () {
       if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'BLOCKQUOTE') { blocks.push(inlineText(node).trim()); return; }
       if (tag === 'HR') { blocks.push('---'); return; }
       if (tag === 'IMG') return;
+      // Balise jamais destinée à l'utilisateur (ex. <style> injecté par l'aperçu A4 paginé de
+      // ReaderMode dans .reader-content) - à ignorer, jamais à extraire comme texte.
+      if (tag === 'STYLE' || tag === 'SCRIPT') return;
       if (tag === 'TABLE') {
         // Dégradation minimale (le bouton Tableau est grisé en mode email - ce cas ne devrait
         // survenir qu'après un collage) : une ligne par ligne de tableau, cellules séparées par " | ".
