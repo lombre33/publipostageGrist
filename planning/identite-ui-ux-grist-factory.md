@@ -21,6 +21,12 @@
 - Un panneau « Crédits » (dans les Réglages) porte Auteur / Site / Licence / Bio. La Bio est encore un texte
   provisoire écrit par Claude sur Publipostage+ — **à reformuler par Antoine**, ne pas la dupliquer telle quelle
   sur un autre widget sans la lui faire valider.
+- **Logo** : chaque widget affiche discrètement le logo Grist Factory (l'avatar du Grist éponyme) dans son
+  chrome — placement de référence, choisi par Antoine sur Publipostage+ : juste à droite de l'icône Réglages.
+  Discret veut dire une taille de repère de marque, pas un élément qui capte l'attention ni qui déplace les
+  contrôles existants autour de lui (non-régression, cf. §1 « Non-régression »). L'asset lui-même n'est pas
+  vendorisable comme les autres dépendances (§1 « Pas de framework ») : c'est un fichier image à obtenir auprès
+  d'Antoine (avatar du Grist « Grist Factory »), pas à recréer ou à deviner.
 
 ### Palette : neutre + un seul accent, pas de « monochrome » au sens gris-sur-gris
 « Interface principalement monochrome » (règle d'Antoine) veut dire : une base de gris (fond/surface/bordure/texte
