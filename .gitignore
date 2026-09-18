@@ -1,4 +1,5 @@
-.claude/
+.claude/*
+!.claude/settings.json
 test-output/
 # Régénéré à la demande par dev-tests/generate-harness.sh (jamais commité,
 # pour ne jamais risquer qu'une version périmée dérive silencieusement de
