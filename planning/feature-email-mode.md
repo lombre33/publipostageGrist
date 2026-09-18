@@ -55,6 +55,15 @@ document :**
 | Traductions anglaises | À ne pas oublier à l'implémentation (`js/i18n.js`) pour chaque nouveau libellé |
 | « C'est quoi l'icône d'horloge ? » | Bonne question — corrigée ci-dessous (§4.2) : c'était une erreur de conception de la maquette, pas une fonctionnalité déjà nommée ainsi dans l'app |
 
+**Quatrième lot de retours (même jour, sur la 3ᵉ version de la maquette) :**
+
+| Retour | Conséquence |
+|---|---|
+| Bar-row 1 (tout en haut) : *« on ne garde bien tout les éléments déjà présent (là ce n'est pas le cas) »* | La 3ᵉ version avait considérablement simplifié cette rangée (boutons textuels inventés, plusieurs éléments réels absents : Enregistrer sous, Tables liées, Aperçu A4, Enregistrement automatique, Qualité PDF, nom de fichier PDF personnalisé, statut). §4.1 revu : reconstruction fidèle des **19 éléments réels** de `#toolbar-top .bar-row` (`index.html:83-146`), en boutons icône seule (comme le code réel — ces boutons n'ont pas de texte visible, `css/style.css:132`), rien retiré ni renommé |
+| Objet + destinataires **sur une seule ligne**, pour réduire la hauteur prise | bar-row 2 fusionnée : `Objet [...] À [...] Cc [...] [+Cci]` sur une seule rangée, plus de découpage 2a/2b (§4.1 revu) |
+| Dernière ligne de la toolbar (`#v2-toolbar`) : même remarque que pour bar-row 1 | Plusieurs éléments réels manquaient aussi ici (les boutons +/− de taille de police, les carets de couleur de police et de surlignage, le bouton Commentaire) et un espaceur avait été inventé pour pousser Annuler/Rétablir à droite (n'existe pas dans le code réel). §4.2 revu : les **24 éléments réels** de `#v2-toolbar` (`index.html:148-268`) sont tous repris, dans le même ordre, sans espaceur ; seuls changements : la classe de verrouillage sur la liste exacte de `js/mailto-export.js`, et l'ajout du bouton `#Variable` |
+| Le bouton « Exporter en PDF » ne doit pas être dupliqué à côté de « Créer l'email », puisqu'il est déjà sur la première ligne | Le bouton d'action email et le compteur de caractères rejoignent **bar-row 1**, juste après le cluster d'export déjà existant (à côté de `#btn-export-pdf`) — il n'y a plus de barre d'actions séparée en bas de l'écran (qui n'existe d'ailleurs pas dans le code réel : ni `#editor-container` ni `#reader-container` n'ont de pied de page) |
+
 ---
 
 ## 1. Le vrai problème de structuration : deux axes qu'on ne doit pas confondre
@@ -191,37 +200,48 @@ ci-dessous n'invente aucun composant — elle réutilise trois choses déjà dan
 - le bouton « Exporter en PDF » existant, laissé tel quel (cf. §0, l'export croisé reste permis).
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ [Relance impayés ▾] [✎] [★]  [+][Enregistrer][🗑]  │Édition│Lecture│  ⚙ │  ← bar-row 1 (inchangée)
-├──────────────────────────────────────────────────────────────┤
-│ Objet [ Relance facture #NumFacture ]                          │
-│ À [ #Email ]  Cc [ #EmailCompta ]  [+ Cci]                     │  ← bar-row 2 (nouvelle, MÊME
-│                        [Exporter en PDF][Créer l'email]        │     composant que bar-row 1)
-├──────────────────────────────────────────────────────────────┤
-│ Normal ▾│G I S̶│gauche…│•▾│#Variable│ [tableau][image][2-col]… │  ← #v2-toolbar : UNE seule
-│                                  boutons sans effet grisés    │     addition (#Variable), le
-├──────────────────────────────────────────────────────────────┤     reste grisé (v2-hf-locked)
-│ Bonjour #Prenom,                                              │
-│ Sauf erreur de notre part, la facture…                        │  ← #editor-container, INCHANGÉ
-├──────────────────────────────────────────────────────────────┤
-│                                    1 240 / 2 000 caractères   │  ← texte dans #status-msg existant
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│[Relance impayés▾][✎][★] [+][💾][⧉][🗑][🔗] │[✎][👁] [A4][⟳] │[PDF-q][PDF][✎] │  ← bar-row 1, LES
+│                                                  1240/2000 [Créer l'email]  Enregistré [⚙]│     19 ÉLÉMENTS RÉELS
+├──────────────────────────────────────────────────────────────────────┤     de #toolbar-top (rien
+│ Objet [ Relance facture #NumFacture ]  À [ #Email ]  Cc [ #EmailCompta ] [+Cci]           │     retiré) + 2 AJOUTS
+├──────────────────────────────────────────────────────────────────────┤     (compteur, action email)
+│ Normal▾│G I S̶│▤│•▾ ⇤⇥│−10.5pt+▾│A▾ 🖍▾│▦│⧉ 🖼 ⁘ ▤ 💬│#Variable│↶ ↷ │  ← #v2-toolbar, LES 24
+│         grisés (sans effet en texte brut)      seul ajout ─┘         │     ÉLÉMENTS RÉELS + 1 AJOUT
+├──────────────────────────────────────────────────────────────────────┤
+│ Bonjour #Prenom,                                                      │  ← #editor-container, INCHANGÉ
+│ Sauf erreur de notre part, la facture…                                │     (pas de pied de page :
+└──────────────────────────────────────────────────────────────────────┘     il n'y en a pas non plus
+                                                                               dans le code réel)
 ```
 
-Objet, À et Cc sont donc toujours visibles, **Objet en tête puis À et Cc qui se suivent** (demandé
-explicitement — l'ordre de la 1ʳᵉ version de ce paragraphe, À/Objet/Cc, est abandonné) ; seul Cci
-est révélé au clic, avec exactement le mécanisme déjà écrit pour le nom de fichier PDF (`hidden`
-retiré au clic, remis si le champ est vide au blur), et en **style neutre** (pas d'accent bleu :
-l'interface est majoritairement monochrome, l'accent est réservé aux actions primaires). Les bulles
+*(schéma condensé — le détail élément par élément est dans la maquette, pas reproductible lisiblement
+en ASCII vu le nombre réel de boutons ; voir le lien §6)*
+
+**Bar-row 1 : reconstruction fidèle, pas de simplification.** La 3ᵉ version de ce document avait
+réduit cette rangée à une poignée de boutons stylisés en texte — Antoine a eu raison de relever que
+plusieurs éléments réels manquaient (Enregistrer sous, Tables liées, Aperçu A4, Enregistrement
+automatique, Qualité PDF, nom de fichier PDF personnalisé, statut). Les **19 éléments** de
+`#toolbar-top .bar-row` (`index.html:83-146`) sont tous des boutons **icône seule** dans le code réel
+(pas de texte visible, juste une infobulle — `css/style.css:132`, `#toolbar-top button::before`) :
+c'est cette forme, pas des boutons textuels inventés, qui doit apparaître à l'implémentation. Les deux
+seuls ajouts (compteur de caractères, bouton d'action email) rejoignent cette même rangée, juste après
+le cluster d'export déjà existant (`btn-export-pdf`) — **pas de bouton « Exporter en PDF » dupliqué**
+à côté : celui déjà présent sur cette ligne suffit, l'action email n'a pas besoin du sien.
+
+**Bar-row 2 : Objet et destinataires sur une seule ligne.** Pour limiter la hauteur ajoutée (demande
+explicite d'Antoine), Objet/À/Cc/[+Cci] tiennent sur une seule rangée, dans cet ordre — **Objet en
+tête puis À et Cc qui se suivent**. Seul Cci est révélé au clic, avec exactement le mécanisme déjà
+écrit pour le nom de fichier PDF (`hidden` retiré au clic, remis si le champ est vide au blur), en
+**style neutre** (pas d'accent bleu : l'interface est majoritairement monochrome). Les bulles
 `#Variable` dans Objet/À/Cc/Cci (décidé au lieu d'un champ texte simple, §0) demandent que ces
 trois/quatre champs deviennent des mini-zones TipTap comme le corps, pas de vrais `<input>` — coût
 d'implémentation à assumer (§6.2).
 
-Le cluster « Exporter en PDF » reste affiché (l'export croisé est permis, §0) ; seul un nouveau
-bouton d'action email vient s'ajouter à côté, au même style que `#btn-export-pdf`
-(`css/style.css:148`, fond `var(--accent)`) — un bouton de plus dans un cluster existant, pas un
-nouveau langage visuel. Son libellé est **« Créer l'email »** (tranché par Antoine via la carte de
-choix, 2026-09-18, parmi Composer l'email / Nouveau message / Créer l'email / Rédiger l'email).
+Le bouton d'action email, au même style que `#btn-export-pdf` (`css/style.css:148`, fond
+`var(--accent)`) — un bouton de plus dans un cluster existant, pas un nouveau langage visuel — a pour
+libellé **« Créer l'email »** (tranché par Antoine via la carte de choix, 2026-09-18, parmi Composer
+l'email / Nouveau message / Créer l'email / Rédiger l'email).
 
 Ce qui ne change pas du tout par rapport au mode document, contrairement à la version précédente de
 ce document : la feuille A4, l'aperçu A4, `#editor-container`/`.tiptap` tels quels. Antoine n'a pas
@@ -235,6 +255,17 @@ Version précédente de ce document : proposait de **masquer** les boutons sans 
 (image, tableau, 2-colonnes, saut de page, sommaire, gras/italique/souligné/barré, couleur,
 surlignage, police, taille, alignement — liste déjà dans l'en-tête de `js/mailto-export.js`), pour
 réduire l'encombrement. **Antoine a tranché l'inverse : les griser.**
+
+**Reconstruction fidèle, même remarque que pour bar-row 1.** La 3ᵉ version de la maquette omettait
+plusieurs éléments réels de `#v2-toolbar` (`index.html:148-268`, 24 éléments/séparateurs) : les
+boutons −/+ de taille de police (seul le chiffre était présent), les carets de choix de couleur de
+police et de surlignage (seul le bouton principal était présent), et le bouton Commentaire
+(`v2-btn-comment`) — absent des deux listes de `js/mailto-export.js` (ni verrouillé ni cité comme
+utilisable), donc actif comme en mode document. Un espaceur avait aussi été ajouté pour pousser
+Annuler/Rétablir à droite : il n'existe pas dans le code réel (`#v2-toolbar` n'a pas de
+`margin-left:auto`, contrairement à `#status-msg` en bar-row 1) et a été retiré. Tous ces éléments
+sont maintenant repris à l'identique ; seuls changements réels : la classe de verrouillage sur la
+liste ci-dessous, et l'ajout du bouton `#Variable`.
 
 Le mécanisme technique existe déjà tel quel : `syncToolbarState` (`js/main-toolbar.js:121-133`) pose
 une classe de verrouillage sur des boutons selon un mode courant — c'est exactement ce que fait déjà
@@ -275,22 +306,28 @@ Le mode Lecture email affiche donc **exactement ce que le client mail recevra**,
 `#reader-container` inchangé (même bascule `.mode-toggle` que le document) :
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ [Relance impayés ▾]                          │Édition│Lecture│  ⚙ │
-├──────────────────────────────────────────────────────────────┤
-│ Objet  Relance facture F-2024-118                             │  ← bar-row 2, valeurs résolues,
-│ À  marie.dupont@exemple.fr   Cc marie.compta@exemple.fr        │     mêmes champs et même ordre
-├──────────────────────────────────────────────────────────────┤     qu'en édition (Cci révélé
-│ Bonjour Marie,                                                │     seulement si rempli)
-│ Sauf erreur de notre part, la facture F-2024-118…             │  ← #reader-container, texte brut
-├──────────────────────────────────────────────────────────────┤
-│ 1 240 / 2 000 caractères          [Exporter en PDF][Créer l'email]    │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ [Relance impayés▾]        │[✎][👁 actif]│ … (mêmes 19 éléments qu'en édition) │
+│                              1180/2000 [Créer l'email]  Enregistré [⚙]│
+├──────────────────────────────────────────────────────────────────────┤
+│ Objet  Relance facture F-2024-118  À marie.dupont@exemple.fr  Cc marie.compta@exemple.fr │
+├──────────────────────────────────────────────────────────────────────┤
+│ Normal▾│G I S̶│▤│•▾ ⇤⇥│−10.5pt+▾│A▾ 🖍▾│▦│⧉ 🖼 ⁘ ▤ 💬│#Variable│↶ ↷ │  ← présent aussi en
+├──────────────────────────────────────────────────────────────────────┤     Lecture (voir note)
+│ Bonjour Marie,                                                        │
+│ Sauf erreur de notre part, la facture F-2024-118…                     │  ← #reader-container, texte
+└──────────────────────────────────────────────────────────────────────┘     brut, INCHANGÉ
 ```
 
 Destinataires et objet sont résolus avec la vraie ligne Grist, comme le corps — c'est déjà ce que
 fait `ReaderMode.render()` pour le document et `ReaderMode.resolveFilename()`
 (`js/reader-mode.js:321`) pour le nom de fichier PDF.
+
+**Découverte en reconstruisant la maquette fidèlement (§4.1) :** `switchMode()` (`js/main.js:550`)
+ne bascule que l'affichage de `#editor-container`/`#reader-container` — `#v2-toolbar` n'est masqué
+nulle part dans le code, il reste donc affiché en mode Lecture aujourd'hui (document comme email).
+La maquette précédente l'omettait en Lecture ; ce n'est pas correct vis-à-vis du comportement actuel,
+corrigé ici pour rester fidèle.
 
 ### 4.4 La jauge de longueur
 
