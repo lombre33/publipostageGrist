@@ -35,13 +35,18 @@
   // au 1er chargement, seulement pour les actions déclenchées PENDANT un
   // test, cf. applyUserActions ci-dessous qui gère quand même AddTable/
   // AddRecord/UpdateRecord/RemoveRecord au cas où un test les exercerait).
-  state.rows.Publipostage_Modeles = columnarEmpty(['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter']);
+  // DateModif/Margins/EstParDefaut sont déclarées ICI plutôt que laissées apparaître au 1er
+  // UpdateRecord : `ensureMarginsColumn()`/`ensureDefaultColumn()` testent `'Margins' in data`, et une
+  // table à qui ces clés manquent envoie le code sur un chemin de migration qu'un vrai document Grist
+  // déjà à jour ne prend jamais.
+  state.rows.Publipostage_Modeles = columnarEmpty(['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut']);
   state.rows.Publipostage_LiensTables = columnarEmpty(['TableCible', 'Mode', 'ColonneCible', 'ColonneSource']);
   state.rows.Publipostage_UserProbe = columnarEmpty(['Email']);
+  state.rows.Publipostage_Commentaires = columnarEmpty(['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']);
   state.rows._grist_Tables = columnarEmpty(['tableId']);
   state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type']);
 
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', '_grist_Tables', '_grist_Tables_column'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
 
   function setVariables(tableId, columns) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
@@ -79,7 +84,19 @@
     if (state.recordCallback) state.recordCallback(record, { tableId });
   }
 
+  // Journal de TOUTES les écritures passées par ce client. Certaines promesses ne se vérifient que
+  // comme ça : "annuler un fil de commentaire jamais publié n'écrit AUCUNE ligne" a exactement le
+  // même état final que "le fil a été écrit puis supprimé" - seul le compte des écritures réelles
+  // distingue les deux.
+  state.actionLog = [];
+  function getActionLog() { return state.actionLog.slice(); }
+  function clearActionLog() { state.actionLog = []; }
+  // Compte les actions d'un type sur une table (ex: countActions('UpdateRecord', 'Publipostage_Modeles')).
+  function countActions(type, tableId) {
+    return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
+  }
   async function applyUserActions(actions) {
+    actions.forEach(a => state.actionLog.push(a));
     const retValues = [];
     actions.forEach(action => {
       const [type, tableId] = action;
@@ -143,5 +160,5 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions };
+  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions };
 })();

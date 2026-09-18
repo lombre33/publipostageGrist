@@ -43,6 +43,7 @@ apparaît) :
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
 | `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
+| `js/comments.js`, `js/editor-nodes.js:createCommentMark`, `js/main.js` (`loadForTemplate`/`onSave`) | `comments` |
 | `js/editor-core.js`, `js/editor.js` | **Transverse** - traiter comme une demande de suite complète, ces fichiers sont partagés par tous les domaines |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 
@@ -51,7 +52,62 @@ QUE `scenarios-twocolumns.js` + `scenarios-pdf-fidelity.js` (+ `scenarios-images
 si le correctif touche une image en calque dans une colonne) - pas les 10
 groupes.
 
-## Démarrage rapide
+## Démarrage rapide (sans navigateur à piloter à la main)
+
+```bash
+bash dev-tests/generate-harness.sh          # régénère _test-harness.html depuis index.html
+node dev-tests/run-headless.mjs             # tous les groupes
+node dev-tests/run-headless.mjs comments formatting # seulement ces groupes
+```
+
+`run-headless.mjs` sert le dépôt, ouvre `_test-harness.html` dans un Chromium
+headless (Playwright), pose `.a4-preview`, charge `helpers`/`runner` + le
+fichier du groupe, exécute et imprime le rapport. Il sort en code 1 dès qu'un
+scénario échoue, donc il s'utilise tel quel avant un commit ou dans un runner
+CI. **Un navigateur neuf par groupe**, à dessein : ce README documente plus bas
+des fuites d'état entre suites, un processus par groupe rend chaque verdict
+indépendant de l'ordre de lancement.
+
+Il attend **« Widget prêt. »** dans `#status-msg` avant de charger le moindre
+scénario, et pas seulement l'existence de l'éditeur : `.tiptap` existe déjà en
+0×0 pendant que `main.js:init()` tourne encore, et `execCommand('insertText')`
+renvoie `false` tant que l'éditeur n'a pas sa vraie taille - les scénarios qui
+tapent du texte échouent alors avec des notes de diagnostic vides, ce qui
+ressemble à une régression sans en être une.
+
+Deux options utiles :
+
+- `--port 8899` si 8843 est déjà pris (plusieurs runs en parallèle).
+- `--probe "<expression JS>"` ouvre le harnais, évalue l'expression (`await`
+  supporté) et imprime le résultat, sans exécuter aucun scénario - pour
+  inspecter l'état réel de la page avant d'écrire un test.
+
+### Dépendances CDN et réseau bloqué
+
+`index.html` charge TipTap/ProseMirror depuis `esm.sh` et pdfmake/pdf.js/JSZip/
+html2pdf depuis `cdnjs`. Un environnement d'exécution distant (Claude Code sur
+le web, un runner CI) refuse souvent ces hôtes : l'éditeur ne démarre alors pas
+du tout et aucun test ne peut tourner.
+
+```bash
+bash dev-tests/offline-deps.sh   # réinstalle les MÊMES versions depuis npm et les bundle localement
+```
+
+Rien de tout ça n'est commité (cf. `dev-tests/.gitignore`) : ce n'est pas une
+vendorisation des dépendances, juste un cache reconstructible. `run-headless.mjs`
+détecte ce cache et détourne les requêtes CDN vers lui ; s'il est absent, il
+laisse les CDN être appelés normalement. Deux détails qui ont coûté un
+diagnostic, réglés dans le lanceur et à ne pas défaire :
+
+- les chunks partagés produits par esbuild sont servis sous **une seule URL
+  absolue** - servis sous deux URL différentes, ProseMirror est chargé deux
+  fois et TipTap casse avec *"looks like multiple versions of prosemirror-model
+  were loaded"* ;
+- le hash **SRI** (`integrity`) de `js/pdf-export.js` est neutralisé dans la
+  page de test uniquement : un miroir local ne peut pas satisfaire le hash d'un
+  fichier minifié par cdnjs. L'application réelle garde sa protection intacte.
+
+## Démarrage manuel (navigateur réel, pour observer ou mettre au point)
 
 ```bash
 # Depuis la racine du dépôt
@@ -75,6 +131,7 @@ const files = [
   'scenarios-pagebreak-toc', 'scenarios-headerfooter', 'scenarios-chips',
   'scenarios-varformat',
   'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth', 'scenarios-readmode-fidelity',
+  'scenarios-comments',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
 const results = await TestRunner.runAll(EditorTestSuites);

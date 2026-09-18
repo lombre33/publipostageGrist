@@ -142,6 +142,13 @@
     await refreshTemplateList();
     templateSelect.value = savedId;
     syncDefaultTemplateButton();
+    // Premier enregistrement d'un modèle tout neuf : Comments n'a encore JAMAIS reçu d'id de modèle (loadForTemplate n'est appelé que par
+    // loadTemplateIntoEditor, qui ne repasse pas par ici). Sans ceci, "Commenter la sélection" répondait "Enregistrez d'abord le modèle" à quelqu'un qui
+    // venait précisément de l'enregistrer, jusqu'à ce qu'il change de modèle et revienne. Uniquement quand l'id CHANGE : un ré-enregistrement du même
+    // modèle n'a rien à recharger, et loadForTemplate referme le popup ouvert.
+    if (String(id) !== String(savedId)) {
+      Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
+    }
     setStatus(I18n.t('status.templateSaved'));
   }
 
