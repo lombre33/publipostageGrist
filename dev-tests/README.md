@@ -34,12 +34,13 @@ apparaît) :
 | Fichier modifié | Groupe(s) à lancer |
 |---|---|
 | `js/pdf-export.js` | Le(s) groupe(s) du domaine touché (`images`, `twoColumns`, `tables`, `lists`, `formatting`, `pageBreakToc`, `headerFooter`, `chips`) **+ toujours `pdfFidelity` ET `pdfGroundTruth`** (points d'entrée export communs à tout - `pdfGroundTruth` en particulier couvre tout changement touchant la position d'une image en calque ou l'alignement d'un paragraphe) |
+| `js/docx-export.js` | **Toujours `docx` ET `docxImages`** (seuls points d'entrée de l'export DOCX - `docxImages` couvre tout changement touchant la position/l'habillage d'une image, `docx` le reste de la structure OOXML) |
 | `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
 | `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
 | `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) |
-| `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity` et `readModeFidelity` (la largeur de contenu est consommée par les deux) |
+| `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
@@ -133,6 +134,7 @@ const files = [
   'scenarios-varformat',
   'scenarios-pdf-fidelity', 'scenarios-pdf-ground-truth', 'scenarios-readmode-fidelity',
   'scenarios-comments', 'scenarios-pagelayout',
+  'scenarios-docx', 'scenarios-docx-images',
 ];
 for (const f of files) await loadFresh('/dev-tests/' + f + '.js');
 const results = await TestRunner.runAll(EditorTestSuites);
@@ -252,6 +254,43 @@ tant que le RENDU final concorde.
 corrigé le même jour) : `.reader-content ul`/`ol` n'avait pas l'équivalent du `padding-left: 1.4em` de
 `.tiptap` - une liste imbriquée rendait visiblement plus indentée en mode Lecture qu'en éditeur (l'écart
 se cumulait par niveau). `readModeFidelity` est maintenant 100% vert.
+
+## Étage 3 (export DOCX) — `scenarios-docx.js` + `scenarios-docx-images.js` : on OUVRE le fichier généré
+
+Même principe que `h.extractPdfGroundTruth` pour le PDF, et pour exactement la même raison :
+**un objet `docx.Paragraph`/`docx.ImageRun` correct en mémoire ne prouve rien sur le fichier que Word
+ouvrira.** Entre les deux il y a la sérialisation de `docx.js`, qui a déjà introduit deux vrais défauts
+dans ce projet — un compteur `wp:docPr` repartant à `1` à chaque `ImageRun` (Word refusait d'ouvrir le
+fichier), et un `<w:tblGrid>` à 100 twips/colonne quand `columnWidths` est absent — tous deux
+**invisibles avant d'ouvrir le paquet**.
+
+`h.exportDocxParts(html, headerFooterData, marginsTwip)` génère le `.docx`, le dézippe (JSZip, via
+`PdfExport.ensurePdfLibsLoaded`) et rend chaque partie XML parsée. Les accesseurs à utiliser ensuite :
+
+| Helper | Ce qu'il rend |
+|---|---|
+| `h.docxDrawings(xmlDoc)` | Une entrée par `<w:drawing>`, dans l'ordre : `kind` (`'inline'` / `'anchor'`), `x`/`y` **en pt** depuis le repère `relativeFrom`, `alignH`/`alignV` quand Word positionne par mot-clé, `widthPt`/`heightPt`, `behindDoc`, `wrap`/`wrapSide`, `docPrId` |
+| `h.docxParagraphs(xmlDoc)` | Une entrée par `<w:p>` (y compris dans les tableaux) : `text`, `runs[]` (gras/italique/couleur/taille/police…), `style`, `align`, `numId`/`ilvl`, `indentLeft`, `pageBreakBefore` |
+| `h.docxTables(xmlDoc)` | Les `<w:tbl>` de premier niveau avec leur `<w:tblGrid>` réel et la largeur de chaque cellule — de quoi vérifier la cohérence `tblGrid` ↔ `tcW`, celle que Word contrôle |
+| `h.docxSectionProps(xmlDoc)` | `<w:sectPr>` : taille de page, `pgMar`, `titlePg`, références en-tête/pied |
+| `h.docxNumbering(parts.part('word/numbering.xml'))` | `numId` → `{ format, text, start, indentLeft }` du niveau 0 |
+| `h.docxFootnotes(...)`, `h.docxFields(...)` | Notes de bas de page réelles ; champs Word (`PAGE`, `NUMPAGES`) |
+
+`parts.names` liste les parties du paquet, `parts.part(nom)` en parse une (`word/header1.xml`…),
+`parts.mediaSizes` donne les octets embarqués dans `word/media/` (dédoublonnage des images).
+
+**Pourquoi une suite `docxImages` séparée** : tout l'historique de `js/docx-export.js` est fait de
+corrections de POSITION d'image (habillage gauche/droite ignoré, image plaquée en haut du paragraphe,
+image enfant direct du document qui disparaissait, `wp:docPr` dupliqué). `docxImages` rejoue donc la
+même matrice `contexte × alignement × type d'ancre` que `pdfGroundTruth`, construite par de vrais clics
+dans l'éditeur, et vérifie que `<wp:anchor>` tombe sur `marge de page + grille page capturée` — plus
+deux scénarios de parité qui comparent directement la position DOCX à la position **réellement peinte**
+dans le PDF du même document.
+
+**A immédiatement trouvé un vrai bug dès son premier lancement** : une image `data-align="center"`
+sortait collée à gauche dans le `.docx` alors que l'éditeur, le mode Lecture et le PDF la centrent tous
+les trois. Cause : `alignment` est une propriété de **paragraphe** en OOXML (`w:jc`), jamais de run —
+l'image doit donc occuper son propre `<w:p>` centré (cf. `splitRunsAtFloatedImages`, `js/docx-export.js`).
 
 ## Pourquoi `_test-harness.html` n'est pas commité
 

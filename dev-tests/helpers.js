@@ -388,6 +388,232 @@ window.TestHelpers = (function () {
     return { pages };
   }
 
+
+  // --- Export DOCX : ouverture du .docx GÉNÉRÉ, jamais des objets docx.js intermédiaires ---
+  // Même philosophie que extractPdfGroundTruth ci-dessus, et pour la même raison : un objet
+  // `docx.ImageRun`/`docx.Paragraph` en mémoire n'est PAS le fichier que Word ouvrira. Entre les deux
+  // il y a la sérialisation de docx.js (et ses bugs : le compteur wp:docPr repart à 1 à chaque
+  // ImageRun, un `columnWidths` absent retombe sur 100 twips/colonne - deux vrais défauts corrigés
+  // dans js/docx-export.js qu'une assertion sur les objets d'entrée n'aurait JAMAIS vus). On
+  // dézippe donc le .docx et on lit l'OOXML réel.
+  // JSZip vient du même lot que pdfmake (PdfExport.ensurePdfLibsLoaded, cf. js/main.js:onExportDocxBatch) :
+  // js/docx-export.js n'en déclare pas de son côté.
+  async function exportDocxParts(html, headerFooterData, marginsTwip) {
+    await PdfExport.ensurePdfLibsLoaded();
+    await DocxExport.ensureDocxLibLoaded();
+    const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, null, {}, '', headerFooterData || null, marginsTwip || null);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const parts = {};
+    const names = Object.keys(zip.files).filter(n => !zip.files[n].dir);
+    for (const name of names) {
+      // word/media/* : des octets d'image, jamais du XML - gardés à part (taille seule, cf. mediaSizes).
+      if (/\.(xml|rels)$/.test(name)) parts[name] = await zip.file(name).async('string');
+    }
+    const mediaSizes = {};
+    for (const name of names.filter(n => n.startsWith('word/media/'))) {
+      mediaSizes[name] = (await zip.file(name).async('uint8array')).length;
+    }
+    const parse = xml => new DOMParser().parseFromString(xml, 'application/xml');
+    return {
+      blob, filename, zip, parts, names, mediaSizes,
+      doc: parse(parts['word/document.xml'] || '<x/>'),
+      part: name => (parts[name] ? parse(parts[name]) : null),
+    };
+  }
+
+  // 1pt = 12700 EMU (unité native des positions/tailles de dessin OOXML, cf. EMU_PER_PT js/docx-export.js).
+  const DOCX_EMU_PER_PT = 12700;
+  // Décrit chaque <w:drawing> du XML donné dans l'ORDRE du document : `kind` 'inline' (image dans le
+  // flux de texte) ou 'anchor' (image flottante - calque ou habillage). Pour une ancre, la position
+  // est rendue en pt depuis l'origine du repère indiqué par `relativeFrom` (page/margin/paragraph...),
+  // ou `alignH`/`alignV` quand Word positionne par mot-clé plutôt que par décalage ('left', 'top'...).
+  // `x`/`y` valent null dans ce dernier cas : c'est une information volontairement ABSENTE du fichier,
+  // pas une position à 0.
+  function docxDrawings(xmlDoc) {
+    const out = [];
+    const drawings = xmlDoc.getElementsByTagName('w:drawing');
+    for (let i = 0; i < drawings.length; i++) {
+      const d = drawings[i];
+      const anchor = d.getElementsByTagName('wp:anchor')[0];
+      const inline = d.getElementsByTagName('wp:inline')[0];
+      const box = anchor || inline;
+      if (!box) continue;
+      const extent = box.getElementsByTagName('wp:extent')[0];
+      const docPr = box.getElementsByTagName('wp:docPr')[0];
+      const entry = {
+        kind: anchor ? 'anchor' : 'inline',
+        widthPt: extent ? Number(extent.getAttribute('cx')) / DOCX_EMU_PER_PT : null,
+        heightPt: extent ? Number(extent.getAttribute('cy')) / DOCX_EMU_PER_PT : null,
+        docPrId: docPr ? docPr.getAttribute('id') : null,
+      };
+      if (anchor) {
+        const posOf = tag => {
+          const el = anchor.getElementsByTagName(tag)[0];
+          if (!el) return { rel: null, pt: null, align: null };
+          const offset = el.getElementsByTagName('wp:posOffset')[0];
+          const align = el.getElementsByTagName('wp:align')[0];
+          return {
+            rel: el.getAttribute('relativeFrom'),
+            pt: offset ? Number(offset.textContent) / DOCX_EMU_PER_PT : null,
+            align: align ? align.textContent : null,
+          };
+        };
+        const h = posOf('wp:positionH'), v = posOf('wp:positionV');
+        entry.x = h.pt; entry.y = v.pt;
+        entry.alignH = h.align; entry.alignV = v.align;
+        entry.relativeFrom = { h: h.rel, v: v.rel };
+        entry.behindDoc = anchor.getAttribute('behindDoc') === '1' || anchor.getAttribute('behindDoc') === 'true';
+        entry.zIndex = anchor.getAttribute('relativeHeight');
+        const square = anchor.getElementsByTagName('wp:wrapSquare')[0];
+        entry.wrap = square ? 'square' : (anchor.getElementsByTagName('wp:wrapNone')[0] ? 'none' : null);
+        entry.wrapSide = square ? square.getAttribute('wrapText') : null;
+      }
+      out.push(entry);
+    }
+    return out;
+  }
+
+  // Décrit chaque <w:p> d'un XML OOXML, dans l'ordre du document, y compris ceux imbriqués dans un
+  // <w:tbl> (un `index` de paragraphe ne dit donc rien du contexte : croiser avec docxTables au besoin).
+  // `text` concatène les <w:t> du paragraphe - pas les images ni les champs (numéro de page), qui ont
+  // leurs propres accesseurs.
+  function docxParagraphs(xmlDoc) {
+    const out = [];
+    const ps = xmlDoc.getElementsByTagName('w:p');
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      const pPr = p.getElementsByTagName('w:pPr')[0];
+      const val = (parent, tag) => { const el = parent && parent.getElementsByTagName(tag)[0]; return el ? el.getAttribute('w:val') : null; };
+      const numPr = pPr && pPr.getElementsByTagName('w:numPr')[0];
+      const ts = p.getElementsByTagName('w:t');
+      let text = '';
+      for (let j = 0; j < ts.length; j++) text += ts[j].textContent;
+      const runs = [];
+      const rs = p.getElementsByTagName('w:r');
+      for (let j = 0; j < rs.length; j++) {
+        const r = rs[j];
+        const rPr = r.getElementsByTagName('w:rPr')[0];
+        const has = tag => !!(rPr && rPr.getElementsByTagName(tag)[0]);
+        const t = r.getElementsByTagName('w:t')[0];
+        runs.push({
+          text: t ? t.textContent : '',
+          bold: has('w:b'), italics: has('w:i'), strike: has('w:strike'),
+          underline: has('w:u'),
+          sizeHalfPt: val(rPr, 'w:sz') ? Number(val(rPr, 'w:sz')) : null,
+          color: val(rPr, 'w:color'),
+          highlight: (rPr && rPr.getElementsByTagName('w:shd')[0]) ? rPr.getElementsByTagName('w:shd')[0].getAttribute('w:fill') : null,
+          font: (rPr && rPr.getElementsByTagName('w:rFonts')[0]) ? rPr.getElementsByTagName('w:rFonts')[0].getAttribute('w:ascii') : null,
+          hasDrawing: !!r.getElementsByTagName('w:drawing').length,
+          hasFootnoteRef: !!r.getElementsByTagName('w:footnoteReference').length,
+        });
+      }
+      out.push({
+        text,
+        runs,
+        style: val(pPr, 'w:pStyle'),
+        align: val(pPr, 'w:jc'),
+        numId: numPr ? val(numPr, 'w:numId') : null,
+        ilvl: numPr ? val(numPr, 'w:ilvl') : null,
+        indentLeft: (pPr && pPr.getElementsByTagName('w:ind')[0]) ? pPr.getElementsByTagName('w:ind')[0].getAttribute('w:left') : null,
+        pageBreakBefore: !!(pPr && pPr.getElementsByTagName('w:pageBreakBefore')[0]),
+        drawingCount: p.getElementsByTagName('w:drawing').length,
+      });
+    }
+    return out;
+  }
+
+  // Les <w:tbl> de premier niveau du corps (une 2-colonnes comme un vrai tableau : js/docx-export.js
+  // émule les colonnes par un tableau sans bordures, cf. twoColumnsBlockFrom), avec le <w:tblGrid>
+  // RÉEL - la cohérence tblGrid/tcW est ce que Word vérifie pour accepter le fichier.
+  function docxTables(xmlDoc) {
+    const body = xmlDoc.getElementsByTagName('w:body')[0];
+    if (!body) return [];
+    return Array.from(body.children).filter(n => n.nodeName === 'w:tbl').map(tbl => {
+      const grid = tbl.getElementsByTagName('w:tblGrid')[0];
+      const gridCols = grid ? Array.from(grid.getElementsByTagName('w:gridCol')).map(g => Number(g.getAttribute('w:w'))) : [];
+      const rows = Array.from(tbl.children).filter(n => n.nodeName === 'w:tr').map(tr => {
+        const cells = Array.from(tr.children).filter(n => n.nodeName === 'w:tc').map(tc => {
+          const tcPr = tc.getElementsByTagName('w:tcPr')[0];
+          const w = tcPr && tcPr.getElementsByTagName('w:tcW')[0];
+          const span = tcPr && tcPr.getElementsByTagName('w:gridSpan')[0];
+          const noBorder = tcPr && Array.from(tcPr.getElementsByTagName('w:tcBorders')).length
+            ? Array.from(tcPr.getElementsByTagName('w:tcBorders')[0].children).every(b => b.getAttribute('w:val') === 'none')
+            : null;
+          let text = '';
+          const ts = tc.getElementsByTagName('w:t');
+          for (let j = 0; j < ts.length; j++) text += ts[j].textContent;
+          return { widthTwip: w ? Number(w.getAttribute('w:w')) : null, gridSpan: span ? Number(span.getAttribute('w:val')) : 1, text, borderless: noBorder };
+        });
+        return { cells };
+      });
+      return { gridCols, rows };
+    });
+  }
+
+  // <w:sectPr> : taille de page, marges (w:pgMar, en twips - la valeur que PageLayout.getMarginsTwip a
+  // fournie à l'export doit se retrouver ICI telle quelle) et `titlePg` (première page différente).
+  function docxSectionProps(xmlDoc) {
+    const sect = xmlDoc.getElementsByTagName('w:sectPr')[0];
+    if (!sect) return null;
+    const pgSz = sect.getElementsByTagName('w:pgSz')[0];
+    const pgMar = sect.getElementsByTagName('w:pgMar')[0];
+    const num = (el, a) => (el && el.getAttribute(a) !== null ? Number(el.getAttribute(a)) : null);
+    return {
+      widthTwip: num(pgSz, 'w:w'), heightTwip: num(pgSz, 'w:h'),
+      margins: { top: num(pgMar, 'w:top'), right: num(pgMar, 'w:right'), bottom: num(pgMar, 'w:bottom'), left: num(pgMar, 'w:left'), header: num(pgMar, 'w:header'), footer: num(pgMar, 'w:footer') },
+      // CT_OnOff : la PRÉSENCE de la balise vaut `true`, sauf w:val="false" explicite (ce que docx.js écrit quand l'option est désactivée). Tester la
+      // seule présence rendrait "première page différente" toujours actif.
+      titlePg: (() => { const el = sect.getElementsByTagName('w:titlePg')[0]; return !!el && el.getAttribute('w:val') !== 'false' && el.getAttribute('w:val') !== '0'; })(),
+      headerRefs: Array.from(sect.getElementsByTagName('w:headerReference')).map(r => r.getAttribute('w:type')),
+      footerRefs: Array.from(sect.getElementsByTagName('w:footerReference')).map(r => r.getAttribute('w:type')),
+    };
+  }
+
+
+  // Champs Word (w:instrText) dans l'ordre : 'PAGE', 'NUMPAGES'... Un VRAI champ, pas un nombre figé - c'est toute la différence entre un numéro de page
+  // qui suit la pagination du lecteur et un "1" écrit en dur (ce que fait forcément le PDF, lui).
+  function docxFields(xmlDoc) {
+    return Array.from(xmlDoc.getElementsByTagName('w:instrText')).map(el => el.textContent.trim());
+  }
+
+  // numbering.xml : numId -> { format, text, start } du niveau 0. js/docx-export.js donne à CHAQUE <ul>/<ol> sa propre référence (jamais partagée), donc
+  // un numId par liste du document - c'est ce qui garantit qu'une liste redémarre bien à 1 (ou à `start`) sans manipuler d'instance.
+  function docxNumbering(numberingDoc) {
+    if (!numberingDoc) return {};
+    const abstracts = {};
+    Array.from(numberingDoc.getElementsByTagName('w:abstractNum')).forEach(an => {
+      const lvl = Array.from(an.getElementsByTagName('w:lvl')).find(l => l.getAttribute('w:ilvl') === '0');
+      const val = (parent, tag) => { const el = parent && parent.getElementsByTagName(tag)[0]; return el ? el.getAttribute('w:val') : null; };
+      abstracts[an.getAttribute('w:abstractNumId')] = lvl
+        ? { format: val(lvl, 'w:numFmt'), text: val(lvl, 'w:lvlText'), start: val(lvl, 'w:start'), indentLeft: (lvl.getElementsByTagName('w:ind')[0] || { getAttribute: () => null }).getAttribute('w:left') }
+        : null;
+    });
+    const out = {};
+    Array.from(numberingDoc.getElementsByTagName('w:num')).forEach(n => {
+      const ref = n.getElementsByTagName('w:abstractNumId')[0];
+      const override = n.getElementsByTagName('w:startOverride')[0];
+      const base = ref ? abstracts[ref.getAttribute('w:val')] : null;
+      out[n.getAttribute('w:numId')] = base ? Object.assign({}, base, override ? { start: override.getAttribute('w:val') } : {}) : null;
+    });
+    return out;
+  }
+
+  // footnotes.xml : id -> texte. Les id -1 (separator) et 0 (continuationSeparator) sont posés d'office par docx.js, jamais par l'export - écartés ici pour
+  // que l'appelant ne compte que les VRAIES notes du document.
+  function docxFootnotes(footnotesDoc) {
+    const out = {};
+    if (!footnotesDoc) return out;
+    Array.from(footnotesDoc.getElementsByTagName('w:footnote')).forEach(fn => {
+      const id = fn.getAttribute('w:id');
+      if (id === '-1' || id === '0') return;
+      let text = '';
+      const ts = fn.getElementsByTagName('w:t');
+      for (let i = 0; i < ts.length; i++) text += ts[i].textContent;
+      out[id] = text;
+    });
+    return out;
+  }
+
   // Aplati récursivement un tableau de contenu pdfmake (stack/columns/table
   // body imbriqués) en une liste plate de blocs - pratique pour chercher
   // "y a-t-il un run avec ce texte quelque part" sans connaître la structure
@@ -425,6 +651,8 @@ window.TestHelpers = (function () {
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth,
+    exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
+    docxFields, docxNumbering, docxFootnotes,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,
   };
 })();

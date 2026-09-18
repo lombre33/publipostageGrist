@@ -39,6 +39,8 @@ const GROUPS = {
   pdfGroundTruth: 'scenarios-pdf-ground-truth',
   readModeFidelity: 'scenarios-readmode-fidelity',
   pageLayout: 'scenarios-pagelayout',
+  docx: 'scenarios-docx',
+  docxImages: 'scenarios-docx-images',
   comments: 'scenarios-comments',
 };
 
@@ -55,6 +57,11 @@ const groups = probe ? [] : (wanted.length ? wanted : Object.keys(GROUPS));
 for (const g of groups) {
   if (!GROUPS[g]) { console.error(`Groupe inconnu : ${g}\nGroupes : ${Object.keys(GROUPS).join(', ')}`); process.exit(2); }
 }
+// GROUPS liste TOUS les groupes du projet, y compris ceux dont le fichier n'est pas encore sur la branche courante (plusieurs chantiers avancent en
+// parallèle sur main). Un fichier absent n'est pas un échec de test : on le signale et on passe, au lieu de faire tomber la suite entière sur une
+// exception de chargement de script qui ressemble à une régression.
+const missingFiles = groups.filter(g => !existsSync(join(ROOT, 'dev-tests', `${GROUPS[g]}.js`)));
+const runnable = groups.filter(g => !missingFiles.includes(g));
 
 // === Serveur statique ===
 const MIME = {
@@ -218,7 +225,8 @@ if (probe) {
 
 let totalPass = 0, totalFail = 0;
 const failing = [];
-for (const g of groups) {
+if (missingFiles.length) console.log(`\n(groupes ignorés, fichier absent de cette branche : ${missingFiles.join(', ')})`);
+for (const g of runnable) {
   process.stdout.write(`\n=== ${g} ===\n`);
   try {
     const r = await runGroup(g);
