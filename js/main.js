@@ -36,9 +36,36 @@
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
-      opt.textContent = t.nom;
+      opt.textContent = t.estParDefaut ? (t.nom + ' ★') : t.nom;
       templateSelect.appendChild(opt);
     });
+  }
+
+  // Reflète si le modèle actuellement chargé est le modèle par défaut - rappelé après chaque changement de modèle et après le clic sur le bouton lui-même,
+  // jamais mis à jour "à la main" ailleurs pour ne jamais désynchroniser l'icône de l'état réel.
+  function syncDefaultTemplateButton() {
+    const btn = document.getElementById('btn-set-default-template');
+    if (!btn) return;
+    const currentId = Templates.getCurrentId();
+    const isDefault = currentId != null && String(Templates.getDefaultId()) === String(currentId);
+    btn.classList.toggle('is-default', isDefault);
+    btn.disabled = currentId == null;
+  }
+
+  function wireDefaultTemplateButton() {
+    const btn = document.getElementById('btn-set-default-template');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const currentId = Templates.getCurrentId();
+      if (!currentId) return;
+      const wasDefault = String(Templates.getDefaultId()) === String(currentId);
+      await Templates.setDefault(wasDefault ? null : currentId);
+      await refreshTemplateList();
+      templateSelect.value = currentId;
+      syncDefaultTemplateButton();
+      setStatus(wasDefault ? I18n.t('status.defaultTemplateCleared') : I18n.t('status.defaultTemplateSet'));
+    });
+    syncDefaultTemplateButton();
   }
 
   function loadTemplateIntoEditor(tpl) {
@@ -46,6 +73,9 @@
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
     // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
     Editor.exitHeaderFooterModeIfActive();
+    // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
+    // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
+    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
     Editor.setHTML(tpl ? tpl.contenu : '');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
@@ -61,6 +91,7 @@
     // Changer de modèle ne touchait jusqu'ici que #editor-container (caché en mode Lecture) - #reader-container ne se rafraîchissait donc jamais tant qu'on
     // ne repassait pas explicitement par "Mode édition" puis "Mode lecture" (le changement de modèle semblait alors "ne rien faire" en mode Lecture).
     if (currentMode === 'read') renderReader();
+    syncDefaultTemplateButton();
     // DERNIÈRE ligne de cette fonction (pas avant) : Editor.setHTML()/setHeaderFooterData() juste au-dessus déclenchent leurs propres transactions
     // ProseMirror, donc leur propre `editor.on('update')` - sans ça, charger un modèle se marquerait lui-même "modifié" aux yeux de l'auto-save.
     resetAutosaveState(tpl);
@@ -111,10 +142,11 @@
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
-    const { id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData());
+    const { id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
     Templates.setCurrentId(savedId);
     await refreshTemplateList();
     templateSelect.value = savedId;
+    syncDefaultTemplateButton();
     // Un enregistrement manuel explicite tranche tout conflit auto-save en cours en faveur de CETTE version (cf. autosaveTick) - pas besoin de recharger.
     autosaveDirty = false;
     autosaveLastKnownDateModif = dateModif;
@@ -198,7 +230,7 @@
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
     try {
-      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData());
+      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm());
       autosaveLastKnownDateModif = dateModif;
       autosaveDirty = false;
       setStatus(I18n.t('status.autosaved'));
@@ -253,14 +285,20 @@
       exportOperationInProgress = true;
       const btnSingle = document.getElementById('btn-export-pdf');
       const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
+      const btnDocx = document.getElementById('v2-btn-export-docx');
+      const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
+      setExportControlLocked(btnDocx, true);
+      setExportControlLocked(btnDocxBatch, true);
       try {
         await fn(...args);
       } finally {
         exportOperationInProgress = false;
         setExportControlLocked(btnSingle, false);
         setExportControlLocked(btnBatch, false);
+        setExportControlLocked(btnDocx, false);
+        setExportControlLocked(btnDocxBatch, false);
       }
     };
   }
@@ -273,11 +311,26 @@
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
-      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData());
+      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       console.error(e);
       setStatus(I18n.t('status.pdfGenerationError'), true);
+    }
+  }
+
+  // V1 - portée volontairement plus modeste que le PDF (cf. en-tête js/docx-export.js) : pas de sélecteur de qualité, un seul mode d'export.
+  async function onExportDocx() {
+    Editor.exitHeaderFooterModeIfActive();
+    const record = GristAPI.getCurrentRecord();
+    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    setStatus(I18n.t('status.docxGenerating'));
+    try {
+      await DocxExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
+      setStatus(I18n.t('status.docxGenerated'));
+    } catch (e) {
+      console.error(e);
+      setStatus(I18n.t('status.docxGenerationError'), true);
     }
   }
 
@@ -327,6 +380,7 @@
     const html = Editor.getHTML();
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
+    const marginsPt = PageLayout.getMarginsPt();
     const zip = new JSZip();
     const usedNames = new Set();
     let ok = 0;
@@ -334,7 +388,7 @@
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
-        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData);
+        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsPt);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
         zip.file(uniqueZipFilename(base, usedNames) + '.pdf', blob);
         ok++;
@@ -351,6 +405,68 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = sanitizeFilenamePart(tableId) + '-export-pdf.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus(failed
+      ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
+      : I18n.t('status.batchExportDone', { ok }));
+  }
+
+  // Même schéma que onExportPdfBatch - réutilise JSZip via PdfExport.ensurePdfLibsLoaded (docx-export.js n'embarque pas sa propre déclaration CDN/SRI
+  // pour cette lib déjà chargée ailleurs, cf. commentaire équivalent en tête de ce fichier pour le PDF).
+  async function onExportDocxBatch() {
+    Editor.exitHeaderFooterModeIfActive();
+    const tableId = currentTableId || GristAPI.getCurrentTableId();
+    if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
+    let rows;
+    try { rows = await GristAPI.fetchTableRows(tableId); }
+    catch (e) {
+      console.error('[main] export DOCX en lot : échec de lecture de la table', e);
+      setStatus(I18n.t('status.cannotReadRows'), true);
+      return;
+    }
+    if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
+    const proceed = window.confirm(I18n.t('confirm.batchExport', { count: rows.length, table: tableId }));
+    if (!proceed) return;
+
+    setStatus(I18n.t('status.loadingPdfLibs'));
+    try { await PdfExport.ensurePdfLibsLoaded(); }
+    catch (e) {
+      console.error('[main] export DOCX en lot : échec de chargement de JSZip', e);
+      setStatus(I18n.t('status.pdfLibsLoadError'), true);
+      return;
+    }
+
+    const html = Editor.getHTML();
+    const filenameTemplate = getPdfFilenameTemplate();
+    const headerFooterData = Editor.getHeaderFooterData();
+    const marginsTwip = PageLayout.getMarginsTwip();
+    const zip = new JSZip();
+    const usedNames = new Set();
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
+      try {
+        const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsTwip);
+        const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
+        zip.file(uniqueZipFilename(base, usedNames) + '.docx', blob);
+        ok++;
+      } catch (e) {
+        console.error('[main] export DOCX en lot : échec pour la ligne', rows[i].id, e);
+        failed++;
+      }
+    }
+    if (!ok) { setStatus(I18n.t('status.exportError'), true); return; }
+
+    setStatus(I18n.t('status.zipCompressing'));
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilenamePart(tableId) + '-export-docx.zip';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -405,7 +521,7 @@
     const flyout = document.getElementById('v2-quality-flyout');
     const trigger = document.getElementById('v2-btn-quality');
     if (!select || !flyout || !trigger) return;
-    const rows = flyout.querySelectorAll('.v2-hover-row');
+    const rows = flyout.querySelectorAll('.v2-hover-row[data-quality]');
     const syncActiveRow = () => rows.forEach(row => row.classList.toggle('is-active', row.dataset.quality === select.value));
     rows.forEach(row => {
       if (row.classList.contains('v2-hover-row-disabled')) return;
@@ -637,6 +753,10 @@
     EditorCore.getEditor().on('update', markAutosaveDirty);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
+    ['top', 'right', 'bottom', 'left'].forEach(side => {
+      const marginInput = document.getElementById('settings-margin-' + side);
+      if (marginInput) marginInput.addEventListener('input', markAutosaveDirty);
+    });
     GristAPI.onRecord(async function (record, tableId) {
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
@@ -644,6 +764,10 @@
       if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
     });
     await refreshTemplateList();
+    // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
+    // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
+    const defaultTemplateId = Templates.getDefaultId();
+    if (defaultTemplateId != null) templateSelect.value = defaultTemplateId;
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
     document.getElementById('btn-new').addEventListener('click', onNew);
@@ -652,12 +776,15 @@
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(onExportPdfBatch));
+    document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
+    document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(onExportDocxBatch));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
+    wireDefaultTemplateButton();
     wirePdfFilenameToggle();
     wireQualityDropdown();
     Settings.wireSettingsModal();

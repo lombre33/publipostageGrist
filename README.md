@@ -119,4 +119,6 @@ priorité.
 
 ## Licence
 
-À définir avant publication officielle.
+Ce projet est distribué sous licence [GNU General Public License v3.0](LICENSE) (GPLv3).
+
+Copyright (C) 2026 lombre33

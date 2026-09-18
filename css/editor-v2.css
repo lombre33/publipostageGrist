@@ -111,6 +111,26 @@
 .tiptap .two-columns-zone-outer { position: relative; }
 .tiptap .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 14px; height: 32px; transform: translate(-50%, -50%); border-radius: 4px; background: var(--accent, #2f6fed); cursor: ew-resize; opacity: 0; transition: opacity .15s ease; z-index: 5; }
 .tiptap .two-columns-zone-outer:hover .two-columns-resize-grip { opacity: 1; }
+/* Bouton "mm" - séparé de la poignée de glisser ci-dessus (pas d'ambiguïté clic/glisser à détecter) : juste au-dessus d'elle, même déclenchement au
+   survol de la zone. */
+.tiptap .two-columns-mm-button {
+  position: absolute; top: calc(50% - 26px); left: var(--layout-left, 50%); transform: translateX(-50%);
+  display: flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border: none; border-radius: 4px;
+  background: var(--accent, #2f6fed); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 5;
+}
+.tiptap .two-columns-zone-outer:hover .two-columns-mm-button { opacity: 1; }
+/* Popover du bouton "mm" ci-dessus - même position horizontale (juste en dessous de la poignée), même famille visuelle que les autres petits panneaux
+   flottants du projet (#autocomplete-box/.v2-hover-flyout : fond blanc, liseré, ombre portée légère). Deux lignes (gauche saisissable, droite calculée) -
+   pas un champ isolé dont on ne sait pas s'il décrit la colonne de gauche ou de droite. */
+.two-columns-mm-popover {
+  position: absolute; top: calc(50% + 22px); left: var(--layout-left, 50%); transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: #fff; border: 1px solid var(--border-strong, #c3cad6);
+  border-radius: 6px; box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: #3a4452; white-space: nowrap;
+}
+.two-columns-mm-popover label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.two-columns-mm-popover input { width: 56px; padding: 3px 5px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; }
+.two-columns-mm-computed { display: inline-block; width: 56px; padding: 3px 5px; text-align: right; color: var(--text-faint, #6b7684); }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
 /* NodeView de l'image (js/editor.js:createEditorImageNode) - structure DIFFÉRENTE du HTML sérialisé (qui pose position/left/top/data-align/data-wrap
@@ -201,12 +221,12 @@
    l'échelle réelle). Ce n'était donc pas la donnée exportée qui était fausse, mais l'aperçu éditeur lui-même qui mentait dès qu'il rendait en dessous de
    793.71px. */
 #editor-container.a4-preview .v2-page-sheet { box-sizing: border-box; width: 793.71px; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
-#editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: 37.33px; background: transparent; box-shadow: none; }
+#editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: transparent; box-shadow: none; }
 /* En mode édition d'en-tête/pied (.hf-editing), ce même `.tiptap` affiche temporairement le contenu de l'en-tête/pied - le padding vertical de 37.33px
    ci-dessus simule la marge de PAGE pour le document PRINCIPAL, mais n'a aucun sens ici (c'est déjà le contenu de la marge elle-même). Padding vertical
    ramené à 8px, IDENTIQUE à la zone de prévisualisation en lecture seule (`.v2-page-edge-spacer`), pour que l'édition active corresponde à ce qu'on voit une
    fois "Terminer" cliqué - le padding horizontal (37.33px) reste pertinent : il aligne le contenu sur les VRAIES marges gauche/droite de la page. */
-#editor-container.a4-preview.hf-editing .tiptap { padding: 8px 37.33px; }
+#editor-container.a4-preview.hf-editing .tiptap { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); }
 /* Un tableau avec beaucoup de colonnes peut dépasser la largeur disponible - chaque <col> porte un `min-width` (TipTap), contrainte dure même sous
    table-layout:fixed. .tableWrapper laisse alors défiler horizontalement (utile en mode classique), mais en Aperçu A4 ce défilement cachait la vraie largeur
    qu'utilisera l'export PDF (qui ne défile jamais, cf. tableFrom dans js/pdf-export.js). `min-width: 0 !important` supprime le plancher dans le cas courant ;
@@ -221,7 +241,7 @@
    redimensionnement de tableau de l'éditeur TipTap (absent en lecture, simple HTML résolu). */
 #reader-container.a4-preview { background: #eef1f5; }
 /* Pas de `max-width: 100%` ici non plus, même raison que `.v2-page-sheet` ci-dessus : #reader-container a déjà `overflow: auto` (css/style.css). */
-#reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; margin: 0 auto; padding: 37.33px; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+#reader-container.a4-preview .reader-content { box-sizing: border-box; width: 793.71px; margin: 0 auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 
 /* === Aperçu paginé réel - éditeur (cf. js/editor.js:renderPaginationOverlay) === Deux natures d'éléments : les espaceurs de bord (`.v2-page-edge-spacer`,
    en flux normal, frères de `.tiptap`) réservent un vrai espace au début/à la fin du document pour l'en-tête de la page 1/le pied de la dernière page,
@@ -229,7 +249,7 @@
    entre deux pages et PEUVENT recouvrir un peu de texte pile à la limite (résidu assumé). Même mécanisme réutilisé en mode Lecture, #reader-container ayant
    déjà `position:relative` (css/style.css). */
 #editor-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-edge-spacer {
-  box-sizing: border-box; padding: 8px 37.33px;
+  box-sizing: border-box; padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px);
   font-size: 10.5px; line-height: 1.42; color: #1b2430; min-height: 1.6em;
   transition: background .12s ease, box-shadow .12s ease;
 }
@@ -278,12 +298,12 @@
 
 .v2-pagination-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 4; }
 .v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
-.v2-page-band-header, .v2-page-band-footer { padding: 8px 37.33px; max-height: 76px; overflow: hidden; box-sizing: border-box; }
+.v2-page-band-header, .v2-page-band-footer { padding: 8px var(--pp-margin-right, 37.33px) 8px var(--pp-margin-left, 37.33px); max-height: 76px; overflow: hidden; box-sizing: border-box; }
 .v2-page-band-header:empty, .v2-page-band-footer:empty { display: none; }
 .v2-page-seam-divider { height: 0; border-top: 1px dashed #c3cad6; margin: 0 14px; }
 /* Coupure de page automatique SANS en-tête/pied configuré (reste visible dès "beaucoup de lignes", pas seulement avec en-tête/pied ou saut forcé) - simple
    repère "— Page N —", pas de carte "page" (rien à afficher qui justifierait un fond blanc). */
-.v2-page-break-line { display: flex; align-items: center; gap: 10px; height: 20px; padding: 0 37.33px; }
+.v2-page-break-line { display: flex; align-items: center; gap: 10px; height: 20px; padding: 0 var(--pp-margin-right, 37.33px) 0 var(--pp-margin-left, 37.33px); }
 .v2-page-break-line::before, .v2-page-break-line::after { content: ''; flex: 1; border-top: 1px dashed #c3cad6; }
 .v2-page-break-label { font-size: 10px; font-weight: 600; color: #9aa2ad; white-space: nowrap; }
 

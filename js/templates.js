@@ -40,6 +40,43 @@ const Templates = (function () {
     }
   }
 
+  // Marges de page (haut/droite/bas/gauche, mm) - même migration idempotente que HeaderFooter ci-dessus.
+  let marginsColumnChecked = false;
+  async function ensureMarginsColumn() {
+    if (marginsColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('Margins' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'Margins', { type: 'Text', isFormula: false, label: 'Marges de page' }]
+        ]);
+      }
+      marginsColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne Margins', e);
+    }
+  }
+
+  // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
+  // que HeaderFooter ci-dessus.
+  let defaultColumnChecked = false;
+  async function ensureDefaultColumn() {
+    if (defaultColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('EstParDefaut' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'EstParDefaut', { type: 'Bool', isFormula: false, label: 'Modèle par défaut' }]
+        ]);
+      }
+      defaultColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne EstParDefaut', e);
+    }
+  }
+
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
   function safeParseHeaderFooter(json) {
@@ -56,9 +93,24 @@ const Templates = (function () {
     }
   }
 
+  // Défaut identique à PageLayout.DEFAULT_MARGIN_MM (js/page-layout.js) - dupliqué plutôt qu'importé, même tolérance que safeParseHeaderFooter ci-dessus.
+  // DOIT convertir exactement vers 28pt (l'ancienne marge codée en dur) pour qu'un modèle sans réglage propre reste pixel-identique à avant.
+  function safeParseMargins(json) {
+    const DEFAULT_MARGIN_MM = 28 * 25.4 / 72;
+    const empty = { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM };
+    if (!json) return empty;
+    try {
+      return Object.assign(empty, JSON.parse(json));
+    } catch (e) {
+      return empty;
+    }
+  }
+
   async function loadAll() {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
+    await ensureDefaultColumn();
+    await ensureMarginsColumn();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
@@ -72,6 +124,8 @@ const Templates = (function () {
           // Utilisé par js/main.js (auto-save) pour détecter qu'une autre personne a enregistré ce même modèle entre deux vérifications - jamais affiché
           // tel quel à l'utilisateur.
           dateModif: data.DateModif ? data.DateModif[i] : null,
+          marginsMm: safeParseMargins(data.Margins ? data.Margins[i] : null),
+          estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i])
         });
       }
     } catch (e) {
@@ -87,13 +141,37 @@ const Templates = (function () {
 
   function setCurrentId(id) { currentTemplateId = id; }
 
+  function getDefaultId() {
+    const found = templatesCache.find(t => t.estParDefaut);
+    return found ? found.id : null;
+  }
+
+  // id = null retire le modèle par défaut sans en redéfinir un autre. Un seul modèle par défaut à la fois : les autres sont explicitement repassés à false
+  // plutôt que laissés tels quels, pour ne jamais se retrouver avec deux "par défaut" après un enchaînement d'appels.
+  async function setDefault(id) {
+    await ensureTableExists();
+    await ensureDefaultColumn();
+    const actions = [];
+    templatesCache.forEach(t => {
+      if (t.estParDefaut && String(t.id) !== String(id)) actions.push(['UpdateRecord', TABLE_NAME, t.id, { EstParDefaut: false }]);
+    });
+    if (id != null) actions.push(['UpdateRecord', TABLE_NAME, id, { EstParDefaut: true }]);
+    if (actions.length) await grist.docApi.applyUserActions(actions);
+    templatesCache.forEach(t => { t.estParDefaut = (id != null && String(t.id) === String(id)); });
+  }
+
   // Renvoie { id, dateModif } (pas juste l'id) : js/main.js (auto-save) a besoin de connaître le DateModif qu'IL vient d'écrire, pour le distinguer d'un
   // DateModif différent constaté plus tard (preuve qu'quelqu'un d'autre a enregistré ce modèle entre-temps).
-  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData) {
+  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
+    await ensureMarginsColumn();
     const now = new Date().toISOString();
-    const columns = { Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now, HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)) };
+    const columns = {
+      Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,
+      HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
+      Margins: JSON.stringify(marginsData || safeParseMargins(null)),
+    };
     if (id) {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]
@@ -115,5 +193,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, save, remove, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, TABLE_NAME };
 })();

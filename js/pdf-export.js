@@ -42,7 +42,10 @@ const PdfExport = (function () {
   const PDFMAKE_DEFAULT_LINE_RATIO = 1.171875;
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
-  const PAGE_MARGIN_PT = 28; // doit matcher pageMargins dans buildNativeDocDefinition
+  // Marges de page (pt) - variables de module plutôt que des constantes : réglées par setPageMarginsPt() une fois par export (même schéma que
+  // footnoteCounter/footnoteEntries ci-dessous, réinitialisés une fois par passage racine). 28pt sur les 4 côtés = comportement d'avant PageLayout, repli
+  // si l'appelant ne fournit aucune marge (compatibilité ascendante totale).
+  let marginTopPt = 28, marginRightPt = 28, marginBottomPt = 28, marginLeftPt = 28;
   const A4_HEIGHT_PT = 841.89;
   // Notes de bas de page : collectées par inlineRuns à toute profondeur d'appel (cellule/colonne/corps) - variables de module plutôt qu'un paramètre
   // traversant tableFrom/twoColumnsFrom/cellLineToPdfObject. Remises à zéro à chaque buildPdfContentFromRoot racine (une fois par passe, cf. isTopLevel).
@@ -52,8 +55,9 @@ const PdfExport = (function () {
   // très longues sur une page peut la déborder (limite assumée).
   const FOOTNOTE_BAND_PT = 4 * 8 * 1.15 + 8; // ≈ 4 lignes à 8pt + le filet séparateur
   // left/top d'une image en calque sont relatifs au padding de `.tiptap` (= marge de page en Aperçu A4), mais l'hôte de mesure PDF a un padding nul -
-  // soustrait une seule fois avant toute comparaison/interpolation.
-  const A4_PREVIEW_PADDING_PX = PAGE_MARGIN_PT / PX_TO_PT;
+  // soustrait une seule fois avant toute comparaison/interpolation. Deux valeurs séparées (pas une seule) depuis que les marges peuvent être asymétriques.
+  let A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
+  let A4_PREVIEW_PADDING_LEFT_PX = marginLeftPt / PX_TO_PT;
 
   // ProseMirror pose `white-space: break-spaces` (l'espace avant un retour à la ligne compte dans la largeur), pas `normal` comme pdfmake (l'espace dépasse
   // sans compter, un mot de plus peut tenir) - compensé en retranchant la largeur d'un espace (mesurée une fois, mise en cache) de chaque largeur d'habillage.
@@ -71,8 +75,23 @@ const PdfExport = (function () {
     cachedSpaceWidthPt = Math.max(1, (withSpace - withoutSpace) * PX_TO_PT);
     return cachedSpaceWidthPt;
   }
-  const CONTENT_WIDTH_PT = 595.28 - 2 * PAGE_MARGIN_PT;
-  const CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
+  let CONTENT_WIDTH_PT = 595.28 - marginLeftPt - marginRightPt;
+  let CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
+
+  // Réglé une fois par export (cf. exportCurrentRecord/getNativePdfBlobForRecord) à partir des marges du modèle courant (js/page-layout.js) - recalcule
+  // toutes les valeurs dérivées. `marginsPt` absent/partiel retombe côté appelant sur les valeurs par défaut de PageLayout (28pt), jamais ici : ce module
+  // ne connaît pas PageLayout, il reste un pur convertisseur pt->dérivées, cohérent avec le reste du fichier (aucune dépendance vers js/page-layout.js).
+  function setPageMarginsPt(marginsPt) {
+    const m = marginsPt || {};
+    marginTopPt = Number.isFinite(m.top) ? m.top : 28;
+    marginRightPt = Number.isFinite(m.right) ? m.right : 28;
+    marginBottomPt = Number.isFinite(m.bottom) ? m.bottom : 28;
+    marginLeftPt = Number.isFinite(m.left) ? m.left : 28;
+    A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
+    A4_PREVIEW_PADDING_LEFT_PX = marginLeftPt / PX_TO_PT;
+    CONTENT_WIDTH_PT = 595.28 - marginLeftPt - marginRightPt;
+    CONTENT_WIDTH_PX = CONTENT_WIDTH_PT / PX_TO_PT;
+  }
 
   function cssSize(value, fallback) {
     const n = parseFloat(value);
@@ -420,7 +439,7 @@ const PdfExport = (function () {
     flushPending();
   }
   // Rattache une image en calque à `obj` comme ancre locale : dans une cellule, le paragraphe hôte est la référence la plus proche, pas besoin de bracketing.
-  // Pas de correction A4_PREVIEW_PADDING_PX ici : la cellule a son propre position:relative, seule la différence avec le conteneur compte.
+  // Pas de correction A4_PREVIEW_PADDING_TOP/LEFT_PX ici : la cellule a son propre position:relative, seule la différence avec le conteneur compte.
   function attributeNestedPendingImages(images, before, obj, containerNode, rootRect, nestedPending) {
     if (!nestedPending || !rootRect) return;
     for (let i = before; i < images.length; i += 1) {
@@ -734,8 +753,8 @@ const PdfExport = (function () {
         const colContentLeft = colRect.left + (parseFloat(colCs.paddingLeft) || 0) + (parseFloat(colCs.borderLeftWidth) || 0);
         pending.forEach(p => {
           if (p.container || p.above || p.below) {
-            p.imgTopPx += A4_PREVIEW_PADDING_PX + (zoneRect.top - colContentTop);
-            p.imgLeftPx += A4_PREVIEW_PADDING_PX + (zoneRect.left - colContentLeft);
+            p.imgTopPx += A4_PREVIEW_PADDING_TOP_PX + (zoneRect.top - colContentTop);
+            p.imgLeftPx += A4_PREVIEW_PADDING_LEFT_PX + (zoneRect.left - colContentLeft);
           } else {
             // Aucune ancre : repli générique page-relatif (resolveImageAbsolutePosition) - ramène à la position réelle de la zone dans le document.
             p.imgTopPx += zoneRect.top - rootRect.top;
@@ -1284,16 +1303,16 @@ const PdfExport = (function () {
     blocks.forEach((block, idx) => {
       if (!block || !block._pendingImgNode) return;
       const imgRect = block._pendingImgNode.getBoundingClientRect();
-      // Repère BRUT (sans le -A4_PREVIEW_PADDING_PX ci-dessous), utilisé UNIQUEMENT pour le bracketing above/below juste en dessous : comparer un imgTopPx
-      // déjà décalé de -37px à des bottom/top de candidats qui ne le sont pas rendait le bracketing "au-dessus" ~37px trop strict (ratait une ancre
-      // pourtant juste au-dessus, cas réel et fréquent : image posée juste après une seule ligne de texte) et le bracketing "en-dessous" ~37px trop
+      // Repère BRUT (sans le -A4_PREVIEW_PADDING_TOP_PX ci-dessous), utilisé UNIQUEMENT pour le bracketing above/below juste en dessous : comparer un
+      // imgTopPx déjà décalé de -37px à des bottom/top de candidats qui ne le sont pas rendait le bracketing "au-dessus" ~37px trop strict (ratait une
+      // ancre pourtant juste au-dessus, cas réel et fréquent : image posée juste après une seule ligne de texte) et le bracketing "en-dessous" ~37px trop
       // permissif (l'asymétrie inverse) - bug découvert en reproduisant le cas le plus basique qui soit (2 colonnes, texte, image juste en dessous).
       const rawImgTopPx = imgRect.top - rootRect.top;
       const rawImgBottomPx = imgRect.bottom - rootRect.top;
       // Ramène au référentiel sans padding utilisé par tout le reste de cette fonction (mesures prises dans l'hôte de mesure).
-      const imgTopPx = rawImgTopPx - A4_PREVIEW_PADDING_PX;
-      const imgBottomPx = rawImgBottomPx - A4_PREVIEW_PADDING_PX;
-      const imgLeftPx = imgRect.left - rootRect.left - A4_PREVIEW_PADDING_PX;
+      const imgTopPx = rawImgTopPx - A4_PREVIEW_PADDING_TOP_PX;
+      const imgBottomPx = rawImgBottomPx - A4_PREVIEW_PADDING_TOP_PX;
+      const imgLeftPx = imgRect.left - rootRect.left - A4_PREVIEW_PADDING_LEFT_PX;
       const hostNode = sourceNodes[idx];
       const container = hostToOwnTextBlock.get(hostNode) || null;
       const containerTopPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().top - rootRect.top) : null;
@@ -1418,11 +1437,11 @@ const PdfExport = (function () {
     // `content._footnoteBlocks` est posé par buildPdfContentFromRoot à CHAQUE appel (mesure ET finale, cf. resolveNativePdfContent) - cette condition est
     // donc IDENTIQUE aux deux appels, invariant déjà exigé par topExtraPt/bottomExtraPt (même marge aux deux passes, sinon la pagination mesurée dérive).
     const hasFootnotes = (content._footnoteBlocks || []).length > 0;
-    const topMarginPt = PAGE_MARGIN_PT + (hf.topExtraPt || 0);
-    const bottomMarginPt = PAGE_MARGIN_PT + (hf.bottomExtraPt || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
+    const topMarginPt = marginTopPt + (hf.topExtraPt || 0);
+    const bottomMarginPt = marginBottomPt + (hf.bottomExtraPt || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     const doc = {
       pageSize: 'A4', pageOrientation: 'portrait',
-      pageMargins: [PAGE_MARGIN_PT, topMarginPt, PAGE_MARGIN_PT, bottomMarginPt],
+      pageMargins: [marginLeftPt, topMarginPt, marginRightPt, bottomMarginPt],
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
@@ -1432,7 +1451,7 @@ const PdfExport = (function () {
       doc.header = (currentPage, pageCount) => {
         const chunk = (currentPage === 1 && hf.differentFirstPage) ? hf.header.first : hf.header.default;
         if (!chunk) return null;
-        return { margin: [PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5, PAGE_MARGIN_PT, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
+        return { margin: [marginLeftPt, marginTopPt * 0.5, marginRightPt, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
       };
     }
     // Le pied de page doit exister même sans en-tête/pied configuré par l'utilisateur dès qu'il y a au moins une note : le texte des notes est ajouté après
@@ -1453,7 +1472,7 @@ const PdfExport = (function () {
           });
         }
         if (!stackParts.length) return null;
-        return { margin: [PAGE_MARGIN_PT, 0, PAGE_MARGIN_PT, PAGE_MARGIN_PT * 0.5], stack: stackParts };
+        return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
       };
     }
     return doc;
@@ -1462,8 +1481,8 @@ const PdfExport = (function () {
   // Convertit une image en calque en `absolutePosition` pdfmake, interpolée entre les blocs-ancre au-dessus/en-dessous (repli sur une seule ancre, ou local
   // si aucune résolue). `layer` choisit l'ancre de référence pour Y sur pages différentes - même ordre que la relocation : "devant" préfère le dessous.
   function resolveImageAbsolutePosition(a, topMarginPt, bottomMarginPt, layer) {
-    const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : PAGE_MARGIN_PT;
-    const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : PAGE_MARGIN_PT;
+    const effectiveTopMarginPt = topMarginPt != null ? topMarginPt : marginTopPt;
+    const effectiveBottomMarginPt = bottomMarginPt != null ? bottomMarginPt : marginBottomPt;
     // X suit exactement la même structure que Y ci-dessous (container prioritaire, puis interpolation above+below, puis repli sur une seule ancre, puis
     // page-relatif générique) - sans ça, une image ancrée "au-dessus"/"en-dessous" (pas "container") recevait un imgLeftPx déjà converti au référentiel de
     // la colonne/cellule (par twoColumnsFrom/attributeNestedPendingImages) mais réinterprété à tort par le repli page-relatif, donnant un X hors-page.
@@ -1482,7 +1501,7 @@ const PdfExport = (function () {
     } else if (layer !== 'front' && a.belowLeft != null) {
       xPt = a.belowLeft + (a.imgLeftPx - a.belowLeftPx) * PX_TO_PT;
     } else {
-      xPt = PAGE_MARGIN_PT + a.imgLeftPx * PX_TO_PT;
+      xPt = marginLeftPt + a.imgLeftPx * PX_TO_PT;
     }
     let yPt;
     // Référence locale prioritaire sur le bracketing générique quand disponible : plus précise, fondée sur le début du paragraphe qui héberge l'image
@@ -1519,10 +1538,10 @@ const PdfExport = (function () {
     const hasFootnotes = (content._footnoteBlocks || []).length > 0;
     // Marge haute réelle de cette passe - doit être identique à celle de la passe réelle pour que la pagination mesurée ici corresponde exactement au
     // document final.
-    const topMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
+    const topMarginPt = marginTopPt + ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0);
     // Doit suivre exactement la même formule que buildNativeDocDefinition (bottomMarginPt) - sert de plancher au filet de sécurité anti-débordement de
     // resolveImageAbsolutePosition, doit donc matcher la vraie marge basse rendue.
-    const bottomMarginPt = PAGE_MARGIN_PT + ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
+    const bottomMarginPt = marginBottomPt + ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     if (hasToc || hasPendingImages || hasFootnotes) {
       await new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(content, filename, headerFooterChunks)).getBuffer(() => resolve()); });
       const headingPageNumbers = (content._headingBlocks || []).map(b => (b.positions && b.positions[0] && b.positions[0].pageNumber) || null);
@@ -1588,7 +1607,7 @@ const PdfExport = (function () {
           // Position connue directement (capturée dans l'éditeur, Aperçu A4) - aucun ancrage/interpolation à faire, garantie de rendu identique à
           // l'éditeur. Seule inconnue restante : sur QUELLE page ce document (peut-être modifié depuis) place réellement ce contenu aujourd'hui - trouvée
           // via blockPageNumbers, jamais en reconstruisant une position depuis un ancrage textuel.
-          p.image.absolutePosition = { x: PAGE_MARGIN_PT + pageGrid.pageLeftPt, y: topMarginPt + pageGrid.pageTopPt };
+          p.image.absolutePosition = { x: marginLeftPt + pageGrid.pageLeftPt, y: topMarginPt + pageGrid.pageTopPt };
           const targetPage = pageGrid.pageIndex + 1;
           const candidateIdxs = blockPageNumbers.reduce((acc, pn, j) => { if (pn === targetPage) acc.push(j); return acc; }, []);
           // Page introuvable (document raccourci depuis le dernier positionnement de cette image, ex.) : repli sur la DERNIÈRE page connue plutôt que de
@@ -1780,8 +1799,9 @@ const PdfExport = (function () {
     });
   }
 
-  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData) {
+  async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData, marginsPt) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    setPageMarginsPt(marginsPt);
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
@@ -1800,7 +1820,8 @@ const PdfExport = (function () {
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
   // resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
-  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData) {
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
+    setPageMarginsPt(marginsPt);
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
