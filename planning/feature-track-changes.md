@@ -44,13 +44,16 @@ corrigé ici pour éviter un conflit d'édition sur ce fichier partagé.
   un bandeau à deux choix). Aucune fusion automatique — Grist ne fournit pas de compare-and-swap sur
   `UpdateRecord`.
 - **Le bouton « Enregistrer » manuel (`onSave`, js/main.js:223-254) ne vérifie JAMAIS de conflit** —
-  bandeau affiché ou non, auto-save activé ou non — et écrase **inconditionnellement les 10 colonnes**
+  bandeau affiché ou non, auto-save activé ou non — et écrase **inconditionnellement 11 colonnes**
   de la ligne en un seul `UpdateRecord` (`Nom`, `Contenu`, `NomFichierPDF`, `DateModif`, `HeaderFooter`,
-  `Margins`, `TypeModele`, `Destinataires`, `Cc`, `Cci`), pas seulement `Contenu` (vérifié le
-  2026-09-19, corrige une lecture antérieure trop étroite de cette section). C'est le véritable chemin
-  d'écrasement silencieux, et — important pour le chiffrage du risque plus bas — il n'est **pas borné**
-  à la fenêtre de 2,5 s de l'auto-save : un clic sur « Enregistrer » écrase à tout moment, y compris
-  juste après un tick qui vient de détecter un conflit et d'afficher le bandeau.
+  `Margins`, `TypeModele`, `Destinataires`, `Cc`, `Cci`, `Objet`), pas seulement `Contenu` — objet
+  construit dans `js/templates.js:251-257` (`Templates.save()`) ; `EstParDefaut` est une colonne à
+  part, écrite séparément par `setDefault()` (`js/templates.js:204-214`), PAS dans ce même
+  `UpdateRecord` (vérifié le 2026-09-19, corrige une lecture antérieure qui en comptait 10 et omettait
+  `Objet`). C'est le véritable chemin d'écrasement silencieux, et — important pour le chiffrage du
+  risque plus bas — il n'est **pas borné** à la fenêtre de 2,5 s de l'auto-save : un clic sur
+  « Enregistrer » écrase à tout moment, y compris juste après un tick qui vient de détecter un conflit
+  et d'afficher le bandeau.
 - **Identification de l'utilisateur courant** (`GristAPI.getCurrentUserEmail()`, `js/grist-api.js`) :
   passe par une colonne à formule déclenchée dans une table interne dédiée
   (`Publipostage_UserProbe`), vidée après lecture — un aller-retour asynchrone, pas une valeur locale
@@ -437,7 +440,7 @@ cycle propre et potentiellement désynchronisé.
 
 **Nuance ajoutée le 2026-09-19, après relecture exacte de `js/main.js`** : la fenêtre de 2,5 s décrite
 ci-dessus ne borne que le chemin AUTO-SAVE. Le bouton « Enregistrer » manuel n'a, aujourd'hui déjà,
-aucune borne du tout (voir plus haut : `onSave` n'a jamais vérifié de conflit, sur les 10 colonnes de
+aucune borne du tout (voir plus haut : `onSave` n'a jamais vérifié de conflit, sur les 11 colonnes de
 la ligne). Ce n'est pas une régression introduite par ce chantier : c'est le comportement déjà en
 production pour `Contenu` seul. Comme `SuiviModifications` voyagera dans le MÊME `UpdateRecord` que
 `Contenu`, quel que soit le chemin qui déclenche cet `UpdateRecord` (tick auto-save borné à 2,5 s, ou
@@ -518,6 +521,109 @@ pour :
 5. Rétention de l'historique une fois accepté/refusé : conservé (traçabilité, mais recoupe la
    discussion RSSI/RGPD déjà ouverte ailleurs sur `requiredAccess: 'full'`, item B1 de
    `roadmap-consolidee.md`) ou purgé dès résolution (comme un commentaire supprimé aujourd'hui) ?
+
+## Prochaines étapes (2026-09-19) — réponse à la demande d'Antoine « migration / stabilisation / tests »
+
+Recherche menée directement dans `js/editor.js`, `js/editor-nodes.js`, `js/templates.js` et `dev-tests/`
+(pas des suppositions) pour fonder les 3 points ci-dessous sur le vrai code.
+
+### 1) Préparer la migration
+
+**Le blocage de zone partagée est levé** : le fil « Mode Email » a fini ses correctifs, Antoine a
+confirmé que ça marche chez lui, `index.html`/l'éditeur/la barre d'outils ne sont plus occupés par un
+autre chantier. L'intégration peut donc démarrer — **mais seulement sur le feu vert d'Antoine**, qui a
+explicitement demandé de durcir le prototype d'abord (fait ci-dessus). Ce qui suit est prêt à être
+lancé, pas une étape enchaînée d'office.
+
+Points concrets trouvés en lisant le vrai code (au-delà de `doc`/`table` déjà traités dans le
+prototype) :
+
+- **2 conteneurs de bloc supplémentaires ont besoin du même correctif** que `doc`/`table`
+  (`.extend({marks: 'insertion deletion modification'})`) : `twoColumnsColumn` (`content: 'block+'`,
+  `js/editor-nodes.js:409-415`) et `twoColumnsZone` (`content: 'twoColumnsColumn twoColumnsColumn'`,
+  `js/editor-nodes.js:416-420`). Sans ce correctif, un paragraphe supprimé/inséré dans une mise en page
+  à deux colonnes ne pourrait pas être marqué non-destructivement. Ça répond à la question laissée
+  ouverte plus haut (« les 19 nœuds custom ont-ils d'autres conteneurs à étendre ? ») : oui, ces deux-là.
+  À vérifier en même temps : `TableCell`/`TableHeader` (`js/editor.js:269-270`, enrichis via
+  `EditorNodes.withCellBackground`) — seul `Table` a été étendu dans le prototype, pas eux séparément.
+- **2 risques de collision de balise latents, pas actifs aujourd'hui** (même famille que le bug
+  `<del>`/Strike déjà corrigé) : `editorImage` revendique `<img class="editor-image">`
+  (`js/editor-nodes.js:699`) alors que l'extension officielle `@tiptap/extension-image` revendique
+  `<img>` de façon générique — non chargée aujourd'hui (absente de l'import map), donc sans effet tant
+  qu'elle n'est pas ajoutée. Même remarque pour `footnoteRef` sur `<sup>` face à un `Superscript`
+  officiel hypothétique. À traiter préventivement (priorité Tiptap explicite) si l'une de ces
+  extensions officielles est ajoutée un jour.
+- **Aucun hook `dispatchTransaction`/`appendTransaction`/`decorations` n'existe déjà** dans `js/`
+  (vérifié par recherche exhaustive) : le pont vers `prosemirror-suggest-changes` ne rentrera en
+  conflit avec rien de bas niveau. Deux points de couture à respecter : la chaîne `onUpdate`
+  (`js/editor.js:279`, plusieurs traitements enchaînés — pagination, tableaux, badges) et l'extension
+  `clearHistory` (`js/editor.js:330`, undo/redo). Bonne nouvelle sur ce dernier point : `setHTML()`
+  (`js/editor.js:390-409`) appelle déjà `editor.commands.clearHistory()` à CHAQUE chargement de modèle
+  (ligne 395, avec un commentaire expliquant que c'est pour éviter qu'un Annuler ne fasse réapparaître
+  un modèle précédent) — donc le vrai `setHTML` a déjà, par construction, le même besoin que la
+  commande `loadDocument` du prototype (remplacement net, historique maîtrisé), juste à brancher le
+  même contournement de `transformToSuggestionTransaction` dessus.
+- **Le point de greffe Grist est entièrement balisé** : un nouvel objet littéral `columns` unique dans
+  `Templates.save()` (`js/templates.js:251-257`) construit exactement ce qui part dans le même
+  `UpdateRecord`/`AddRecord` que `Contenu`/`DateModif` — il suffit d'y ajouter une clé
+  `SuiviModifications`. Reste à écrire, sur le modèle des migrations existantes
+  (`ensureHeaderFooterColumn`/`ensureMarginsColumn`/`ensureEmailColumns`, `js/templates.js:27-123`) :
+  une migration idempotente dédiée, l'exposer dans la signature de `save(...)`, la lire dans
+  `loadAll()`, et mettre à jour les deux points d'appel (`js/main.js:230` bouton Enregistrer,
+  `js/main.js:367` tick auto-save).
+- **Correction à noter** : le vrai `UpdateRecord` du bouton Enregistrer écrit 11 colonnes, pas 10 —
+  `Objet` (objet de l'email) avait été omis d'une lecture précédente ; `EstParDefaut` est en réalité
+  une colonne à part, écrite séparément par `setDefault()`, jamais dans ce même `UpdateRecord` (détail
+  ci-dessus).
+
+### 2) Stabiliser la feature
+
+- Les 5 bugs déjà trouvés et corrigés dans le prototype (2 sur le nœud de bloc/dernier nœud, 2 sur le
+  conflit de balise/rechargement pendant suivi actif, plus la garde `skip`) sont documentés en détail
+  plus haut — rien de nouveau à corriger côté prototype à ce stade.
+- **Nouveau risque de stabilité identifié aujourd'hui** : `twoColumnsColumn`/`twoColumnsZone` ne sont
+  PAS encore couverts par le correctif de marque de nœud (point 1 ci-dessus). Tant que ce n'est pas
+  fait, « le prototype est stable » ne veut dire « stable sur `doc`/`table` », pas sur l'ensemble des
+  conteneurs de bloc réels de l'éditeur — à traiter avant de considérer la feature prête pour une vraie
+  page à deux colonnes.
+- Le bug de performance O(N²) confirmé par la mesure (voir plus haut, x9 de temps pour x4 de taille)
+  est un vrai risque de stabilité sur un document long, pas juste un détail : nécessite soit un
+  arbitrage produit (accepter le risque pour la taille réelle des modèles Grist), soit d'intégrer la
+  piste de mitigation par découpage avant tout déploiement à des utilisateurs réels.
+- Les 3 questions produit encore ouvertes (attribution par auteur, comportement des exports, rétention
+  de l'historique — voir plus bas) bloquent une spec complète ; rien n'empêche de commencer
+  l'intégration technique du point 1 sans elles, mais l'UI finale (bouton accepter/refuser, export) en
+  dépend.
+
+### 3) Tests unitaires pour sécuriser le déploiement
+
+Périmètre clarifié avec le fil d'audit général des tests (ouvert par Antoine en parallèle) : ce fil-là
+couvre ce qui est déjà en production (éditeur, mode email, mode lecture, export PDF) ; le suivi des
+modifications reste ici tant qu'il n'est pas intégré, pour éviter deux listes à réconcilier.
+
+- Le mécanisme d'intégration dans le harnais est entièrement balisé : ajouter une entrée dans `GROUPS`
+  (`dev-tests/run-headless.mjs:27-47`, ex. `trackChanges: 'scenarios-track-changes'`), écrire
+  `dev-tests/scenarios-track-changes.js` sur le patron IIFE + `cases.push({id, description, run})` de
+  `scenarios-comments.js`, terminer par `window.EditorTestSuites.trackChanges = cases`.
+- **Patron à suivre, déjà éprouvé sur les commentaires** : vérifier systématiquement les DEUX moitiés à
+  chaque scénario — l'ancrage dans le document (marques `insertion`/`deletion`/`modification` dans le
+  DOM ET dans `Editor.getHTML()`, qui peuvent diverger) ET la donnée de suivi côté Grist (la future
+  colonne `SuiviModifications`, une fois qu'elle existe). Exemples directement transposables :
+  `scenarios-comments.js:185-213` (suppression = les deux moitiés disparaissent ensemble) et
+  `scenarios-comments.js:216-248` (persistance après un vrai cycle Enregistrer/rechargement).
+- **Angle mort du harnais déjà documenté (seed après `init()`) : une solution existe déjà, pas besoin
+  de la construire.** Le mécanisme `--preseed` (`dev-tests/run-headless.mjs`, `grist-stub.js:231`)
+  injecte l'état Grist AVANT que `main.js:init()` tourne, via un petit fichier dédié
+  (`node dev-tests/run-headless.mjs --preseed dev-tests/preseed-xxx.js trackChanges`) — c'est le bon
+  outil pour tester « le widget démarre avec un suivi déjà en attente », pas un nouveau chantier sur le
+  runner.
+- Liste des scénarios à écrire dès que l'intégration réelle démarre (reprend et complète la section
+  « Tests de non-régression à prévoir » plus haut, maintenant que le prototype les a déjà validés en
+  isolation) : les 24 scénarios du prototype portés sur le vrai éditeur (dont round-trip après
+  rechargement, deux utilisateurs qui divergent puis s'écrasent, superposition avec `commentMark`),
+  plus les deux nouveaux conteneurs de bloc (`twoColumnsColumn`/`twoColumnsZone`) et la colonne
+  `SuiviModifications` réelle (les deux moitiés ci-dessus), plus un scénario `--preseed` dédié pour le
+  démarrage avec suivi déjà présent.
 
 ## Sources externes consultées (recherche du 2026-09-18)
 
