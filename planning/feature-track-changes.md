@@ -54,12 +54,19 @@ corrigé ici pour éviter un conflit d'édition sur ce fichier partagé.
   risque plus bas — il n'est **pas borné** à la fenêtre de 2,5 s de l'auto-save : un clic sur
   « Enregistrer » écrase à tout moment, y compris juste après un tick qui vient de détecter un conflit
   et d'afficher le bandeau.
-- **Identification de l'utilisateur courant** (`GristAPI.getCurrentUserEmail()`, `js/grist-api.js`) :
-  passe par une colonne à formule déclenchée dans une table interne dédiée
-  (`Publipostage_UserProbe`), vidée après lecture — un aller-retour asynchrone, pas une valeur locale
-  instantanée. **Il n'y a pas de présence temps réel** entre utilisateurs (pas de canal live, pas de
-  curseurs d'autres utilisateurs) : deux utilisateurs éditent deux copies locales indépendantes du
-  document jusqu'à ce que l'un des deux enregistre.
+- **Identification de l'utilisateur courant** (`GristAPI.getCurrentUserEmail()`, `js/grist-api.js:
+  446-463`) : passe par une colonne à formule déclenchée dans une table interne dédiée
+  (`Publipostage_UserProbe`), la ligne étant ajoutée puis retirée après lecture — un aller-retour
+  asynchrone, pas une valeur locale instantanée. **Nuance importante ajoutée le 2026-09-19** : le
+  résultat est mis en cache en mémoire dès le premier appel (`_userEmailCache`,
+  `js/grist-api.js:445,447,456`) — l'aller-retour Grist ne se produit donc **qu'une seule fois par
+  session du widget**, tous les appels suivants sont instantanés. Le mécanisme est déjà EN PRODUCTION
+  aujourd'hui : `js/comments.js:64` l'utilise pour attribuer un auteur à chaque commentaire posté
+  (avec repli anonyme silencieux si l'appel échoue). Ce n'est donc pas un détour hypothétique ou
+  coûteux par frappe — c'est un mécanisme déjà éprouvé, dont le coût réel se limite à un aller-retour
+  au tout premier appel de la session. **Il n'y a pas de présence temps réel** entre utilisateurs (pas
+  de canal live, pas de curseurs d'autres utilisateurs) : deux utilisateurs éditent deux copies locales
+  indépendantes du document jusqu'à ce que l'un des deux enregistre.
 
 ## Décision structurante n°1 — quelle UX de suivi ?
 
@@ -512,9 +519,15 @@ pour :
 1. ~~UX cible~~ — **tranché 2026-09-18 : mode suggestion façon Word/Google Docs.**
 2. ~~Politique « pas de build/pas de vendorisation »~~ — **tranché 2026-09-18 : DIY sur ProseMirror,
    pas de Tiptap Pro.**
-3. Attribution par auteur : l'app n'a pas de présence temps réel et l'identification utilisateur
-   passe déjà par un détour asynchrone (`UserProbe`) — le suivi doit-il malgré tout distinguer les
-   auteurs, ou un suivi anonyme/mono-auteur suffit-il pour un premier jet ?
+3. Attribution par auteur — **coût réel corrigé le 2026-09-19** : l'identification utilisateur
+   (`UserProbe`) n'est PAS un détour coûteux répété à chaque frappe comme une lecture antérieure de
+   cette section le laissait entendre — le résultat est mis en cache dès le premier appel de la
+   session (un seul aller-retour Grist par ouverture du widget, jamais par changement), et le
+   mécanisme est déjà utilisé en production par les commentaires (`js/comments.js:64`). Distinguer les
+   auteurs d'un changement de suivi coûterait donc le même prix, déjà payé et déjà éprouvé — un suivi
+   anonyme/mono-auteur ne se justifie plus par un souci de coût technique. La question reste ouverte,
+   mais sur un terrain produit (l'utilité de savoir qui a fait quoi) plutôt que sur une contrainte
+   technique qui n'existe pas.
 4. Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés :
    n'exporter que l'état accepté, exporter avec les marques visibles, ou bloquer l'export tant qu'il
    reste des changements en attente ?
