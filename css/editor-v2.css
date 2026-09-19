@@ -287,6 +287,11 @@
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover { background: var(--accent-soft, #e8f0fe); }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover { background: var(--accent-soft, #e8f0fe); box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); }
+/* Mode email (js/header-footer-preview.js:setEmailMode, retour d'Antoine 2026-09-19) : un en-tête/pied de page n'a aucun sens dans un mailto: (texte
+   brut, pas de pages, cf. js/mailto-export.js). Couvre les deux natures de zones (bords dans .v2-page-sheet ET coutures dans .v2-pagination-overlay,
+   toutes deux descendantes de #editor-container.a4-preview) - gardées visibles (jamais masquées, même règle que le reste de la toolbar) mais inertes et
+   grisées plutôt que retirées. */
+#editor-container.a4-preview .v2-hf-zone.v2-hf-locked { pointer-events: none; opacity: .45; cursor: default; }
 /* Les zones de BORD (dans `.v2-page-sheet`) n'ont PAS leur propre carte - `.v2-page-sheet` porte déjà le fond/liseré "page" ; seules les COUTURES
    intermédiaires (`.v2-page-band` dans `.v2-pagination-overlay`) gardent la règle générique, représentant le VRAI saut entre deux pages physiques. */
 #editor-container.a4-preview .v2-page-sheet .v2-hf-zone.v2-hf-zone-filled { background: transparent; box-shadow: none; }

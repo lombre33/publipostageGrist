@@ -4,6 +4,13 @@ const HeaderFooterPreview = (function () {
   let editor = null;
   function setEditor(ed) { editor = ed; }
 
+  // Posé par js/main.js (comme MainToolbar.setEmailMode) quand le modèle courant est un modèle email : un en-tête/pied de page n'a aucun sens dans un
+  // mailto: (texte brut, pas de pages, cf. js/mailto-export.js) - retour d'Antoine 2026-09-19. Bloque enterHeaderFooterMode (seul point d'entrée, cf. les
+  // 3 sites qui l'appellent plus bas) plutôt que de masquer les zones de marge : elles restent visibles mais inertes et grisées (classe v2-hf-locked,
+  // même vocabulaire que le verrouillage de la toolbar principale), même règle "jamais disparaître" que le reste de la toolbar en mode email.
+  let inEmailMode = false;
+  function setEmailMode(active) { inEmailMode = !!active; }
+
   // `null` = édition normale ; sinon édition d'en-tête/pied (même éditeur, contenu affiché échangé via setContent).
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
   function getHfMode() { return hfMode; }
@@ -44,7 +51,7 @@ const HeaderFooterPreview = (function () {
   // Édition en-tête/pied de page : un seul éditeur, on y charge le fragment voulu après avoir sauvegardé ce qu'on quitte (brouillon, ou snapshot du document
   // principal à la toute première entrée).
   function enterHeaderFooterMode(zone, variant) {
-    if (!editor) return;
+    if (!editor || inEmailMode) return;
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
     headerFooterDraft.enabled = true;
@@ -286,6 +293,7 @@ const HeaderFooterPreview = (function () {
     const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
+    el.classList.toggle('v2-hf-locked', inEmailMode);
     el.innerHTML = hasContent
       ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
       : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
@@ -473,7 +481,7 @@ const HeaderFooterPreview = (function () {
         seam.className = 'v2-page-band v2-page-seam';
         if (footerText) {
           const f = document.createElement('div');
-          f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled';
+          f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
           f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
           f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
           seam.appendChild(f);
@@ -483,7 +491,7 @@ const HeaderFooterPreview = (function () {
         seam.appendChild(divider);
         if (headerText) {
           const h = document.createElement('div');
-          h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled';
+          h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
           h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
           h.onclick = () => enterHeaderFooterMode('header', 'default');
           seam.appendChild(h);
@@ -503,7 +511,7 @@ const HeaderFooterPreview = (function () {
   }
 
   return {
-    setEditor, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
+    setEditor, setEmailMode, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
     enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData, renderHfPill,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions,

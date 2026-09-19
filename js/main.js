@@ -155,6 +155,12 @@
       if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
     }
     MainToolbar.setEmailMode(currentTypeModele === 'email');
+    HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');
+    // Editor.setHTML() plus haut a déjà déclenché un premier rendu de l'aperçu paginé (onUpdate ->
+    // schedulePaginationRecompute) AVANT que setEmailMode ci-dessus ne soit posé - sans ce rafraîchissement
+    // explicite, les zones de marge cliquables garderaient l'état verrouillé/déverrouillé du modèle
+    // PRÉCÉDENT jusqu'à la prochaine frappe.
+    Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
     Templates.setCurrentId(tpl ? tpl.id : null);

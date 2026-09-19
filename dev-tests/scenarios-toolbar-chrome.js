@@ -171,6 +171,42 @@
     },
   });
 
+  cases.push({
+    id: 'toolbar_header_footer_zones_locked_in_email_mode',
+    description: 'En mode email, les zones cliquables d\'en-tête/pied de page restent visibles mais deviennent inertes et grisées - un en-tête/pied n\'a aucun sens dans un mailto: (retour d\'Antoine 2026-09-19)',
+    run: async (h) => {
+      // resetEditor() (appelé par un scénario précédent de ce même groupe) retire .a4-preview de
+      // #editor-container pour les scénarios qui ont besoin de la largeur large habituelle (cf. son
+      // commentaire dans dev-tests/helpers.js) - sans elle, renderPaginationOverlay() se coupe court
+      // (aucune zone de marge créée), exactement le piège que ce commentaire signale déjà.
+      document.getElementById('editor-container').classList.add('a4-preview');
+      await goToNewEmail(h);
+      Editor.refreshPaginationPreview();
+      await h.sleep(200);
+      const topInEmail = document.querySelector('#editor-container .v2-page-edge-top');
+      const lockedInEmail = topInEmail.classList.contains('v2-hf-locked');
+      // Lire les valeurs MAINTENANT (pas garder la référence CSSStyleDeclaration) : goToNewDocument()
+      // plus bas peut recréer/détacher cette zone (clearPaginationOverlay), et getComputedStyle sur un
+      // élément détaché renvoie des chaînes vides pour tout, faussant silencieusement l'assertion.
+      const pointerEventsInEmail = getComputedStyle(topInEmail).pointerEvents;
+      const opacityInEmail = getComputedStyle(topInEmail).opacity;
+      topInEmail.click();
+      await h.sleep(30);
+      const blockedInEmail = !HeaderFooterPreview.isEditingHeaderFooter();
+      await goToNewDocument(h);
+      Editor.refreshPaginationPreview();
+      await h.sleep(200);
+      const topInDocument = document.querySelector('#editor-container .v2-page-edge-top');
+      const unlockedInDocument = !topInDocument.classList.contains('v2-hf-locked');
+      topInDocument.click();
+      await h.sleep(30);
+      const enterableInDocument = HeaderFooterPreview.isEditingHeaderFooter();
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      const pass = lockedInEmail && pointerEventsInEmail === 'none' && blockedInEmail && unlockedInDocument && enterableInDocument;
+      return { pass, notes: JSON.stringify({ lockedInEmail, pointerEventsInEmail, opacityInEmail, blockedInEmail, unlockedInDocument, enterableInDocument }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();
