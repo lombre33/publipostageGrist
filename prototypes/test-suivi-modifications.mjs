@@ -136,17 +136,77 @@ await test('suivi activé : supprimer un mot pose une marque deletion, le texte 
   if (!h.includes('sans-suivi')) throw new Error('le texte a été réellement supprimé (non-destructif attendu): ' + h.slice(0, 400))
 })
 
-await test('suivi activé : supprimer une ligne de tableau entière ne plante plus (transaction refusée, contenu inchangé)', async () => {
-  const before = await html()
+await test('suivi activé : supprimer une ligne de tableau entière est marquée non-destructivement (plus de plantage ni de refus)', async () => {
   await page.click('#btn-del-row')
   await page.waitForTimeout(200)
   const after = await html()
-  if (!after.includes('Widget A')) throw new Error('la ligne a été supprimée (devrait être refusée tant que non géré): ' + after.slice(0, 400))
-  const log = await page.evaluate(() => document.getElementById('log').textContent)
-  if (!log.includes('Transaction refusée')) throw new Error('pas de message de refus dans le log')
+  if (!after.includes('Widget A')) throw new Error('le contenu de la ligne a disparu (suppression réelle au lieu d\'une marque non-destructive): ' + after.slice(0, 400))
+  if (!/<del[^>]*><tr/.test(after)) throw new Error('pas de marque <del> posée sur le nœud <tr> lui-même (marque de nœud): ' + after.slice(0, 400))
 })
 
-await test('suivi activé : supprimer un paragraphe entier ne plante plus (transaction refusée)', async () => {
+await test('refuser (par id) la suppression de la ligne la restaure sans la marque', async () => {
+  // Cible par id plutôt que par sélection : sélectionner une ligne de tableau entière via l'API de
+  // sélection ProseMirror est déjà peu naturel (les tables ont leur propre CellSelection) - plus
+  // robuste, et plus proche de ce qu'un vrai bouton "refuser CE changement" ferait dans l'UI finale.
+  const res = await page.evaluate(() => {
+    const { state } = window.__editor
+    let id = null
+    state.doc.descendants((node) => {
+      if (node.type.name === 'tableRow' && node.textContent.includes('Widget A') && id === null) {
+        const mark = node.marks.find((m) => m.type.name === 'deletion')
+        if (mark) id = mark.attrs.id
+      }
+    })
+    if (id === null) return { html: window.__editor.getHTML(), error: 'aucune marque deletion trouvée sur la ligne' }
+    window.__editor.commands.rejectSuggestionById(id)
+    return { html: window.__editor.getHTML() }
+  })
+  if (res.error) throw new Error(res.error)
+  if (!res.html.includes('Widget A')) throw new Error('la ligne a été perdue en la restaurant: ' + res.html.slice(0, 400))
+  if (/<del[^>]*><tr/.test(res.html)) throw new Error('la marque de suppression de la ligne est toujours là après le refus par id: ' + res.html.slice(0, 400))
+})
+
+// L'insertion/refus du bloc de test passe AVANT le marquage de "second paragraphe" pour suppression
+// (et non après, comme on pourrait s'y attendre en lisant les titres dans l'ordre "suppression puis
+// insertion") : les deux sont ajoutés en toute fin de document, donc adjacents. Trouvé en testant :
+// `suggestReplaceStep` (dans la lib, dist/replaceStep.js) réutilise l'id de la marque insertion/
+// deletion directement adjacente à la place d'en générer une nouvelle - une fusion volontaire pour
+// représenter un "remplacement" (ancien contenu supprimé + nouveau contenu inséré) comme UNE seule
+// suggestion. Si on insère le bloc de test juste après avoir marqué "second paragraphe" pour
+// suppression, les deux héritent du MÊME id sans rapport avec l'intention du test, et refuser le
+// bloc par id (test suivant) réverte alors AUSSI la suppression de "second paragraphe" par la même
+// occasion (comportement correct de la lib, pas un bug - juste une adjacence non voulue ici). En
+// faisant l'aller-retour insertion/refus du bloc AVANT de marquer "second paragraphe", plus rien
+// n'est adjacent à ce moment-là et chaque suggestion garde son propre id.
+await test('suivi activé : insérer un bloc entier programmatiquement pose une marque insertion sur le nœud (symétrique de la suppression de bloc)', async () => {
+  const res = await page.evaluate(() => {
+    const docSize = window.__editor.state.doc.content.size
+    window.__editor.commands.insertContentAt(docSize, '<p>Bloc entier inséré programmatiquement.</p>')
+    return window.__editor.getHTML()
+  })
+  if (!res.includes('Bloc entier inséré programmatiquement.')) throw new Error('le contenu inséré est absent: ' + res.slice(-400))
+  if (!/<ins[^>]*><p>Bloc entier inséré/.test(res)) throw new Error('pas de marque <ins> posée sur le nœud lui-même (marque de nœud): ' + res.slice(-400))
+})
+
+await test('refuser (par id) un bloc entier nouvellement inséré le supprime entièrement', async () => {
+  const res = await page.evaluate(() => {
+    const { state } = window.__editor
+    let id = null
+    state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph' && node.textContent.includes('Bloc entier inséré') && id === null) {
+        const mark = node.marks.find((m) => m.type.name === 'insertion')
+        if (mark) id = mark.attrs.id
+      }
+    })
+    if (id === null) return { html: window.__editor.getHTML(), error: 'aucune marque insertion trouvée sur le bloc' }
+    window.__editor.commands.rejectSuggestionById(id)
+    return { html: window.__editor.getHTML() }
+  })
+  if (res.error) throw new Error(res.error)
+  if (res.html.includes('Bloc entier inséré')) throw new Error('le bloc refusé est toujours présent: ' + res.html.slice(-400))
+})
+
+await test('suivi activé : supprimer un paragraphe entier est marqué non-destructivement (plus de plantage)', async () => {
   const res = await page.evaluate(() => {
     try {
       const { state } = window.__editor
@@ -163,7 +223,86 @@ await test('suivi activé : supprimer un paragraphe entier ne plante plus (trans
     }
   })
   if (res.threw) throw new Error('exception levée depuis la page: ' + res.error)
-  if (!res.html.includes('second paragraphe')) throw new Error('le paragraphe a été supprimé (devrait être refusé): ' + res.html.slice(0, 300))
+  if (!res.html.includes('second paragraphe')) throw new Error('le paragraphe a disparu (suppression réelle au lieu d\'une marque non-destructive): ' + res.html.slice(0, 400))
+  if (!/<del[^>]*><p>Un second paragraphe/.test(res.html)) throw new Error('pas de marque <del> posée sur le paragraphe lui-même (marque de nœud): ' + res.html.slice(0, 400))
+})
+
+await test('accepter un bloc marqué qui se trouve être le DERNIER nœud du document ne plante plus et supprime réellement le contenu', async () => {
+  // Reproduit exactement le crash trouvé en testant manuellement : `applySuggestions` (dans la lib,
+  // pas notre code) levait "Cannot read properties of undefined (reading 'nodeSize')" quand le nœud
+  // marqué était le tout dernier du document - ici, le paragraphe "second paragraphe" marqué au test
+  // précédent est exactement ce cas puisque le bloc inséré au test d'avant vient d'être refusé (donc
+  // supprimé). Vérifie aussi que le paragraphe-tampon temporaire posé par `runGuardedLibCommand`
+  // (voir le commentaire dans le prototype) est bien retiré après coup, SAUF le cas particulier
+  // suivant : supprimer "second paragraphe" expose le tableau comme nouveau dernier nœud du document,
+  // ce qui fait réagir la PROPRE extension `TrailingNode` de StarterKit (embarquée par défaut, sans
+  // rapport avec ce correctif - vérifié dans le code source réel de @tiptap/starter-kit) : elle
+  // maintient en permanence l'invariant "le document ne se termine jamais juste après un tableau" et
+  // réinsère alors elle-même un paragraphe vide. Un même paragraphe vide apparaîtrait à l'identique
+  // si "second paragraphe" était supprimé normalement, sans suivi des modifications - ce n'est donc
+  // pas un reliquat propre à ce correctif, juste le comportement permanent de l'éditeur. On tolère
+  // donc au plus UN paragraphe vide de plus qu'avant (celui de TrailingNode), pas davantage.
+  const before = await html()
+  const res = await page.evaluate(() => {
+    try {
+      window.__editor.commands.acceptAllSuggestions()
+      return { threw: false }
+    } catch (e) {
+      return { threw: true, error: e.message }
+    }
+  })
+  if (res.threw) throw new Error('exception levée par "tout accepter": ' + res.error)
+  const h = await html()
+  if (h.includes('second paragraphe')) throw new Error('le paragraphe accepté-supprimé est toujours là: ' + h.slice(0, 400))
+  const extraEmptyParagraphs = (h.match(/<p><\/p>/g) || []).length - (before.match(/<p><\/p>/g) || []).length
+  if (extraEmptyParagraphs > 1) {
+    throw new Error('plus d\'un paragraphe vide résiduel laissé par le contournement du bug de la lib: ' + h.slice(-200))
+  }
+})
+
+await test('un document CHARGÉ avec une marque déjà posée sur son dernier nœud ne plante pas au tout premier accepter (pas seulement après une première édition)', async () => {
+  // Distinct de la scène ci-dessus : ici aucune édition n'a lieu avant l'appel à "tout accepter" -
+  // cas réel visé par le stockage Grist (reprendre un modèle où un suivi était déjà en cours). Un
+  // premier contournement par plugin permanent (essayé puis abandonné, voir le commentaire dans le
+  // prototype) ne se déclenchait qu'après une première transaction et aurait planté ici.
+  const port2 = PORT + 1
+  const server2 = createServer(async (req, res) => {
+    try {
+      const filePath = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]))
+      const data = await readFile(filePath)
+      const ext = path.extname(filePath)
+      const type = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css' }[ext] || 'application/octet-stream'
+      res.writeHead(200, { 'Content-Type': type }); res.end(data)
+    } catch (e) { res.writeHead(404); res.end('not found: ' + e.message) }
+  })
+  await new Promise((resolve, reject) => { server2.on('error', reject); server2.listen(port2, resolve) })
+  const page2 = await context.newPage()
+  const pageErrors2 = []
+  page2.on('pageerror', (err) => pageErrors2.push(err.message))
+  try {
+    await page2.goto(`http://localhost:${port2}/prototypes/suivi-modifications.html`, { waitUntil: 'networkidle', timeout: 30000 })
+    await page2.waitForTimeout(1000)
+    const res = await page2.evaluate(() => {
+      window.__editor.commands.setContent('<p>Intro.</p><p data-marked-test="1">Dernier paragraphe déjà marqué.</p>')
+      const { state } = window.__editor
+      const del = state.schema.marks.deletion.create({ id: 'x' })
+      let pos = -1
+      state.doc.descendants((node, p) => { if (node.textContent.includes('déjà marqué') && pos === -1) pos = p })
+      window.__editor.view.dispatch(state.tr.addNodeMark(pos, del).setMeta('addToHistory', false))
+      try {
+        window.__editor.commands.acceptAllSuggestions()
+        return { threw: false, html: window.__editor.getHTML() }
+      } catch (e) {
+        return { threw: true, error: e.message }
+      }
+    })
+    if (pageErrors2.length) throw new Error('exception(s) page non attendue(s): ' + pageErrors2.join(' | '))
+    if (res.threw) throw new Error('exception levée dès le premier accepter, sans édition préalable: ' + res.error)
+    if (res.html.includes('déjà marqué')) throw new Error('le paragraphe accepté-supprimé est toujours là: ' + res.html)
+  } finally {
+    await page2.close()
+    server2.close()
+  }
 })
 
 await test('suivi activé : supprimer seulement le texte d\'une cellule fonctionne (marque deletion)', async () => {

@@ -44,6 +44,7 @@
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/history.mjs": "https://esm.sh/*prosemirror-history@1.5.0",
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/changeset.mjs": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@3.31.3",
+    "@tiptap/extension-document": "https://esm.sh/@tiptap/extension-document@3.31.3",
     "@tiptap/extension-table": "https://esm.sh/@tiptap/extension-table@3.31.3",
     "@tiptap/extension-table-row": "https://esm.sh/@tiptap/extension-table-row@3.31.3",
     "@tiptap/extension-table-cell": "https://esm.sh/@tiptap/extension-table-cell@3.31.3",
@@ -96,6 +97,7 @@
   // même patron que js/editor.js.
   import { Editor, Mark, Extension } from '@tiptap/core'
   import { StarterKit } from '@tiptap/starter-kit'
+  import { Document } from '@tiptap/extension-document'
   import { Table } from '@tiptap/extension-table'
   import { TableRow } from '@tiptap/extension-table-row'
   import { TableCell } from '@tiptap/extension-table-cell'
@@ -146,6 +148,102 @@
     renderHTML({ HTMLAttributes }) { return ['span', { 'data-type': 'modification', 'data-id': JSON.stringify(HTMLAttributes.id) }, 0] },
   })
 
+  // CORRECTIF (2026-09-19) — vraie prise en charge de la suppression de bloc entier, remplaçant le
+  // simple refus posé le 2026-09-18. Diagnostic en lisant le code source réel de la lib
+  // (dist/replaceStep.js) : quand une suppression correspond EXACTEMENT à un ou plusieurs nœuds de
+  // bloc entiers (`blockRange.start === stepFrom && blockRange.end === stepTo`), la lib appelle
+  // `tr.addNodeMark(pos, deletion.create(...))` - une marque posée sur le NŒUD lui-même (pas sur son
+  // contenu inline). Ça ne plantait pas dans la lib elle-même : ça plantait dans ProseMirror, qui
+  // valide que le PARENT du nœud marqué autorise cette marque sur ses enfants
+  // (`NodeType.allowsMarks`, calculé depuis `NodeSpec.marks` du parent - constaté en lisant
+  // prosemirror-model : "nodes with inline content default to allowing all marks, other nodes
+  // default to not allowing marks"). `doc` (parent d'un paragraphe) et `table` (parent d'une ligne)
+  // ne déclarent pas `marks` dans Tiptap 3.x (vérifié dans le code source réel de
+  // @tiptap/extension-document et @tiptap/extension-table) : suppression de bloc entier impossible
+  // à marquer avec le schéma par défaut, d'où "Invalid content for node doc/table". Correctif :
+  // étendre ces deux nœuds pour autoriser explicitement les 3 marques de suivi sur leurs enfants.
+  const TrackedDocument = Document.extend({ marks: 'insertion deletion modification' })
+  const TrackedTable = Table.extend({ marks: 'insertion deletion modification' })
+
+  // Second bug trouvé en testant (2026-09-19), cette fois DANS la lib elle-même (pas dans notre
+  // schéma) : `applySuggestions`/`revertSuggestions`/`applySuggestion`/`revertSuggestion`
+  // (commands.js) plantent avec "Cannot read properties of undefined (reading 'nodeSize')" quand le
+  // bloc traité est le tout DERNIER nœud du document entier. En cause : leur calcul de "y a-t-il un
+  // espace juste après, pour fusionner proprement" fait
+  // `deletionTo <= tr.doc.content.size ? tr.doc.textBetween(deletionTo, deletionTo + 1, ...) : ""`
+  // - `<=` au lieu de `<` : quand `deletionTo === content.size` (fin réelle du document), ça essaie
+  // quand même de lire un caractère à `content.size + 1`, hors limites. Pas quelque chose qu'on peut
+  // corriger depuis notre code (bug dans le paquet chargé depuis esm.sh).
+  //
+  // Premier contournement essayé (2026-09-19, abandonné après revue) : un plugin ProseMirror
+  // permanent (`appendTransaction`) qui aurait maintenu un paragraphe vide en fin de document en
+  // permanence. Deux défauts trouvés en le faisant relire : (1) comme il réagit à CHAQUE transaction
+  // qui change le document, y compris les transactions d'annulation elles-mêmes, il pouvait
+  // ré-insérer un paragraphe juste après qu'Annuler venait de le retirer, empêchant l'historique de
+  // revenir à l'état d'origine (constaté : plusieurs Ctrl+Z de suite sans jamais retrouver le HTML de
+  // départ) ; (2) il ne s'appliquait qu'après une PREMIÈRE transaction depuis le chargement, donc un
+  // document chargé depuis Grist avec une marque déjà posée sur son tout dernier nœud (exactement le
+  // cas réel : un suivi commencé dans une session, repris dans une autre) plantait quand même dès le
+  // premier accepter/refuser.
+  //
+  // Contournement retenu : pas de structure permanente. On ne touche au document qu'au moment précis
+  // d'appeler une des 4 fonctions à risque, et seulement quand c'est nécessaire (le dernier nœud du
+  // document porte réellement une marque de suivi) : un paragraphe vide temporaire est inséré juste
+  // après lui, l'opération s'exécute, puis le paragraphe est retiré s'il est resté vide et sans
+  // marque. Les deux transactions de bord (ajout/retrait) sont exclues de l'historique
+  // (`addToHistory: false`) : invisibles pour Annuler/Rétablir, donc aucun conflit possible avec eux,
+  // et le correctif s'applique dès le tout premier appel, y compris sur un document qui vient d'être
+  // chargé.
+  function lastNodeCarriesSuggestionMark(state) {
+    const last = state.doc.lastChild
+    return !!last && last.marks.some((m) => ['insertion', 'deletion', 'modification'].includes(m.type.name))
+  }
+  // BUG TROUVÉ EN FAISANT RELIRE CE CORRECTIF (2026-09-19) : la toute première version passait le
+  // `dispatch` fourni par Tiptap au contexte de commande à `applySuggestions`/`revertSuggestion` et à
+  // nos transactions de bourrage. Ça ne faisait RIEN, silencieusement. Cause, vue dans le code source
+  // réel de @tiptap/core (`CommandManager.buildProps`) : pour un appel direct `editor.commands.xxx()`
+  // (pas une chaîne), Tiptap fournit `dispatch: () => void 0` (un NO-OP) et un `state` "chaînable" où
+  // `state.tr` est TOUJOURS LE MÊME objet Transaction partagé pendant tout l'appel ; Tiptap dispatche
+  // ce tr partagé lui-même, une fois, après le retour de la commande. Passer `editor.state` (l'état
+  // RÉEL déjà validé, figé) au lieu de ce `state` chaînable crée un tr ORPHELIN à chaque fois
+  // (`editor.state.tr` est un nouvel objet à chaque lecture) que le `dispatch` no-op jette
+  // silencieusement - la mutation n'atteint jamais la vue. Ça ne se voyait pas sur les commandes
+  // simples (une seule mutation, laissée au tr partagé de Tiptap) mais cassait justement ce
+  // correctif, qui a besoin d'appliquer réellement plusieurs transactions dans l'ordre (bourrage,
+  // opération, nettoyage) pour que chacune voie le résultat de la précédente. Corrigé en utilisant
+  // directement `editor.view.dispatch` (le vrai dispatch ProseMirror, synchrone, jamais un no-op) et
+  // en empêchant Tiptap de dispatcher en plus son propre tr partagé resté vide (`preventDispatch`).
+  function runGuardedLibCommand(libFn, editor, dispatch, tr) {
+    if (!dispatch) return libFn(editor.state, undefined) // vérif de capacité (editor.can()...) : pas de mutation
+    if (tr) tr.setMeta('preventDispatch', true)
+    if (!lastNodeCarriesSuggestionMark(editor.state)) return libFn(editor.state, editor.view.dispatch)
+    // `editor.view.dispatch` retraverse `SuggestChangesBridge.dispatchTransaction` (c'est le VRAI
+    // dispatch de la vue, celui-là même que ce hook intercepte). Sans le meta `{skip: true}` sur
+    // `suggestChangesKey` - la même convention que `applySuggestions`/`revertSuggestions` utilisent
+    // pour LEUR propre transaction (voir plus haut) -, nos transactions de bourrage/nettoyage
+    // seraient elles-mêmes transformées en nouvelles suggestions (un paragraphe vide qui apparaîtrait
+    // comme "en attente d'insertion") au lieu de rester des changements de structure invisibles.
+    const guardMeta = (t) => t.setMeta(suggestChangesKey, { skip: true }).setMeta('addToHistory', false)
+    editor.view.dispatch(guardMeta(editor.state.tr
+      .insert(editor.state.doc.content.size, editor.state.schema.nodes.paragraph.create())))
+    const result = libFn(editor.state, editor.view.dispatch)
+    // Retire le paragraphe-tampon s'il est resté vide et sans marque. Remarque trouvée en testant :
+    // StarterKit embarque par défaut sa PROPRE extension `TrailingNode` (@tiptap/extensions,
+    // vérifié dans le code source réel de @tiptap/starter-kit) qui garantit indépendamment que le
+    // document ne se termine jamais par autre chose qu'un paragraphe (par ex. juste après un
+    // tableau) - un mécanisme existant, sans rapport avec ce correctif. Si retirer notre tampon
+    // expose un nœud non-paragraphe en toute fin de document (ex. un tableau), TrailingNode en
+    // réinsère un lui-même dans la MÊME transaction : notre retrait semble alors n'avoir aucun
+    // effet, ce qui est correct - c'est le comportement normal et permanent de l'éditeur, pas un
+    // reliquat propre à ce correctif.
+    const guard = editor.state.doc.lastChild
+    if (guard && guard.type.name === 'paragraph' && guard.content.size === 0 && guard.marks.length === 0) {
+      editor.view.dispatch(guardMeta(editor.state.tr
+        .delete(editor.state.doc.content.size - guard.nodeSize, editor.state.doc.content.size)))
+    }
+    return result
+  }
+
   // Pont entre le plugin ProseMirror de la lib et Tiptap : addProseMirrorPlugins() suffit pour
   // les décorations (suggestChanges() les fournit déjà via ses propres `props.decorations`,
   // composées automatiquement par ProseMirror - PAS besoin de toucher editorProps.decorations).
@@ -161,12 +259,24 @@
     addCommands() {
       return {
         toggleSuggestMode: () => ({ state, dispatch }) => toggleSuggestChanges(state, dispatch),
-        acceptAllSuggestions: () => ({ state, dispatch }) => applySuggestions(state, dispatch),
-        rejectAllSuggestions: () => ({ state, dispatch }) => revertSuggestions(state, dispatch),
-        acceptSuggestionsInSelection: () => ({ state, dispatch }) =>
-          applySuggestion(undefined, state.selection.from, state.selection.to)(state, dispatch),
-        rejectSuggestionsInSelection: () => ({ state, dispatch }) =>
-          revertSuggestion(undefined, state.selection.from, state.selection.to)(state, dispatch),
+        acceptAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(applySuggestions, editor, dispatch, tr),
+        rejectAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(revertSuggestions, editor, dispatch, tr),
+        acceptSuggestionsInSelection: () => ({ editor, dispatch, tr, state }) => {
+          const { from, to } = state.selection
+          return runGuardedLibCommand((s, d) => applySuggestion(undefined, from, to)(s, d), editor, dispatch, tr)
+        },
+        rejectSuggestionsInSelection: () => ({ editor, dispatch, tr, state }) => {
+          const { from, to } = state.selection
+          return runGuardedLibCommand((s, d) => revertSuggestion(undefined, from, to)(s, d), editor, dispatch, tr)
+        },
+        // Cible une suggestion par son id plutôt que par la sélection courante - plus robuste pour
+        // un bloc entier (une ligne de tableau n'a pas de sélection de texte naturelle) et plus
+        // proche de ce qu'un vrai bouton "accepter/refuser CE changement" ferait (l'id vient de
+        // l'attribut data-id posé par InsertionMark/DeletionMark, pas de la sélection courante).
+        acceptSuggestionById: (id) => ({ editor, dispatch, tr }) =>
+          runGuardedLibCommand((s, d) => applySuggestion(id)(s, d), editor, dispatch, tr),
+        rejectSuggestionById: (id) => ({ editor, dispatch, tr }) =>
+          runGuardedLibCommand((s, d) => revertSuggestion(id)(s, d), editor, dispatch, tr),
       }
     },
     dispatchTransaction({ transaction, next }) {
@@ -188,15 +298,12 @@
         && !transaction.getMeta('history$')
         && !(skipMeta && 'skip' in skipMeta)
       if (!enabled) { next(transaction); return }
-      // CORRECTIF (2026-09-18) : transformToSuggestionTransaction lève une exception non
-      // rattrapée sur la suppression d'un nœud de BLOC entier (paragraphe, ligne de tableau) -
-      // "Invalid content for node table/doc", constaté en testant ce prototype. On attrape
-      // l'exception et on REFUSE la transaction (elle n'est jamais appliquée) plutôt que de
-      // laisser planter la page ou de laisser passer une suppression réelle non trackée en
-      // silence - un suivi des modifications qui perd le suivi sans le dire serait pire que de
-      // bloquer temporairement ce cas. Ce n'est PAS le correctif définitif (l'utilisateur ne
-      // peut aujourd'hui plus rien supprimer en bloc tant que le suivi est actif), juste ce qui
-      // évite le crash le temps de creuser une vraie prise en charge des nœuds de bloc.
+      // Filet de sécurité : depuis le correctif du 2026-09-19 (TrackedDocument/TrackedTable
+      // ci-dessus), la suppression de bloc entier pour paragraphe/ligne de tableau ne devrait plus
+      // lever d'exception. On garde le try/catch pour tout autre type de nœud de bloc pas encore
+      // couvert (ex. un futur nœud custom de l'éditeur réel dont le parent n'autorise pas les 3
+      // marques) : on REFUSE la transaction (jamais appliquée) plutôt que de planter la page ou de
+      // laisser passer une suppression réelle non trackée en silence.
       try {
         next(transformToSuggestionTransaction(transaction, editor.state))
       } catch (e) {
@@ -210,8 +317,8 @@
     editor = new Editor({
       element: document.getElementById('editor'),
       extensions: [
-        StarterKit,
-        Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
+        StarterKit.configure({ document: false }), TrackedDocument,
+        TrackedTable.configure({ resizable: false }), TableRow, TableHeader, TableCell,
         InsertionMark, DeletionMark, ModificationMark, SuggestChangesBridge,
       ],
       content: `
