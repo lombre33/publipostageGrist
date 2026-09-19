@@ -33,13 +33,24 @@ corrigé ici pour éviter un conflit d'édition sur ce fichier partagé.
   document ; contenu du fil dans une table Grist compagnon (`Publipostage_Commentaires`), lié par un
   identifiant. `Comments.findMarkRanges()` retrouve les fils en parcourant `doc.descendants()` du
   document COURANT — donc dépendant d'une marque encore présente dans le document vivant.
-- **Auto-save** (`js/main.js`) : `autosaveTick()` toutes les 2500 ms, relit **toute** la table
-  `Publipostage_Modeles` (`Templates.loadAll()`) à chaque tick pour comparer `DateModif`, réécrit
-  l'intégralité de la colonne Texte `Contenu` à chaque sauvegarde. Détection de conflit purement
-  applicative et a posteriori (comparaison de `DateModif` au tick précédent, pas un verrou) : en cas
-  d'écart, bandeau « recharger » (perd le brouillon local) vs « enregistrer quand même » (écrase la
-  version distante). Aucune fusion automatique — Grist ne fournit pas de compare-and-swap sur
+- **Auto-save** (`js/main.js`) : `autosaveTick()` (js/main.js:345-377) toutes les 2500 ms
+  (`AUTOSAVE_INTERVAL_MS`, js/main.js:285), désactivable par l'utilisateur (drapeau localStorage
+  `pp_autosave_enabled`, js/main.js:346) — désactivé, la fonction sort immédiatement, **sans aucune
+  détection de conflit**. Sinon, relit **toute** la table `Publipostage_Modeles` (`Templates.loadAll()`)
+  à chaque tick et compare par égalité stricte (`!==`) le `dateModif` fraîchement relu à la dernière
+  valeur connue (`autosaveLastKnownDateModif`, js/main.js:356) ; en cas d'écart, se fige et affiche un
+  bandeau **à un seul bouton** (« Recharger la dernière version ») — pas de choix « enregistrer quand
+  même » à ce stade (correction du 2026-09-19 : la version précédente de cette section décrivait à tort
+  un bandeau à deux choix). Aucune fusion automatique — Grist ne fournit pas de compare-and-swap sur
   `UpdateRecord`.
+- **Le bouton « Enregistrer » manuel (`onSave`, js/main.js:223-254) ne vérifie JAMAIS de conflit** —
+  bandeau affiché ou non, auto-save activé ou non — et écrase **inconditionnellement les 10 colonnes**
+  de la ligne en un seul `UpdateRecord` (`Nom`, `Contenu`, `NomFichierPDF`, `DateModif`, `HeaderFooter`,
+  `Margins`, `TypeModele`, `Destinataires`, `Cc`, `Cci`), pas seulement `Contenu` (vérifié le
+  2026-09-19, corrige une lecture antérieure trop étroite de cette section). C'est le véritable chemin
+  d'écrasement silencieux, et — important pour le chiffrage du risque plus bas — il n'est **pas borné**
+  à la fenêtre de 2,5 s de l'auto-save : un clic sur « Enregistrer » écrase à tout moment, y compris
+  juste après un tick qui vient de détecter un conflit et d'afficher le bandeau.
 - **Identification de l'utilisateur courant** (`GristAPI.getCurrentUserEmail()`, `js/grist-api.js`) :
   passe par une colonne à formule déclenchée dans une table interne dédiée
   (`Publipostage_UserProbe`), vidée après lecture — un aller-retour asynchrone, pas une valeur locale
@@ -255,15 +266,101 @@ entier a une vraie prise en charge depuis le 2026-09-19, plus seulement un refus
    « accepter/refuser CE changement » dans l'UI réelle : deux changements qui se touchent peuvent être
    liés du point de vue de la lib.
 
+**Deux bugs supplémentaires trouvés le 2026-09-19, en complexifiant les tests à la demande d'Antoine
+(« anticiper les problèmes à la migration, teste avec plusieurs utilisateurs »). Les deux sont corrigés
+dans le prototype :**
+
+4. **Recharger un document contenant déjà une marque `deletion` en attente la convertissait en simple
+   texte barré PERMANENT, sans exception.** Cause : `@tiptap/starter-kit` embarque sa propre extension
+   `Strike`, dont `parseHTML` reconnaît AUSSI la balise `<del>` (en plus de `<s>`/`<strike>`) — vérifié
+   dans le code source réel du paquet. StarterKit est enregistré avant `DeletionMark` dans le tableau
+   d'extensions, et les deux ont par défaut la même priorité Tiptap (100) : à priorité de règle
+   ProseMirror égale (`DOMParser.schemaRules()`, défaut 50), l'ordre d'insertion dans `schema.marks`
+   tranche l'égalité, donc `Strike` gagnait la course au parsing de `<del>` et absorbait silencieusement
+   la marque de suivi, perdant à la fois son statut de suggestion ET son id. Se déclenchait dès le tout
+   premier chargement d'un document contenant une suppression en attente (`setContent`), suivi actif ou
+   non à ce moment — donc aussi bien au chargement initial d'un modèle qu'au rechargement après un
+   conflit. **Corrigé** en donnant aux marques `insertion`/`deletion` une priorité Tiptap explicite de
+   200, pour qu'elles gagnent systématiquement ce genre de conflit de balise avec une extension
+   standard de StarterKit.
+5. **Recharger un document pendant que le suivi est actif dupliquait tout le contenu au lieu de le
+   remplacer.** `editor.commands.setContent()` (utilisé par le prototype pour simuler un rechargement,
+   comme `Editor.setHTML()` de l'app réelle à `js/editor.js:392`) passe par le même pipeline
+   `dispatchTransaction`/`transformToSuggestionTransaction` qu'une frappe normale : si le suivi est
+   actif au moment du chargement, TOUT le remplacement de document est traité comme une seule
+   suggestion géante, empilant ancien et nouveau contenu dans des `<del>`/`<ins>` imbriqués au lieu de
+   remplacer proprement. **Corrigé** par une nouvelle commande dédiée, `loadDocument(html)`, qui
+   parse le HTML directement (`DOMParser.fromSchema`) et dispatche le remplacement avec les mêmes
+   méta-données que la lib utilise pour ses propres opérations « déjà appliquées »
+   (`{skip: true}` + `addToHistory: false`) — un remplacement net, quel que soit l'état du suivi au
+   moment du chargement. Pertinent pour la vraie migration : c'est exactement le rechargement qui se
+   produit après un conflit d'auto-save (« Recharger la dernière version ») ou à l'ouverture normale
+   d'un modèle qui contient déjà un suivi non résolu.
+
+**Conclusion vérifiée sur la collision d'id entre utilisateurs (pas un bug, un risque de migration à
+surveiller)** : `generateNextNumberId` calcule l'id suivant en scannant uniquement le document de
+l'instance d'éditeur COURANTE (`max(ids existants) + 1`), sans compteur global. Deux utilisateurs qui
+partent du même document sans marque obtiennent donc systématiquement le MÊME id (1) pour leur premier
+changement, quel qu'il soit — confirmé en le reproduisant réellement entre deux onglets/deux instances
+d'éditeur indépendantes. **Sans conséquence aujourd'hui** : le modèle produit tranché (dernier écrivain
+gagne, remplacement intégral de `Contenu`, jamais de fusion) fait que les deux documents qui
+collisionnent ne coexistent jamais dans une même instance d'éditeur — un id=1 chez le perdant disparaît
+intégralement avec son document au moment de l'écrasement. **Point de vigilance pour une éventuelle
+évolution future** (fusion/replay des suggestions de deux utilisateurs au lieu d'un remplacement
+intégral — non demandé, non implémenté, hors du modèle produit actuel) : `applySuggestionById`/
+`revertSuggestionById` retrouvent une marque par ÉGALITÉ D'ID SEULE sur tout le document, sans borne de
+position ; si une future UI combinait un jour les suggestions de deux auteurs dans un même document, la
+collision d'id ferait qu'une action « accepter/refuser CE changement » en toucherait potentiellement
+DEUX, sans rapport entre eux — vérifié reproductible avec un document construit à la main. À garder en
+tête uniquement si un mécanisme de fusion est ajouté un jour ; le modèle actuel n'y est pas exposé.
+
+**Bug de performance CONFIRMÉ (pas une hypothèse) dans la lib tierce, mesuré le 2026-09-19** :
+`applySuggestions`/`revertSuggestions`/`applySuggestion`/`revertSuggestion` de
+`@handlewithcare/prosemirror-suggest-changes@0.1.8` traitent chaque marque trouvée en appelant
+`Transform.mapping.map()` sur un `Transform` PARTAGÉ qui accumule les steps de toutes les marques déjà
+traitées dans le même appel — un coût cumulatif en O(N²) pour N marques, pas O(N), puisque
+`mapping.map()` coûte proportionnellement au nombre de steps déjà accumulés. Mesuré dans la suite de
+tests (400→1600 paragraphes, chacun avec une paire `<ins>`+`<del>` préexistante, plus une table
+associée) : temps de « tout accepter » multiplié par **9,12x** et « tout refuser » par **8,69x** pour une
+multiplication de la taille par 4x seulement — largement super-linéaire. Mesuré à plus grande échelle
+pendant l'investigation (hors suite committée, pour ne pas alourdir son temps d'exécution) :
+200→800→3200→12800 paragraphes donnent des ratios de 5,6x/8,45x/20,8x pour chaque multiplication par
+4x, et « tout accepter » à 12800 paragraphes (16640 marques) prend environ 26,7 secondes — de quoi geler
+l'onglet, la lib dispatchant une seule transaction ProseMirror synchrone sur le thread principal. **Ce
+n'est pas un bug de notre code** (`TrackedDocument`/`TrackedTable`/`runGuardedLibCommand` n'y
+participent pas) : c'est une caractéristique algorithmique de la lib tierce elle-même, donc pas
+corrigeable depuis ce prototype. Piste de mitigation identifiée mais NON intégrée (preuve de concept
+seulement, demanderait à re-vérifier son interaction avec les 3 bugs déjà corrigés ci-dessus) :
+découper « tout accepter » en plusieurs transactions bornées (une toutes les ~200 paragraphes via
+`acceptSuggestionsInSelection()` sur une plage, au lieu d'un seul appel `acceptAllSuggestions()`) a
+réduit le temps mesuré à 12800 paragraphes de 15,5s à 7,8s. **À signaler explicitement pour tout
+chiffrage réel** : un document long avec beaucoup de changements en attente est un risque de gel de
+l'UI, indépendant de tout ce que notre code peut corriger dans le périmètre de ce chantier.
+
+**Superposition avec `commentMark` : comportement vérifié correct, aucun bug trouvé.** Marquer pour
+suppression une plage déjà commentée pose bien les deux marques (`deletion` + `commentMark`) sans
+conflit ; refuser la suppression restaure texte ET commentaire intacts. Accepter la suppression d'une
+plage partiellement commentée ne détruit QUE la portion du commentaire qui recouvrait le texte
+physiquement supprimé — la portion survivante du commentaire garde légitimement sa marque (comportement
+fin, cohérent avec la conséquence déjà anticipée dans ce document : « un fil de discussion devient
+orphelin... tant que la suppression n'est pas formellement acceptée », ici vérifié dans l'autre sens).
+Insérer du texte sous suivi à l'intérieur d'une plage commentée pose bien les deux marques (`insertion`
++ `commentMark`) sur le texte inséré.
+
 **Suite de tests automatisée** : `prototypes/test-suivi-modifications.mjs` (Playwright headless,
-autonome, `node prototypes/test-suivi-modifications.mjs`) couvre désormais 15 scénarios — les cas
+autonome, `node prototypes/test-suivi-modifications.mjs`) couvre désormais **21 scénarios** — les cas
 précédents plus : suppression de ligne/paragraphe entiers marquée non-destructivement sur le nœud,
 refus par id d'une suppression de bloc (la restaure), insertion programmatique d'un bloc entier marquée
-sur le nœud, refus par id d'une insertion de bloc (la supprime), et le cas de bord accepter/refuser le
-dernier nœud du document (bug n°3 ci-dessus, dans les deux situations : après une édition dans la
-session, et sur un document rechargé déjà marqué). Les 15 passent. Ordre volontaire dans le fichier :
-l'aller-retour insertion/refus d'un bloc de test passe AVANT le marquage du dernier paragraphe pour
-suppression, précisément pour éviter l'adjacence de marques décrite ci-dessus.
+sur le nœud, refus par id d'une insertion de bloc (la supprime), le cas de bord accepter/refuser le
+dernier nœud du document (bug n°3 ci-dessus, dans les deux situations), le round-trip d'une marque
+deletion déjà en attente (bug n°4), un scénario complet à deux utilisateurs indépendants qui divergent
+puis s'écrasent (dernier écrivain gagne, via `loadDocument`, bug n°5), la mesure de performance
+super-linéaire ci-dessus, et les trois scénarios de superposition avec `commentMark`. Les 21 passent.
+Un second fichier dédié, `prototypes/test-suivi-modifications-multi-utilisateurs.mjs` (3 scénarios,
+tous verts), isole spécifiquement la collision d'id entre utilisateurs indépendants documentée
+ci-dessus. Ordre volontaire dans le premier fichier : l'aller-retour insertion/refus d'un bloc de test
+passe AVANT le marquage du dernier paragraphe pour suppression, précisément pour éviter l'adjacence de
+marques décrite ci-dessus.
 
 **Conséquence** : la marque non-destructive (option 2) est confirmée pour le texte inline ET pour les
 nœuds de bloc entiers (paragraphe, ligne de tableau) dans les deux sens (suppression et insertion). Le
@@ -338,8 +435,20 @@ comme une lecture naïve du risque pourrait le laisser craindre. C'est un argume
 de la préférence produit d'Antoine, en faveur du modèle (c) plutôt qu'une table compagnon écrite sur un
 cycle propre et potentiellement désynchronisé.
 
+**Nuance ajoutée le 2026-09-19, après relecture exacte de `js/main.js`** : la fenêtre de 2,5 s décrite
+ci-dessus ne borne que le chemin AUTO-SAVE. Le bouton « Enregistrer » manuel n'a, aujourd'hui déjà,
+aucune borne du tout (voir plus haut : `onSave` n'a jamais vérifié de conflit, sur les 10 colonnes de
+la ligne). Ce n'est pas une régression introduite par ce chantier : c'est le comportement déjà en
+production pour `Contenu` seul. Comme `SuiviModifications` voyagera dans le MÊME `UpdateRecord` que
+`Contenu`, quel que soit le chemin qui déclenche cet `UpdateRecord` (tick auto-save borné à 2,5 s, ou
+clic manuel non borné), le suivi héritera EXACTEMENT du même profil de risque que `Contenu` aujourd'hui
+— ni mieux ni pire. L'exigence d'Antoine (« pas plus de risque que l'auto-save actuel ») reste donc
+satisfaite par construction, à condition de comprendre que « le risque de l'auto-save actuel » inclut
+déjà ce chemin manuel non borné, pas seulement le tick de 2,5 s.
+
 Reste un point non résolu par cette discipline : la fusion elle-même n'existe toujours pas (dernier
-écrivain gagne, intégralement) — seule la TAILLE de ce qui peut être perdu est bornée. Une vraie fusion
+écrivain gagne, intégralement) — seule la TAILLE de ce qui peut être perdu est bornée (au sens ci-dessus,
+manual save inclus). Une vraie fusion
 demanderait un canal de collaboration temps réel (OT/CRDT, ce que `prosemirror-collab`/Yjs offrent) —
 changement structurel hors périmètre de ce cadrage, et non demandé par Antoine. Piste d'atténuation
 partielle (pas nécessaire pour tenir l'exigence ci-dessus, juste pour réduire la fréquence des
@@ -376,13 +485,24 @@ fonctionnalité (ancrage dans le document ET contenu dans la table Grist compagn
 `scenarios-track-changes.js` devra vérifier à la fois l'état du document (marques/décorations
 insertion/suppression) et, si le modèle (b) est retenu, la table compagnon — plus des scénarios dédiés
 pour :
-- l'interaction avec `commentMark` (superposition, non-orphelinage) ;
-- au moins un nœud complexe supprimé en bloc (tableau, image) avec suivi actif ;
+- ~~l'interaction avec `commentMark` (superposition, non-orphelinage)~~ — **couvert dans le
+  prototype le 2026-09-19** (3 scénarios verts, voir plus haut) ; à refaire sur le vrai `commentMark`
+  de `js/comments.js` (popup, table Grist compagnon) au moment de l'intégration.
+- au moins un nœud complexe supprimé en bloc (tableau, image) avec suivi actif ; le prototype couvre
+  déjà la ligne de tableau, pas encore l'image.
 - l'annulabilité d'un accepter/refuser (Ctrl+Z) ;
 - l'auto-save avec un historique de suivi non trivial (taille du payload, absence de blocage) ;
-- un scénario de conflit (deux `Contenu` divergents) pour vérifier ce qui survit à un écrasement.
-- perf sur un document long multi-pages avec tableaux/images (coût d'interception de chaque
-  transaction) — actuellement une simple hypothèse raisonnée, jamais mesurée sur ce projet.
+- ~~un scénario de conflit (deux `Contenu` divergents) pour vérifier ce qui survit à un
+  écrasement~~ — **couvert dans le prototype le 2026-09-19** (scénario complet à deux utilisateurs
+  indépendants, dernier écrivain gagne, voir plus haut) ; à refaire contre le vrai
+  `Templates.save()`/`onSave` au moment de l'intégration, notamment pour vérifier le chemin manuel
+  sans détection de conflit décrit plus haut.
+- ~~perf sur un document long multi-pages avec tableaux/images (coût d'interception de chaque
+  transaction) — actuellement une simple hypothèse raisonnée, jamais mesurée sur ce projet~~ —
+  **mesuré le 2026-09-19** : croissance super-linéaire confirmée (bug de la lib tierce, voir plus
+  haut), pas juste une hypothèse. Reste à mesurer : coût d'interception PAR FRAPPE sur un document déjà
+  volumineux pendant une session d'édition normale (le test actuel mesure « tout accepter »/« tout
+  refuser », pas la frappe continue).
 
 ## Questions ouvertes avec Antoine avant tout chiffrage d'effort
 

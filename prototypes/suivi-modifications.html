@@ -66,6 +66,7 @@
   #editor:focus-within { outline: 2px solid #333; }
   #editor ins { text-decoration: underline; background: rgba(0,0,0,0.06); text-decoration-thickness: 2px; }
   #editor del { text-decoration: line-through; background: rgba(0,0,0,0.06); color: #555; }
+  #editor .comment-mark { background: rgba(255,196,0,0.25); }
   #editor table { border-collapse: collapse; margin: 8px 0; }
   #editor td, #editor th { border: 1px solid #999; padding: 4px 8px; min-width: 60px; }
   #log { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; background: #fafafa; border: 1px solid #eee; padding: 8px; margin-top: 16px; max-width: 700px; max-height: 220px; overflow: auto; }
@@ -102,6 +103,7 @@
   import { TableRow } from '@tiptap/extension-table-row'
   import { TableCell } from '@tiptap/extension-table-cell'
   import { TableHeader } from '@tiptap/extension-table-header'
+  import { DOMParser as PMDOMParser } from 'prosemirror-model'
   import {
     suggestChanges, suggestChangesKey, toggleSuggestChanges, isSuggestChangesEnabled,
     applySuggestions, revertSuggestions, applySuggestion, revertSuggestion,
@@ -118,16 +120,51 @@
   // (schema.marks.insertion/.deletion/.modification), d'où les noms figés ci-dessous. `excludes`
   // ne liste QUE les 3 marques de la lib entre elles : aucun conflit avec les marques custom de
   // l'app réelle (gras, commentMark, etc.), qui ne sont pas dans cette liste.
+  // `priority: 200` sur les deux marques ci-dessous : voir le bug de conflit de balise `<del>`
+  // documenté juste avant `DeletionMark`, trouvé en construisant le scénario à deux utilisateurs.
+  // `InsertionMark` n'a pas ce risque avec `<ins>` (StarterKit ne le revendique pas), priorité
+  // relevée quand même par cohérence/robustesse si un futur nœud custom du projet réel déclarait un
+  // jour sa propre règle sur `<ins>`.
   const InsertionMark = Mark.create({
     name: 'insertion',
+    priority: 200,
     inclusive: false,
     excludes: 'deletion modification insertion',
     addAttributes() { return { id: { default: null } } },
     parseHTML() { return [{ tag: 'ins', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) }] },
     renderHTML({ HTMLAttributes }) { return ['ins', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0] },
   })
+  // BUG TROUVÉ EN CONSTRUISANT LE SCÉNARIO À DEUX UTILISATEURS (2026-09-19), sans rapport avec la
+  // question de collision d'id qui a motivé ce scénario : recharger un document déjà sérialisé
+  // (exactement ce qui se passerait à chaque ouverture d'un modèle Grist ayant un suivi en cours,
+  // puisque `Contenu` est stocké et relu comme du HTML) faisait perdre TOUTE marque `<del>` en
+  // attente. Constaté avec `editor.commands.setContent(editor.getHTML())` :
+  // `<del data-id="1">mot</del>` ressortait en `<s>mot</s>` (un simple Strike), la marque de suivi
+  // et son id disparaissant silencieusement - aucune exception, donc invisible sans comparer le HTML
+  // avant/après.
+  // Cause, vérifiée dans le code source réel : `@tiptap/starter-kit` embarque par défaut sa propre
+  // extension `Strike`, dont la règle `parseHTML` reconnaît AUSSI la balise `<del>` (en plus de
+  // `<s>`/`<strike>`) sans définir de `priority` de règle explicite (donc 50, le défaut de
+  // `prosemirror-model` pour un `ParseRule` sans priorité). `DeletionMark` n'en définissait pas non
+  // plus, donc les deux rivalisaient à 50 partout : `DOMParser.schemaRules()` (prosemirror-model)
+  // départage alors une égalité de priorité par l'ORDRE d'insertion des marques dans `schema.marks`,
+  // qui suit lui-même l'ordre de tri par PRIORITÉ D'EXTENSION Tiptap (défaut 100 pour toutes,
+  // vérifié dans `@tiptap/core`, fonction `sortExtensions`) - `StarterKit` étant déclaré en premier
+  // dans `extensions: [...]` ci-dessous, à priorité d'extension égale son `Strike` passait avant
+  // `DeletionMark` dans le schéma, donc gagnait la balise `<del>` partagée.
+  // **Correctif** : donner à `DeletionMark` (et par cohérence à `InsertionMark`) une priorité
+  // d'EXTENSION explicitement supérieure au défaut Tiptap (100) de `Strike`, pour que son entrée de
+  // schéma soit insérée avant la sienne et gagne l'égalité de priorité de règle à 50 - vérifié après
+  // coup par un test dédié : le round-trip HTML d'un `<del>` déjà posé repose la marque `deletion`
+  // avec le bon id, plus aucune conversion en `strike`. Point d'attention pour la vraie migration :
+  // les 19 nœuds/marques custom de l'éditeur réel (dont certains touchent potentiellement d'autres
+  // balises comme `<mark>`/surlignage) devront être audités de la même façon pour tout conflit de
+  // balise avec `insertion`/`deletion`/`modification` avant intégration - cet incident montre que
+  // l'audit doit couvrir les MARQUES, pas seulement les NŒUDS de bloc déjà identifiés au premier
+  // correctif ci-dessus.
   const DeletionMark = Mark.create({
     name: 'deletion',
+    priority: 200,
     inclusive: false,
     excludes: 'insertion modification deletion',
     addAttributes() { return { id: { default: null } } },
@@ -146,6 +183,38 @@
     },
     parseHTML() { return [{ tag: "span[data-type='modification']" }] },
     renderHTML({ HTMLAttributes }) { return ['span', { 'data-type': 'modification', 'data-id': JSON.stringify(HTMLAttributes.id) }, 0] },
+  })
+
+  // AJOUT (2026-09-19, à la demande d'Antoine) — reproduction fidèle de `commentMark`
+  // (js/editor-nodes.js:createCommentMark) pour tester la superposition avec les 3 marques de
+  // suivi ci-dessus sur la même plage de texte. Le prototype n'a pas l'extension Commentaires
+  // réelle (pas de popup, pas de table Grist compagnon) : seule la MARQUE ProseMirror est
+  // reproduite ici, attribut par attribut et option par option identiques à l'original
+  // (`excludes: ''`, `inclusive: false`, attributs `id`/`resolved`, tag `span.comment-mark`) - la
+  // seule chose qui compte pour ce test est le comportement générique "deux marks Tiptap sur la
+  // même plage", donc le rendu (popup, fil Grist) n'a pas été reproduit : hors sujet pour ce test
+  // du modèle de marques.
+  const CommentMark = Mark.create({
+    name: 'commentMark',
+    excludes: '',
+    inclusive: false,
+    addAttributes() {
+      return {
+        id: { default: null, renderHTML: attrs => ({ 'data-comment-id': attrs.id }) },
+        resolved: {
+          default: false,
+          parseHTML: el => el.getAttribute('data-resolved') === 'true',
+          renderHTML: attrs => ({ 'data-resolved': attrs.resolved ? 'true' : 'false' }),
+        },
+      }
+    },
+    parseHTML() {
+      return [{ tag: 'span.comment-mark', getAttrs: el => ({ id: el.getAttribute('data-comment-id'), resolved: el.getAttribute('data-resolved') === 'true' }) }]
+    },
+    renderHTML({ HTMLAttributes }) {
+      const cls = 'comment-mark' + (HTMLAttributes['data-resolved'] === 'true' ? ' comment-mark-resolved' : '')
+      return ['span', { ...HTMLAttributes, class: cls }, 0]
+    },
   })
 
   // CORRECTIF (2026-09-19) — vraie prise en charge de la suppression de bloc entier, remplaçant le
@@ -277,6 +346,39 @@
           runGuardedLibCommand((s, d) => applySuggestion(id)(s, d), editor, dispatch, tr),
         rejectSuggestionById: (id) => ({ editor, dispatch, tr }) =>
           runGuardedLibCommand((s, d) => revertSuggestion(id)(s, d), editor, dispatch, tr),
+        // BUG TROUVÉ EN CONSTRUISANT LE SCÉNARIO À DEUX UTILISATEURS (2026-09-19) : un chargement
+        // "dur" de document (recharger depuis Grist après un conflit dernier-écrivain-gagne, ou
+        // tout simplement charger un modèle - exactement `Editor.setHTML()`/
+        // `editor.commands.setContent()` dans js/editor.js:392 de l'app réelle) passe, comme
+        // n'importe quelle transaction, par le hook `dispatchTransaction` ci-dessous. Si le suivi
+        // est actif au moment de ce chargement (cas réel probable : rien ne l'aurait désactivé),
+        // `transformToSuggestionTransaction` traite le remplacement intégral comme une simple
+        // ÉDITION SUGGÉRÉE parmi d'autres, pas comme un rechargement propre - constaté en testant :
+        // le document obtenu double le contenu (ancien ET nouveau superposés dans des <del>/<ins>
+        // englobants) au lieu d'un remplacement net. Un vrai risque de corruption silencieuse pour
+        // la migration : le jour où le suivi existera dans l'app réelle, `Editor.setHTML()`
+        // (chargement initial d'un modèle ET rechargement sur conflit auto-save) ne devra plus être
+        // un simple `editor.commands.setContent()` pendant que le suivi est actif.
+        // Correctif : une commande dédiée qui REMPLACE tout le document d'un coup sans jamais
+        // passer par `transformToSuggestionTransaction`, quel que soit l'état du suivi au moment de
+        // l'appel - même patron que `runGuardedLibCommand` (dispatch direct via
+        // `editor.view.dispatch`, meta `{skip: true}` sur `suggestChangesKey` pour dire au pont
+        // "ceci n'est PAS une nouvelle suggestion, ne le re-transforme pas", la même convention que
+        // `applySuggestions` etc. utilisent pour leur propre transaction).
+        loadDocument: (html) => ({ editor, dispatch, tr }) => {
+          if (!dispatch) return true
+          tr.setMeta('preventDispatch', true) // même piège que dans runGuardedLibCommand : sans ça, Tiptap dispatcherait en plus son propre tr partagé resté vide.
+          const wrapper = document.createElement('div')
+          wrapper.innerHTML = html
+          const docNode = PMDOMParser.fromSchema(editor.schema).parse(wrapper)
+          editor.view.dispatch(
+            editor.state.tr
+              .setMeta(suggestChangesKey, { skip: true })
+              .setMeta('addToHistory', false)
+              .replaceWith(0, editor.state.doc.content.size, docNode.content),
+          )
+          return true
+        },
       }
     },
     dispatchTransaction({ transaction, next }) {
@@ -319,7 +421,7 @@
       extensions: [
         StarterKit.configure({ document: false }), TrackedDocument,
         TrackedTable.configure({ resizable: false }), TableRow, TableHeader, TableCell,
-        InsertionMark, DeletionMark, ModificationMark, SuggestChangesBridge,
+        InsertionMark, DeletionMark, ModificationMark, CommentMark, SuggestChangesBridge,
       ],
       content: `
         <p>Ceci est un paragraphe de test. Activez le suivi puis tapez ou supprimez du texte ici.</p>
