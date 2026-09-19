@@ -49,12 +49,19 @@ const GROUPS = {
 const argv = process.argv.slice(2);
 let port = 8843;
 let probe = null; // --probe "<expression JS>" : ouvre le harnais, evalue, affiche - pour inspecter l'etat reel sans ecrire un scenario
+// --preseed <fichier.js> : injecte ce fichier AVANT la navigation (page.addInitScript), donc avant que dev-tests/grist-stub.js ne s'execute lui-meme -
+// il doit definir window.__preSeedGristStub = (stub) => {...}, appele par grist-stub.js juste apres avoir construit window.__gristStub, donc AVANT
+// tout premier fetchTable de GristAPI.init(). Seul moyen de tester "le widget demarre avec tel modele deja marque par defaut" : setVariables/setRows
+// APRES "Widget prêt." (la seule ouverture qu'offrait ce fichier jusqu'ici) arrive structurellement trop tard, une fois init() deja termine.
+let preseedFile = null;
 const wanted = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--port') { port = Number(argv[++i]); continue; }
   if (argv[i] === '--probe') { probe = argv[++i]; continue; }
+  if (argv[i] === '--preseed') { preseedFile = argv[++i]; continue; }
   wanted.push(argv[i]);
 }
+const preseedCode = preseedFile ? readFileSync(resolve(preseedFile), 'utf8') : null;
 const groups = probe ? [] : (wanted.length ? wanted : Object.keys(GROUPS));
 for (const g of groups) {
   if (!GROUPS[g]) { console.error(`Groupe inconnu : ${g}\nGroupes : ${Object.keys(GROUPS).join(', ')}`); process.exit(2); }
@@ -166,6 +173,7 @@ async function runGroup(name, probeExpr) {
     await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   }
 
+  if (preseedCode) await page.addInitScript({ content: preseedCode });
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,
   // pas un délai arbitraire.

@@ -175,6 +175,10 @@ body { display:flex; flex-direction:column; }
 .link-config-mode label { display:flex; flex-direction:column; }
 .link-config-hint { font-weight:400; font-size:11px; color: var(--text-faint); margin:2px 0 0 20px; }
 .link-config-match-fields { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+/* Même piège que .settings-trigger-reload-notice[hidden] (css/toolbar-v2.css) : `display:flex` a une spécificité (0,1,0) qui gagne contre la règle
+   native [hidden]{display:none} car l'origine auteur l'emporte sur l'origine UA - Variables.showLinkConfigModal (applyModeVisibility) posait `hidden` en
+   mode "ligne fixe" sans jamais masquer réellement ces champs à l'écran. Re-déclaré avec [hidden] en plus pour qu'il reprenne la main. */
+.link-config-match-fields[hidden] { display: none; }
 .link-config-match-fields select { width:100%; box-sizing:border-box; }
 .link-config-explain { margin:0; font-size:11px; color: var(--text-faint); }
 .link-config-preview { font-size:12px; background: var(--surface-sunken); border:1px solid var(--border); border-radius:4px; padding:6px 8px; margin-bottom:12px; min-height:1.2em; }

@@ -13,6 +13,22 @@
 (function () {
   const cases = [];
 
+  // La propriété .hidden reflète seulement l'ATTRIBUT posé par le JS, pas le rendu réel : une règle CSS
+  // auteur qui fixe `display` sur l'élément (ex. #v2-email-fields-row { display:flex }) gagne contre la
+  // règle native [hidden]{display:none} de la feuille UA, quelle que soit la spécificité, car l'origine
+  // auteur l'emporte toujours sur l'origine UA - l'élément reste donc VISUELLEMENT affiché même avec
+  // hidden=true. C'est exactement le bug du 2026-09-19 (bandeau email/bouton "Créer l'email" jamais
+  // masqués en réalité, alors que tous les tests qui ne vérifiaient QUE .hidden passaient au vert) - voir
+  // le commentaire dans css/toolbar-v2.css à côté de #v2-email-fields-row[hidden]. Un scénario de ce
+  // fichier ne doit donc plus jamais asserter `.hidden` seul : toujours via ce helper, qui vérifie le
+  // rendu réel en plus de l'attribut.
+  function isVisuallyHidden(el) {
+    return el.hidden && getComputedStyle(el).display === 'none';
+  }
+  function isVisuallyShown(el) {
+    return !el.hidden && getComputedStyle(el).display !== 'none';
+  }
+
   // Ramène le widget en mode document propre via le VRAI chemin UI (survol "Nouveau" -> clic "Nouveau
   // document"), plutôt que d'appeler une fonction interne - un scénario de chrome doit passer par les
   // mêmes gestes qu'un utilisateur, sinon il peut passer au vert sur un bug qui bloque justement ce geste
@@ -33,8 +49,8 @@
       const emailRow = document.getElementById('v2-email-fields-row');
       const btnCreateEmail = document.getElementById('btn-create-email');
       const charCounter = document.getElementById('v2-email-char-counter');
-      const pass = emailRow.hidden && btnCreateEmail.hidden && charCounter.hidden;
-      return { pass, notes: JSON.stringify({ emailRowHidden: emailRow.hidden, btnCreateEmailHidden: btnCreateEmail.hidden, charCounterHidden: charCounter.hidden }) };
+      const pass = isVisuallyHidden(emailRow) && isVisuallyHidden(btnCreateEmail) && isVisuallyHidden(charCounter);
+      return { pass, notes: JSON.stringify({ emailRowDisplay: getComputedStyle(emailRow).display, btnCreateEmailDisplay: getComputedStyle(btnCreateEmail).display, charCounterDisplay: getComputedStyle(charCounter).display }) };
     },
   });
 
@@ -67,8 +83,8 @@
       const btnCreateEmail = document.getElementById('btn-create-email');
       const boldBtn = document.getElementById('v2-btn-bold');
       const stillInDom = document.body.contains(boldBtn);
-      const pass = !emailRow.hidden && !btnCreateEmail.hidden && stillInDom && boldBtn.classList.contains('v2-hf-locked');
-      return { pass, notes: JSON.stringify({ emailRowHidden: emailRow.hidden, btnCreateEmailHidden: btnCreateEmail.hidden, stillInDom, boldLocked: boldBtn.classList.contains('v2-hf-locked') }) };
+      const pass = isVisuallyShown(emailRow) && isVisuallyShown(btnCreateEmail) && stillInDom && boldBtn.classList.contains('v2-hf-locked');
+      return { pass, notes: JSON.stringify({ emailRowDisplay: getComputedStyle(emailRow).display, btnCreateEmailDisplay: getComputedStyle(btnCreateEmail).display, stillInDom, boldLocked: boldBtn.classList.contains('v2-hf-locked') }) };
     },
   });
 
@@ -83,8 +99,8 @@
       const emailRow = document.getElementById('v2-email-fields-row');
       const btnCreateEmail = document.getElementById('btn-create-email');
       const boldBtn = document.getElementById('v2-btn-bold');
-      const pass = emailRow.hidden && btnCreateEmail.hidden && !boldBtn.classList.contains('v2-hf-locked');
-      return { pass, notes: JSON.stringify({ emailRowHidden: emailRow.hidden, btnCreateEmailHidden: btnCreateEmail.hidden, boldLocked: boldBtn.classList.contains('v2-hf-locked') }) };
+      const pass = isVisuallyHidden(emailRow) && isVisuallyHidden(btnCreateEmail) && !boldBtn.classList.contains('v2-hf-locked');
+      return { pass, notes: JSON.stringify({ emailRowDisplay: getComputedStyle(emailRow).display, btnCreateEmailDisplay: getComputedStyle(btnCreateEmail).display, boldLocked: boldBtn.classList.contains('v2-hf-locked') }) };
     },
   });
 

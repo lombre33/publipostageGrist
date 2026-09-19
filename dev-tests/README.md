@@ -85,6 +85,19 @@ Deux options utiles :
 - `--probe "<expression JS>"` ouvre le harnais, évalue l'expression (`await`
   supporté) et imprime le résultat, sans exécuter aucun scénario - pour
   inspecter l'état réel de la page avant d'écrire un test.
+- `--preseed <fichier.js>` injecte ce fichier AVANT la navigation
+  (`page.addInitScript`), donc avant que `dev-tests/grist-stub.js` ne
+  s'exécute lui-même - le fichier doit définir
+  `window.__preSeedGristStub = (stub) => {...}` (accès direct à
+  `stub.state.rows.Publipostage_Modeles`, etc.), appelé juste après que
+  `grist-stub.js` a construit `window.__gristStub`, donc AVANT le tout premier
+  `fetchTable` de `GristAPI.init()`. Seul moyen de tester "le widget démarre
+  avec tel modèle déjà marqué par défaut" : semer via `setVariables`/`setRows`
+  APRÈS "Widget prêt." (ce que ce fichier permettait déjà) arrive
+  structurellement trop tard, une fois `init()` déjà terminé. Combinable avec
+  `--probe` pour inspecter l'état obtenu sans écrire de scénario. Trouvé utile
+  le 2026-09-19 en cherchant (à tort - la vraie cause était une règle CSS, cf.
+  plus bas) un bug qui ne se manifestait qu'au tout premier chargement.
 
 ### Dépendances CDN et réseau bloqué
 

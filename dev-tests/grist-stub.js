@@ -223,4 +223,10 @@
   };
 
   window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
+  // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
+  // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
+  // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
+  // dev-tests/README.md). Posé via page.addInitScript AVANT page.goto (donc déjà présent quand ce
+  // fichier s'exécute, lui-même chargé avant js/main.js dans _test-harness.html).
+  if (typeof window.__preSeedGristStub === 'function') window.__preSeedGristStub(window.__gristStub);
 })();

@@ -89,6 +89,13 @@
    <input type="text"> (pas des mini-éditeurs TipTap) : #Variable s'y insère en texte brut via Variables.initFilenameInput, MÊME mécanisme déjà éprouvé que
    #pdf-filename-template ci-dessus - ces valeurs finissent de toute façon en texte brut dans une URL mailto:, une bulle riche n'y apporterait rien. */
 #v2-email-fields-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); font-family: var(--font-ui); }
+/* `display:flex` juste au-dessus a une spécificité (1,0,0) supérieure à la règle native [hidden]{display:none} de la feuille UA (0,1,0) - la règle
+   AUTEUR l'emporte dans la cascade quelle que soit la spécificité (origine auteur > origine UA), donc l'attribut `hidden` posé par js/main.js
+   (loadTemplateIntoEditor) ne masquait plus rien : le bandeau Objet/À/Cc/Cci et le bouton #btn-create-email restaient visibles en permanence, y compris
+   sur un modèle document (régression jamais vue par les tests, qui ne vérifiaient que la propriété .hidden, pas le rendu réel - cf.
+   .settings-trigger-reload-notice[hidden] plus bas pour le même piège déjà rencontré). Re-déclarés avec [hidden] en plus pour qu'ils reprennent la main. */
+#v2-email-fields-row[hidden] { display: none; }
+#btn-create-email[hidden] { display: none; }
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
