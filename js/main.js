@@ -97,7 +97,10 @@
     const currentId = Templates.getCurrentId();
     const isDefault = currentId != null && String(Templates.getDefaultId()) === String(currentId);
     btn.classList.toggle('is-default', isDefault);
-    btn.disabled = currentId == null;
+    // Un modèle email ne doit jamais devenir le modèle qui s'ouvre par défaut (Antoine, 2026-09-19) :
+    // l'email est une action ponctuelle sur un enregistrement, pas un état dans lequel le widget doit
+    // démarrer. Grisé (disabled, même traitement visuel que "aucun modèle chargé"), jamais masqué.
+    btn.disabled = currentId == null || currentTypeModele === 'email';
   }
 
   function wireDefaultTemplateButton() {
@@ -131,8 +134,10 @@
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     if (pdfFilenameInput) {
       pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
-      // Reste visible si un nom est déjà configuré - éviter de cacher un réglage actif derrière le crayon (cf. wirePdfFilenameToggle).
-      pdfFilenameInput.hidden = !pdfFilenameInput.value.trim();
+      // Toujours replié au chargement d'un modèle (Antoine, 2026-09-19 : l'UI de base doit rester
+      // clean par défaut), même si un nom est déjà configuré - le crayon (cf. wirePdfFilenameToggle)
+      // le déplie à la demande, la valeur elle-même n'est jamais perdue.
+      pdfFilenameInput.hidden = true;
     }
     currentTypeModele = tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
     if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';

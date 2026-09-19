@@ -32,10 +32,17 @@
    Poussé tout à droite par #status-msg juste avant lui (margin-left:auto), sans CSS de positionnement supplémentaire. */
 #v2-btn-settings::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E"); }
 
-/* Logo Grist Factory : repère de marque discret, à droite du bouton Réglages (demande d'Antoine, 2026-09-18).
-   Pas un ::before comme les autres icônes de cette ligne : c'est une vraie image (avatar fourni), pas un trait
-   monochrome recolorable - donc un <img> à part, pas intégré à la famille d'icônes .bar-row. */
-#v2-brand-logo { width: 20px; height: 20px; border-radius: 50%; margin-left: 6px; flex: none; opacity: .85; }
+/* Logo Grist Factory : repère de marque discret, coin haut-droit du bandeau (demande d'Antoine, 2026-09-19 -
+   posé au départ dans le flux de .bar-row, il retombait donc à la ligne suivante dès que cette ligne (déjà
+   dense, cf. mémoire projet) passait au retour à la ligne). Sorti du flux (position absolute, ancré sur
+   #toolbar-top) pour rester fixe dans le coin quel que soit le nombre de lignes que .bar-row occupe.
+   Toujours pas un ::before comme les autres icônes de cette ligne : c'est une vraie image (avatar fourni),
+   pas un trait monochrome recolorable - donc un <img> à part, pas intégré à la famille d'icônes .bar-row. */
+#toolbar-top { position: relative; }
+#v2-brand-logo { position: absolute; top: 7px; right: 10px; width: 20px; height: 20px; border-radius: 50%; opacity: .85; }
+/* Réserve la place du logo dans le coin haut-droit pour qu'aucun élément de .bar-row (bouton Réglages,
+   compteur de longueur email...) ne puisse jamais passer dessous. */
+.bar-row { padding-right: 34px; }
 
 /* === Infobulle classique (bulle sombre sous le bouton), remplace "libellé révélé au survol" de la V1 (`.btn-text`, qui élargit le bouton). Déclenchée par
    [data-tip] plutôt que `title` (les deux natifs ne cohabitent pas bien) - l'accessibilité passe par aria-label. Pas de flèche : les icônes ::before
@@ -68,8 +75,8 @@
 .autosave-toggle { border-color: transparent; background: transparent; }
 .autosave-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
 
-/* === Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) - reste visible si un nom est déjà configuré (cf.
-   js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor), pour ne pas cacher un réglage actif derrière une icône anodine. */
+/* === Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) - toujours replié au chargement d'un modèle, même si
+   un nom y est déjà configuré (cf. js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor - UI de base clean par défaut, retour d'Antoine 2026-09-19). */
 .v2-pdf-filename-cluster { display: inline-flex; align-items: center; gap: 4px; }
 #pdf-filename-template { height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; min-width: 220px; background: var(--surface); color: var(--text); }
 #btn-toggle-pdf-filename::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
@@ -82,9 +89,19 @@
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
-.v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
 .v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
+/* Préfixées par #toolbar-top (même compte de spécificité que la règle générique #toolbar-top button de
+   css/style.css qui, sinon, gagne et impose sa bordure transparente et son texte foncé - même piège et
+   même remède que #toolbar-top #btn-save un peu plus bas dans ce fichier). Sans ce préfixe le bouton
+   perdait sa bordure et sa couleur muted de la maquette. */
+#toolbar-top .v2-email-cci-toggle { border: 1px solid var(--border-strong); color: var(--text-muted); }
+/* Bouton texte pur, comme sur la maquette (aucune icône) - sans ce ::before en plus spécifique, le
+   ::before générique de #toolbar-top button::before (css/style.css) gagne à spécificité égale (chargé
+   avant, cf. #v2-toolbar button::before dans editor-v2.css qui règle le même problème pour l'autre
+   toolbar) et affiche un carré plein 14x14, faute de mask-image défini pour ce bouton. */
+#toolbar-top #v2-btn-toggle-cci::before { content: none; }
 
 /* Compteur de longueur + bouton d'action de la bar-row 1, visibles uniquement en mode email (js/main.js) - insérés après le bouton Exporter PDF existant,
    jamais à côté (il n'y a qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email]
@@ -93,8 +110,18 @@
    */
 .v2-email-char-counter { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .v2-email-char-counter.is-over-limit { color: var(--danger); font-weight: 600; }
-#btn-create-email { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
-#btn-create-email:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+/* Préfixées par #toolbar-top, comme #btn-save/#btn-export-pdf juste au-dessus dans css/style.css : sans
+   ce préfixe, la règle générique #toolbar-top button (background/color/border-color) gagne à spécificité
+   égale et le bouton retombe à son style transparent par défaut - c'était le cas ici (bug constaté,
+   Antoine 2026-09-19 : "pas du tout comme la maquette"), le fond accent et le texte blanc n'étaient
+   jamais appliqués. */
+#toolbar-top #btn-create-email { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); gap: 5px; }
+#toolbar-top #btn-create-email:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+/* Icône avion en papier de la maquette, en mask (même famille que le reste de .bar-row) plutôt qu'un
+   <svg> inline - currentColor reprend le blanc du texte ci-dessus. Taille : celle du ::before générique
+   de #toolbar-top button (14x14, css/style.css) - une valeur ici n'y gagnerait pas, cette règle étant
+   moins spécifique sur width/height (seul mask-image, qu'aucune autre règle ne fixe, s'applique bien). */
+#btn-create-email::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); }
 
 /* === Qualité PDF : bouton + panneau au survol (même mécanisme que les styles de puce/numérotation de la ligne de mise en forme) plutôt qu'un <select>
    toujours affiché - js/main.js:onExportPdf lit encore v2-pdf-quality.value directement, inchangé. */
