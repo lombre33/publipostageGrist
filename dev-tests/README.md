@@ -47,6 +47,7 @@ apparaît) :
 | `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
 | `js/comments.js`, `js/editor-nodes.js:createCommentMark`, `js/main.js` (`loadForTemplate`/`onSave`) | `comments` |
 | `js/main.js` (section « Auto-save », `autosaveTick`/`resetAutosaveState`/`wireAutosaveToggle`), `js/templates.js` (`save`/`loadAll` - `DateModif`) | `autosave` |
+| `index.html` (`.bar-row`, `#v2-email-fields-row`, `#v2-toolbar` - markup/attributs, pas le contenu de l'éditeur), `css/toolbar-v2.css`, `js/main.js` (`loadTemplateIntoEditor` pour la partie chrome, `syncDefaultTemplateButton`, `onNew`/`onNewEmail`), `js/main-toolbar.js` (`setEmailMode`/`syncToolbarState`) | **Toujours `toolbarChrome`** (seul groupe qui clique réellement les boutons/flyouts de la barre du haut plutôt que l'éditeur lui-même - ajouté 2026-09-19 après deux bugs visuels sur cette zone passés inaperçus) |
 | `js/editor-core.js`, `js/editor.js` | **Transverse** - traiter comme une demande de suite complète, ces fichiers sont partagés par tous les domaines |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 

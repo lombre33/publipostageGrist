@@ -1113,7 +1113,15 @@
     // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
     const defaultTemplateId = Templates.getDefaultId();
-    if (defaultTemplateId != null) templateSelect.value = defaultTemplateId;
+    if (defaultTemplateId != null) {
+      const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
+      // Un modèle email ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton, qui
+      // grise désormais le bouton "modèle par défaut" en mode email) - mais ce garde ne "détricote" pas
+      // un défaut resté coincé sur un modèle email d'AVANT ce correctif (Antoine, 2026-09-19 : le
+      // widget s'ouvrait encore sur l'email malgré le bouton grisé). On l'ignore explicitement ici
+      // plutôt que de compter sur une remise à zéro manuelle.
+      if (!defaultTpl || defaultTpl.typeModele !== 'email') templateSelect.value = defaultTemplateId;
+    }
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
     document.getElementById('btn-new').addEventListener('click', onNew);

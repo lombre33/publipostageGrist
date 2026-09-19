@@ -43,6 +43,7 @@ const GROUPS = {
   docxImages: 'scenarios-docx-images',
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
+  toolbarChrome: 'scenarios-toolbar-chrome',
 };
 
 const argv = process.argv.slice(2);

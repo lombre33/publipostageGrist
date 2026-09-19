@@ -39,7 +39,10 @@
    Toujours pas un ::before comme les autres icônes de cette ligne : c'est une vraie image (avatar fourni),
    pas un trait monochrome recolorable - donc un <img> à part, pas intégré à la famille d'icônes .bar-row. */
 #toolbar-top { position: relative; }
-#v2-brand-logo { position: absolute; top: 7px; right: 10px; width: 20px; height: 20px; border-radius: 50%; opacity: .85; }
+/* top calé sur le centre vertical des boutons de .bar-row (padding-top 6px + moitié des 28px de hauteur
+   de bouton, moins la moitié des 20px du logo) pour l'aligner avec le bouton Réglages plutôt qu'avec le
+   haut de la barre - demande d'Antoine, 2026-09-19 ("aligner avec la roue crantée que ça fasse joli"). */
+#v2-brand-logo { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; opacity: .85; }
 /* Réserve la place du logo dans le coin haut-droit pour qu'aucun élément de .bar-row (bouton Réglages,
    compteur de longueur email...) ne puisse jamais passer dessous. */
 .bar-row { padding-right: 34px; }
