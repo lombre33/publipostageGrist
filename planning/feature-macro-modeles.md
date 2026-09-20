@@ -109,16 +109,13 @@ pour le mode email avec `TypeModele`) :
 
 ## Risques et questions ouvertes
 
-Deux choix structurants, posés à Antoine séparément (cf. le fil) :
-
-- **Hypothèse à confirmer** : chaque annexe correspond à une ligne d'une table liée, et c'est une
+- **Tranché par Antoine le 2026-09-20** : en-tête/pied/marges — **un seul jeu de réglages pour tout le
+  document fusionné**, porté par le macro-modèle lui-même (colonnes `HeaderFooter`/`Margins` déjà
+  existantes sur `Publipostage_Modeles`), appliqué à la page de garde ET à toutes les annexes. Pas de
+  config par modèle assemblé à prévoir.
+- **Hypothèse encore à confirmer** : chaque annexe correspond à une ligne d'une table liée, et c'est une
   valeur de CETTE ligne qui choisit son modèle — c'est ma lecture de sa demande, l'alternative (une
   seule valeur sur la ligne courante qui sélectionne une liste fixe de modèles) est possible aussi.
-- **En-tête/pied/marges** : un seul jeu de réglages pour tout le document fusionné (le plus simple,
-  déjà recommandé dans `feature-misc-editor-and-output.md`), ou chaque modèle du macro garde le sien
-  (plus fidèle si la page de garde et les annexes ont des identités visuelles différentes, mais
-  fusionner plusieurs configs dans un seul export n'est PAS l'approche recommandée par ce document
-  existant).
 
 Questions plus mineures, tranchées ici par défaut raisonnable (à corriger si Antoine n'est pas d'accord) :
 
