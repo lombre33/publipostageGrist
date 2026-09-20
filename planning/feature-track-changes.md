@@ -548,6 +548,19 @@ autre chantier. L'intégration peut donc démarrer — **mais seulement sur le f
 explicitement demandé de durcir le prototype d'abord (fait ci-dessus). Ce qui suit est prêt à être
 lancé, pas une étape enchaînée d'office.
 
+**Mise à jour du 2026-09-20** : deux autres chantiers (« Macro modèles » et « Rangement des
+modèles ») ont depuis reçu le feu vert et touchent en ce moment `index.html`/`js/main.js`/l'éditeur ;
+l'intégration du suivi des modifications passe après eux (la plus profonde des trois, trois chantiers
+simultanés sur ces fichiers seraient ingérables). « Macro modèles » a été livré en production ce
+même jour (`b5a2103` sur `main`) : une nouvelle valeur `TypeModele='macro'` existe désormais à côté de
+`document`/`email` dans `Publipostage_Modeles`, dont le `Contenu` est du **JSON de composition**
+(page de garde + annexes conditionnelles), pas du HTML TipTap. **Conséquence directe pour ce
+chantier** : le suivi des modifications se pose sur `Contenu`, donc son intégration (chargement dans
+l'éditeur, `Editor.setHTML()`, colonne `SuiviModifications`) doit **explicitement exclure les lignes
+`TypeModele==='macro'`** — rien n'y est éditable ni suivable, ouvrir un tel modèle dans l'éditeur de
+prose n'a pas de sens. À couvrir par un test dédié dès l'intégration réelle (le genre de cas qui passe
+inaperçu jusqu'à ce qu'un utilisateur ouvre un macro-modèle).
+
 Points concrets trouvés en lisant le vrai code (au-delà de `doc`/`table` déjà traités dans le
 prototype) :
 

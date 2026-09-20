@@ -85,6 +85,8 @@
   <button id="btn-toggle">Suivi : désactivé</button>
   <button id="btn-accept-all">Tout accepter</button>
   <button id="btn-reject-all">Tout refuser</button>
+  <button id="btn-accept-all-chunked">Tout accepter (par lots)</button>
+  <button id="btn-reject-all-chunked">Tout refuser (par lots)</button>
   <button id="btn-accept-sel">Accepter la sélection</button>
   <button id="btn-reject-sel">Refuser la sélection</button>
   <button id="btn-undo">Annuler</button>
@@ -109,6 +111,20 @@
     applySuggestions, revertSuggestions, applySuggestion, revertSuggestion,
     transformToSuggestionTransaction,
   } from '@handlewithcare/prosemirror-suggest-changes'
+  // Remarque vérifiée le 2026-09-20 : le paquet source (npm pack) exporte aussi
+  // `applySuggestionsInRange`/`revertSuggestionsInRange` (dist/commands.js), des équivalents de
+  // `applySuggestions`/`revertSuggestions` bornés à une plage sans filtre d'id - candidats plus
+  // directs que `applySuggestion(undefined, from, to)` pour la mitigation de perf ci-dessous. Mais
+  // le bundle ESM réellement chargé ici depuis esm.sh (celui déjà épinglé dans ce prototype et
+  // dans l'import map) NE LES EXPORTE PAS (`curl .../es2022/prosemirror-suggest-changes.mjs` :
+  // absents de la liste `export{...}`, seuls `applySuggestion`/`revertSuggestion` - qui font le
+  // même travail en interne avec un id `undefined` - sont exposés) : un import direct de ces deux
+  // noms fait échouer le chargement du module ENTIER (silencieusement, avant même le try/catch
+  // autour de `new Editor(...)` - `window.__editor` reste undefined sans aucune erreur JS visible
+  // dans la page). D'où l'usage de `applySuggestion(undefined, from, to)`/
+  // `revertSuggestion(undefined, from, to)` ci-dessous, déjà utilisés par
+  // `acceptSuggestionsInSelection`/`rejectSuggestionsInSelection` plus haut, plutôt que les
+  // variantes dédiées.
 
   const logEl = document.getElementById('log')
   const log = (msg) => { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; console.log('[proto]', msg) }
@@ -313,6 +329,51 @@
     return result
   }
 
+  // Mitigation du bug de performance O(N²) de la lib tierce (mesuré et documenté dans
+  // planning/feature-track-changes.md et prototypes/test-suivi-modifications.mjs, "PERF mesuré").
+  // Diagnostic exact, vérifié en lisant le code source réel de
+  // @handlewithcare/prosemirror-suggest-changes@0.1.8 (dist/commands.js,
+  // `applySuggestionsToTransform`) : `applySuggestions()`/`revertSuggestions()` (sans plage) font
+  // `state.doc.descendants(...)` sur TOUT le document et, pour CHAQUE marque de suppression
+  // trouvée, appellent `tr.mapping.mapResult(pos)` sur un unique `Transform` PARTAGÉ qui accumule
+  // les steps de TOUTES les marques déjà traitées dans cet appel - `Transform.mapping.map()`
+  // coûtant proportionnellement au nombre de steps déjà accumulés, traiter N marques dans un seul
+  // appel coûte O(N²). `applySuggestion(undefined, from, to)`/`revertSuggestion(undefined, from,
+  // to)` (déjà importés plus haut, utilisés ci-dessus par `acceptSuggestionsInSelection`/
+  // `rejectSuggestionsInSelection`) appellent la MÊME fonction interne mais BORNÉE À UNE PLAGE :
+  // leur traversée balaie aussi tout le document, mais le coût de `mapping.map()` ne s'accumule
+  // que pour les marques DANS `[from, to]` (vérifié dans le code : les enfants hors plage sont
+  // ignorés avant tout appel de mapping). En répétant l'opération sur des tranches de `chunkSize`
+  // marques à la fois - toujours
+  // depuis la position 0 du document COURANT, jamais des positions mises en cache d'un tour à
+  // l'autre puisque la taille du document change à chaque tranche traitée -, le coût total
+  // redevient linéaire en nombre total de marques (O(N) au lieu de O(N²)) : mesuré dans
+  // `test-suivi-modifications.mjs`, gain confirmé sur un document de plusieurs milliers de
+  // marques. Chaque tranche est sa PROPRE transaction ProseMirror, donc chacune repasse par le
+  // même garde-fou de dernier-nœud que `runGuardedLibCommand` gère déjà. Contrepartie assumée,
+  // pas un bug : Annuler (Ctrl+Z) après un "tout accepter/refuser par lots" doit être pressé une
+  // fois par tranche pour tout défaire, puisque chaque tranche est un pas d'historique séparé -
+  // différent d'un "tout accepter" non découpé (un seul pas), à documenter côté produit si cette
+  // mitigation est un jour intégrée dans l'app réelle.
+  function findFirstPendingMarks(state, chunkSize) {
+    const found = []
+    state.doc.descendants((node, pos) => {
+      if (found.length >= chunkSize) return false
+      const mark = node.marks.find((m) => ['insertion', 'deletion', 'modification'].includes(m.type.name))
+      if (mark) found.push({ from: pos, to: pos + node.nodeSize })
+      return true
+    })
+    return found
+  }
+  function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize) {
+    while (true) {
+      const marks = findFirstPendingMarks(editor.state, chunkSize)
+      if (marks.length === 0) break
+      const to = marks[marks.length - 1].to
+      runGuardedLibCommand((s, d) => rangeCommandFactory(0, to)(s, d), editor, editor.view.dispatch, undefined)
+    }
+  }
+
   // Pont entre le plugin ProseMirror de la lib et Tiptap : addProseMirrorPlugins() suffit pour
   // les décorations (suggestChanges() les fournit déjà via ses propres `props.decorations`,
   // composées automatiquement par ProseMirror - PAS besoin de toucher editorProps.decorations).
@@ -330,6 +391,23 @@
         toggleSuggestMode: () => ({ state, dispatch }) => toggleSuggestChanges(state, dispatch),
         acceptAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(applySuggestions, editor, dispatch, tr),
         rejectAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(revertSuggestions, editor, dispatch, tr),
+        // Variantes "par lots" - voir le commentaire de `runChunkedLibCommand` ci-dessus pour le
+        // diagnostic et la mesure. `chunkSize` par défaut choisi empiriquement (voir la mesure de
+        // perf dans test-suivi-modifications.mjs) - suffisamment petit pour rester loin du coût
+        // quadratique, suffisamment grand pour ne pas multiplier le nombre de transactions/pas
+        // d'historique pour rien sur un document de taille normale.
+        acceptAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
+          if (!dispatch) return true
+          tr.setMeta('preventDispatch', true)
+          runChunkedLibCommand((from, to) => applySuggestion(undefined, from, to), editor, chunkSize)
+          return true
+        },
+        rejectAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
+          if (!dispatch) return true
+          tr.setMeta('preventDispatch', true)
+          runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize)
+          return true
+        },
         acceptSuggestionsInSelection: () => ({ editor, dispatch, tr, state }) => {
           const { from, to } = state.selection
           return runGuardedLibCommand((s, d) => applySuggestion(undefined, from, to)(s, d), editor, dispatch, tr)
@@ -453,6 +531,8 @@
   }
   document.getElementById('btn-accept-all').onclick = () => { editor.chain().focus().acceptAllSuggestions().run(); log('Tout accepté') }
   document.getElementById('btn-reject-all').onclick = () => { editor.chain().focus().rejectAllSuggestions().run(); log('Tout refusé') }
+  document.getElementById('btn-accept-all-chunked').onclick = () => { editor.chain().focus().acceptAllSuggestionsChunked().run(); log('Tout accepté (par lots)') }
+  document.getElementById('btn-reject-all-chunked').onclick = () => { editor.chain().focus().rejectAllSuggestionsChunked().run(); log('Tout refusé (par lots)') }
   document.getElementById('btn-accept-sel').onclick = () => { editor.chain().focus().acceptSuggestionsInSelection().run(); log('Sélection acceptée') }
   document.getElementById('btn-reject-sel').onclick = () => { editor.chain().focus().rejectSuggestionsInSelection().run(); log('Sélection refusée') }
   document.getElementById('btn-undo').onclick = () => editor.chain().focus().undo().run()

@@ -676,6 +676,113 @@ await test(perfLabel, async () => {
   if (rejectRes.small.remaining !== 0 || rejectRes.large.remaining !== 0) throw new Error('"tout refuser" laisse des marques: ' + JSON.stringify(rejectRes))
 })
 
+// --- Mitigation du bug de perf : commandes "par lots" (chunked) -----------------------------
+// Suite directe du bug de perf mesuré ci-dessus, à la demande d'Antoine du 2026-09-19
+// ("anticiper les problèmes à la migration") et de sa question du 2026-09-20 sur l'état du
+// prototype : la piste de mitigation identifiée pendant l'investigation (découper "tout accepter/
+// refuser" en plusieurs transactions bornées via `applySuggestion(undefined, from, to)`/
+// `revertSuggestion(undefined, from, to)`, jamais intégrée jusqu'ici) est maintenant de vraies
+// commandes du prototype : `acceptAllSuggestionsChunked(chunkSize)`/
+// `rejectAllSuggestionsChunked(chunkSize)` (voir leur commentaire dans suivi-modifications.html
+// pour le diagnostic complet et la remarque sur l'export ESM manquant d'esm.sh qui a d'abord fait
+// échouer l'implémentation évidente).
+
+await test('les commandes par lots (acceptAllSuggestionsChunked) produisent EXACTEMENT le même résultat que la commande non découpée, sur un document avec plusieurs paragraphes et une table', async () => {
+  const doc = '<p>Para 0 <ins data-id="10">ins0</ins></p>'
+    + Array.from({ length: 12 }, (_, i) => `<p>Para ${i + 1} <ins data-id="${20 + i}">ins${i}</ins> <del data-id="${40 + i}">del${i}</del></p>`).join('')
+    + '<table><tbody><tr><td><ins data-id="99">cellins</ins></td></tr></tbody></table>'
+  // `loadDocument` (pas `setContent`) : le suivi est actif depuis le test "suivi activé" plus haut
+  // et le reste pour tous les scénarios suivants qui réutilisent `page` - un `setContent` direct
+  // pendant que le suivi est actif serait lui-même intercepté par `transformToSuggestionTransaction`
+  // (bug déjà documenté dans le prototype, cf. commentaire sur `loadDocument`) et doublerait le
+  // contenu (ancien ET nouveau superposés dans un <del>/<ins> englobant) au lieu de le remplacer -
+  // faussant la comparaison chunké/non-chunké de ce test.
+  const res = await page.evaluate((c) => {
+    const editor = window.__editor
+    editor.commands.loadDocument(c)
+    editor.commands.acceptAllSuggestions()
+    const nonChunked = editor.getHTML()
+    editor.commands.loadDocument(c)
+    editor.commands.acceptAllSuggestionsChunked(3) // chunkSize volontairement petit (3) pour forcer plusieurs tranches sur un aussi petit document
+    const chunked = editor.getHTML()
+    return { nonChunked, chunked }
+  }, doc)
+  if (res.chunked !== res.nonChunked) throw new Error('résultat différent entre accepter-tout et accepter-tout-par-lots:\nnon découpé: ' + res.nonChunked + '\npar lots: ' + res.chunked)
+  // Remet un contenu neutre pour les scénarios suivants qui réutilisent `page`.
+  await page.evaluate(() => window.__editor.commands.loadDocument('<p>Réinitialisation après test des commandes par lots.</p>'))
+})
+
+await test('rejectAllSuggestionsChunked ne plante pas quand le DERNIER nœud du document porte une marque de suppression de bloc (même piège que le bug de dernier-nœud déjà corrigé)', async () => {
+  // `loadDocument` ici aussi, même raison que le test précédent : le suivi est actif à ce point de
+  // la suite, et un `setContent` direct doublerait le contenu au lieu de charger proprement le
+  // document voulu par ce scénario.
+  const res = await page.evaluate(() => {
+    const editor = window.__editor
+    editor.commands.loadDocument('<p>a <ins data-id="501">X</ins> b</p><del data-id="502"><p>dernier paragraphe marqué pour suppression</p></del>')
+    try {
+      editor.commands.rejectAllSuggestionsChunked(1) // chunkSize=1 : force le traitement du dernier nœud dans sa PROPRE tranche/transaction
+      let jsonOk = true
+      try { JSON.stringify(editor.getJSON()) } catch (e) { jsonOk = false }
+      return { threw: false, html: editor.getHTML(), jsonOk }
+    } catch (e) {
+      return { threw: true, error: e.message }
+    }
+  })
+  if (res.threw) throw new Error('rejectAllSuggestionsChunked a levé une exception sur un document dont le dernier nœud porte une marque: ' + res.error)
+  if (!res.jsonOk) throw new Error('getJSON()/JSON.stringify plante après rejectAllSuggestionsChunked sur ce document')
+  if (!res.html.includes('dernier paragraphe marqué pour suppression')) throw new Error('le paragraphe refusé (dernier nœud) n\'a pas été restauré: ' + res.html)
+  if (res.html.includes('<del')) throw new Error('la marque de suppression du dernier nœud est toujours là après refus: ' + res.html)
+  await page.evaluate(() => window.__editor.commands.loadDocument('<p>Réinitialisation après test du dernier nœud par lots.</p>'))
+})
+
+// Re-mesure la perf avec la version PAR LOTS aux mêmes tailles que "PERF mesuré" ci-dessus, pour
+// documenter le gain réel plutôt qu'une estimation. Chiffres mesurés le 2026-09-20 (hors de cette
+// suite, pour choisir un `chunkSize`) : ratio non découpé ~9-11x pour 4x de taille (ci-dessus),
+// ratio PAR LOTS (chunkSize=200) ~5x pour la même multiplication de 4x — une amélioration réelle
+// et significative, mais PAS un retour à un comportement parfaitement linéaire (le découpage
+// borne le coût quadratique de `mapping.map()` par tranche, mais chaque tranche refait un
+// `state.doc.descendants()` complet pour retrouver ses marques - voir le commentaire de
+// `runChunkedLibCommand` dans le prototype -, un coût résiduel qui croît lui aussi avec la taille
+// du document). Pas de seuil strict ici (la mesure absolue varie avec la machine) : le chiffre est
+// documenté dans le libellé du test, la seule assertion dure est l'absence de marques restantes et
+// d'exception.
+let perfChunkedError = null
+let acceptChunkedRes
+try {
+  acceptChunkedRes = await withFreshPage(async (p) => {
+    const small = await p.evaluate((c) => {
+      const editor = window.__editor
+      editor.commands.setContent(c)
+      const t0 = performance.now()
+      editor.commands.acceptAllSuggestionsChunked(200)
+      const t1 = performance.now()
+      return { ms: t1 - t0, remaining: (editor.getHTML().match(/<ins |<del /g) || []).length }
+    }, buildLargeTrackedContent(SMALL))
+    const large = await p.evaluate((c) => {
+      const editor = window.__editor
+      editor.commands.setContent(c)
+      const t0 = performance.now()
+      editor.commands.acceptAllSuggestionsChunked(200)
+      const t1 = performance.now()
+      return { ms: t1 - t0, remaining: (editor.getHTML().match(/<ins |<del /g) || []).length }
+    }, buildLargeTrackedContent(LARGE))
+    return { small, large }
+  })
+} catch (e) { perfChunkedError = e }
+
+const chunkedRatio = perfChunkedError ? null : acceptChunkedRes.large.ms / acceptChunkedRes.small.ms
+const perfChunkedLabel = perfChunkedError
+  ? 'PERFORMANCE — mesure de "tout accepter par lots" sur ' + SMALL + '→' + LARGE + ' paragraphes (échouée, voir erreur)'
+  : 'PERF mesuré (mitigation par lots, chunkSize=200) : accepter-tout-par-lots ' + SMALL + '→' + LARGE
+    + ' paragraphes : ' + acceptChunkedRes.small.ms.toFixed(1) + 'ms → ' + acceptChunkedRes.large.ms.toFixed(1)
+    + 'ms (ratio ' + chunkedRatio.toFixed(2) + 'x pour ' + sizeRatio + 'x de marques, à comparer au ratio '
+    + (perfError ? '?' : acceptRatio.toFixed(2)) + 'x sans mitigation ci-dessus)'
+
+await test(perfChunkedLabel, async () => {
+  if (perfChunkedError) throw perfChunkedError
+  if (acceptChunkedRes.small.remaining !== 0 || acceptChunkedRes.large.remaining !== 0) throw new Error('"tout accepter par lots" laisse des marques: ' + JSON.stringify(acceptChunkedRes))
+})
+
 // --- Superposition avec commentMark ---------------------------------------------------------
 // Le prototype n'a pas l'extension Commentaires réelle (popup, table Grist compagnon) : seule la
 // MARQUE ProseMirror `commentMark` a été reproduite dans suivi-modifications.html (voir son
