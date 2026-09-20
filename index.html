@@ -95,6 +95,7 @@
             <span class="v2-hover-flyout-label" data-i18n="toolbar.new">Nouveau modèle</span>
             <span class="v2-hover-row" id="v2-btn-new-document" data-i18n="toolbar.newDocument">Nouveau document</span>
             <span class="v2-hover-row" id="v2-btn-new-email" data-i18n="toolbar.newEmail">Nouvel email</span>
+            <span class="v2-hover-row" id="v2-btn-new-macro" data-i18n="toolbar.newMacro">Nouveau macro-modèle</span>
             <span class="v2-hover-hsep"></span>
             <span class="v2-hover-row" id="v2-btn-new-from-template" data-i18n="toolbar.newFromTemplate">Créer à partir d'un template…</span>
           </span>
@@ -290,6 +291,12 @@
     <button type="button" id="autosave-conflict-reload" data-i18n="autosave.conflict.reload">Recharger la dernière version</button>
   </div>
   <div id="editor-container"></div>
+  <div id="macro-summary-container" style="display:none;">
+    <div class="macro-summary-box">
+      <p class="macro-summary-text" id="macro-summary-text"></p>
+      <button type="button" id="btn-edit-macro" data-i18n="macro.editButton">Modifier la composition</button>
+    </div>
+  </div>
   <div id="reader-container" style="display:none;"></div>
   <div id="link-rules-modal" style="display:none;" tabindex="-1"><div class="modal-content link-rules-modal-content">
     <h3 data-i18n="linkRules.title">Tables liées (correspondance pour #Variable)</h3>
@@ -316,6 +323,25 @@
     </div>
     <div class="tpl-gallery-grid" id="tpl-gallery-grid"></div>
     <div class="modal-actions"><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
+  </div></div>
+  <div id="macro-editor-modal" style="display:none;" tabindex="-1"><div class="modal-content macro-editor-modal-content">
+    <h3 data-i18n="macro.modal.title">Macro modèle</h3>
+    <p class="macro-editor-intro" data-i18n="macro.modal.intro">Page de garde toujours incluse, puis des annexes choisies selon des règles évaluées sur la même ligne.</p>
+    <div class="macro-editor-field">
+      <label for="macro-editor-name" data-i18n="macro.modal.nameLabel">Nom du macro-modèle</label>
+      <input type="text" id="macro-editor-name" data-i18n-placeholder="macro.modal.namePlaceholder" placeholder="Nom du macro-modèle">
+    </div>
+    <div class="macro-editor-field">
+      <label for="macro-editor-cover" data-i18n="macro.modal.coverLabel">Page de garde</label>
+      <select id="macro-editor-cover"></select>
+    </div>
+    <div class="macro-editor-slots-header" data-i18n="macro.modal.annexesTitle">Annexes conditionnelles</div>
+    <div id="macro-editor-slots" class="macro-editor-slots"></div>
+    <button type="button" id="macro-editor-add-slot" class="macro-editor-add-slot" data-i18n="macro.modal.addSlot">+ Ajouter une annexe conditionnelle</button>
+    <div class="modal-actions">
+      <button id="macro-editor-cancel" data-i18n="common.cancel">Annuler</button>
+      <button id="macro-editor-save" class="link-config-btn-primary" data-i18n="common.save">Enregistrer</button>
+    </div>
   </div></div>
   <div id="template-preview-modal" style="display:none;" tabindex="-1"><div class="modal-content template-preview-modal-content">
     <div class="tpl-preview-header">
@@ -388,19 +414,19 @@
 </div>
 <script src="js/html-sanitize.js?v=0.2"></script>
 <script src="js/grist-api.js?v=0.75"></script>
-<script src="js/templates.js?v=0.74"></script>
+<script src="js/templates.js?v=0.75"></script>
 <script src="js/reader-mode.js?v=0.85"></script>
-<script src="js/i18n.js?v=0.13"></script>
+<script src="js/i18n.js?v=0.14"></script>
 <script src="js/page-layout.js?v=0.2"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.7"></script>
-<script src="js/variables.js?v=0.24"></script>
+<script src="js/variables.js?v=0.25"></script>
 <script src="js/icons.js?v=0.20"></script>
 <script src="js/editor-core.js?v=0.1"></script>
 <script src="js/header-footer-preview.js?v=1.1"></script>
 <script src="js/editor-nodes.js?v=0.7"></script>
 <script src="js/floating-toolbars.js?v=0.7"></script>
-<script src="js/main-toolbar.js?v=0.4"></script>
+<script src="js/main-toolbar.js?v=0.5"></script>
 <script src="js/comments.js?v=0.2"></script>
 <script src="js/editor.js?v=1.1"></script>
 <script src="js/pdf-export-alt.js?v=0.1"></script>
@@ -409,6 +435,8 @@
 <script src="js/mailto-export.js?v=0.2"></script>
 <script src="js/template-gallery.js?v=0.6"></script>
 <script src="js/settings.js?v=0.6"></script>
-<script src="js/main.js?v=0.47"></script>
+<script src="js/macro-templates.js?v=0.1"></script>
+<script src="js/macro-editor.js?v=0.1"></script>
+<script src="js/main.js?v=0.48"></script>
 </body>
 </html>

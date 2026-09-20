@@ -157,13 +157,58 @@
 .link-config-toggle-link:hover { color: var(--accent-hover); text-decoration: underline; }
 .link-config-toggle-link[hidden] { display: none; }
 .link-config-modal-content .modal-actions,
-.link-rules-modal-content .modal-actions { margin-top: 16px; }
+.link-rules-modal-content .modal-actions,
+.macro-editor-modal-content .modal-actions { margin-top: 16px; }
 .link-config-modal-content .modal-actions button,
-.link-rules-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.link-rules-modal-content .modal-actions button,
+.macro-editor-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .link-config-modal-content .modal-actions button:hover,
-.link-rules-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
-.link-config-modal-content .modal-actions .link-config-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.link-config-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }
+.link-rules-modal-content .modal-actions button:hover,
+.macro-editor-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
+.link-config-modal-content .modal-actions .link-config-btn-primary,
+.macro-editor-modal-content .modal-actions .link-config-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.link-config-modal-content .modal-actions .link-config-btn-primary:hover,
+.macro-editor-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--accent-hover); }
+
+/* === Modale "Macro modèle" (#macro-editor-modal, js/macro-editor.js) === Page de garde + liste de cartes "annexe conditionnelle", chaque carte reprenant
+   .link-rule-row pour ses lignes de règle (même vocabulaire visuel que la modale "Tables liées" ci-dessus) plutôt qu'un nouveau patron de liste. */
+.macro-editor-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; }
+.macro-editor-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); }
+.macro-editor-intro { font-size: 11.5px; color: var(--text-faint); margin: 0 0 14px; }
+.macro-editor-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.macro-editor-field label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.macro-editor-field input, .macro-editor-field select { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12.5px; padding: 0 8px; background: var(--surface); color: var(--text); }
+.macro-editor-slots-header { font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 4px 0 8px; text-transform: uppercase; letter-spacing: .02em; }
+.macro-editor-slots { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow: auto; margin-bottom: 10px; }
+.macro-slots-empty { font-size: 12px; color: var(--text-faint); margin: 0; padding: 8px 0; }
+.macro-slot-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--surface-sunken); }
+.macro-slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.macro-slot-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.macro-slot-remove, .macro-rule-remove { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.macro-slot-remove:hover, .macro-rule-remove:hover { background: var(--surface); border-color: var(--border-strong); color: var(--danger); }
+.macro-slot-remove::before, .macro-rule-remove::before { content: "✕"; font-size: 12px; }
+.macro-slot-rules { display: flex; flex-direction: column; gap: 4px; }
+.macro-rule-row { display: flex; align-items: center; gap: 5px; padding: 3px 0; }
+.macro-rule-connector { flex: none; font-size: 11px; font-weight: 700; color: var(--text-muted); width: 34px; }
+.macro-rule-column, .macro-rule-value { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.macro-rule-row select { flex: none; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); }
+.macro-rule-row select.macro-rule-modele { flex: 1; min-width: 0; }
+.macro-rule-arrow { flex: none; color: var(--text-faint); font-size: 12px; }
+.macro-rule-add { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--accent); background: none; border: none; padding: 4px 0; cursor: pointer; font-family: var(--font-ui); }
+.macro-rule-add:hover { color: var(--accent-hover); text-decoration: underline; }
+.macro-slot-sep { border-top: 1px solid var(--border); margin: 8px 0; }
+.macro-slot-default-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+.macro-slot-default-select { width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.macro-editor-add-slot { display: block; width: 100%; font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 7px; cursor: pointer; font-family: var(--font-ui); }
+.macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Panneau résumé (#macro-summary-container, index.html) affiché à la place de l'éditeur TipTap quand le modèle courant est un macro modèle
+   (js/main.js:syncEditorVisibilityForMode) - reste sobre, l'utilisateur ne modifie sa composition qu'en rouvrant la modale ci-dessus. */
+#macro-summary-container { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--surface-sunken); }
+.macro-summary-box { text-align: center; max-width: 360px; }
+.macro-summary-text { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+#btn-edit-macro { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 32px; padding: 0 16px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+#btn-edit-macro:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
 /* === Modale "Tables liées" (#link-rules-modal) === Liste des règles configurées ; chaque ligne avait 2 boutons texte bruts sans style, remplacés par des
    icônes cohérentes avec le reste de la toolbar (même crayon que le renommage, même corbeille que Supprimer). */

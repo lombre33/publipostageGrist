@@ -602,6 +602,10 @@
 /* Panneau Réglages (js/settings.js) - même overlay plein écran, même raison de le garder sur un ID distinct (encore une modale séparée). */
 #settings-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
 
+/* Modale de composition des macro modèles (js/macro-editor.js, planning/feature-macro-modeles.md) - même overlay plein écran que les modales ci-dessus,
+   ID distinct car c'est encore une modale séparée ; .macro-editor-modal-content est stylée dans css/toolbar-v2.css avec les autres modales v2. */
+#macro-editor-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+
 /* === Ajustement automatique de la page à la largeur disponible === Dans un panneau Grist étroit, la feuille A4 (793.71px + marges de l'espace de travail)
    dépasse le conteneur : elle restait atteignable au défilement horizontal, mais lire un document en le faisant glisser de gauche à droite n'a aucun sens.
    `zoom` plutôt que `transform: scale()` : `zoom` participe à la mise en page (le conteneur voit la taille réduite, donc plus de débordement horizontal) et
