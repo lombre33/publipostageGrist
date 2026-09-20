@@ -138,6 +138,21 @@ const Templates = (function () {
     }
   }
 
+  // Macro modèles (planning/feature-macro-modeles.md) : TypeModele='macro' réutilise la colonne Contenu, mais pour y stocker du JSON (liste ordonnée de
+  // slots) plutôt que du HTML TipTap - aucune nouvelle colonne, TypeModele existe déjà (mode email). Forme par défaut si absente/invalide, même tolérance
+  // que safeParseHeaderFooter ci-dessus.
+  function safeParseMacroSlots(json) {
+    const empty = { slots: [] };
+    if (!json) return empty;
+    try {
+      const parsed = JSON.parse(json);
+      if (!parsed || !Array.isArray(parsed.slots)) return empty;
+      return parsed;
+    } catch (e) {
+      return empty;
+    }
+  }
+
   // Défaut identique à PageLayout.DEFAULT_MARGIN_MM (js/page-layout.js) - dupliqué plutôt qu'importé, même tolérance que safeParseHeaderFooter ci-dessus.
   // DOIT convertir exactement vers 28pt (l'ancienne marge codée en dur) pour qu'un modèle sans réglage propre reste pixel-identique à avant.
   function safeParseMargins(json) {
@@ -172,6 +187,8 @@ const Templates = (function () {
           estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i]),
           // Une ligne existante sans TypeModele (créée avant le mode email) est un modèle document - aucune migration de données à rejouer.
           typeModele: (data.TypeModele && data.TypeModele[i]) || 'document',
+          // null pour un modèle document/email : évite de faire porter à chaque consommateur la charge de vérifier typeModele avant de lire ce champ.
+          macroSlots: (data.TypeModele && data.TypeModele[i] === 'macro') ? safeParseMacroSlots(data.Contenu ? data.Contenu[i] : null) : null,
           destinataires: data.Destinataires ? data.Destinataires[i] : '',
           cc: data.Cc ? data.Cc[i] : '',
           cci: data.Cci ? data.Cci[i] : '',

@@ -19,6 +19,7 @@
   const pdfFilenameInput = document.getElementById('pdf-filename-template');
   const editorContainer = document.getElementById('editor-container');
   const readerContainer = document.getElementById('reader-container');
+  const macroSummaryContainer = document.getElementById('macro-summary-container');
   const btnEdit = document.getElementById('btn-mode-edit');
   const btnRead = document.getElementById('btn-mode-read');
   const conflictBanner = document.getElementById('autosave-conflict-banner');
@@ -119,9 +120,49 @@
     syncDefaultTemplateButton();
   }
 
+  // Un macro-modèle (TypeModele='macro') n'a pas de contenu TipTap propre : Contenu est du JSON de composition (planning/feature-macro-modeles.md), jamais
+  // du HTML - Editor.setHTML() ne doit donc JAMAIS le recevoir. Branche à part, plus courte que le chemin normal (pas de champs email, pas d'autosave
+  // significatif puisque l'éditeur partagé n'est jamais touché pour ce type) plutôt que de parsemer loadTemplateIntoEditor de conditions supplémentaires.
+  function loadMacroIntoEditor(tpl) {
+    closeTemplateRenameEditor();
+    Editor.exitHeaderFooterModeIfActive();
+    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+    Editor.setHTML('');
+    Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
+    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
+    if (pdfFilenameInput) { pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : ''; pdfFilenameInput.hidden = true; }
+    currentTypeModele = 'macro';
+    if (emailFieldsRow) emailFieldsRow.hidden = true;
+    emailFieldsRawCache = null;
+    [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => { if (el) { el.value = ''; el.readOnly = false; } });
+    MainToolbar.setEmailMode(false);
+    MainToolbar.setMacroMode(true);
+    HeaderFooterPreview.setEmailMode(false);
+    Editor.refreshPaginationPreview();
+    MainToolbar.syncToolbarState();
+    if (btnCreateEmail) btnCreateEmail.hidden = true;
+    Templates.setCurrentId(tpl ? tpl.id : null);
+    Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
+    MacroEditor.showSummary(tpl);
+    syncEditorVisibilityForMode();
+    if (currentMode === 'read') renderReader();
+    syncDefaultTemplateButton();
+    resetAutosaveState(tpl);
+  }
+
+  // Bascule editor-container/macro-summary-container/reader-container selon le mode courant ET le type du modèle chargé - factorisé plutôt que dupliqué
+  // entre switchMode() et loadMacroIntoEditor()/loadTemplateIntoEditor() (un changement de modèle en pleine édition ne repasse jamais par switchMode()).
+  function syncEditorVisibilityForMode() {
+    const showEditor = currentMode === 'edit' && currentTypeModele !== 'macro';
+    const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
+    editorContainer.style.display = showEditor ? 'block' : 'none';
+    if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
+  }
+
   // forcedTypeModele : n'a d'effet que pour tpl=null (nouveau modèle vide, cf. onNew/onNewEmail) - un tpl existant porte déjà son propre typeModele
   // (Templates.loadAll()), jamais réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
+    if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
     closeTemplateRenameEditor();
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
     // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
@@ -155,7 +196,10 @@
       if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
     }
     MainToolbar.setEmailMode(currentTypeModele === 'email');
+    MainToolbar.setMacroMode(false);
     HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');
+    if (macroSummaryContainer) macroSummaryContainer.style.display = 'none';
+    syncEditorVisibilityForMode();
     // Editor.setHTML() plus haut a déjà déclenché un premier rendu de l'aperçu paginé (onUpdate ->
     // schedulePaginationRecompute) AVANT que setEmailMode ci-dessus ne soit posé - sans ce rafraîchissement
     // explicite, les zones de marge cliquables garderaient l'état verrouillé/déverrouillé du modèle
@@ -226,7 +270,33 @@
     loadTemplateIntoEditor(null, 'email');
   }
 
+  // Un nouveau macro-modèle n'a rien à "charger" avant d'avoir été composé et enregistré au moins une fois (contrairement à onNew/onNewEmail, qui vident
+  // l'éditeur immédiatement) - ouvre directement l'écran de composition, vide.
+  function onNewMacro() {
+    MacroEditor.openModal(null);
+  }
+
+  // Rappel de MacroEditor après "Enregistrer" dans sa modale (nouveau macro-modèle ou modification d'un existant) - même geste que la fin d'onSave() :
+  // rafraîchir la liste, sélectionner ce qui vient d'être enregistré, resynchroniser le bouton "par défaut".
+  async function onMacroSaved(id) {
+    await refreshTemplateList();
+    templateSelect.value = id;
+    const tpl = Templates.getCached().find(t => String(t.id) === String(id));
+    loadTemplateIntoEditor(tpl);
+    syncDefaultTemplateButton();
+    setStatus(I18n.t('status.macroSaved'));
+  }
+
+  // Un macro-modèle s'édite exclusivement via sa modale (MacroEditor) - jamais Editor.getHTML() (toujours vide pour ce type, cf. loadMacroIntoEditor), qui
+  // écraserait silencieusement ses slots avec un contenu vide si on laissait passer le chemin normal ci-dessous. "Enregistrer" rouvre donc directement la
+  // modale plutôt que d'enregistrer quoi que ce soit lui-même.
   async function onSave() {
+    if (currentTypeModele === 'macro') {
+      const id = Templates.getCurrentId();
+      const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
+      MacroEditor.openModal(tpl);
+      return;
+    }
     Editor.exitHeaderFooterModeIfActive();
     const id = Templates.getCurrentId();
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
@@ -262,6 +332,21 @@
   async function onSaveAs() {
     const nom = prompt(I18n.t('prompt.newTemplateName'));
     if (!nom) return;
+    // Copie un macro-modèle par sa composition (mêmes slots, nouvel id Grist) plutôt que de passer par onSave() ci-dessus, qui rouvrirait la modale au
+    // lieu d'enregistrer quoi que ce soit - "sous" doit ici dupliquer directement, comme pour un document normal.
+    if (currentTypeModele === 'macro') {
+      const id = Templates.getCurrentId();
+      const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
+      const macroSlots = tpl && tpl.macroSlots ? tpl.macroSlots : { slots: [] };
+      try {
+        const { id: newId } = await Templates.save(null, nom, JSON.stringify(macroSlots), '', null, null, 'macro', null);
+        await onMacroSaved(newId);
+      } catch (e) {
+        console.error('[main] échec de la copie du macro-modèle', e);
+        setStatus(I18n.t('status.saveError'), true);
+      }
+      return;
+    }
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     await onSave();
@@ -417,19 +502,36 @@
     });
   }
 
+  // Slots du macro-modèle actuellement chargé (Templates.getCurrentId()), ou une liste vide si aucun/pas macro - jamais null, pour épargner aux appelants
+  // la vérification.
+  function getCurrentMacroSlots() {
+    const id = Templates.getCurrentId();
+    const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
+    return (tpl && tpl.macroSlots) ? tpl.macroSlots : { slots: [] };
+  }
+
+  // Pour un macro-modèle, le "contenu" à résoudre n'est jamais Editor.getHTML() (toujours vide, cf. loadMacroIntoEditor) mais le résultat de la
+  // concaténation des modèles retenus pour CETTE ligne/table (MacroTemplates.buildConcatenatedHtml) - même ligne pour la page de garde et les annexes
+  // (décision d'Antoine, 2026-09-20), donc un seul appel suffit ici.
+  async function currentDocumentHtml(tableId, record) {
+    if (currentTypeModele !== 'macro') return Editor.getHTML();
+    if (!record || !tableId) return '';
+    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, Templates.getCached());
+  }
+
   async function renderReader(record, recordTableId) {
-    const html = Editor.getHTML();
     if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
     // Sans ligne sélectionnée, on délègue quand même à ReaderMode.render() pour qu'il affiche son état vide. Avant, ce `return` sec laissait
     // #reader-container littéralement vide : écran blanc sans explication, et le message prévu dans reader-mode.js était du code mort.
     // Note : onCreateEmail() (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps résolu sans changer de mode -
     // sans risque, #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
-    if (!record) { await ReaderMode.render(Editor.getHTML(), tableId, null, Editor.getHeaderFooterData()); return; }
+    if (!record) { await ReaderMode.render(await currentDocumentHtml(tableId, null), tableId, null, Editor.getHeaderFooterData()); return; }
     if (!tableId) {
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
+    const html = await currentDocumentHtml(tableId, record);
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
@@ -543,7 +645,9 @@
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
       const quality = qualitySelect ? qualitySelect.value : 'native';
-      await PdfExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
+      const tableId = currentTableId || GristAPI.getCurrentTableId();
+      const html = await currentDocumentHtml(tableId, record);
+      await PdfExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
       console.error(e);
@@ -591,7 +695,9 @@
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     setStatus(I18n.t('status.docxGenerating'));
     try {
-      await DocxExport.exportCurrentRecord(Editor.getHTML(), currentTableId || GristAPI.getCurrentTableId(), record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
+      const tableId = currentTableId || GristAPI.getCurrentTableId();
+      const html = await currentDocumentHtml(tableId, record);
+      await DocxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
       setStatus(I18n.t('status.docxGenerated'));
     } catch (e) {
       console.error(e);
@@ -642,7 +748,13 @@
       return;
     }
 
-    const html = Editor.getHTML();
+    // Pas de HTML unique calculé une fois pour tout le lot : pour un macro-modèle, le choix des annexes dépend des valeurs de CHAQUE ligne (cf.
+    // MacroTemplates), donc la concaténation doit être refaite ligne par ligne dans la boucle ci-dessous plutôt que réutilisée telle quelle comme pour un
+    // modèle normal (où le même gabarit HTML suffit pour toutes les lignes, seule sa résolution #Variable variant par ligne).
+    const isMacro = currentTypeModele === 'macro';
+    const html = isMacro ? null : Editor.getHTML();
+    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
+    const templatesCache = isMacro ? Templates.getCached() : null;
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
     const marginsPt = PageLayout.getMarginsPt();
@@ -653,7 +765,8 @@
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
-        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsPt);
+        const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
+        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, marginsPt);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
         zip.file(uniqueZipFilename(base, usedNames) + '.pdf', blob);
         ok++;
@@ -704,7 +817,11 @@
       return;
     }
 
-    const html = Editor.getHTML();
+    // Cf. commentaire équivalent dans onExportPdfBatch : pas de HTML unique pour tout le lot en macro-modèle, refait ligne par ligne.
+    const isMacro = currentTypeModele === 'macro';
+    const html = isMacro ? null : Editor.getHTML();
+    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
+    const templatesCache = isMacro ? Templates.getCached() : null;
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
     const marginsTwip = PageLayout.getMarginsTwip();
@@ -715,7 +832,8 @@
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
       try {
-        const { blob, filename } = await DocxExport.getDocxBlobForRecord(html, tableId, rows[i], filenameTemplate, headerFooterData, marginsTwip);
+        const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
+        const { blob, filename } = await DocxExport.getDocxBlobForRecord(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, marginsTwip);
         const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
         zip.file(uniqueZipFilename(base, usedNames) + '.docx', blob);
         ok++;
@@ -746,7 +864,7 @@
     currentMode = mode;
     btnEdit.classList.toggle('active', mode === 'edit');
     btnRead.classList.toggle('active', mode === 'read');
-    editorContainer.style.display = mode === 'edit' ? 'block' : 'none';
+    syncEditorVisibilityForMode();
     readerContainer.style.display = mode === 'read' ? 'block' : 'none';
     if (mode === 'read') await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
     await updateEmailFieldsDisplay();
@@ -881,6 +999,7 @@
       { id: 'template-gallery-modal', closeId: 'tpl-gallery-close' },
       { id: 'template-preview-modal', closeId: 'tpl-preview-close' },
       { id: 'settings-modal', closeId: 'settings-close' },
+      { id: 'macro-editor-modal', closeId: 'macro-editor-cancel' },
     ];
     MODALS.forEach(({ id, closeId }) => {
       const modal = document.getElementById(id);
@@ -1133,8 +1252,11 @@
     document.getElementById('btn-new').addEventListener('click', onNew);
     const btnNewDocument = document.getElementById('v2-btn-new-document');
     const btnNewEmail = document.getElementById('v2-btn-new-email');
+    const btnNewMacro = document.getElementById('v2-btn-new-macro');
     if (btnNewDocument) btnNewDocument.addEventListener('click', onNew);
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
+    if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
+    MacroEditor.wire(onMacroSaved);
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);

@@ -602,5 +602,7 @@ const Variables = (function () {
     });
   }
 
-  return { createExtension, resolveVariable, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
+  // resolveRawValue exposé pour js/macro-templates.js (évaluation de conditions sur une valeur brute, non formatée - même/cross-table via le même mécanisme
+  // que #Variable) - jusqu'ici purement interne, aucun autre appelant existant à revalider.
+  return { createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
 })();

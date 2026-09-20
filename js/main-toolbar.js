@@ -9,6 +9,11 @@ const MainToolbar = (function () {
   // relu à chaque syncToolbarState comme inHfMode ci-dessous (HeaderFooterPreview.getHfMode()).
   let inEmailMode = false;
   function setEmailMode(active) { inEmailMode = !!active; }
+  // Macro modèle (planning/feature-macro-modeles.md) : même drapeau/patron que inEmailMode ci-dessus, posé par js/main.js quand le modèle courant est de
+  // type 'macro' - aucun contenu TipTap propre pour ce type (l'éditeur partagé reste vide), donc verrouille STRICTEMENT PLUS de boutons qu'en mode email
+  // (qui a, lui, un vrai corps de document à mettre en forme).
+  let inMacroMode = false;
+  function setMacroMode(active) { inMacroMode = !!active; }
 
   // Menu listant les colonnes Attachments : insère un placeholder lié à la #Variable (résolu en vraie image en mode Lecture/export).
   let imageVarPickerBox = null;
@@ -141,20 +146,26 @@ const MainToolbar = (function () {
     // annuler/rétablir et #Variable restent actifs (liste exhaustive des USABLE de ce fichier) - tout le reste de la mise en forme est grisé, jamais retiré
     // (règle d'Antoine). Les groupes à survol (alignement, image) sont verrouillés dans leur ENTIER (pointer-events hérite aux descendants, cf.
     // css/toolbar-v2.css:208) pour bloquer aussi leur volet déroulant, pas seulement leur bouton visible.
-    setLocked('v2-btn-bold', inEmailMode);
-    setLocked('v2-btn-italic', inEmailMode);
-    setLocked('v2-btn-underline', inEmailMode);
-    setLocked('v2-btn-strike', inEmailMode);
-    setLocked('v2-align-group', inEmailMode);
-    setLocked('v2-size-stepper', inEmailMode);
-    setLocked('v2-font-chip', inEmailMode);
-    setLocked('v2-text-color-split', inEmailMode);
-    setLocked('v2-highlight-split', inEmailMode);
-    setLocked('v2-btn-table', inEmailMode);
-    setLocked('v2-btn-two-columns', inEmailMode);
-    setLocked('v2-image-group', inEmailMode);
-    setLocked('v2-btn-page-break', inEmailMode);
-    setLocked('v2-btn-toc', inEmailMode);
+    setLocked('v2-btn-bold', inEmailMode || inMacroMode);
+    setLocked('v2-btn-italic', inEmailMode || inMacroMode);
+    setLocked('v2-btn-underline', inEmailMode || inMacroMode);
+    setLocked('v2-btn-strike', inEmailMode || inMacroMode);
+    setLocked('v2-align-group', inEmailMode || inMacroMode);
+    setLocked('v2-size-stepper', inEmailMode || inMacroMode);
+    setLocked('v2-font-chip', inEmailMode || inMacroMode);
+    setLocked('v2-text-color-split', inEmailMode || inMacroMode);
+    setLocked('v2-highlight-split', inEmailMode || inMacroMode);
+    setLocked('v2-btn-table', inEmailMode || inMacroMode);
+    setLocked('v2-btn-two-columns', inEmailMode || inMacroMode);
+    setLocked('v2-image-group', inEmailMode || inMacroMode);
+    setLocked('v2-btn-page-break', inEmailMode || inMacroMode);
+    setLocked('v2-btn-toc', inEmailMode || inMacroMode);
+    // Un macro-modèle n'a aucun corps propre à mettre en forme (contrairement au mode email) : verrouille aussi ce que le mode email laisse actif.
+    setLocked('v2-heading-group', inMacroMode);
+    setLocked('v2-btn-comment', inMacroMode);
+    setLocked('v2-btn-insert-variable', inMacroMode);
+    setLocked('v2-btn-undo', inMacroMode);
+    setLocked('v2-btn-redo', inMacroMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -341,7 +352,7 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, setEmailMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
+    setEditor, setEmailMode, setMacroMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
     wireSelectionDependentSelects, wireCompactFontSizeControls,
   };
 })();
