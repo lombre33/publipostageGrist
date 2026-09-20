@@ -1,0 +1,50 @@
+/* Habillage visuel de TemplateTreeSelect (js/template-tree-select.js) - Piste B, planning/feature-rangement-tri-modeles.md §7.
+   Fichier séparé (pas dans toolbar-v2.css) : nouvelle fonctionnalité pas encore câblée dans index.html, pour ne pas toucher un fichier CSS partagé/disputé
+   avant le lot de câblage final (cf. mémoire d'équipe). Réutilise les tokens de css/style.css (--surface, --border-strong, --radius-sm, etc.), aucune
+   couleur en dur : dark mode hérité automatiquement. */
+
+/* Piège du 2026-09-19 (bandeau email resté affiché malgré [hidden]) : le <select> réel ne doit JAMAIS redevenir visible via une règle `display` plus
+   spécifique ailleurs - display:none ici est intentionnellement défendu par !important, pas un `[hidden]` seul. */
+.tts-native-select.tts-native-select { display: none !important; }
+
+.tts-wrap { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+
+.tts-trigger { display: inline-flex; align-items: center; gap: 4px; border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; min-width: 0; border-radius: 0; font: inherit; color: inherit; cursor: pointer; }
+.tts-trigger:hover { background: var(--surface-sunken); }
+.tts-trigger:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
+.tts-trigger:disabled { opacity: .5; cursor: default; background: transparent; }
+.tts-trigger-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; text-align: left; }
+
+.tts-icon { display: inline-block; width: 14px; height: 14px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+/* "Nouveau modèle" : même tracé que #btn-new (css/style.css), pour rester le même symbole partout. */
+.tts-icon-new { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
+.tts-icon-document { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M7 2h7l4 4v16H7z'/%3E%3Cpath d='M14 2v4h4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M7 2h7l4 4v16H7z'/%3E%3Cpath d='M14 2v4h4'/%3E%3C/svg%3E"); }
+.tts-icon-email { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M3 6l9 7 9-7'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M3 6l9 7 9-7'/%3E%3C/svg%3E"); }
+/* Macro-modèle : plusieurs pages assemblées (distinct d'un document simple), cf. planning/feature-macro-modeles.md. */
+.tts-icon-macro { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); }
+.tts-icon-folder { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z'/%3E%3C/svg%3E"); }
+
+.tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
+
+.tts-popup { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
+.tts-popup.is-open { display: block; }
+
+.tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }
+
+.tts-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; padding-left: calc(8px + var(--tts-depth, 0) * 16px); border-radius: var(--radius-sm); cursor: pointer; }
+.tts-row:hover { background: var(--surface-sunken); }
+.tts-row:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
+.tts-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tts-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tts-group.is-collapsed { display: none; }
+
+.tts-folder-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E"); transition: transform .1s ease; }
+.tts-row-folder[aria-expanded="true"] .tts-folder-caret { transform: rotate(90deg); }
+
+/* Étoile d'épinglage : même tracé que #btn-set-default-template (css/toolbar-v2.css) - même vocabulaire visuel que "modèle par défaut". */
+.tts-pin-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); opacity: 0; }
+.tts-row:hover .tts-pin-btn, .tts-row:focus-within .tts-pin-btn, .tts-pin-btn.is-pinned { opacity: 1; }
+.tts-pin-btn:hover { background: var(--surface-sunken); }
+.tts-pin-btn.is-pinned { color: var(--accent); }
+.tts-pin-btn::before { content: ""; display: inline-block; width: 12px; height: 12px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); }

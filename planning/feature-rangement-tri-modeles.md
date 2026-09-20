@@ -221,3 +221,54 @@ exposée à un chevauchement avec ce travail en cours ; la Piste A et l'existant
 modale et `js/templates.js`/`js/main.js` en dehors de cette zone, y sont beaucoup moins exposés. Ce
 n'est pas une raison de choix en soi, mais un facteur de risque/calendrier à connaître au moment de
 trancher.
+
+## 8. Décision d'Antoine et état d'avancement (2026-09-20)
+
+Antoine a tranché en faveur de la **Piste B**, en connaissance du risque décrit en §7.5 : « la piste B
+est très bien je te laisse l'implémenter proprement et rajouter tout les test necessaire pour éviter la
+non regression ».
+
+### 8.1 Conception retenue
+
+Le `<select id="template-select">` réel reste l'unique source de vérité (`.value`/`.options`/
+`.selectedIndex`/évènement `change`) : les ~8 points d'appel existants de `js/main.js` ne changent pas.
+`js/template-tree-select.js` (nouveau, pas encore câblé) l'enveloppe visuellement :
+- Le select réel passe en `display:none` permanent via une classe dédiée avec `!important`
+  (`css/template-tree-select.css`), jamais via `hidden` seul — piège du 2026-09-19 (bandeau email resté
+  affiché malgré `[hidden]`, une règle `display` plus spécifique l'ayant emporté) explicitement évité.
+  Renforcé par `tabindex="-1"`/`aria-hidden="true"` en défense supplémentaire.
+- Détection des écritures programmatiques de `.value` (nombreuses dans `js/main.js`, aucune ne
+  déclenche `change`) par redéfinition de l'accesseur `value` sur cette seule instance de `<select>`.
+- Reconstructions complètes du `<select>` (`refreshTemplateList()`) captées par un `MutationObserver`
+  sur `childList`/`subtree`, distinct du point précédent.
+- État désactivé du select réel reflété sur le déclencheur via le même observateur (`attributes:
+  ['disabled']`) — prévu pour un futur verrouillage (mode macro, cf. `js/main-toolbar.js`), aucun
+  verrouillage du select lui-même n'existe encore dans le code au 2026-09-20.
+- Scope volontairement limité à parcourir/choisir/épingler depuis l'arbre. Assigner un dossier à un
+  modèle reste à faire depuis la modale « Organiser mes modèles… » (§4, pas encore construite) plutôt
+  que d'improviser un glisser-déposer non éprouvé dans l'arbre — à confirmer avec Antoine au câblage,
+  ce n'est pas une limite qu'il a demandée.
+
+Données par utilisateur (épingle + dossier) : table Grist dédiée `Publipostage_PreferencesModeles`
+(`js/template-preferences.js`), pas une colonne sur `Publipostage_Modeles` — relation utilisateur ×
+modèle, même principe que `Publipostage_Commentaires`. Décision communiquée à Antoine dans le fil
+(2026-09-20), pas encore commentée par lui.
+
+### 8.2 Fait au 2026-09-20
+
+- `js/template-preferences.js` + `js/template-organizer.js` (logique pure de regroupement, gère les
+  trois types `document`/`email`/`macro`) + `js/template-tree-select.js` + `css/template-tree-select.css`.
+- Tests unitaires sans navigateur (`dev-tests/unit-harness.mjs` + `unit-template-organizer.mjs` +
+  `unit-template-preferences.mjs`) : 33/33 passés, y compris la migration depuis un document créé AVANT
+  la fonctionnalité (aucune table au départ) et l'idempotence sur un document créé après.
+- Vérification ad hoc de `template-tree-select.js` dans un vrai Chromium (script de scratch, non commité
+  - la vraie suite Playwright arrivera dans `dev-tests/` au câblage, `_test-harness.html` étant généré
+  depuis `index.html` et donc aveugle à un module non câblé) : 19/19 vérifications passées, dont les
+  trois pièges ci-dessus (display calculé, hors ordre de tabulation, état désactivé répercuté) et la
+  préservation du focus clavier après un ré-rendu déclenché par un clic d'épingle.
+
+### 8.3 Reste à faire
+
+Câblage dans `index.html`/`js/main.js` (fichiers partagés/disputés, en un seul lot annoncé au préalable
+- cf. mémoire d'équipe), ajout des clés I18n FR+EN correspondantes dans `js/i18n.js`, puis vraie suite
+Playwright dans `dev-tests/` une fois câblé.
