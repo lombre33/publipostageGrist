@@ -138,5 +138,86 @@ Posées séparément via les cartes de décision dédiées (une par question) :
 
 ## 6. Maquette
 
-Maquette visuelle interactive (sélecteur avec groupes, modale « Organiser mes modèles ») :
+Maquette visuelle interactive (4 planches - sélecteur groupé, modale liste plate, et les deux pistes
+arborescence du §7) :
 https://claude.ai/artifact/8hX42DJG5gQoUS913Ps4eP
+
+## 7. Comparaison avec une arborescence de fichiers classique
+
+Demandé par Antoine le 2026-09-20 : comparer la proposition ci-dessus (liste plate + `<optgroup>`) à
+une interface plus proche d'un explorateur de fichiers classique (dossiers imbriqués, dépliables). Deux
+pistes conçues et évaluées indépendamment, planches 3 et 4 de la maquette.
+
+### 7.1 Piste A — un vrai arbre, mais confiné à la modale (recommandée)
+
+Le `<select>` de la barre d'outils ne change pas du tout (§4.1 inchangée). Seule la modale « Organiser
+mes modèles » (§4.2) change : sa liste plate + `<select>` de dossier par ligne devient un arbre
+dépliable/repliable, avec dossiers imbriqués (ex. `Factures > Clients A`), chevrons SVG trait, icônes
+dossier/document. Détails :
+
+- **Épinglés reste une section à part**, à plat, au-dessus de l'arbre — un modèle épinglé ET classé
+  apparaît aux deux endroits (comme un signet dans un explorateur qui ne retire pas le fichier de son
+  dossier), avec son chemin de dossier affiché en clair dans la section Épinglés pour ne pas perdre
+  cette information.
+- **Pas de glisser-déposer** : un bouton « Déplacer vers… » par modèle ouvre un petit menu listant les
+  dossiers, cliquable. Raison : le glisser-déposer HTML5 n'a pas de support tactile natif (deuxième
+  implémentation à écrire), et exclut le clavier sans un travail d'accessibilité équivalent — le bouton
+  couvre le même besoin pour un coût de développement bien moindre.
+- **Modèle de données** : la colonne `Dossier` (§3) reste un Texte, mais stocke un CHEMIN complet
+  (`Factures/Clients A`) au lieu d'un simple nom — zéro changement de schéma par rapport à ce qui est
+  déjà poussé sur `main`, seulement une convention de contenu différente. Renommer un dossier réécrit
+  par lot les lignes dont le chemin commence par l'ancien préfixe (acceptable vu le volume attendu -
+  une bibliothèque personnelle de modèles, pas des milliers de lignes).
+- **Respecte intégralement** la barre d'outils gelée et la non-régression (rien ne change hors de la
+  modale).
+- **Coût** : nettement supérieur à la liste plate déjà rédigée (composant arbre à écrire à la main -
+  patron ARIA Tree View documenté, mais aucune librairie prête à l'emploi compatible avec ce projet
+  zéro-framework/zéro-build) — pour un bénéfice réel mais qui reste à démontrer vu le nombre de modèles
+  probable par utilisateur (probablement quelques dizaines, pas des centaines).
+
+### 7.2 Piste B — le sélecteur de la barre devient lui-même un arbre (écartée)
+
+Piste plus radicale : remplacer le `<select>` natif de la barre d'outils par un bouton personnalisé qui
+ouvre un panneau flottant contenant l'arbre, pour un rendu « explorateur de fichiers » visible en
+permanence, pas seulement dans une modale de rangement.
+
+- **C'est la plus fidèle visuellement** à la demande d'Antoine, mais c'est un changement de nature, pas
+  un habillage : le `<select>` natif offre gratuitement le clavier (flèches, recherche par frappe), le
+  picker natif mobile, et est lu par au moins 8 endroits de `js/main.js`
+  (`onTemplateSelectChange`, `onNew`, `onNewEmail`, la restauration du modèle par défaut, le renommage
+  qui réécrit `templateSelect.options[...].textContent`, etc.). Tout ça devrait être réécrit à la main
+  (patron ARIA combobox+tree complet), avec un vrai risque de régression clavier/accessibilité/mobile,
+  et un chantier de code de plusieurs centaines de lignes.
+- Le déclencheur fermé pourrait garder le même gabarit (168×28px), mais remplacer le contrôle
+  lui-même dans cette zone est, au sens où Antoine a gelé la barre d'outils, un changement qui appelle
+  son accord explicite séparé — pas un simple ajustement visuel dans le gabarit existant.
+- Même extension du modèle de données que la piste A (chemin ou nouvelle table pour l'imbrication).
+
+### 7.3 Tableau comparatif
+
+| Critère | Existant proposé (§4, `<optgroup>`) | Piste A — arbre dans la modale | Piste B — arbre dans la barre |
+|---|---|---|---|
+| Fidélité à « une arborescence classique » | Faible (liste à plat, `<optgroup>` jamais indenté) | Élevée, mais confinée à la modale | Maximale, visible à chaque usage |
+| Barre d'outils gelée | Respectée | Respectée | Non respectée sans accord explicite |
+| Non-régression | Totale | Totale | À risque (parité clavier/mobile à reconstruire) |
+| Effort de dev (JS vanilla) | Minimal | Modéré à élevé | Élevé |
+| Risque accessibilité/clavier | Nul (select natif intact) | Modéré, maîtrisable | Élevé |
+| Dossiers imbriqués / glisser-déposer | Non (dossiers plats) | Oui (imbriqués), pas de glisser-déposer | Oui (imbriqués), idem |
+| Simplicité pour l'utilisateur | Très simple, mais organisation limitée | Bonne, usage quotidien inchangé | Ambivalente (nouvelle habitude) |
+
+### 7.4 Recommandation
+
+Livrer d'abord l'existant (§4, déjà rédigé). Garder la Piste A comme évolution documentée, à
+déclencher si l'usage réel démontre un besoin d'imbrication profonde — elle ne touche ni le sélecteur
+ni la barre, donc son coût d'activation plus tard reste faible. Écarter la Piste B sauf accord explicite
+et informé d'Antoine sur l'ampleur du chantier et sur la remise en cause de la barre gelée.
+
+### 7.5 Point de calendrier (à connaître, pas un engagement de délai)
+
+`index.html`, l'éditeur, la barre d'outils et la chaîne d'export sont actuellement le terrain d'un
+autre chantier en cours d'implémentation (« Macro modèles »), avec un troisième chantier en attente sur
+les mêmes fichiers. La Piste B, qui touche directement la zone du sélecteur dans la barre, est la plus
+exposée à un chevauchement avec ce travail en cours ; la Piste A et l'existant, qui ne touchent que la
+modale et `js/templates.js`/`js/main.js` en dehors de cette zone, y sont beaucoup moins exposés. Ce
+n'est pas une raison de choix en soi, mais un facteur de risque/calendrier à connaître au moment de
+trancher.
