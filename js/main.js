@@ -100,8 +100,11 @@
     btn.classList.toggle('is-default', isDefault);
     // Un modèle email ne doit jamais devenir le modèle qui s'ouvre par défaut (Antoine, 2026-09-19) :
     // l'email est une action ponctuelle sur un enregistrement, pas un état dans lequel le widget doit
-    // démarrer. Grisé (disabled, même traitement visuel que "aucun modèle chargé"), jamais masqué.
-    btn.disabled = currentId == null || currentTypeModele === 'email';
+    // démarrer. Grisé (disabled, même traitement visuel que "aucun modèle chargé"), jamais masqué. Même
+    // raison pour un macro-modèle (planning/feature-macro-modeles.md) : l'UI de base doit rester propre au
+    // démarrage, un mode spécialisé (email, macro) ne s'affiche que si l'utilisateur le demande sur le
+    // moment - un widget qui s'ouvrirait sur le panneau résumé macro serait le même désagrément.
+    btn.disabled = currentId == null || currentTypeModele === 'email' || currentTypeModele === 'macro';
   }
 
   function wireDefaultTemplateButton() {
@@ -1240,12 +1243,12 @@
     const defaultTemplateId = Templates.getDefaultId();
     if (defaultTemplateId != null) {
       const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
-      // Un modèle email ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton, qui
-      // grise désormais le bouton "modèle par défaut" en mode email) - mais ce garde ne "détricote" pas
-      // un défaut resté coincé sur un modèle email d'AVANT ce correctif (Antoine, 2026-09-19 : le
-      // widget s'ouvrait encore sur l'email malgré le bouton grisé). On l'ignore explicitement ici
-      // plutôt que de compter sur une remise à zéro manuelle.
-      if (!defaultTpl || defaultTpl.typeModele !== 'email') templateSelect.value = defaultTemplateId;
+      // Un modèle email ou macro ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton,
+      // qui grise désormais le bouton "modèle par défaut" pour ces deux types) - mais ce garde ne
+      // "détricote" pas un défaut resté coincé sur un modèle email d'AVANT ce correctif (Antoine,
+      // 2026-09-19 : le widget s'ouvrait encore sur l'email malgré le bouton grisé). On l'ignore
+      // explicitement ici plutôt que de compter sur une remise à zéro manuelle.
+      if (!defaultTpl || (defaultTpl.typeModele !== 'email' && defaultTpl.typeModele !== 'macro')) templateSelect.value = defaultTemplateId;
     }
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);

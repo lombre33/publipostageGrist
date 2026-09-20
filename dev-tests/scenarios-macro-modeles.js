@@ -165,6 +165,32 @@
     },
   });
 
+  // --- Garde-fou de non-régression, distinct des cas ci-dessus : ceux-là testent MacroTemplates (résolution), celui-ci teste que js/main.js n'envoie
+  // JAMAIS le JSON de composition d'un macro-modèle à Editor.setHTML(). Exercé par le VRAI flux UI (flyout "Nouveau" -> modale -> Enregistrer) plutôt
+  // qu'un appel direct à loadTemplateIntoEditor : cette fonction vit dans la fermeture de js/main.js, non exposée sur window, et ce chemin réel couvre
+  // en même temps loadTemplateIntoEditor ET onMacroSaved (js/main.js). Protège contre un futur réordonnancement de la garde de type
+  // (js/main.js:loadTemplateIntoEditor) qui laisserait passer tpl.contenu jusqu'à l'éditeur avant la redirection vers loadMacroIntoEditor.
+  cases.push({
+    id: 'macro_save_flow_never_leaks_json_into_editor',
+    description: 'Créer et enregistrer un macro-modèle par le vrai flux UI ne fait jamais atterrir son JSON de composition dans l’éditeur TipTap',
+    run: async (h) => {
+      await h.resetEditor();
+      h.openFlyout('#v2-new-template-group');
+      await h.clickButton('v2-btn-new-macro');
+      await h.sleep(150);
+      const nameInput = document.getElementById('macro-editor-name');
+      if (!nameInput) return { pass: false, notes: 'modale macro introuvable après clic sur "Nouveau macro-modèle"' };
+      nameInput.value = 'Macro test fuite JSON';
+      document.getElementById('macro-editor-save').click();
+      await h.sleep(250);
+      const html = EditorCore.getEditor().getHTML();
+      const editorVisible = getComputedStyle(document.getElementById('editor-container')).display !== 'none';
+      const summaryVisible = getComputedStyle(document.getElementById('macro-summary-container')).display !== 'none';
+      const pass = !html.includes('slots') && !html.includes('macroSlots') && !editorVisible && summaryVisible;
+      return { pass, notes: JSON.stringify({ html, editorVisible, summaryVisible }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();
