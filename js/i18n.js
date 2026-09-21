@@ -141,6 +141,14 @@ const I18n = (function () {
     'history.undo': { fr: 'Annuler', en: 'Undo' },
     'history.redo': { fr: 'Rétablir', en: 'Redo' },
 
+    // --- Suivi des modifications (js/track-changes.js) ---
+    'trackChanges.toggle.tip': { fr: 'Suivi des modifications', en: 'Track changes' },
+    'trackChanges.toggle.aria': { fr: 'Activer ou désactiver le suivi des modifications', en: 'Turn track changes on or off' },
+    'trackChanges.acceptAll.tip': { fr: 'Tout accepter', en: 'Accept all' },
+    'trackChanges.acceptAll.aria': { fr: 'Accepter toutes les suggestions du document', en: 'Accept all suggestions in the document' },
+    'trackChanges.rejectAll.tip': { fr: 'Tout refuser', en: 'Reject all' },
+    'trackChanges.rejectAll.aria': { fr: 'Refuser toutes les suggestions du document', en: 'Reject all suggestions in the document' },
+
     // --- Actions communes (boutons de modale réutilisés à plusieurs endroits) ---
     'common.close': { fr: 'Fermer', en: 'Close' },
     'common.cancel': { fr: 'Annuler', en: 'Cancel' },

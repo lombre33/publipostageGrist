@@ -122,6 +122,25 @@ const Templates = (function () {
     }
   }
 
+  // Suivi des modifications (planning/feature-track-changes.md, décision n°4) : auteur/horodatage par suggestion en attente, écrit dans le MÊME
+  // UpdateRecord/AddRecord que Contenu/DateModif (jamais un appel séparé) - même migration idempotente que HeaderFooter ci-dessus.
+  let trackChangesColumnChecked = false;
+  async function ensureTrackChangesColumn() {
+    if (trackChangesColumnChecked) return;
+    await ensureTableExists();
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!('SuiviModifications' in data)) {
+        await grist.docApi.applyUserActions([
+          ['AddVisibleColumn', TABLE_NAME, 'SuiviModifications', { type: 'Text', isFormula: false, label: 'Suivi des modifications' }]
+        ]);
+      }
+      trackChangesColumnChecked = true;
+    } catch (e) {
+      console.error('Erreur migration colonne SuiviModifications', e);
+    }
+  }
+
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
   function safeParseHeaderFooter(json) {
@@ -153,6 +172,18 @@ const Templates = (function () {
     }
   }
 
+  // Forme par défaut si absente/invalide, même tolérance que safeParseHeaderFooter ci-dessus - {} (aucune suggestion connue) plutôt que null, pour que
+  // TrackChanges.computeMetadata (js/track-changes.js) puisse toujours l'utiliser directement comme previousMetadata sans vérification préalable.
+  function safeParseSuiviModifications(json) {
+    if (!json) return {};
+    try {
+      const parsed = JSON.parse(json);
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Défaut identique à PageLayout.DEFAULT_MARGIN_MM (js/page-layout.js) - dupliqué plutôt qu'importé, même tolérance que safeParseHeaderFooter ci-dessus.
   // DOIT convertir exactement vers 28pt (l'ancienne marge codée en dur) pour qu'un modèle sans réglage propre reste pixel-identique à avant.
   function safeParseMargins(json) {
@@ -173,10 +204,12 @@ const Templates = (function () {
     await ensureMarginsColumn();
     await ensureDateModifColumn();
     await ensureEmailColumns();
+    await ensureTrackChangesColumn();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
       for (let i = 0; i < data.id.length; i++) {
+        const typeModele = (data.TypeModele && data.TypeModele[i]) || 'document';
         templatesCache.push({
           id: data.id[i],
           nom: data.Nom[i],
@@ -186,9 +219,11 @@ const Templates = (function () {
           marginsMm: safeParseMargins(data.Margins ? data.Margins[i] : null),
           estParDefaut: !!(data.EstParDefaut && data.EstParDefaut[i]),
           // Une ligne existante sans TypeModele (créée avant le mode email) est un modèle document - aucune migration de données à rejouer.
-          typeModele: (data.TypeModele && data.TypeModele[i]) || 'document',
+          typeModele: typeModele,
           // null pour un modèle document/email : évite de faire porter à chaque consommateur la charge de vérifier typeModele avant de lire ce champ.
-          macroSlots: (data.TypeModele && data.TypeModele[i] === 'macro') ? safeParseMacroSlots(data.Contenu ? data.Contenu[i] : null) : null,
+          macroSlots: (typeModele === 'macro') ? safeParseMacroSlots(data.Contenu ? data.Contenu[i] : null) : null,
+          // null pour un macro-modèle (jamais chargé dans l'éditeur suivi, cf. loadMacroIntoEditor - js/main.js) - même convention que macroSlots ci-dessus.
+          suiviModifications: (typeModele === 'macro') ? null : safeParseSuiviModifications(data.SuiviModifications ? data.SuiviModifications[i] : null),
           destinataires: data.Destinataires ? data.Destinataires[i] : '',
           cc: data.Cc ? data.Cc[i] : '',
           cci: data.Cci ? data.Cci[i] : '',
@@ -257,12 +292,16 @@ const Templates = (function () {
   // (readBackDateModif), pas de la chaîne ISO envoyée - cf. commentaire de cette fonction.
   // typeModele/emailFields : ajoutés pour le mode email (§ ensureEmailColumns ci-dessus) - optionnels, pour ne rien changer aux appels existants (mode
   // document). emailFields = { destinataires, cc, cci, objet }, ignoré (colonnes laissées vides) pour un modèle document.
-  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null) {
+  // suiviModifications : { [id]: {author, createdAt} } (js/track-changes.js, TrackChanges.computeMetadata), écrite dans CE MÊME UpdateRecord/AddRecord que
+  // Contenu - jamais un appel séparé (planning/feature-track-changes.md, décision n°4, exigence sur la fenêtre de risque en cas de conflit d'auto-save).
+  // null pour un macro-modèle (Editor.getSuiviModificationsForSave n'est jamais appelée sur ce chemin, cf. onSave - js/main.js).
+  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
     await ensureDateModifColumn();
     await ensureEmailColumns();
+    await ensureTrackChangesColumn();
     const now = new Date().toISOString();
     const email = emailFields || {};
     const columns = {
@@ -271,6 +310,7 @@ const Templates = (function () {
       Margins: JSON.stringify(marginsData || safeParseMargins(null)),
       TypeModele: typeModele,
       Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
+      SuiviModifications: JSON.stringify(suiviModifications || {}),
     };
     if (id) {
       await grist.docApi.applyUserActions([

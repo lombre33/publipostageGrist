@@ -94,6 +94,8 @@ const MainToolbar = (function () {
     set('v2-btn-comment', 'comment');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
+    set('v2-btn-track-changes', 'trackChanges');
+    set('v2-btn-accept-all', 'acceptAll'); set('v2-btn-reject-all', 'rejectAll');
     set('v2-highlight-icon', 'highlight');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
     set('v2-font-chip-caret', 'caretDown');
@@ -132,6 +134,12 @@ const MainToolbar = (function () {
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
     setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
+    // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
+    // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
+    setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
+    const hasPending = Editor.hasPendingTrackedChanges();
+    setDisabled('v2-btn-accept-all', !hasPending);
+    setDisabled('v2-btn-reject-all', !hasPending);
     // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque
     // devant/derrière est bloqué plus bas.
     const inHfMode = !!HeaderFooterPreview.getHfMode();
@@ -166,6 +174,9 @@ const MainToolbar = (function () {
     setLocked('v2-btn-insert-variable', inMacroMode);
     setLocked('v2-btn-undo', inMacroMode);
     setLocked('v2-btn-redo', inMacroMode);
+    setLocked('v2-btn-track-changes', inMacroMode);
+    setLocked('v2-btn-accept-all', inMacroMode);
+    setLocked('v2-btn-reject-all', inMacroMode);
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -253,6 +264,10 @@ const MainToolbar = (function () {
     bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
+    bind('v2-btn-track-changes', () => editor.chain().focus().toggleSuggestMode().run());
+    // Chunked (pas la variante non découpée) : mitige le bug de perf O(N²) confirmé dans la lib pour "tout accepter/refuser" (js/track-changes.js).
+    bind('v2-btn-accept-all', () => editor.chain().focus().acceptAllSuggestionsChunked().run());
+    bind('v2-btn-reject-all', () => editor.chain().focus().rejectAllSuggestionsChunked().run());
 
     wireHeadingMenu();
     wireSelectionDependentSelects();

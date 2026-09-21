@@ -57,6 +57,7 @@
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/history.mjs": "https://esm.sh/*prosemirror-history@1.5.0",
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/changeset.mjs": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@3.31.3",
+    "@tiptap/extension-document": "https://esm.sh/@tiptap/extension-document@3.31.3",
     "@tiptap/extension-underline": "https://esm.sh/@tiptap/extension-underline@3.31.3",
     "@tiptap/extension-text-align": "https://esm.sh/@tiptap/extension-text-align@3.31.3",
     "@tiptap/extension-text-style": "https://esm.sh/@tiptap/extension-text-style@3.31.3",
@@ -69,7 +70,11 @@
     "@tiptap/extension-task-item": "https://esm.sh/@tiptap/extension-task-item@3.31.3",
     "@tiptap/extension-placeholder": "https://esm.sh/@tiptap/extension-placeholder@3.31.3",
     "@tiptap/suggestion": "https://esm.sh/@tiptap/suggestion@3.31.3",
-    "@floating-ui/dom": "https://esm.sh/@floating-ui/dom@1.6.12"
+    "@floating-ui/dom": "https://esm.sh/@floating-ui/dom@1.6.12",
+    "@handlewithcare/prosemirror-suggest-changes": "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8",
+    "https://esm.sh/prosemirror-state@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-state@1.4.4",
+    "https://esm.sh/prosemirror-transform@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-transform@1.12.0",
+    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3"
   }
 }
 </script>
@@ -78,6 +83,7 @@
 <link rel="stylesheet" href="css/editor-v2.css?v=0.70">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.28">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.1">
+<link rel="stylesheet" href="css/track-changes.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -285,6 +291,10 @@
       <span class="v2-sep"></span>
       <button id="v2-btn-undo" data-tip="Annuler" aria-label="Annuler" data-i18n-tip="history.undo" data-i18n-aria="history.undo"></button>
       <button id="v2-btn-redo" data-tip="Rétablir" aria-label="Rétablir" data-i18n-tip="history.redo" data-i18n-aria="history.redo"></button>
+      <span class="v2-sep"></span>
+      <button id="v2-btn-track-changes" data-tip="Suivi des modifications" aria-label="Activer ou désactiver le suivi des modifications" data-i18n-tip="trackChanges.toggle.tip" data-i18n-aria="trackChanges.toggle.aria"></button>
+      <button id="v2-btn-accept-all" data-tip="Tout accepter" aria-label="Accepter toutes les suggestions du document" data-i18n-tip="trackChanges.acceptAll.tip" data-i18n-aria="trackChanges.acceptAll.aria"></button>
+      <button id="v2-btn-reject-all" data-tip="Tout refuser" aria-label="Refuser toutes les suggestions du document" data-i18n-tip="trackChanges.rejectAll.tip" data-i18n-aria="trackChanges.rejectAll.aria"></button>
     </div>
   </div>
   <div id="autosave-conflict-banner" class="autosave-conflict-banner" style="display:none;" role="alert">
@@ -415,21 +425,22 @@
 </div>
 <script src="js/html-sanitize.js?v=0.2"></script>
 <script src="js/grist-api.js?v=0.76"></script>
-<script src="js/templates.js?v=0.75"></script>
+<script src="js/templates.js?v=0.76"></script>
 <script src="js/reader-mode.js?v=0.85"></script>
-<script src="js/i18n.js?v=0.15"></script>
+<script src="js/i18n.js?v=0.16"></script>
 <script src="js/page-layout.js?v=0.2"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.7"></script>
 <script src="js/variables.js?v=0.25"></script>
-<script src="js/icons.js?v=0.20"></script>
+<script src="js/icons.js?v=0.21"></script>
 <script src="js/editor-core.js?v=0.1"></script>
 <script src="js/header-footer-preview.js?v=1.1"></script>
 <script src="js/editor-nodes.js?v=0.7"></script>
 <script src="js/floating-toolbars.js?v=0.7"></script>
-<script src="js/main-toolbar.js?v=0.5"></script>
+<script src="js/main-toolbar.js?v=0.6"></script>
 <script src="js/comments.js?v=0.2"></script>
-<script src="js/editor.js?v=1.1"></script>
+<script src="js/track-changes.js?v=0.2"></script>
+<script src="js/editor.js?v=1.3"></script>
 <script src="js/pdf-export-alt.js?v=0.1"></script>
 <script src="js/pdf-export.js?v=0.995"></script>
 <script src="js/docx-export.js?v=0.12"></script>
@@ -441,6 +452,6 @@
 <script src="js/template-organizer.js?v=0.1"></script>
 <script src="js/template-preferences.js?v=0.1"></script>
 <script src="js/template-tree-select.js?v=0.1"></script>
-<script src="js/main.js?v=0.50"></script>
+<script src="js/main.js?v=0.51"></script>
 </body>
 </html>

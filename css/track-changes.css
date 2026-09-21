@@ -1,0 +1,23 @@
+/* Suivi des modifications (js/track-changes.js) - rendu des marques insertion/deletion/modification dans le contenu de l'éditeur (.tiptap), mode "suivi"
+   façon Word/Google Docs (planning/feature-track-changes.md). Boutons de la barre (#v2-btn-track-changes/#v2-btn-accept-all/#v2-btn-reject-all) : aucune
+   règle dédiée nécessaire ici, ils héritent des styles génériques déjà posés sur tout bouton de #v2-toolbar (icône, survol, .is-active, :disabled -
+   css/editor-v2.css). Seule la marque « insertion » introduit une couleur nouvelle (vert) : deletion/modification réutilisent --danger/--accent déjà
+   présentes dans css/style.css, comme .var-badge-broken et .comment-mark le font déjà pour leurs propres états.
+   parseHTML de ModificationMark lit `span[data-type="modification"]` sans exiger data-id (attribut optionnel côté schéma) ; ces règles ciblent le sélecteur
+   d'attribut seul pour rester valides même sur un span sans data-id. */
+.tiptap ins[data-id] {
+  text-decoration: none;
+  color: #1a7f43;
+  background: #e6f6ec;
+  border-bottom: 1px solid #8fd3aa;
+}
+.tiptap del[data-id] {
+  text-decoration: line-through;
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.tiptap span[data-type="modification"] {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+}

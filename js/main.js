@@ -173,7 +173,7 @@
     // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
     // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
-    Editor.setHTML(tpl ? tpl.contenu : '');
+    Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     if (pdfFilenameInput) {
@@ -306,7 +306,8 @@
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     let savedId, dateModif;
     try {
-      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs()));
+      const suiviModifications = await Editor.getSuiviModificationsForSave();
+      ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications));
     } catch (e) {
       // Avant ce try/catch, un échec ici (ex. colonne Grist manquante) interrompait silencieusement la fonction : aucune erreur visible, la liste des
       // modèles/le statut n'étaient jamais mis à jour, et rien dans l'interface ne laissait deviner que "Enregistrer" n'avait rien enregistré.
@@ -458,7 +459,8 @@
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
     try {
-      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs());
+      const suiviModifications = await Editor.getSuiviModificationsForSave();
+      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
       autosaveLastKnownDateModif = dateModif;
       autosaveDirty = false;
       updateSaveStatus();

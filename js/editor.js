@@ -2,6 +2,15 @@
 // de portée globale avec GristAPI/Templates/ReaderMode ; nœuds/extensions construits par des createXxx(...) (classes TipTap indisponibles avant cet import).
 const Editor = (function () {
   let editor = null;
+  // Suivi des modifications : métadonnée (auteur/horodatage) par id de suggestion en attente, hors
+  // du document ProseMirror lui-même (l'id suffit à l'ancrer dans le HTML) - voyage dans la colonne
+  // Grist SuiviModifications, dans le MÊME UpdateRecord que Contenu (planning/feature-track-
+  // changes.md, décision n°4). Repartie de zéro à chaque chargement de modèle (setHTML), jamais
+  // conservée d'un modèle à l'autre.
+  let suiviMetadataCache = {};
+  // API renvoyée par TrackChanges.createExtensions() (js/track-changes.js), construite une fois dans
+  // init() - isSuggestModeOn a besoin des fonctions de la lib, importées dynamiquement là-bas.
+  let trackChangesApi = null;
 
   function probeImageDimensions(url) {
     return new Promise((resolve, reject) => {
@@ -223,6 +232,7 @@ const Editor = (function () {
       { TextStyle },
       { FontFamily },
       { Suggestion },
+      { Document },
       { Table },
       { TableRow },
       { TableCell },
@@ -239,6 +249,7 @@ const Editor = (function () {
       import('@tiptap/extension-text-style'),
       import('@tiptap/extension-font-family'),
       import('@tiptap/suggestion'),
+      import('@tiptap/extension-document'),
       import('@tiptap/extension-table'),
       import('@tiptap/extension-table-row'),
       import('@tiptap/extension-table-cell'),
@@ -274,6 +285,21 @@ const Editor = (function () {
     const HeadingNumberingConfig = EditorNodes.createHeadingNumberingConfigNode(Node);
     const Toc = EditorNodes.createTocNode(Node);
 
+    // Suivi des modifications (planning/feature-track-changes.md) : `doc` et tout conteneur de bloc
+    // dont un enfant direct peut être supprimé/inséré EN BLOC (pas seulement son texte) doivent
+    // explicitement autoriser les 3 marques de suivi via `.extend({marks: '...'})`, sans quoi
+    // ProseMirror lève "Invalid content for node X" dès la première suppression de bloc entier sous
+    // suivi actif - cf. js/track-changes.js. StarterKit embarque son propre `Document` (jamais
+    // extensible depuis l'extérieur) - `document: false` le désactive pour lui substituer la version
+    // étendue ci-dessous, seule différence avec l'usage par défaut de StarterKit.
+    trackChangesApi = await TrackChanges.createExtensions(Node, Mark, Extension, mergeAttributes);
+    const TrackedDocument = TrackChanges.extendForTracking(Document);
+    const TrackedTable = TrackChanges.extendForTracking(Table);
+    const TrackedTableHeaderWithBg = TrackChanges.extendForTracking(TableHeaderWithBg);
+    const TrackedTableCellWithBg = TrackChanges.extendForTracking(TableCellWithBg);
+    const TrackedTwoColumnsColumn = TrackChanges.extendForTracking(TwoColumnsColumn);
+    const TrackedTwoColumnsZone = TrackChanges.extendForTracking(TwoColumnsZone);
+
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
       onUpdate: ({ editor: updatedEditor, transaction }) => { HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction); backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
@@ -291,7 +317,8 @@ const Editor = (function () {
         },
       },
       extensions: [
-        StarterKit,
+        StarterKit.configure({ document: false }),
+        TrackedDocument,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         TextStyle,
         FontFamily,
@@ -315,13 +342,17 @@ const Editor = (function () {
         SmartChip,
         FootnoteRef,
         CommentMark,
+        trackChangesApi.InsertionMark,
+        trackChangesApi.DeletionMark,
+        trackChangesApi.ModificationMark,
+        trackChangesApi.SuggestChangesBridge,
         Variables.createExtension(Extension, Suggestion),
-        Table.configure({ resizable: true }),
+        TrackedTable.configure({ resizable: true }),
         TableRow,
-        TableHeaderWithBg,
-        TableCellWithBg,
-        TwoColumnsColumn,
-        TwoColumnsZone,
+        TrackedTableHeaderWithBg,
+        TrackedTableCellWithBg,
+        TrackedTwoColumnsColumn,
+        TrackedTwoColumnsZone,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,
@@ -387,12 +418,24 @@ const Editor = (function () {
     });
   }
 
-  function setHTML(html) {
+  // suiviModifications : métadonnée { [id]: {author, createdAt} } relue depuis la colonne Grist du
+  // modèle (null pour un modèle jamais suivi, ou de type macro - cf. js/templates.js). `setContent`
+  // remplacé par `loadTrackedDocument` (js/track-changes.js) : le suivi peut être actif au moment de
+  // ce chargement (rien ne l'aurait désactivé entre deux modèles), et un `setContent` normal y serait
+  // intercepté par le pont Tiptap comme une suggestion géante, doublant tout le contenu au lieu de le
+  // remplacer (planning/feature-track-changes.md, bug n°5).
+  function setHTML(html, suiviModifications) {
     if (!editor) return;
-    editor.commands.setContent(html || '', { emitUpdate: false });
+    suiviMetadataCache = suiviModifications || {};
+    const wasTrackChangesOn = isTrackChangesOn();
+    editor.commands.loadTrackedDocument(html || '');
     // Sans ça l'historique Annuler/Rétablir s'accumule à travers les changements de modèle : un Annuler après chargement pouvait faire réapparaître le
     // contenu d'un modèle précédent (bug confirmé).
     editor.commands.clearHistory();
+    // clearHistory() reconstruit l'état ProseMirror via EditorState.create(), qui réinitialise l'état de TOUS les plugins (pas seulement l'historique
+    // Annuler/Rétablir qu'elle vise) - le mode suivi (un booléen de plugin, jamais stocké dans le document) repasserait sinon silencieusement à OFF à
+    // chaque changement de modèle, y compris en rechargeant le même. Cf. commentaire de TrackChanges.restoreSuggestModeIfNeeded (js/track-changes.js).
+    trackChangesApi.restoreSuggestModeIfNeeded(editor, wasTrackChangesOn);
     editor.view.dom.dataset.headingStyle = getHeadingNumberingStyle();
     // Force un rafraîchissement du NodeView du sommaire : son premier rendu (pendant setContent) a eu lieu avant que headingStyle soit posé ci-dessus.
     editor.view.dispatch(editor.state.tr);
@@ -419,6 +462,28 @@ const Editor = (function () {
     HeaderFooterPreview.schedulePaginationRecompute();
   }
 
+  function isTrackChangesOn() {
+    return !!editor && !!trackChangesApi && trackChangesApi.isSuggestModeOn(editor.state);
+  }
+
+  function hasPendingTrackedChanges() {
+    return !!editor && TrackChanges.hasPendingSuggestions(editor.state);
+  }
+
+  // Auteur/horodatage par suggestion en attente (colonne Grist SuiviModifications, cf. commentaire de
+  // suiviMetadataCache plus haut). Appelée juste avant chaque Templates.save() (Enregistrer manuel ET
+  // auto-save, js/main.js) - jamais séparément, pour ne jamais écrire cette colonne hors du même
+  // UpdateRecord que Contenu/DateModif (planning/feature-track-changes.md, exigence sur la fenêtre de
+  // risque en cas de conflit). Repli anonyme silencieux si l'identification Grist échoue, même
+  // convention que js/comments.js.
+  async function getSuiviModificationsForSave() {
+    if (!editor) return suiviMetadataCache;
+    let author = null;
+    try { author = await GristAPI.getCurrentUserEmail(); } catch (e) { /* repli anonyme silencieux */ }
+    suiviMetadataCache = TrackChanges.computeMetadata(editor.state, suiviMetadataCache, author);
+    return suiviMetadataCache;
+  }
+
   return {
     init, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData,
@@ -428,5 +493,8 @@ const Editor = (function () {
     refreshLayout,
     openFootnoteEditorAt,
     isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter,
+    isTrackChangesOn,
+    hasPendingTrackedChanges,
+    getSuiviModificationsForSave,
   };
 })();

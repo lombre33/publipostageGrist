@@ -519,21 +519,23 @@ pour :
 1. ~~UX cible~~ — **tranché 2026-09-18 : mode suggestion façon Word/Google Docs.**
 2. ~~Politique « pas de build/pas de vendorisation »~~ — **tranché 2026-09-18 : DIY sur ProseMirror,
    pas de Tiptap Pro.**
-3. Attribution par auteur — **coût réel corrigé le 2026-09-19** : l'identification utilisateur
-   (`UserProbe`) n'est PAS un détour coûteux répété à chaque frappe comme une lecture antérieure de
-   cette section le laissait entendre — le résultat est mis en cache dès le premier appel de la
-   session (un seul aller-retour Grist par ouverture du widget, jamais par changement), et le
-   mécanisme est déjà utilisé en production par les commentaires (`js/comments.js:64`). Distinguer les
-   auteurs d'un changement de suivi coûterait donc le même prix, déjà payé et déjà éprouvé — un suivi
-   anonyme/mono-auteur ne se justifie plus par un souci de coût technique. La question reste ouverte,
-   mais sur un terrain produit (l'utilité de savoir qui a fait quoi) plutôt que sur une contrainte
-   technique qui n'existe pas.
-4. Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés :
-   n'exporter que l'état accepté, exporter avec les marques visibles, ou bloquer l'export tant qu'il
-   reste des changements en attente ?
-5. Rétention de l'historique une fois accepté/refusé : conservé (traçabilité, mais recoupe la
-   discussion RSSI/RGPD déjà ouverte ailleurs sur `requiredAccess: 'full'`, item B1 de
-   `roadmap-consolidee.md`) ou purgé dès résolution (comme un commentaire supprimé aujourd'hui) ?
+3. ~~Attribution par auteur~~ — **implémentée telle quelle le 2026-09-21** : `SuiviModifications`
+   stocke l'email par id (`GristAPI.getCurrentUserEmail()`, même mécanisme déjà en cache que les
+   commentaires), repli anonyme (`null`) si l'identification échoue. Pas de choix produit distinct
+   restant ici.
+4. Comportement des exports (PDF/DOCX/mailto/mode Lecture) face à des changements non tranchés —
+   **toujours ouverte : défaut prudent retenu le 2026-09-21 en attendant, pas une décision produit.**
+   Ces 4 chemins ne sont pas suivi-aware dans l'intégration livrée : ils montrent le HTML brut
+   (`<ins>`/`<del>`/`<span data-type="modification">`) tel quel, jamais un état "propre" recalculé.
+   Reste à trancher : n'exporter que l'état accepté, exporter avec les marques visibles (défaut
+   actuel), ou bloquer l'export tant qu'il reste des changements en attente ?
+5. Rétention de l'historique une fois accepté/refusé — **toujours ouverte : défaut prudent retenu le
+   2026-09-21 en attendant.** `TrackChanges.computeMetadata` (js/track-changes.js) ne recopie que les
+   ids encore présents dans le document à chaque enregistrement : un id accepté/refusé disparaît donc
+   de lui-même de `SuiviModifications`, sans purge explicite à écrire - comportement équivalent à
+   "purgé dès résolution" (comme un commentaire supprimé aujourd'hui). Reste à trancher si Antoine
+   préfère un historique conservé (traçabilité, mais recoupe la discussion RSSI/RGPD déjà ouverte
+   ailleurs sur `requiredAccess: 'full'`, item B1 de `roadmap-consolidee.md`).
 
 ## Prochaines étapes (2026-09-19) — réponse à la demande d'Antoine « migration / stabilisation / tests »
 
@@ -560,6 +562,36 @@ l'éditeur, `Editor.setHTML()`, colonne `SuiviModifications`) doit **expliciteme
 `TypeModele==='macro'`** — rien n'y est éditable ni suivable, ouvrir un tel modèle dans l'éditeur de
 prose n'a pas de sens. À couvrir par un test dédié dès l'intégration réelle (le genre de cas qui passe
 inaperçu jusqu'à ce qu'un utilisateur ouvre un macro-modèle).
+
+**Mise à jour du 2026-09-21 — intégration réelle livrée** (`js/track-changes.js`,
+`js/editor.js`, `js/templates.js`, `js/main.js`, boutons de `#v2-toolbar`,
+`dev-tests/scenarios-track-changes.js`, 8/8, suite complète 329/329 sans régression) :
+
+- **Piège NON anticipé par la « bonne nouvelle » ci-dessous sur `clearHistory`** : cette extension
+  (`js/editor-nodes.js:createClearHistoryExtension`) ne fait pas qu'effacer Annuler/Rétablir - elle
+  reconstruit l'état ProseMirror via `EditorState.create({..., plugins: view.state.plugins})`, qui
+  appelle `init()` sur CHAQUE plugin de la liste (contrairement à `state.reconfigure(...)`, qui
+  préserve l'état des plugins dont la référence ne change pas). Le suivi (un booléen de PLUGIN, jamais
+  stocké dans le document) repassait donc silencieusement à OFF à chaque changement de modèle, y
+  compris en rechargeant le même - trouvé par le test d'intégration `trackchanges_typing_marks_
+  insertion_rendered` (aucune marque posée malgré le mode activé juste avant). Corrigé dans
+  `js/editor.js:setHTML` par un dispatch réel post-`clearHistory()`
+  (`TrackChanges.restoreSuggestModeIfNeeded`), sans toucher `createClearHistoryExtension` lui-même
+  (fonction partagée par tout l'éditeur, hors périmètre de ce chantier). À garder en tête pour toute
+  future feature qui introduirait un état de PLUGIN (pas de document) devant survivre à un changement
+  de modèle.
+- **Question n°3 (attribution par auteur)** : implémentée avec le choix le plus simple compatible avec
+  l'existant - `SuiviModifications` stocke `{ [id]: {author, createdAt} }`, `author` posé une seule
+  fois par id (jamais réécrit) via `GristAPI.getCurrentUserEmail()`, repli `null` si l'identification
+  échoue (même convention que `js/comments.js`).
+- **Questions n°4/n°5 (exports, rétention)** : toujours pas tranchées avec Antoine - défauts prudents
+  retenus en attendant, à ne pas confondre avec une décision produit. (4) `pdf-export.js`/
+  `docx-export.js`/`mailto-export.js`/`reader-mode.js` ne sont PAS suivi-aware dans ce lot : un document
+  avec des suggestions en attente y montre le HTML brut (`<ins>`/`<del>`/`<span data-type=
+  "modification">`), jamais un état "propre". (5) Rétention = purge automatique dès résolution :
+  `TrackChanges.computeMetadata` ne recopie que les ids encore présents dans le document, donc un id
+  accepté/refusé disparaît de lui-même de `SuiviModifications` au prochain enregistrement, sans code de
+  purge dédié - à revoir explicitement si Antoine veut un historique conservé au-delà de la résolution.
 
 Points concrets trouvés en lisant le vrai code (au-delà de `doc`/`table` déjà traités dans le
 prototype) :

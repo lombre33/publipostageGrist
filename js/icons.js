@@ -61,6 +61,10 @@ const Icons = (function () {
     // Symbole "#" : ouvre l'autocomplétion #Variable/chips déjà existante (js/variables.js) sans avoir à taper le déclencheur - même icône dans les deux
     // modes (document et email), le bouton n'est pas propre au mode email.
     variable: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+    // Suivi des modifications : crayon (bouton bascule) + coche/croix (tout accepter/tout refuser), même style trait que le reste de la barre.
+    trackChanges: '<path d="M4 20l1-4L15.5 5.5a2 2 0 0 1 3 0l0 0a2 2 0 0 1 0 3L8 19l-4 1z"/><path d="M13.5 7.5l3 3"/>',
+    acceptAll: '<path d="M5 13l4 4L19 7"/>',
+    rejectAll: '<path d="M6 6l12 12M18 6L6 18"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();
