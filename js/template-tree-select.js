@@ -123,6 +123,8 @@ const TemplateTreeSelect = (function () {
     pinBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
+        // setPinned() ne lève jamais pour une identification indisponible (repli anonyme silencieux,
+        // cf. js/template-preferences.js) - seule une vraie panne d'écriture Grist atterrit ici.
         await TemplatePreferences.setPinned(node.id, !pinned);
         render();
       } catch (err) {
@@ -396,6 +398,17 @@ const TemplateTreeSelect = (function () {
   // Force un nouveau rendu depuis les données actuelles - utile après TemplatePreferences.loadForCurrentUser()
   // qui résout après le premier attach()/render() (l'identification utilisateur est asynchrone).
   function refresh() { if (realSelect) render(); }
+
+  // Abonnement UNIQUE au niveau module (pas dans attach()) : I18n.onChange() (js/i18n.js) n'offre aucun
+  // moyen de se désabonner, un ré-abonnement à chaque attach()/detach() empilerait donc un écouteur
+  // fantôme par cycle. La garde `if (popup)` le rend inoffensif tant que rien n'est attaché - même
+  // schéma que I18n.onChange(decorateSaveButtonShortcut) dans js/main.js, mais avec garde explicite ici
+  // puisque ce module peut être détaché.
+  if (typeof I18n !== 'undefined') {
+    I18n.onChange(() => {
+      if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); render(); }
+    });
+  }
 
   return { attach, detach, refresh };
 })();

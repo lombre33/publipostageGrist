@@ -4,7 +4,10 @@ console.log('[GristAPI] module chargé, timestamp:', new Date().toISOString(), '
 const GristAPI = (function () {
   // Tables internes de bookkeeping du widget (modèles, règles de correspondance entre tables) - jamais des tables "métier" de l'utilisateur, donc exclues de
   // _tables/getAllVariables/tout sélecteur de table présenté à l'utilisateur (sans quoi elles polluaient l'autocomplétion # et les sélecteurs de liaison).
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe'];
+  // Publipostage_PreferencesModeles (js/template-preferences.js, épingle/dossier par utilisateur pour
+  // l'arbre de modèles) : même raison d'exclusion que les trois tables ci-dessus, jamais un choix
+  // métier de l'utilisateur.
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") - une colonne à formule déclenchée (capture qui a réellement déclenché le
   // calcul, `user.Email`), vidée après chaque lecture.

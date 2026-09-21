@@ -45,6 +45,7 @@ const GROUPS = {
   autosave: 'scenarios-autosave',
   toolbarChrome: 'scenarios-toolbar-chrome',
   macroModeles: 'scenarios-macro-modeles',
+  templateTree: 'scenarios-template-tree',
 };
 
 const argv = process.argv.slice(2);

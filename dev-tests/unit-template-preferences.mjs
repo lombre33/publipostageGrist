@@ -85,19 +85,30 @@ async function main() {
     check('isolation : le dossier de l’AUTRE utilisateur ne fuite pas', cache[1].dossier !== 'Confidentiel');
   }
 
-  // 5. Repli anonyme silencieux (identification indisponible) : loadForCurrentUser() ne doit jamais lever,
-  // mais toute écriture doit lever une erreur claire plutôt que réussir sans jamais être relue.
+  // 5. Repli anonyme silencieux (identification indisponible) : ni loadForCurrentUser() ni setPinned()
+  // ne doivent lever - même politique que js/comments.js (Auteur='' plutôt que de bloquer l'action).
+  // L'écriture doit rester lisible dans la MÊME session anonyme (round-trip), pas juste "ne pas planter".
   {
-    const { run } = freshModule({ initialTables: [TABLE_NAME], emailFails: true });
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], emailFails: true });
     let threwOnLoad = false;
     let cache;
     try { cache = await run('TemplatePreferences.loadForCurrentUser()'); } catch (e) { threwOnLoad = true; }
     check('repli anonyme : loadForCurrentUser ne lève pas', !threwOnLoad);
-    check('repli anonyme : cache vide', cache && Object.keys(cache).length === 0);
+    check('repli anonyme : cache vide au départ', cache && Object.keys(cache).length === 0);
 
     let writeError = null;
     try { await run('TemplatePreferences.setPinned(1, true)'); } catch (e) { writeError = e; }
-    check('repli anonyme : setPinned lève une erreur explicite', !!writeError && /[Ii]dentification/.test(writeError.message), writeError && writeError.message);
+    check('repli anonyme : setPinned ne lève pas non plus', !writeError, writeError && writeError.message);
+    const row = docApi.rows[TABLE_NAME].find((r) => r.ModeleId === 1);
+    check('repli anonyme : la ligne Grist est écrite avec Utilisateur vide', row && row.Utilisateur === '', row);
+
+    // Round-trip : une nouvelle session (nouveau module, même document) tout aussi anonyme doit
+    // retrouver cette même préférence "anonyme partagée" - sans quoi épingler puis rouvrir l'arbre
+    // "oublierait" l'épingle qu'on vient de poser.
+    const second = freshModule({ initialTables: [TABLE_NAME], emailFails: true });
+    second.docApi.rows[TABLE_NAME] = docApi.rows[TABLE_NAME];
+    const reloaded = await second.run('TemplatePreferences.loadForCurrentUser()');
+    check('repli anonyme : relu dans une session anonyme suivante (round-trip)', reloaded[1] && reloaded[1].epingle === true, reloaded);
   }
 
   // 6. Chemins de dossier normalisés à l'écriture (espaces/segments vides), et dossier vidé -> null (pas

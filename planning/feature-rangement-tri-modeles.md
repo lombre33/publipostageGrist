@@ -254,21 +254,38 @@ Données par utilisateur (épingle + dossier) : table Grist dédiée `Publiposta
 modèle, même principe que `Publipostage_Commentaires`. Décision communiquée à Antoine dans le fil
 (2026-09-20), pas encore commentée par lui.
 
-### 8.2 Fait au 2026-09-20
+### 8.2 Fait au 2026-09-20/21
 
 - `js/template-preferences.js` + `js/template-organizer.js` (logique pure de regroupement, gère les
   trois types `document`/`email`/`macro`) + `js/template-tree-select.js` + `css/template-tree-select.css`.
-- Tests unitaires sans navigateur (`dev-tests/unit-harness.mjs` + `unit-template-organizer.mjs` +
-  `unit-template-preferences.mjs`) : 33/33 passés, y compris la migration depuis un document créé AVANT
-  la fonctionnalité (aucune table au départ) et l'idempotence sur un document créé après.
-- Vérification ad hoc de `template-tree-select.js` dans un vrai Chromium (script de scratch, non commité
-  - la vraie suite Playwright arrivera dans `dev-tests/` au câblage, `_test-harness.html` étant généré
-  depuis `index.html` et donc aveugle à un module non câblé) : 19/19 vérifications passées, dont les
-  trois pièges ci-dessus (display calculé, hors ordre de tabulation, état désactivé répercuté) et la
-  préservation du focus clavier après un ré-rendu déclenché par un clic d'épingle.
+- Identification anonyme : repli sur `Utilisateur=''` plutôt qu'une erreur bloquante, même politique que
+  `js/comments.js` (`Auteur=''`) — l'épingle/dossier posée sans identité résolue reste une préférence
+  "anonyme" partagée, relisible dans une session anonyme suivante, plutôt que de perdre l'action. Corrigé
+  suite à un vrai échec surpris par `dev-tests/scenarios-template-tree.js` (le harnais de test lui-même
+  n'a aucune identité Grist résolue, cas réel que la première version (qui levait une erreur) ne gérait
+  pas).
+- Câblage dans `index.html` (CSS + 3 `<script>`, `?v=` incrémentés), `js/main.js` (attache
+  `TemplateTreeSelect` juste après `refreshTemplateList()`, avant l'écriture du modèle par défaut sur
+  `.value` — l'ordre compte, cf. commentaire dans le code), `js/i18n.js` (3 clés FR+EN) et
+  `js/grist-api.js` (`Publipostage_PreferencesModeles` ajoutée à `INTERNAL_TABLES`, pour ne jamais
+  apparaître comme table "métier" dans le sélecteur de tables liées).
+- Tests unitaires sans navigateur : 35/35 passés (organizer 17 + preferences 18, dont migration depuis un
+  document sans la table, idempotence, et le round-trip anonyme ci-dessus).
+- Vraie suite Playwright `dev-tests/scenarios-template-tree.js` (groupe `templateTree` dans
+  `run-headless.mjs`) : 9/9 passés, contre le vrai `_test-harness.html` (donc le vrai `js/main.js`, pas un
+  stub) — les trois pièges (display calculé, hors ordre de tabulation, accesseur `value` intercepté sur
+  une écriture réelle de `js/main.js`), les 3 types de modèle créés par le vrai flux UI, la persistance
+  Grist réelle de l'épingle, l'étoile "modèle par défaut", et la navigation clavier (Échap).
+- Suite complète du projet (tous groupes existants + le nouveau) rejouée : aucune régression.
+- Limitation d'environnement rencontrée et documentée en mémoire d'équipe (pas propre à cette
+  fonctionnalité) : les tests Playwright de ce fil de session ne pouvaient pas du tout démarrer
+  (TipTap ne charge jamais depuis esm.sh) tant que `dev-tests/offline-deps.sh` n'avait pas été relancé
+  pour reconstruire le miroir CDN local - déjà documenté comme le correctif attendu pour ce cas
+  (`dev-tests/README.md`), maintenant fait pour cette session.
 
 ### 8.3 Reste à faire
 
-Câblage dans `index.html`/`js/main.js` (fichiers partagés/disputés, en un seul lot annoncé au préalable
-- cf. mémoire d'équipe), ajout des clés I18n FR+EN correspondantes dans `js/i18n.js`, puis vraie suite
-Playwright dans `dev-tests/` une fois câblé.
+- Confirmer avec Antoine, au moment où il verra le rendu réel, la limite de scope posée en 8.1 (pin/tri
+  depuis l'arbre, dossier depuis la modale "Organiser mes modèles…" restant à construire).
+- Vérification en conditions réelles (vrai document Grist, vraie identité utilisateur) : aucun fil n'a
+  accès au document réel d'Antoine, donc ce point ne peut être confirmé que par lui.

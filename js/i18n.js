@@ -13,6 +13,10 @@ const I18n = (function () {
     'template.rename.aria': { fr: 'Renommer le modèle', en: 'Rename template' },
     'template.setDefault.tip': { fr: 'Modèle par défaut', en: 'Default template' },
     'template.setDefault.aria': { fr: 'Définir ce modèle comme modèle par défaut à l’ouverture', en: 'Set this template as the default one on open' },
+    // --- Arbre de modèles (épingle + dossiers), js/template-tree-select.js ---
+    'templateTree.pin.aria': { fr: 'Épingler ce modèle', en: 'Pin this template' },
+    'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
+    'templateTree.allSection': { fr: 'Tous les modèles', en: 'All templates' },
     'toolbar.new': { fr: 'Nouveau modèle', en: 'New template' },
     'toolbar.newDocument': { fr: 'Nouveau document', en: 'New document' },
     'toolbar.newEmail': { fr: 'Nouvel email', en: 'New email' },

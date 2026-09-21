@@ -1238,6 +1238,16 @@
       await updateEmailLengthGauge();
     });
     await refreshTemplateList();
+    // Enveloppe #template-select AVANT l'écriture de templateSelect.value ci-dessous (modèle par
+    // défaut) : TemplateTreeSelect intercepte cet accesseur pour se synchroniser (js/template-tree-select.js),
+    // donc l'ordre importe - attaché après, ce premier affichage du modèle par défaut serait manqué.
+    TemplateTreeSelect.attach(templateSelect);
+    // Chargement non bloquant, même patron que Comments.loadForTemplate ci-dessous : l'identification
+    // utilisateur (GristAPI.getCurrentUserEmail) est un aller-retour réseau, pas de raison de retarder
+    // le démarrage du widget pour la section "Épinglés" de l'arbre.
+    TemplatePreferences.loadForCurrentUser()
+      .then(() => TemplateTreeSelect.refresh())
+      .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
     // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
     const defaultTemplateId = Templates.getDefaultId();

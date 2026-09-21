@@ -7,9 +7,12 @@
 // absence de détection de conflit (cf. project-publipostage-autosave-conflict-mechanics).
 //
 // Identification : GristAPI.getCurrentUserEmail() (js/grist-api.js), déjà utilisé en production par
-// les commentaires - même repli anonyme silencieux si l'identification échoue (permissions, etc.) :
-// aucune préférence personnelle n'est alors disponible, l'appelant retombe sur le comportement par
-// défaut (liste plate) plutôt que de faire échouer quoi que ce soit.
+// les commentaires - même repli anonyme SILENCIEUX si l'identification échoue (permissions, etc.),
+// Utilisateur='' plutôt que de bloquer l'action (cf. js/comments.js:64, Auteur='' de la même façon) :
+// dans ce cas dégradé, épingle/dossier deviennent une préférence "anonyme" partagée par quiconque n'a
+// pas d'identité résolue, plutôt que de perdre l'action entièrement. Vérifié le 2026-09-21 par
+// dev-tests/scenarios-template-tree.js : le harnais de test lui-même n'a aucune identité Grist réelle,
+// exactement le cas que ce repli couvre.
 const TemplatePreferences = (function () {
   const TABLE_NAME = 'Publipostage_PreferencesModeles';
 
@@ -62,12 +65,15 @@ const TemplatePreferences = (function () {
   async function loadForCurrentUser() {
     await ensureTableExists();
     cache = {};
-    const email = await currentUserEmail();
-    if (!email) return cache;
+    // '' (pas de court-circuit ici) : une préférence écrite en repli anonyme (upsert ci-dessous) doit
+    // pouvoir être relue dans la même session anonyme, exactement comme un commentaire à Auteur=''
+    // reste lisible par tous (js/comments.js) - sans ce round-trip, épingler puis rouvrir l'arbre
+    // "oublierait" l'épingle qu'on vient de poser.
+    const email = (await currentUserEmail()) || '';
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
       for (let i = 0; i < data.id.length; i++) {
-        if (data.Utilisateur[i] !== email) continue;
+        if ((data.Utilisateur[i] || '') !== email) continue;
         cache[data.ModeleId[i]] = {
           rowId: data.id[i],
           epingle: !!data.Epingle[i],
@@ -82,13 +88,12 @@ const TemplatePreferences = (function () {
 
   function getCached() { return cache || {}; }
 
-  // patch = { Epingle } et/ou { Dossier } (colonnes Grist telles quelles). Lève si l'identification
-  // utilisateur est indisponible - à l'appelant (UI) de décider quoi faire (ex. griser l'action
-  // plutôt que de laisser échouer silencieusement une préférence qui ne serait jamais relue).
+  // patch = { Epingle } et/ou { Dossier } (colonnes Grist telles quelles). Ne lève jamais pour une
+  // identification indisponible (repli '' silencieux, cf. commentaire d'en-tête) - seule une vraie
+  // panne d'écriture Grist (applyUserActions) remonte à l'appelant.
   async function upsert(modeleId, patch) {
     await ensureTableExists();
-    const email = await currentUserEmail();
-    if (!email) throw new Error('Identification utilisateur indisponible : impossible d’enregistrer une préférence personnelle');
+    const email = (await currentUserEmail()) || '';
     if (!cache) await loadForCurrentUser();
     const id = Number(modeleId);
     const existing = cache[id];
