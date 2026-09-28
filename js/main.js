@@ -1243,7 +1243,14 @@
     // Enveloppe #template-select AVANT l'écriture de templateSelect.value ci-dessous (modèle par
     // défaut) : TemplateTreeSelect intercepte cet accesseur pour se synchroniser (js/template-tree-select.js),
     // donc l'ordre importe - attaché après, ce premier affichage du modèle par défaut serait manqué.
-    TemplateTreeSelect.attach(templateSelect);
+    //
+    // try/catch ajouté le 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") :
+    // init() n'a ailleurs aucun filet, donc une exception ici (arbre du rangement, nouveau cette
+    // semaine) empêchait tout ce qui suit de se brancher - Enregistrer, Ctrl+S, l'auto-save, le statut
+    // "Prêt" - sans aucun message. Cas réel trouvé et corrigé séparément (js/template-organizer.js,
+    // ligne avec Nom vide/null), mais Enregistrer ne doit plus jamais dépendre du bon fonctionnement de
+    // cette vue décorative : un futur bug de rendu de l'arbre reste dans l'arbre.
+    try { TemplateTreeSelect.attach(templateSelect); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
     // Chargement non bloquant, même patron que Comments.loadForTemplate ci-dessous : l'identification
     // utilisateur (GristAPI.getCurrentUserEmail) est un aller-retour réseau, pas de raison de retarder
     // le démarrage du widget pour la section "Épinglés" de l'arbre.

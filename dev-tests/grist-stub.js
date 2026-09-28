@@ -135,7 +135,18 @@
         retValues.push({ tableId });
       } else if (type === 'AddRecord' || type === 'BulkAddRecord') {
         const fields = action[3] || {};
+        // Lève sur une colonne inconnue si la table EXISTE déjà (schéma déjà fixé) - comme le vrai Grist
+        // (useractions.py, KeyError sur un colId absent), vérifié le 2026-09-28 contre grist-core@main en
+        // creusant "l'enregistrement ne fonctionne pas" (mémoire project-publipostage-templates-migration-
+        // race). Une table encore inconnue ici (AddRecord avant tout AddTable) garde son bootstrap existant
+        // (déduit du premier enregistrement) - aucun appelant réel ne passe par ce chemin, AddTable précède
+        // toujours dans js/templates.js/js/template-preferences.js.
+        const existed = !!state.rows[tableId];
         const table = state.rows[tableId] || (state.rows[tableId] = columnarEmpty(Object.keys(fields)));
+        if (existed) {
+          const unknown = Object.keys(fields).find(k => !(k in table));
+          if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
+        }
         const newId = (state.nextRowId[tableId] = (state.nextRowId[tableId] || 1));
         state.nextRowId[tableId]++;
         table.id.push(newId);
@@ -149,9 +160,10 @@
         const fields = action[3] || {};
         const table = state.rows[tableId];
         if (table) {
+          const unknown = Object.keys(fields).find(k => !(k in table));
+          if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
           const idx = table.id.indexOf(rowId);
           if (idx !== -1) Object.keys(fields).forEach(k => {
-            if (!table[k]) table[k] = table.id.map(() => null);
             table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
           });
         }
@@ -174,18 +186,21 @@
         // ci-dessus la déclarent dès l'init. Un scénario qui veut tester un chemin de migration doit RETIRER la colonne de `state.rows` avant de jouer
         // l'action qui la lit/l'écrit (cf. dev-tests/scenarios-autosave.js:autosave_date_modif_column_migrated_on_existing_document).
         //
-        // Lève si la colonne existe déjà (comme le vrai Grist refuse un id de colonne déjà utilisé) -
-        // ajouté le 2026-09-28 en creusant "l'enregistrement ne fonctionne pas" (Antoine) : chaque
-        // ensureXxxColumn (js/templates.js) suit un patron vérifier-puis-agir non atomique, et deux
-        // appels concurrents (ex. tick d'auto-save pendant un Enregistrer manuel) pouvaient tous les deux
-        // constater la colonne absente et tous les deux appeler AddVisibleColumn pour le même id - accepté
-        // silencieusement ici (idempotent), mais rejeté par un vrai document Grist. Ce garde-fou aurait
-        // attrapé la régression immédiatement ; le correctif (ensureOnce, un seul essai partagé par tous
-        // les appelants concurrents) est dans js/templates.js.
-        const colId = action[2];
+        // Renomme (suffixe numérique) si l'id demandé existe déjà, EXACTEMENT comme le vrai Grist -
+        // vérifié le 2026-09-28 contre grist-core@main (useractions.py:doAddColumn -> _pick_col_name ->
+        // identifiers.pick_col_ident) : AddColumn/AddVisibleColumn ne refuse JAMAIS un id déjà pris,
+        // contrairement à une première version de ce garde-fou (qui levait une erreur - FAUSSE, cf.
+        // mémoire d'équipe project-publipostage-templates-migration-race). Le code appelant qui ignore
+        // le colId réellement renvoyé (comme js/templates.js:ensureXxxColumn) continue donc de chercher
+        // son id d'origine indéfiniment si une vraie collision se produit - à dessein, pour rester fidèle.
+        const requestedColId = action[2];
         const table = state.rows[tableId];
-        if (table && colId in table) throw new Error('Colonne déjà existante : ' + tableId + '.' + colId);
-        if (table) table[colId] = table.id.map(() => null);
+        let colId = requestedColId;
+        if (table) {
+          let suffix = 2;
+          while (colId in table) { colId = requestedColId + suffix; suffix++; }
+          table[colId] = table.id.map(() => null);
+        }
         retValues.push({ colId });
       } else {
         retValues.push(null);

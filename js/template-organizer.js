@@ -13,7 +13,15 @@ const TemplateOrganizer = (function () {
     return path ? String(path).split('/').map((s) => s.trim()).filter(Boolean) : [];
   }
 
-  function byName(a, b) { return a.nom.localeCompare(b.nom, 'fr'); }
+  // (a.nom || '') : une ligne Grist réelle peut avoir Nom vide/null (cellule effacée directement dans la
+  // grille, jamais passée par la validation "Nom du modèle requis" de js/main.js:onSave) - avant ce garde,
+  // .localeCompare sur null plantait ici en plein tri, qui casse TOUT le rendu de l'arbre (bug réel trouvé
+  // le 2026-09-28 en creusant "l'enregistrement d'un modèle ne fonctionne pas" chez Antoine : attach()
+  // (js/template-tree-select.js) appelle render() -> buildView() -> byName() SANS filet, donc l'exception
+  // remonte jusqu'à main.js:init(), qui n'a lui-même aucun try/catch autour de son propre appel - tout ce
+  // qui vient après (branchement d'Enregistrer, Ctrl+S, l'auto-save, et le statut "Prêt") ne s'exécute
+  // alors jamais.
+  function byName(a, b) { return (a.nom || '').localeCompare(b.nom || '', 'fr'); }
 
   // { pinned: [{id, nom, dossier}], tree: [noeud, ...] } où noeud est
   // { type: 'dossier', nom, chemin, enfants: [noeud, ...] } ou { type: 'modele', id, nom }.

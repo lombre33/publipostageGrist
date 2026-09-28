@@ -102,4 +102,24 @@ function view(templates, prefs) {
   check('typeModele par défaut = document quand absent', v.tree[0].typeModele === 'document');
 }
 
+// 9. Régression du 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") - une ligne
+// Grist réelle avec Nom vide/null (cellule effacée directement dans la grille, jamais passée par la
+// validation "Nom du modèle requis" de js/main.js:onSave) faisait planter byName() (a.nom.localeCompare
+// sur null) EN PLEIN TRI, DANS TOUS les groupes (racine, pinned, chaque dossier) - pas seulement celui
+// de la ligne sale. Cette exception remonte sans filet à travers template-tree-select.js:render()/
+// attach() jusqu'à main.js:init(), qui n'a lui-même aucun try/catch : tout ce que init() branche APRÈS
+// TemplateTreeSelect.attach() (bouton Enregistrer, Ctrl+S, l'auto-save, le statut "Prêt") ne s'exécute
+// alors jamais - un candidat sérieux pour expliquer À LA FOIS le "plus de dropdown" ET "l'enregistrement
+// ne marche pas" d'un seul coup.
+{
+  const templates = [{ id: 1, nom: 'Modèle propre' }, { id: 2, nom: null }, { id: 3, nom: undefined }, { id: 4, nom: '' }];
+  const prefs = { 2: { epingle: true, dossier: null } };
+  let threw = null;
+  let v;
+  try { v = view(templates, prefs); } catch (e) { threw = e; }
+  check('une ligne Nom vide/null/undefined ne fait plus planter le tri', !threw, threw && threw.message);
+  check('les 4 lignes apparaissent quand même dans l’arbre', v && v.tree.length === 4, v && JSON.stringify(v.tree));
+  check('la ligne épinglée à Nom null apparaît aussi dans pinned', v && v.pinned.some((p) => p.id === 2));
+}
+
 summarizeAndExit();
