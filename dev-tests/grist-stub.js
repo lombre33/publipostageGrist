@@ -146,6 +146,9 @@
   }
 
   function fireRecord(record, tableId) {
+    // Mémorise la table de CETTE ligne pour fetchSelectedRecord ci-dessous (docApi) : la vraie API Grist ne prend jamais de tableId, elle opère
+    // implicitement sur la section/table à laquelle ce widget est lié - state.lastTableId en tient lieu ici.
+    state.lastTableId = tableId;
     let effective = record;
     // 'shown' (défaut) : Grist retire du record les colonnes pas cochées dans CETTE section (vérifié à la
     // source, cf. state.recordIncludeColumns). 'normal'/'all' : toutes les colonnes normales, quel que
@@ -308,6 +311,25 @@
       },
       applyUserActions: applyUserActions,
       getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/stub' }; },
+      // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
+      // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
+      // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage 'shown' que fireRecord - utilisé par js/grist-api.js:refetchRecordAsNormal
+      // pour repêcher une ligne que la souscription 'normal' n'a jamais reçue (trou de bascule includeColumns, audit du coordinateur 2026-09-28).
+      fetchSelectedRecord: async function (rowId, options) {
+        const tableId = state.lastTableId;
+        const row = getRow(tableId, rowId);
+        if (!row) return { id: rowId };
+        const includeColumns = (options && options.includeColumns) || 'shown';
+        if (includeColumns === 'shown') {
+          const hidden = state.hiddenColumnsByTable[tableId] || [];
+          if (hidden.length) {
+            const filtered = { id: row.id };
+            Object.keys(row).forEach(k => { if (k === 'id' || hidden.indexOf(k) === -1) filtered[k] = row[k]; });
+            return filtered;
+          }
+        }
+        return row;
+      },
     },
   };
 

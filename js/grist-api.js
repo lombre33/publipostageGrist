@@ -31,9 +31,6 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
-  // true dès que la souscription enrichie (includeColumns:'normal') est active - cf. handleIncomingRecord/init ci-dessous.
-  let _normalAccessConfirmed = false;
-  let _limitedAccessWarned = false;
   let _tokenCache = null;
 
   // Corps commun aux deux souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre les deux pour ne
@@ -73,31 +70,6 @@ const GristAPI = (function () {
     });
   }
 
-  // Bascule la souscription onRecord vers includeColumns:'normal' (colonnes non cochées incluses) une fois l'accès complet confirmé par onOptions -
-  // cf. l'appel dans init() ci-dessous pour le pourquoi (grist.onRecord(cb, {includeColumns:'normal'}) rejette silencieusement CHAQUE ligne, sans jamais
-  // appeler `cb`, si l'accès n'est pas complet : vérifié à la source jsDelivr le 2026-09-28, grist-plugin-api.ts fonction onRecord() - elle attend
-  // `await docApi.fetchSelectedRecord(msg.rowId, options)` avant d'appeler callback(), et WidgetFrame.ts:538-543 fait lever cet appel si
-  // `options.includeColumns` vaut 'normal'/'all' et que l'accès accordé n'est pas 'full' - AUCUN filet de rattrapage dans le plugin lui-même).
-  function upgradeToNormalAccessIfPossible(accessLevel) {
-    if (_normalAccessConfirmed) return;
-    if (accessLevel !== 'full') {
-      if (!_limitedAccessWarned) {
-        _limitedAccessWarned = true;
-        console.warn('[GristAPI] accès accordé au widget = "' + accessLevel + '" (pas "full") : repli sur includeColumns:\'shown\' pour onRecord - '
-          + 'les règles macro-modèle testant une colonne non cochée dans le panneau de droite de CE widget continueront à échouer silencieusement '
-          + '(record[col] absent) jusqu\'à ce qu\'un accès complet soit accordé.');
-      }
-      return;
-    }
-    try {
-      grist.onRecord(handleIncomingRecord, { includeColumns: 'normal' });
-      _normalAccessConfirmed = true;
-      console.log('[GristAPI] accès complet confirmé : souscription onRecord enrichie (includeColumns:\'normal\') ajoutée.');
-    } catch (e) {
-      console.error('[GristAPI] ERREUR lors de la souscription onRecord enrichie (includeColumns:\'normal\'):', e);
-    }
-  }
-
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
@@ -114,19 +86,25 @@ const GristAPI = (function () {
     if (_recordSubscriptionRegistered) {
       console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
     } else try {
-      // Repli sûr d'abord, sans option (= includeColumns:'shown', le seul niveau qui ne demande jamais d'accès complet - FetchSelectedOptions,
-      // vérifié à la source le 2026-09-28) : ne remonte que les colonnes cochées visibles dans le panneau de droite DE CE widget, comme avant le
-      // premier correctif de cette série. Gardé actif en permanence (jamais désinscrit - l'API publique n'offre pas d'"offRecord") mais neutralisé
-      // par le garde ci-dessous dès que la souscription enrichie (includeColumns:'normal', cf. upgradeToNormalAccessIfPossible) a pris le relais :
-      // sans ce garde, les deux souscriptions tourneraient en parallèle indéfiniment et celle-ci pourrait écraser après coup `_currentRecord` avec sa
-      // version partielle (course entre deux promesses concurrentes, pas d'ordre garanti) - régression intermittente qui reproduirait exactement le
-      // bug d'Antoine du 2026-09-28 même une fois l'accès complet accordé.
-      grist.onRecord(function (record, mappings) {
-        if (_normalAccessConfirmed) return;
-        handleIncomingRecord(record, mappings);
-      });
+      // includeColumns:'normal' (au lieu du défaut 'shown') : sans ça, seules les colonnes cochées visibles dans le panneau de droite DE CE WIDGET
+      // arrivent dans `record` (GristAPI.ts, FetchSelectedOptions.includeColumns, vérifié à la source jsDelivr le 2026-09-28) - toute colonne créée
+      // depuis une autre vue, ou simplement pas affichée ici, est absente de `record` (record[col] === undefined), jamais juste vide. Une règle
+      // macro-modèle qui teste cette colonne échoue alors silencieusement en "=" (undefined ne matche jamais) et bascule sur le cas par défaut -
+      // symptôme d'Antoine du 2026-09-28. 'normal' exige un accès complet, déjà demandé ci-dessus (requiredAccess:'full').
+      //
+      // Une bascule "repli 'shown' sûr puis passage à 'normal' une fois l'accès complet confirmé par onOptions" a été essayée ici (même journée) pour
+      // couvrir aussi le cas d'un accès non complet - RETIRÉE en urgence : au démarrage, la ligne courante et les options arrivent quasi simultanément
+      // (WidgetFrame.ts, TableNotifier puis ConfigNotifier au ready) et la réponse du repli 'shown' (un aller-retour RPC) revenait SYSTÉMATIQUEMENT
+      // après que les options aient déjà déclenché la bascule - mesuré par le coordinateur avec le vrai grist-plugin-api.js et grain-rpc, chronologie
+      // réelle à l'appui (ready 101ms, ligne 105ms, options 106ms, réponse 'shown' 113ms). Le garde anti-course ignorait alors cette réponse tardive,
+      // et la souscription 'normal' (enregistrée après coup) n'avait de toute façon jamais reçu ce message précis (pas de rejeu d'événements passés
+      // côté RPC) : aucun rappel n'était jamais appelé, `getCurrentRecord()` restait `null` jusqu'au changement de ligne suivant - régression PIRE que
+      // le bug d'origine (accès complet = cas normal d'Antoine). Accès non complet dès le démarrage reste donc un gap connu (impact faible : docApi
+      // exige déjà l'accès complet ailleurs) tant que la bascule n'est pas refaite correctement (relire la ligne courante en 'normal' au moment de la
+      // bascule, ET ne jamais ignorer une réponse 'shown' tant que 'normal' n'a rien livré lui-même).
+      grist.onRecord(handleIncomingRecord, { includeColumns: 'normal' });
       _recordSubscriptionRegistered = true;
-      console.log('[GristAPI] grist.onRecord enregistré (repli includeColumns:\'shown\').');
+      console.log('[GristAPI] grist.onRecord enregistré.');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
     }
@@ -135,10 +113,6 @@ const GristAPI = (function () {
       grist.onOptions(function (options, settings) {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
-        // settings.accessLevel (InteractionOptions, ConfigNotifier._update côté grist-core) reflète le niveau RÉELLEMENT accordé, pas celui demandé
-        // par grist.ready({requiredAccess:'full'}) ci-dessus - un utilisateur peut refuser. onOptions est aussi rappelé plus tard si l'accès change
-        // (ex. l'utilisateur l'accorde après coup dans le panneau du widget), donc revérifier à chaque appel plutôt qu'une seule fois.
-        if (settings) upgradeToNormalAccessIfPossible(settings.accessLevel);
       });
       console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
