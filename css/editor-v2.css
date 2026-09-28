@@ -478,24 +478,38 @@
 /* Groupe "bouton principal + variantes au survol" (alignement/puces/numérotation) - le bouton principal reste l'action rapide par défaut ; le survol du
    groupe révèle .v2-hover-flyout SANS écart de hitbox car il touche directement le bas du bouton (top:100%, aucune marge). */
 .v2-hover-group { position: relative; display: inline-flex; }
-/* max-height/overflow-y : même fermé (visibility:hidden n'exclut pas la boîte du calcul de mise en page), un flyout dont le contenu naturel dépasse le
-   bas de la fenêtre (#v2-heading-flyout, 7 niveaux de titre + numérotation) agrandit le scrollHeight de la PAGE elle-même côté navigateur - une simple
-   molette au-dessus de la barre d'outils (aucun flyout ouvert) fait alors défiler la page et sort le reste de la barre de la zone visible (mesuré à la
-   vraie molette Playwright par le coordinateur, 700x400 et 600x400 : 29px de débordement). Un document non vide pousse le groupe plus bas qu'un document
-   vide (la barre s'enroule différemment) - la borne ci-dessous vient d'une mesure AVEC contenu réel, sur les 8 groupes, de 500x300 à 700x400, marge
-   incluse. `overflow-y:auto` fait défiler SES lignes en interne si la fenêtre est trop courte pour le contenu, plutôt que de compter sur un défilement
-   de la page - jamais une ligne inatteignable.
+/* display:none au repos (pas juste visibility:hidden) : un flyout gardait sa boîte dans le calcul de mise
+   en page même fermé, et #v2-heading-flyout (7 niveaux de titre + numérotation, le seul à dépasser une
+   petite fenêtre) agrandissait alors le scrollHeight/scrollWidth de la PAGE elle-même - une simple molette
+   au-dessus de la barre (aucun flyout ouvert) la faisait défiler et sortait le reste de la barre de la zone
+   visible (mesuré à la vraie molette Playwright, coordinateur, 700x400/600x400, aussi en mode email+Cci où
+   la barre s'allonge encore). display:none retire la boîte du calcul le temps qu'il est fermé, quelle que
+   soit la hauteur de la barre - measuré ET validé par le coordinateur (expérience sur 4b346e3) contre un
+   premier essai à `max-height`/`overflow-y:auto` sur CE rôle générique : `overflow-y:auto` force
+   `overflow-x` à `auto` (les deux ne peuvent pas rester indépendants dès que l'un n'est plus `visible`),
+   ce qui rognait les info-bulles ([data-tip]::after, css/toolbar-v2.css) des boutons Alignement/Liste -
+   régression sur une zone qu'Antoine avait validée le matin même. `overflow-y:auto` reste donc réservé à
+   #v2-heading-flyout ci-dessous (seul flyout sans aucune info-bulle interne), pas ce rôle partagé.
+   L'animation d'ouverture (opacity/transform) ne joue plus sur un display:none/flex (pas de valeur de
+   départ à interpoler) - perte acceptée, un `display` recalculé en JS à l'ouverture (positionFlyout,
+   js/editor-core.js) couvre la hauteur RÉELLE disponible sous la barre à cet instant (email+Cci y compris),
+   plus fiable qu'une constante CSS.
    Détails : mémoire projet [[project-publipostage-scroll-chaining-popup-fix]]. */
 .v2-hover-flyout {
-  position: absolute; top: 100%; left: 0; display: flex; gap: 3px; padding: 4px;
+  position: absolute; top: 100%; left: 0; display: none; gap: 3px; padding: 4px;
   background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
   box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 15;
-  max-height: max(80px, calc(100vh - 190px)); overflow-y: auto;
-  opacity: 0; visibility: hidden; transform: translateY(-4px);
-  transition: opacity .12s ease, transform .12s ease;
+  opacity: 0; transform: translateY(-4px);
 }
-.v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { opacity: 1; visibility: visible; transform: translateY(2px); }
+.v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { display: flex; opacity: 1; transform: translateY(2px); }
 .v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
+/* Réservé aux flyouts dont le contenu peut dépasser une petite fenêtre (aujourd'hui : #v2-heading-flyout,
+   niveaux de titre + numérotation) - AUCUNE ligne à info-bulle ([data-tip]) dedans, donc overflow-y:auto
+   (et son overflow-x:auto forcé, cf. commentaire ci-dessus) ne coupe rien ici. Ne pas l'ajouter à un futur
+   flyout sans vérifier d'abord qu'aucune de ses lignes ne porte [data-tip]. positionFlyout (js/editor-
+   core.js, réservé à cette même classe) fixe le max-height réel à l'ouverture ; la valeur ci-dessous n'est
+   qu'un repli tant que JS n'a pas encore tourné. */
+.v2-hover-flyout-scrollable { max-height: 280px; overflow-y: auto; }
 /* Séparateur entre puces et numéros dans le panneau "Liste" fusionné. */
 .v2-hover-vsep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 2px; }
 /* Panneau "Liste" restructuré en 3 lignes empilées (puces/numéros/cases à cocher), plus lisible que 3 groupes en rangée horizontale. Le conteneur passe en

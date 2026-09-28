@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -49,6 +50,15 @@ const GROUPS = {
   trackChanges: 'scenarios-track-changes',
 };
 
+// Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
+// ci-dessus, qui exécute tout DANS la page (cf. runGroup) et ne peut donc jamais déclencher un geste de
+// molette/survol "trusted" par le navigateur. Inclus par défaut dans `node run-headless.mjs` sans
+// argument (la suite complète), et invocables seuls par leur nom comme un groupe normal -
+// [[project-publipostage-scroll-chaining-popup-fix]].
+const NODE_SCRIPTS = {
+  wheelScroll: 'verify-wheel-scroll.mjs',
+};
+
 const argv = process.argv.slice(2);
 let port = 8843;
 let probe = null; // --probe "<expression JS>" : ouvre le harnais, evalue, affiche - pour inspecter l'etat reel sans ecrire un scenario
@@ -73,15 +83,23 @@ for (let i = 0; i < argv.length; i++) {
   wanted.push(argv[i]);
 }
 const preseedCode = preseedFile ? readFileSync(resolve(preseedFile), 'utf8') : null;
-const groups = probe ? [] : (wanted.length ? wanted : Object.keys(GROUPS));
-for (const g of groups) {
-  if (!GROUPS[g]) { console.error(`Groupe inconnu : ${g}\nGroupes : ${Object.keys(GROUPS).join(', ')}`); process.exit(2); }
+if (!probe) {
+  for (const g of wanted) {
+    if (!GROUPS[g] && !NODE_SCRIPTS[g]) {
+      console.error(`Groupe inconnu : ${g}\nGroupes : ${[...Object.keys(GROUPS), ...Object.keys(NODE_SCRIPTS)].join(', ')}`);
+      process.exit(2);
+    }
+  }
 }
+const groups = probe ? [] : (wanted.length ? wanted.filter(g => GROUPS[g]) : Object.keys(GROUPS));
+const nodeScripts = probe ? [] : (wanted.length ? wanted.filter(g => NODE_SCRIPTS[g]) : Object.keys(NODE_SCRIPTS));
 // GROUPS liste TOUS les groupes du projet, y compris ceux dont le fichier n'est pas encore sur la branche courante (plusieurs chantiers avancent en
 // parallèle sur main). Un fichier absent n'est pas un échec de test : on le signale et on passe, au lieu de faire tomber la suite entière sur une
 // exception de chargement de script qui ressemble à une régression.
 const missingFiles = groups.filter(g => !existsSync(join(ROOT, 'dev-tests', `${GROUPS[g]}.js`)));
 const runnable = groups.filter(g => !missingFiles.includes(g));
+const missingNodeScripts = nodeScripts.filter(s => !existsSync(join(ROOT, 'dev-tests', NODE_SCRIPTS[s])));
+const runnableNodeScripts = nodeScripts.filter(s => !missingNodeScripts.includes(s));
 
 // === Serveur statique ===
 const MIME = {
@@ -247,6 +265,7 @@ if (probe) {
 let totalPass = 0, totalFail = 0;
 const failing = [];
 if (missingFiles.length) console.log(`\n(groupes ignorés, fichier absent de cette branche : ${missingFiles.join(', ')})`);
+if (missingNodeScripts.length) console.log(`\n(scripts Node ignorés, fichier absent de cette branche : ${missingNodeScripts.join(', ')})`);
 for (const g of runnable) {
   process.stdout.write(`\n=== ${g} ===\n`);
   try {
@@ -260,6 +279,24 @@ for (const g of runnable) {
   } catch (e) {
     totalFail++; failing.push(g);
     console.log(`  EXCEPTION sur le groupe ${g} : ${e.message}`);
+  }
+}
+for (const s of runnableNodeScripts) {
+  process.stdout.write(`\n=== ${s} (Node, molette/souris réelle) ===\n`);
+  const scriptPath = join(ROOT, 'dev-tests', NODE_SCRIPTS[s]);
+  // Port distinct de celui du serveur statique ci-dessus : ce script lance le sien (il a besoin de sa
+  // propre page, indépendante de tout groupe GROUPS déjà passé).
+  const r = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8', env: { ...process.env, WHEEL_SCROLL_PORT: String(port + 53) } });
+  const out = ((r.stdout || '') + (r.stderr || '')).trimEnd();
+  console.log(out);
+  const m = out.match(/(\d+)\/(\d+) passés\s*$/);
+  if (m) {
+    const pass = Number(m[1]), tot = Number(m[2]), fail = tot - pass;
+    totalPass += pass; totalFail += fail;
+    if (fail) failing.push(s);
+  } else {
+    totalFail++; failing.push(s);
+    console.log(`  (sortie inattendue de ${s}, code de sortie ${r.status})`);
   }
 }
 console.log(`\n=== TOTAL : ${totalPass} OK, ${totalFail} ECHEC(S) ===`);

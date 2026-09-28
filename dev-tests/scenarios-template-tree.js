@@ -324,14 +324,25 @@
     id: 'tree_reopen_scrolls_selected_row_into_view_not_stale_position',
     description: 'Rouvrir le panneau après avoir choisi un modèle tout en bas de la liste doit le montrer directement visible - jamais la position de défilement de la fermeture précédente',
     run: async (h) => {
+      // Zéro-paddé (00..14) : le tri est alphabétique (byName, js/template-organizer.js), donc "14" non
+      // paddé trierait AVANT "2".."9" (comparaison de chaînes) et ne serait pas en bas de la liste - piège
+      // relevé par le coordinateur (mesure indépendante 2026-09-28), le nom d'origine "Arbre-reouverture 14"
+      // se retrouvait vers le HAUT, rendant le test vrai par accident (rien à faire défiler pour l'atteindre).
       const ids = [];
-      for (let i = 0; i < 15; i++) ids.push(await createTemplate(h, 'document', 'Arbre-reouverture ' + i));
+      for (let i = 0; i < 15; i++) ids.push(await createTemplate(h, 'document', 'Arbre-reouverture ' + String(i).padStart(2, '0')));
       const lastId = ids[ids.length - 1];
       await openPopup(h);
+      const p = popup();
+      // Défilement RÉEL vers le bas (pas juste le clic, qui ne scrolle pas tout seul) pour révéler la
+      // dernière ligne, puis la sélectionner - .tts-popup garde ensuite ce scrollTop en mémoire à la
+      // fermeture (Chromium, cf. js/template-tree-select.js:openPopup) : c'est CE scrollTop périmé que la
+      // réouverture doit écraser, pas un scrollTop resté à 0 faute d'avoir jamais bougé.
+      p.scrollTop = p.scrollHeight - p.clientHeight;
+      p.dispatchEvent(new Event('scroll'));
+      await h.sleep(30);
       await clickEl(h, rowFor(lastId));
       await h.sleep(200);
       await openPopup(h);
-      const p = popup();
       const selectedRow = p.querySelector('.tts-row[aria-selected="true"]');
       const found = !!selectedRow;
       let visible = false;

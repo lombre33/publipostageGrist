@@ -7,7 +7,9 @@
 // un dispatchEvent('scroll')/'wheel' scripté n'y déclenche jamais le comportement natif de défilement
 // du navigateur (seul un geste "trusted" le fait). Documenté dans la mémoire projet
 // [[project-publipostage-scroll-chaining-popup-fix]] : la seule façon de prouver l'absence de chaînage
-// de scroll est un vrai geste Playwright au niveau Node, d'où ce script à part.
+// de scroll est un vrai geste Playwright au niveau Node, d'où ce script à part - lancé automatiquement
+// par run-headless.mjs (groupe Node "wheelScroll", cf. sa liste NODE_SCRIPTS) en plus des groupes
+// habituels basés sur EditorTestSuites.
 //
 // Historique du bug (Antoine, 28/09) : au premier clic la liste des modèles s'ouvre, mais la moindre
 // molette la referme et la rend impossible à rouvrir. Trois causes, corrigées séparément :
@@ -20,10 +22,11 @@
 //      chaînage DEPUIS le popup (c7ce978), mais pas le débordement latent lui-même : une molette
 //      donnée directement au-dessus de la barre d'outils ou de l'éditeur, SANS jamais toucher au
 //      popup, faisait encore défiler la page de 29px (mesuré indépendamment par le coordinateur en
-//      700x400 et 600x400 après c7ce978) et sortait le reste de la barre de la zone visible. Ce script
-//      couvre ce chemin, corrigé en pla­fonnant #v2-heading-flyout (css/editor-v2.css, règle
-//      `.v2-hover-flyout`) pour qu'il ne compte plus dans le défilement de page une fois fermé, et
-//      qu'il tienne dans la fenêtre une fois ouvert (overflow-y:auto interne sinon).
+//      700x400 et 600x400 après c7ce978) et sortait le reste de la barre de la zone visible. Corrigé en
+//      passant TOUS les flyouts (.v2-hover-flyout, css/editor-v2.css) à display:none à l'état fermé -
+//      zéro emprise de mise en page quelle que soit la hauteur de la barre, donc zéro contribution au
+//      scrollHeight de la page - au lieu du visibility:hidden+max-height fixe d'origine qui dépendait
+//      d'une constante CSS incapable de couvrir tous les modes (document/email/email+Cci).
 //
 // Usage : node dev-tests/verify-wheel-scroll.mjs
 import { createServer } from 'node:http';
@@ -35,7 +38,7 @@ import { createRequire } from 'node:module';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
-const PORT = 8896;
+const PORT = Number(process.env.WHEEL_SCROLL_PORT || 8896);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -85,6 +88,23 @@ function check(name, pass, notes) {
   else { failures++; console.log('  FAIL - ' + name + (notes !== undefined ? ' (' + JSON.stringify(notes) + ')' : '')); }
 }
 
+// Un geste de molette réel peut continuer à faire bouger le scroll pendant quelques frames après le
+// dernier `page.mouse.wheel` (inertie du compositeur) - lire scrollTop/scrollLeft immédiatement après
+// peut donc rendre un chaînage réel invisible (lu avant qu'il n'ait fini) ou, à l'inverse, rapporter une
+// valeur transitoire qui va revenir à 0. On attend que la valeur soit stable sur plusieurs lectures de
+// suite avant de s'y fier (piège signalé par le coordinateur : scrollTop lu à 1 juste après le geste sur
+// une version qui débordait réellement de 29px une fois la valeur stabilisée).
+async function waitForScrollSettle(page, prop) {
+  let prev = null, stable = 0;
+  for (let i = 0; i < 40; i++) {
+    const cur = await page.evaluate(p => document.scrollingElement[p], prop);
+    if (cur === prev) { stable++; if (stable >= 3) return cur; } else { stable = 0; }
+    prev = cur;
+    await page.waitForTimeout(40);
+  }
+  return prev;
+}
+
 async function runAt(width, height) {
   console.log(`\n=== ${width}x${height} ===`);
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -123,18 +143,20 @@ async function runAt(width, height) {
   }, null, { timeout: 90000 });
   await page.evaluate(() => { document.getElementById('editor-container').classList.add('a4-preview'); });
 
-  // Quelques modèles réels (pas injectés) - juste assez pour avoir une sélection à protéger.
+  // 15 modèles réels (pas injectés) - assez pour que la liste défile elle-même (cause 1 du bug), et
+  // aligné sur la taille utilisée ailleurs (scenarios-template-tree.js) pour rester représentatif de la
+  // charge réelle d'Antoine plutôt que d'une poignée d'exemples triviale.
   await page.evaluate(async () => {
     function openFlyout(sel) { document.querySelector(sel).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); }
     async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 15; i++) {
       openFlyout('#v2-new-template-group');
       document.getElementById('v2-btn-new-document').click();
-      await sleep(50);
+      await sleep(30);
       EditorCore.getEditor().commands.setContent('<p>Contenu ' + i + '</p>');
-      document.getElementById('template-name').value = 'Modèle ' + i;
+      document.getElementById('template-name').value = 'Modèle ' + String(i).padStart(2, '0');
       document.getElementById('btn-save').click();
-      await sleep(300);
+      await sleep(200);
     }
   });
   // Contenu COURT dans l'éditeur actif - il ne doit pas avoir besoin de défiler lui-même, pour isoler
@@ -157,7 +179,7 @@ async function runAt(width, height) {
   });
   await page.mouse.move(toolbarBox.centerX, toolbarBox.centerY);
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
-  let scrollTop = await page.evaluate(() => document.scrollingElement.scrollTop);
+  let scrollTop = await waitForScrollSettle(page, 'scrollTop');
   check('popup fermé, molette sur la barre -> page immobile', scrollTop === 0, { scrollTop });
 
   const editorBox = await page.evaluate(() => {
@@ -167,14 +189,35 @@ async function runAt(width, height) {
   });
   await page.mouse.move(editorBox.centerX, editorBox.centerY);
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
-  scrollTop = await page.evaluate(() => document.scrollingElement.scrollTop);
+  scrollTop = await waitForScrollSettle(page, 'scrollTop');
   check('popup fermé, molette sur l\'éditeur -> page immobile', scrollTop === 0, { scrollTop });
+
+  // 1bis) Molette HORIZONTALE (trackpad/shift+molette) au-dessus de la barre, popup fermé - ne doit pas
+  // non plus faire défiler la page (débordement horizontal résiduel des info-bulles, cf. mémoire projet,
+  // distinct de ce correctif mais surveillé ici pour ne pas régresser sans le voir).
+  await page.mouse.move(toolbarBox.centerX, toolbarBox.centerY);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(100, 0);
+  let scrollLeft = await waitForScrollSettle(page, 'scrollLeft');
+  const trigAfterHWheel = await page.evaluate((box) => {
+    const t = document.querySelector('.tts-trigger');
+    const el = document.elementFromPoint(box.centerX, box.centerY);
+    return { isTriggerOrChild: el === t || t.contains(el), scrollLeft: document.scrollingElement.scrollLeft };
+  }, triggerBox);
+  check('popup fermé, molette horizontale sur la barre -> page immobile (ou déclencheur toujours cliquable à sa place)', scrollLeft === 0 || trigAfterHWheel.isTriggerOrChild, { scrollLeft, trigAfterHWheel });
 
   // 2) Ouvrir par un vrai clic, molette SUR LA LISTE - reste ouvert, page immobile.
   await page.mouse.click(triggerBox.centerX, triggerBox.centerY);
   await page.waitForTimeout(100);
   let popupOpen = await page.evaluate(() => document.querySelector('.tts-popup').classList.contains('is-open'));
   check('clic sur le déclencheur -> popup ouvert', popupOpen === true);
+
+  const fit = await page.evaluate(() => {
+    const p = document.querySelector('.tts-popup');
+    const r = p.getBoundingClientRect();
+    return { bottom: r.bottom, innerHeight: window.innerHeight, fontFamily: getComputedStyle(p).fontFamily };
+  });
+  check('popup ouvert -> tient dans la fenêtre', fit.bottom <= fit.innerHeight + 0.5, fit);
+  check('popup ouvert -> police de la barre (pas Arial par défaut)', !/^arial/i.test(fit.fontFamily), fit);
 
   const popupBox = await page.evaluate(() => {
     const p = document.querySelector('.tts-popup');
@@ -184,7 +227,7 @@ async function runAt(width, height) {
   await page.mouse.move(popupBox.centerX, popupBox.centerY);
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
   popupOpen = await page.evaluate(() => document.querySelector('.tts-popup').classList.contains('is-open'));
-  scrollTop = await page.evaluate(() => document.scrollingElement.scrollTop);
+  scrollTop = await waitForScrollSettle(page, 'scrollTop');
   check('popup ouvert, molette sur la liste -> reste ouvert', popupOpen === true, { popupOpen });
   check('popup ouvert, molette sur la liste -> page immobile', scrollTop === 0, { scrollTop });
 
@@ -194,7 +237,7 @@ async function runAt(width, height) {
   // l'immobilité de la page l'est.
   await page.mouse.move(toolbarBox.centerX, toolbarBox.centerY);
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
-  scrollTop = await page.evaluate(() => document.scrollingElement.scrollTop);
+  scrollTop = await waitForScrollSettle(page, 'scrollTop');
   check('molette sur la barre, popup ouvert -> page immobile', scrollTop === 0, { scrollTop });
 
   // 4) Échap pour repartir d'un état FERMÉ connu, puis clic à l'emplacement D'ORIGINE du déclencheur
@@ -218,6 +261,90 @@ async function runAt(width, height) {
   // 5) La sélection n'a pas bougé pendant toute la séquence (aucun clic parasite sur une ligne).
   const selectedAfter = await page.evaluate(() => document.getElementById('template-select').value);
   check('valeur sélectionnée inchangée', selectedAfter === selectedBefore, { selectedBefore, selectedAfter });
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(50);
+
+  // 6) Mode email+Cci : la ligne #v2-email-fields-row grandit (révélation du champ Cci), ce qui pousse
+  // la barre d'outils plus bas - c'est le cas mesuré par le coordinateur (487/531px de hauteur de page)
+  // où l'ancien correctif (max-height fixe sur .v2-hover-flyout) ne suffisait plus. Le menu Titre
+  // (#v2-heading-flyout, le seul concerné par .v2-hover-flyout-scrollable) y est ouvert pour de vrai.
+  //
+  // À 600x400, il reste un débordement résiduel D'ENVIRON 16px, MÊME MENU FERMÉ - donc sans rapport avec
+  // .v2-hover-flyout (display:none à l'état fermé n'y contribue plus rien) : #toolbar-top lui-même (qui
+  // contient la ligne email+Cci ET la barre de boutons) rend à une hauteur (mesuré 388px) inférieure au
+  // besoin réel de son propre contenu à cette largeur (scrollHeight mesuré 407px) - son plancher
+  // min-height:auto (calcul CSS "min-content") sous-estime la hauteur qu'il lui faut une fois les lignes
+  // réellement enroulées à 600px, et le débordement résultant, non clippé (overflow:visible), remonte
+  // dans le scrollHeight de la page - EXACTEMENT le même mécanisme que le bug des flyouts (contenu qui
+  // compte dans le scroll d'un ancêtre sans y être visuellement contenu), mais sur #toolbar-top entier,
+  // pas sur un seul flyout. Confirmé PRÉEXISTANT et sans lien avec ce correctif : mesuré à 531px (soit
+  // 131px de trop) sur `49460c3` (avant ce fix), contre 16px avec le display:none appliqué ici - une
+  // réduction de 131 à 16px, pas une régression. Corriger cela demanderait de donner à #toolbar-top son
+  // propre défilement interne (même schéma que #editor-container), ce qui rouvrirait le même compromis
+  // overflow-x/y que .v2-hover-flyout-scrollable, à une échelle plus large (toute la barre, pas un seul
+  // menu) - hors du périmètre de ce correctif (Antoine n'a signalé que la fermeture/l'inaccessibilité du
+  // popup, jamais ce cas 600px+email+Cci). Suivi séparé à ouvrir plutôt que de le cacher derrière un
+  // seuil à 0 qui ferait paraître ce test cassé pour un problème qu'il ne corrige pas.
+  const KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX = 20;
+  await page.evaluate(async () => {
+    function openFlyout(sel) { document.querySelector(sel).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); }
+    openFlyout('#v2-new-template-group');
+    document.getElementById('v2-btn-new-email').click();
+    await new Promise(r => setTimeout(r, 30));
+    document.getElementById('v2-btn-toggle-cci').click();
+  });
+  await page.waitForTimeout(50);
+  const emailRowVisible = await page.evaluate(() => {
+    const row = document.getElementById('v2-email-fields-row');
+    const cci = document.getElementById('v2-email-cci');
+    return { rowHidden: row.hidden, cciHidden: cci.hidden };
+  });
+  check('mode email+Cci -> ligne email affichée avec Cci révélé', emailRowVisible.rowHidden === false && emailRowVisible.cciHidden === false, emailRowVisible);
+
+  const pageOverflowBeforeOpen = await page.evaluate(() => ({
+    scrollHeight: document.scrollingElement.scrollHeight, clientHeight: document.scrollingElement.clientHeight,
+  }));
+  check('mode email+Cci, menu Titre FERMÉ -> page ne déborde pas verticalement (hors résidu connu #toolbar-top, cf. commentaire)', pageOverflowBeforeOpen.scrollHeight <= pageOverflowBeforeOpen.clientHeight + KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, pageOverflowBeforeOpen);
+
+  const headingChipBox = await page.evaluate(() => {
+    const b = document.getElementById('v2-heading-chip');
+    const r = b.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.move(headingChipBox.x, headingChipBox.y);
+  await page.waitForTimeout(150);
+  const headingOpenState = await page.evaluate(() => {
+    const flyout = document.getElementById('v2-heading-flyout');
+    return {
+      display: getComputedStyle(flyout).display,
+      flyoutBottom: flyout.getBoundingClientRect().bottom,
+      innerHeight: window.innerHeight,
+      flyoutScrollHeight: flyout.scrollHeight,
+      flyoutClientHeight: flyout.clientHeight,
+    };
+  });
+  check('mode email+Cci, menu Titre OUVERT (survol réel) -> réellement affiché', headingOpenState.display === 'flex', headingOpenState);
+  check('mode email+Cci, menu Titre OUVERT -> le flyout lui-même tient dans la fenêtre', headingOpenState.flyoutBottom <= headingOpenState.innerHeight + 0.5, headingOpenState);
+  check('mode email+Cci, menu Titre OUVERT -> tout son contenu reste atteignable (scroll interne si besoin)', headingOpenState.flyoutScrollHeight <= headingOpenState.flyoutClientHeight + 1 || headingOpenState.flyoutClientHeight > 40, headingOpenState);
+
+  const pageOverflowWhileOpen = await page.evaluate(() => ({
+    scrollHeight: document.scrollingElement.scrollHeight, clientHeight: document.scrollingElement.clientHeight,
+  }));
+  check('mode email+Cci, menu Titre OUVERT -> la PAGE ne déborde pas PLUS QUE le résidu déjà présent menu fermé', pageOverflowWhileOpen.scrollHeight <= pageOverflowWhileOpen.clientHeight + KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, pageOverflowWhileOpen);
+
+  // Molette PENDANT que ce menu est ouvert (survol maintenu sur son déclencheur, comme au clavier/trackpad
+  // réel - déplacer la souris ailleurs sur la barre fermerait le flyout via mouseout avant même de tester
+  // quoi que ce soit) - la page ne doit pas bouger. C'est le cas le plus défavorable mesuré par le
+  // coordinateur (487/531px de hauteur de page en mode email+Cci).
+  await page.mouse.move(headingChipBox.x, headingChipBox.y);
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
+  const stillOpenDuringWheel = await page.evaluate(() => getComputedStyle(document.getElementById('v2-heading-flyout')).display);
+  const scrollTopEmail = await waitForScrollSettle(page, 'scrollTop');
+  // scrollTopEmail peut atteindre (sans le dépasser) le résidu connu de #toolbar-top ci-dessus : la page
+  // a alors juste fini de défiler dans la petite marge déjà en trop avant même ce geste, pas une
+  // régression de chaînage de scroll distincte.
+  check('mode email+Cci, molette sur le déclencheur du menu Titre ouvert -> page quasi immobile (au résidu connu près)', scrollTopEmail <= KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, { scrollTopEmail, stillOpenDuringWheel });
 
   await browser.close();
 }

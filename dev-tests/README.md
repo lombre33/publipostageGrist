@@ -50,6 +50,8 @@ apparaît) :
 | `index.html` (`.bar-row`, `#v2-email-fields-row`, `#v2-toolbar` - markup/attributs, pas le contenu de l'éditeur), `css/toolbar-v2.css`, `js/main.js` (`loadTemplateIntoEditor` pour la partie chrome, `syncDefaultTemplateButton`, `onNew`/`onNewEmail`), `js/main-toolbar.js` (`setEmailMode`/`syncToolbarState`) | **Toujours `toolbarChrome`** (seul groupe qui clique réellement les boutons/flyouts de la barre du haut plutôt que l'éditeur lui-même - ajouté 2026-09-19 après deux bugs visuels sur cette zone passés inaperçus) |
 | `js/macro-templates.js`, `js/macro-editor.js`, `js/main.js` (`loadMacroIntoEditor`, `getCurrentMacroSlots`, `currentDocumentHtml`, `onNewMacro`/`onMacroSaved`, branches macro de `onSave`/`onSaveAs`/`onExportPdfBatch`/`onExportDocxBatch`), `js/templates.js` (`safeParseMacroSlots`) | **Toujours `macroModeles`** (seul groupe qui couvre la résolution page de garde + annexes conditionnelles) **+ `toolbarChrome`** si le changement touche le verrouillage de la toolbar en mode macro (`js/main-toolbar.js` `setMacroMode`) |
 | `js/editor-core.js`, `js/editor.js` | **Transverse** - traiter comme une demande de suite complète, ces fichiers sont partagés par tous les domaines |
+| `js/template-tree-select.js`, `css/template-tree-select.css` | **Toujours `templateTree`** (arbre de sélection des modèles - ouverture/fermeture, scroll interne, réouverture) |
+| `css/editor-v2.css` (règle `.v2-hover-flyout`/`.v2-hover-flyout-scrollable`), `js/editor-core.js` (`positionFlyout`/`setGroupExpanded`) | **Toujours `toolbarChrome` ET `templateTree` ET le script Node `wheelScroll`** (molette réelle, cf. plus bas) - ces menus partagent un mécanisme commun (`.v2-hover-group`/`.v2-hover-flyout`, délégation dans `editor-core.js`) avec le popup de l'arbre des modèles : un flyout mal plafonné fait déborder LA PAGE (pas juste le menu) même fermé, ce qu'aucun scénario `page.evaluate()` ne peut détecter (cf. [[project-publipostage-scroll-chaining-popup-fix]]) |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 
 Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
@@ -86,6 +88,18 @@ Deux options utiles :
 - `--probe "<expression JS>"` ouvre le harnais, évalue l'expression (`await`
   supporté) et imprime le résultat, sans exécuter aucun scénario - pour
   inspecter l'état réel de la page avant d'écrire un test.
+- Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
+  tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
+  un `run-headless.mjs` sans argument (ou seul via
+  `node dev-tests/run-headless.mjs wheelScroll`). Nécessaire car TOUS les
+  scénarios `scenarios-*.js` s'exécutent DANS la page via `page.evaluate()`
+  (sans accès à `page.mouse`), donc un `dispatchEvent('wheel'/'scroll')`
+  scripté n'y déclenche jamais le comportement natif de scroll/hover du
+  navigateur - seul un geste Playwright réel au niveau Node le peut. Ce script
+  vérifie qu'aucune molette réelle (verticale ou horizontale, popup ouvert ou
+  fermé, y compris en mode email+Cci à 700×400 et 600×400) ne fait défiler la
+  PAGE elle-même derrière l'arbre des modèles ou les menus de la barre
+  (`.v2-hover-flyout`) - cf. [[project-publipostage-scroll-chaining-popup-fix]].
 - `--preseed <fichier.js>` injecte ce fichier AVANT la navigation
   (`page.addInitScript`), donc avant que `dev-tests/grist-stub.js` ne
   s'exécute lui-même - le fichier doit définir

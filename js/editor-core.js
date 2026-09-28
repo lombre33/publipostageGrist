@@ -136,10 +136,42 @@ const EditorCore = (function () {
   function groupOf(target) { return target.closest && target.closest('.v2-hover-group'); }
   // Une VRAIE entrée/sortie du groupe : ignore un simple passage entre deux de ses propres descendants (relatedTarget encore/déjà dans le groupe).
   function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
+  // positionFlyout : même principe que positionPopup() de TemplateTreeSelect (js/template-tree-select.js)
+  // - un flyout `.v2-hover-flyout` (position:absolute; top:100%; left:0, CSS) suppose une barre d'outils
+  // toujours à peu près à la même hauteur/largeur, faux dans un petit panneau Grist réel (~700x400) : le
+  // mode email (avec Cci déplié) ajoute deux lignes AU-DESSUS de la barre (#v2-email-fields-row), qui finit
+  // alors à 311-387px selon la taille (mesure indépendante du coordinateur, 2026-09-28) - aucune constante
+  // CSS ne peut suivre toutes ces variantes. Calculé ici depuis la position RÉELLE du groupe à CHAQUE
+  // ouverture (délégation déjà en place pour les 8 groupes existants ET tout futur groupe créé après coup,
+  // ex. #v2-hf-pagenum-group), display:none entre-temps (cf. commentaire CSS .v2-hover-flyout) rendant une
+  // correction proactive (redimensionnement, bascule email) inutile - measurer un flyout display:none donne
+  // un rect à zéro, sans intérêt.
+  // La correction horizontale (left) s'applique à tous les flyouts - un left ne change que leur position,
+  // jamais le clipping de leur contenu. Le max-height/scrollTop ne touchent QUE .v2-hover-flyout-scrollable
+  // (aujourd'hui #v2-heading-flyout) : un max-height sur un flyout resté overflow:visible ne fait que
+  // rétrécir sa BOÎTE, son contenu continue de déborder par-dessus, visible mais désormais hors d'une boîte
+  // trop courte - inutile sur les 7 flyouts qui tiennent déjà naturellement, risque de les rendre moches
+  // sans rien régler. scrollTop remis à 0 à chaque ouverture : sans ça, un défilement interne resterait
+  // mémorisé à la fermeture (constaté par le coordinateur, comportement Chromium déjà rencontré pour
+  // TemplateTreeSelect) et rouvrirait sur une portion du menu qui cache "Normal"/"Titre 1".
+  function positionFlyout(group) {
+    const flyout = group.querySelector(':scope > .v2-hover-flyout');
+    if (!flyout) return;
+    flyout.style.left = '';
+    const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
+    if (overflowRight > 0) flyout.style.left = (-overflowRight) + 'px';
+    if (!flyout.classList.contains('v2-hover-flyout-scrollable')) return;
+    flyout.style.maxHeight = '';
+    // -10 : max-height cible la boîte de contenu du flyout (bordure 1px + padding 4px de chaque côté,
+    // css/editor-v2.css), pas border-box - même piège que positionPopup().
+    const available = window.innerHeight - group.getBoundingClientRect().bottom - 12 - 10;
+    flyout.style.maxHeight = Math.max(60, available) + 'px';
+    flyout.scrollTop = 0;
+  }
   function setGroupExpanded(group, expanded) {
     const trigger = group.querySelector(':scope > button');
     if (!trigger) return;
-    if (expanded) trigger.setAttribute('aria-haspopup', 'true');
+    if (expanded) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group); }
     trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   }
   document.addEventListener('mouseover', (event) => {
