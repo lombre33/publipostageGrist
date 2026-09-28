@@ -236,11 +236,11 @@ const TemplateTreeSelect = (function () {
   }
 
   function selectValue(id) {
-    if (String(realSelect.value) === String(id)) { closePopup(); trigger.focus(); return; }
+    if (String(realSelect.value) === String(id)) { closePopup(); trigger.focus({ preventScroll: true }); return; }
     realSelect.value = id; // passe par interceptValueWrites -> syncTriggerLabel() immédiat
     realSelect.dispatchEvent(new Event('change', { bubbles: true }));
     closePopup();
-    trigger.focus();
+    trigger.focus({ preventScroll: true });
   }
 
   // --- Ouverture/fermeture + navigation clavier (patron WAI-ARIA "Tree View") ----------------------
@@ -260,19 +260,42 @@ const TemplateTreeSelect = (function () {
     popup.querySelectorAll('.tts-row[tabindex="0"]').forEach((r) => r.setAttribute('tabindex', '-1'));
     if (!row) return;
     row.setAttribute('tabindex', '0');
-    row.focus();
+    // preventScroll : ce focus automatique à l'ouverture ne doit jamais faire défiler un ancêtre pour
+    // "révéler" la ligne - c'est exactement ce qui masquait le déclencheur derrière #v2-title-cluster
+    // avant que le panneau ne soit détaché en position: fixed (cf. commentaire CSS de .tts-popup).
+    row.focus({ preventScroll: true });
   }
 
+  // Calé sur le rect RÉEL du déclencheur (pas du CSS top:100%/left:0, qui supposait que popup restait un
+  // enfant positionné de .tts-wrap) - popup vit maintenant dans document.body, cf. commentaire CSS. Mesuré
+  // APRÈS le classList.add('is-open') (display:none n'a pas de taille), pour pouvoir caler `left` en cas de
+  // débordement à droite (barre d'outils qui peut être proche du bord dans un petit panneau Grist).
+  function positionPopup() {
+    const rect = trigger.getBoundingClientRect();
+    popup.style.top = (rect.bottom + 4) + 'px';
+    popup.style.left = rect.left + 'px';
+    const popupRect = popup.getBoundingClientRect();
+    const overflowRight = popupRect.right - (window.innerWidth - 8);
+    if (overflowRight > 0) popup.style.left = Math.max(8, rect.left - overflowRight) + 'px';
+  }
+
+  let outsideScrollHandler = null;
   function openPopup() {
     if (popup.classList.contains('is-open')) return;
     render();
     popup.classList.add('is-open');
+    positionPopup();
     trigger.setAttribute('aria-expanded', 'true');
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
     setRovingFocus(selected);
-    outsideClickHandler = (e) => { if (!wrap.contains(e.target)) closePopup(); };
+    outsideClickHandler = (e) => { if (!wrap.contains(e.target) && !popup.contains(e.target)) closePopup(); };
     document.addEventListener('mousedown', outsideClickHandler, true);
+    // Un panneau en position: fixed ne suit pas tout seul un ancêtre qui défile (page Grist, panneau
+    // latéral...) - le refermer plutôt que le laisser flotter à un endroit qui ne correspond plus au
+    // déclencheur (capture: true pour attraper le scroll de N'IMPORTE quel ancêtre, pas seulement window).
+    outsideScrollHandler = () => closePopup();
+    window.addEventListener('scroll', outsideScrollHandler, true);
   }
 
   function closePopup() {
@@ -280,13 +303,14 @@ const TemplateTreeSelect = (function () {
     popup.classList.remove('is-open');
     trigger.setAttribute('aria-expanded', 'false');
     if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler, true); outsideClickHandler = null; }
+    if (outsideScrollHandler) { window.removeEventListener('scroll', outsideScrollHandler, true); outsideScrollHandler = null; }
   }
 
   function onPopupKeydown(e) {
     const rows = visibleRows();
     const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
     const idx = rows.indexOf(current);
-    if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus({ preventScroll: true }); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setRovingFocus(rows[Math.max(idx - 1, 0)]); return; }
     if (e.key === 'Home') { e.preventDefault(); setRovingFocus(rows[0]); return; }
@@ -381,7 +405,9 @@ const TemplateTreeSelect = (function () {
     popup.addEventListener('keydown', onPopupKeydown);
 
     wrap.appendChild(trigger);
-    wrap.appendChild(popup);
+    // popup rattaché à document.body, PAS à wrap : cf. commentaire de .tts-popup (css/template-tree-select.css)
+    // sur le rognage par #v2-title-cluster { overflow: hidden }. Repositionné à chaque ouverture (openPopup()).
+    document.body.appendChild(popup);
 
     interceptValueWrites(realSelect, () => { syncTriggerLabel(); });
 
@@ -403,7 +429,11 @@ const TemplateTreeSelect = (function () {
     if (!realSelect) return;
     if (mo) { mo.disconnect(); mo = null; }
     if (outsideClickHandler) { document.removeEventListener('mousedown', outsideClickHandler, true); outsideClickHandler = null; }
+    if (outsideScrollHandler) { window.removeEventListener('scroll', outsideScrollHandler, true); outsideScrollHandler = null; }
     if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    // popup n'est plus un enfant de wrap (rattaché à document.body, cf. attach()) : le retirer
+    // explicitement, sinon un futur attach() en recréerait un second en laissant l'ancien orphelin.
+    if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
     realSelect.classList.remove('tts-native-select');
     realSelect.removeAttribute('aria-hidden');
     realSelect.tabIndex = 0;

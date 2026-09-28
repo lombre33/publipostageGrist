@@ -249,6 +249,38 @@
     },
   });
 
+  // Régression du 2026-09-28, cause réelle (Antoine : "fond bleu au clic, dropdown broken") : #v2-title-cluster
+  // (css/toolbar-v2.css) a `overflow: hidden` - conçu pour l'ancien <select> natif, dont le menu s'ouvre au
+  // niveau du système et n'est donc JAMAIS affecté par l'overflow d'un ancêtre. Le panneau de l'arbre, lui,
+  // vivait dans ce même bloc : à l'ouverture, le focus posé sur la ligne sélectionnée faisait défiler ce
+  // bloc de 28px de haut (mesuré : scrollTop passait à 38), poussant le déclencheur hors du cadre visible -
+  // ne laissant apparaître que le fond bleu clair de la ligne sélectionnée. `.is-open`/`aria-expanded` valent
+  // pourtant `true` tout du long, donc un test qui ne vérifie que ces attributs (comme les scénarios
+  // existants ci-dessus, écrits avant que ce panneau n'existe dans un `#v2-title-cluster`) ne l'aurait
+  // jamais détecté - seul un test de rendu RÉEL (rect + elementFromPoint + scrollTop de l'ancêtre) le peut.
+  cases.push({
+    id: 'tree_trigger_stays_visible_when_popup_opens',
+    description: '#v2-title-cluster (overflow:hidden) ne doit plus jamais faire défiler/disparaître le déclencheur quand le panneau de l\'arbre s\'ouvre - le déclencheur reste dans la fenêtre et réellement cliquable',
+    run: async (h) => {
+      await createTemplate(h, 'document', 'Arbre - Visibilité déclencheur');
+      const cluster = document.getElementById('v2-title-cluster');
+      const scrollBefore = cluster.scrollTop;
+      await openPopup(h);
+      const t = trigger();
+      const rect = t.getBoundingClientRect();
+      const elAtTrigger = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      const triggerReachable = elAtTrigger === t || t.contains(elAtTrigger);
+      const triggerFullyInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight && rect.width > 0 && rect.height > 0;
+      const scrollAfter = cluster.scrollTop;
+      // Le panneau lui-même doit être réellement atteignable là où il s'affiche, pas seulement `is-open`.
+      const popupRect = popup().getBoundingClientRect();
+      const elAtPopup = document.elementFromPoint(popupRect.left + 10, popupRect.top + 10);
+      const popupReachable = popup().contains(elAtPopup);
+      const pass = triggerReachable && triggerFullyInViewport && scrollAfter === scrollBefore && popupReachable;
+      return { pass, notes: JSON.stringify({ scrollBefore, scrollAfter, triggerReachable, triggerFullyInViewport, popupReachable, rect: rect.toJSON() }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();

@@ -16,11 +16,17 @@
    #toolbar-top : même compte d'ID que la règle générique, sinon l'ordre de déclaration les départagerait au hasard (cf. commentaire de
    #toolbar-top #v2-btn-toggle-cci::before). */
 #toolbar-top .tts-trigger::before { content: none; }
-/* @media (hover: hover) - sans ce garde, un tap tactile ou trackpad laisse ce fond "collé" sur le bouton
-   après le clic (aucun `mouseleave` sur ces appareils), lu à tort comme un bug visuel/plantage. Signalé le
-   2026-09-28 (Antoine : "fond bleu" sur .tts-trigger, --surface-sunken = #eef1f6, bleuté en mode clair). */
-@media (hover: hover) and (pointer: fine) {
-  .tts-trigger:hover { background: var(--surface-sunken); }
+/* #toolbar-top .tts-trigger:hover (pas juste .tts-trigger:hover) : sans l'ID, cette règle perdait contre
+   la générique #toolbar-top button:hover (css/style.css, non gardée par média) qui pose le MÊME fond sans
+   condition - un simple @media (hover:hover) autour de la règle EN CLASSE ne suffisait donc à rien (trouvé
+   en audit le 2026-09-28) : la générique continuait de s'appliquer sur tactile. Ici la surcharge explicite
+   sous `not (hover: hover)` neutralise vraiment ce fond au lieu de simplement ne pas le redéclarer. Sans
+   ce garde, un tap tactile/trackpad laisse ce fond "collé" sur le bouton après le clic (aucun `mouseleave`
+   sur ces appareils), lu à tort comme un bug visuel/plantage (Antoine, 2026-09-28 : "fond bleu" sur
+   .tts-trigger, --surface-sunken = #eef1f6, bleuté en mode clair). */
+#toolbar-top .tts-trigger:hover { background: var(--surface-sunken); }
+@media not (hover: hover) {
+  #toolbar-top .tts-trigger:hover { background: transparent; }
 }
 .tts-trigger:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
 .tts-trigger:disabled { opacity: .5; cursor: default; background: transparent; }
@@ -37,7 +43,14 @@
 
 .tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 
-.tts-popup { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
+/* position: fixed (pas absolute) et rattaché à document.body (js/template-tree-select.js, openPopup()) plutôt qu'à .tts-wrap : .tts-wrap vit dans
+   #v2-title-cluster (css/toolbar-v2.css), qui a `overflow: hidden` (pour rogner proprement les coins de son ancien <select> natif - un <select> natif
+   ouvre son propre menu au niveau OS, jamais affecté par l'overflow d'un ancêtre, donc ce piège était invisible avant l'arbre). En restant un enfant de
+   .tts-wrap, ce panneau se faisait rogner par ce même overflow: hidden dès que la ligne sélectionnée (focus clavier automatique à l'ouverture) faisait
+   défiler ce bloc de 28px de haut - le déclencheur sortait alors du cadre visible, ne laissant voir qu'un bandeau bleu (fond --accent-soft de la ligne
+   sélectionnée) à sa place. Signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de modèle"), mesuré et confirmé
+   (#v2-title-cluster.scrollTop passait à 38 après un clic réel). top/left posés dynamiquement à l'ouverture (calculés depuis le rect du déclencheur). */
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
 .tts-popup.is-open { display: block; }
 
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }

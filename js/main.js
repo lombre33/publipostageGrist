@@ -426,9 +426,16 @@
   // pas la chaîne ISO qu'on a envoyée. new Date(secondes) la traite à tort comme des millisecondes, ce qui
   // affichait une heure quasi figée (ex. "Enregistré à 18:22:59" en continu) et donnait à tort l'impression
   // que l'enregistrement ne marchait pas plutôt qu'un simple bug d'affichage (signalé le 2026-09-28).
-  function formatSaveTime(epochSeconds) {
-    try { return new Date(epochSeconds * 1000).toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
-    catch (e) { return ''; }
+  // Mais readBackDateModif (js/templates.js) retombe sur la chaîne ISO d'origine (pas un nombre) si la
+  // relecture échoue (colonne/ligne introuvable, requête en échec) - un simple `*1000` sur cette chaîne
+  // donne NaN, et new Date(NaN).toLocaleTimeString() renvoie littéralement "Invalid Date" à l'écran plutôt
+  // que de lever (le catch ci-dessous ne l'attrape donc pas) : les deux représentations doivent être gérées.
+  function formatSaveTime(dateModif) {
+    try {
+      const d = typeof dateModif === 'number' ? new Date(dateModif * 1000) : new Date(dateModif);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) { return ''; }
   }
 
   function showConflictBanner(remoteTpl) {
