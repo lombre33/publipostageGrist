@@ -21,6 +21,21 @@
   });
 
   cases.push({
+    id: 'fmt_citation_basic',
+    description: 'Citation (blockquote) appliquée via le bouton toolbar, bouton actif tant que le curseur y reste (retour Antoine, 2026-09-28 : réutilise le nœud blockquote existant)',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.typeText('Texte cité');
+      await h.selectAllInEditor();
+      await h.clickButton('v2-btn-citation');
+      const html = Editor.getHTML();
+      const btnActive = document.getElementById('v2-btn-citation').classList.contains('is-active');
+      return { pass: /<blockquote><p>Texte cité<\/p><\/blockquote>/.test(html) && btnActive, notes: { html, btnActive } };
+    },
+  });
+
+  cases.push({
     id: 'fmt_italic_basic',
     description: 'Italique appliqué via le bouton toolbar',
     run: async (h) => {
