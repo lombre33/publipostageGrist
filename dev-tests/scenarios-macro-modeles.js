@@ -91,6 +91,13 @@
         // Date saisie invalide : avant ce correctif, Date.UTC débordait silencieusement sur un autre mois/année au lieu d'être rejetée.
         [c(day03MarObj, '=', '31/02/2026', 'Date'), false, '31/02 (jour hors bornes du mois) rejeté, ne déborde plus silencieusement sur le 03/03'],
         [c(new Date(Date.UTC(2028, 1, 9)), '=', '09/26/2026', 'Date'), false, 'mois=26 (saisie US par erreur) rejeté, ne déborde plus sur le 09/02/2028'],
+        // Régression trouvée seulement sur ">"/"≥"/"<" (pas "=", déjà correct ci-dessus) : `expected` illisible retombait sur la comparaison générique en
+        // TEXTE ci-dessous, qui matchait parfois par ordre lexicographique de chaînes ("09/26/2026" > "2026-09-26T00:00:00.000Z" en tant que chaînes) -
+        // une date invalide doit être fausse pour TOUS les opérateurs, jamais seulement "=" (audit du coordinateur, 2026-09-28).
+        [c(day26Obj, '>', '09/26/2026', 'Date'), false, 'mois=26 invalide avec ">" : faux, pas un repli texte qui matche par accident'],
+        [c(day26Obj, '≥', '09/26/2026', 'Date'), false, 'mois=26 invalide avec "≥" : faux'],
+        [c(day26Obj, '<', '31/02/2026', 'Date'), false, '31/02 invalide avec "<" : faux'],
+        [c(day26Sec, '≥', '09/26/2026', 'DateTime:Europe/Paris'), false, 'même régression sur DateTime (secondes, fuseau Paris)'],
       ];
       const failed = checks.filter(([actual, expected]) => actual !== expected);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify(failed.map(f => f[2])) : 'OK' };
@@ -350,6 +357,159 @@
 
       const pass = noWarningWhenPresent && warnsWhenMissing;
       return { pass, notes: JSON.stringify({ noWarningWhenPresent, warnsWhenMissing, typeHintText: typeHint.textContent }) };
+    },
+  });
+
+  // --- Verrou de la cause RÉELLE du bug Choice d'Antoine (audit du coordinateur, 2026-09-28) : le test ci-dessus et le dropdown de choix passent même
+  // si js/grist-api.js:onRecord perd son 2e argument {includeColumns:'normal'}, parce que le faux Grist ignorait jusqu'ici les options de onRecord (le
+  // coordinateur l'a mesuré en le retirant : 15/15 quand même). window.__gristStub.setHiddenColumns simule une colonne PAS cochée dans le panneau de
+  // droite DE CE WIDGET (includeColumns:'shown', le défaut réel de Grist, vérifié à la source) - CE test doit échouer si le correctif disparaît. ---
+  cases.push({
+    id: 'macro_rule_matches_when_column_hidden_from_widget_section',
+    description: 'Une règle sur une colonne PAS cochée dans le panneau de droite du widget matche quand même (includeColumns:"normal"), et la modale ne montre pas de faux avertissement',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersHiddenColTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      window.__gristStub.setHiddenColumns('DossiersHiddenColTest', ['Statut']); // Statut PAS cochée dans le panneau de droite de CE widget
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Statut: 'Urgent' }, 'DossiersHiddenColTest');
+      await h.sleep(20);
+
+      const record = GristAPI.getCurrentRecord();
+      const columnMissingFromRecord = !('Statut' in record); // sans le correctif (includeColumns par défaut 'shown'), vrai
+
+      const slot = { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'Urgent', modeleId: 'm1' }], defaultModeleId: 'm-defaut' };
+      const chosen = await MacroTemplates.pickModeleId(slot, 'DossiersHiddenColTest', record);
+      const ruleMatchedDespiteHiddenColumn = chosen === 'm1'; // le point que le correctif doit verrouiller
+
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+      const row = document.querySelector('.macro-rule-row');
+      const columnSelect = row.querySelector('select.macro-rule-column');
+      const typeHint = row.querySelector('.macro-rule-column-type');
+      columnSelect.value = 'Statut';
+      columnSelect.dispatchEvent(new Event('change'));
+      const noWarningDespiteHiddenColumn = !typeHint.classList.contains('is-warning');
+
+      const pass = !columnMissingFromRecord && ruleMatchedDespiteHiddenColumn && noWarningDespiteHiddenColumn;
+      return { pass, notes: JSON.stringify({ columnMissingFromRecord, ruleMatchedDespiteHiddenColumn, noWarningDespiteHiddenColumn, recordKeys: Object.keys(record) }) };
+    },
+  });
+
+  // --- Mise en page réelle du ⚠ (2e audit du coordinateur, 2026-09-28, mesuré à la vraie souris) : dans .macro-rule-column-wrap (~1/3 de la ligne), le
+  // texte de l'avertissement (400px+) écrasait le reste de la ligne - le sélecteur de colonne tombait à 10px. Vérifie l'état RENDU (rect + elementFromPoint,
+  // pas juste une classe CSS) : le ⚠ doit être ENTIÈREMENT atteignable au clic sur toute sa largeur, jamais recouvert par un voisin. ---
+  cases.push({
+    id: 'macro_rule_missing_column_warning_own_full_width_line',
+    description: 'L’avertissement "colonne absente" occupe sa propre ligne pleine largeur (entièrement touché par elementFromPoint), sans écraser la largeur du sélecteur de colonne',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersWarnLayoutTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier' }, 'DossiersWarnLayoutTest'); // Statut absent du record
+
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+      const row = document.querySelector('.macro-rule-row');
+      const columnSelect = row.querySelector('select.macro-rule-column');
+      columnSelect.value = 'Statut';
+      columnSelect.dispatchEvent(new Event('change'));
+      await h.sleep(20);
+
+      const typeHint = row.querySelector('.macro-rule-column-type');
+      const hintRect = typeHint.getBoundingClientRect();
+      const midY = hintRect.top + hintRect.height / 2;
+      const samples = 12;
+      const inset = 3; // évite le bord exact du rect (arrondi sous-pixel/ligne voisine) - pas ce qu'on cherche à mesurer
+      let hitCount = 0;
+      for (let i = 0; i < samples; i++) {
+        const x = hintRect.left + inset + ((hintRect.width - 2 * inset) * i) / (samples - 1);
+        const el = document.elementFromPoint(x, midY);
+        if (el === typeHint || (el && typeHint.contains(el))) hitCount++;
+      }
+      const warningFullyHit = hitCount === samples;
+
+      const rowRect = row.getBoundingClientRect();
+      const hintOwnFullLine = hintRect.width >= rowRect.width - 20; // pleine largeur de LA LIGNE, pas seulement de columnField.wrap (~1/3)
+
+      const columnSelectRect = columnSelect.getBoundingClientRect();
+      const columnSelectReadable = columnSelectRect.width >= 80; // pas réduit à 10px par l'avertissement
+
+      const pass = warningFullyHit && hintOwnFullLine && columnSelectReadable;
+      return { pass, notes: JSON.stringify({ hitCount, samples, hintRectWidth: hintRect.width, rowRectWidth: rowRect.width, columnSelectWidth: columnSelectRect.width }) };
+    },
+  });
+
+  // --- Mise en page réelle du repli "autre valeur" (2e audit du coordinateur, 2026-09-28) : select ET champ texte visibles ensemble se partageaient la
+  // largeur à 50/50 jusqu'à tronquer leur texte ("Autre valeur…" -> "Au"). Vérifie les largeurs RENDUES (rect), pas juste que le champ est visible. ---
+  cases.push({
+    id: 'macro_rule_value_advanced_fallback_keeps_readable_width',
+    description: 'Le repli "autre valeur" (select + champ texte visibles ensemble) garde une largeur lisible pour les deux, sans être tronqué à quelques caractères',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersValWidthTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Statut: 'Urgent' }, 'DossiersValWidthTest');
+
+      MacroEditor.openModal({ id: null, nom: 'x', macroSlots: { slots: [
+        { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'Ancien choix', modeleId: null }], defaultModeleId: null },
+      ] } });
+      await h.sleep(20);
+      const row = document.querySelector('.macro-rule-row');
+      const valueSelect = row.querySelector('select.macro-rule-value');
+      const valueAdvanced = row.querySelector('.macro-rule-value-advanced');
+
+      const selectWidth = valueSelect.getBoundingClientRect().width;
+      const advancedWidth = valueAdvanced.getBoundingClientRect().width;
+      const minWidthRespected = selectWidth >= 85 && advancedWidth >= 85; // marge sous les 90px CSS pour bordures/arrondi
+
+      const pass = !valueAdvanced.hidden && minWidthRespected;
+      return { pass, notes: JSON.stringify({ selectWidth, advancedWidth, hidden: valueAdvanced.hidden }) };
+    },
+  });
+
+  // --- Défaut préexistant (pas de ce push) relevé en retouchant la même modale (coordinateur, 2026-09-28) : Enregistrer/Annuler sortaient de la fenêtre
+  // dans un panneau bas (700×400 - la taille probable du panneau d'Antoine, cf. mémoire d'équipe section Environnement) dès qu'une règle est ajoutée,
+  // la modale n'ayant ni hauteur maximale ni défilement interne. Vérifie l'état RENDU (elementFromPoint) à la taille de fenêtre réelle du harnais - un
+  // panneau plus grand masquerait le défaut. ---
+  cases.push({
+    id: 'macro_editor_modal_save_cancel_reachable_in_short_viewport',
+    description: 'Les boutons Enregistrer/Annuler de la modale macro restent atteignables (touchés par elementFromPoint) même quand la fenêtre est basse',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersModalHeightTest', { TypeDossier: 'Text' });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier' }, 'DossiersModalHeightTest');
+
+      MacroEditor.openModal(null);
+      // Plusieurs annexes conditionnelles : pousse le contenu au-delà d'un panneau bas, exactement le cas signalé.
+      for (let i = 0; i < 3; i++) document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+
+      function reachable(el) {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        if (rect.top < 0 || rect.bottom > window.innerHeight || rect.left < 0 || rect.right > window.innerWidth) return false;
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return hit === el || (hit && el.contains(hit));
+      }
+
+      const saveBtn = document.getElementById('macro-editor-save');
+      const cancelBtn = document.getElementById('macro-editor-cancel');
+      const saveReachable = reachable(saveBtn);
+      const cancelReachable = reachable(cancelBtn);
+
+      const pass = saveReachable && cancelReachable;
+      return {
+        pass,
+        notes: JSON.stringify({
+          saveReachable, cancelReachable, innerHeight: window.innerHeight,
+          saveRect: saveBtn ? saveBtn.getBoundingClientRect() : null,
+        }),
+      };
     },
   });
 

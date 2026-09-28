@@ -31,7 +31,72 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
+  // true dès que la souscription enrichie (includeColumns:'normal') est active - cf. handleIncomingRecord/init ci-dessous.
+  let _normalAccessConfirmed = false;
+  let _limitedAccessWarned = false;
   let _tokenCache = null;
+
+  // Corps commun aux deux souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre les deux pour ne
+  // pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
+  function handleIncomingRecord(record, mappings) {
+    const receivedAt = new Date();
+    const rowId = record && record.id != null ? record.id : null;
+    // Ne jamais logger `record`/`mappings` en entier : une ligne de ce widget contient typiquement des données personnelles (RGPD). Seul l'ID de ligne,
+    // déjà visible dans l'UI Grist, est loggé.
+    console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
+    _currentRecord = record;
+    _currentMappings = mappings || null;
+    if (!record) {
+      console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
+    }
+
+    // Notifier immédiatement à chaque événement de sélection. La détection du tableId peut nécessiter des appels async et ne doit pas retarder le rendu
+    // du mode lecture ni bloquer les événements suivants.
+    const mappedTableId = mappings && mappings.tableId
+      ? String(mappings.tableId).trim()
+      : null;
+    if (mappedTableId) _currentTableId = mappedTableId;
+    for (const cb of _onRecordCallbacks) {
+      try {
+        Promise.resolve(cb(record, _currentTableId, mappings)).catch(function (e) {
+          console.error('[GristAPI] erreur callback onRecord:', e);
+        });
+      } catch (e) {
+        console.error('[GristAPI] erreur callback onRecord:', e);
+      }
+    }
+
+    detectTableId(mappings, 'onRecord').then(function (tableId) {
+      if (tableId) _currentTableId = tableId;
+    }).catch(function (e) {
+      console.warn('[GristAPI] onRecord: échec detectTableId —', e);
+    });
+  }
+
+  // Bascule la souscription onRecord vers includeColumns:'normal' (colonnes non cochées incluses) une fois l'accès complet confirmé par onOptions -
+  // cf. l'appel dans init() ci-dessous pour le pourquoi (grist.onRecord(cb, {includeColumns:'normal'}) rejette silencieusement CHAQUE ligne, sans jamais
+  // appeler `cb`, si l'accès n'est pas complet : vérifié à la source jsDelivr le 2026-09-28, grist-plugin-api.ts fonction onRecord() - elle attend
+  // `await docApi.fetchSelectedRecord(msg.rowId, options)` avant d'appeler callback(), et WidgetFrame.ts:538-543 fait lever cet appel si
+  // `options.includeColumns` vaut 'normal'/'all' et que l'accès accordé n'est pas 'full' - AUCUN filet de rattrapage dans le plugin lui-même).
+  function upgradeToNormalAccessIfPossible(accessLevel) {
+    if (_normalAccessConfirmed) return;
+    if (accessLevel !== 'full') {
+      if (!_limitedAccessWarned) {
+        _limitedAccessWarned = true;
+        console.warn('[GristAPI] accès accordé au widget = "' + accessLevel + '" (pas "full") : repli sur includeColumns:\'shown\' pour onRecord - '
+          + 'les règles macro-modèle testant une colonne non cochée dans le panneau de droite de CE widget continueront à échouer silencieusement '
+          + '(record[col] absent) jusqu\'à ce qu\'un accès complet soit accordé.');
+      }
+      return;
+    }
+    try {
+      grist.onRecord(handleIncomingRecord, { includeColumns: 'normal' });
+      _normalAccessConfirmed = true;
+      console.log('[GristAPI] accès complet confirmé : souscription onRecord enrichie (includeColumns:\'normal\') ajoutée.');
+    } catch (e) {
+      console.error('[GristAPI] ERREUR lors de la souscription onRecord enrichie (includeColumns:\'normal\'):', e);
+    }
+  }
 
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
@@ -49,48 +114,19 @@ const GristAPI = (function () {
     if (_recordSubscriptionRegistered) {
       console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
     } else try {
-      // includeColumns:'normal' (au lieu du défaut 'shown') : sans ça, seules les colonnes cochées visibles dans le panneau de droite DE CE WIDGET
-      // arrivent dans `record` (GristAPI.ts, FetchSelectedOptions.includeColumns, vérifié à la source jsDelivr le 2026-09-28) - toute colonne créée depuis
-      // une autre vue, ou simplement pas affichée ici, est absente de `record` (record[col] === undefined), jamais juste vide. Une règle macro-modèle qui
-      // teste cette colonne échoue alors silencieusement en "=" (undefined ne matche jamais) et bascule sur le cas par défaut - symptôme d'Antoine du
-      // 2026-09-28. 'normal' exige un accès complet, déjà demandé ci-dessus (requiredAccess:'full'). Effet de bord attendu et voulu : une variable en
-      // mode Lecture qui lisait une colonne masquée montre désormais sa vraie valeur au lieu de rien.
+      // Repli sûr d'abord, sans option (= includeColumns:'shown', le seul niveau qui ne demande jamais d'accès complet - FetchSelectedOptions,
+      // vérifié à la source le 2026-09-28) : ne remonte que les colonnes cochées visibles dans le panneau de droite DE CE widget, comme avant le
+      // premier correctif de cette série. Gardé actif en permanence (jamais désinscrit - l'API publique n'offre pas d'"offRecord") mais neutralisé
+      // par le garde ci-dessous dès que la souscription enrichie (includeColumns:'normal', cf. upgradeToNormalAccessIfPossible) a pris le relais :
+      // sans ce garde, les deux souscriptions tourneraient en parallèle indéfiniment et celle-ci pourrait écraser après coup `_currentRecord` avec sa
+      // version partielle (course entre deux promesses concurrentes, pas d'ordre garanti) - régression intermittente qui reproduirait exactement le
+      // bug d'Antoine du 2026-09-28 même une fois l'accès complet accordé.
       grist.onRecord(function (record, mappings) {
-        const receivedAt = new Date();
-        const rowId = record && record.id != null ? record.id : null;
-        // Ne jamais logger `record`/`mappings` en entier : une ligne de ce widget contient typiquement des données personnelles (RGPD). Seul l'ID de ligne,
-        // déjà visible dans l'UI Grist, est loggé.
-        console.log('[GristAPI] onRecord reçu, rowId=' + rowId + ', à ' + receivedAt.toISOString());
-        _currentRecord = record;
-        _currentMappings = mappings || null;
-        if (!record) {
-          console.warn('[GristAPI] onRecord: aucune ligne sélectionnée (record=null).');
-        }
-
-        // Notifier immédiatement à chaque événement de sélection. La détection du tableId peut nécessiter des appels async et ne doit pas retarder le rendu
-        // du mode lecture ni bloquer les événements suivants.
-        const mappedTableId = mappings && mappings.tableId
-          ? String(mappings.tableId).trim()
-          : null;
-        if (mappedTableId) _currentTableId = mappedTableId;
-        for (const cb of _onRecordCallbacks) {
-          try {
-            Promise.resolve(cb(record, _currentTableId, mappings)).catch(function (e) {
-              console.error('[GristAPI] erreur callback onRecord:', e);
-            });
-          } catch (e) {
-            console.error('[GristAPI] erreur callback onRecord:', e);
-          }
-        }
-
-        detectTableId(mappings, 'onRecord').then(function (tableId) {
-          if (tableId) _currentTableId = tableId;
-        }).catch(function (e) {
-          console.warn('[GristAPI] onRecord: échec detectTableId —', e);
-        });
-      }, { includeColumns: 'normal' });
+        if (_normalAccessConfirmed) return;
+        handleIncomingRecord(record, mappings);
+      });
       _recordSubscriptionRegistered = true;
-      console.log('[GristAPI] grist.onRecord enregistré.');
+      console.log('[GristAPI] grist.onRecord enregistré (repli includeColumns:\'shown\').');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
     }
@@ -99,13 +135,19 @@ const GristAPI = (function () {
       grist.onOptions(function (options, settings) {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
+        // settings.accessLevel (InteractionOptions, ConfigNotifier._update côté grist-core) reflète le niveau RÉELLEMENT accordé, pas celui demandé
+        // par grist.ready({requiredAccess:'full'}) ci-dessus - un utilisateur peut refuser. onOptions est aussi rappelé plus tard si l'accès change
+        // (ex. l'utilisateur l'accorde après coup dans le panneau du widget), donc revérifier à chaque appel plutôt qu'une seule fois.
+        if (settings) upgradeToNormalAccessIfPossible(settings.accessLevel);
       });
       console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
       console.warn('[GristAPI] onOptions non disponible:', e);
     }
 
-    // Seed immédiat: en mode édition plein accès, getOptions() renvoie déjà l'objet InteractionOptions { accessLevel, linking: { asTarget, asSource } }.
+    // Seed immédiat des options JSON propres au widget (jamais accessLevel : grist.getOptions() = WidgetAPI.getOptions(), qui renvoie les options
+    // personnalisées DU WIDGET lui-même (activeCustomOptions côté grist-core), pas InteractionOptions - seul onOptions(cb) ci-dessus reçoit
+    // {accessLevel, linking} en 2e argument, vérifié à la source le 2026-09-28).
     try {
       if (typeof grist.getOptions === 'function') {
         const seedOptions = await grist.getOptions();
