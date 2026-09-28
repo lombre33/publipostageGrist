@@ -71,8 +71,13 @@ const ViewportFit = (function () {
       top = rect.top - gap - Math.min(height, roomAbove);
     }
     if (cap != null) {
-      box.style.maxHeight = Math.max(40, Math.floor(cap)) + 'px';
-      if (getComputedStyle(box).overflowY === 'visible') box.style.overflowY = 'auto';
+      // En box-sizing content-box (#v2-comment-popup : 10px de padding, 1px de bordure), max-height ne borne que le contenu : padding et bordure en sont
+      // retranchés, sinon le popup plafonné dépassait de 22px - sur le texte de son ancre quand il est placé au-dessus.
+      const style = getComputedStyle(box);
+      const chrome = style.boxSizing === 'border-box' ? 0
+        : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      box.style.maxHeight = Math.max(40, Math.floor(cap - chrome)) + 'px';
+      if (style.overflowY === 'visible') box.style.overflowY = 'auto';
     }
     const left = Math.max(EDGE, Math.min(rect.left, viewportWidth - EDGE - width));
     box.style.left = Math.round(left + window.scrollX) + 'px';
