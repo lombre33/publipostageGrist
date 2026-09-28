@@ -16,7 +16,17 @@
 // harnais pour ça).
 (function () {
   const state = {
-    tables: [], // liste de tableId (hors tables internes, jamais mentionnées ici)
+    // Les 4 tables internes pré-remplies plus bas (Publipostage_Modeles/LiensTables/UserProbe/
+    // Commentaires) DOIVENT apparaître ici dès le départ, pas seulement dans state.rows : sans ça,
+    // grist.docApi.listTables() ne les rapporte jamais comme existantes, et Templates.ensureTableExists()
+    // (js/templates.js) reprend donc la branche AddTable à CHAQUE appel (loadAll/save/setDefault, et une
+    // deuxième fois depuis l'intérieur de chacun des 6 ensureXxxColumn) au lieu de s'arrêter au tout
+    // premier `if (tables.includes(TABLE_NAME)) return`, comme sur le document déjà migré d'Antoine.
+    // Régression trouvée le 2026-09-28 en creusant "l'enregistrement ne fonctionne pas" (mémoire
+    // project-publipostage-stub-listtables-vs-preseeded-tables) : ce décalage masquait totalement, dans
+    // toute la suite dev-tests/, le VRAI volume d'appels AddTable/ensureTableExists qu'un Enregistrer ou
+    // un tick d'auto-save déclenche en pratique.
+    tables: ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires'],
     columns: {}, // { tableId: { colId: type } }
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     recordCallback: null,
@@ -163,9 +173,19 @@
         // ensureDateModifColumn) : le stub se comportait comme si TOUTE colonne migrée existait déjà depuis toujours, puisque les tables internes
         // ci-dessus la déclarent dès l'init. Un scénario qui veut tester un chemin de migration doit RETIRER la colonne de `state.rows` avant de jouer
         // l'action qui la lit/l'écrit (cf. dev-tests/scenarios-autosave.js:autosave_date_modif_column_migrated_on_existing_document).
+        //
+        // Lève si la colonne existe déjà (comme le vrai Grist refuse un id de colonne déjà utilisé) -
+        // ajouté le 2026-09-28 en creusant "l'enregistrement ne fonctionne pas" (Antoine) : chaque
+        // ensureXxxColumn (js/templates.js) suit un patron vérifier-puis-agir non atomique, et deux
+        // appels concurrents (ex. tick d'auto-save pendant un Enregistrer manuel) pouvaient tous les deux
+        // constater la colonne absente et tous les deux appeler AddVisibleColumn pour le même id - accepté
+        // silencieusement ici (idempotent), mais rejeté par un vrai document Grist. Ce garde-fou aurait
+        // attrapé la régression immédiatement ; le correctif (ensureOnce, un seul essai partagé par tous
+        // les appelants concurrents) est dans js/templates.js.
         const colId = action[2];
         const table = state.rows[tableId];
-        if (table && !(colId in table)) table[colId] = table.id.map(() => null);
+        if (table && colId in table) throw new Error('Colonne déjà existante : ' + tableId + '.' + colId);
+        if (table) table[colId] = table.id.map(() => null);
         retValues.push({ colId });
       } else {
         retValues.push(null);

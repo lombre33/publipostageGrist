@@ -4,10 +4,32 @@ const Templates = (function () {
   let templatesCache = [];
   let currentTemplateId = null;
 
-  async function ensureTableExists() {
-    const tables = await grist.docApi.listTables();
-    if (tables.includes(TABLE_NAME)) return;
+  // Régression du 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") : chaque
+  // ensureXxxColumn() ci-dessous suit un patron "vérifier (fetchTable) puis agir (AddVisibleColumn)"
+  // qui n'est PAS atomique. autosaveTick() (js/main.js) appelle Templates.loadAll() toutes les ~2.5s,
+  // et un Enregistrer manuel appelle Templates.save() - les deux passent par les MÊMES ensureXxxColumn.
+  // Sur un document qui vient tout juste de recevoir une nouvelle colonne (typiquement le tout premier
+  // Enregistrer après une mise à jour du widget, comme cette semaine), deux appels qui se chevauchent
+  // (un tick d'auto-save pile pendant qu'on clique Enregistrer) peuvent tous les deux lire la colonne
+  // absente AVANT que l'un des deux ne l'ait ajoutée, et donc tous les deux appeler AddVisibleColumn
+  // pour le MÊME id de colonne - le vrai Grist rejette un id de colonne déjà utilisé. Invisible dans
+  // dev-tests/grist-stub.js, dont AddVisibleColumn/AddTable sont délibérément idempotents (commentaire
+  // sur ces handlers) : le faux Grist accepte donc sans broncher ce que le vrai refuserait. ensureOnce()
+  // fait partager le MÊME appel fetchTable+AddVisibleColumn en cours à tout appelant concurrent, au lieu
+  // que chacun reparte de zéro - et relance un essai (au prochain appel) seulement si celui-ci a échoué,
+  // même comportement de retry que les checked=true/false individuels remplacés ci-dessous.
+  function ensureOnce(worker) {
+    let inFlight = null;
+    return function ensure() {
+      if (!inFlight) inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; });
+      return inFlight;
+    };
+  }
+
+  const ensureTableExists = ensureOnce(async function () {
     try {
+      const tables = await grist.docApi.listTables();
+      if (tables.includes(TABLE_NAME)) return true;
       await grist.docApi.applyUserActions([
         ['AddTable', TABLE_NAME, [
           { id: 'Nom', type: 'Text' },
@@ -16,16 +38,16 @@ const Templates = (function () {
           { id: 'DateModif', type: 'DateTime' }
         ]]
       ]);
+      return true;
     } catch (e) {
       console.error('Erreur création table modèles', e);
+      return false;
     }
-  }
+  });
 
   // Colonne ajoutée APRÈS la création initiale de la table (v2, en-têtes/pieds de page) - AddTable ne concerne que les tout nouveaux documents, un document
   // existant a besoin de ce chemin de migration dédié (idempotent - ne fait rien si la colonne existe déjà).
-  let headerFooterColumnChecked = false;
-  async function ensureHeaderFooterColumn() {
-    if (headerFooterColumnChecked) return;
+  const ensureHeaderFooterColumn = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -34,16 +56,15 @@ const Templates = (function () {
           ['AddVisibleColumn', TABLE_NAME, 'HeaderFooter', { type: 'Text', isFormula: false, label: 'En-tête / pied de page' }]
         ]);
       }
-      headerFooterColumnChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonne HeaderFooter', e);
+      return false;
     }
-  }
+  });
 
   // Marges de page (haut/droite/bas/gauche, mm) - même migration idempotente que HeaderFooter ci-dessus.
-  let marginsColumnChecked = false;
-  async function ensureMarginsColumn() {
-    if (marginsColumnChecked) return;
+  const ensureMarginsColumn = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -52,18 +73,17 @@ const Templates = (function () {
           ['AddVisibleColumn', TABLE_NAME, 'Margins', { type: 'Text', isFormula: false, label: 'Marges de page' }]
         ]);
       }
-      marginsColumnChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonne Margins', e);
+      return false;
     }
-  }
+  });
 
   // Horodatage de dernière modification (auto-save, cf. js/main.js) - même migration idempotente que HeaderFooter ci-dessus. Manquait à l'origine : DateModif
   // ne figurait QUE dans le AddTable de ensureTableExists (donc présent sur un document tout neuf), jamais ajoutée en migration sur un document existant -
   // sur un tel document, save()/loadAll() écrivaient/lisaient une colonne qui n'a jamais existé, ce qui a empêché l'auto-save de fonctionner en pratique.
-  let dateModifColumnChecked = false;
-  async function ensureDateModifColumn() {
-    if (dateModifColumnChecked) return;
+  const ensureDateModifColumn = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -72,17 +92,16 @@ const Templates = (function () {
           ['AddVisibleColumn', TABLE_NAME, 'DateModif', { type: 'DateTime', isFormula: false, label: 'Dernière modification' }]
         ]);
       }
-      dateModifColumnChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonne DateModif', e);
+      return false;
     }
-  }
+  });
 
   // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
   // que HeaderFooter ci-dessus.
-  let defaultColumnChecked = false;
-  async function ensureDefaultColumn() {
-    if (defaultColumnChecked) return;
+  const ensureDefaultColumn = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -91,20 +110,19 @@ const Templates = (function () {
           ['AddVisibleColumn', TABLE_NAME, 'EstParDefaut', { type: 'Bool', isFormula: false, label: 'Modèle par défaut' }]
         ]);
       }
-      defaultColumnChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonne EstParDefaut', e);
+      return false;
     }
-  }
+  });
 
   // Mode email (planning/feature-email-mode.md) : colonnes par table existante plutôt qu'une table dédiée (décision d'Antoine, 2026-09-18 - "pas fan de la
   // démultiplication des tables"). TypeModele distingue un modèle email d'un modèle document ('document' par défaut - une ligne déjà existante sans cette
   // colonne, ou avec une valeur vide, EST un modèle document : aucune migration de données à rejouer sur les modèles déjà créés). Les 4 autres colonnes n'ont
   // de sens que pour un modèle email, mais restent présentes (vides) sur un modèle document plutôt que d'introduire un schéma conditionnel. Même migration
   // idempotente que les colonnes ci-dessus, regroupées ici car introduites ensemble.
-  let emailColumnsChecked = false;
-  async function ensureEmailColumns() {
-    if (emailColumnsChecked) return;
+  const ensureEmailColumns = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -116,17 +134,16 @@ const Templates = (function () {
       addIfMissing('Cci', 'Text', 'Copie cachée (Cci)');
       addIfMissing('Objet', 'Text', 'Objet de l\'email');
       if (actions.length) await grist.docApi.applyUserActions(actions);
-      emailColumnsChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonnes mode email', e);
+      return false;
     }
-  }
+  });
 
   // Suivi des modifications (planning/feature-track-changes.md, décision n°4) : auteur/horodatage par suggestion en attente, écrit dans le MÊME
   // UpdateRecord/AddRecord que Contenu/DateModif (jamais un appel séparé) - même migration idempotente que HeaderFooter ci-dessus.
-  let trackChangesColumnChecked = false;
-  async function ensureTrackChangesColumn() {
-    if (trackChangesColumnChecked) return;
+  const ensureTrackChangesColumn = ensureOnce(async function () {
     await ensureTableExists();
     try {
       const data = await grist.docApi.fetchTable(TABLE_NAME);
@@ -135,11 +152,12 @@ const Templates = (function () {
           ['AddVisibleColumn', TABLE_NAME, 'SuiviModifications', { type: 'Text', isFormula: false, label: 'Suivi des modifications' }]
         ]);
       }
-      trackChangesColumnChecked = true;
+      return true;
     } catch (e) {
       console.error('Erreur migration colonne SuiviModifications', e);
+      return false;
     }
-  }
+  });
 
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
