@@ -20,7 +20,6 @@ const TemplateTreeSelect = (function () {
   let wrap, trigger, triggerIcon, triggerLabel, popup;
   let mo = null;
   let outsideClickHandler = null;
-  let lastOpenedAt = 0;
 
   function iconSpan(typeModele) {
     const span = document.createElement('span');
@@ -268,7 +267,6 @@ const TemplateTreeSelect = (function () {
     if (popup.classList.contains('is-open')) return;
     render();
     popup.classList.add('is-open');
-    lastOpenedAt = Date.now();
     trigger.setAttribute('aria-expanded', 'true');
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
@@ -356,13 +354,17 @@ const TemplateTreeSelect = (function () {
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerLabel);
     trigger.appendChild(caret);
-    // Le 2e clic d'un double-clic (réflexe hérité du <select> natif, où un seul clic ouvrait déjà le menu)
-    // arrive alors que le panneau vient tout juste de s'ouvrir sur le 1er clic : sans ce garde, il le
-    // referme aussitôt, et tout ce qu'Antoine voit est le fond de survol du bouton qui reste affiché -
-    // signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de modèle").
-    trigger.addEventListener('click', () => {
+    // e.detail (nombre de clics que le navigateur compte pour CE geste - 2 pour un vrai double-clic natif)
+    // distingue un authentique double-clic d'un simple second clic délibéré (rouvrir puis refermer, ce que
+    // fait par ex. dev-tests/scenarios-toolbar-chrome.js en dispatchant deux clics synthétiques séparés,
+    // toujours à detail=0) : sans ce garde, le réflexe hérité du <select> natif (double-clic pour "choisir")
+    // ouvrait puis refermait aussitôt le panneau au 2e clic, ne laissant visible que le fond de survol du
+    // bouton - signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de
+    // modèle"). Une minuterie fixe (ex. "ignorer un clic dans les 250ms") avait été essayée puis écartée :
+    // elle cassait aussi une fermeture délibérée rapide, exactement le geste que ce test générique exerce.
+    trigger.addEventListener('click', (e) => {
       if (popup.classList.contains('is-open')) {
-        if (Date.now() - lastOpenedAt < 250) return;
+        if (e.detail >= 2) return;
         closePopup();
       } else {
         openPopup();

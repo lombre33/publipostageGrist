@@ -225,12 +225,16 @@
       const id = await createTemplate(h, 'document', 'Arbre - Double-clic');
       if (popupOpen()) await clickEl(h, trigger());
       const t = trigger();
-      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      // detail: 2 sur le 2e clic reproduit ce que le navigateur pose RÉELLEMENT sur le 2e clic d'un
+      // authentique double-clic (un MouseEvent scripté sans detail explicite vaut 0, comme un simple clic
+      // isolé - cf. le garde correspondant dans js/template-tree-select.js) : sans ce detail, ce scénario
+      // ne testerait pas la même chose qu'un vrai double-clic souris.
+      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 }));
+      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, detail: 2 }));
+      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 2 }));
       await h.sleep(30);
       const display = getComputedStyle(popup()).display;
       const row = rowFor(id);
