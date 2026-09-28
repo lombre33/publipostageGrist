@@ -56,7 +56,10 @@ const ConditionFields = (function () {
     ordered.forEach(table => {
       const group = document.createElement('optgroup');
       group.label = tableGroupLabel(table, currentTableId);
-      GristAPI.getColumns(table).forEach(c => appendColumnOption(group, table === currentTableId ? c : table + '.' + c, table === currentTableId ? c : table + '.' + c));
+      // Sans les colonnes d'aide « gristHelper_… » (valeur affichée d'une Référence, cachées par Grist lui-même) : la Référence se compare déjà à sa
+      // valeur affichée (js/variables.js:cellValue).
+      GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0)
+        .forEach(c => appendColumnOption(group, table === currentTableId ? c : table + '.' + c, table === currentTableId ? c : table + '.' + c));
       if (group.children.length) select.appendChild(group);
     });
   }

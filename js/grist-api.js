@@ -16,6 +16,12 @@ const GristAPI = (function () {
   let _columnsByTable = {};
   let _columnTypesByTable = {};
   let _columnChoicesByTable = {};
+  // { tableId: { colId: colonne d'affichage } } - pour une Référence, la colonne d'aide (« gristHelper_Display… ») que Grist calcule dans la même table
+  // avec la valeur affichée, cf. getDisplayColumn.
+  let _displayColByTable = {};
+  // Lignes lues par fetchTable (fetchTableRows/fetchRowById) : forme BRUTE (une Référence = id de ligne), contrairement à la ligne livrée par
+  // grist.onRecord (valeur affichée) - cf. isRawRow.
+  const _rawRows = new WeakSet();
   // Liste BRUTE (tables internes incluses) de listTables(), mémorisée pour éviter de la redemander à chaque ensureXxxTableExists() - `_tables` ci-dessus
   // les exclut déjà, inutilisable ici. Tenue à jour manuellement après un AddTable réussi (cf. listAllTablesCached/ensureLinksTableExists/
   // ensureUserProbeTable) pour ne jamais répondre "table absente" pour une table qu'on vient nous-mêmes de créer dans la même session.
@@ -270,16 +276,26 @@ const GristAPI = (function () {
   async function refreshColumnTypes() {
     _columnTypesByTable = {};
     _columnChoicesByTable = {};
+    _displayColByTable = {};
     try {
       const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
       const tableIdByRowId = {};
       for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
       const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
+      const colIdByRowId = {};
+      for (let i = 0; i < colsMeta.id.length; i++) colIdByRowId[colsMeta.id[i]] = colsMeta.colId[i];
       for (let i = 0; i < colsMeta.id.length; i++) {
         const tableId = tableIdByRowId[colsMeta.parentId[i]];
         if (!tableId) continue;
         if (!_columnTypesByTable[tableId]) _columnTypesByTable[tableId] = {};
         _columnTypesByTable[tableId][colsMeta.colId[i]] = colsMeta.type[i];
+        // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0 (ColumnRec.displayColModel,
+        // vérifié à la source grist-core le 2026-09-28).
+        const displayRef = colsMeta.displayCol ? colsMeta.displayCol[i] : 0;
+        if (displayRef && displayRef !== colsMeta.id[i] && colIdByRowId[displayRef]) {
+          if (!_displayColByTable[tableId]) _displayColByTable[tableId] = {};
+          _displayColByTable[tableId][colsMeta.colId[i]] = colIdByRowId[displayRef];
+        }
         // Choix d'une colonne Choice/ChoiceList : widgetOptions est un JSON stocké en Text (schema.ts), clé "choices" (vérifié à la source grist-core,
         // ChoiceTextBox.ts: this.options.prop("choices")) - un tableau de chaînes. widgetOptions absent/mal formé ne doit jamais faire planter tout
         // refreshSchema, juste laisser cette colonne sans choix connus (repli sur le champ texte libre, cf. js/macro-editor.js:buildValueField).
@@ -298,6 +314,15 @@ const GristAPI = (function () {
   function getColumnType(tableId, colId) {
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
   }
+
+  // Colonne qui porte la valeur AFFICHÉE d'une Référence/liste de références (ex. "gristHelper_Display2", présente dans les lignes de fetchTable), null
+  // si la colonne s'affiche elle-même (identifiant de ligne) ou n'est pas une Référence.
+  function getDisplayColumn(tableId, colId) {
+    return (_displayColByTable[tableId] && _displayColByTable[tableId][colId]) || null;
+  }
+  // Vrai pour une ligne lue par fetchTableRows/fetchRowById (forme brute), faux pour la ligne de grist.onRecord - js/variables.js:cellValue ne
+  // convertit que la première.
+  function isRawRow(row) { return !!row && typeof row === 'object' && _rawRows.has(row); }
 
   // Liste des choix configurés (widgetOptions.choices) d'une colonne Choice/ChoiceList, ou null si absente/non applicable - cf. refreshColumnTypes.
   function getColumnChoices(tableId, colId) {
@@ -373,6 +398,7 @@ const GristAPI = (function () {
     if (idx === -1) return null;
     const row = {};
     for (const key of Object.keys(data)) row[key] = data[key][idx];
+    _rawRows.add(row);
     return row;
   }
 
@@ -385,6 +411,7 @@ const GristAPI = (function () {
     for (let i = 0; i < ids.length; i++) {
       const row = {};
       for (const key of Object.keys(data)) row[key] = data[key][i];
+      _rawRows.add(row);
       rows.push(row);
     }
     return rows;
@@ -556,5 +583,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow };
 })();

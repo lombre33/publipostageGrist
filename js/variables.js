@@ -283,6 +283,24 @@ const Variables = (function () {
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
+  // Valeur d'une cellule telle que Grist l'AFFICHE, pour une ligne lue par fetchTable (autre table, export en lot, aperçu de la fenêtre de condition) :
+  // cette forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, alors que grist.onRecord livre déjà
+  // la valeur affichée pour la table de la page. Une Référence ou une liste de références prend la valeur de sa colonne d'affichage, que Grist calcule
+  // dans la même table (GristAPI.getDisplayColumn, colonne « gristHelper_Display… » lue par fetchTable - engine.py:fetch_table, vérifié à la source
+  // grist-core le 2026-09-28). Retour d'Antoine du 2026-09-28 : un attribut lui-même Référence affichait son id.
+  function cellValue(table, column, row) {
+    if (!row) return null;
+    let value = row[column];
+    const type = GristAPI.getColumnType(table, column) || '';
+    const isRef = type.indexOf('Ref:') === 0;
+    if (isRef || type.indexOf('RefList:') === 0) {
+      if (isRef && value === 0) return null;
+      const displayCol = GristAPI.getDisplayColumn(table, column);
+      if (displayCol && displayCol in row) value = row[displayCol];
+    }
+    return (Array.isArray(value) && value[0] === 'L') ? value.slice(1) : value;
+  }
+
   // Valeur de la colonne source d'une règle "match" pour la ligne courante. Une colonne Référence comparée à l'identifiant de ligne de la table cible doit
   // fournir l'identifiant RÉFÉRENCÉ : fetchTable (export en lot) le donne tel quel, un entier, mais grist.onRecord (mode Lecture, export de la ligne
   // courante) livre la valeur de la colonne AFFICHÉE par la référence (ex. "Dupont Jean"), ou un objet Reference quand cette valeur est un nombre
@@ -292,6 +310,11 @@ const Variables = (function () {
   // affiché, ex. "NomPrenom = Responsable", continue de fonctionner comme avant).
   async function ruleSourceValue(rule, record, currentTableId, fetchRows) {
     if (rule.colonneSource === 'id') return record.id;
+    // Ligne de fetchTable (export en lot) : l'id brut pour une comparaison à l'identifiant de ligne, sinon la valeur affichée - celle que compare la même
+    // règle en mode Lecture, où grist.onRecord la livre déjà.
+    if (GristAPI.isRawRow(record)) {
+      return rule.colonneCible === 'id' ? unwrapRefValue(record[rule.colonneSource]) : cellValue(currentTableId, rule.colonneSource, record);
+    }
     const value = unwrapRefValue(record[rule.colonneSource]);
     if (rule.colonneCible !== 'id' || typeof value === 'number' || record.id == null) return value;
     const type = GristAPI.getColumnType(currentTableId, rule.colonneSource);
@@ -324,9 +347,9 @@ const Variables = (function () {
   // signale : js/condition-rules.js:matches teste alors chaque ligne liée, sans confondre avec une ChoiceList, elle aussi un tableau.
   async function resolveRawValueWithRule(varTable, varColumn, rule, record, currentTableId, opts) {
     const rows = await resolveLinkedRows(varTable, rule, record, currentTableId, opts);
-    if (rule.mode === 'singleton') return { value: rows.length ? rows[0][varColumn] : null };
+    if (rule.mode === 'singleton') return { value: rows.length ? cellValue(varTable, varColumn, rows[0]) : null };
     if (!rows.length) return { value: null };
-    return { value: rows.map(r => r[varColumn]), multi: true };
+    return { value: rows.map(r => cellValue(varTable, varColumn, r)), multi: true };
   }
   async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
@@ -341,7 +364,8 @@ const Variables = (function () {
           if (row) return { value: row[varColumn] };
         } catch (e) { /* repli sur record[varColumn] ci-dessous */ }
       }
-      return { value: record[varColumn] };
+      // Ligne de fetchTable (export en lot, aperçu de la fenêtre de condition) : ramenée à la valeur affichée, comme celle de grist.onRecord.
+      return { value: GristAPI.isRawRow(record) ? cellValue(varTable, varColumn, record) : record[varColumn] };
     }
     const rule = GristAPI.getLinkRule(varTable);
     if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record, resolvedTableId, opts);
@@ -352,7 +376,7 @@ const Variables = (function () {
     const rowId = unwrapRefValue(refId);
     const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
     if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
-    return { value: linkedRow[varColumn] };
+    return { value: cellValue(varTable, varColumn, linkedRow) };
   }
   async function resolveVariable(varTable, varColumn, currentTableId, record, format) {
     try {
@@ -645,10 +669,10 @@ const Variables = (function () {
   }
 
   // resolveRawValue exposé pour js/condition-rules.js (évaluation de conditions sur une valeur brute, non formatée - même/cross-table via le même mécanisme
-  // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue : fenêtres de condition et d'autres attributs d'une
+  // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue/cellValue : fenêtres de condition et d'autres attributs d'une
   // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable.
   return {
     createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, formatValue,
+    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, formatValue, cellValue,
   };
 })();

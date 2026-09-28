@@ -29,6 +29,7 @@
     tables: ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires'],
     columns: {}, // { tableId: { colId: type } }
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
+    displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
     // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
@@ -93,26 +94,34 @@
     return Math.floor(ms / 1000); // secondes entières depuis l'epoch, jamais des millisecondes (cf. doc citée ci-dessus)
   }
 
-  function setVariables(tableId, columns, choicesByCol) {
+  function setVariables(tableId, columns, choicesByCol, displayCols) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
     // choicesByCol (optionnel) : { colId: string[] } pour une colonne Choice/ChoiceList - même clé "choices" que le vrai widgetOptions JSON de Grist
     // (grist-core ChoiceTextBox.ts: this.options.prop("choices")), vérifié à la source le 2026-09-28.
+    // displayCols (optionnel) : { colRef: colonneAide } - une Référence affichée par une colonne de la table cible a, dans le vrai Grist, une colonne
+    // d'aide « gristHelper_Display… » dans SA table (à déclarer dans `columns` et remplir via setRows, comme fetchTable la renvoie) et son displayCol
+    // pointe dessus (schema.ts, ColumnRec.displayColModel, vérifié à la source le 2026-09-28). Absent = aucune : la Référence s'affiche par son id.
     if (state.tables.indexOf(tableId) === -1) state.tables.push(tableId);
     state.columns[tableId] = columns;
     if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(Object.keys(columns));
     if (choicesByCol) state.choices[tableId] = Object.assign({}, state.choices[tableId], choicesByCol);
+    state.displayCols[tableId] = Object.assign({}, displayCols);
     // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
     // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
     // reconstruit tout à chaque fois à partir de state.tables/columns/choices.
     const gt = columnarEmpty(['tableId']);
-    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol']);
     let rowId = 1;
+    const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
+    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = rowId++; }));
     state.tables.forEach((t, tIdx) => {
       gt.id.push(tIdx + 1); gt.tableId.push(t);
       Object.keys(state.columns[t] || {}).forEach(colId => {
         const choices = state.choices[t] && state.choices[t][colId];
-        gtc.id.push(rowId++); gtc.parentId.push(tIdx + 1); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
+        const helper = state.displayCols[t] && state.displayCols[t][colId];
+        gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tIdx + 1); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
         gtc.widgetOptions.push(choices ? JSON.stringify({ choices }) : '');
+        gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
       });
     });
     state.rows._grist_Tables = gt;
