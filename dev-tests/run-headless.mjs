@@ -64,6 +64,7 @@ const GROUPS = {
   toolbarChrome: 'scenarios-toolbar-chrome',
   macroModeles: 'scenarios-macro-modeles',
   templateTree: 'scenarios-template-tree',
+  templateOrganize: 'scenarios-template-organize',
   trackChanges: 'scenarios-track-changes',
 };
 

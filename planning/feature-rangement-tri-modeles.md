@@ -285,7 +285,34 @@ modèle, même principe que `Publipostage_Commentaires`. Décision communiquée 
 
 ### 8.3 Reste à faire
 
-- Confirmer avec Antoine, au moment où il verra le rendu réel, la limite de scope posée en 8.1 (pin/tri
-  depuis l'arbre, dossier depuis la modale "Organiser mes modèles…" restant à construire).
+- ~~Confirmer avec Antoine... la modale "Organiser mes modèles…" restant à construire~~ : fait, cf. 8.4.
 - Vérification en conditions réelles (vrai document Grist, vraie identité utilisateur) : aucun fil n'a
   accès au document réel d'Antoine, donc ce point ne peut être confirmé que par lui.
+
+### 8.4 « Organiser mes modèles » construite (2026-09-28)
+
+Antoine a demandé cette interface après avoir vu l'arbre en place ("où est l'interface pour créer les
+dossiers et arranger les modèles ?"). Construite dans `js/template-organize-modal.js` +
+`css/template-organize-modal.css`, ouverte depuis une dernière ligne "Organiser mes modèles…" du panneau
+de l'arbre (`js/template-tree-select.js:makeOrganizeRow`).
+
+**Écart assumé avec le design de 4.2** (chips de dossiers + `+ Nouveau dossier` + menu déroulant par
+ligne) : ce design suppose un dossier comme objet existant indépendamment d'un modèle. Dans
+l'implémentation réelle (8.1), un dossier n'est QUE la valeur du champ `Dossier` d'au moins une
+préférence — pas de table de dossiers séparée. Carte de décision posée à Antoine le 2026-09-28 (« peut-on
+créer un dossier vide à l'avance, ou seulement en y rangeant un modèle ? ») ; construit dans l'intervalle
+avec l'option recommandée (pas de table en plus) plutôt que d'attendre sa réponse sur un choix réversible :
+un bouton « Déplacer vers… » par modèle ouvre un `prompt()` (même patron que
+`prompt.newTemplateName`/`prompt.newTableName`, déjà utilisés ailleurs dans ce projet) pré-rempli avec le
+dossier actuel et indiquant les dossiers déjà existants ; taper un chemin avec `/` crée des dossiers
+imbriqués au passage (`TemplatePreferences.normalizeFolderPath` gère déjà cette syntaxe). Si Antoine
+préfère l'autre option, une table de dossiers séparée s'ajoute par-dessus sans reprendre ce qui existe.
+
+Réutilise `.tts-row`/`.tts-icon`/`.tts-pin-btn`/`.tts-folder-caret`/`.tts-section-label`/`.tts-group`
+(`css/template-tree-select.css`) telles quelles pour les lignes de la liste plutôt que de dupliquer ce
+rendu — seuls la recherche, le bouton "Déplacer vers…" et l'indice de dossier des épinglés sont nouveaux.
+
+Tests : `dev-tests/scenarios-template-organize.js` (groupe `templateOrganize`), 7/7 — entrée dans l'arbre,
+épingle/déplacement synchronisés en direct avec le panneau de la barre (`TemplateTreeSelect.refresh()`),
+annulation du `prompt()` n'écrivant rien, recherche, Échap (confirme le branchement sur
+`wireModalAccessibility`, `js/main.js`). Suite complète du projet rejouée : 403/403, aucune régression.

@@ -1,0 +1,35 @@
+/* Habillage de #template-organize-modal (js/template-organize-modal.js) - "Organiser mes modèles".
+   L'overlay/.modal-content viennent de css/style.css + la règle #template-organize-modal ajoutée à
+   css/editor-v2.css (même patron que #macro-editor-modal/#template-gallery-modal). Les lignes de la
+   liste réutilisent TELLES QUELLES .tts-row/.tts-icon/.tts-pin-btn/.tts-folder-caret/.tts-section-label/
+   .tts-group de css/template-tree-select.css (déjà chargé, déjà couvert par ses propres tests) plutôt que
+   de dupliquer ce rendu - seul ce qui est vraiment nouveau ici (recherche, bouton "Déplacer vers…",
+   indice de dossier des épinglés) a sa propre règle. */
+
+.template-organize-modal-content { width: 480px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; }
+
+.template-organize-intro { margin: 0; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+
+.template-organize-search { display: flex; }
+.template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font: inherit; background: var(--surface); color: var(--text); }
+
+.template-organize-list { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px; }
+
+/* Les lignes de cette liste ne sélectionnent rien au clic (à la différence de .tts-popup) : seul un
+   dossier réagit au clic (dépliage). Le curseur "pointer" hérité de .tts-row induirait sinon une fausse
+   affordance de clic sur chaque modèle. */
+#template-organize-list .tts-row-leaf { cursor: default; }
+
+.tom-folder-hint { flex: none; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+
+.tom-move-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
+.tts-row:hover .tom-move-btn, .tts-row:focus-within .tom-move-btn { opacity: 1; }
+@media not (hover: hover) {
+  /* Même piège que .tts-trigger/.tts-row ailleurs dans ce projet (fond/affordance "collée" ou au
+     contraire jamais révélée sans survol réel) - sur tactile, ce bouton reste toujours visible plutôt que
+     de dépendre d'un :hover qui ne se déclenchera jamais. */
+  .tom-move-btn { opacity: 1; }
+}
+.tom-move-btn:hover { background: var(--surface-sunken); color: var(--text); }
+
+.tom-empty { padding: 16px 8px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
