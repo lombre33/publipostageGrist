@@ -6,15 +6,10 @@
 // tient synchronisée dans les deux sens - voir attach() pour le détail des trois pièges déjà rencontrés
 // sur ce projet (relais coordinateur 2026-09-20) et explicitement évités ici.
 //
-// Scope volontairement limité à parcourir/choisir/épingler depuis l'arbre. Assigner un modèle à un
-// dossier reste pour l'instant à faire depuis la modale "Organiser mes modèles…" cadrée en
-// planning/feature-rangement-tri-modeles.md §4 (pas encore construite) plutôt que d'improviser un
-// glisser-déposer non éprouvé dans l'arbre lui-même - à annoncer à Antoine au moment du câblage, pas une
-// limitation qu'il a demandée.
-//
-// Clés I18n utilisées ci-dessous mais PAS ENCORE ajoutées à js/i18n.js (fichier partagé/disputé,
-// cf. mémoire d'équipe - modifié seulement au lot de câblage final, pas ici) : templateTree.pin.aria,
-// templateTree.pinnedSection, templateTree.allSection. À ajouter (FR+EN) dans ce même lot de câblage.
+// Scope limité à parcourir/choisir/épingler depuis l'arbre - pas de glisser-déposer, jamais éprouvé ici.
+// Créer un dossier et y ranger un modèle se fait depuis la modale js/template-organize-modal.js
+// ("Organiser mes modèles…", dernière ligne du panneau, cf. makeOrganizeRow ci-dessous) plutôt qu'en
+// improvisant cette interaction dans l'arbre lui-même (Antoine, 2026-09-28).
 const TemplateTreeSelect = (function () {
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
@@ -137,6 +132,26 @@ const TemplateTreeSelect = (function () {
     return li;
   }
 
+  // Dernière ligne du panneau, hors arbre - ouvre js/template-organize-modal.js (créer des dossiers,
+  // "Déplacer vers…", cf. son en-tête). Referme le panneau au clic : la modale est son propre calque
+  // (z-index supérieur), pas la peine de garder l'arbre ouvert derrière.
+  function makeOrganizeRow() {
+    const row = document.createElement('div');
+    row.className = 'tts-row tts-row-organize';
+    row.setAttribute('role', 'treeitem');
+    row.setAttribute('tabindex', '-1');
+    row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-icon tts-icon-organize' }));
+    const label = document.createElement('span');
+    label.className = 'tts-row-label';
+    label.textContent = I18n.t('organize.modal.openFromTree');
+    row.appendChild(label);
+    row.addEventListener('click', () => {
+      closePopup();
+      TemplateOrganizeModal.open();
+    });
+    return row;
+  }
+
   function render() {
     const selectedValue = realSelect.value;
     // Un ré-affichage déclenché pendant que le popup est ouvert (ex. clic sur l'épingle d'une ligne, cf.
@@ -182,6 +197,8 @@ const TemplateTreeSelect = (function () {
       popup.appendChild(sep);
       view.tree.forEach((n) => popup.appendChild(makeRow(n, 0)));
     }
+
+    popup.appendChild(makeOrganizeRow());
 
     syncTriggerLabel();
     syncDisabledState();
@@ -367,6 +384,10 @@ const TemplateTreeSelect = (function () {
     if ((e.key === 'Enter' || e.key === ' ') && current) {
       e.preventDefault();
       if (current.classList.contains('tts-row-folder')) toggleFolder(current, current.nextElementSibling);
+      // tts-row-organize (dernière ligne, "Organiser mes modèles…") n'a pas de dataset.templateId : la
+      // confondre avec une feuille appellerait selectValue(undefined) et écrirait une valeur invalide sur
+      // le <select> réel.
+      else if (current.classList.contains('tts-row-organize')) current.click();
       else selectValue(current.dataset.templateId);
     }
   }

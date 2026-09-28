@@ -986,7 +986,7 @@
   // Volontairement le SEUL raccourci applicatif ajouté ici - le reste du périmètre clavier est encore à cadrer.
   function wireSaveShortcut() {
     const anyModalOpen = () => Array.prototype.some.call(
-      document.querySelectorAll('#link-rules-modal, #link-config-modal, #template-gallery-modal, #template-preview-modal, #settings-modal'),
+      document.querySelectorAll('#link-rules-modal, #link-config-modal, #template-gallery-modal, #template-preview-modal, #settings-modal, #template-organize-modal'),
       m => m.style.display && m.style.display !== 'none');
     document.addEventListener('keydown', (event) => {
       if (event.key !== 's' && event.key !== 'S') return;
@@ -1018,6 +1018,7 @@
       { id: 'template-preview-modal', closeId: 'tpl-preview-close' },
       { id: 'settings-modal', closeId: 'settings-close' },
       { id: 'macro-editor-modal', closeId: 'macro-editor-cancel' },
+      { id: 'template-organize-modal', closeId: 'template-organize-close' },
     ];
     MODALS.forEach(({ id, closeId }) => {
       const modal = document.getElementById(id);
@@ -1292,6 +1293,7 @@
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     MacroEditor.wire(onMacroSaved);
+    TemplateOrganizeModal.wire();
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
