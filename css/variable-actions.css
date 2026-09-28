@@ -1,0 +1,70 @@
+/* Variables conditionnelles et autres attributs d'une bulle #Variable (maquette validée par Antoine le 2026-09-28) : groupe d'actions de la barre
+   flottante (js/floating-toolbars.js), fenêtre de condition (js/variable-condition.js) et fenêtre des autres attributs (js/variable-linked-attrs.js).
+   Fichier propre à ces trois éléments pour ne rien changer aux feuilles partagées ; les lignes de règle réutilisent telles quelles les classes
+   .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles, js/condition-fields.js). */
+
+/* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
+.tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
+
+/* === Barre flottante : actions à gauche, séparateur visible avant les réglages nombre/date (masqué pour une colonne sans réglage) === */
+.v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }
+.v2-varfmt-toolbar .v2-floating-sep[data-var-sep] { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
+.v2-varfmt-toolbar .v2-floating-sep[data-var-sep][hidden] { display: none; }
+.v2-floating-toolbar button.is-disabled { opacity: .35; cursor: default; }
+.v2-floating-toolbar button.is-disabled:hover { background: transparent; }
+
+/* « vide » / « non vide » : le champ Valeur ne sert pas, grisé (partagé avec la fenêtre des macro-modèles, js/condition-fields.js:syncValueDisabled). */
+.macro-rule-value-slot.is-disabled { opacity: .45; }
+
+/* === Fenêtres === z-index sous #link-config-modal (2000, css/style.css) : le choix de la clé d'une table pas encore liée s'ouvre PAR-DESSUS la fenêtre
+   de condition. max-height + actions collantes : Enregistrer/Annuler restent atteignables dans un panneau Grist bas (~700x400), comme la fenêtre macro. */
+#var-condition-modal, #var-linked-modal { position: fixed; inset: 0; background: var(--pp-scrim, rgba(15, 23, 42, .45)); display: flex; align-items: center; justify-content: center; z-index: 1990; }
+.var-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; max-height: 90vh; overflow-y: auto; box-sizing: border-box; }
+.var-linked-modal-content { width: 420px; }
+.var-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); overflow-wrap: anywhere; }
+.var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 12px; overflow-wrap: anywhere; }
+.var-modal-intro .var-badge { border-style: dashed; border-color: #5b7fc0; font-size: 11.5px; }
+.var-modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; position: sticky; bottom: 0; background: var(--surface); padding-top: 4px; }
+.var-modal-actions .var-modal-spacer { flex: 1; }
+.var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.var-modal-actions button:hover { background: var(--surface-sunken); }
+.var-modal-actions button.var-modal-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.var-modal-actions button.var-modal-primary:hover { background: var(--accent-hover); }
+.var-modal-actions button.var-modal-primary:disabled { opacity: .45; cursor: default; }
+.var-modal-actions button.var-modal-danger { border-color: transparent; background: transparent; color: var(--danger); padding: 0 4px; }
+.var-modal-actions button.var-modal-danger:hover { background: var(--danger-soft, #fbe9e9); }
+.var-modal-actions button[hidden] { display: none; }
+
+/* === Fenêtre de condition === */
+.var-condition-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+.var-condition-mode[hidden] { display: none; }
+.var-condition-mode select { height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
+.var-condition-rules { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; }
+.var-condition-rules .macro-rule-column-type { padding-left: 39px; box-sizing: border-box; }
+.var-condition-link-hint { flex: 1 0 100%; padding-left: 39px; box-sizing: border-box; font-size: 10.5px; font-weight: 600; color: var(--text-muted); white-space: normal; }
+.var-condition-link-hint[hidden] { display: none; }
+.var-condition-link-hint button { font: inherit; font-weight: 700; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
+.var-condition-add { align-self: flex-start; margin-top: 4px; height: 26px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
+.var-condition-add:hover { color: var(--accent); border-color: var(--accent); }
+.var-condition-debug { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.var-condition-debug-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
+.var-condition-debug-line[hidden] { display: none; }
+.var-condition-debug-line.is-good { background: var(--good-soft, #e5f6ee); border-color: var(--good-soft-border, #bfe6d3); color: var(--good, #146c48); }
+.var-condition-debug-line strong { color: var(--text); }
+.var-condition-debug-line.is-good strong { color: inherit; }
+
+/* === Fenêtre « Autres attributs » === */
+.var-linked-filter { display: block; width: 100%; height: 28px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 8px; margin-bottom: 8px; background: var(--surface); color: var(--text); }
+.var-linked-list { display: flex; flex-direction: column; max-height: min(220px, 38vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.var-linked-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; border-top: 1px solid var(--border); color: var(--text); }
+.var-linked-row:first-child { border-top: none; }
+.var-linked-row:hover { background: var(--surface-sunken); }
+.var-linked-row[hidden] { display: none; }
+.var-linked-row.is-current { opacity: .55; cursor: default; }
+.var-linked-row.is-current:hover { background: transparent; }
+.var-linked-row input { flex: none; margin: 0; }
+.var-linked-col { flex: none; max-width: 62%; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.var-linked-col small { font-weight: 600; color: var(--text-faint); }
+.var-linked-value { flex: 1; min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.var-linked-empty { padding: 8px 10px; font-size: 12px; color: var(--text-faint); }
+.var-linked-note { font-size: 11.5px; line-height: 1.45; color: var(--text-faint); margin: 8px 0 0; }

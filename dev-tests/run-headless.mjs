@@ -65,6 +65,7 @@ const GROUPS = {
   macroModeles: 'scenarios-macro-modeles',
   templateTree: 'scenarios-template-tree',
   trackChanges: 'scenarios-track-changes',
+  varCondition: 'scenarios-var-condition',
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -74,6 +75,7 @@ const GROUPS = {
 // [[project-publipostage-scroll-chaining-popup-fix]].
 const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
+  varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
 };
 
 const argv = process.argv.slice(2);

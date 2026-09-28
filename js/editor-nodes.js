@@ -25,16 +25,23 @@ const EditorNodes = (function () {
         const noBareRender = { default: null, renderHTML: () => ({}) };
         // `format` : { type:'number', style, decimals, currency, words } ou { type:'date', preset } - choisi via la barre flottante (cf.
         // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a rien réglé (comportement historique, String(val) brut).
-        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender };
+        // `condition` : { mode:'all'|'any', rules:[{ column, operator, value }] } - condition d'affichage (js/variable-condition.js), évaluée en lecture et
+        // à l'export par js/reader-mode.js ; `null` = toujours affichée.
+        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender, condition: noBareRender };
       },
       parseHTML() {
         return [{
           tag: 'span.var-badge',
           getAttrs: el => {
-            let format = null;
-            const raw = el.getAttribute('data-format');
-            if (raw) { try { format = JSON.parse(raw); } catch (e) { format = null; } }
-            return { table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'), format };
+            const parseJsonAttr = name => {
+              const raw = el.getAttribute(name);
+              if (!raw) return null;
+              try { return JSON.parse(raw); } catch (e) { return null; }
+            };
+            return {
+              table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
+              format: parseJsonAttr('data-format'), condition: parseJsonAttr('data-condition'),
+            };
           },
         }];
       },
@@ -44,6 +51,7 @@ const EditorNodes = (function () {
           'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
         // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
         return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
       },

@@ -323,11 +323,17 @@ const FloatingToolbars = (function () {
     editor.on('transaction', check);
   }
 
-  // Barre flottante de formatage nombre/date d'une bulle #Variable (même modèle que l'image). Le type de colonne Grist choisit le sous-panneau affiché ; une
-  // colonne Texte/Référence n'a rien à formater, barre cachée.
+  // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur TOUTES les variables depuis la maquette validée le 2026-09-28 : un groupe
+  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne - de la place pour les suivantes, ex. boucle), puis, pour une colonne
+  // nombre/date seulement, le sous-panneau de formatage choisi par le type de colonne Grist (inchangé).
   function wireVariableFloatingToolbar() {
     const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
+      '<div class="v2-varbadge-actions">',
+      `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
+      `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
+      '</div>',
+      '<span class="v2-floating-sep" data-var-sep></span>',
       '<div data-var-panel="number">',
       '<span class="v2-varfmt-seg">',
       `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
@@ -363,9 +369,22 @@ const FloatingToolbars = (function () {
       const format = Object.assign({}, node.attrs.format, patch);
       EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
     }
+    // « Autres attributs » n'a de sens que si la variable désigne une ligne d'une AUTRE table : variable d'une autre table (déjà liée à l'insertion), ou
+    // colonne Référence de la table de la page (la ligne référencée). Grisé sinon (pas retiré) ; une RefList désigne plusieurs lignes (future boucle).
+    // Règle tenue par la fenêtre elle-même (js/variable-linked-attrs.js:targetFor).
+    function linkedAttrsAvailable(node) {
+      return VariableLinkedAttrs.isAvailable(node.attrs);
+    }
     function onAction(action) {
       const node = selectedVarBadgeNode();
       if (!node) return;
+      // Position capturée AU CLIC : la fenêtre ouverte ensuite retire le focus de l'éditeur, et c'est cette bulle précise qu'elle modifiera.
+      if (action === 'var-condition') { VariableCondition.open(editor, editor.state.selection.from); return; }
+      if (action === 'var-linked') {
+        if (!linkedAttrsAvailable(node)) return;
+        VariableLinkedAttrs.open(editor, editor.state.selection.from);
+        return;
+      }
       if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
       if (action === 'num-words') {
         const current = node.attrs.format || {};
@@ -399,6 +418,15 @@ const FloatingToolbars = (function () {
       if (!node) return;
       const format = node.attrs.format || {};
       const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
+      setActive('var-condition', !!ConditionRules.normalizeCondition(node.attrs.condition));
+      // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle expliquant POURQUOI il est grisé ne s'afficherait pas.
+      const linkedBtn = panel.el.querySelector('button[data-action="var-linked"]');
+      if (linkedBtn) {
+        const available = linkedAttrsAvailable(node);
+        linkedBtn.classList.toggle('is-disabled', !available);
+        linkedBtn.setAttribute('aria-disabled', available ? 'false' : 'true');
+        linkedBtn.title = I18n.t(available ? 'varToolbar.linked' : 'varToolbar.linkedDisabled');
+      }
       // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
       const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
       const style = format.type === 'number' ? (format.style || defaultStyle) : defaultStyle;
@@ -431,12 +459,14 @@ const FloatingToolbars = (function () {
       // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
       const node = selectedVarBadgeNode();
       if (!node) { panel.hide(); return; }
+      // Fenêtre de condition / d'autres attributs ouverte sur cette bulle : la barre (z-index 2000) passerait par-dessus son voile.
+      if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen()) { panel.hide(); return; }
       const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
       const isNumber = type === 'Numeric' || type === 'Int';
       const isDate = type === 'Date' || type === 'DateTime';
-      if (!isNumber && !isDate) { panel.hide(); return; }
       panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
       panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
+      panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate;
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       if (!dom) { panel.hide(); return; }
       syncState();

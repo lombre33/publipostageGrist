@@ -266,9 +266,11 @@ const Variables = (function () {
 
   // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans format
   // reste en revanche `String(val)` brut.
+  // Un tableau (une valeur par ligne liée d'une règle "match", ou une liste) est formaté élément par élément : un simple join laissait une date d'une autre
+  // table en secondes brutes et ignorait le format nombre/date de la bulle.
   function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
-    if (Array.isArray(val)) return val.join(', ');
+    if (Array.isArray(val)) return val.map(v => formatValue(v, format, varTable, varColumn)).join(', ');
     let effectiveFormat = format;
     if (!effectiveFormat && varTable && varColumn) {
       const colType = GristAPI.getColumnType(varTable, varColumn);
@@ -281,24 +283,50 @@ const Variables = (function () {
   function unwrapRefValue(v) { return Array.isArray(v) ? v[1] : v; }
   function sameValue(a, b) { return String(a).trim() === String(b).trim(); }
 
-  // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
-  // Retourne { value } ou { error } (déjà formaté "[ERREUR: ...]").
-  async function resolveRawValueWithRule(varTable, varColumn, rule, record) {
+  // Valeur de la colonne source d'une règle "match" pour la ligne courante. Une colonne Référence comparée à l'identifiant de ligne de la table cible doit
+  // fournir l'identifiant RÉFÉRENCÉ : fetchTable (export en lot) le donne tel quel, un entier, mais grist.onRecord (mode Lecture, export de la ligne
+  // courante) livre la valeur de la colonne AFFICHÉE par la référence (ex. "Dupont Jean"), ou un objet Reference quand cette valeur est un nombre
+  // (WidgetFrame.ts:fetchSelectedRecord, expandRefs vrai par défaut, et objtypes.ts:decodeObject - vérifié à la source grist-core le 2026-09-28) : la
+  // règle proposée d'office pour une colonne Référence (identifiant de ligne = colonne Référence) ne trouvait donc jamais la ligne en mode Lecture. Dans
+  // ce seul cas, relit la ligne brute par son id ; toute autre règle garde la valeur de `record` telle quelle (une règle qui compare justement le texte
+  // affiché, ex. "NomPrenom = Responsable", continue de fonctionner comme avant).
+  async function ruleSourceValue(rule, record, currentTableId, fetchRows) {
+    if (rule.colonneSource === 'id') return record.id;
+    const value = unwrapRefValue(record[rule.colonneSource]);
+    if (rule.colonneCible !== 'id' || typeof value === 'number' || record.id == null) return value;
+    const type = GristAPI.getColumnType(currentTableId, rule.colonneSource);
+    if (!type || type.indexOf('Ref:') !== 0) return value;
+    const rows = await fetchRows(currentTableId);
+    const raw = rows.find(r => r.id === record.id);
+    return raw ? raw[rule.colonneSource] : value;
+  }
+  // Ligne(s) de `varTable` qui correspondent à la ligne courante selon la règle de liaison de cette table (vide si aucune) - partagé entre la résolution
+  // d'une #Variable (resolveRawValueWithRule) et la fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui lit plusieurs colonnes de la MÊME
+  // ligne. `opts.fetchRows(tableId)` (facultatif) remplace GristAPI.fetchTableRows, pour ne lire chaque table qu'une fois quand une condition est évaluée
+  // sur toutes les lignes d'une table (aperçu de js/variable-condition.js).
+  async function resolveLinkedRows(varTable, rule, record, currentTableId, opts) {
+    const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
     if (rule.mode === 'singleton') {
-      const rows = await GristAPI.fetchTableRows(varTable);
-      if (!rows.length) return { value: null };
-      const first = rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0]);
-      return { value: first[varColumn] };
+      const rows = await fetchRows(varTable);
+      if (!rows.length) return [];
+      return [rows.reduce((min, r) => (r.id < min.id ? r : min), rows[0])];
     }
-    const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
-    if (sourceVal === undefined || sourceVal === null) return { value: null };
-    const rows = await GristAPI.fetchTableRows(varTable);
-    const matches = rows.filter(r => {
+    const sourceVal = await ruleSourceValue(rule, record, currentTableId, fetchRows);
+    if (sourceVal === undefined || sourceVal === null) return [];
+    const rows = await fetchRows(varTable);
+    return rows.filter(r => {
       const cibleVal = rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]);
       return sameValue(cibleVal, sourceVal);
     });
-    if (!matches.length) return { value: null };
-    return { value: matches.map(r => r[varColumn]) };
+  }
+  // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
+  // Retourne { value } ou { error } (déjà formaté "[ERREUR: ...]"). En mode "match", `value` est un tableau (une valeur par ligne liée) et `multi` le
+  // signale : js/condition-rules.js:matches teste alors chaque ligne liée, sans confondre avec une ChoiceList, elle aussi un tableau.
+  async function resolveRawValueWithRule(varTable, varColumn, rule, record, currentTableId, opts) {
+    const rows = await resolveLinkedRows(varTable, rule, record, currentTableId, opts);
+    if (rule.mode === 'singleton') return { value: rows.length ? rows[0][varColumn] : null };
+    if (!rows.length) return { value: null };
+    return { value: rows.map(r => r[varColumn]), multi: true };
   }
   async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
@@ -316,7 +344,7 @@ const Variables = (function () {
       return { value: record[varColumn] };
     }
     const rule = GristAPI.getLinkRule(varTable);
-    if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record);
+    if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record, resolvedTableId, opts);
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
     if (refCols.length === 0) return { error: `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]` };
     const refId = record[refCols[0]];
@@ -500,7 +528,9 @@ const Variables = (function () {
           preview.classList.add('is-good');
           return;
         }
-        const sourceVal = rule.colonneSource === 'id' ? record.id : unwrapRefValue(record[rule.colonneSource]);
+        // Même lecture de la colonne source que la résolution réelle (ruleSourceValue) : sinon l'aperçu annonçait « aucune ligne » pour une colonne
+        // Référence alors que la variable, elle, la trouve.
+        const sourceVal = await ruleSourceValue(rule, record, currentTableId, GristAPI.fetchTableRows);
         const matches = rows.filter(r => sameValue(rule.colonneCible === 'id' ? r.id : unwrapRefValue(r[rule.colonneCible]), sourceVal));
         if (matches.length) {
           preview.textContent = I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') });
@@ -543,6 +573,25 @@ const Variables = (function () {
       btnCancel.addEventListener('click', onCancel);
     });
   }
+  // Modifie la règle d'une table déjà liée (même modale qu'à l'insertion), partagé entre le panneau « Tables liées » ci-dessous et le lien « Modifier le
+  // lien » de la fenêtre de condition d'une variable (js/variable-condition.js). Vrai si une nouvelle règle a été enregistrée.
+  async function editLinkRule(tableCible) {
+    const currentTableId = GristAPI.getCurrentTableId();
+    if (!currentTableId) return false;
+    const newRule = await showLinkConfigModal(tableCible, currentTableId, GristAPI.getLinkRule(tableCible));
+    if (!newRule) return false;
+    await GristAPI.saveLinkRule(tableCible, newRule);
+    refreshLinkRulesPanel();
+    return true;
+  }
+  // Colonne qui porte le lien d'une règle "match", pour les libellés des fenêtres d'une variable (condition, autres attributs) : côté table de la page
+  // ("Dossiers.Responsable") ou côté table liée ("Planning.Dossier"), sinon les deux colonnes comparées. Vide pour "singleton" (pas de colonne de lien).
+  function describeLinkVia(tableCible, rule, currentTableId) {
+    if (!rule || rule.mode !== 'match') return '';
+    if (rule.colonneCible === 'id') return currentTableId + '.' + rule.colonneSource;
+    if (rule.colonneSource === 'id') return tableCible + '.' + rule.colonneCible;
+    return currentTableId + '.' + rule.colonneSource + ' = ' + tableCible + '.' + rule.colonneCible;
+  }
   // Modèles dont le contenu contient au moins un badge #Variable pointant vers `tableCible` - recherche brute sur l'attribut sérialisé, pas besoin d'un
   // DOMParser complet. Utilisé pour avertir avant de supprimer une règle encore utilisée ailleurs.
   function findTemplatesUsingTable(tableCible) {
@@ -573,14 +622,7 @@ const Variables = (function () {
       const btnEdit = document.createElement('button');
       btnEdit.type = 'button'; btnEdit.className = 'link-rule-btn link-rule-btn-edit';
       btnEdit.setAttribute('aria-label', I18n.t('linkRules.edit')); btnEdit.title = I18n.t('linkRules.edit');
-      btnEdit.addEventListener('click', async () => {
-        const currentTableId = GristAPI.getCurrentTableId();
-        if (!currentTableId) return;
-        const newRule = await showLinkConfigModal(rule.tableCible, currentTableId, rule);
-        if (!newRule) return;
-        await GristAPI.saveLinkRule(rule.tableCible, newRule);
-        refreshLinkRulesPanel();
-      });
+      btnEdit.addEventListener('click', () => editLinkRule(rule.tableCible));
       const btnDelete = document.createElement('button');
       btnDelete.type = 'button'; btnDelete.className = 'link-rule-btn link-rule-btn-delete';
       btnDelete.setAttribute('aria-label', I18n.t('linkRules.delete')); btnDelete.title = I18n.t('linkRules.delete');
@@ -602,7 +644,11 @@ const Variables = (function () {
     });
   }
 
-  // resolveRawValue exposé pour js/macro-templates.js (évaluation de conditions sur une valeur brute, non formatée - même/cross-table via le même mécanisme
-  // que #Variable) - jusqu'ici purement interne, aucun autre appelant existant à revalider.
-  return { createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar };
+  // resolveRawValue exposé pour js/condition-rules.js (évaluation de conditions sur une valeur brute, non formatée - même/cross-table via le même mécanisme
+  // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue : fenêtres de condition et d'autres attributs d'une
+  // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable.
+  return {
+    createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, formatValue,
+  };
 })();

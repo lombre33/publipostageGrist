@@ -7,6 +7,16 @@ const ReaderMode = (function () {
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
+  // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de l'export, le
+  // texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle (js/condition-rules.js:matches).
+  async function badgeConditionHolds(badge, tableId, record) {
+    const raw = badge.getAttribute('data-condition');
+    if (!raw) return true;
+    let condition = null;
+    try { condition = JSON.parse(raw); } catch (e) { console.error('[ReaderMode] condition de variable illisible', e); return false; }
+    try { return await ConditionRules.conditionHolds(condition, tableId, record); }
+    catch (e) { console.error('[ReaderMode] échec de l\'évaluation d\'une condition de variable', e); return false; }
+  }
   // === Aperçu paginé réel - mode Lecture === Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt qu'importé (pas de mécanisme de module
   // entre scripts classiques). Plus simple ici : contenu statique déjà résolu, pas de débounce nécessaire.
   const PT_TO_PX = 96 / 72;
@@ -75,6 +85,7 @@ const ReaderMode = (function () {
     await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
+      if (!(await badgeConditionHolds(badge, tableId, record))) { badge.replaceWith(document.createTextNode('')); return; }
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
     }));
     // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
@@ -310,6 +321,7 @@ const ReaderMode = (function () {
   // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
   // par GristAPI.hydrateAttachmentImages, appelé juste après.
   async function resolveBadgeNode(badge, tableId, record, format) {
+    if (!(await badgeConditionHolds(badge, tableId, record))) return { node: document.createTextNode(''), isError: false };
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
     const isAttachments = GristAPI.getColumnType(table, column) === 'Attachments';

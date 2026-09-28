@@ -52,6 +52,7 @@ apparaît) :
 | `js/editor-core.js`, `js/editor.js` | **Transverse** - traiter comme une demande de suite complète, ces fichiers sont partagés par tous les domaines |
 | `js/template-tree-select.js`, `css/template-tree-select.css` | **Toujours `templateTree`** (arbre de sélection des modèles - ouverture/fermeture, scroll interne, réouverture) |
 | `css/editor-v2.css` (règle `.v2-hover-flyout`/`.v2-hover-flyout-scrollable`), `js/editor-core.js` (`positionFlyout`/`setGroupExpanded`) | **Toujours `toolbarChrome` ET `templateTree` ET le script Node `wheelScroll`** (molette réelle, cf. plus bas) - ces menus partagent un mécanisme commun (`.v2-hover-group`/`.v2-hover-flyout`, délégation dans `editor-core.js`) avec le popup de l'arbre des modèles : un flyout mal plafonné fait déborder LA PAGE (pas juste le menu) même fermé, ce qu'aucun scénario `page.evaluate()` ne peut détecter (cf. [[project-publipostage-scroll-chaining-popup-fix]]) |
+| `js/variable-condition.js`, `js/variable-linked-attrs.js`, `css/variable-actions.css`, `js/condition-rules.js` (`conditionHolds`, lignes liées multiples), `js/condition-fields.js` (mode toutes tables), `js/variables.js` (`ruleSourceValue`, `resolveLinkedRows`, `formatValue`), `js/reader-mode.js` (`badgeConditionHolds`), attribut `condition` de `varBadge` (`js/editor-nodes.js`), actions de la barre d'une bulle (`js/floating-toolbars.js:wireVariableFloatingToolbar`) | **Toujours `varCondition` ET le script Node `varToolbarMouse`** (variables conditionnelles et autres attributs : masquage en lecture/export, fenêtres, barre flottante ; le script clique pour de vrai à 700×400) **+ `macroModeles`** si `js/condition-rules.js`/`js/condition-fields.js` change (mêmes règles) |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 
 Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
@@ -88,6 +89,9 @@ Deux options utiles :
 - `--probe "<expression JS>"` ouvre le harnais, évalue l'expression (`await`
   supporté) et imprime le résultat, sans exécuter aucun scénario - pour
   inspecter l'état réel de la page avant d'écrire un test.
+- Un second script Node, `varToolbarMouse` (`dev-tests/verify-var-toolbar-mouse.mjs`), clique
+  à la vraie souris, à 700×400, la barre d'une bulle #Variable puis ses deux fenêtres (condition, autres
+  attributs, choix de la clé par-dessus) : icônes, Enregistrer/Insérer/Valider atteignables et non recouverts.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via

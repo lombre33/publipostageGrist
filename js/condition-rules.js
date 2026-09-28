@@ -165,17 +165,30 @@ const ConditionRules = (function () {
     return { table: rawColumn.slice(0, idx), column: rawColumn.slice(idx + 1) };
   }
 
-  async function matches(rule, tableId, record) {
+  // `opts` (facultatif) est transmis tel quel à Variables.resolveRawValue - ex. { fetchRows } pour lire chaque table une seule fois quand une même
+  // condition est évaluée sur toutes les lignes d'une table (aperçu de la fenêtre de condition d'une variable, js/variable-condition.js).
+  async function matches(rule, tableId, record, opts) {
     if (!rule || !rule.column) return false;
     const { table, column } = parseColumnRef(rule.column, tableId);
     let actual;
+    let perLinkedRow = false;
     try {
-      const { value, error } = await Variables.resolveRawValue(table, column, tableId, record);
+      const { value, error, multi } = await Variables.resolveRawValue(table, column, tableId, record, opts);
       if (error) { console.error('[ConditionRules] valeur illisible pour la règle', rule, error); return false; }
       actual = value;
+      perLinkedRow = !!multi;
     } catch (e) {
       console.error('[ConditionRules] échec de résolution de la règle', rule, e);
       return false;
+    }
+    const columnType = GristAPI.getColumnType(table, column);
+    // Colonne d'une autre table liée par correspondance (règle "match") : une valeur PAR ligne liée, la bulle les affichant séparées par des virgules.
+    // La règle est remplie si AU MOINS UNE ligne liée la remplit - comparer le tableau entier retombait sur String(tableau) ("a,b"), donc jamais une date,
+    // un booléen ou « vide » correctement, même pour une seule ligne liée. Réservé à ce cas (`multi`, posé par js/variables.js) : une ChoiceList ou une
+    // RefList de la table courante arrive elle aussi en tableau, et sa sémantique reste le gap connu décrit au-dessus de compareValues.
+    if (perLinkedRow && Array.isArray(actual)) {
+      if (!actual.length) return compareValues(null, rule.operator, rule.value, columnType);
+      return actual.some(v => compareValues(v, rule.operator, rule.value, columnType));
     }
     // record[column] === undefined ET la clé elle-même absente (pas juste une valeur vide) : la colonne n'a jamais été transmise à ce widget pour cette
     // ligne. Cause la plus probable, colonne de la table courante non montrée dans le panneau de droite DE CE WIDGET (grist.onRecord, includeColumns -
@@ -185,9 +198,26 @@ const ConditionRules = (function () {
       console.warn('[ConditionRules] règle sur la colonne "' + column + '" : absente de la ligne courante (record) - vérifiez qu\'elle existe toujours '
         + 'et qu\'elle est cochée dans les colonnes visibles de CE widget (panneau de droite), ou qu\'elle a bien un accès complet.', rule);
     }
-    const columnType = GristAPI.getColumnType(table, column);
     return compareValues(actual, rule.operator, rule.value, columnType);
   }
 
-  return { OPERATORS, compareValues, parseColumnRef, matches };
+  // Condition d'affichage d'une bulle #Variable (attribut `condition` du nœud varBadge, js/editor-nodes.js) : { mode: 'all'|'any', rules: [...] }.
+  // Les règles sans colonne (ligne laissée vide dans la fenêtre) sont ignorées ; sans aucune règle complète, pas de condition (null).
+  function normalizeCondition(condition) {
+    if (!condition || !Array.isArray(condition.rules)) return null;
+    const rules = condition.rules.filter(r => r && r.column);
+    if (!rules.length) return null;
+    return { mode: condition.mode === 'any' ? 'any' : 'all', rules };
+  }
+
+  // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une. Une règle
+  // illisible compte comme non remplie (même choix que pour les macro-modèles, cf. matches).
+  async function conditionHolds(condition, tableId, record, opts) {
+    const c = normalizeCondition(condition);
+    if (!c) return true;
+    const results = await Promise.all(c.rules.map(rule => matches(rule, tableId, record, opts)));
+    return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
+  }
+
+  return { OPERATORS, compareValues, parseColumnRef, matches, normalizeCondition, conditionHolds };
 })();
