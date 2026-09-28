@@ -30,7 +30,7 @@
 //
 // Usage : node dev-tests/verify-wheel-scroll.mjs
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,20 @@ import { createRequire } from 'node:module';
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const PORT = Number(process.env.WHEEL_SCROLL_PORT || 8896);
+
+// _test-harness.html (gitignoré) est régénéré ici avant de servir quoi que ce soit - ce script est aussi
+// lancé seul (`node dev-tests/verify-wheel-scroll.mjs`), pas seulement via run-headless.mjs (qui le fait
+// déjà lui-même) : sans ça, un markup modifié dans index.html (ex. une classe CSS ajoutée) sans avoir
+// relancé dev-tests/generate-harness.sh donne un résultat basé sur un DOM périmé, sans erreur visible.
+async function regenerateHarness() {
+  const html = await readFile(join(ROOT, 'index.html'), 'utf8');
+  const stubbed = html.replace(
+    '<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>',
+    '<script src="dev-tests/grist-stub.js"></script>'
+  );
+  await writeFile(join(ROOT, '_test-harness.html'), stubbed);
+}
+await regenerateHarness();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',

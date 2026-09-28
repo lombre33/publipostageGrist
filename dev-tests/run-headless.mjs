@@ -12,7 +12,7 @@
 // (scenarios-chips laissait échouer un scénario d'image sans rapport). Un processus par groupe rend
 // chaque verdict indépendant de l'ordre de lancement, au prix de quelques secondes de démarrage.
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,23 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
+
+// _test-harness.html (racine, gitignoré) est une simple copie de index.html avec l'API Grist réelle
+// remplacée par le stub local - jusqu'ici régénérée à la main (dev-tests/generate-harness.sh) avant
+// TOUT lancement, un piège déjà documenté (mémoire projet) qui a produit un faux résultat dans cette
+// même session : un changement de markup (classe CSS ajoutée) non reflété tant que le harnais n'était
+// pas régénéré. Régénérée ICI systématiquement (avant de servir quoi que ce soit) pour rendre cette
+// dérive structurellement impossible plutôt que de compter sur ce qu'un humain/Claude s'en souvienne à
+// chaque session - même substitution que generate-harness.sh, gardée en un seul endroit avec elle.
+async function regenerateHarness() {
+  const html = await readFile(join(ROOT, 'index.html'), 'utf8');
+  const stubbed = html.replace(
+    '<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>',
+    '<script src="dev-tests/grist-stub.js"></script>'
+  );
+  await writeFile(join(ROOT, '_test-harness.html'), stubbed);
+}
+await regenerateHarness();
 
 // Les groupes et leurs fichiers, dans l'ordre du README. `deps` = fichiers à charger en plus de
 // helpers/runner (un groupe qui s'appuie sur un autre scénario n'existe pas aujourd'hui, mais la
