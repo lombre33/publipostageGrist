@@ -109,20 +109,24 @@ const MacroTemplates = (function () {
         // pareil sur les deux chemins de lecture, sans coïncidence.
         if (operator === 'contient') return aKey.indexOf(String(expected == null ? '' : expected).trim().toLowerCase()) !== -1;
         const expectedDate = parseDateExpected(expected);
-        if (expectedDate) {
-          // Comparaison à la granularité JOUR pour TOUS les autres opérateurs (dans le fuseau de la colonne pour DateTime:<fuseau>, en UTC nu pour
-          // Date - déjà correct sans fuseau, cf. GristDate.toString()) : la modale ne propose de saisir qu'un jour, jamais une heure (placeholder),
-          // donc comparer l'instant exact rendait "=" (jour) et ">"/"≤" (instant) incohérents entre eux pour une même valeur - ex. 14h le jour J
-          // matchait à la fois "= J" et "> J", alors que "≤ J" échouait (audit du coordinateur, 2026-09-28).
-          const eKey = dayKey(expectedDate);
-          switch (operator) {
-            case '=': return aKey === eKey;
-            case '≠': return aKey !== eKey;
-            case '>': return aKey > eKey;
-            case '<': return aKey < eKey;
-            case '≥': return aKey >= eKey;
-            case '≤': return aKey <= eKey;
-          }
+        // `expected` illisible en date (ex. "31/02/2026", ou vide) : faux pour TOUS les opérateurs restants, jamais un repli sur la comparaison
+        // générique en texte ci-dessous - sinon ">"/"≥"/"<" retombaient sur un ordre lexicographique de chaînes et matchaient parfois par accident
+        // (ex. "> 09/26/2026" ou "≥ 09/26/2026" matchaient le 26/09/2026 ; régression trouvée seulement sur ces opérateurs, "=" étant déjà correct
+        // depuis le premier correctif - audit du coordinateur, 2026-09-28).
+        if (!expectedDate) return false;
+        // Comparaison à la granularité JOUR pour TOUS les autres opérateurs (dans le fuseau de la colonne pour DateTime:<fuseau>, en UTC nu pour
+        // Date - déjà correct sans fuseau, cf. GristDate.toString()) : la modale ne propose de saisir qu'un jour, jamais une heure (placeholder),
+        // donc comparer l'instant exact rendait "=" (jour) et ">"/"≤" (instant) incohérents entre eux pour une même valeur - ex. 14h le jour J
+        // matchait à la fois "= J" et "> J", alors que "≤ J" échouait (audit du coordinateur, 2026-09-28).
+        const eKey = dayKey(expectedDate);
+        switch (operator) {
+          case '=': return aKey === eKey;
+          case '≠': return aKey !== eKey;
+          case '>': return aKey > eKey;
+          case '<': return aKey < eKey;
+          case '≥': return aKey >= eKey;
+          case '≤': return aKey <= eKey;
+          default: return false;
         }
       }
     }

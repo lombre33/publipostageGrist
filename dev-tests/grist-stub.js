@@ -31,7 +31,21 @@
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     recordCallback: null,
+    recordIncludeColumns: 'shown', // 2e argument de grist.onRecord (cf. window.grist.onRecord ci-dessous)
+    // { tableId: [colId, ...] } - colonnes PAS cochées dans le panneau de droite DE CE WIDGET, pour ce
+    // tableId (cf. setHiddenColumns). Vide par défaut = toutes les colonnes "montrées", pour ne rien
+    // changer aux tests existants qui ne s'en soucient pas - un test qui veut vérifier le comportement
+    // includeColumns:'shown' (vérifié à la source grist-core, GristAPI.ts/WidgetFrame.ts - cf. mémoire
+    // d'équipe project-publipostage-macro-condition-columntype-fix) doit le déclarer explicitement.
+    hiddenColumnsByTable: {},
     nextRowId: { Publipostage_Modeles: 1, Publipostage_LiensTables: 1, Publipostage_UserProbe: 1 },
+    // Niveau d'accès RÉELLEMENT accordé au widget (settings.accessLevel de onOptions côté grist-core,
+    // JAMAIS ce que grist.getOptions() renvoie - WidgetAPI.getOptions() est les options JSON PROPRES au
+    // widget, pas InteractionOptions, vérifié à la source le 2026-09-28). 'full' par défaut pour ne rien
+    // changer aux tests existants (dont ceux qui dépendent déjà de includeColumns:'normal') - un test qui
+    // veut simuler un accès limité doit appeler setAccessLevel explicitement.
+    accessLevel: 'full',
+    optionsCallback: null,
   };
 
   function columnarEmpty(cols) {
@@ -114,8 +128,36 @@
     state.rows[tableId] = out;
   }
 
+  // Colonnes de `tableId` PAS cochées dans le panneau de droite DE CE WIDGET (donc absentes de `record`
+  // sous includeColumns:'shown', le défaut réel de grist.onRecord) - cf. le commentaire de
+  // state.hiddenColumnsByTable ci-dessus pour le "pourquoi". `id` ne peut jamais être masqué (Grist ne le
+  // permet pas non plus).
+  function setHiddenColumns(tableId, colIds) {
+    state.hiddenColumnsByTable[tableId] = (colIds || []).filter(c => c !== 'id');
+  }
+
+  // Simule un changement du niveau d'accès accordé (ex. l'utilisateur refuse l'accès complet demandé par
+  // grist.ready({requiredAccess:'full'}), ou l'accorde plus tard) - re-déclenche onOptions si déjà
+  // enregistré, exactement comme grist-core le fait à chaque changement réel (ConfigNotifier, pas
+  // seulement au ready initial).
+  function setAccessLevel(level) {
+    state.accessLevel = level;
+    if (state.optionsCallback) state.optionsCallback(null, { accessLevel: state.accessLevel, linking: {} });
+  }
+
   function fireRecord(record, tableId) {
-    if (state.recordCallback) state.recordCallback(record, { tableId });
+    let effective = record;
+    // 'shown' (défaut) : Grist retire du record les colonnes pas cochées dans CETTE section (vérifié à la
+    // source, cf. state.recordIncludeColumns). 'normal'/'all' : toutes les colonnes normales, quel que
+    // soit l'affichage (le correctif de js/grist-api.js:onRecord demande explicitement 'normal').
+    if (record && state.recordIncludeColumns === 'shown') {
+      const hidden = state.hiddenColumnsByTable[tableId] || [];
+      if (hidden.length) {
+        effective = {};
+        Object.keys(record).forEach(k => { if (k === 'id' || hidden.indexOf(k) === -1) effective[k] = record[k]; });
+      }
+    }
+    if (state.recordCallback) state.recordCallback(effective, { tableId });
   }
 
   // Journal de TOUTES les écritures passées par ce client. Certaines promesses ne se vérifient que
@@ -250,9 +292,15 @@
 
   window.grist = {
     ready: function () { /* no-op, cf. GristAPI.init() */ },
-    onRecord: function (cb) { state.recordCallback = cb; },
-    onOptions: function () { /* no-op */ },
-    getOptions: async function () { return { accessLevel: 'full', linking: {} }; },
+    onRecord: function (cb, opts) { state.recordCallback = cb; state.recordIncludeColumns = (opts && opts.includeColumns) || 'shown'; },
+    // Déclenché immédiatement à l'enregistrement (simule "on ready, send initial configuration",
+    // ConfigNotifier._ready côté grist-core) puis à chaque setAccessLevel() ultérieur - c'est la SEULE
+    // source fiable de accessLevel (jamais getOptions(), cf. son commentaire ci-dessous).
+    onOptions: function (cb) { state.optionsCallback = cb; cb(null, { accessLevel: state.accessLevel, linking: {} }); },
+    // WidgetAPI.getOptions() = options JSON PROPRES au widget (activeCustomOptions), jamais accessLevel -
+    // ce widget n'appelle jamais grist.setOptions(), donc toujours null en pratique (vérifié à la source
+    // le 2026-09-28, cf. js/grist-api.js:onOptions pour la vraie source d'accessLevel).
+    getOptions: async function () { return null; },
     docApi: {
       listTables: async function () { return state.tables.slice(); },
       fetchTable: async function (tableId) {
@@ -263,7 +311,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

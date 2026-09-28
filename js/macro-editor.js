@@ -47,7 +47,8 @@ const MacroEditor = (function () {
   // texte pour le cas rare cross-table ("Table.Colonne", cf. js/macro-templates.js:parseColumnRef) - jamais retiré, pour ne pas régresser sur une
   // capacité déjà là (règle de non-régression du projet), juste sorti du chemin principal. `onTypeChange(type)` : notifie le champ valeur du type Grist
   // de la colonne choisie (ou null), pour adapter son placeholder - le format attendu (ex. une date) est précisément ce qu'Antoine n'arrivait pas à
-  // deviner (2026-09-28).
+  // deviner (2026-09-28). Renvoie `{ wrap, typeHint }` (pas juste un élément) : `typeHint` doit être placé par l'appelant en dehors de `wrap`, cf. son
+  // commentaire plus bas.
   function buildColumnField(rule, onTypeChange) {
     const wrap = document.createElement('span');
     wrap.className = 'macro-rule-column-wrap';
@@ -122,8 +123,12 @@ const MacroEditor = (function () {
 
     wrap.appendChild(select);
     wrap.appendChild(advancedInput);
-    wrap.appendChild(typeHint);
-    return wrap;
+    // typeHint N'EST PLUS un enfant de `wrap` (donc plus soumis à sa largeur flex:1, ~1/3 de la ligne) :
+    // l'avertissement "colonne absente" peut faire 400px+ dans une ligne de ~460px (mesuré par le
+    // coordinateur, 2026-09-28) et écrasait tout le reste de la ligne (select réduit à 10px). L'appelant
+    // (renderSlots) place `typeHint` en pleine largeur SOUS la ligne (cf. .macro-rule-column-type dans
+    // css/toolbar-v2.css : flex-basis:100%, sur .macro-rule-row directement).
+    return { wrap, typeHint };
   }
 
   function valuePlaceholderForType(type) {
@@ -271,7 +276,8 @@ const MacroEditor = (function () {
         valueWrap.className = 'macro-rule-value-slot';
         function renderValue(type, colId) { valueWrap.replaceChildren(buildValueField(rule, type, colId)); }
 
-        row.appendChild(buildColumnField(rule, (type, colId) => renderValue(type, colId)));
+        const columnField = buildColumnField(rule, (type, colId) => renderValue(type, colId));
+        row.appendChild(columnField.wrap);
 
         const opSelect = document.createElement('select');
         OPERATORS.forEach(op => { const o = document.createElement('option'); o.value = op; o.textContent = op; opSelect.appendChild(o); });
@@ -298,6 +304,11 @@ const MacroEditor = (function () {
         removeRuleBtn.setAttribute('aria-label', I18n.t('macro.modal.removeRule'));
         removeRuleBtn.addEventListener('click', () => { slot.rules.splice(ruleIndex, 1); renderSlots(); });
         row.appendChild(removeRuleBtn);
+
+        // Ajouté en DERNIER, pas avec columnField.wrap : `.macro-rule-column-type` a flex-basis:100% (cf. css/toolbar-v2.css), donc prend TOUJOURS sa
+        // propre ligne en pleine largeur de `row`, quelle que soit sa position dans le HTML - mesuré par le coordinateur (2026-09-28) : à l'intérieur du
+        // <1/3 de largeur de columnField.wrap, l'avertissement "colonne absente" (400px+) écrasait tout le reste de la ligne.
+        row.appendChild(columnField.typeHint);
 
         rulesBox.appendChild(row);
       });

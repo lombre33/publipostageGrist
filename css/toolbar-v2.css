@@ -186,7 +186,12 @@
 
 /* === Modale "Macro modèle" (#macro-editor-modal, js/macro-editor.js) === Page de garde + liste de cartes "annexe conditionnelle", chaque carte reprenant
    .link-rule-row pour ses lignes de règle (même vocabulaire visuel que la modale "Tables liées" ci-dessus) plutôt qu'un nouveau patron de liste. */
-.macro-editor-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; }
+/* max-height + overflow-y sur LA MODALE ENTIÈRE (pas seulement .macro-editor-slots, déjà limité à 320px) : sans ça, Enregistrer/Annuler sortent de la
+   fenêtre dès qu'une seule règle est ajoutée dans un panneau bas (700×400, 600×400, 500×500, 900×450 - mesuré par le coordinateur, 2026-09-28), donc
+   inatteignables à la souris. position:sticky sur .modal-actions (juste en dessous) : les boutons restent visibles en bas du cadre visible même en
+   scrollant, au lieu de simplement faire défiler toute la boîte (qui les laisserait hors champ jusqu'à défiler tout en bas). */
+.macro-editor-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; max-height: 90vh; overflow-y: auto; }
+.macro-editor-modal-content .modal-actions { position: sticky; bottom: 0; background: var(--surface); padding-top: 4px; }
 .macro-editor-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); }
 .macro-editor-intro { font-size: 11.5px; color: var(--text-faint); margin: 0 0 14px; }
 .macro-editor-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -202,22 +207,31 @@
 .macro-slot-remove:hover, .macro-rule-remove:hover { background: var(--surface); border-color: var(--border-strong); color: var(--danger); }
 .macro-slot-remove::before, .macro-rule-remove::before { content: "✕"; font-size: 12px; }
 .macro-slot-rules { display: flex; flex-direction: column; gap: 4px; }
-.macro-rule-row { display: flex; align-items: center; gap: 5px; padding: 3px 0; }
+/* flex-wrap:wrap (au lieu du nowrap implicite) : sans ça, les zones flex:1 (min-width:0) de la ligne se réduisaient jusqu'à l'illisible plutôt que de
+   passer à la ligne - mesuré par le coordinateur (2026-09-28, panneau étroit ET avertissement colonne absente) : sélecteur de colonne réduit à 10px. */
+.macro-rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 0; }
 .macro-rule-connector { flex: none; font-size: 11px; font-weight: 700; color: var(--text-muted); width: 34px; }
 .macro-rule-column, .macro-rule-value { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-row select { flex: none; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); }
 .macro-rule-row select.macro-rule-modele { flex: 1; min-width: 0; }
 .macro-rule-arrow { flex: none; color: var(--text-faint); font-size: 12px; }
-.macro-rule-column-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
-.macro-rule-column-wrap select.macro-rule-column { flex: 1; min-width: 0; }
-.macro-rule-column-advanced { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+/* flex-wrap:wrap + min-width en px (au lieu de 0) sur les deux enfants : quand select ET advancedInput sont visibles en même temps (valeur déjà
+   enregistrée absente des choix/colonnes actuels), ils se partageaient l'espace à 50/50 jusqu'à tronquer leur texte ("Autre valeur…" -> "Au", mesuré par
+   le coordinateur, 2026-09-28) - passent maintenant à la ligne l'un sous l'autre plutôt que de rétrécir sous une largeur lisible. */
+.macro-rule-column-wrap { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.macro-rule-column-wrap select.macro-rule-column { flex: 1 1 90px; min-width: 90px; }
+.macro-rule-column-advanced { flex: 1 1 90px; min-width: 90px; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-column-advanced[hidden] { display: none; }
-.macro-rule-column-type { flex: none; font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
+/* flex:1 0 100% : force TOUJOURS sa propre ligne en pleine largeur de .macro-rule-row (jamais juste celle de .macro-rule-column-wrap, ~1/3 de la ligne -
+   l'avertissement "colonne absente" y dépassait largement et écrasait le reste de la ligne, cf. commentaire de .macro-rule-row) ; white-space:normal
+   (au lieu de nowrap) pour qu'il puisse revenir à la ligne lui-même si besoin. Placé par renderSlots (js/macro-editor.js) en DERNIER enfant de la ligne,
+   hors de .macro-rule-column-wrap. */
+.macro-rule-column-type { flex: 1 0 100%; font-size: 10.5px; color: var(--text-faint); white-space: normal; margin-top: 2px; }
 .macro-rule-column-type.is-warning { color: var(--danger); font-weight: 600; }
 .macro-rule-value-slot { flex: 1; min-width: 0; display: flex; }
-.macro-rule-value-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
-.macro-rule-value-wrap select.macro-rule-value { flex: 1; min-width: 0; }
-.macro-rule-value-advanced { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.macro-rule-value-wrap { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.macro-rule-value-wrap select.macro-rule-value { flex: 1 1 90px; min-width: 90px; }
+.macro-rule-value-advanced { flex: 1 1 90px; min-width: 90px; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-value-advanced[hidden] { display: none; }
 .macro-rule-add { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--accent); background: none; border: none; padding: 4px 0; cursor: pointer; font-family: var(--font-ui); }
 .macro-rule-add:hover { color: var(--accent-hover); text-decoration: underline; }
