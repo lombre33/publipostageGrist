@@ -272,9 +272,6 @@ const MainToolbar = (function () {
     wireHeadingMenu();
     wireSelectionDependentSelects();
     wireCompactFontSizeControls();
-    // Mécanisme commun anti-chevauchement info-bulle/menu (retour Antoine 2026-09-28) - cf. commentaire dans editor-core.js. Couvre TOUS les
-    // `.v2-hover-group` de la page (pas seulement #v2-toolbar), un seul appel suffit donc pour toute la barre d'outils.
-    EditorCore.wireHoverGroupTooltipSuppression();
   }
 
   // Menu "Titre" fusionné (niveau + numérotation) : les deux réglages restent portés par un <select> caché comme source de vérité, le flyout se contente de

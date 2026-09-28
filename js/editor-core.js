@@ -92,7 +92,8 @@ const EditorCore = (function () {
   });
   // aria-expanded posé/retiré sur le bouton déclencheur pendant que son panneau est ouvert - même convention que TemplateTreeSelect
   // (js/template-tree-select.js, trigger.setAttribute('aria-expanded', ...)) et signal générique lu par la règle CSS qui masque l'info-bulle [data-tip]
-  // d'un bouton à menu tant que celui-ci est ouvert (css/toolbar-v2.css) - cf. wireHoverGroupTooltipSuppression ci-dessous pour le pendant "survol".
+  // d'un bouton à menu tant que celui-ci est ouvert (css/toolbar-v2.css) - cf. la délégation mouseover/mouseout/focusin/focusout plus bas pour le pendant
+  // "survol d'un .v2-hover-group", câblée une fois pour toutes au chargement de ce script, jamais à rappeler depuis un autre fichier.
   function closeDropdownPanel() {
     if (!openDropdownPanel) return;
     openDropdownPanel.hide();
@@ -120,26 +121,43 @@ const EditorCore = (function () {
   // purement et simplement data-tip, cf. commentaire .v2-hover-flyout-label dans editor-v2.css) : un bouton qui ouvre un `.v2-hover-flyout` au survol
   // (css/editor-v2.css, `.v2-hover-group:hover .v2-hover-flyout`) affiche AUSSI sa propre info-bulle [data-tip] au survol (css/toolbar-v2.css) - les deux
   // apparaissent juste sous le bouton et se chevauchent. Mécanisme commun plutôt qu'un correctif par bouton : pose aria-expanded="true"/"false" sur le
-  // déclencheur de CHAQUE `.v2-hover-group` de la page pendant que son flyout est visible - la même règle CSS ([data-tip][aria-expanded="true"]::after,
-  // css/toolbar-v2.css) masque alors son info-bulle, exactement comme pour wireDropdownButton/closeDropdownPanel ci-dessus et TemplateTreeSelect. Tout
-  // futur bouton à menu en hérite automatiquement (les groupes futurs suivent la même structure, aucune liste d'ids à tenir à jour ici).
-  // mouseenter/mouseleave/focusin/focusout plutôt que le pseudo-état CSS :hover/:focus-within lui-même (qui pilote déjà l'ouverture du flyout, inchangée) :
-  // ce sont de VRAIS évènements DOM, contrairement à :hover qui ne peut pas être déclenché par dispatchEvent() dans le harnais de test automatisé (cf.
-  // openFlyout, dev-tests/helpers.js) - un mécanisme purement basé sur :hover ne serait donc pas vérifiable par un test de non-régression exécutable.
-  function wireHoverGroupTooltipSuppression() {
-    document.querySelectorAll('.v2-hover-group').forEach((group) => {
-      const trigger = group.querySelector(':scope > [data-tip]');
-      if (!trigger) return;
-      trigger.setAttribute('aria-haspopup', 'true');
-      trigger.setAttribute('aria-expanded', 'false');
-      const open = () => trigger.setAttribute('aria-expanded', 'true');
-      const close = () => trigger.setAttribute('aria-expanded', 'false');
-      group.addEventListener('mouseenter', open);
-      group.addEventListener('mouseleave', close);
-      group.addEventListener('focusin', open);
-      group.addEventListener('focusout', (event) => { if (!group.contains(event.relatedTarget)) close(); });
-    });
+  // déclencheur du `.v2-hover-group` pendant que son flyout est visible - la même règle CSS ([data-tip][aria-expanded="true"]::after, css/toolbar-v2.css)
+  // masque alors son info-bulle, exactement comme pour wireDropdownButton/closeDropdownPanel ci-dessus et TemplateTreeSelect.
+  //
+  // PAR DÉLÉGATION sur document (mousedown ci-dessus l'est déjà) plutôt qu'un scan ponctuel des .v2-hover-group au chargement : un groupe créé APRÈS ce
+  // script - ex. #v2-hf-pagenum-group, injecté à la demande par ensureHfPill() (js/header-footer-preview.js) - a exactement le même bug et doit être
+  // couvert sans qu'aucun autre fichier n'ait à rappeler une fonction de câblage ici. Un scan ponctuel avait exactement raté ce cas.
+  //
+  // mouseover/mouseout (pas mouseenter/mouseleave, qui ne remontent pas et ne peuvent donc pas être délégués sur document) avec vérification de
+  // relatedTarget : émulation standard d'une VRAIE entrée/sortie du groupe (ignore un simple passage entre deux de ses descendants). focusin/focusout
+  // remontent nativement, la délégation est directe. Que des évènements DOM RÉELS (jamais les pseudo-classes :hover/:focus-within elles-mêmes, qui
+  // pilotent déjà l'ouverture du flyout, inchangée) : :hover ne peut pas être déclenché par dispatchEvent() dans le harnais de test automatisé (cf.
+  // openFlyout, dev-tests/helpers.js) - un mécanisme basé uniquement sur :hover n'aurait donc jamais été vérifiable par un test exécutable.
+  function groupOf(target) { return target.closest && target.closest('.v2-hover-group'); }
+  // Une VRAIE entrée/sortie du groupe : ignore un simple passage entre deux de ses propres descendants (relatedTarget encore/déjà dans le groupe).
+  function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
+  function setGroupExpanded(group, expanded) {
+    const trigger = group.querySelector(':scope > button');
+    if (!trigger) return;
+    if (expanded) trigger.setAttribute('aria-haspopup', 'true');
+    trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   }
+  document.addEventListener('mouseover', (event) => {
+    const group = groupOf(event.target);
+    if (group && realCrossing(event, group)) setGroupExpanded(group, true);
+  });
+  document.addEventListener('mouseout', (event) => {
+    const group = groupOf(event.target);
+    if (group && realCrossing(event, group)) setGroupExpanded(group, false);
+  });
+  document.addEventListener('focusin', (event) => {
+    const group = groupOf(event.target);
+    if (group) setGroupExpanded(group, true);
+  });
+  document.addEventListener('focusout', (event) => {
+    const group = groupOf(event.target);
+    if (group && realCrossing(event, group)) setGroupExpanded(group, false);
+  });
   function setColorBar(id, color) {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';
@@ -167,7 +185,7 @@ const EditorCore = (function () {
     setEditor, getEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
-    getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton, wireHoverGroupTooltipSuppression,
+    getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver,
   };
 })();

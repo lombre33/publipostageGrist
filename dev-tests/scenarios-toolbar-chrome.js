@@ -209,15 +209,22 @@
 
   // --- Régression 2026-09-28 : l'info-bulle [data-tip] d'un bouton à menu (survol OU clic) s'affichait PAR-DESSUS son propre menu déroulant pendant qu'il
   // est ouvert (retour Antoine, bouton "image" - déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip, cf.
-  // .v2-hover-flyout-label dans editor-v2.css). Corrigé par un mécanisme COMMUN (aria-expanded posé sur le déclencheur par js/editor-core.js -
-  // wireHoverGroupTooltipSuppression pour le survol, wireDropdownButton/closeDropdownPanel pour les panneaux flottants - + une seule règle CSS dans
-  // css/toolbar-v2.css) plutôt qu'un correctif par bouton. Les deux cas ci-dessous DÉCOUVRENT les boutons à menu depuis le DOM
-  // ([aria-haspopup][aria-expanded], posé par ce même mécanisme sur chaque déclencheur), jamais une liste figée d'ids - tout futur bouton à menu suivant
-  // la même convention (survol dans un .v2-hover-group, ou aria-expanded posé à l'ouverture/fermeture) est donc couvert automatiquement.
+  // .v2-hover-flyout-label dans editor-v2.css - généralisé à Titre/Alignement/Liste/Image de la même façon). Corrigé par un mécanisme COMMUN (aria-expanded
+  // posé sur le déclencheur - délégation document dans js/editor-core.js pour tout .v2-hover-group au survol/focus, wireDropdownButton/closeDropdownPanel
+  // pour les panneaux flottants au clic - + deux règles CSS séparées dans css/toolbar-v2.css) plutôt qu'un correctif par bouton.
+  //
+  // Trois cas, pour trois affirmations distinctes :
+  // 1. La règle CSS elle-même (cas direct [data-tip][aria-expanded]) fonctionne, en isolation d'un widget réel.
+  // 2. La règle CSS :has() (cas où data-tip est porté par un ANCÊTRE, ex. #v2-size-stepper) fonctionne aussi, en isolation.
+  // 3. CHAQUE bouton à menu réellement présent sur la page (découverte STRUCTURELLE, pas une liste figée d'ids - y compris un .v2-hover-group créé
+  //    dynamiquement APRÈS le chargement, ex. #v2-hf-pagenum-group) bascule bien aria-expanded via son VRAI geste d'ouverture/fermeture ; pour ceux dont
+  //    le data-tip est porté directement par le déclencheur, on vérifie en plus le RENDU (opacité calculée), avec un vrai `:focus-visible` établi au
+  //    préalable pour que l'assertion soit falsifiable (sans focus réel, l'opacité de repos est déjà 0 - cf. piège relevé en relecture, la vérifier une
+  //    fois n'aurait rien prouvé).
 
   cases.push({
-    id: 'toolbar_menu_tooltip_css_rule_suppresses_on_aria_expanded',
-    description: 'Le mécanisme lui-même, isolé de tout widget réel : la règle CSS commune masque bien le RENDU de [data-tip]::after dès que aria-expanded="true" est posé sur un bouton quelconque (#v2-btn-bold, qui n\'ouvre aucun menu), et le laisse s\'afficher normalement sinon',
+    id: 'toolbar_menu_tooltip_css_rule_suppresses_direct',
+    description: 'Cas direct, isolé de tout widget réel : la règle CSS masque bien le RENDU de [data-tip]::after dès que aria-expanded="true" est posé sur le bouton lui-même (#v2-btn-bold, qui n\'ouvre aucun menu), et le laisse s\'afficher normalement sinon',
     run: async (h) => {
       await h.resetEditor();
       const btn = document.getElementById('v2-btn-bold');
@@ -237,45 +244,100 @@
   });
 
   cases.push({
-    id: 'toolbar_every_menu_trigger_hides_its_tooltip_while_open',
-    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte dynamique via [aria-haspopup][aria-expanded]), l\'info-bulle associée (la sienne, ou celle d\'un ANCÊTRE qui la porte à sa place - ex. #v2-size-stepper) est masquée à l\'écran tant que son menu est ouvert, et réapparaît normalement une fois refermé',
+    id: 'toolbar_menu_tooltip_css_rule_suppresses_has_ancestor',
+    description: 'Cas :has(), isolé sur un élément fabriqué pour l\'occasion : quand data-tip est porté par un ANCÊTRE du bouton qui ouvre réellement le menu (ex. #v2-size-stepper), la règle masque bien le RENDU de son ::after dès que aria-expanded="true" est posé sur ce DESCENDANT - #v2-size-stepper lui-même ne peut jamais recevoir le focus (seuls ses boutons enfants le peuvent), donc ce cas ne peut pas être vérifié avec un `:focus-visible` réel comme le cas direct ci-dessus ; on établit la référence "afficherait normalement" en focusant directement l\'élément fabriqué (qui, lui, porte le data-tip sur l\'élément focusé)',
+    run: async (h) => {
+      const probe = document.createElement('span');
+      probe.setAttribute('data-tip', 'Sonde');
+      probe.tabIndex = -1;
+      const child = document.createElement('button');
+      child.type = 'button';
+      probe.appendChild(child);
+      document.getElementById('v2-toolbar').appendChild(probe);
+      try {
+        probe.focus();
+        await h.sleep(600);
+        const beforeOpacity = getComputedStyle(probe, '::after').opacity;
+        child.setAttribute('aria-expanded', 'true');
+        await h.sleep(20);
+        const duringOpacity = getComputedStyle(probe, '::after').opacity;
+        child.setAttribute('aria-expanded', 'false');
+        await h.sleep(600);
+        const afterOpacity = getComputedStyle(probe, '::after').opacity;
+        const pass = beforeOpacity === '1' && duringOpacity === '0' && afterOpacity === '1';
+        return { pass, notes: JSON.stringify({ beforeOpacity, duringOpacity, afterOpacity }) };
+      } finally {
+        probe.remove();
+      }
+    },
+  });
+
+  cases.push({
+    id: 'toolbar_every_menu_trigger_toggles_aria_expanded_while_open',
+    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte structurelle - tout .v2-hover-group, y compris un créé dynamiquement comme #v2-hf-pagenum-group, + tout [aria-haspopup] posé par wireDropdownButton/TemplateTreeSelect), aria-expanded bascule bien via son VRAI geste d\'ouverture/fermeture ; quand le bouton porte lui-même son data-tip, l\'info-bulle est en plus vérifiée en RENDU (avec un vrai :focus-visible établi au préalable, seule façon de rendre l\'assertion falsifiable)',
     run: async (h) => {
       await goToNewDocument(h);
       await h.sleep(30);
-      const triggers = Array.from(document.querySelectorAll('[aria-haspopup][aria-expanded]'));
+      // Révèle #v2-hf-pagenum-group (injecté à la demande par header-footer-preview.js, absent tant qu'on n'est jamais entré en édition d'en-tête/pied) -
+      // sans ce pas, le test ne prouverait la délégation que sur des groupes déjà présents au chargement, pas sur le cas qui l'a motivée.
+      document.getElementById('editor-container').classList.add('a4-preview');
+      Editor.refreshPaginationPreview();
+      await h.sleep(200);
+      document.querySelector('#editor-container .v2-page-edge-top').click();
+      await h.sleep(30);
+      const hfPagenumPresent = !!document.getElementById('v2-hf-pagenum-group');
+      // La suite du test tourne PENDANT que la pastille en-tête/pied est encore affichée (donc #v2-hf-pagenum-group encore dans le DOM) - la sortir avant
+      // le balayage aurait exclu exactement le groupe qui devait prouver la délégation, en ne gardant qu'un `hfPagenumPresent` qui ne prouve rien de plus
+      // qu'un aller-retour sans conséquence.
+
+      const hoverTriggers = Array.from(document.querySelectorAll('.v2-hover-group')).map(g => g.querySelector(':scope > button')).filter(Boolean);
+      const clickTriggers = Array.from(document.querySelectorAll('[aria-haspopup]'));
+      const triggers = Array.from(new Set([...hoverTriggers, ...clickTriggers]));
+      const pagenumTriggerIncluded = triggers.includes(document.getElementById('v2-hf-btn-pagenum'));
       const details = [];
-      // Au moins les groupes au survol (titre/alignement/liste/image) et les panneaux flottants (police/taille/couleurs) doivent être détectés - une liste
-      // vide signalerait que le mécanisme n'a pas été câblé (wireToolbar()/TemplateTreeSelect.attach() pas encore appelés), pas un vrai succès.
-      let pass = triggers.length >= 6;
+      // Au moins les groupes au survol (titre/alignement/liste/image/qualité/export/nouveau) et les panneaux flottants (police/taille/couleurs) doivent
+      // être détectés - un compte trop bas signalerait que ce test tourne avant que le DOM/le câblage ne soit prêt, pas un vrai succès.
+      let pass = hfPagenumPresent && pagenumTriggerIncluded && triggers.length >= 6;
       for (const trigger of triggers) {
-        // `:hover` ne peut pas être déclenché par dispatchEvent dans ce harnais (cf. openFlyout plus haut/dev-tests/helpers.js) - mouseenter/mouseleave
-        // sont les VRAIS évènements DOM que wireHoverGroupTooltipSuppression (js/editor-core.js) écoute pour ce même mécanisme. Les boutons à menu au
-        // clic (panneaux flottants, TemplateTreeSelect) basculent, eux, sur le même geste répété (mousedown+click), comme un utilisateur qui rouvre puis
-        // referme le même bouton.
         const group = trigger.closest('.v2-hover-group');
-        // `:hover` ne s'active jamais ici (ni via dispatchEvent, ni donc via group.matches(':hover')) - un simple booléen local remplace l'état réel que
-        // le navigateur tiendrait tout seul en conditions normales.
-        let hovered = false;
-        const toggle = () => {
-          if (group) { hovered = !hovered; group.dispatchEvent(new MouseEvent(hovered ? 'mouseenter' : 'mouseleave', { bubbles: false })); return; }
+        // `:hover` ne s'active jamais via dispatchEvent dans ce harnais (cf. openFlyout plus haut/dev-tests/helpers.js) - mouseover/mouseout sont les
+        // VRAIS évènements DOM que la délégation de js/editor-core.js écoute pour ce même mécanisme. Les boutons à menu au clic (panneaux flottants,
+        // TemplateTreeSelect) basculent, eux, sur le même geste répété (mousedown+click), comme un utilisateur qui rouvre puis referme le même bouton.
+        const toggle = (opening) => {
+          if (group) { group.dispatchEvent(new MouseEvent(opening ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body })); return; }
           trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
           trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         };
-        const tipHost = trigger.closest('[data-tip]');
-        toggle();
+        // Seul un bouton qui porte LUI-MÊME son data-tip, ET vit dans le PÉRIMÈTRE du système d'info-bulle (.bar-row/#v2-toolbar, css/toolbar-v2.css),
+        // peut établir une référence "afficherait normalement" falsifiable ici. Deux exclusions distinctes : (1) :focus-visible ne s'applique qu'à
+        // l'élément focusé, jamais à un ancêtre - le cas ancêtre, ex. #v2-size-stepper, est couvert séparément et en isolation ci-dessus, seule façon de
+        // le vérifier sans un vrai survol souris que ce harnais ne peut pas simuler ; (2) #v2-hf-btn-pagenum porte un data-tip mais vit dans la pastille
+        // en-tête/pied (#editor-container, injectée par header-footer-preview.js), HORS de ce périmètre - son ::after est donc gouverné par la seule
+        // autre règle générique en jeu, le point d'accent de .v2-hover-group (opacity: .55, editor-v2.css), jamais par le système d'info-bulle. Bug
+        // préexistant sans rapport avec ce correctif (son data-tip n'a jamais affiché d'info-bulle, chevauchement ou non) - non traité ici, mais un
+        // bouton hors périmètre ne doit pas non plus faire échouer CE test sur une assertion qui ne peut mécaniquement pas tenir.
+        const inTooltipScope = !!trigger.closest('.bar-row, #v2-toolbar');
+        const ownTip = (trigger.hasAttribute('data-tip') && inTooltipScope) ? trigger : null;
+        let beforeOpacity = null;
+        if (ownTip) { trigger.focus(); await h.sleep(600); beforeOpacity = getComputedStyle(ownTip, '::after').opacity; }
+        toggle(true);
         await h.sleep(20);
         const expandedDuring = trigger.getAttribute('aria-expanded');
-        // Une info-bulle native `title` n'apparaît pas dans le DOM et n'aurait donc rien de testable en rendu ici - sans objet aujourd'hui (tout ce
-        // mécanisme repose sur [data-tip]), documenté au cas où un futur bouton à menu l'utiliserait à la place.
-        const opacityDuring = tipHost ? getComputedStyle(tipHost, '::after').opacity : null;
-        toggle();
-        await h.sleep(20);
+        const opacityDuring = ownTip ? getComputedStyle(ownTip, '::after').opacity : null;
+        toggle(false);
+        await h.sleep(ownTip ? 600 : 20); // laisse le temps à l'info-bulle de redevenir visible (transition de la règle de base) avant de la relire
         const expandedAfter = trigger.getAttribute('aria-expanded');
-        const entryPass = expandedDuring === 'true' && expandedAfter === 'false' && (tipHost === null || opacityDuring === '0');
-        details.push({ id: trigger.id || trigger.className, hasTip: !!tipHost, expandedDuring, opacityDuring, expandedAfter });
+        // Lue AVANT le blur() : le bouton est encore réellement :focus-visible juste après la fermeture (l'utilisateur n'a pas bougé le focus), l'info-
+        // bulle doit donc redevenir visible ici - blur() plus bas n'est qu'un nettoyage pour le bouton suivant, pas une étape de la vérification.
+        const afterOpacity = ownTip ? getComputedStyle(ownTip, '::after').opacity : null;
+        if (ownTip) trigger.blur();
+        const entryPass = expandedDuring === 'true' && expandedAfter === 'false'
+          && (!ownTip || (beforeOpacity === '1' && opacityDuring === '0' && afterOpacity === '1'));
+        details.push({ id: trigger.id || trigger.className, ownTip: !!ownTip, beforeOpacity, expandedDuring, opacityDuring, expandedAfter, afterOpacity });
         if (!entryPass) pass = false;
       }
-      return { pass, notes: JSON.stringify({ triggerCount: triggers.length, details }) };
+      HeaderFooterPreview.exitHeaderFooterModeIfActive();
+      return { pass, notes: JSON.stringify({ hfPagenumPresent, pagenumTriggerIncluded, triggerCount: triggers.length, details }) };
     },
   });
 

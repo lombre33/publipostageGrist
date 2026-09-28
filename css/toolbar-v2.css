@@ -63,17 +63,18 @@
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* Mécanisme commun anti-chevauchement info-bulle/menu (retour Antoine 2026-09-28 : le bouton "image" affichait son nom PAR-DESSUS son propre flyout au
-   survol, déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip - cf. .v2-hover-flyout-label, editor-v2.css).
-   aria-expanded="true" est posé sur le bouton qui porte le data-tip (ou dont un ENFANT le porte, ex. le bouton central de #v2-size-stepper : le data-tip
-   est sur le <span> englobant, pas sur le bouton lui-même, d'où le :has() en plus du cas direct) par js/editor-core.js - wireHoverGroupTooltipSuppression
-   pour tout .v2-hover-group (survol), wireDropdownButton/closeDropdownPanel pour les panneaux flottants couleur/police/taille (clic). Un seul signal
-   générique : tout futur bouton à menu en hérite automatiquement dès qu'il pose aria-expanded, sans toucher ce fichier. transition: none pour une
-   disparition immédiate - sinon le délai de .35s ci-dessus laisserait l'info-bulle visible un instant par-dessus le menu qui vient de s'ouvrir. */
-[data-tip][aria-expanded="true"]::after,
-[data-tip]:has([aria-expanded="true"])::after {
-  opacity: 0 !important;
-  transition: none !important;
-}
+   survol, déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip - cf. .v2-hover-flyout-label, editor-v2.css,
+   désormais généralisé à Titre/Alignement/Liste/Image de la même façon). aria-expanded="true" est posé, PAR DÉLÉGATION (donc aussi pour un `.v2-hover-
+   group` créé après coup, ex. #v2-hf-pagenum-group - js/header-footer-preview.js), sur le bouton qui porte le data-tip pendant que son menu est ouvert -
+   js/editor-core.js (délégation document pour tout .v2-hover-group au survol/focus, wireDropdownButton/closeDropdownPanel pour les panneaux flottants
+   police/taille/couleurs au clic). Un seul signal générique : tout futur bouton à menu en hérite automatiquement dès qu'il pose aria-expanded sur son
+   propre déclencheur, sans toucher ce fichier. transition: none pour une disparition immédiate - sinon le délai de .35s ci-dessus laisserait l'info-bulle
+   visible un instant par-dessus le menu qui vient de s'ouvrir. */
+[data-tip][aria-expanded="true"]::after { opacity: 0 !important; transition: none !important; }
+/* Cas où le data-tip est porté par un ANCÊTRE du bouton qui gère réellement le menu (ex. #v2-size-stepper : le data-tip est sur le <span> englobant, pas
+   sur #v2-size-chip-val lui-même) - règle séparée de la précédente : un sélecteur groupé par une virgule est invalidé EN BLOC (cas direct compris) sur un
+   navigateur qui ne connaît pas :has(), alors que deux règles distinctes ne perdent que celle-ci. */
+[data-tip]:has([aria-expanded="true"])::after { opacity: 0 !important; transition: none !important; }
 
 /* === Menu "Titre" fusionné (niveau + numérotation des titres) === Remplace deux contrôles jusqu'ici séparés (un <select> "Normal/Titre 1-6" + une pastille
    de numérotation isolée), qui portent tous deux sur les titres. Un seul chip (.v2-format-chip) déclenche un flyout listant les niveaux PUIS, séparé par un

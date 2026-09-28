@@ -81,7 +81,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.74">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.70">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.29">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.30">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.2">
 <link rel="stylesheet" href="css/track-changes.css?v=0.1">
 </head>
@@ -172,7 +172,7 @@
     </div>
     <div id="v2-toolbar">
       <span class="v2-hover-group" id="v2-heading-group">
-        <button type="button" class="v2-format-chip" id="v2-heading-chip" data-tip="Titre" aria-label="Titre et numérotation des titres — la numérotation ne s'applique qu'aux titres du flux principal" data-i18n-tip="heading.tip" data-i18n-aria="heading.aria">
+        <button type="button" class="v2-format-chip" id="v2-heading-chip" aria-label="Titre et numérotation des titres — la numérotation ne s'applique qu'aux titres du flux principal" data-i18n-aria="heading.aria">
           <span class="v2-format-chip-val" id="v2-heading-chip-val">Normal</span>
           <span class="v2-format-chip-caret"></span>
         </button>
@@ -188,6 +188,7 @@
           <option value="roman">I), II), III)…</option>
         </select>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-heading-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="heading.tip">Titre</span>
           <span class="v2-hover-row" data-level="p" data-i18n="heading.normal">Normal</span>
           <span class="v2-hover-row" data-level="1" data-i18n="heading.level1">Titre 1</span>
           <span class="v2-hover-row" data-level="2" data-i18n="heading.level2">Titre 2</span>
@@ -214,18 +215,22 @@
       <button id="v2-btn-strike" data-tip="Barré" aria-label="Barré" data-i18n-tip="fmt.strike" data-i18n-aria="fmt.strike"></button>
       <span class="v2-sep"></span>
       <span class="v2-hover-group" id="v2-align-group">
-        <button id="v2-btn-align-main" data-tip="Alignement" aria-label="Alignement (survoler pour les options)" data-i18n-tip="align.main.tip" data-i18n-aria="align.main.aria"></button>
-        <span class="v2-hover-flyout">
-          <button id="v2-btn-align-left" data-tip="Aligner à gauche" aria-label="Aligner à gauche" data-i18n-tip="align.left" data-i18n-aria="align.left"></button>
-          <button id="v2-btn-align-center" data-tip="Centrer" aria-label="Centrer" data-i18n-tip="align.center" data-i18n-aria="align.center"></button>
-          <button id="v2-btn-align-right" data-tip="Aligner à droite" aria-label="Aligner à droite" data-i18n-tip="align.right" data-i18n-aria="align.right"></button>
-          <button id="v2-btn-align-justify" data-tip="Justifier" aria-label="Justifier" data-i18n-tip="align.justify" data-i18n-aria="align.justify"></button>
+        <button id="v2-btn-align-main" aria-label="Alignement (survoler pour les options)" data-i18n-aria="align.main.aria"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v">
+          <span class="v2-hover-flyout-label" data-i18n="align.main.tip">Alignement</span>
+          <span class="v2-hover-icon-row">
+            <button id="v2-btn-align-left" data-tip="Aligner à gauche" aria-label="Aligner à gauche" data-i18n-tip="align.left" data-i18n-aria="align.left"></button>
+            <button id="v2-btn-align-center" data-tip="Centrer" aria-label="Centrer" data-i18n-tip="align.center" data-i18n-aria="align.center"></button>
+            <button id="v2-btn-align-right" data-tip="Aligner à droite" aria-label="Aligner à droite" data-i18n-tip="align.right" data-i18n-aria="align.right"></button>
+            <button id="v2-btn-align-justify" data-tip="Justifier" aria-label="Justifier" data-i18n-tip="align.justify" data-i18n-aria="align.justify"></button>
+          </span>
         </span>
       </span>
       <span class="v2-sep"></span>
       <span class="v2-hover-group">
-        <button id="v2-btn-bullet" data-tip="Liste" aria-label="Liste (survoler pour les styles)" data-i18n-tip="list.main.tip" data-i18n-aria="list.main.aria"></button>
+        <button id="v2-btn-bullet" aria-label="Liste (survoler pour les styles)" data-i18n-aria="list.main.aria"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-list-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="list.main.tip">Liste</span>
           <span class="v2-hover-icon-row">
             <button id="v2-btn-bullet-disc" data-tip="Puce disque" aria-label="Puce disque" data-i18n-tip="list.bulletDisc" data-i18n-aria="list.bulletDisc"></button>
             <button id="v2-btn-bullet-circle" data-tip="Puce cercle" aria-label="Puce cercle" data-i18n-tip="list.bulletCircle" data-i18n-aria="list.bulletCircle"></button>
@@ -279,8 +284,9 @@
       <span class="v2-sep"></span>
       <button id="v2-btn-two-columns" data-tip="Insérer 2 colonnes" aria-label="Insérer 2 colonnes" data-i18n-tip="insert.twoColumns" data-i18n-aria="insert.twoColumns"></button>
       <span class="v2-hover-group" id="v2-image-group">
-        <button id="v2-btn-image" data-tip="Ajouter une image" aria-label="Insérer une image (URL)" data-i18n-tip="insert.image.tip" data-i18n-aria="insert.image.aria"></button>
+        <button id="v2-btn-image" aria-label="Insérer une image (URL)" data-i18n-aria="insert.image.aria"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-image-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="insert.image.tip">Ajouter une image</span>
           <span class="v2-hover-row" id="v2-btn-image-from-variable" data-i18n="insert.imageFromVariable">Image depuis une variable (colonne PJ)…</span>
         </span>
       </span>
@@ -433,11 +439,11 @@
 <script src="js/variable-format.js?v=0.7"></script>
 <script src="js/variables.js?v=0.25"></script>
 <script src="js/icons.js?v=0.21"></script>
-<script src="js/editor-core.js?v=0.2"></script>
+<script src="js/editor-core.js?v=0.3"></script>
 <script src="js/header-footer-preview.js?v=1.1"></script>
 <script src="js/editor-nodes.js?v=0.7"></script>
 <script src="js/floating-toolbars.js?v=0.7"></script>
-<script src="js/main-toolbar.js?v=0.7"></script>
+<script src="js/main-toolbar.js?v=0.8"></script>
 <script src="js/comments.js?v=0.2"></script>
 <script src="js/track-changes.js?v=0.2"></script>
 <script src="js/editor.js?v=1.3"></script>
