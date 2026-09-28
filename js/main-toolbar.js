@@ -61,16 +61,27 @@ const MainToolbar = (function () {
     box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
     box.style.display = 'block';
   }
-  // Teste en avance le fetch() que pdf-export.js refera à l'export (même URL) ; avertit si un CORS permissif manque, sans bloquer l'insertion déjà faite.
-  async function warnIfImageUrlNotExportable(src) {
-    if (!src || src.startsWith('data:')) return;
+  // Image insérée par URL : convertie en data URI ICI, avant insertion, plutôt qu'à chaque export (même
+  // fetch que pdf-export.js:inlineEditorImagesAsDataUri, avancé au moment de l'import) - l'URL externe
+  // brute n'est ainsi plus jamais stockée dans le modèle (retour Antoine, 2026-09-28). Repli sur l'URL
+  // brute si la conversion échoue (CORS/réseau) : l'image reste utilisable en éditeur/lecture, seul
+  // l'export PDF/DOCX pourra échouer à l'inclure (même avertissement qu'avant).
+  async function urlToDataUriOrWarn(src) {
+    if (!src || src.startsWith('data:')) return src;
     try {
       const resp = await fetch(src);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      await resp.blob();
+      const blob = await resp.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('FileReader a échoué'));
+        reader.readAsDataURL(blob);
+      });
     } catch (e) {
-      console.warn('[Editor] image probablement non exportable en PDF (CORS) :', src, e);
+      console.warn('[Editor] image par URL non convertible en data URI (CORS/réseau), URL brute conservée :', src, e);
       window.alert(I18n.t('image.corsWarning'));
+      return src;
     }
   }
   function applyToolbarIcons() {
@@ -92,6 +103,7 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
+    set('v2-btn-citation', 'blockquote');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-track-changes', 'trackChanges');
@@ -136,6 +148,7 @@ const MainToolbar = (function () {
     setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
     // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
     // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
+    setActive('v2-btn-citation', editor.isActive('blockquote'));
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
@@ -252,13 +265,15 @@ const MainToolbar = (function () {
     bind('v2-btn-image', async () => {
       const url = window.prompt(I18n.t('image.urlPrompt'));
       if (!url) return;
-      await Editor.insertImageAtDefaultSize(url);
-      warnIfImageUrlNotExportable(url);
+      const src = await urlToDataUriOrWarn(url);
+      await Editor.insertImageAtDefaultSize(src);
     });
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
+    // Nœud blockquote de StarterKit, déjà géré en PDF/DOCX/mode Lecture - seul un point d'entrée manquait.
+    bind('v2-btn-citation', () => editor.chain().focus().toggleBlockquote().run());
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
     bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());

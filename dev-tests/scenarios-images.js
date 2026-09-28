@@ -2,9 +2,12 @@
 // droite, calque devant/derrière), redimensionnement (poignées réelles),
 // zoom +/-/taille d'origine, opacité, bascule ligne/bloc, suppression.
 // Image en data: URI (1x1 PNG) - contourne toute dépendance réseau ET la
-// vérification CORS (warnIfImageUrlNotExportable retourne immédiatement
-// pour un src data:, cf. editor.js), donc rien à attendre ni simuler côté
-// chargement réseau.
+// conversion en data URI (urlToDataUriOrWarn retourne immédiatement pour
+// un src data:, cf. main-toolbar.js), donc rien à attendre ni simuler côté
+// chargement réseau pour la plupart des cas ci-dessous. Deux cas dédiés
+// plus bas exercent la vraie conversion http(s) -> data: (retour Antoine,
+// 2026-09-28), via des chemins servis par le serveur de test lui-même
+// (même origine, pas de CORS réel à simuler).
 (function () {
   const DATA_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const cases = [];
@@ -26,6 +29,52 @@
       await h.focusAtEnd();
       const img = await insertImageViaToolbar(h);
       return { pass: !!img && img.getAttribute('src') === DATA_PNG, notes: Editor.getHTML() };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_from_url_converts_to_data_uri',
+    description: 'Image insérée depuis une vraie URL http(s) : convertie en data: URI dès l\'insertion, l\'URL brute n\'est jamais stockée dans le modèle (retour Antoine, 2026-09-28)',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      // Chemin relatif servi par le serveur de test lui-même (même origine que la page) : un
+      // vrai fetch() a bien lieu, sans dépendre d'un hôte externe ni se heurter au CORS.
+      const origPrompt = window.prompt;
+      window.prompt = () => '/img/grist-factory-logo.jpg';
+      await h.clickButton('v2-btn-image');
+      window.prompt = origPrompt;
+      await h.sleep(150);
+      const img = h.tiptap().querySelector('img.editor-image');
+      const src = img && img.getAttribute('src');
+      return {
+        pass: !!src && src.startsWith('data:image/') && !src.includes('grist-factory-logo'),
+        notes: src ? src.slice(0, 60) + '…' : '(aucune image)',
+      };
+    },
+  });
+
+  cases.push({
+    id: 'img_insert_from_url_fetch_failure_keeps_raw_url_and_warns',
+    description: 'Image insérée depuis une URL introuvable (404) : conversion impossible, repli sur l\'URL brute + avertissement affiché (au lieu de bloquer l\'insertion)',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const origPrompt = window.prompt;
+      const origAlert = window.alert;
+      let alertShown = false;
+      window.prompt = () => '/img/n-existe-pas-404.png';
+      window.alert = () => { alertShown = true; };
+      await h.clickButton('v2-btn-image');
+      window.prompt = origPrompt;
+      window.alert = origAlert;
+      await h.sleep(150);
+      const img = h.tiptap().querySelector('img.editor-image');
+      const src = img && img.getAttribute('src');
+      return {
+        pass: alertShown && src === '/img/n-existe-pas-404.png',
+        notes: { alertShown, src },
+      };
     },
   });
 
