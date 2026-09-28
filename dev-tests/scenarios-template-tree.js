@@ -281,6 +281,70 @@
     },
   });
 
+  // Bug suivant signalé par Antoine (2026-09-28, après le correctif ci-dessus) : "dès que je fais la
+  // moindre action la liste disparait... que ca soit une tentative de scroll ou un clic". `.tts-popup` a
+  // overflow-y:auto (liste longue, cf. CSS) - un scroll de la liste elle-même ne bubble pas mais reste
+  // intercepté en phase de capture par l'écouteur scroll posé sur `window` (fermeture sur scroll d'un
+  // ANCÊTRE qui déplacerait le panneau). Sans garde, la moindre molette au-dessus de la liste la refermait
+  // aussitôt et remettait son scrollTop à 0 - tout modèle au-delà de la hauteur visible (~360px) devenait
+  // impossible à atteindre.
+  cases.push({
+    id: 'tree_internal_list_scroll_does_not_close_popup',
+    description: 'Faire défiler la liste elle-même (molette au-dessus du panneau, overflow-y:auto) ne doit jamais la refermer - seul un scroll hors du panneau doit le faire',
+    run: async (h) => {
+      const ids = [];
+      for (let i = 0; i < 15; i++) ids.push(await createTemplate(h, 'document', 'Arbre-scroll ' + i));
+      await openPopup(h);
+      const p = popup();
+      const scrollable = p.scrollHeight > p.clientHeight;
+      const targetScrollTop = p.scrollHeight - p.clientHeight;
+      p.scrollTop = targetScrollTop;
+      p.dispatchEvent(new Event('scroll', { bubbles: false }));
+      await h.sleep(30);
+      const stillOpenAfterInternalScroll = popupOpen();
+      const scrollTopKept = p.scrollTop === targetScrollTop;
+      // Une sélection tout en bas de la liste doit rester atteignable après ce scroll.
+      const lastRow = rowFor(ids[ids.length - 1]);
+      const lastRowRect = lastRow.getBoundingClientRect();
+      const elAtLastRow = document.elementFromPoint(lastRowRect.left + 5, lastRowRect.top + 5);
+      const lastRowReachable = lastRow.contains(elAtLastRow) || elAtLastRow === lastRow;
+      // Un scroll qui vient d'ailleurs (page/ancêtre) doit toujours fermer le panneau - pas de régression inverse.
+      document.scrollingElement.dispatchEvent(new Event('scroll', { bubbles: false }));
+      await h.sleep(30);
+      const closedByOuterScroll = !popupOpen();
+      const pass = scrollable && stillOpenAfterInternalScroll && scrollTopKept && lastRowReachable && closedByOuterScroll;
+      return { pass, notes: JSON.stringify({ scrollable, stillOpenAfterInternalScroll, scrollTopKept, lastRowReachable, closedByOuterScroll }) };
+    },
+  });
+
+  // Complément mesuré par le coordinateur (2026-09-28) : Chromium garde le scrollTop de .tts-popup d'une
+  // fermeture à l'autre. Sans remise à zéro à l'ouverture, rouvrir après avoir défilé montrait une liste
+  // toujours scrollée à un endroit qui ne correspondait plus à la sélection courante.
+  cases.push({
+    id: 'tree_reopen_scrolls_selected_row_into_view_not_stale_position',
+    description: 'Rouvrir le panneau après avoir choisi un modèle tout en bas de la liste doit le montrer directement visible - jamais la position de défilement de la fermeture précédente',
+    run: async (h) => {
+      const ids = [];
+      for (let i = 0; i < 15; i++) ids.push(await createTemplate(h, 'document', 'Arbre-reouverture ' + i));
+      const lastId = ids[ids.length - 1];
+      await openPopup(h);
+      await clickEl(h, rowFor(lastId));
+      await h.sleep(200);
+      await openPopup(h);
+      const p = popup();
+      const selectedRow = p.querySelector('.tts-row[aria-selected="true"]');
+      const found = !!selectedRow;
+      let visible = false;
+      if (selectedRow) {
+        const r = selectedRow.getBoundingClientRect();
+        const pr = p.getBoundingClientRect();
+        visible = r.top >= pr.top && r.bottom <= pr.bottom;
+      }
+      const pass = found && visible;
+      return { pass, notes: JSON.stringify({ found, visible, scrollTop: p.scrollTop }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();

@@ -289,12 +289,29 @@ const TemplateTreeSelect = (function () {
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
     setRovingFocus(selected);
+    // Le navigateur GARDE le scrollTop de .tts-popup d'une fermeture à l'autre (overflow-y:auto, cf. CSS) -
+    // sans repositionnement explicite ici, rouvrir après avoir défilé rendait visibles des lignes qui
+    // n'étaient plus les mêmes que celles attendues en haut du panneau (mesure indépendante du
+    // coordinateur, 2026-09-28 : ligne visible à l'endroit du déclencheur après une fermeture/réouverture
+    // avec la liste défilée, un clic dessus retombait donc sur le déclencheur). scrollIntoView() est évité
+    // à dessein : il peut faire défiler un ANCÊTRE (page Grist), pas seulement .tts-popup lui-même.
+    if (selected) {
+      const desired = selected.offsetTop - (popup.clientHeight - selected.offsetHeight) / 2;
+      popup.scrollTop = Math.max(0, Math.min(desired, popup.scrollHeight - popup.clientHeight));
+    } else {
+      popup.scrollTop = 0;
+    }
     outsideClickHandler = (e) => { if (!wrap.contains(e.target) && !popup.contains(e.target)) closePopup(); };
     document.addEventListener('mousedown', outsideClickHandler, true);
     // Un panneau en position: fixed ne suit pas tout seul un ancêtre qui défile (page Grist, panneau
     // latéral...) - le refermer plutôt que le laisser flotter à un endroit qui ne correspond plus au
     // déclencheur (capture: true pour attraper le scroll de N'IMPORTE quel ancêtre, pas seulement window).
-    outsideScrollHandler = () => closePopup();
+    // MAIS `.tts-popup` a lui-même overflow-y:auto (liste longue, cf. CSS) : un scroll NE BUBBLE PAS mais
+    // reste intercepté en phase de capture par ce même écouteur - sans le garde ci-dessous, la moindre
+    // tentative de faire défiler la liste (molette, barre de défilement, PageDown) la refermait aussitôt et
+    // remettait son scrollTop à 0, rendant tout modèle au-delà de la hauteur visible impossible à atteindre
+    // (Antoine, 2026-09-28 : "dès que je fais la moindre action... que ca soit une tentative de scroll").
+    outsideScrollHandler = (e) => { if (popup.contains(e.target)) return; closePopup(); };
     window.addEventListener('scroll', outsideScrollHandler, true);
   }
 
