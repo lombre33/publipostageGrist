@@ -30,8 +30,10 @@
     columns: {}, // { tableId: { colId: type } }
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
-    recordCallback: null,
-    recordIncludeColumns: 'shown', // 2e argument de grist.onRecord (cf. window.grist.onRecord ci-dessous)
+    // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
+    // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
+    // un tableau, jamais un seul slot qu'un 2e appel écraserait. { cb, includeColumns } par entrée.
+    recordCallbacks: [],
     // { tableId: [colId, ...] } - colonnes PAS cochées dans le panneau de droite DE CE WIDGET, pour ce
     // tableId (cf. setHiddenColumns). Vide par défaut = toutes les colonnes "montrées", pour ne rien
     // changer aux tests existants qui ne s'en soucient pas - un test qui veut vérifier le comportement
@@ -145,22 +147,39 @@
     if (state.optionsCallback) state.optionsCallback(null, { accessLevel: state.accessLevel, linking: {} });
   }
 
+  // Même filtrage que la vraie API (WidgetFrame.ts:_visibleColumns, vérifié à la source) : 'shown' retire les colonnes pas cochées dans CETTE
+  // section, 'normal'/'all' garde tout. Partagé entre fireRecord et docApi.fetchSelectedRecord ci-dessous.
+  function filterRecordForIncludeColumns(record, tableId, includeColumns) {
+    if (!record || includeColumns !== 'shown') return record;
+    const hidden = state.hiddenColumnsByTable[tableId] || [];
+    if (!hidden.length) return record;
+    const filtered = { id: record.id };
+    Object.keys(record).forEach(k => { if (k === 'id' || hidden.indexOf(k) === -1) filtered[k] = record[k]; });
+    return filtered;
+  }
+
+  // GristViewImpl._visibleColumns (WidgetFrame.ts, vérifié à la source le 2026-09-28) lève quand includeColumns vaut 'normal'/'all' et que l'accès
+  // accordé n'est pas "full" - ce throw se produit CÔTÉ FRAME PARENT, dans la promesse que fetchSelectedRecord attend : le callback onRecord n'est
+  // alors JAMAIS appelé pour ce message (pas d'erreur qui remonte au code du widget). Partagé entre fireRecord et docApi.fetchSelectedRecord.
+  function deniedByAccessLevel(includeColumns) {
+    return (includeColumns === 'normal' || includeColumns === 'all') && state.accessLevel !== 'full';
+  }
+
   function fireRecord(record, tableId) {
     // Mémorise la table de CETTE ligne pour fetchSelectedRecord ci-dessous (docApi) : la vraie API Grist ne prend jamais de tableId, elle opère
     // implicitement sur la section/table à laquelle ce widget est lié - state.lastTableId en tient lieu ici.
     state.lastTableId = tableId;
-    let effective = record;
-    // 'shown' (défaut) : Grist retire du record les colonnes pas cochées dans CETTE section (vérifié à la
-    // source, cf. state.recordIncludeColumns). 'normal'/'all' : toutes les colonnes normales, quel que
-    // soit l'affichage (le correctif de js/grist-api.js:onRecord demande explicitement 'normal').
-    if (record && state.recordIncludeColumns === 'shown') {
-      const hidden = state.hiddenColumnsByTable[tableId] || [];
-      if (hidden.length) {
-        effective = {};
-        Object.keys(record).forEach(k => { if (k === 'id' || hidden.indexOf(k) === -1) effective[k] = record[k]; });
-      }
-    }
-    if (state.recordCallback) state.recordCallback(effective, { tableId });
+    // Photographie des écouteurs enregistrés à CET INSTANT : un écouteur enregistré APRÈS cet appel ne doit PAS recevoir cet événement, exactement
+    // comme le vrai bus 'message' de grist-plugin-api.ts (un nouvel écouteur ne rejoue jamais les événements passés). Notification SYNCHRONE (pas de
+    // microtâche) : le vrai fetchSelectedRecord fait un aller-retour RPC async, mais de nombreux scénarios existants appellent fireRecord() puis lisent
+    // GristAPI.getCurrentRecord()/ouvrent la modale sans attendre - la garder synchrone évite de casser tout ce qui n'a pas de rapport avec ce fichier
+    // (constaté : la rendre async cassait 2 scénarios sans lien avec includeColumns, simplement en retardant la livraison d'un tick).
+    const snapshot = state.recordCallbacks.slice();
+    snapshot.forEach(function (entry) {
+      if (deniedByAccessLevel(entry.includeColumns)) return; // callback jamais appelé, cf. deniedByAccessLevel ci-dessus
+      const effective = filterRecordForIncludeColumns(record, tableId, entry.includeColumns);
+      entry.cb(effective, { tableId });
+    });
   }
 
   // Journal de TOUTES les écritures passées par ce client. Certaines promesses ne se vérifient que
@@ -295,7 +314,9 @@
 
   window.grist = {
     ready: function () { /* no-op, cf. GristAPI.init() */ },
-    onRecord: function (cb, opts) { state.recordCallback = cb; state.recordIncludeColumns = (opts && opts.includeColumns) || 'shown'; },
+    // Ajoute TOUJOURS un nouvel écouteur, ne remplace jamais le précédent : la vraie API n'offre pas d'"offRecord", plusieurs souscriptions coexistent
+    // (cf. state.recordCallbacks ci-dessus).
+    onRecord: function (cb, opts) { state.recordCallbacks.push({ cb, includeColumns: (opts && opts.includeColumns) || 'shown' }); },
     // Déclenché immédiatement à l'enregistrement (simule "on ready, send initial configuration",
     // ConfigNotifier._ready côté grist-core) puis à chaque setAccessLevel() ultérieur - c'est la SEULE
     // source fiable de accessLevel (jamais getOptions(), cf. son commentaire ci-dessous).
@@ -313,22 +334,17 @@
       getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/stub' }; },
       // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
-      // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage 'shown' que fireRecord - utilisé par js/grist-api.js:refetchRecordAsNormal
-      // pour repêcher une ligne que la souscription 'normal' n'a jamais reçue (trou de bascule includeColumns, audit du coordinateur 2026-09-28).
+      // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage que fireRecord (filterRecordForIncludeColumns), même refus d'accès
+      // (deniedByAccessLevel) - c'est cet appel-ci, fait en interne par grist.onRecord (grist-plugin-api.ts), qui lève réellement côté vraie API.
       fetchSelectedRecord: async function (rowId, options) {
+        const includeColumns = (options && options.includeColumns) || 'shown';
+        if (deniedByAccessLevel(includeColumns)) {
+          throw new Error('Setting includeColumns to ' + includeColumns + ' requires full access, but the current access level is ' + state.accessLevel);
+        }
         const tableId = state.lastTableId;
         const row = getRow(tableId, rowId);
         if (!row) return { id: rowId };
-        const includeColumns = (options && options.includeColumns) || 'shown';
-        if (includeColumns === 'shown') {
-          const hidden = state.hiddenColumnsByTable[tableId] || [];
-          if (hidden.length) {
-            const filtered = { id: row.id };
-            Object.keys(row).forEach(k => { if (k === 'id' || hidden.indexOf(k) === -1) filtered[k] = row[k]; });
-            return filtered;
-          }
-        }
-        return row;
+        return filterRecordForIncludeColumns(row, tableId, includeColumns);
       },
     },
   };

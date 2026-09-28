@@ -397,6 +397,36 @@
     },
   });
 
+  // --- Verrou de la régression de production du 2026-09-28 (mesurée par le coordinateur avec le vrai grist-plugin-api.js/grain-rpc) : une PREMIÈRE
+  // version bascule pas à pas (repli 'shown' seul au démarrage, souscription 'normal' ajoutée seulement APRÈS confirmation de l'accès complet par
+  // onOptions) laissait getCurrentRecord() à `null` en accès complet (cas normal d'Antoine) parce que la confirmation d'accès arrivait AVANT que le
+  // repli 'shown' n'ait fini son aller-retour RPC, et la souscription 'normal' ajoutée après coup n'avait de toute façon jamais reçu ce premier
+  // message (pas de rejeu d'événements passés côté bus 'message' de grist-plugin-api.ts). Le correctif enregistre 'shown' ET 'normal' ENSEMBLE, tous
+  // les deux avant tout await, dans init() (js/grist-api.js) - il n'y a plus de bascule différée à rater, donc plus d'ordre d'arrivée à reproduire
+  // fidèlement ici (grist-stub.js:fireRecord est resté volontairement synchrone, cf. son commentaire). Ce test verrouille l'état final : la ligne
+  // reçue au tout premier événement onRecord doit porter les données enrichies ('normal'), jamais rester sur les données bridées du repli 'shown'
+  // ni sur `null` - doit échouer si une bascule différée (dépendante de l'ordre d'arrivée) réapparaît. ---
+  cases.push({
+    id: 'macro_onrecord_no_data_loss_when_access_confirmation_races_delivery',
+    description: 'getCurrentRecord() n\'est jamais null/incomplet après le tout premier fireRecord, même juste après une confirmation d\'accès (onOptions) (régression de production du 2026-09-28)',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersRaceStartupTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      window.__gristStub.setHiddenColumns('DossiersRaceStartupTest', ['Statut']); // Statut PAS cochée dans le panneau de droite de CE widget
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Statut: 'Urgent' }, 'DossiersRaceStartupTest');
+      window.__gristStub.setAccessLevel('full'); // équivalent d'une confirmation onOptions/ConfigNotifier juste après la ligne
+      await h.sleep(20);
+
+      const record = GristAPI.getCurrentRecord();
+      const recordIsNull = !record;
+      const columnMissingFromRecord = !record || !('Statut' in record); // 'Statut' est masquée pour 'shown' : sa présence prouve que 'normal' a bien livré
+
+      const pass = !recordIsNull && !columnMissingFromRecord;
+      return { pass, notes: JSON.stringify({ recordIsNull, columnMissingFromRecord, recordKeys: record ? Object.keys(record) : null }) };
+    },
+  });
+
   // --- Mise en page réelle du ⚠ (2e audit du coordinateur, 2026-09-28, mesuré à la vraie souris) : dans .macro-rule-column-wrap (~1/3 de la ligne), le
   // texte de l'avertissement (400px+) écrasait le reste de la ligne - le sélecteur de colonne tombait à 10px. Vérifie l'état RENDU (rect + elementFromPoint,
   // pas juste une classe CSS) : le ⚠ doit être ENTIÈREMENT atteignable au clic sur toute sa largeur, jamais recouvert par un voisin. ---

@@ -31,10 +31,16 @@ const GristAPI = (function () {
   let _currentTableId = null;
   let _onRecordCallbacks = [];
   let _recordSubscriptionRegistered = false;
+  // true UNE FOIS QUE la souscription includeColumns:'normal' a réellement LIVRÉ au moins un record (jamais juste "a été enregistrée" ni "demandée" -
+  // cf. le commentaire dans init() : les deux souscriptions 'shown' et 'normal' sont enregistrées ensemble au démarrage, ce drapeau sert uniquement à
+  // faire taire le repli 'shown' une fois que 'normal' a prouvé qu'elle fonctionne, pour ne jamais écraser une donnée enrichie par une donnée bridée -
+  // distinction issue d'une régression de production corrigée le 2026-09-28).
+  let _normalDataDelivered = false;
+  let _limitedAccessWarned = false;
   let _tokenCache = null;
 
-  // Corps commun aux deux souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre les deux pour ne
-  // pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
+  // Corps commun à toutes les souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre elles pour
+  // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
   function handleIncomingRecord(record, mappings) {
     const receivedAt = new Date();
     const rowId = record && record.id != null ? record.id : null;
@@ -70,6 +76,17 @@ const GristAPI = (function () {
     });
   }
 
+  // Avertit une seule fois si l'accès accordé n'est pas "full" - appelé depuis onOptions dans init(). Purement informatif : la souscription 'normal'
+  // (cf. init()) reste enregistrée dans tous les cas, elle échoue juste silencieusement à chaque événement tant que l'accès n'est pas complet (le
+  // repli 'shown', enregistré en même temps, continue lui de fonctionner et de livrer des données - cf. commentaire détaillé dans init()).
+  function warnIfLimitedAccess(accessLevel) {
+    if (accessLevel === 'full' || _limitedAccessWarned) return;
+    _limitedAccessWarned = true;
+    console.warn('[GristAPI] accès accordé au widget = "' + accessLevel + '" (pas "full") : includeColumns:\'normal\' pour onRecord échoue - '
+      + 'les règles macro-modèle testant une colonne non cochée dans le panneau de droite de CE widget échoueront silencieusement '
+      + '(record[col] absent) tant qu\'un accès complet n\'est pas accordé.');
+  }
+
   async function init() {
     console.log('[GristAPI] init: appel de grist.ready({requiredAccess: "full"}).');
     try {
@@ -90,21 +107,33 @@ const GristAPI = (function () {
       // arrivent dans `record` (GristAPI.ts, FetchSelectedOptions.includeColumns, vérifié à la source jsDelivr le 2026-09-28) - toute colonne créée
       // depuis une autre vue, ou simplement pas affichée ici, est absente de `record` (record[col] === undefined), jamais juste vide. Une règle
       // macro-modèle qui teste cette colonne échoue alors silencieusement en "=" (undefined ne matche jamais) et bascule sur le cas par défaut -
-      // symptôme d'Antoine du 2026-09-28. 'normal' exige un accès complet, déjà demandé ci-dessus (requiredAccess:'full').
+      // symptôme d'Antoine du 2026-09-28. 'normal' exige un accès complet, déjà demandé ci-dessus (requiredAccess:'full') mais pas forcément accordé.
       //
-      // Une bascule "repli 'shown' sûr puis passage à 'normal' une fois l'accès complet confirmé par onOptions" a été essayée ici (même journée) pour
-      // couvrir aussi le cas d'un accès non complet - RETIRÉE en urgence : au démarrage, la ligne courante et les options arrivent quasi simultanément
-      // (WidgetFrame.ts, TableNotifier puis ConfigNotifier au ready) et la réponse du repli 'shown' (un aller-retour RPC) revenait SYSTÉMATIQUEMENT
-      // après que les options aient déjà déclenché la bascule - mesuré par le coordinateur avec le vrai grist-plugin-api.js et grain-rpc, chronologie
-      // réelle à l'appui (ready 101ms, ligne 105ms, options 106ms, réponse 'shown' 113ms). Le garde anti-course ignorait alors cette réponse tardive,
-      // et la souscription 'normal' (enregistrée après coup) n'avait de toute façon jamais reçu ce message précis (pas de rejeu d'événements passés
-      // côté RPC) : aucun rappel n'était jamais appelé, `getCurrentRecord()` restait `null` jusqu'au changement de ligne suivant - régression PIRE que
-      // le bug d'origine (accès complet = cas normal d'Antoine). Accès non complet dès le démarrage reste donc un gap connu (impact faible : docApi
-      // exige déjà l'accès complet ailleurs) tant que la bascule n'est pas refaite correctement (relire la ligne courante en 'normal' au moment de la
-      // bascule, ET ne jamais ignorer une réponse 'shown' tant que 'normal' n'a rien livré lui-même).
-      grist.onRecord(handleIncomingRecord, { includeColumns: 'normal' });
+      // Deux souscriptions onRecord INDÉPENDANTES sont enregistrées ici, ensemble, avant tout await (Grist n'a pas d'"offRecord" - un abonnement
+      // ajouté plus tard ne reçoit jamais les messages déjà distribués, vérifié à la source jsDelivr le 2026-09-28) :
+      //  - 'normal' (enrichie) : la source de vérité une fois qu'elle a livré au moins un record (_normalDataDelivered). Si l'accès n'est pas
+      //    "full", chaque tentative échoue silencieusement côté Grist (rejet RPC jamais rattrapé par le widget, cf. warnIfLimitedAccess ci-dessous
+      //    pour le diagnostic) et _normalDataDelivered reste faux indéfiniment - sans conséquence, le repli ci-dessous continue de fonctionner.
+      //  - 'shown' (repli) : ignorée UNIQUEMENT une fois que 'normal' a réellement livré au moins un record. Tant que ce n'est pas le cas (accès
+      //    encore incertain, ou pas "full"), ses données sont toujours appliquées via handleIncomingRecord - jamais perdues.
+      // Une première version bascule pas à pas (repli 'shown' seul au démarrage, souscription 'normal' ajoutée seulement APRÈS confirmation de
+      // l'accès complet par onOptions) a été essayée puis RETIRÉE en urgence : au démarrage, la ligne courante et les options arrivent quasi
+      // simultanément (WidgetFrame.ts, TableNotifier puis ConfigNotifier au ready), si bien que la confirmation par onOptions arrivait AVANT la
+      // réponse RPC du repli 'shown' - mesuré par le coordinateur avec le vrai grist-plugin-api.js et grain-rpc (ready 101ms, ligne 105ms,
+      // options 106ms, réponse 'shown' 113ms). La souscription 'normal', ajoutée après coup à la confirmation, n'avait de toute façon jamais reçu
+      // ce premier message (pas de rejeu d'événements passés côté RPC, cf. ci-dessus) : aucun rappel n'était jamais appelé pour la ligne initiale,
+      // `getCurrentRecord()` restait `null` jusqu'au changement de ligne suivant - régression PIRE que le bug d'origine (accès complet = cas normal
+      // d'Antoine). Enregistrer les deux souscriptions ensemble dès le départ élimine ce délai : il n'y a plus de "bascule" à faire au bon moment.
+      grist.onRecord(function (record, mappings) {
+        if (_normalDataDelivered) return;
+        handleIncomingRecord(record, mappings);
+      }, { includeColumns: 'shown' });
+      grist.onRecord(function (record, mappings) {
+        _normalDataDelivered = true;
+        handleIncomingRecord(record, mappings);
+      }, { includeColumns: 'normal' });
       _recordSubscriptionRegistered = true;
-      console.log('[GristAPI] grist.onRecord enregistré.');
+      console.log('[GristAPI] grist.onRecord enregistré (repli \'shown\' + souscription enrichie \'normal\').');
     } catch (e) {
       console.error('[GristAPI] ERREUR lors de grist.onRecord():', e);
     }
@@ -113,6 +142,7 @@ const GristAPI = (function () {
       grist.onOptions(function (options, settings) {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
+        warnIfLimitedAccess(settings && settings.accessLevel);
       });
       console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
