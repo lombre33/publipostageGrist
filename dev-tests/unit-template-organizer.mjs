@@ -122,4 +122,53 @@ function view(templates, prefs) {
   check('la ligne épinglée à Nom null apparaît aussi dans pinned', v && v.pinned.some((p) => p.id === 2));
 }
 
+// 10. Régression du 2026-09-28, signalée par Antoine après le correctif du scénario 9 ("fond bleu au clic,
+// dropdown cassé") : (a.nom || '') protège '' et null, mais PAS un Nom non-nullish et non-string (colonne
+// Nom d'un type autre que Texte, ou valeur d'erreur Grist sur une formule) - .localeCompare n'existe que
+// sur les chaînes, donc byName() plantait quand même. Coercition explicite en chaîne (String(x ?? '')) des
+// deux côtés de la comparaison.
+{
+  const templates = [
+    { id: 1, nom: 'Modèle propre' },
+    { id: 2, nom: 42 },
+    { id: 3, nom: true },
+    { id: 4, nom: { error: 'ERROR: colonne invalide' } },
+  ];
+  const prefs = { 2: { epingle: true, dossier: null } };
+  let threw = null;
+  let v;
+  try { v = view(templates, prefs); } catch (e) { threw = e; }
+  check('un Nom nombre/booléen/objet ne fait plus planter le tri', !threw, threw && threw.message);
+  check('les 4 lignes apparaissent quand même dans l’arbre (nom non-string)', v && v.tree.length === 4, v && JSON.stringify(v.tree));
+  check('la ligne épinglée à Nom nombre apparaît aussi dans pinned', v && v.pinned.some((p) => p.id === 2));
+}
+
+// 11. Régression du 2026-09-28 (même signalement) : un dossier nommé comme une propriété héritée
+// d'Object.prototype ('constructor', 'toString', '__proto__'...) était lu comme "déjà créé" par
+// folderNode() sur un accumulateur { } ordinaire (node.enfants[seg] retrouvait la propriété héritée au
+// lieu d'undefined), réutilisait cette valeur native à la place d'un vrai noeud {enfants,modeles}, et
+// plantait plus loin faute de ces champs. Object.create(null) enlève ce prototype partagé.
+{
+  const templates = [
+    { id: 1, nom: 'Facture A' },
+    { id: 2, nom: 'Facture B' },
+    { id: 3, nom: 'Facture C' },
+    { id: 4, nom: 'Facture D' },
+  ];
+  const prefs = {
+    1: { epingle: false, dossier: 'constructor' },
+    2: { epingle: false, dossier: 'toString' },
+    3: { epingle: false, dossier: '__proto__' },
+    4: { epingle: false, dossier: 'hasOwnProperty' },
+  };
+  let threw = null;
+  let v;
+  try { v = view(templates, prefs); } catch (e) { threw = e; }
+  check('un dossier nommé comme Object.prototype ne fait plus planter le rangement', !threw, threw && threw.message);
+  const dossierNoms = v ? v.tree.filter((n) => n.type === 'dossier').map((n) => n.nom).sort() : [];
+  check('les 4 dossiers-pièges sont bien créés comme de vrais dossiers', JSON.stringify(dossierNoms) === JSON.stringify(['__proto__', 'constructor', 'hasOwnProperty', 'toString']), dossierNoms.join(','));
+  const protoFolder = v && v.tree.find((n) => n.nom === '__proto__');
+  check('chaque dossier-piège garde bien son modèle dedans', protoFolder && protoFolder.enfants.length === 1 && protoFolder.enfants[0].id === 3, protoFolder && JSON.stringify(protoFolder));
+}
+
 summarizeAndExit();

@@ -354,7 +354,22 @@ const TemplateTreeSelect = (function () {
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerLabel);
     trigger.appendChild(caret);
-    trigger.addEventListener('click', () => { if (popup.classList.contains('is-open')) closePopup(); else openPopup(); });
+    // e.detail (nombre de clics que le navigateur compte pour CE geste - 2 pour un vrai double-clic natif)
+    // distingue un authentique double-clic d'un simple second clic délibéré (rouvrir puis refermer, ce que
+    // fait par ex. dev-tests/scenarios-toolbar-chrome.js en dispatchant deux clics synthétiques séparés,
+    // toujours à detail=0) : sans ce garde, le réflexe hérité du <select> natif (double-clic pour "choisir")
+    // ouvrait puis refermait aussitôt le panneau au 2e clic, ne laissant visible que le fond de survol du
+    // bouton - signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de
+    // modèle"). Une minuterie fixe (ex. "ignorer un clic dans les 250ms") avait été essayée puis écartée :
+    // elle cassait aussi une fermeture délibérée rapide, exactement le geste que ce test générique exerce.
+    trigger.addEventListener('click', (e) => {
+      if (popup.classList.contains('is-open')) {
+        if (e.detail >= 2) return;
+        closePopup();
+      } else {
+        openPopup();
+      }
+    });
     trigger.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); }
     });

@@ -420,8 +420,14 @@
     setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
   }
 
-  function formatSaveTime(iso) {
-    try { return new Date(iso).toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  // autosaveLastKnownDateModif vient de Templates.save()/loadAll(), qui relisent toutes deux DateModif via
+  // fetchTable() : Grist représente une colonne DateTime comme des SECONDES entières depuis l'epoch, jamais
+  // des millisecondes (dev-tests/grist-stub.js:61-76 reproduit ce comportement) - malgré son nom, ce n'est
+  // pas la chaîne ISO qu'on a envoyée. new Date(secondes) la traite à tort comme des millisecondes, ce qui
+  // affichait une heure quasi figée (ex. "Enregistré à 18:22:59" en continu) et donnait à tort l'impression
+  // que l'enregistrement ne marchait pas plutôt qu'un simple bug d'affichage (signalé le 2026-09-28).
+  function formatSaveTime(epochSeconds) {
+    try { return new Date(epochSeconds * 1000).toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
     catch (e) { return ''; }
   }
 
@@ -1310,5 +1316,12 @@
     setStatus(I18n.t('status.ready'));
   }
 
-  init();
+  // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire
+  // ci-dessus) - toute autre exception plantait l'initialisation en silence, rien dans le statut, la seule
+  // trace était la console (qu'Antoine ne consulte pas). Un futur bug ailleurs dans init() s'affichera
+  // maintenant ici plutôt que de reproduire "l'enregistrement ne fonctionne pas" sans aucun indice visible.
+  init().catch((e) => {
+    console.error('[main] init() a échoué', e);
+    setStatus(I18n.t('status.initError', { message: (e && e.message) || String(e) }), true);
+  });
 })();

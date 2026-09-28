@@ -212,6 +212,43 @@
     },
   });
 
+  // Régression du 2026-09-28 (Antoine : "quand on clic sur le nom du modèle ça devient un fond bleu, du
+  // coup le dropdown est broken et on ne peut pas changer de modèle") - un double-clic sur le déclencheur
+  // (réflexe hérité du <select> natif) ouvrait puis refermait aussitôt le panneau au 2e clic, laissant
+  // seulement le fond de survol du bouton visible. Vérifie la visibilité RÉELLE du panneau après un vrai
+  // double-clic (display calculé + elementFromPoint sur une ligne), pas seulement la classe is-open -
+  // exigence d'Antoine après les régressions du 2026-09-19/28 (tests d'attribut qui ne prouvent rien).
+  cases.push({
+    id: 'tree_double_click_trigger_keeps_popup_visible',
+    description: 'Un double-clic rapide sur le déclencheur (réflexe "ancien <select>") laisse le panneau réellement ouvert et cliquable, pas juste refermé avec le fond de survol du bouton',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Double-clic');
+      if (popupOpen()) await clickEl(h, trigger());
+      const t = trigger();
+      // detail: 2 sur le 2e clic reproduit ce que le navigateur pose RÉELLEMENT sur le 2e clic d'un
+      // authentique double-clic (un MouseEvent scripté sans detail explicite vaut 0, comme un simple clic
+      // isolé - cf. le garde correspondant dans js/template-tree-select.js) : sans ce detail, ce scénario
+      // ne testerait pas la même chose qu'un vrai double-clic souris.
+      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+      t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 }));
+      t.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, detail: 2 }));
+      t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 2 }));
+      await h.sleep(30);
+      const display = getComputedStyle(popup()).display;
+      const row = rowFor(id);
+      let elAtRow = null;
+      if (row) {
+        const rect = row.getBoundingClientRect();
+        elAtRow = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }
+      const rowReachable = !!row && (elAtRow === row || row.contains(elAtRow));
+      const pass = popupOpen() && display !== 'none' && rowReachable;
+      return { pass, notes: JSON.stringify({ popupOpen: popupOpen(), display, rowFound: !!row, rowReachable }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();

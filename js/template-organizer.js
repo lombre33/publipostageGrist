@@ -13,15 +13,14 @@ const TemplateOrganizer = (function () {
     return path ? String(path).split('/').map((s) => s.trim()).filter(Boolean) : [];
   }
 
-  // (a.nom || '') : une ligne Grist réelle peut avoir Nom vide/null (cellule effacée directement dans la
-  // grille, jamais passée par la validation "Nom du modèle requis" de js/main.js:onSave) - avant ce garde,
-  // .localeCompare sur null plantait ici en plein tri, qui casse TOUT le rendu de l'arbre (bug réel trouvé
-  // le 2026-09-28 en creusant "l'enregistrement d'un modèle ne fonctionne pas" chez Antoine : attach()
-  // (js/template-tree-select.js) appelle render() -> buildView() -> byName() SANS filet, donc l'exception
-  // remonte jusqu'à main.js:init(), qui n'a lui-même aucun try/catch autour de son propre appel - tout ce
-  // qui vient après (branchement d'Enregistrer, Ctrl+S, l'auto-save, et le statut "Prêt") ne s'exécute
-  // alors jamais.
-  function byName(a, b) { return (a.nom || '').localeCompare(b.nom || '', 'fr'); }
+  // String(x ?? '') : une ligne Grist réelle peut avoir Nom null (via l'API, jamais en effaçant la cellule
+  // dans la grille - ça écrit '') ou un type non textuel si la colonne Nom n'est pas en Texte (nombre,
+  // booléen, objet/erreur Grist) - .localeCompare n'existe que sur les chaînes, donc (a.nom || '') ne
+  // suffit pas : un Nom non-nullish mais non-string (ex. un nombre) le traversait tel quel et plantait
+  // quand même. Ce tri casse TOUT le rendu de l'arbre sans filet (cf. js/template-tree-select.js render()),
+  // ce qui bloque en cascade Enregistrer/Ctrl+S/auto-save/statut "Prêt" dans main.js:init() (bug du
+  // 2026-09-28 chez Antoine).
+  function byName(a, b) { return String(a.nom ?? '').localeCompare(String(b.nom ?? ''), 'fr'); }
 
   // { pinned: [{id, nom, dossier}], tree: [noeud, ...] } où noeud est
   // { type: 'dossier', nom, chemin, enfants: [noeud, ...] } ou { type: 'modele', id, nom }.
@@ -36,13 +35,18 @@ const TemplateOrganizer = (function () {
       .map((t) => ({ id: t.id, nom: t.nom, typeModele: t.typeModele || 'document', dossier: (preferences[t.id] && preferences[t.id].dossier) || null }))
       .sort(byName);
 
-    const root = { enfants: {}, modeles: [] };
+    // Object.create(null) : un dossier nommé "constructor", "toString", "__proto__"... sur un {} ordinaire
+    // renvoie une propriété héritée d'Object.prototype au lieu d'undefined - folderNode croit alors le
+    // dossier déjà créé, réutilise cet objet natif à la place d'un vrai noeud, et le rendu plante plus loin
+    // (pas de .modeles/.enfants dessus). Sans prototype, node.enfants[seg] est undefined pour N'IMPORTE
+    // quel nom de dossier (bug reproduit le 2026-09-28, même famille que byName ci-dessus).
+    const root = { enfants: Object.create(null), modeles: [] };
     function folderNode(segments) {
       let node = root;
       const acc = [];
       segments.forEach((seg) => {
         acc.push(seg);
-        if (!node.enfants[seg]) node.enfants[seg] = { nom: seg, chemin: acc.join('/'), enfants: {}, modeles: [] };
+        if (!node.enfants[seg]) node.enfants[seg] = { nom: seg, chemin: acc.join('/'), enfants: Object.create(null), modeles: [] };
         node = node.enfants[seg];
       });
       return node;
