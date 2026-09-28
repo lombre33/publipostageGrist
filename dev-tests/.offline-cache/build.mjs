@@ -11,12 +11,12 @@ const BARE = [
   'w3c-keyname', 'prosemirror-commands', 'prosemirror-schema-list', 'prosemirror-tables',
   'prosemirror-gapcursor', 'prosemirror-dropcursor', 'prosemirror-inputrules',
   'prosemirror-changeset',
-  '@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-underline',
+  '@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-document', '@tiptap/extension-underline',
   '@tiptap/extension-text-align', '@tiptap/extension-text-style', '@tiptap/extension-font-family',
   '@tiptap/extension-table', '@tiptap/extension-table-row', '@tiptap/extension-table-cell',
   '@tiptap/extension-table-header', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
   '@tiptap/extension-placeholder',
-  '@tiptap/suggestion', '@floating-ui/dom',
+  '@tiptap/suggestion', '@floating-ui/dom', '@handlewithcare/prosemirror-suggest-changes',
 ];
 
 mkdirSync('entries', { recursive: true });

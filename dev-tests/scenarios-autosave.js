@@ -50,6 +50,49 @@
     await h.sleep(400);
   }
 
+  // Régression du 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") : hypothèse de départ, la colonne SuiviModifications (ajoutée par
+  // le suivi des modifications, js/templates.js:ensureTrackChangesColumn) manquerait sa migration sur un document créé AVANT son existence, faisant échouer
+  // le bouton Enregistrer en bloc (les 11 colonnes partent dans le MÊME UpdateRecord, cf. mémoire d'équipe project-publipostage-templates-save-columns).
+  // Ligne injectée DIRECTEMENT dans le stub (state.rows), pas via Templates.save()/le bouton "Nouveau" : ces deux derniers chemins passeraient par
+  // ensureXColumn() dès la création et ne distingueraient donc jamais "colonne jamais migrée sur ce document" de "a toujours fait partie du schéma" - or
+  // c'est précisément cette distinction que ce scénario doit couvrir. L'état par défaut du stub (dev-tests/grist-stub.js) ne déclare déjà QUE Nom/Contenu/
+  // NomFichierPDF/HeaderFooter/DateModif/Margins/EstParDefaut - TypeModele/Destinataires/Cc/Cci/Objet/SuiviModifications y sont donc naturellement absents,
+  // exactement comme sur un document d'Antoine jamais rouvert depuis l'ajout du mode email puis du suivi des modifications.
+  cases.push({
+    id: 'autosave_manual_save_migrates_missing_columns_on_preexisting_row',
+    description: "Un modèle DÉJÀ enregistré AVANT l'ajout des colonnes email/suivi des modifications se ré-enregistre correctement via le vrai bouton Enregistrer (migration ensureEmailColumns/ensureTrackChangesColumn, pas seulement sur un modèle tout neuf)",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      await newTemplate(h); // repart d'un état propre (currentTypeModele='document', aucun id courant) via le vrai bouton "Nouveau"
+      const rows = stub().state.rows[TABLE];
+      const rowId = (stub().state.nextRowId[TABLE] = (stub().state.nextRowId[TABLE] || 1));
+      stub().state.nextRowId[TABLE]++;
+      rows.id.push(rowId);
+      rows.Nom.push('Modèle pré-existant'); rows.Contenu.push('<p>Avant les nouvelles colonnes</p>'); rows.NomFichierPDF.push('');
+      rows.HeaderFooter.push(''); rows.DateModif.push(null); rows.Margins.push(''); rows.EstParDefaut.push(false);
+      Templates.setCurrentId(rowId);
+      document.getElementById('template-name').value = 'Modèle pré-existant';
+      Editor.setHTML('<p>Contenu ré-enregistré</p>');
+      await h.clickButton('btn-save');
+      await h.sleep(400);
+      const row = stub().getRow(TABLE, rowId);
+      const statusMsg = document.getElementById('status-msg').textContent || '';
+      // Migration déjà déclenchée par Templates.loadAll() au chargement du widget (main.js:init -> refreshTemplateList), AVANT que cette ligne ne soit
+      // injectée : compter les AddVisibleColumn du clic sur Enregistrer isolément donnerait donc 0 par construction, pas une absence de migration. On
+      // vérifie plutôt que chacune des 6 colonnes qui n'existaient pas à l'origine du stub a bien été migrée à un moment de la session (log complet,
+      // jamais vidé), ET que la ligne pré-existante s'enregistre malgré tout sans erreur avec ces colonnes correctement renseignées.
+      const migratedCols = ['TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications'];
+      const log = stub().getActionLog();
+      const migratedAll = migratedCols.every(col => log.some(a => a[0] === 'AddVisibleColumn' && a[1] === TABLE && a[2] === col));
+      const pass = !!row && migratedAll && row.TypeModele === 'document' && row.SuiviModifications === '{}'
+        && String(row.Contenu).indexOf('ré-enregistré') !== -1 && !/erreur/i.test(statusMsg);
+      return {
+        pass,
+        notes: JSON.stringify({ statusMsg, migratedAll, row }),
+      };
+    },
+  });
+
   cases.push({
     id: 'autosave_no_write_when_idle',
     description: "Aucune écriture tant que rien n'a changé (la moitié de la promesse qu'un enregistrement permanent tiendrait aussi)",

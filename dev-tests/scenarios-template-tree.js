@@ -71,6 +71,21 @@
     },
   });
 
+  // Régression du 2026-09-28 (Antoine : "un carré noir est présent dans l'ui") : .tts-trigger est un <button> dans #toolbar-top, qui hérite donc du
+  // ::before générique #toolbar-top button (css/style.css - content:"", 14x14, background-color:currentColor, SANS mask-image, faute de quoi il se
+  // peint en carré plein) sauf s'il définit son propre ::before ou le supprime explicitement (même piège que #toolbar-top #v2-btn-toggle-cci::before).
+  // .tts-trigger n'avait ni l'un ni l'autre. Vérifier le ::before RÉELLEMENT calculé, pas la présence d'une règle CSS dans le fichier source : c'est
+  // exactement le type de piège (test d'attribut plutôt que de rendu) qu'Antoine a demandé d'éviter après les régressions du 2026-09-19.
+  cases.push({
+    id: 'tree_trigger_has_no_phantom_before_square',
+    description: 'Le bouton du sélecteur (.tts-trigger) supprime bien le ::before générique #toolbar-top button (sinon : carré 14x14 plein, sans mask-image, visible avant l’icône réelle)',
+    run: async () => {
+      const before = getComputedStyle(trigger(), '::before');
+      const pass = before.content === 'none';
+      return { pass, notes: JSON.stringify({ content: before.content, display: before.display }) };
+    },
+  });
+
   cases.push({
     id: 'tree_migration_creates_preferences_table_lazily',
     description: 'Publipostage_PreferencesModeles est créée à la volée au premier chargement (document "créé avant la fonctionnalité"), une seule fois',
