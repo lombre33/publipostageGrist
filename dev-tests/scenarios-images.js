@@ -66,9 +66,18 @@
       window.prompt = () => '/img/n-existe-pas-404.png';
       window.alert = () => { alertShown = true; };
       await h.clickButton('v2-btn-image');
+      // clickButton ne fait qu'un sleep(30) fixe - le bind() du bouton est async (fetch 404 puis
+      // insertion) et n'est pas attendu par le clic lui-même. Restaurer window.alert tout de suite
+      // gagnait la course la plupart du temps mais pas sous charge (flaky, signalé par le
+      // coordinateur, 2026-09-28) : on attend le vrai signal (alerte déclenchée OU image déjà
+      // insérée avec l'URL de repli) avant de rendre la main aux globals d'origine.
+      const deadline = Date.now() + 3000;
+      while (!alertShown && !h.tiptap().querySelector('img.editor-image') && Date.now() < deadline) {
+        await h.sleep(20);
+      }
       window.prompt = origPrompt;
       window.alert = origAlert;
-      await h.sleep(150);
+      await h.sleep(50);
       const img = h.tiptap().querySelector('img.editor-image');
       const src = img && img.getAttribute('src');
       return {
