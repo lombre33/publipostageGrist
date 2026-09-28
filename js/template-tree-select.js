@@ -20,6 +20,7 @@ const TemplateTreeSelect = (function () {
   let wrap, trigger, triggerIcon, triggerLabel, popup;
   let mo = null;
   let outsideClickHandler = null;
+  let lastOpenedAt = 0;
 
   function iconSpan(typeModele) {
     const span = document.createElement('span');
@@ -267,6 +268,7 @@ const TemplateTreeSelect = (function () {
     if (popup.classList.contains('is-open')) return;
     render();
     popup.classList.add('is-open');
+    lastOpenedAt = Date.now();
     trigger.setAttribute('aria-expanded', 'true');
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
@@ -354,7 +356,18 @@ const TemplateTreeSelect = (function () {
     trigger.appendChild(triggerIcon);
     trigger.appendChild(triggerLabel);
     trigger.appendChild(caret);
-    trigger.addEventListener('click', () => { if (popup.classList.contains('is-open')) closePopup(); else openPopup(); });
+    // Le 2e clic d'un double-clic (réflexe hérité du <select> natif, où un seul clic ouvrait déjà le menu)
+    // arrive alors que le panneau vient tout juste de s'ouvrir sur le 1er clic : sans ce garde, il le
+    // referme aussitôt, et tout ce qu'Antoine voit est le fond de survol du bouton qui reste affiché -
+    // signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de modèle").
+    trigger.addEventListener('click', () => {
+      if (popup.classList.contains('is-open')) {
+        if (Date.now() - lastOpenedAt < 250) return;
+        closePopup();
+      } else {
+        openPopup();
+      }
+    });
     trigger.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPopup(); }
     });

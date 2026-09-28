@@ -240,6 +240,11 @@ const I18n = (function () {
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
     'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
+    // init() (js/main.js) n'a de filet QUE sur TemplateTreeSelect.attach() : une exception ailleurs (rare,
+    // mais déjà vu le 2026-09-28 avec l'arbre de rangement) bloquait tout le reste - Enregistrer, Ctrl+S,
+    // l'auto-save - sans le moindre message, seule la console (jamais consultée par Antoine) montrait la
+    // cause. init().catch(...) affiche maintenant l'erreur ici plutôt que de laisser le widget muet.
+    'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
     'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },

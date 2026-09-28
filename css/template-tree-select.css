@@ -16,7 +16,12 @@
    #toolbar-top : même compte d'ID que la règle générique, sinon l'ordre de déclaration les départagerait au hasard (cf. commentaire de
    #toolbar-top #v2-btn-toggle-cci::before). */
 #toolbar-top .tts-trigger::before { content: none; }
-.tts-trigger:hover { background: var(--surface-sunken); }
+/* @media (hover: hover) - sans ce garde, un tap tactile ou trackpad laisse ce fond "collé" sur le bouton
+   après le clic (aucun `mouseleave` sur ces appareils), lu à tort comme un bug visuel/plantage. Signalé le
+   2026-09-28 (Antoine : "fond bleu" sur .tts-trigger, --surface-sunken = #eef1f6, bleuté en mode clair). */
+@media (hover: hover) and (pointer: fine) {
+  .tts-trigger:hover { background: var(--surface-sunken); }
+}
 .tts-trigger:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
 .tts-trigger:disabled { opacity: .5; cursor: default; background: transparent; }
 .tts-trigger-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; text-align: left; }
@@ -38,7 +43,10 @@
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }
 
 .tts-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; padding-left: calc(8px + var(--tts-depth, 0) * 16px); border-radius: var(--radius-sm); cursor: pointer; }
-.tts-row:hover { background: var(--surface-sunken); }
+/* @media (hover: hover) - même piège que .tts-trigger:hover ci-dessus (fond collé après un tap). */
+@media (hover: hover) and (pointer: fine) {
+  .tts-row:hover { background: var(--surface-sunken); }
+}
 .tts-row:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
 .tts-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .tts-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -51,6 +59,9 @@
 /* Étoile d'épinglage : même tracé que #btn-set-default-template (css/toolbar-v2.css) - même vocabulaire visuel que "modèle par défaut". */
 .tts-pin-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); opacity: 0; }
 .tts-row:hover .tts-pin-btn, .tts-row:focus-within .tts-pin-btn, .tts-pin-btn.is-pinned { opacity: 1; }
-.tts-pin-btn:hover { background: var(--surface-sunken); }
+/* @media (hover: hover) - même piège que .tts-trigger:hover ci-dessus (fond collé après un tap). */
+@media (hover: hover) and (pointer: fine) {
+  .tts-pin-btn:hover { background: var(--surface-sunken); }
+}
 .tts-pin-btn.is-pinned { color: var(--accent); }
 .tts-pin-btn::before { content: ""; display: inline-block; width: 12px; height: 12px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.4 5.6 6.1.6-4.6 4 1.4 6-5.3-3.2-5.3 3.2 1.4-6-4.6-4 6.1-.6Z'/%3E%3C/svg%3E"); }
