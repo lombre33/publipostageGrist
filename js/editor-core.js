@@ -80,6 +80,7 @@ const EditorCore = (function () {
 
   // Un seul menu déroulant à la fois (couleur/police/taille), fermé au clic ailleurs.
   let openDropdownPanel = null;
+  let openDropdownButton = null;
   function getOpenDropdownPanel() { return openDropdownPanel; }
   function setOpenDropdownPanel(panel) { openDropdownPanel = panel; }
   document.addEventListener('mousedown', (event) => {
@@ -87,14 +88,23 @@ const EditorCore = (function () {
     if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')
       || event.target.closest('.v2-format-panel') || event.target.closest('.v2-format-chip')
       || event.target.closest('.v2-stepper') || event.target.closest('.v2-fill-chip')) return;
+    closeDropdownPanel();
+  });
+  // aria-expanded posé/retiré sur le bouton déclencheur pendant que son panneau est ouvert - même convention que TemplateTreeSelect
+  // (js/template-tree-select.js, trigger.setAttribute('aria-expanded', ...)) et signal générique lu par la règle CSS qui masque l'info-bulle [data-tip]
+  // d'un bouton à menu tant que celui-ci est ouvert (css/toolbar-v2.css) - cf. wireHoverGroupTooltipSuppression ci-dessous pour le pendant "survol".
+  function closeDropdownPanel() {
+    if (!openDropdownPanel) return;
     openDropdownPanel.hide();
     openDropdownPanel = null;
-  });
-  function closeDropdownPanel() { if (openDropdownPanel) { openDropdownPanel.hide(); openDropdownPanel = null; } }
+    if (openDropdownButton) { openDropdownButton.setAttribute('aria-expanded', 'false'); openDropdownButton = null; }
+  }
   // Ouvre/ferme `panel` au clic sur `btn` - mousedown+preventDefault (pas click), comme la toolbar tableau/image, pour ne pas perdre la sélection avant
   // l'ouverture. `getSelection` capture la sélection AU MOMENT du clic, restaurée par `withSavedSelection` quand une couleur est vraiment choisie.
   function wireDropdownButton(btn, panel, captureSelection) {
     if (!btn) return;
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
     btn.addEventListener('mousedown', (event) => {
       event.preventDefault();
       captureSelection();
@@ -102,6 +112,32 @@ const EditorCore = (function () {
       closeDropdownPanel();
       panel.show(btn);
       openDropdownPanel = panel;
+      openDropdownButton = btn;
+      btn.setAttribute('aria-expanded', 'true');
+    });
+  }
+  // Bug récurrent (retour Antoine, bouton "image" 2026-09-28 - déjà corrigé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant
+  // purement et simplement data-tip, cf. commentaire .v2-hover-flyout-label dans editor-v2.css) : un bouton qui ouvre un `.v2-hover-flyout` au survol
+  // (css/editor-v2.css, `.v2-hover-group:hover .v2-hover-flyout`) affiche AUSSI sa propre info-bulle [data-tip] au survol (css/toolbar-v2.css) - les deux
+  // apparaissent juste sous le bouton et se chevauchent. Mécanisme commun plutôt qu'un correctif par bouton : pose aria-expanded="true"/"false" sur le
+  // déclencheur de CHAQUE `.v2-hover-group` de la page pendant que son flyout est visible - la même règle CSS ([data-tip][aria-expanded="true"]::after,
+  // css/toolbar-v2.css) masque alors son info-bulle, exactement comme pour wireDropdownButton/closeDropdownPanel ci-dessus et TemplateTreeSelect. Tout
+  // futur bouton à menu en hérite automatiquement (les groupes futurs suivent la même structure, aucune liste d'ids à tenir à jour ici).
+  // mouseenter/mouseleave/focusin/focusout plutôt que le pseudo-état CSS :hover/:focus-within lui-même (qui pilote déjà l'ouverture du flyout, inchangée) :
+  // ce sont de VRAIS évènements DOM, contrairement à :hover qui ne peut pas être déclenché par dispatchEvent() dans le harnais de test automatisé (cf.
+  // openFlyout, dev-tests/helpers.js) - un mécanisme purement basé sur :hover ne serait donc pas vérifiable par un test de non-régression exécutable.
+  function wireHoverGroupTooltipSuppression() {
+    document.querySelectorAll('.v2-hover-group').forEach((group) => {
+      const trigger = group.querySelector(':scope > [data-tip]');
+      if (!trigger) return;
+      trigger.setAttribute('aria-haspopup', 'true');
+      trigger.setAttribute('aria-expanded', 'false');
+      const open = () => trigger.setAttribute('aria-expanded', 'true');
+      const close = () => trigger.setAttribute('aria-expanded', 'false');
+      group.addEventListener('mouseenter', open);
+      group.addEventListener('mouseleave', close);
+      group.addEventListener('focusin', open);
+      group.addEventListener('focusout', (event) => { if (!group.contains(event.relatedTarget)) close(); });
     });
   }
   function setColorBar(id, color) {
@@ -131,7 +167,7 @@ const EditorCore = (function () {
     setEditor, getEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
-    getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
+    getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton, wireHoverGroupTooltipSuppression,
     setColorBar, setColorIcon, createSelectionPreserver,
   };
 })();

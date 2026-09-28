@@ -207,6 +207,78 @@
     },
   });
 
+  // --- Régression 2026-09-28 : l'info-bulle [data-tip] d'un bouton à menu (survol OU clic) s'affichait PAR-DESSUS son propre menu déroulant pendant qu'il
+  // est ouvert (retour Antoine, bouton "image" - déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip, cf.
+  // .v2-hover-flyout-label dans editor-v2.css). Corrigé par un mécanisme COMMUN (aria-expanded posé sur le déclencheur par js/editor-core.js -
+  // wireHoverGroupTooltipSuppression pour le survol, wireDropdownButton/closeDropdownPanel pour les panneaux flottants - + une seule règle CSS dans
+  // css/toolbar-v2.css) plutôt qu'un correctif par bouton. Les deux cas ci-dessous DÉCOUVRENT les boutons à menu depuis le DOM
+  // ([aria-haspopup][aria-expanded], posé par ce même mécanisme sur chaque déclencheur), jamais une liste figée d'ids - tout futur bouton à menu suivant
+  // la même convention (survol dans un .v2-hover-group, ou aria-expanded posé à l'ouverture/fermeture) est donc couvert automatiquement.
+
+  cases.push({
+    id: 'toolbar_menu_tooltip_css_rule_suppresses_on_aria_expanded',
+    description: 'Le mécanisme lui-même, isolé de tout widget réel : la règle CSS commune masque bien le RENDU de [data-tip]::after dès que aria-expanded="true" est posé sur un bouton quelconque (#v2-btn-bold, qui n\'ouvre aucun menu), et le laisse s\'afficher normalement sinon',
+    run: async (h) => {
+      await h.resetEditor();
+      const btn = document.getElementById('v2-btn-bold');
+      btn.focus();
+      await h.sleep(600); // laisse passer le délai de .35s de la transition avant de lire l'opacité calculée (cf. css/toolbar-v2.css)
+      const beforeOpacity = getComputedStyle(btn, '::after').opacity;
+      btn.setAttribute('aria-expanded', 'true');
+      await h.sleep(20);
+      const duringOpacity = getComputedStyle(btn, '::after').opacity;
+      btn.removeAttribute('aria-expanded');
+      await h.sleep(600); // même délai de transition qu'au-dessus : redevenir visible repasse par le .35s de la règle de base, pas par notre override
+      const afterOpacity = getComputedStyle(btn, '::after').opacity;
+      btn.blur();
+      const pass = beforeOpacity === '1' && duringOpacity === '0' && afterOpacity === '1';
+      return { pass, notes: JSON.stringify({ beforeOpacity, duringOpacity, afterOpacity }) };
+    },
+  });
+
+  cases.push({
+    id: 'toolbar_every_menu_trigger_hides_its_tooltip_while_open',
+    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte dynamique via [aria-haspopup][aria-expanded]), l\'info-bulle associée (la sienne, ou celle d\'un ANCÊTRE qui la porte à sa place - ex. #v2-size-stepper) est masquée à l\'écran tant que son menu est ouvert, et réapparaît normalement une fois refermé',
+    run: async (h) => {
+      await goToNewDocument(h);
+      await h.sleep(30);
+      const triggers = Array.from(document.querySelectorAll('[aria-haspopup][aria-expanded]'));
+      const details = [];
+      // Au moins les groupes au survol (titre/alignement/liste/image) et les panneaux flottants (police/taille/couleurs) doivent être détectés - une liste
+      // vide signalerait que le mécanisme n'a pas été câblé (wireToolbar()/TemplateTreeSelect.attach() pas encore appelés), pas un vrai succès.
+      let pass = triggers.length >= 6;
+      for (const trigger of triggers) {
+        // `:hover` ne peut pas être déclenché par dispatchEvent dans ce harnais (cf. openFlyout plus haut/dev-tests/helpers.js) - mouseenter/mouseleave
+        // sont les VRAIS évènements DOM que wireHoverGroupTooltipSuppression (js/editor-core.js) écoute pour ce même mécanisme. Les boutons à menu au
+        // clic (panneaux flottants, TemplateTreeSelect) basculent, eux, sur le même geste répété (mousedown+click), comme un utilisateur qui rouvre puis
+        // referme le même bouton.
+        const group = trigger.closest('.v2-hover-group');
+        // `:hover` ne s'active jamais ici (ni via dispatchEvent, ni donc via group.matches(':hover')) - un simple booléen local remplace l'état réel que
+        // le navigateur tiendrait tout seul en conditions normales.
+        let hovered = false;
+        const toggle = () => {
+          if (group) { hovered = !hovered; group.dispatchEvent(new MouseEvent(hovered ? 'mouseenter' : 'mouseleave', { bubbles: false })); return; }
+          trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        };
+        const tipHost = trigger.closest('[data-tip]');
+        toggle();
+        await h.sleep(20);
+        const expandedDuring = trigger.getAttribute('aria-expanded');
+        // Une info-bulle native `title` n'apparaît pas dans le DOM et n'aurait donc rien de testable en rendu ici - sans objet aujourd'hui (tout ce
+        // mécanisme repose sur [data-tip]), documenté au cas où un futur bouton à menu l'utiliserait à la place.
+        const opacityDuring = tipHost ? getComputedStyle(tipHost, '::after').opacity : null;
+        toggle();
+        await h.sleep(20);
+        const expandedAfter = trigger.getAttribute('aria-expanded');
+        const entryPass = expandedDuring === 'true' && expandedAfter === 'false' && (tipHost === null || opacityDuring === '0');
+        details.push({ id: trigger.id || trigger.className, hasTip: !!tipHost, expandedDuring, opacityDuring, expandedAfter });
+        if (!entryPass) pass = false;
+      }
+      return { pass, notes: JSON.stringify({ triggerCount: triggers.length, details }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();
