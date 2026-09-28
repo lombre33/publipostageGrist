@@ -478,10 +478,19 @@
 /* Groupe "bouton principal + variantes au survol" (alignement/puces/numérotation) - le bouton principal reste l'action rapide par défaut ; le survol du
    groupe révèle .v2-hover-flyout SANS écart de hitbox car il touche directement le bas du bouton (top:100%, aucune marge). */
 .v2-hover-group { position: relative; display: inline-flex; }
+/* max-height/overflow-y : même fermé (visibility:hidden n'exclut pas la boîte du calcul de mise en page), un flyout dont le contenu naturel dépasse le
+   bas de la fenêtre (#v2-heading-flyout, 7 niveaux de titre + numérotation) agrandit le scrollHeight de la PAGE elle-même côté navigateur - une simple
+   molette au-dessus de la barre d'outils (aucun flyout ouvert) fait alors défiler la page et sort le reste de la barre de la zone visible (mesuré à la
+   vraie molette Playwright par le coordinateur, 700x400 et 600x400 : 29px de débordement). Un document non vide pousse le groupe plus bas qu'un document
+   vide (la barre s'enroule différemment) - la borne ci-dessous vient d'une mesure AVEC contenu réel, sur les 8 groupes, de 500x300 à 700x400, marge
+   incluse. `overflow-y:auto` fait défiler SES lignes en interne si la fenêtre est trop courte pour le contenu, plutôt que de compter sur un défilement
+   de la page - jamais une ligne inatteignable.
+   Détails : mémoire projet [[project-publipostage-scroll-chaining-popup-fix]]. */
 .v2-hover-flyout {
   position: absolute; top: 100%; left: 0; display: flex; gap: 3px; padding: 4px;
   background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
   box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 15;
+  max-height: max(80px, calc(100vh - 190px)); overflow-y: auto;
   opacity: 0; visibility: hidden; transform: translateY(-4px);
   transition: opacity .12s ease, transform .12s ease;
 }
