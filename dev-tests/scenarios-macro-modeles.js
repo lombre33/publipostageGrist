@@ -35,6 +35,35 @@
     },
   });
 
+  // --- compareValues, columnType : Bool/Date-DateTime/Reference étaient structurellement incapables de correspondre à AUCUNE valeur saisie avant ce
+  // correctif (Antoine, 2026-09-28 : "la condition ne fonctionne pas, mais je ne sais pas... format de la colonne, ou de la valeur testée"). Sans
+  // `columnType` (4e paramètre), ces trois cas restent ignorés (cf. macro_compare_operators ci-dessus) - c'est justement l'ancien comportement qui
+  // cassait silencieusement ces colonnes. ---
+  cases.push({
+    id: 'macro_compare_values_column_type_aware',
+    description: 'compareValues interprète Bool ("Oui"/"Non"), Date/DateTime (jour, avant/après) et Reference (valeur déballée) selon columnType',
+    run: async () => {
+      const c = MacroTemplates.compareValues;
+      const day26 = new Date(2026, 8, 26).getTime() / 1000; // format réel Grist : secondes depuis l'epoch (js/variable-format.js)
+      const day27 = new Date(2026, 8, 27).getTime() / 1000;
+      const checks = [
+        [c(true, '=', 'Oui', 'Bool'), true, 'Bool = "Oui" sur true'],
+        [c(false, '=', 'Non', 'Bool'), true, 'Bool = "Non" sur false'],
+        [c(true, '=', 'Non', 'Bool'), false, 'Bool = "Non" sur true est faux'],
+        [c(true, '≠', 'Non', 'Bool'), true, 'Bool ≠ "Non" sur true'],
+        [c(day26, '=', '26/09/2026', 'Date'), true, 'Date = format FR'],
+        [c(day26, '=', '2026-09-26', 'Date'), true, 'Date = format ISO'],
+        [c(day26, '≠', '27/09/2026', 'Date'), true, 'Date ≠ jour différent'],
+        [c(day26, '<', '27/09/2026', 'DateTime:UTC'), true, 'DateTime < jour suivant'],
+        [c(day27, '>', '26/09/2026', 'Date'), true, 'Date > jour précédent'],
+        [c([5, 'Entreprise SARL'], '=', 'Entreprise SARL', 'Ref:Clients'), true, 'Reference déballée avant comparaison (=)'],
+        [c([9, 'Client Inconnu'], '≠', 'Entreprise SARL', 'RefList:Clients'), true, 'Reference déballée avant comparaison (≠)'],
+      ];
+      const failed = checks.filter(([actual, expected]) => actual !== expected);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify(failed.map(f => f[2])) : 'OK' };
+    },
+  });
+
   // --- parseColumnRef : colonne nue (table courante) vs "Table.Colonne" (cross-table, même mécanisme que #Variable). ---
   cases.push({
     id: 'macro_parse_column_ref',
@@ -162,6 +191,45 @@
       const hasBothFragments = text.includes('Contenu de la page de garde') && text.includes('Contenu de l’annexe choisie');
       const hasPageBreak = !!content.querySelector('.page-break-marker');
       return { pass: hasBothFragments && hasPageBreak, notes: JSON.stringify({ hasBothFragments, hasPageBreak, text }) };
+    },
+  });
+
+  // --- État rendu du champ colonne de la modale (js/macro-editor.js:buildColumnField) - demande d'Antoine du 2026-09-28 : "que le champ ... soit une
+  // liste des colonnes de la page sur laquelle est le widget" plutôt qu'un texte libre. Teste l'état RENDU (options du <select>, visibilité du champ
+  // avancé, texte de l'indice de type), pas seulement la logique - exigence du projet pour toute correction UI. ---
+  cases.push({
+    id: 'macro_rule_column_field_lists_real_columns',
+    description: 'Le champ colonne de la modale macro liste les vraies colonnes de la table courante, garde un repli "avancé", et adapte l’indice de type',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersTest', { TypeDossier: 'Text', Actif: 'Bool' });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Actif: true }, 'DossiersTest');
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+
+      const row = document.querySelector('.macro-rule-row');
+      const select = row ? row.querySelector('select.macro-rule-column') : null;
+      const optionValues = select ? Array.from(select.options).map(o => o.value) : [];
+      const hasRealColumns = optionValues.includes('TypeDossier') && optionValues.includes('Actif');
+      const advancedInput = row ? row.querySelector('.macro-rule-column-advanced') : null;
+      const hasAdvancedOption = optionValues.includes('__advanced__'); // ADVANCED_COLUMN_VALUE (js/macro-editor.js)
+      const advancedHiddenInitially = advancedInput ? advancedInput.hidden : null;
+
+      select.value = 'Actif';
+      select.dispatchEvent(new Event('change'));
+      const typeHint = row.querySelector('.macro-rule-column-type');
+      const valInput = row.querySelector('.macro-rule-value');
+      const boolHintOk = typeHint.textContent === I18n.t('macro.modal.typeBool');
+      const boolPlaceholderOk = valInput.placeholder === I18n.t('macro.modal.valuePlaceholderBool');
+
+      select.value = '__advanced__';
+      select.dispatchEvent(new Event('change'));
+      const advancedVisibleAfterToggle = advancedInput.hidden === false;
+
+      const pass = hasRealColumns && hasAdvancedOption && advancedHiddenInitially === true && boolHintOk && boolPlaceholderOk && advancedVisibleAfterToggle;
+      return { pass, notes: JSON.stringify({ optionValues, boolHintOk, boolPlaceholderOk, advancedHiddenInitially, advancedVisibleAfterToggle }) };
     },
   });
 
