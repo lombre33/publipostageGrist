@@ -10,13 +10,6 @@ const MacroTemplates = (function () {
 
   function isEmpty(v) { return v === null || v === undefined || v === ''; }
 
-  // Reference/ReferenceList (colonnes "Ref:Table"/"RefList:Table", cf. js/grist-api.js:findReferenceColumns pour le format exact de ces chaînes de
-  // type) : même déballage que Variables.unwrapRefValue (js/variables.js), pour la même raison - Grist renvoie un tableau [id, valeur affichée], jamais
-  // comparable tel quel à la valeur texte saisie dans une règle. Ré-implémenté ici plutôt qu'exporté depuis variables.js : resolveRawValue lui-même ne
-  // doit JAMAIS déballer automatiquement (Variables.resolveAttachmentIds a besoin de la valeur brute - un tableau d'ids de pièce jointe, jamais une
-  // Reference - donc le déballage reste à la charge de chaque appelant qui connaît le vrai type de la colonne).
-  function unwrapRefLike(v) { return Array.isArray(v) ? v[1] : v; }
-
   const BOOL_TRUE_WORDS = ['oui', 'vrai', 'true', '1', 'yes'];
   const BOOL_FALSE_WORDS = ['non', 'faux', 'false', '0', 'no'];
   function parseBoolExpected(expected) {
@@ -26,32 +19,46 @@ const MacroTemplates = (function () {
     return null;
   }
 
-  // "26/09/2026" (saisie humaine attendue, format FR) ou "2026-09-26" (ISO) - Date.parse seul est trop ambigu selon le moteur (DD/MM vs MM/DD) pour
-  // être fiable ici ; une valeur qui ne correspond à aucun des deux renvoie null plutôt que de deviner.
+  // Un Date/DateTime arrive sous DEUX formes réelles selon le chemin de lecture (vérifié à la source grist-core, cf. mémoire d'équipe
+  // project-publipostage-macro-condition-columntype-fix) : un objet type Date (GristDate/GristDateTime, décodé par grist.onRecord - le chemin
+  // aperçu/lecture d'un macro-modèle, js/main.js:524) représentant un instant UTC, OU un NOMBRE de secondes UTC depuis 1970 (chemin export en lot
+  // multi-lignes, js/main.js:773/840, même format que js/variable-format.js:29). isDateLike couvre le premier cas sans supposer lequel des deux le
+  // columnType impose - un même correctif sert donc les deux chemins.
+  function isDateLike(v) { return v instanceof Date && !isNaN(v.getTime()); }
+  function toUtcInstant(actual) {
+    if (isDateLike(actual)) return actual;
+    if (typeof actual === 'number' && isFinite(actual)) return new Date(actual * 1000);
+    return null;
+  }
+  // "26/09/2026" (saisie humaine attendue, format FR) ou "2026-09-26" (ISO, format de GristDate.toString()) - Date.parse seul est trop ambigu selon
+  // le moteur (DD/MM vs MM/DD) pour être fiable ici. Construit en UTC (Date.UTC, jamais `new Date(y,m,d)` qui interprète en heure LOCALE) pour que la
+  // comparaison ne dépende JAMAIS du fuseau du navigateur/serveur qui l'exécute - une valeur Grist représente un jour calendaire, pas un instant local
+  // (bug trouvé le 2026-09-28 : `new Date(y,m,d)` en heure locale décalait le jour d'un cran à l'ouest de l'UTC, ex. New York).
   function parseDateExpected(expected) {
     const s = String(expected == null ? '' : expected).trim();
     const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-    if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
     const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-    if (fr) return new Date(Number(fr[3]), Number(fr[2]) - 1, Number(fr[1]));
+    if (fr) return new Date(Date.UTC(Number(fr[3]), Number(fr[2]) - 1, Number(fr[1])));
     return null;
   }
-  function dayKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  // getUTC*, jamais getFullYear/getMonth/getDate (heure locale) - même raison que parseDateExpected ci-dessus.
+  function dayKey(d) { return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
 
   // '=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide' - même liste que planning/feature-conditional-content.md (jamais implémentée ailleurs,
   // donc rien à réutiliser). `columnType` (chaîne Grist telle que js/grist-api.js:getColumnType la renvoie - "Text","Numeric","Bool","Date",
-  // "DateTime:UTC","Choice","Ref:Table",... - ou null/undefined si inconnue) pilote trois cas AVANT toute comparaison générique, chacun un vrai bug
-  // trouvé le 2026-09-28 (Antoine : "la condition ne fonctionne pas") - sans elle, ces trois types de colonne ne pouvaient JAMAIS correspondre à
+  // "DateTime:UTC","Choice","Ref:Table",... - ou null/undefined si inconnue) pilote deux cas AVANT toute comparaison générique, chacun un vrai bug
+  // trouvé le 2026-09-28 (Antoine : "la condition ne fonctionne pas") - sans elle, ces deux types de colonne ne pouvaient JAMAIS correspondre à
   // aucune valeur saisie, quel que soit son contenu :
   //  - Bool : Grist renvoie un booléen JS natif, jamais égal à la chaîne française tapée dans la règle ("Oui"/"Non").
-  //  - Date/DateTime : Grist renvoie un nombre de secondes depuis 1970 (même format que js/variable-format.js:29), jamais numériquement égal à
-  //    Number("26/09/2026") qui vaut NaN - la comparaison retombait alors en texte brut entre un timestamp et une date, qui ne coïncident jamais.
-  //  - Reference/ReferenceList : un tableau [id, valeur affichée] ne correspond jamais à la valeur texte saisie tel quel (cf. unwrapRefLike ci-dessus).
-  // Sans `columnType` (repli identique au comportement d'avant ce correctif, ex. les tests qui appellent compareValues sans ce 4e paramètre), ces trois
+  //  - Date/DateTime : cf. toUtcInstant/parseDateExpected/dayKey ci-dessus.
+  // Reference/ReferenceList N'EST PAS géré ici : une 1ère tentative (colonne toujours un tableau [id, valeur affichée]) s'est révélée fausse sur les
+  // deux chemins réels (audit du coordinateur, 2026-09-28) et provoquait même une régression sur ReferenceList (repli sur comparaison générique en
+  // texte, désormais explicitement conservé) - condition non fiable sur ce type de colonne pour l'instant, à traiter séparément.
+  // Sans `columnType` (repli identique au comportement d'avant ce correctif, ex. les tests qui appellent compareValues sans ce 4e paramètre), ces deux
   // cas sont simplement ignorés et la comparaison générique s'applique comme avant.
   function compareValues(actual, operator, expected, columnType) {
     const type = String(columnType || '');
-    if (type.indexOf('Ref:') === 0 || type.indexOf('RefList:') === 0) actual = unwrapRefLike(actual);
 
     if (operator === 'vide') return isEmpty(actual);
     if (operator === 'non vide') return !isEmpty(actual);
@@ -64,10 +71,10 @@ const MacroTemplates = (function () {
       }
     }
 
-    if ((type === 'Date' || type.indexOf('DateTime') === 0) && typeof actual === 'number' && isFinite(actual)) {
+    if (type === 'Date' || type.indexOf('DateTime') === 0) {
+      const actualDate = toUtcInstant(actual);
       const expectedDate = parseDateExpected(expected);
-      if (expectedDate) {
-        const actualDate = new Date(actual * 1000);
+      if (actualDate && expectedDate) {
         switch (operator) {
           case '=': return dayKey(actualDate) === dayKey(expectedDate);
           case '≠': return dayKey(actualDate) !== dayKey(expectedDate);

@@ -35,29 +35,39 @@
     },
   });
 
-  // --- compareValues, columnType : Bool/Date-DateTime/Reference étaient structurellement incapables de correspondre à AUCUNE valeur saisie avant ce
-  // correctif (Antoine, 2026-09-28 : "la condition ne fonctionne pas, mais je ne sais pas... format de la colonne, ou de la valeur testée"). Sans
-  // `columnType` (4e paramètre), ces trois cas restent ignorés (cf. macro_compare_operators ci-dessus) - c'est justement l'ancien comportement qui
-  // cassait silencieusement ces colonnes. ---
+  // --- compareValues, columnType : Bool/Date-DateTime étaient structurellement incapables de correspondre à AUCUNE valeur saisie avant ce correctif
+  // (Antoine, 2026-09-28 : "la condition ne fonctionne pas..."). Un 1er correctif (`d31b15a`) a aussi tenté Reference/ReferenceList en supposant un
+  // format [id, valeur affichée] qui n'existe sur AUCUN des deux chemins réels de lecture (audit du coordinateur contre grist-core, 2026-09-28) - retiré,
+  // condition non fiable sur ce type pour l'instant (repli sur la comparaison générique, cf. macro-templates.js). Date/DateTime arrive sous deux formes
+  // réelles selon le chemin (même audit) : un objet Date (GristDate, chemin aperçu/lecture d'une ligne, js/main.js:524) OU un nombre de secondes UTC
+  // (chemin export en lot multi-lignes, js/main.js:773/840) - les deux sont exercées ici. Construites en UTC (Date.UTC), JAMAIS `new Date(y,m,d)` (heure
+  // locale) : le fuseau du navigateur/serveur qui exécute ce test ne doit jamais changer le résultat, puisque toUtcInstant/parseDateExpected/dayKey
+  // (macro-templates.js) n'utilisent eux-mêmes que des accesseurs UTC - une seule exécution couvre donc tous les fuseaux par construction, sans avoir
+  // besoin de faire tourner ce harnais dans plusieurs `timezoneId` Playwright pour le prouver.
+  // Sans `columnType` (4e paramètre), ces deux cas restent ignorés (cf. macro_compare_operators ci-dessus) - c'est justement l'ancien comportement qui
+  // cassait silencieusement ces colonnes.
   cases.push({
     id: 'macro_compare_values_column_type_aware',
-    description: 'compareValues interprète Bool ("Oui"/"Non"), Date/DateTime (jour, avant/après) et Reference (valeur déballée) selon columnType',
+    description: 'compareValues interprète Bool ("Oui"/"Non") et Date/DateTime (objet Date OU secondes UTC, jour/avant/après) selon columnType',
     run: async () => {
       const c = MacroTemplates.compareValues;
-      const day26 = new Date(2026, 8, 26).getTime() / 1000; // format réel Grist : secondes depuis l'epoch (js/variable-format.js)
-      const day27 = new Date(2026, 8, 27).getTime() / 1000;
+      const day26Obj = new Date(Date.UTC(2026, 8, 26)); // forme "onRecord" (objet Date, ex. GristDate)
+      const day26Sec = Date.UTC(2026, 8, 26) / 1000; // forme "export en lot" (secondes UTC, js/variable-format.js)
+      const day27Obj = new Date(Date.UTC(2026, 8, 27));
       const checks = [
         [c(true, '=', 'Oui', 'Bool'), true, 'Bool = "Oui" sur true'],
         [c(false, '=', 'Non', 'Bool'), true, 'Bool = "Non" sur false'],
         [c(true, '=', 'Non', 'Bool'), false, 'Bool = "Non" sur true est faux'],
         [c(true, '≠', 'Non', 'Bool'), true, 'Bool ≠ "Non" sur true'],
-        [c(day26, '=', '26/09/2026', 'Date'), true, 'Date = format FR'],
-        [c(day26, '=', '2026-09-26', 'Date'), true, 'Date = format ISO'],
-        [c(day26, '≠', '27/09/2026', 'Date'), true, 'Date ≠ jour différent'],
-        [c(day26, '<', '27/09/2026', 'DateTime:UTC'), true, 'DateTime < jour suivant'],
-        [c(day27, '>', '26/09/2026', 'Date'), true, 'Date > jour précédent'],
-        [c([5, 'Entreprise SARL'], '=', 'Entreprise SARL', 'Ref:Clients'), true, 'Reference déballée avant comparaison (=)'],
-        [c([9, 'Client Inconnu'], '≠', 'Entreprise SARL', 'RefList:Clients'), true, 'Reference déballée avant comparaison (≠)'],
+        [c(day26Obj, '=', '26/09/2026', 'Date'), true, 'Date (objet) = format FR'],
+        [c(day26Obj, '=', '2026-09-26', 'Date'), true, 'Date (objet) = format ISO'],
+        [c(day26Sec, '=', '26/09/2026', 'Date'), true, 'Date (secondes) = format FR'],
+        [c(day26Sec, '=', '2026-09-26', 'DateTime:UTC'), true, 'DateTime (secondes) = format ISO'],
+        [c(day26Obj, '≠', '27/09/2026', 'Date'), true, 'Date (objet) ≠ jour différent'],
+        [c(day26Sec, '≠', '27/09/2026', 'DateTime:UTC'), true, 'DateTime (secondes) ≠ jour différent'],
+        [c(day26Obj, '<', '27/09/2026', 'Date'), true, 'Date (objet) < jour suivant'],
+        [c(day26Sec, '<', '27/09/2026', 'DateTime:UTC'), true, 'DateTime (secondes) < jour suivant'],
+        [c(day27Obj, '>', '26/09/2026', 'Date'), true, 'Date (objet) > jour précédent'],
       ];
       const failed = checks.filter(([actual, expected]) => actual !== expected);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify(failed.map(f => f[2])) : 'OK' };
