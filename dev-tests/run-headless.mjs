@@ -57,11 +57,19 @@ let probe = null; // --probe "<expression JS>" : ouvre le harnais, evalue, affic
 // tout premier fetchTable de GristAPI.init(). Seul moyen de tester "le widget demarre avec tel modele deja marque par defaut" : setVariables/setRows
 // APRES "Widget prêt." (la seule ouverture qu'offrait ce fichier jusqu'ici) arrive structurellement trop tard, une fois init() deja termine.
 let preseedFile = null;
+// --width/--height : viewport par défaut 1400x1000 pensé pour la fenêtre de dev, mais un panneau latéral
+// Grist réel (là où vit ce widget) descend couramment à ~700x400 - certains bugs de mise en page/scroll
+// (débordement de page masqué, barre d'outils qui remonte hors de portée) ne sont reproductibles qu'à
+// cette taille (mesure du coordinateur, 2026-09-28, cf. js/template-tree-select.js:outsideScrollHandler).
+let viewportWidth = 1400;
+let viewportHeight = 1000;
 const wanted = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--port') { port = Number(argv[++i]); continue; }
   if (argv[i] === '--probe') { probe = argv[++i]; continue; }
   if (argv[i] === '--preseed') { preseedFile = argv[++i]; continue; }
+  if (argv[i] === '--width') { viewportWidth = Number(argv[++i]); continue; }
+  if (argv[i] === '--height') { viewportHeight = Number(argv[++i]); continue; }
   wanted.push(argv[i]);
 }
 const preseedCode = preseedFile ? readFileSync(resolve(preseedFile), 'utf8') : null;
@@ -135,7 +143,7 @@ const DEV_FILES = ['helpers', 'runner'];
 
 async function runGroup(name, probeExpr) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+  const context = await browser.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });

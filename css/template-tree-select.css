@@ -50,7 +50,12 @@
    défiler ce bloc de 28px de haut - le déclencheur sortait alors du cadre visible, ne laissant voir qu'un bandeau bleu (fond --accent-soft de la ligne
    sélectionnée) à sa place. Signalé le 2026-09-28 ("fond bleu au clic, dropdown broken, impossible de changer de modèle"), mesuré et confirmé
    (#v2-title-cluster.scrollTop passait à 38 après un clic réel). top/left posés dynamiquement à l'ouverture (calculés depuis le rect du déclencheur). */
-.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
+/* overscroll-behavior: contain - une fois arrivé en haut/bas de LA LISTE elle-même, le reste d'un geste de
+   molette ne doit jamais "chaîner" vers la page (comportement par défaut du navigateur sans cette ligne) :
+   c'est exactement ce qui, combiné à outsideScrollHandler (js/template-tree-select.js), faisait défiler la
+   PAGE une fois le panneau épuisé - révélant un débordement de page latent (#v2-heading-flyout) qui
+   remontait toute la barre d'outils hors de portée de la souris en petite fenêtre (2026-09-28). */
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
 .tts-popup.is-open { display: block; }
 
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }
