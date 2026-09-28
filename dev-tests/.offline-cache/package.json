@@ -40,6 +40,7 @@
     "pdfmake": "0.2.7",
     "pdfjs-dist": "3.11.174",
     "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
     "docx": "9.7.1",
     "html2pdf.js": "0.10.1",
     "esbuild": "0.25.10"

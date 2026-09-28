@@ -56,6 +56,7 @@ const umd = [
   ['node_modules/pdfjs-dist/build/pdf.min.js', 'umd/pdf.min.js'],
   ['node_modules/pdfjs-dist/build/pdf.worker.min.js', 'umd/pdf.worker.min.js'],
   ['node_modules/jszip/dist/jszip.min.js', 'umd/jszip.min.js'],
+  ['node_modules/pdf-lib/dist/pdf-lib.min.js', 'umd/pdf-lib.min.js'],
   ['node_modules/html2pdf.js/dist/html2pdf.bundle.min.js', 'umd/html2pdf.bundle.min.js'],
   ['node_modules/docx/dist/index.iife.js', 'umd/docx.iife.js'],
 ];
