@@ -268,6 +268,30 @@
     },
   });
 
+  cases.push({
+    id: 'comments_table_never_offered_as_user_table',
+    description: "La table interne des fils (Publipostage_Commentaires) ne doit jamais apparaître parmi les tables de l'utilisateur (#Variable, sélecteurs de table)",
+    run: async (h) => {
+      // Le vrai listTables() rend TOUTES les tables du document (grist-core WidgetFrame.ts : _grist_Tables sans filtre), internes comprises - le stub, lui,
+      // n'y met jamais les siennes : sans cet ajout, l'oubli dans INTERNAL_TABLES (js/grist-api.js) restait invisible ici.
+      const tables = stub().state.tables;
+      const added = tables.indexOf(TABLE) === -1;
+      if (added) tables.push(TABLE);
+      try {
+        await GristAPI.refreshSchema();
+        const listed = GristAPI.getTables().slice();
+        const inVariables = GristAPI.getAllVariables().filter(v => v.table === TABLE).map(v => v.key);
+        return {
+          pass: listed.indexOf(TABLE) === -1 && inVariables.length === 0,
+          notes: 'tables proposées=' + JSON.stringify(listed) + ', #Variable issues de la table interne=' + JSON.stringify(inVariables),
+        };
+      } finally {
+        if (added) tables.splice(tables.indexOf(TABLE), 1);
+        await GristAPI.refreshSchema();
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.comments = cases;
 })();

@@ -106,13 +106,14 @@ const Variables = (function () {
     });
   }
 
+  // Appelée popup déjà affiché : ViewportFit.placePopup mesure sa vraie hauteur pour le garder dans la fenêtre - sous le curseur, ou au-dessus quand il est
+  // en bas d'un panneau bas (il s'ouvrait jusque-là entièrement sous le bord, invisible).
   function position(clientRect) {
     const rect = clientRect && clientRect();
     if (!rect) return;
     const box = ensureBox();
-    box.style.position = 'absolute';
-    box.style.left = (rect.left + window.scrollX) + 'px';
-    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    if (box.style.display === 'none') return;
+    ViewportFit.placePopup(box, rect, { gap: 4 });
   }
 
   // La fonction command() n'est fournie par @tiptap/suggestion que dans les props d'onStart/onUpdate, jamais celles d'onKeyDown - mémorisée ici pour être
@@ -126,8 +127,8 @@ const Variables = (function () {
     latestCommand = props.command;
     setTabsVisible(true);
     render(currentItems, item => latestCommand(item));
-    position(props.clientRect);
     ensureBox().style.display = currentItems.length ? 'flex' : 'none';
+    position(props.clientRect);
   }
 
   function hide() { if (acBox) acBox.style.display = 'none'; }
@@ -227,8 +228,8 @@ const Variables = (function () {
     latestCommand = item => insertFilenameVariable(item);
     setTabsVisible(false);
     render(currentItems, latestCommand);
-    position(() => el.getBoundingClientRect());
     ensureBox().style.display = 'flex';
+    position(() => el.getBoundingClientRect());
   }
   // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ) - insérer
   // directement "#Cle" en texte, sans badge (un <input> ne peut de toute façon pas contenir de HTML), est donc suffisant.

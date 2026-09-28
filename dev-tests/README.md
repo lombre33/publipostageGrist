@@ -45,7 +45,7 @@ apparaît) :
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
 | `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
-| `js/comments.js`, `js/editor-nodes.js:createCommentMark`, `js/main.js` (`loadForTemplate`/`onSave`) | `comments` |
+| `js/comments.js`, `js/editor-nodes.js:createCommentMark`, `js/main.js` (`loadForTemplate`/`onSave`), `js/grist-api.js` (`INTERNAL_TABLES`) | `comments` |
 | `js/main.js` (section « Auto-save », `autosaveTick`/`resetAutosaveState`/`wireAutosaveToggle`), `js/templates.js` (`save`/`loadAll` - `DateModif`) | `autosave` |
 | `index.html` (`.bar-row`, `#v2-email-fields-row`, `#v2-toolbar` - markup/attributs, pas le contenu de l'éditeur), `css/toolbar-v2.css`, `js/main.js` (`loadTemplateIntoEditor` pour la partie chrome, `syncDefaultTemplateButton`, `onNew`/`onNewEmail`), `js/main-toolbar.js` (`setEmailMode`/`syncToolbarState`) | **Toujours `toolbarChrome`** (seul groupe qui clique réellement les boutons/flyouts de la barre du haut plutôt que l'éditeur lui-même - ajouté 2026-09-19 après deux bugs visuels sur cette zone passés inaperçus) |
 | `js/macro-templates.js`, `js/macro-editor.js`, `js/main.js` (`loadMacroIntoEditor`, `getCurrentMacroSlots`, `currentDocumentHtml`, `onNewMacro`/`onMacroSaved`, branches macro de `onSave`/`onSaveAs`/`onExportPdfBatch`/`onExportDocxBatch`), `js/templates.js` (`safeParseMacroSlots`) | **Toujours `macroModeles`** (seul groupe qui couvre la résolution page de garde + annexes conditionnelles) **+ `toolbarChrome`** si le changement touche le verrouillage de la toolbar en mode macro (`js/main-toolbar.js` `setMacroMode`) |
@@ -54,6 +54,7 @@ apparaît) :
 | `css/editor-v2.css` (règle `.v2-hover-flyout`/`.v2-hover-flyout-scrollable`), `js/editor-core.js` (`positionFlyout`/`setGroupExpanded`) | **Toujours `toolbarChrome` ET `templateTree` ET le script Node `wheelScroll`** (molette réelle, cf. plus bas) - ces menus partagent un mécanisme commun (`.v2-hover-group`/`.v2-hover-flyout`, délégation dans `editor-core.js`) avec le popup de l'arbre des modèles : un flyout mal plafonné fait déborder LA PAGE (pas juste le menu) même fermé, ce qu'aucun scénario `page.evaluate()` ne peut détecter (cf. [[project-publipostage-scroll-chaining-popup-fix]]) |
 | `js/variable-condition.js`, `js/variable-linked-attrs.js`, `css/variable-actions.css`, `js/condition-rules.js` (`conditionHolds`, lignes liées multiples), `js/condition-fields.js` (mode toutes tables), `js/variables.js` (`ruleSourceValue`, `resolveLinkedRows`, `formatValue`), `js/reader-mode.js` (`badgeConditionHolds`), attribut `condition` de `varBadge` (`js/editor-nodes.js`), actions de la barre d'une bulle (`js/floating-toolbars.js:wireVariableFloatingToolbar`) | **Toujours `varCondition` ET le script Node `varToolbarMouse`** (variables conditionnelles et autres attributs : masquage en lecture/export, fenêtres, barre flottante ; le script clique pour de vrai à 700×400) **+ `macroModeles`** si `js/condition-rules.js`/`js/condition-fields.js` change (mêmes règles) |
 | `js/pdf-merge.js`, `js/main.js` (`onExportPdfBatch`, `withExportLock`), lignes « Exporter toutes les lignes » du menu Exporter en PDF (`index.html`) | **Toujours `pdfBatch`** (clique les lignes du menu et ouvre le fichier téléchargé : archive ZIP d'un PDF par ligne, PDF unique où chaque ligne commence sur une nouvelle page avec sa propre numérotation) |
+| `js/viewport-fit.js`, `css/toolbar-v2.css` (info-bulles `[data-tip]`, `#status-msg`, champs email sous 900px, `overflow` de `#toolbar-top`/`#v2-title-cluster`/`.v2-color-split`/`#v2-size-stepper`), placement des popups (`js/variables.js:position`, `js/comments.js:positionPopup`, `js/main-toolbar.js:openImageVariablePicker`) | **Toujours le script Node `smallPanel`** (vraie souris à 600-800×400 : info-bulles entières et visibles aux pixels, pas d'info-bulle collée après Échap, email+Cci, hauteur de barre stable, popups dans la fenêtre) + les groupes déjà listés pour ces fichiers (`toolbarChrome`, `comments`, `chips`, `formatting`, `lists`) |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 
 Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
@@ -93,6 +94,11 @@ Deux options utiles :
 - Un second script Node, `varToolbarMouse` (`dev-tests/verify-var-toolbar-mouse.mjs`), clique
   à la vraie souris, à 700×400, la barre d'une bulle #Variable puis ses deux fenêtres (condition, autres
   attributs, choix de la clé par-dessus) : icônes, Enregistrer/Insérer/Valider atteignables et non recouverts.
+- Un troisième, `smallPanel` (`dev-tests/verify-small-panel.mjs`), rejoue à la vraie souris et au vrai clavier le
+  petit panneau Grist (600 à 800×400) : info-bulles de la barre entières et visibles sur une vraie capture,
+  page jamais décalable, pas d'info-bulle collée après un clic puis Échap, email+Cci lisible, hauteur de
+  barre indépendante du message d'état, popups #Variable/commentaires/image tenus dans la fenêtre.
+  Sections lançables seules : `node dev-tests/verify-small-panel.mjs popups email`.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via

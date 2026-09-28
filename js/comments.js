@@ -248,25 +248,20 @@ const Comments = (function () {
       actions.appendChild(deleteBtn);
     }
     box.appendChild(actions);
+    // Popup déjà ouvert dont le contenu change de hauteur (message publié, réponse, fil résolu) : replacé pour rester dans la fenêtre. Ancre relue par son
+    // id - ProseMirror re-rend la marque à chaque transaction (setResolved), l'élément d'origine peut ne plus être dans le document.
+    if (box.style.display !== 'none' && editor) {
+      const anchor = editor.view.dom.querySelector('.comment-mark[data-comment-id="' + commentId + '"]');
+      if (anchor) positionPopup(box, anchor);
+    }
     return { box, replyArea };
   }
 
+  // Popup déjà affiché : sa hauteur RÉELLE est mesurée (ViewportFit.placePopup) - l'ancienne estimation fixe (180px) laissait un fil de quelques réponses
+  // (~380px) sortir de 200px sous le bas d'un panneau de 400px.
   function positionPopup(box, anchorEl) {
     try {
-      const rect = anchorEl.getBoundingClientRect();
-      const boxWidth = 280; // cf. #v2-comment-popup { width: 280px } (editor-v2.css)
-      const boxHeightEstimate = 180;
-      let left = rect.left + window.scrollX;
-      let top = rect.bottom + window.scrollY + 6;
-      const minLeft = window.scrollX + 4;
-      const minTop = window.scrollY + 4;
-      const maxLeft = Math.max(minLeft, window.scrollX + window.innerWidth - boxWidth - 8);
-      const maxTop = Math.max(minTop, window.scrollY + window.innerHeight - boxHeightEstimate - 8);
-      left = Math.min(Math.max(left, minLeft), maxLeft);
-      top = Math.min(Math.max(top, minTop), maxTop);
-      box.style.position = 'absolute';
-      box.style.left = left + 'px';
-      box.style.top = top + 'px';
+      ViewportFit.placePopup(box, anchorEl.getBoundingClientRect(), { gap: 6 });
     } catch (e) {
       box.style.position = 'fixed';
       box.style.left = '40%';
@@ -279,8 +274,8 @@ const Comments = (function () {
     popupCommentId = commentId;
     popupIsNewThread = false;
     const { box } = renderPopup(commentId, resolved);
-    positionPopup(box, anchorEl);
     box.style.display = 'block';
+    positionPopup(box, anchorEl);
   }
 
   function openComposer(commentId, anchorEl) {
@@ -288,8 +283,8 @@ const Comments = (function () {
     popupCommentId = commentId;
     popupIsNewThread = true;
     const { box, replyArea } = renderPopup(commentId, false);
-    positionPopup(box, anchorEl);
     box.style.display = 'block';
+    positionPopup(box, anchorEl);
     setTimeout(() => { replyArea.focus(); }, 0); // cf. footnote popup : focus différé, sinon écrasé par le refocus de .tiptap juste après le mousedown déclencheur
   }
 

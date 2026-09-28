@@ -39,6 +39,11 @@
    Toujours pas un ::before comme les autres icônes de cette ligne : c'est une vraie image (avatar fourni),
    pas un trait monochrome recolorable - donc un <img> à part, pas intégré à la famille d'icônes .bar-row. */
 #toolbar-top { position: relative; }
+/* clip (pas hidden : aucun conteneur de défilement, rien que focus() ou scrollIntoView puisse faire défiler) sur l'axe horizontal seulement - les menus et
+   info-bulles qui descendent sous la barre restent visibles. Une info-bulle masquée (opacity:0, mais toujours en place) d'un bouton de bout de ligne
+   dépassait de 19 à 36px à droite et rendait la page entière défilable latéralement, barre comprise. Au survol, js/viewport-fit.js la ramène dans la
+   fenêtre avant qu'elle n'apparaisse : ce clip ne coupe jamais une info-bulle visible. */
+#toolbar-top { overflow-x: clip; }
 /* top calé sur le centre vertical des boutons de .bar-row (padding-top 6px + moitié des 28px de hauteur
    de bouton, moins la moitié des 20px du logo) pour l'aligner avec le bouton Réglages plutôt qu'avec le
    haut de la barre - demande d'Antoine, 2026-09-19 ("aligner avec la roue crantée que ça fasse joli"). */
@@ -46,14 +51,21 @@
 /* Réserve la place du logo dans le coin haut-droit pour qu'aucun élément de .bar-row (bouton Réglages,
    compteur de longueur email...) ne puisse jamais passer dessous. */
 .bar-row { padding-right: 34px; }
+/* Coin "info" (#status-msg, css/style.css) : largeur de base FIXE, celle de "Enregistré à HH:MM:SS.", texte tronqué au-delà (message entier au survol,
+   js/viewport-fit.js). Sa largeur suivait jusqu'ici son texte, qui passe de "" à "Enregistré à HH:MM:SS." à chaque auto-save : entre ~740 et 880px de
+   large, le bouton Réglages passait alors à la ligne puis revenait, et la barre sautait de 33px pendant la frappe. Le retour à la ligne ne dépend plus
+   que de cette base constante, jamais du message affiché. */
+#status-msg { flex: 1 1 12.5em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
 /* === Infobulle classique (bulle sombre sous le bouton), remplace "libellé révélé au survol" de la V1 (`.btn-text`, qui élargit le bouton). Déclenchée par
    [data-tip] plutôt que `title` (les deux natifs ne cohabitent pas bien) - l'accessibilité passe par aria-label. Pas de flèche : les icônes ::before
    occupent déjà le seul autre pseudo-élément disponible. */
 .bar-row [data-tip], #v2-toolbar [data-tip] { position: relative; }
+/* --pp-tip-shift : décalage posé au survol/focus par js/viewport-fit.js pour qu'une info-bulle de bout de ligne tienne entière dans la fenêtre (porté par
+   `left`, pas par `transform`, qui est animé : l'info-bulle glisserait latéralement en apparaissant). */
 .bar-row [data-tip]::after, #v2-toolbar [data-tip]::after {
   content: attr(data-tip);
-  position: absolute; left: 50%; top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
+  position: absolute; left: calc(50% + var(--pp-tip-shift, 0px)); top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
   background: var(--text); color: #fff; font-family: var(--font-ui); font-weight: 600; font-size: 11.5px;
   padding: 5px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none;
   opacity: 0; transition: opacity .12s ease .35s, transform .12s ease .35s; z-index: 50;
@@ -61,6 +73,21 @@
 }
 .bar-row [data-tip]:hover::after, .bar-row [data-tip]:focus-visible::after,
 #v2-toolbar [data-tip]:hover::after, #v2-toolbar [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Info-bulle "collée" : après un clic souris, un bouton qui garde (Enregistrer, Mode lecture...) ou reprend (Tables liées, Réglages, à la fermeture de leur
+   fenêtre) le focus passe en :focus-visible dès la touche suivante - Échap typiquement - et affichait son info-bulle jusqu'au prochain clic ailleurs, souris
+   partie. `pp-tip-pointer` (js/viewport-fit.js) marque la souris comme dernière modalité : seule l'info-bulle de FOCUS y est cachée, celle du survol reste,
+   et Tab rend les siennes à la navigation clavier. */
+.pp-tip-pointer .bar-row [data-tip]:focus-visible:not(:hover)::after,
+.pp-tip-pointer #v2-toolbar [data-tip]:focus-visible:not(:hover)::after { opacity: 0; }
+/* Info-bulles coupées par leur propre conteneur : un overflow:hidden rogne l'info-bulle (::after, sous le bouton) de tout bouton qu'il contient - Renommer et
+   Modèle par défaut dans #v2-title-cluster, les deux moitiés des boutons couleur/surlignage - ou la sienne propre (#v2-size-stepper porte lui-même son
+   data-tip). Ces overflow ne servaient qu'à arrondir les coins des fonds de survol : arrondis désormais par les boutons d'extrémité eux-mêmes (rayon du
+   conteneur moins sa bordure de 1px). Les moitiés couleur/surlignage de #v2-toolbar ont déjà les leurs (css/editor-v2.css). */
+#v2-title-cluster, #v2-toolbar .v2-color-split, #v2-size-stepper { overflow: visible; }
+#v2-title-cluster .tts-trigger { border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px); }
+#toolbar-top #btn-set-default-template { border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0; }
+#v2-toolbar #v2-size-minus { border-radius: 4px 0 0 4px; }
+#v2-toolbar #v2-size-plus { border-radius: 0 4px 4px 0; }
 
 /* Mécanisme commun anti-chevauchement info-bulle/menu (retour Antoine 2026-09-28 : le bouton "image" affichait son nom PAR-DESSUS son propre flyout au
    survol, déjà réglé une fois au cas par cas pour #v2-btn-quality/#btn-export-pdf en leur retirant data-tip - cf. .v2-hover-flyout-label, editor-v2.css,
@@ -113,6 +140,13 @@
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
+/* Panneau étroit : Objet/À/Cc/Cci partagent une seule ligne tant que chaque champ garde au moins 64px. Leurs largeurs de base (300/200px) imposaient 2 à 3
+   lignes de 38px : à 600x400, avec Cci, la barre montait à 388px sur 400 - plus une ligne de texte visible dans l'éditeur, et la page débordait de 16px.
+   Au-delà de 900px, largeurs d'origine inchangées. */
+@media (max-width: 900px) {
+  .v2-email-field-input, .v2-email-field-input.v2-email-field-subject { flex: 1 1 0; min-width: 64px; }
+  .v2-email-field-input.v2-email-field-subject { flex-grow: 1.5; }
+}
 .v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
 .v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }

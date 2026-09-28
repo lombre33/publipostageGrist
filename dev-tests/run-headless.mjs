@@ -78,6 +78,7 @@ const GROUPS = {
 const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
+  smallPanel: 'verify-small-panel.mjs',
 };
 
 const argv = process.argv.slice(2);

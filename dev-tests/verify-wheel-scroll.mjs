@@ -284,23 +284,9 @@ async function runAt(width, height) {
   // où l'ancien correctif (max-height fixe sur .v2-hover-flyout) ne suffisait plus. Le menu Titre
   // (#v2-heading-flyout, le seul concerné par .v2-hover-flyout-scrollable) y est ouvert pour de vrai.
   //
-  // À 600x400, il reste un débordement résiduel D'ENVIRON 16px, MÊME MENU FERMÉ - donc sans rapport avec
-  // .v2-hover-flyout (display:none à l'état fermé n'y contribue plus rien) : #toolbar-top lui-même (qui
-  // contient la ligne email+Cci ET la barre de boutons) rend à une hauteur (mesuré 388px) inférieure au
-  // besoin réel de son propre contenu à cette largeur (scrollHeight mesuré 407px) - son plancher
-  // min-height:auto (calcul CSS "min-content") sous-estime la hauteur qu'il lui faut une fois les lignes
-  // réellement enroulées à 600px, et le débordement résultant, non clippé (overflow:visible), remonte
-  // dans le scrollHeight de la page - EXACTEMENT le même mécanisme que le bug des flyouts (contenu qui
-  // compte dans le scroll d'un ancêtre sans y être visuellement contenu), mais sur #toolbar-top entier,
-  // pas sur un seul flyout. Confirmé PRÉEXISTANT et sans lien avec ce correctif : mesuré à 531px (soit
-  // 131px de trop) sur `49460c3` (avant ce fix), contre 16px avec le display:none appliqué ici - une
-  // réduction de 131 à 16px, pas une régression. Corriger cela demanderait de donner à #toolbar-top son
-  // propre défilement interne (même schéma que #editor-container), ce qui rouvrirait le même compromis
-  // overflow-x/y que .v2-hover-flyout-scrollable, à une échelle plus large (toute la barre, pas un seul
-  // menu) - hors du périmètre de ce correctif (Antoine n'a signalé que la fermeture/l'inaccessibilité du
-  // popup, jamais ce cas 600px+email+Cci). Suivi séparé à ouvrir plutôt que de le cacher derrière un
-  // seuil à 0 qui ferait paraître ce test cassé pour un problème qu'il ne corrige pas.
-  const KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX = 20;
+  // À 600x400, ce cas a longtemps gardé un débordement d'environ 16px MÊME MENU FERMÉ : #toolbar-top plus haut que ce que la fenêtre lui
+  // laissait, chaque champ email (À/Cc/Cci/Objet) sur sa propre ligne. Toléré ici jusqu'au 28/09, corrigé depuis (champs email partagés
+  // sur une ligne sous 900px de large, css/toolbar-v2.css) : plus aucune tolérance, et dev-tests/verify-small-panel.mjs le mesure aussi.
   await page.evaluate(async () => {
     function openFlyout(sel) { document.querySelector(sel).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); }
     openFlyout('#v2-new-template-group');
@@ -319,7 +305,7 @@ async function runAt(width, height) {
   const pageOverflowBeforeOpen = await page.evaluate(() => ({
     scrollHeight: document.scrollingElement.scrollHeight, clientHeight: document.scrollingElement.clientHeight,
   }));
-  check('mode email+Cci, menu Titre FERMÉ -> page ne déborde pas verticalement (hors résidu connu #toolbar-top, cf. commentaire)', pageOverflowBeforeOpen.scrollHeight <= pageOverflowBeforeOpen.clientHeight + KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, pageOverflowBeforeOpen);
+  check('mode email+Cci, menu Titre FERMÉ -> page ne déborde pas verticalement', pageOverflowBeforeOpen.scrollHeight <= pageOverflowBeforeOpen.clientHeight, pageOverflowBeforeOpen);
 
   const headingChipBox = await page.evaluate(() => {
     const b = document.getElementById('v2-heading-chip');
@@ -345,7 +331,7 @@ async function runAt(width, height) {
   const pageOverflowWhileOpen = await page.evaluate(() => ({
     scrollHeight: document.scrollingElement.scrollHeight, clientHeight: document.scrollingElement.clientHeight,
   }));
-  check('mode email+Cci, menu Titre OUVERT -> la PAGE ne déborde pas PLUS QUE le résidu déjà présent menu fermé', pageOverflowWhileOpen.scrollHeight <= pageOverflowWhileOpen.clientHeight + KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, pageOverflowWhileOpen);
+  check('mode email+Cci, menu Titre OUVERT -> la PAGE ne déborde pas verticalement', pageOverflowWhileOpen.scrollHeight <= pageOverflowWhileOpen.clientHeight, pageOverflowWhileOpen);
 
   // Molette PENDANT que ce menu est ouvert (survol maintenu sur son déclencheur, comme au clavier/trackpad
   // réel - déplacer la souris ailleurs sur la barre fermerait le flyout via mouseout avant même de tester
@@ -355,10 +341,7 @@ async function runAt(width, height) {
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
   const stillOpenDuringWheel = await page.evaluate(() => getComputedStyle(document.getElementById('v2-heading-flyout')).display);
   const scrollTopEmail = await waitForScrollSettle(page, 'scrollTop');
-  // scrollTopEmail peut atteindre (sans le dépasser) le résidu connu de #toolbar-top ci-dessus : la page
-  // a alors juste fini de défiler dans la petite marge déjà en trop avant même ce geste, pas une
-  // régression de chaînage de scroll distincte.
-  check('mode email+Cci, molette sur le déclencheur du menu Titre ouvert -> page quasi immobile (au résidu connu près)', scrollTopEmail <= KNOWN_TOOLBAR_MIN_CONTENT_OVERFLOW_PX, { scrollTopEmail, stillOpenDuringWheel });
+  check('mode email+Cci, molette sur le déclencheur du menu Titre ouvert -> page immobile', scrollTopEmail === 0, { scrollTopEmail, stillOpenDuringWheel });
 
   await browser.close();
 }

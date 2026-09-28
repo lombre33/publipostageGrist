@@ -55,11 +55,12 @@ const MainToolbar = (function () {
         box.appendChild(item);
       });
     }
-    const rect = anchorEl.getBoundingClientRect();
-    box.style.position = 'absolute';
-    box.style.left = (rect.left + window.scrollX) + 'px';
-    box.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    // Ancre = la ligne du menu Image ; si ce menu s'est déjà refermé (ligne en display:none, rectangle nul), repli sur le bouton Image lui-même plutôt que
+    // le coin haut-gauche de la fenêtre. Placé une fois affiché, pour rester dans la fenêtre (ViewportFit.placePopup).
+    let rect = anchorEl.getBoundingClientRect();
+    if (!rect.width && !rect.height) rect = document.getElementById('v2-btn-image').getBoundingClientRect();
     box.style.display = 'block';
+    ViewportFit.placePopup(box, rect, { gap: 4 });
   }
   // Image insérée par URL : convertie en data URI ICI, avant insertion, plutôt qu'à chaque export (même
   // fetch que pdf-export.js:inlineEditorImagesAsDataUri, avancé au moment de l'import) - l'URL externe

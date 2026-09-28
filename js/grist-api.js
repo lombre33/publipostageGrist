@@ -6,8 +6,11 @@ const GristAPI = (function () {
   // _tables/getAllVariables/tout sélecteur de table présenté à l'utilisateur (sans quoi elles polluaient l'autocomplétion # et les sélecteurs de liaison).
   // Publipostage_PreferencesModeles (js/template-preferences.js, épingle/dossier par utilisateur pour
   // l'arbre de modèles) : même raison d'exclusion que les trois tables ci-dessus, jamais un choix
-  // métier de l'utilisateur.
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles'];
+  // métier de l'utilisateur. Publipostage_Commentaires (js/comments.js, fils de discussion) manquait : le vrai
+  // listTables() rend TOUTES les tables du document (grist-core WidgetFrame.ts, _grist_Tables sans filtre), elle
+  // apparaissait donc dans l'autocomplétion # et les sélecteurs - invisible avec dev-tests/grist-stub.js, qui ne
+  // liste jamais ses tables internes.
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") - une colonne à formule déclenchée (capture qui a réellement déclenché le
   // calcul, `user.Email`), vidée après chaque lecture.
