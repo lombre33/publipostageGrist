@@ -55,7 +55,9 @@
    c'est exactement ce qui, combiné à outsideScrollHandler (js/template-tree-select.js), faisait défiler la
    PAGE une fois le panneau épuisé - révélant un débordement de page latent (#v2-heading-flyout) qui
    remontait toute la barre d'outils hors de portée de la souris en petite fenêtre (2026-09-28). */
-.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; }
+/* font-family explicite : rattaché à document.body (cf. commentaire JS positionPopup), le panneau sort de la cascade de la barre d'outils (Manrope) et
+   retombait sur l'Arial par défaut du body (css/style.css) - régression relevée par le coordinateur, mesure indépendante 2026-09-28. */
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); }
 .tts-popup.is-open { display: block; }
 
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }

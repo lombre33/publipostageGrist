@@ -258,7 +258,12 @@ window.TestHelpers = (function () {
     const group = document.querySelector(groupSelector);
     if (!group) throw new Error('Groupe flyout introuvable : ' + groupSelector);
     const flyout = group.querySelector('.v2-hover-flyout');
-    if (flyout) { flyout.style.opacity = '1'; flyout.style.visibility = 'visible'; flyout.style.pointerEvents = 'auto'; }
+    // display:none à l'état fermé (css/editor-v2.css, `.v2-hover-flyout`) depuis le correctif du
+    // débordement de page - forcer juste opacity/visibility ne suffit plus à le rendre réellement
+    // cliquable/atteignable par elementFromPoint, il faut aussi lever `display` (le vrai survol CSS le
+    // fait via `.v2-hover-group:hover .v2-hover-flyout { display:flex }`, cf.
+    // [[project-publipostage-scroll-chaining-popup-fix]]).
+    if (flyout) { flyout.style.display = 'flex'; flyout.style.opacity = '1'; flyout.style.visibility = 'visible'; flyout.style.pointerEvents = 'auto'; }
     return flyout;
   }
 

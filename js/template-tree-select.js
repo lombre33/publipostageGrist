@@ -274,6 +274,14 @@ const TemplateTreeSelect = (function () {
     const rect = trigger.getBoundingClientRect();
     popup.style.top = (rect.bottom + 4) + 'px';
     popup.style.left = rect.left + 'px';
+    // Même correction que overflowRight ci-dessous, sur l'axe vertical : un panneau latéral Grist réel
+    // descend vers 700x400 (mesure du coordinateur, 2026-09-28) - le max-height:360px fixe du CSS
+    // dépassait alors le bas de la fenêtre de 9px, rognant la dernière ligne sans qu'aucun défilement
+    // (page ou panneau) ne puisse plus la révéler. Borné ici sur la place RÉELLEMENT disponible sous le
+    // déclencheur, jamais plus que le max-height CSS. -10 : max-height cible la boîte de CONTENU (pas de
+    // box-sizing:border-box sur .tts-popup), donc la bordure+le padding (1px+4px de chaque côté, CSS)
+    // s'ajoutent par-dessus - sans eux la marge de 12px se faisait grignoter et le panneau redépassait.
+    popup.style.maxHeight = Math.max(80, Math.min(360, window.innerHeight - rect.bottom - 12 - 10)) + 'px';
     const popupRect = popup.getBoundingClientRect();
     const overflowRight = popupRect.right - (window.innerWidth - 8);
     if (overflowRight > 0) popup.style.left = Math.max(8, rect.left - overflowRight) + 'px';
