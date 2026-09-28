@@ -28,6 +28,7 @@
     // un tick d'auto-save déclenche en pratique.
     tables: ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires'],
     columns: {}, // { tableId: { colId: type } }
+    choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     recordCallback: null,
     nextRowId: { Publipostage_Modeles: 1, Publipostage_LiensTables: 1, Publipostage_UserProbe: 1 },
@@ -54,7 +55,7 @@
   state.rows.Publipostage_UserProbe = columnarEmpty(['Email']);
   state.rows.Publipostage_Commentaires = columnarEmpty(['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']);
   state.rows._grist_Tables = columnarEmpty(['tableId']);
-  state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type']);
+  state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
 
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
 
@@ -76,21 +77,26 @@
     return Math.floor(ms / 1000); // secondes entières depuis l'epoch, jamais des millisecondes (cf. doc citée ci-dessus)
   }
 
-  function setVariables(tableId, columns) {
+  function setVariables(tableId, columns, choicesByCol) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
+    // choicesByCol (optionnel) : { colId: string[] } pour une colonne Choice/ChoiceList - même clé "choices" que le vrai widgetOptions JSON de Grist
+    // (grist-core ChoiceTextBox.ts: this.options.prop("choices")), vérifié à la source le 2026-09-28.
     if (state.tables.indexOf(tableId) === -1) state.tables.push(tableId);
     state.columns[tableId] = columns;
     if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(Object.keys(columns));
-    // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType() fonctionne
+    if (choicesByCol) state.choices[tableId] = Object.assign({}, state.choices[tableId], choicesByCol);
+    // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
     // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
-    // reconstruit tout à chaque fois à partir de state.tables/columns.
+    // reconstruit tout à chaque fois à partir de state.tables/columns/choices.
     const gt = columnarEmpty(['tableId']);
-    const gtc = columnarEmpty(['parentId', 'colId', 'type']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
     let rowId = 1;
     state.tables.forEach((t, tIdx) => {
       gt.id.push(tIdx + 1); gt.tableId.push(t);
       Object.keys(state.columns[t] || {}).forEach(colId => {
+        const choices = state.choices[t] && state.choices[t][colId];
         gtc.id.push(rowId++); gtc.parentId.push(tIdx + 1); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
+        gtc.widgetOptions.push(choices ? JSON.stringify({ choices }) : '');
       });
     });
     state.rows._grist_Tables = gt;

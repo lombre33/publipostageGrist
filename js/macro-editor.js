@@ -37,6 +37,7 @@ const MacroEditor = (function () {
     if (t === 'Bool') return I18n.t('macro.modal.typeBool');
     if (t.indexOf('Ref:') === 0 || t.indexOf('RefList:') === 0) return I18n.t('macro.modal.typeRef');
     if (t === 'Numeric' || t === 'Int') return I18n.t('macro.modal.typeNumeric');
+    if (t === 'Choice' || t === 'ChoiceList') return I18n.t('macro.modal.typeChoice');
     return '';
   }
 
@@ -77,12 +78,20 @@ const MacroEditor = (function () {
     const typeHint = document.createElement('span');
     typeHint.className = 'macro-rule-column-type';
 
+    // Avertissement visible si la colonne choisie est absente de la ligne actuellement affichée dans le widget (record) : cause probable, colonne pas
+    // cochée dans le panneau de droite DE CE WIDGET (grist.onRecord ne la transmet alors pas, même avec un accès complet) - exactement le bug Choice
+    // d'Antoine du 2026-09-28, dont la règle "=" échouait sans aucune explication (cf. js/grist-api.js:includeColumns et js/macro-templates.js:
+    // ruleMatches pour le même garde-fou côté log). Sans ce signal, rien à l'écran n'indique que la règle ne PEUT pas fonctionner tant que la colonne
+    // n'est pas cochée là-bas.
     function updateTypeHint() {
       const tableId = GristAPI.getCurrentTableId();
       const col = select.value === ADVANCED_COLUMN_VALUE ? null : select.value;
       const type = (col && tableId) ? GristAPI.getColumnType(tableId, col) : null;
-      typeHint.textContent = type ? friendlyTypeLabel(type) : '';
-      if (onTypeChange) onTypeChange(type);
+      const record = col ? GristAPI.getCurrentRecord() : null;
+      const missingFromRecord = !!(col && record && !(col in record));
+      typeHint.textContent = missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : (type ? friendlyTypeLabel(type) : '');
+      typeHint.classList.toggle('is-warning', missingFromRecord);
+      if (onTypeChange) onTypeChange(type, col);
     }
 
     const currentValue = rule.column || '';
@@ -114,6 +123,89 @@ const MacroEditor = (function () {
     wrap.appendChild(select);
     wrap.appendChild(advancedInput);
     wrap.appendChild(typeHint);
+    return wrap;
+  }
+
+  function valuePlaceholderForType(type) {
+    const t = String(type || '');
+    if (t === 'Date' || t.indexOf('DateTime') === 0) return I18n.t('macro.modal.valuePlaceholderDate');
+    if (t === 'Bool') return I18n.t('macro.modal.valuePlaceholderBool');
+    return I18n.t('macro.modal.valuePlaceholder');
+  }
+
+  const ADVANCED_VALUE = '__advanced_value__';
+
+  // Remplace le champ Valeur en texte libre par un <select> des choix réels (widgetOptions.choices, GristAPI.getColumnChoices) quand la colonne est de
+  // type Choice/ChoiceList - même raison et même patron que buildColumnField pour la colonne : une valeur tapée à la main qui ne correspond pas
+  // EXACTEMENT au choix stocké (casse, accent, espace) ne matche jamais, silencieusement (Antoine, 2026-09-28 : "colonne à choix unique, opérateur '='
+  // ne fonctionne pas"). Repli sur le texte libre (placeholder adapté au type) pour tout le reste, et pour une colonne Choice/ChoiceList sans
+  // widgetOptions.choices connu (colonne pas encore vue par refreshSchema, ou vidée) - jamais un champ qui disparaît.
+  function buildValueField(rule, columnType, colId) {
+    const wrap = document.createElement('span');
+    wrap.className = 'macro-rule-value-wrap';
+    const type = String(columnType || '');
+    const tableId = GristAPI.getCurrentTableId();
+    const choices = (type === 'Choice' || type === 'ChoiceList') && colId && tableId ? GristAPI.getColumnChoices(tableId, colId) : null;
+
+    if (choices && choices.length) {
+      const select = document.createElement('select');
+      select.className = 'macro-rule-value';
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = I18n.t('macro.modal.valueChoosePlaceholder');
+      select.appendChild(empty);
+      choices.forEach(ch => {
+        const o = document.createElement('option');
+        o.value = ch;
+        o.textContent = ch;
+        select.appendChild(o);
+      });
+      const advancedOpt = document.createElement('option');
+      advancedOpt.value = ADVANCED_VALUE;
+      advancedOpt.textContent = I18n.t('macro.modal.valueAdvanced');
+      select.appendChild(advancedOpt);
+
+      const advancedInput = document.createElement('input');
+      advancedInput.type = 'text';
+      advancedInput.className = 'macro-rule-value-advanced';
+      advancedInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
+
+      const currentValue = rule.value || '';
+      // Même garde qu'en colonne (buildColumnField) : une valeur déjà enregistrée qui ne correspond à aucun choix connu (choix retiré depuis côté Grist,
+      // ou widgetOptions pas encore chargé au moment de la 1ère saisie) reste visible en saisie avancée, jamais silencieusement effacée.
+      if (currentValue && choices.indexOf(currentValue) === -1) {
+        select.value = ADVANCED_VALUE;
+        advancedInput.value = currentValue;
+        advancedInput.hidden = false;
+      } else {
+        select.value = currentValue;
+        advancedInput.hidden = true;
+      }
+
+      select.addEventListener('change', () => {
+        if (select.value === ADVANCED_VALUE) {
+          advancedInput.hidden = false;
+          advancedInput.focus();
+          rule.value = advancedInput.value;
+        } else {
+          advancedInput.hidden = true;
+          rule.value = select.value;
+        }
+      });
+      advancedInput.addEventListener('input', () => { rule.value = advancedInput.value; });
+
+      wrap.appendChild(select);
+      wrap.appendChild(advancedInput);
+      return wrap;
+    }
+
+    const valInput = document.createElement('input');
+    valInput.type = 'text';
+    valInput.className = 'macro-rule-value';
+    valInput.placeholder = valuePlaceholderForType(type);
+    valInput.value = rule.value || '';
+    valInput.addEventListener('input', () => { rule.value = valInput.value; });
+    wrap.appendChild(valInput);
     return wrap;
   }
 
@@ -171,27 +263,22 @@ const MacroEditor = (function () {
         connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
         row.appendChild(connector);
 
-        const valInput = document.createElement('input');
-        valInput.type = 'text';
-        valInput.className = 'macro-rule-value';
-        valInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
-        valInput.value = rule.value || '';
-        valInput.addEventListener('input', () => { rule.value = valInput.value; });
+        // Le champ Valeur dépend du type de la colonne choisie (dropdown des vrais choix pour Choice/ChoiceList, placeholder adapté pour Date/Bool,
+        // texte libre sinon - buildValueField) : reconstruit entièrement à chaque changement de colonne plutôt que de juste garder le même <input> et
+        // en changer le placeholder, puisque le type de champ lui-même (select vs texte) peut changer. `valueWrap` doit exister AVANT buildColumnField :
+        // celui-ci appelle son callback une 1ère fois de façon synchrone, pour la colonne déjà enregistrée de la règle.
+        const valueWrap = document.createElement('span');
+        valueWrap.className = 'macro-rule-value-slot';
+        function renderValue(type, colId) { valueWrap.replaceChildren(buildValueField(rule, type, colId)); }
 
-        row.appendChild(buildColumnField(rule, (type) => {
-          const t = String(type || '');
-          if (t === 'Date') valInput.placeholder = I18n.t('macro.modal.valuePlaceholderDate');
-          else if (t.indexOf('DateTime') === 0) valInput.placeholder = I18n.t('macro.modal.valuePlaceholderDate');
-          else if (t === 'Bool') valInput.placeholder = I18n.t('macro.modal.valuePlaceholderBool');
-          else valInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
-        }));
+        row.appendChild(buildColumnField(rule, (type, colId) => renderValue(type, colId)));
 
         const opSelect = document.createElement('select');
         OPERATORS.forEach(op => { const o = document.createElement('option'); o.value = op; o.textContent = op; opSelect.appendChild(o); });
         opSelect.value = rule.operator || '=';
         opSelect.addEventListener('change', () => { rule.operator = opSelect.value; });
         row.appendChild(opSelect);
-        row.appendChild(valInput);
+        row.appendChild(valueWrap);
 
         const arrow = document.createElement('span');
         arrow.className = 'macro-rule-arrow';

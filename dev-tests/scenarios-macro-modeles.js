@@ -48,12 +48,17 @@
   // cassait silencieusement ces colonnes.
   cases.push({
     id: 'macro_compare_values_column_type_aware',
-    description: 'compareValues interprète Bool ("Oui"/"Non") et Date/DateTime (objet Date OU secondes UTC, jour/avant/après) selon columnType',
+    description: 'compareValues interprète Bool ("Oui"/"Non") et Date/DateTime (objet Date OU secondes UTC, jour/avant/après, fuseau de colonne, "contient", dates invalides rejetées) selon columnType',
     run: async () => {
       const c = MacroTemplates.compareValues;
       const day26Obj = new Date(Date.UTC(2026, 8, 26)); // forme "onRecord" (objet Date, ex. GristDate)
       const day26Sec = Date.UTC(2026, 8, 26) / 1000; // forme "export en lot" (secondes UTC, js/variable-format.js)
       const day27Obj = new Date(Date.UTC(2026, 8, 27));
+      // 26/09 23h30 UTC = 27/09 01h30 à Paris (CEST, UTC+2, encore actif fin septembre) - le jour Paris diffère du jour UTC (audit du coordinateur,
+      // 2026-09-28, trouvé en vérifiant CE correctif séparément du bug Choice d'Antoine dont la cause est ailleurs, cf. js/grist-api.js:includeColumns).
+      const parisLateObj = new Date(Date.UTC(2026, 8, 26, 23, 30));
+      const parisLateSec = Date.UTC(2026, 8, 26, 23, 30) / 1000;
+      const day03MarObj = new Date(Date.UTC(2026, 2, 3));
       const checks = [
         [c(true, '=', 'Oui', 'Bool'), true, 'Bool = "Oui" sur true'],
         [c(false, '=', 'Non', 'Bool'), true, 'Bool = "Non" sur false'],
@@ -68,6 +73,24 @@
         [c(day26Obj, '<', '27/09/2026', 'Date'), true, 'Date (objet) < jour suivant'],
         [c(day26Sec, '<', '27/09/2026', 'DateTime:UTC'), true, 'DateTime (secondes) < jour suivant'],
         [c(day27Obj, '>', '26/09/2026', 'Date'), true, 'Date (objet) > jour précédent'],
+        // Cohérence entre opérateurs à la même paire de valeurs (14h le jour J doit être = J, PAS > J, et ≤ J) - avant ce correctif, "=" utilisait le
+        // jour et ">"/"≤" l'instant exact, ce qui les rendait incohérents entre eux (audit du coordinateur, 2026-09-28).
+        [c(new Date(Date.UTC(2026, 8, 26, 14, 0)), '=', '26/09/2026', 'Date'), true, '14h le jour J est bien = J'],
+        [c(new Date(Date.UTC(2026, 8, 26, 14, 0)), '>', '26/09/2026', 'Date'), false, '14h le jour J ne doit PAS être > J'],
+        [c(new Date(Date.UTC(2026, 8, 26, 14, 0)), '≤', '26/09/2026', 'Date'), true, '14h le jour J doit être ≤ J (inclusif)'],
+        // Fuseau de colonne (DateTime:<fuseau>) : même instant, jour différent selon le fuseau déclaré par la colonne.
+        [c(parisLateObj, '=', '27/09/2026', 'DateTime:Europe/Paris'), true, 'DateTime (objet, fuseau Paris) = jour Paris (différent du jour UTC)'],
+        [c(parisLateSec, '=', '27/09/2026', 'DateTime:Europe/Paris'), true, 'DateTime (secondes, fuseau Paris) = jour Paris'],
+        [c(parisLateObj, '=', '26/09/2026', 'DateTime:UTC'), true, 'même instant, = jour UTC quand la colonne est déclarée UTC'],
+        [c(parisLateObj, '=', '26/09/2026', 'DateTime:Europe/Paris'), false, 'le même instant ne doit PAS matcher le jour UTC quand la colonne est à Paris'],
+        // "contient" sur une date : avant ce correctif, toujours faux (régression par rapport à avant le tout premier correctif) - doit à nouveau
+        // fonctionner, sur les DEUX chemins de lecture, sans dépendre d'une coïncidence de format.
+        [c(day26Obj, 'contient', '09-26', 'Date'), true, 'contient (objet) retrouve un fragment du jour'],
+        [c(day26Sec, 'contient', '2026-09-26', 'DateTime:UTC'), true, 'contient (secondes) retrouve le jour complet'],
+        [c(day26Obj, 'contient', '2026-10', 'Date'), false, 'contient (objet) absent'],
+        // Date saisie invalide : avant ce correctif, Date.UTC débordait silencieusement sur un autre mois/année au lieu d'être rejetée.
+        [c(day03MarObj, '=', '31/02/2026', 'Date'), false, '31/02 (jour hors bornes du mois) rejeté, ne déborde plus silencieusement sur le 03/03'],
+        [c(new Date(Date.UTC(2028, 1, 9)), '=', '09/26/2026', 'Date'), false, 'mois=26 (saisie US par erreur) rejeté, ne déborde plus sur le 09/02/2028'],
       ];
       const failed = checks.filter(([actual, expected]) => actual !== expected);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify(failed.map(f => f[2])) : 'OK' };
@@ -240,6 +263,109 @@
 
       const pass = hasRealColumns && hasAdvancedOption && advancedHiddenInitially === true && boolHintOk && boolPlaceholderOk && advancedVisibleAfterToggle;
       return { pass, notes: JSON.stringify({ optionValues, boolHintOk, boolPlaceholderOk, advancedHiddenInitially, advancedVisibleAfterToggle }) };
+    },
+  });
+
+  // --- État rendu du champ Valeur pour une colonne Choice (js/macro-editor.js:buildValueField) - Antoine, 2026-09-28 : "une colonne comprenant des
+  // choix uniques avec l'opérateur '=' ça ne fonctionne pas". La cause réelle (colonne masquée dans le panneau du widget, cf. le test ci-dessous) est
+  // réglée côté js/grist-api.js:includeColumns, mais un dropdown des vrais choix Grist (au lieu d'un texte libre) élimine en plus toute la classe des
+  // fautes de frappe/casse/espace qui feraient échouer "=" en silence - même patron que buildColumnField pour la colonne. ---
+  cases.push({
+    id: 'macro_rule_value_field_choice_dropdown',
+    description: 'Le champ Valeur devient un <select> des vrais choix Grist pour une colonne Choice, avec repli "autre valeur" pour une valeur déjà enregistrée absente des choix actuels',
+    run: async (h) => {
+      await h.resetEditor();
+      // Nom de table dédié, jamais réutilisé par un autre cas de ce fichier : le faux Grist ne reconstruit PAS state.rows[tableId] (donc GristAPI.getColumns)
+      // sur un 2e setVariables() du même tableId (seulement state.columns, cf. dev-tests/grist-stub.js) - réutiliser "DossiersTest" ici laissait "Statut"
+      // absent du <select> colonne (limite du faux Grist, pas de MacroEditor), trouvé en debuggant ce test.
+      window.__gristStub.setVariables('DossiersChoixTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'En cours', 'Clos'] });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Statut: 'Urgent' }, 'DossiersChoixTest');
+
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+      let row = document.querySelector('.macro-rule-row');
+      let columnSelect = row.querySelector('select.macro-rule-column');
+      columnSelect.value = 'Statut';
+      columnSelect.dispatchEvent(new Event('change'));
+
+      const valueSelect = row.querySelector('select.macro-rule-value');
+      const optionValues = valueSelect ? Array.from(valueSelect.options).map(o => o.value) : [];
+      const hasRealChoices = optionValues.includes('Urgent') && optionValues.includes('En cours') && optionValues.includes('Clos');
+      const hasAdvancedValueOption = optionValues.includes('__advanced_value__'); // ADVANCED_VALUE (js/macro-editor.js)
+      const advancedValueInput = row.querySelector('.macro-rule-value-advanced');
+      const advancedHiddenInitially = advancedValueInput ? advancedValueInput.hidden : null;
+
+      valueSelect.value = '__advanced_value__';
+      valueSelect.dispatchEvent(new Event('change'));
+      const advancedVisibleAfterToggle = advancedValueInput.hidden === false;
+
+      // Une valeur DÉJÀ enregistrée (ex. un ancien choix retiré côté Grist depuis) qui ne correspond à aucun choix actuel doit rester visible en saisie
+      // avancée à l'ouverture, jamais silencieusement effacée ni remplacée par le premier choix venu.
+      MacroEditor.openModal({ id: null, nom: 'x', macroSlots: { slots: [
+        { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'ValeurObsolete', modeleId: null }], defaultModeleId: null },
+      ] } });
+      await h.sleep(20);
+      row = document.querySelector('.macro-rule-row');
+      const staleValueSelect = row.querySelector('select.macro-rule-value');
+      const staleAdvancedInput = row.querySelector('.macro-rule-value-advanced');
+      const staleValueKept = staleValueSelect && staleValueSelect.value === '__advanced_value__'
+        && staleAdvancedInput && staleAdvancedInput.hidden === false && staleAdvancedInput.value === 'ValeurObsolete';
+
+      const pass = hasRealChoices && hasAdvancedValueOption && advancedHiddenInitially === true && advancedVisibleAfterToggle && staleValueKept;
+      return { pass, notes: JSON.stringify({ optionValues, advancedHiddenInitially, advancedVisibleAfterToggle, staleValueKept }) };
+    },
+  });
+
+  // --- Avertissement visible (js/macro-editor.js:updateTypeHint) quand la colonne choisie par une règle est absente de la ligne actuellement affichée
+  // (record) - cause RÉELLE du bug Choice d'Antoine du 2026-09-28 (colonne pas cochée dans le panneau de droite DE CE WIDGET -> absente d'onRecord par
+  // défaut, cf. js/grist-api.js:includeColumns), trouvée par l'audit du coordinateur en vérifiant grist-core à la source. Sans ce signal, rien
+  // n'indique que la règle ne PEUT pas fonctionner tant que la colonne n'est pas cochée là-bas. ---
+  cases.push({
+    id: 'macro_rule_column_missing_from_record_warns',
+    description: 'La modale macro avertit visiblement quand la colonne choisie par une règle est absente de la ligne actuellement affichée dans le widget',
+    run: async (h) => {
+      await h.resetEditor();
+      // Nom de table dédié, jamais réutilisé ailleurs dans ce fichier (cf. le commentaire du test précédent sur cette même limite du faux Grist).
+      window.__gristStub.setVariables('DossiersMissingColTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      await GristAPI.refreshSchema();
+      // Statut n'est délibérément PAS dans ce record - simule une colonne non cochée dans le panneau du widget (includeColumns:'shown').
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier' }, 'DossiersMissingColTest');
+
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+      await h.sleep(50);
+      const row = document.querySelector('.macro-rule-row');
+      const columnSelect = row.querySelector('select.macro-rule-column');
+      const typeHint = row.querySelector('.macro-rule-column-type');
+
+      columnSelect.value = 'TypeDossier';
+      columnSelect.dispatchEvent(new Event('change'));
+      const noWarningWhenPresent = !typeHint.classList.contains('is-warning');
+
+      columnSelect.value = 'Statut';
+      columnSelect.dispatchEvent(new Event('change'));
+      const warnsWhenMissing = typeHint.classList.contains('is-warning') && typeHint.textContent === I18n.t('macro.modal.columnMissingFromRecord');
+
+      const pass = noWarningWhenPresent && warnsWhenMissing;
+      return { pass, notes: JSON.stringify({ noWarningWhenPresent, warnsWhenMissing, typeHintText: typeHint.textContent }) };
+    },
+  });
+
+  // --- GristAPI.getColumnChoices (js/grist-api.js) - widgetOptions.choices d'une colonne Choice/ChoiceList, source du dropdown ci-dessus. ---
+  cases.push({
+    id: 'macro_get_column_choices',
+    description: 'GristAPI.getColumnChoices renvoie les choix configurés (widgetOptions.choices) d’une colonne Choice, et null pour une colonne sans choix connus',
+    run: async () => {
+      window.__gristStub.setVariables('DossiersTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'En cours', 'Clos'] });
+      await GristAPI.refreshSchema();
+      const statutChoices = GristAPI.getColumnChoices('DossiersTest', 'Statut');
+      const typeDossierChoices = GristAPI.getColumnChoices('DossiersTest', 'TypeDossier');
+      const unknownColChoices = GristAPI.getColumnChoices('DossiersTest', 'ColonneInconnue');
+      const pass = Array.isArray(statutChoices) && statutChoices.join(',') === 'Urgent,En cours,Clos'
+        && typeDossierChoices === null && unknownColChoices === null;
+      return { pass, notes: JSON.stringify({ statutChoices, typeDossierChoices, unknownColChoices }) };
     },
   });
 

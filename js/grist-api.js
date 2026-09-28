@@ -15,6 +15,7 @@ const GristAPI = (function () {
   let _tables = [];
   let _columnsByTable = {};
   let _columnTypesByTable = {};
+  let _columnChoicesByTable = {};
   // Liste BRUTE (tables internes incluses) de listTables(), mémorisée pour éviter de la redemander à chaque ensureXxxTableExists() - `_tables` ci-dessus
   // les exclut déjà, inutilisable ici. Tenue à jour manuellement après un AddTable réussi (cf. listAllTablesCached/ensureLinksTableExists/
   // ensureUserProbeTable) pour ne jamais répondre "table absente" pour une table qu'on vient nous-mêmes de créer dans la même session.
@@ -48,6 +49,12 @@ const GristAPI = (function () {
     if (_recordSubscriptionRegistered) {
       console.log('[GristAPI] grist.onRecord déjà enregistré, souscription réutilisée.');
     } else try {
+      // includeColumns:'normal' (au lieu du défaut 'shown') : sans ça, seules les colonnes cochées visibles dans le panneau de droite DE CE WIDGET
+      // arrivent dans `record` (GristAPI.ts, FetchSelectedOptions.includeColumns, vérifié à la source jsDelivr le 2026-09-28) - toute colonne créée depuis
+      // une autre vue, ou simplement pas affichée ici, est absente de `record` (record[col] === undefined), jamais juste vide. Une règle macro-modèle qui
+      // teste cette colonne échoue alors silencieusement en "=" (undefined ne matche jamais) et bascule sur le cas par défaut - symptôme d'Antoine du
+      // 2026-09-28. 'normal' exige un accès complet, déjà demandé ci-dessus (requiredAccess:'full'). Effet de bord attendu et voulu : une variable en
+      // mode Lecture qui lisait une colonne masquée montre désormais sa vraie valeur au lieu de rien.
       grist.onRecord(function (record, mappings) {
         const receivedAt = new Date();
         const rowId = record && record.id != null ? record.id : null;
@@ -81,7 +88,7 @@ const GristAPI = (function () {
         }).catch(function (e) {
           console.warn('[GristAPI] onRecord: échec detectTableId —', e);
         });
-      });
+      }, { includeColumns: 'normal' });
       _recordSubscriptionRegistered = true;
       console.log('[GristAPI] grist.onRecord enregistré.');
     } catch (e) {
@@ -216,6 +223,7 @@ const GristAPI = (function () {
   // la compare à l'Identifiant de ligne, pas à une colonne texte.
   async function refreshColumnTypes() {
     _columnTypesByTable = {};
+    _columnChoicesByTable = {};
     try {
       const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
       const tableIdByRowId = {};
@@ -226,6 +234,15 @@ const GristAPI = (function () {
         if (!tableId) continue;
         if (!_columnTypesByTable[tableId]) _columnTypesByTable[tableId] = {};
         _columnTypesByTable[tableId][colsMeta.colId[i]] = colsMeta.type[i];
+        // Choix d'une colonne Choice/ChoiceList : widgetOptions est un JSON stocké en Text (schema.ts), clé "choices" (vérifié à la source grist-core,
+        // ChoiceTextBox.ts: this.options.prop("choices")) - un tableau de chaînes. widgetOptions absent/mal formé ne doit jamais faire planter tout
+        // refreshSchema, juste laisser cette colonne sans choix connus (repli sur le champ texte libre, cf. js/macro-editor.js:buildValueField).
+        if (!_columnChoicesByTable[tableId]) _columnChoicesByTable[tableId] = {};
+        try {
+          const raw = colsMeta.widgetOptions && colsMeta.widgetOptions[i];
+          const opts = raw ? JSON.parse(raw) : null;
+          if (opts && Array.isArray(opts.choices)) _columnChoicesByTable[tableId][colsMeta.colId[i]] = opts.choices;
+        } catch (e) { /* widgetOptions mal formé pour cette colonne : pas de choix connus, tant pis */ }
       }
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
@@ -234,6 +251,11 @@ const GristAPI = (function () {
 
   function getColumnType(tableId, colId) {
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
+  }
+
+  // Liste des choix configurés (widgetOptions.choices) d'une colonne Choice/ChoiceList, ou null si absente/non applicable - cf. refreshColumnTypes.
+  function getColumnChoices(tableId, colId) {
+    return (_columnChoicesByTable[tableId] && _columnChoicesByTable[tableId][colId]) || null;
   }
 
   function getTables() { return _tables; }
@@ -488,5 +510,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule };
 })();
