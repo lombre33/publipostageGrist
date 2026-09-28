@@ -127,6 +127,12 @@
    toolbar) et affiche un carré plein 14x14, faute de mask-image défini pour ce bouton. */
 #toolbar-top #v2-btn-toggle-cci::before { content: none; }
 
+/* #btn-organize-templates (2026-09-28, déplacé du panneau de l'arbre vers la toolbar) porte son icône
+   via un <span class="tts-icon tts-icon-organize"> enfant (même mécanisme que .tts-trigger, cf.
+   css/template-tree-select.css), pas via ::before - même neutralisation que ci-dessus, sinon le carré
+   générique de #toolbar-top button::before (css/style.css) s'affiche en plus de l'icône réelle. */
+#toolbar-top #btn-organize-templates::before { content: none; }
+
 /* Compteur de longueur + bouton d'action de la bar-row 1, visibles uniquement en mode email (js/main.js) - insérés après le bouton Exporter PDF existant,
    jamais à côté (il n'y a qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email]
    il est déjà sur la première ligne, donc pas besoin qu'il soit à côté de composer l'email" - retour d'Antoine). Le compteur mesure la longueur de l'URL

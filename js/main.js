@@ -1294,6 +1294,7 @@
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     MacroEditor.wire(onMacroSaved);
     TemplateOrganizeModal.wire();
+    document.getElementById('btn-organize-templates').addEventListener('click', () => TemplateOrganizeModal.open());
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);

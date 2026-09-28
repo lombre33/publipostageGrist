@@ -1,9 +1,9 @@
 // Suite "templateOrganize" - js/template-organize-modal.js ("Organiser mes modèles", créer des dossiers
 // et y ranger des modèles). Complète dev-tests/scenarios-template-tree.js plutôt que de la dupliquer :
-// ici seulement ce que ce nouveau module ajoute (entrée dans le panneau, recherche, "Déplacer vers…",
-// synchronisation bidirectionnelle avec l'arbre de la barre). js/template-organizer.js et
-// js/template-preferences.js, réutilisés tels quels par cette modale, gardent leurs propres suites
-// (dev-tests/unit-template-organizer.mjs, dev-tests/unit-template-preferences.mjs).
+// ici seulement ce que ce nouveau module ajoute (bouton toolbar dédié, recherche, "Déplacer vers…",
+// glisser-déposer, boutons "+", synchronisation bidirectionnelle avec l'arbre de la barre).
+// js/template-organizer.js et js/template-preferences.js, réutilisés tels quels par cette modale, gardent
+// leurs propres suites (dev-tests/unit-template-organizer.mjs, dev-tests/unit-template-preferences.mjs).
 (function () {
   const cases = [];
   const TABLE = 'Publipostage_PreferencesModeles';
@@ -12,16 +12,18 @@
   function trigger() { return document.querySelector('.tts-trigger'); }
   function popup() { return document.querySelector('.tts-popup'); }
   function popupOpen() { return !!popup() && popup().classList.contains('is-open'); }
-  function organizeRow() { return popup() && popup().querySelector('.tts-row-organize'); }
   function modal() { return document.getElementById('template-organize-modal'); }
   function modalOpen() { return !!modal() && getComputedStyle(modal()).display !== 'none'; }
   function list() { return document.getElementById('template-organize-list'); }
   function rowFor(id) { return list() && list().querySelector('.tts-row-leaf[data-template-id="' + id + '"]'); }
-  // Les lignes de cette liste ne portent pas data-template-id sur l'élément lui-même dans template-organize-modal
-  // (contrairement à l'arbre) : on retrouve une ligne par le texte de son libellé, plus robuste au changement
-  // d'implémentation interne (pas de dataset dédié posé par makeLeafRow ici).
   function rowByName(nom) {
     return Array.from(list().querySelectorAll('.tts-row-leaf')).find((r) => r.querySelector('.tts-row-label').textContent === nom) || null;
+  }
+  // Trouve un dossier RÉEL ou "en attente" (tom-pending-folder porte aussi .tts-row-folder) par son
+  // libellé - le texte affiché est le nom du dossier pour un vrai noeud, le chemin complet pour un
+  // pending (cf. js/template-organize-modal.js:makePendingFolderRow).
+  function folderRowByLabel(texte) {
+    return Array.from(list().querySelectorAll('.tts-row-folder')).find((r) => r.querySelector('.tts-row-label').textContent === texte) || null;
   }
 
   async function clickEl(h, el) {
@@ -29,6 +31,21 @@
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await h.sleep(30);
+  }
+
+  // Glisser-déposer HTML5 réel (pas juste dispatchEvent d'un clic) : un DataTransfer explicite, réutilisé
+  // entre dragstart/dragover/drop exactement comme le ferait un vrai geste souris - dispatchEvent ne le
+  // fait pas tout seul. Chromium réel (Playwright, cf. dev-tests/run-headless.mjs) supporte DataTransfer/
+  // DragEvent en page, contrairement à un DOM simulé.
+  async function simulateDragDrop(h, sourceEl, targetEl) {
+    if (!sourceEl) throw new Error('Source de glisser-déposer introuvable');
+    if (!targetEl) throw new Error('Cible de glisser-déposer introuvable');
+    const dataTransfer = new DataTransfer();
+    sourceEl.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    targetEl.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+    targetEl.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+    sourceEl.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
     await h.sleep(30);
   }
 
@@ -56,16 +73,35 @@
   }
 
   cases.push({
-    id: 'organize_row_is_last_in_tree_and_opens_modal',
-    description: 'La dernière ligne du panneau ("Organiser mes modèles…") ouvre la modale et referme le panneau de l’arbre',
+    id: 'organize_toolbar_button_opens_modal',
+    description: '#btn-organize-templates (icône seule, à côté de "nouveau modèle") ouvre la modale - déplacé hors du panneau de l’arbre le 2026-09-28 (retour d’Antoine : "mettre ailleurs que tout en bas")',
     run: async (h) => {
-      await createTemplate(h, 'Organiser - Pour ouverture');
+      const btn = document.getElementById('btn-organize-templates');
+      const hasIcon = !!(btn && btn.querySelector('.tts-icon.tts-icon-organize'));
+      await clickEl(h, btn);
+      const pass = hasIcon && modalOpen();
+      TemplateOrganizeModal.close();
+      return { pass, notes: JSON.stringify({ hasIcon, modalOpen: modalOpen() }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_toolbar_button_has_no_phantom_before_square',
+    description: 'Régression connue (2026-09-19/28) : #btn-organize-templates porte son icône via un <span class="tts-icon"> enfant, pas via ::before - sans neutralisation explicite, le carré plein générique de #toolbar-top button::before s’affiche en plus',
+    run: () => {
+      const before = getComputedStyle(document.getElementById('btn-organize-templates'), '::before');
+      const pass = before.content === 'none';
+      return { pass, notes: JSON.stringify({ content: before.content }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_tree_no_longer_has_organize_row',
+    description: 'Le panneau de l’arbre ne contient plus de ligne "Organiser mes modèles" (déplacée, pas dupliquée)',
+    run: async (h) => {
       await openTreePopup(h);
-      const rows = Array.from(popup().querySelectorAll('.tts-row'));
-      const isLast = rows[rows.length - 1] === organizeRow();
-      await clickEl(h, organizeRow());
-      const pass = isLast && modalOpen() && !popupOpen();
-      return { pass, notes: JSON.stringify({ isLast, modalOpen: modalOpen(), popupOpen: popupOpen() }) };
+      const pass = !popup().querySelector('.tts-row-organize');
+      return { pass, notes: JSON.stringify({ pass }) };
     },
   });
 
@@ -176,6 +212,132 @@
       await h.sleep(30);
       const pass = !modalOpen();
       return { pass, notes: JSON.stringify({ modalOpen: modalOpen() }) };
+    },
+  });
+
+  // --- Glisser-déposer et boutons "+" (28/09, second retour d'Antoine après le premier essai) --------
+  cases.push({
+    id: 'organize_dragdrop_moves_template_into_existing_folder',
+    description: 'Glisser un modèle sur une ligne dossier écrit son Dossier dans Publipostage_PreferencesModeles et l’imbrique visuellement, sans passer par "Déplacer vers…"',
+    run: async (h) => {
+      await createTemplate(h, 'Glisser - Dossier créateur');
+      const secondId = await createTemplate(h, 'Glisser - Modèle déplacé');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt('Glisser/Cible', async () => {
+        await clickEl(h, rowByName('Glisser - Dossier créateur').querySelector('.tom-move-btn'));
+      });
+      const source = rowFor(secondId);
+      const target = folderRowByLabel('Cible');
+      await simulateDragDrop(h, source, target);
+      const rows = stub().state.rows[TABLE];
+      const idx = rows.ModeleId.map(String).lastIndexOf(String(secondId));
+      const wroteFolder = idx !== -1 && rows.Dossier[idx] === 'Glisser/Cible';
+      const moved = rowFor(secondId);
+      const depth = moved && moved.style.getPropertyValue('--tts-depth');
+      TemplateOrganizeModal.close();
+      const pass = wroteFolder && depth === '2';
+      return { pass, notes: JSON.stringify({ wroteFolder, depth }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_new_root_folder_button_shows_pending_row_without_writing',
+    description: 'Le "+ Nouveau dossier" en haut de la liste nomme un dossier candidat à la racine, affiché à part, sans écrire en base tant qu’aucun modèle n’y est rangé',
+    run: async (h) => {
+      await createTemplate(h, 'Racine - Pas encore rangé');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const before = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+      await withPrompt('Nouveau dossier racine', async () => {
+        await clickEl(h, document.getElementById('template-organize-new-folder'));
+      });
+      const after = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+      const pending = folderRowByLabel('Nouveau dossier racine');
+      const isPending = !!(pending && pending.classList.contains('tom-pending-folder'));
+      TemplateOrganizeModal.close();
+      const pass = isPending && after === before;
+      return { pass, notes: JSON.stringify({ isPending, before, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_new_root_folder_cancelled_shows_no_pending_row',
+    description: 'Annuler le prompt du "+" (Annuler, pas nom vide) ne crée aucun dossier candidat ni écriture',
+    run: async (h) => {
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt(null, async () => {
+        await clickEl(h, document.getElementById('template-organize-new-folder'));
+      });
+      const pass = !document.querySelector('.tom-pending-folder');
+      TemplateOrganizeModal.close();
+      return { pass, notes: JSON.stringify({ pass }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_place_here_button_writes_pending_folder_from_leaf_row',
+    description: 'Le bouton de repli "Ranger ici", visible pendant qu’un dossier est en attente, écrit Dossier pour le modèle cliqué - sans glisser-déposer (repli clavier/tactile)',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Repli - Ranger ici');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt('Repli/Nouveau', async () => {
+        await clickEl(h, document.getElementById('template-organize-new-folder'));
+      });
+      const placeBtn = rowByName('Repli - Ranger ici').querySelector('.tom-place-here-btn');
+      await clickEl(h, placeBtn);
+      const rows = stub().state.rows[TABLE];
+      const idx = rows.ModeleId.map(String).lastIndexOf(String(id));
+      const wroteFolder = idx !== -1 && rows.Dossier[idx] === 'Repli/Nouveau';
+      const stillPending = !!document.querySelector('.tom-pending-folder');
+      const nowReal = !!folderRowByLabel('Nouveau');
+      TemplateOrganizeModal.close();
+      const pass = wroteFolder && !stillPending && nowReal;
+      return { pass, notes: JSON.stringify({ wroteFolder, stillPending, nowReal }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_subfolder_plus_button_prefixes_parent_path',
+    description: 'Le "+" à droite d’un dossier réel préfixe automatiquement le chemin du parent - l’utilisateur ne tape que le nom du sous-dossier',
+    run: async (h) => {
+      await createTemplate(h, 'Sous-dossier - Parent créateur');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt('Parent', async () => {
+        await clickEl(h, rowByName('Sous-dossier - Parent créateur').querySelector('.tom-move-btn'));
+      });
+      const parentRow = folderRowByLabel('Parent');
+      await withPrompt('Enfant', async () => {
+        await clickEl(h, parentRow.querySelector('.tom-add-subfolder-btn'));
+      });
+      const pending = folderRowByLabel('Parent/Enfant');
+      const isPending = !!(pending && pending.classList.contains('tom-pending-folder'));
+      TemplateOrganizeModal.close();
+      const pass = isPending;
+      return { pass, notes: JSON.stringify({ isPending }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_closing_modal_discards_pending_folder_without_writing',
+    description: 'Fermer la modale abandonne silencieusement un dossier "en attente" jamais rangé - rien ne réapparaît à la réouverture, aucune écriture Grist',
+    run: async (h) => {
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const before = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+      await withPrompt('Abandonné', async () => {
+        await clickEl(h, document.getElementById('template-organize-new-folder'));
+      });
+      TemplateOrganizeModal.close();
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const after = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+      const pass = !document.querySelector('.tom-pending-folder') && after === before;
+      TemplateOrganizeModal.close();
+      return { pass, notes: JSON.stringify({ pass, before, after }) };
     },
   });
 

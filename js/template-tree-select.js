@@ -8,8 +8,8 @@
 //
 // Scope limité à parcourir/choisir/épingler depuis l'arbre - pas de glisser-déposer, jamais éprouvé ici.
 // Créer un dossier et y ranger un modèle se fait depuis la modale js/template-organize-modal.js
-// ("Organiser mes modèles…", dernière ligne du panneau, cf. makeOrganizeRow ci-dessous) plutôt qu'en
-// improvisant cette interaction dans l'arbre lui-même (Antoine, 2026-09-28).
+// ("Organiser mes modèles", ouverte depuis #btn-organize-templates dans la toolbar - Antoine a demandé
+// le 2026-09-28 de déplacer ce déclencheur hors du panneau, où il vivait initialement en dernière ligne).
 const TemplateTreeSelect = (function () {
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
@@ -132,25 +132,6 @@ const TemplateTreeSelect = (function () {
     return li;
   }
 
-  // Dernière ligne du panneau, hors arbre - ouvre js/template-organize-modal.js (créer des dossiers,
-  // "Déplacer vers…", cf. son en-tête). Referme le panneau au clic : la modale est son propre calque
-  // (z-index supérieur), pas la peine de garder l'arbre ouvert derrière.
-  function makeOrganizeRow() {
-    const row = document.createElement('div');
-    row.className = 'tts-row tts-row-organize';
-    row.setAttribute('role', 'treeitem');
-    row.setAttribute('tabindex', '-1');
-    row.appendChild(Object.assign(document.createElement('span'), { className: 'tts-icon tts-icon-organize' }));
-    const label = document.createElement('span');
-    label.className = 'tts-row-label';
-    label.textContent = I18n.t('organize.modal.openFromTree');
-    row.appendChild(label);
-    row.addEventListener('click', () => {
-      closePopup();
-      TemplateOrganizeModal.open();
-    });
-    return row;
-  }
 
   function render() {
     const selectedValue = realSelect.value;
@@ -197,8 +178,6 @@ const TemplateTreeSelect = (function () {
       popup.appendChild(sep);
       view.tree.forEach((n) => popup.appendChild(makeRow(n, 0)));
     }
-
-    popup.appendChild(makeOrganizeRow());
 
     syncTriggerLabel();
     syncDisabledState();
@@ -353,6 +332,13 @@ const TemplateTreeSelect = (function () {
     const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
     const idx = rows.indexOf(current);
     if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus({ preventScroll: true }); return; }
+    // Tab (relevé 2026-09-28) : sans ce garde, Tab suivait l'ordre naturel du DOM depuis une ligne du
+    // panneau - qui vit dans document.body, PAS juste après le déclencheur (cf. commentaire de attach()
+    // sur #v2-title-cluster { overflow: hidden }) - et atterrissait n'importe où, popup toujours ouvert à
+    // l'écran. Pas de preventDefault ici : on referme et on redonne le focus au déclencheur AVANT que le
+    // navigateur ne poursuive son Tab par défaut, qui part alors du déclencheur (sa place naturelle dans
+    // la barre) plutôt que de la ligne du panneau.
+    if (e.key === 'Tab') { closePopup(); trigger.focus({ preventScroll: true }); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setRovingFocus(rows[Math.max(idx - 1, 0)]); return; }
     if (e.key === 'Home') { e.preventDefault(); setRovingFocus(rows[0]); return; }
@@ -384,10 +370,6 @@ const TemplateTreeSelect = (function () {
     if ((e.key === 'Enter' || e.key === ' ') && current) {
       e.preventDefault();
       if (current.classList.contains('tts-row-folder')) toggleFolder(current, current.nextElementSibling);
-      // tts-row-organize (dernière ligne, "Organiser mes modèles…") n'a pas de dataset.templateId : la
-      // confondre avec une feuille appellerait selectValue(undefined) et écrirait une valeur invalide sur
-      // le <select> réel.
-      else if (current.classList.contains('tts-row-organize')) current.click();
       else selectValue(current.dataset.templateId);
     }
   }
@@ -397,6 +379,32 @@ const TemplateTreeSelect = (function () {
     if (realSelect) detach();
     realSelect = select;
 
+    // Piège 4 (relevé 2026-09-28, jamais reproduit mais jamais protégé) : le <select> réel est masqué
+    // (classe + tabIndex + aria-hidden ci-dessous) AVANT que le reste de cette fonction (construction de
+    // l'arbre, render() en fin de fonction - lit les données Grist et peut lever sur une donnée
+    // inattendue) n'ait fini. Le try/catch de js/main.js autour de TemplateTreeSelect.attach() empêche
+    // bien l'exception de casser tout init(), mais SANS repli explicite ici, une exception après ce point
+    // laissait le <select> déjà masqué et aucun arbre affiché à la place : plus aucun moyen de choisir un
+    // modèle, silencieusement. En cas d'échec, on annule tout ce que attach() a déjà fait (retire
+    // wrap/popup s'ils existent, arrête le MutationObserver) et on rend le <select> natif de nouveau
+    // visible/utilisable avant de relayer l'exception à l'appelant.
+    try {
+      attachInner();
+    } catch (err) {
+      if (mo) { mo.disconnect(); mo = null; }
+      if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
+      if (realSelect) {
+        realSelect.classList.remove('tts-native-select');
+        realSelect.removeAttribute('aria-hidden');
+        realSelect.tabIndex = 0;
+      }
+      realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = null;
+      throw err;
+    }
+  }
+
+  function attachInner() {
     // Piège 1 (2026-09-19, bandeau email resté affiché) : `hidden` seul peut être vaincu par une règle
     // CSS `display` plus spécifique ailleurs. Le <select> réel passe donc en display:none PERMANENT via
     // une classe dédiée avec !important (css/template-tree-select.css) - jamais via l'attribut hidden.

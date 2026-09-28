@@ -6,19 +6,33 @@
    de dupliquer ce rendu - seul ce qui est vraiment nouveau ici (recherche, bouton "Déplacer vers…",
    indice de dossier des épinglés) a sa propre règle. */
 
-.template-organize-modal-content { width: 480px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; }
+/* Corrections DA (28/09, premier retour d'Antoine après le premier essai) : ce fichier ne redéclarait
+   aucune des propriétés que chaque modale soeur fixe explicitement (police, tailles, marges, bouton de
+   fermeture) - tout héritait donc des défauts du navigateur/de <body>. Valeurs alignées sur les modales
+   les plus proches en gabarit (#macro-editor-modal, #template-gallery-modal), cf. css/toolbar-v2.css. */
+.template-organize-modal-content { width: 480px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-ui); }
 
-.template-organize-intro { margin: 0; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+.template-organize-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
 
-.template-organize-search { display: flex; }
-.template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font: inherit; background: var(--surface); color: var(--text); }
+.template-organize-intro { margin: 0; font-size: 11.5px; color: var(--text-faint); line-height: 1.4; }
+
+.template-organize-search { display: flex; gap: 6px; }
+.template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); color: var(--text); }
+
+.tom-new-folder-btn { flex: none; height: 30px; padding: 0 10px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.tom-new-folder-btn:hover { background: var(--surface-sunken); }
 
 .template-organize-list { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px; }
 
+.template-organize-modal-content .modal-actions { margin-top: 14px; }
+.template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
+
 /* Les lignes de cette liste ne sélectionnent rien au clic (à la différence de .tts-popup) : seul un
    dossier réagit au clic (dépliage). Le curseur "pointer" hérité de .tts-row induirait sinon une fausse
-   affordance de clic sur chaque modèle. */
-#template-organize-list .tts-row-leaf { cursor: default; }
+   affordance de clic sur chaque modèle. "grab" (pas "default") depuis le glisser-déposer (28/09) : ces
+   lignes restent draggable, cf. js/template-organize-modal.js:makeLeafRow. */
+#template-organize-list .tts-row-leaf { cursor: grab; }
 
 .tom-folder-hint { flex: none; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 
@@ -33,3 +47,27 @@
 .tom-move-btn:hover { background: var(--surface-sunken); color: var(--text); }
 
 .tom-empty { padding: 16px 8px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
+
+/* Glisser-déposer et boutons "+" (28/09, second retour d'Antoine) - cf. commentaire d'en-tête de
+   js/template-organize-modal.js sur pendingFolder. */
+.tom-dragging { opacity: 0.4; }
+.tom-drop-target { background: var(--surface-sunken); outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+.tom-add-subfolder-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
+.tts-row-folder:hover .tom-add-subfolder-btn, .tts-row-folder:focus-within .tom-add-subfolder-btn { opacity: 1; }
+@media not (hover: hover) {
+  .tom-add-subfolder-btn { opacity: 1; }
+}
+.tom-add-subfolder-btn:hover { background: var(--surface); color: var(--text); }
+
+.tom-place-here-btn { flex: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.tom-place-here-btn:hover { background: var(--accent); color: var(--surface); }
+
+.tom-pending-folder { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-style: italic; color: var(--text-faint); }
+/* Pas de vrai caret d'expansion ici (rien à replier/déplier tant que le dossier n'existe pas) - masqué
+   plutôt que retiré pour garder l'alignement avec l'icône/le libellé des lignes dossier réelles. */
+.tom-pending-folder .tts-folder-caret { visibility: hidden; }
+.tom-pending-folder .tts-row-label { font-style: italic; }
+.tom-pending-hint { flex: 1; min-width: 0; font-size: 11px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.tom-cancel-pending-btn:hover { background: var(--surface-sunken); color: var(--text); }

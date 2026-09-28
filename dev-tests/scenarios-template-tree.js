@@ -356,6 +356,62 @@
     },
   });
 
+  // --- Repli et clavier (défauts relevés le 2026-09-28, choisis par Antoine pour correction) ---------
+  cases.push({
+    id: 'tree_attach_failure_falls_back_to_native_select',
+    description: 'Si la construction de l’arbre échoue à l’attache, le <select> natif redevient visible/utilisable plutôt que rester masqué sans remplacement',
+    run: async () => {
+      const sel = realSelect();
+      const orig = TemplateOrganizer.buildView;
+      TemplateOrganizer.buildView = () => { throw new Error('panne simulée pour le test'); };
+      let threw = false;
+      try {
+        TemplateTreeSelect.attach(sel);
+      } catch (e) {
+        threw = true;
+      } finally {
+        TemplateOrganizer.buildView = orig;
+      }
+      const display = getComputedStyle(sel).display;
+      const tabIndex = sel.tabIndex;
+      const stillNative = display !== 'none' && tabIndex !== -1 && !sel.hasAttribute('aria-hidden') && !trigger();
+      // Ré-attache pour de bon avant de rendre la main à la suite du fichier - sinon toutes les cases
+      // suivantes tourneraient sans arbre du tout.
+      TemplateTreeSelect.attach(sel);
+      const recovered = !!trigger() && getComputedStyle(sel).display === 'none';
+      const pass = threw && stillNative && recovered;
+      return { pass, notes: JSON.stringify({ threw, display, tabIndex, stillNative, recovered }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_end_key_focuses_last_visible_row',
+    description: 'La touche Fin (End) déplace le focus clavier roulant sur la dernière ligne visible du panneau',
+    run: async (h) => {
+      await openPopup(h);
+      const rows = Array.from(popup().querySelectorAll('.tts-row'));
+      const last = rows[rows.length - 1];
+      document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      const pass = document.activeElement === last;
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      return { pass, notes: JSON.stringify({ pass, lastIsOrganizeRow: last.classList.contains('tts-row-organize') }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_tab_closes_popup_and_returns_focus_to_trigger',
+    description: 'Tab dans le panneau referme le panneau et rend le focus au déclencheur, plutôt que de laisser le panneau ouvert avec le focus parti ailleurs (le panneau vit dans document.body, hors de l’ordre naturel du DOM)',
+    run: async (h) => {
+      await openPopup(h);
+      document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      const pass = !popupOpen() && document.activeElement === trigger();
+      return { pass, notes: JSON.stringify({ popupOpen: popupOpen(), focusIsTrigger: document.activeElement === trigger() }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();
