@@ -112,7 +112,7 @@
     if (!btn) return;
     btn.addEventListener('click', async () => {
       const currentId = Templates.getCurrentId();
-      if (!currentId) return;
+      if (!currentId || isReadOnly()) return;
       const wasDefault = String(Templates.getDefaultId()) === String(currentId);
       await Templates.setDefault(wasDefault ? null : currentId);
       await refreshTemplateList();
@@ -260,6 +260,7 @@
   }
 
   async function onNew() {
+    if (isReadOnly()) return;
     templateSelect.value = '';
     // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
     // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
@@ -269,6 +270,7 @@
 
   // Même schéma qu'onNew() - seule différence, le 2e argument qui bascule le bandeau Objet/À/Cc/Cci et le verrouillage de la toolbar.
   async function onNewEmail() {
+    if (isReadOnly()) return;
     templateSelect.value = '';
     loadTemplateIntoEditor(null, 'email');
   }
@@ -276,6 +278,7 @@
   // Un nouveau macro-modèle n'a rien à "charger" avant d'avoir été composé et enregistré au moins une fois (contrairement à onNew/onNewEmail, qui vident
   // l'éditeur immédiatement) - ouvre directement l'écran de composition, vide.
   function onNewMacro() {
+    if (isReadOnly()) return;
     MacroEditor.openModal(null);
   }
 
@@ -294,6 +297,7 @@
   // écraserait silencieusement ses slots avec un contenu vide si on laissait passer le chemin normal ci-dessous. "Enregistrer" rouvre donc directement la
   // modale plutôt que d'enregistrer quoi que ce soit lui-même.
   async function onSave() {
+    if (isReadOnly()) return; // Ctrl+S compris (wireSaveShortcut) : le bouton, lui, est déjà grisé
     if (currentTypeModele === 'macro') {
       const id = Templates.getCurrentId();
       const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
@@ -334,6 +338,7 @@
   }
 
   async function onSaveAs() {
+    if (isReadOnly()) return;
     const nom = prompt(I18n.t('prompt.newTemplateName'));
     if (!nom) return;
     // Copie un macro-modèle par sa composition (mêmes slots, nouvel id Grist) plutôt que de passer par onSave() ci-dessus, qui rouvrirait la modale au
@@ -357,6 +362,7 @@
   }
 
   async function onDelete() {
+    if (isReadOnly()) return;
     const id = Templates.getCurrentId();
     if (!id) { setStatus(I18n.t('status.noTemplateSelected'), true); return; }
     if (!confirm(I18n.t('confirm.deleteTemplate'))) return;
@@ -364,6 +370,58 @@
     await refreshTemplateList();
     onNew();
     setStatus(I18n.t('status.templateDeleted'));
+  }
+
+  // === Droits par personne (js/access-rights.js, demande d'Antoine du 2026-09-28) ===
+  // Verrou d'interface seulement : grise (classe pp-access-locked, jamais masqué ni retiré), et les gardes des fonctions d'action (onSave, switchMode,
+  // withExportLock, autosaveTick...) couvrent les raccourcis clavier et les appels directs. Seules les règles d'accès de Grist protègent les données.
+  const ACCESS_LOCK_CLASS = 'pp-access-locked';
+  // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre droit).
+  const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'btn-save', 'btn-save-as', 'btn-delete', 'btn-link-rules',
+    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-autosave-toggle', 'v2-pdf-filename-cluster'];
+  // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
+  const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
+  const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
+  // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le widget
+  // démarre verrouillé (AccessRights.get() tant que le calcul n'a pas abouti) et se déverrouille seul à la réponse.
+  const ACCESS_STARTUP_WAIT_MS = 5000;
+
+  function isReadOnly() { return AccessRights.get().readOnly; }
+
+  function setAccessLocked(el, locked) {
+    if (!el) return;
+    el.classList.toggle(ACCESS_LOCK_CLASS, locked);
+    if (locked) el.setAttribute('aria-disabled', 'true');
+    else el.removeAttribute('aria-disabled');
+  }
+
+  function applyAccessRights() {
+    const rights = AccessRights.get();
+    READ_ONLY_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), rights.readOnly));
+    const formattingBar = document.getElementById('v2-toolbar');
+    if (formattingBar) Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, rights.readOnly); });
+    setAccessLocked(document.getElementById('v2-btn-comment'), !rights.canComment);
+    EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport));
+    READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
+    Comments.setPermissions({ canComment: rights.canComment, readerMode: rights.readOnly && rights.canComment });
+    updateSaveStatus();
+  }
+
+  // Droits changés en cours de session (case cochée dans la table, réglage modifié) : switchMode force lui-même le mode Lecture en lecture seule ; sinon
+  // un mode Lecture déjà affiché est redessiné, commentaires montrés ou non.
+  function onAccessRightsChange() {
+    applyAccessRights();
+    if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
+  }
+
+  // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights est arrêté en capture, avant tout gestionnaire.
+  function wireAccessLockGuard() {
+    document.addEventListener('click', event => {
+      const target = event.target;
+      if (!target || !target.closest || !target.closest('.' + ACCESS_LOCK_CLASS)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
   }
 
   // === Auto-save (V1) ===
@@ -411,6 +469,8 @@
   // dire au coin "info" la vérité sur l'état ACTUEL plutôt que sur le dernier événement : "Enregistré à HH:MM" seulement quand tout ce qui a été tapé
   // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu).
   function updateSaveStatus() {
+    // Lecture seule (js/access-rights.js) : rien ne s'enregistre pour cette personne, « Enregistré à… » ou « modèle non enregistré » n'auraient pas de sens.
+    if (isReadOnly()) { setStatus(I18n.t('status.readOnly')); return; }
     // Aucun modèle enregistré du tout (pas encore de ligne Grist) : autosaveTick() ne peut structurellement rien faire tant que ça dure (il refuse de
     // CRÉER un modèle, cf. son "if (!id) return" plus bas) - un statut vide laissait croire, à tort, que tout allait bien pendant que rien n'était
     // jamais protégé par l'auto-save. Même style d'alerte que templateNameRequired (onSave) : même cause réelle, pas encore de nom/ligne Grist.
@@ -466,6 +526,9 @@
       return;
     }
     if (!autosaveDirty) return;
+    // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire posé en
+    // Lecture passe par saveReaderCommentAnchors, jamais par ici.
+    if (isReadOnly()) return;
     // getHTML() renverrait le fragment en-tête/pied actuellement chargé, pas le document principal (cf. header-footer-preview.js) - on saute ce tick
     // plutôt que de forcer une sortie de ce mode toutes les ~2-3s (bien plus perturbant que d'attendre le tick suivant).
     if (Editor.isEditingHeaderFooter()) return;
@@ -549,8 +612,42 @@
       const ctx = await GristAPI.detectCurrentContext();
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
-    const html = await currentDocumentHtml(tableId, record);
+    readerContainer.classList.toggle('pp-reader-comments', readerCommentsActive());
+    const html = readerCommentsActive() ? await Comments.buildReaderHtml() : await currentDocumentHtml(tableId, record);
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
+  }
+
+  // Lecture seule avec droit de commenter (js/comments.js:readerMode) : le mode Lecture montre les commentaires et en accepte de nouveaux, sur un HTML
+  // qui porte les positions du document. Jamais pour un macro-modèle : son contenu vient d'autres modèles, pas de l'éditeur.
+  function readerCommentsActive() { return Comments.isReaderMode() && currentTypeModele !== 'macro'; }
+
+  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule, le modèle (sa marque de commentaire) est
+  // donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son chargement, sinon la marque écraserait ce changement (même contrôle de
+  // DateModif que autosaveTick). false = rien d'enregistré, js/comments.js annule alors son changement de marque.
+  async function saveReaderCommentAnchors() {
+    const id = Templates.getCurrentId();
+    if (!id || currentTypeModele === 'macro' || autosaveConflictActive) return false;
+    const nom = templateNameInput ? templateNameInput.value.trim() : '';
+    if (!nom) return false;
+    let fresh;
+    try { fresh = await Templates.loadAll(); }
+    catch (e) { console.error('[main] commentaire en lecture : vérification de conflit impossible', e); return false; }
+    const remoteTpl = fresh.find(t => String(t.id) === String(id));
+    if (!remoteTpl) return false;
+    if (autosaveLastKnownDateModif && remoteTpl.dateModif && remoteTpl.dateModif !== autosaveLastKnownDateModif) { showConflictBanner(remoteTpl); return false; }
+    try {
+      const suiviModifications = await Editor.getSuiviModificationsForSave();
+      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+      autosaveLastKnownDateModif = dateModif;
+      autosaveDirty = false;
+      updateSaveStatus();
+      // Cache des modèles relu (Templates.save ne le touche pas) : revenir plus tard sur ce modèle doit montrer la marque qui vient d'être posée.
+      Templates.loadAll().catch(e => console.error('[main] relecture des modèles impossible', e));
+      return true;
+    } catch (e) {
+      console.error('[main] commentaire en lecture : échec d’enregistrement du modèle', e);
+      return false;
+    }
   }
 
   // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) - MÊMES <input>, jamais dupliqués (cf.
@@ -630,7 +727,7 @@
   }
   function withExportLock(fn) {
     return async (...args) => {
-      if (exportOperationInProgress) return;
+      if (exportOperationInProgress || !AccessRights.get().canExport) return;
       exportOperationInProgress = true;
       const btnSingle = document.getElementById('btn-export-pdf');
       const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
@@ -895,6 +992,8 @@
   }
 
   async function switchMode(mode) {
+    // Lecture seule : le mode Lecture est le seul accessible (demande d'Antoine), y compris depuis la dernière ligne d'init().
+    if (isReadOnly()) mode = 'read';
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
     btnEdit.classList.toggle('active', mode === 'edit');
@@ -1241,8 +1340,13 @@
   }
 
   async function init() {
+    wireAccessLockGuard();
     try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
+    // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
+    const accessReady = AccessRights.init();
     await Editor.init();
+    Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
+    Comments.wireReader(readerContainer);
     // 'update' (pas 'transaction') : ne fire que si le DOCUMENT a réellement changé (docChanged), jamais pour un simple déplacement de curseur/sélection -
     // cf. section "Auto-save" plus haut. Couvre aussi l'édition en-tête/pied (même instance d'éditeur, contenu échangé via setContent).
     EditorCore.getEditor().on('update', markAutosaveDirty);
@@ -1311,7 +1415,7 @@
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     MacroEditor.wire(onMacroSaved);
     TemplateOrganizeModal.wire();
-    document.getElementById('btn-organize-templates').addEventListener('click', () => TemplateOrganizeModal.open());
+    document.getElementById('btn-organize-templates').addEventListener('click', () => { if (!isReadOnly()) TemplateOrganizeModal.open(); });
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
@@ -1341,8 +1445,11 @@
     wireAutosaveConflictBanner();
     wireAutosaveToggle();
     startAutosaveLoop();
+    await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
+    applyAccessRights();
+    AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
-    setStatus(I18n.t('status.ready'));
+    setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
   }
 
   // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire

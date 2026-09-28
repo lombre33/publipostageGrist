@@ -217,7 +217,7 @@ const ReaderMode = (function () {
       const { node, isError } = await resolveBadgeNode(badge, tableId, record, format);
       return { badge, node, isError };
     }));
-    for (const r of results) { if (r.isError) hasError = true; r.badge.replaceWith(r.node); }
+    for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
@@ -315,8 +315,14 @@ const ReaderMode = (function () {
       const span = document.createElement('span');
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
+      carryReaderAtom(chip, span);
       chip.replaceWith(span);
     }));
+  }
+  // Repère de position posé par js/comments.js:buildReaderHtml (commentaires en mode Lecture, lecture seule) : reporté sur la valeur qui remplace la
+  // bulle/le chip, pour qu'une sélection qui commence ou finit sur cette valeur retrouve sa place dans le modèle. Absent partout ailleurs (exports).
+  function carryReaderAtom(from, to) {
+    if (to && to.nodeType === 1 && from.hasAttribute('data-pp-atom')) to.setAttribute('data-pp-atom', from.getAttribute('data-pp-atom'));
   }
   // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
   // par GristAPI.hydrateAttachmentImages, appelé juste après.

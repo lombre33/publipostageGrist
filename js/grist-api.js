@@ -47,6 +47,8 @@ const GristAPI = (function () {
   let _normalDataDelivered = false;
   let _limitedAccessWarned = false;
   let _tokenCache = null;
+  // Abonnés aux options JSON du widget (js/access-rights.js) : grist.onOptions n'est enregistré qu'une fois, ici, et redistribué.
+  let _optionsCallbacks = [];
 
   // Corps commun à toutes les souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre elles pour
   // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
@@ -152,6 +154,9 @@ const GristAPI = (function () {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
         warnIfLimitedAccess(settings && settings.accessLevel);
+        for (const cb of _optionsCallbacks) {
+          try { cb(_currentOptions); } catch (e) { console.error('[GristAPI] erreur callback onOptions:', e); }
+        }
       });
       console.log('[GristAPI] grist.onOptions enregistré.');
     } catch (e) {
@@ -360,6 +365,17 @@ const GristAPI = (function () {
 
   function getCurrentRecord() { return _currentRecord; }
   function getCurrentTableId() { return _currentTableId; }
+
+  // Options JSON propres au widget (jamais accessLevel, cf. init()) : lues au démarrage par getOptions puis tenues à jour par onOptions.
+  function getWidgetOptions() { return _currentOptions; }
+  function onWidgetOptionsChange(cb) { _optionsCallbacks.push(cb); }
+  // grist.setOption ne pose qu'un BROUILLON des options de la section (ViewSectionRec.activeCustomOptions, vérifié à la source grist-core) : Grist
+  // affiche alors un bouton Enregistrer en haut du widget, seul moyen de le rendre durable et visible des autres personnes. Recopié localement tout de
+  // suite, sans attendre le retour d'onOptions.
+  async function setWidgetOption(key, value) {
+    _currentOptions = Object.assign({}, _currentOptions, { [key]: value });
+    await grist.setOption(key, value);
+  }
 
   function safeJSONStringify(value) {
     try { return JSON.stringify(value); }
@@ -586,5 +602,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow };
 })();

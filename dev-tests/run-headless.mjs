@@ -68,6 +68,7 @@ const GROUPS = {
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
   pdfBatch: 'scenarios-pdf-batch',
+  accessRights: 'scenarios-access-rights',
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -79,6 +80,7 @@ const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   smallPanel: 'verify-small-panel.mjs',
+  accessRightsMouse: 'verify-access-rights-mouse.mjs',
 };
 
 const argv = process.argv.slice(2);

@@ -55,6 +55,7 @@ apparaît) :
 | `js/variable-condition.js`, `js/variable-linked-attrs.js`, `css/variable-actions.css`, `js/condition-rules.js` (`conditionHolds`, lignes liées multiples), `js/condition-fields.js` (mode toutes tables), `js/variables.js` (`ruleSourceValue`, `resolveLinkedRows`, `formatValue`), `js/reader-mode.js` (`badgeConditionHolds`), attribut `condition` de `varBadge` (`js/editor-nodes.js`), actions de la barre d'une bulle (`js/floating-toolbars.js:wireVariableFloatingToolbar`) | **Toujours `varCondition` ET le script Node `varToolbarMouse`** (variables conditionnelles et autres attributs : masquage en lecture/export, fenêtres, barre flottante ; le script clique pour de vrai à 700×400) **+ `macroModeles`** si `js/condition-rules.js`/`js/condition-fields.js` change (mêmes règles) |
 | `js/pdf-merge.js`, `js/main.js` (`onExportPdfBatch`, `withExportLock`), lignes « Exporter toutes les lignes » du menu Exporter en PDF (`index.html`) | **Toujours `pdfBatch`** (clique les lignes du menu et ouvre le fichier téléchargé : archive ZIP d'un PDF par ligne, PDF unique où chaque ligne commence sur une nouvelle page avec sa propre numérotation) |
 | `js/viewport-fit.js`, `css/toolbar-v2.css` (info-bulles `[data-tip]`, `#status-msg`, champs email sous 900px, `overflow` de `#toolbar-top`/`#v2-title-cluster`/`.v2-color-split`/`#v2-size-stepper`), placement des popups (`js/variables.js:position`, `js/comments.js:positionPopup`, `js/main-toolbar.js:openImageVariablePicker`) | **Toujours le script Node `smallPanel`** (vraie souris à 600-800×400 : info-bulles entières et visibles aux pixels, pas d'info-bulle collée après Échap, email+Cci, hauteur de barre stable, popups dans la fenêtre) + les groupes déjà listés pour ces fichiers (`toolbarChrome`, `comments`, `chips`, `formatting`, `lists`) |
+| `js/access-rights.js`, onglet Réglages > Accès (`index.html`, `css/access-rights.css`), `js/main.js` (section « Droits par personne », gardes `isReadOnly`/`canExport` de `onSave`, `switchMode`, `withExportLock`, `autosaveTick`, `saveReaderCommentAnchors`), `js/comments.js` (`readerMode`, `buildReaderHtml`, `wireReader`), options du widget et email simulés (`dev-tests/grist-stub.js` : `setWidgetOptions`, `setUserEmail`) | **Toujours `accessRights` ET le script Node `accessRightsMouse`** (lecture seule, export et commentaires par personne ; le script démarre avec le réglage déjà posé et commente en Lecture à la vraie souris, à 700×400) **+ `comments`** si `js/comments.js` change |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
 
 Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
@@ -99,6 +100,10 @@ Deux options utiles :
   page jamais décalable, pas d'info-bulle collée après un clic puis Échap, email+Cci lisible, hauteur de
   barre indépendante du message d'état, popups #Variable/commentaires/image tenus dans la fenêtre.
   Sections lançables seules : `node dev-tests/verify-small-panel.mjs popups email`.
+- Un quatrième, `accessRightsMouse` (`dev-tests/verify-access-rights-mouse.mjs`), démarre à 700×400 avec des
+  droits déjà réglés (lecture seule, sans export, commentaires permis) : widget ouvert directement en Lecture,
+  vrais clics sur des commandes grisées sans effet, texte sélectionné en glissant la souris dans le mode Lecture,
+  Commenter puis Publier cliqués pour de vrai.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via

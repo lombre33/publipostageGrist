@@ -49,6 +49,12 @@
     // veut simuler un accès limité doit appeler setAccessLevel explicitement.
     accessLevel: 'full',
     optionsCallback: null,
+    // Options JSON PROPRES au widget (activeCustomOptions côté grist-core) : null tant que rien n'est réglé, comme une vue neuve. setOption/setOptions
+    // les modifient et rappellent onOptions, comme le vrai ConfigNotifier (vérifié à la source le 2026-09-28).
+    options: null,
+    // Email que renverrait la formule déclenchée user.Email de Publipostage_UserProbe (js/grist-api.js:getCurrentUserEmail). null = formule sans
+    // valeur, comme avant ce champ : l'identification échoue, ce que tous les scénarios existants supposent.
+    userEmail: null,
   };
 
   function columnarEmpty(cols) {
@@ -153,8 +159,20 @@
   // seulement au ready initial).
   function setAccessLevel(level) {
     state.accessLevel = level;
-    if (state.optionsCallback) state.optionsCallback(null, { accessLevel: state.accessLevel, linking: {} });
+    if (state.optionsCallback) state.optionsCallback(state.options, { accessLevel: state.accessLevel, linking: {} });
   }
+
+  // Options du widget changées côté Grist (autre personne qui enregistre la vue, bouton Enregistrer...) : même rappel onOptions que le vrai
+  // ConfigNotifier, asynchrone comme lui.
+  function setWidgetOptions(options) {
+    state.options = options == null ? null : JSON.parse(JSON.stringify(options));
+    notifyOptions();
+  }
+  function notifyOptions() {
+    const cb = state.optionsCallback;
+    if (cb) setTimeout(() => cb(state.options, { accessLevel: state.accessLevel, linking: {} }), 0);
+  }
+  function setUserEmail(email) { state.userEmail = email || null; }
 
   // Même filtrage que la vraie API (WidgetFrame.ts:_visibleColumns, vérifié à la source) : 'shown' retire les colonnes pas cochées dans CETTE
   // section, 'normal'/'all' garde tout. Partagé entre fireRecord et docApi.fetchSelectedRecord ci-dessous.
@@ -233,6 +251,11 @@
           if (!table[k]) table[k] = table.id.map(() => null);
           table[k][table.id.length - 1] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
         });
+        // Formule déclenchée à la création (user.Email) - seulement si un scénario a fixé l'email (setUserEmail).
+        if (tableId === 'Publipostage_UserProbe' && state.userEmail) {
+          if (!table.Email) table.Email = table.id.map(() => null);
+          table.Email[table.id.length - 1] = state.userEmail;
+        }
         retValues.push(newId);
       } else if (type === 'UpdateRecord') {
         const rowId = action[2];
@@ -329,11 +352,17 @@
     // Déclenché immédiatement à l'enregistrement (simule "on ready, send initial configuration",
     // ConfigNotifier._ready côté grist-core) puis à chaque setAccessLevel() ultérieur - c'est la SEULE
     // source fiable de accessLevel (jamais getOptions(), cf. son commentaire ci-dessous).
-    onOptions: function (cb) { state.optionsCallback = cb; cb(null, { accessLevel: state.accessLevel, linking: {} }); },
-    // WidgetAPI.getOptions() = options JSON PROPRES au widget (activeCustomOptions), jamais accessLevel -
-    // ce widget n'appelle jamais grist.setOptions(), donc toujours null en pratique (vérifié à la source
-    // le 2026-09-28, cf. js/grist-api.js:onOptions pour la vraie source d'accessLevel).
-    getOptions: async function () { return null; },
+    onOptions: function (cb) { state.optionsCallback = cb; cb(state.options, { accessLevel: state.accessLevel, linking: {} }); },
+    // WidgetAPI.getOptions() = options JSON PROPRES au widget (activeCustomOptions), jamais accessLevel (vérifié à la source le 2026-09-28, cf.
+    // js/grist-api.js:onOptions pour la vraie source d'accessLevel). Écrites par l'onglet Réglages > Accès (js/access-rights.js) via setOption.
+    getOptions: async function () { return state.options == null ? null : JSON.parse(JSON.stringify(state.options)); },
+    getOption: async function (key) { return state.options ? state.options[key] : undefined; },
+    setOption: async function (key, value) {
+      state.options = Object.assign({}, state.options, { [key]: value === undefined ? null : JSON.parse(JSON.stringify(value)) });
+      notifyOptions();
+    },
+    setOptions: async function (options) { state.options = JSON.parse(JSON.stringify(options || {})); notifyOptions(); },
+    clearOptions: async function () { state.options = null; notifyOptions(); },
     docApi: {
       listTables: async function () { return state.tables.slice(); },
       fetchTable: async function (tableId) {
@@ -358,7 +387,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

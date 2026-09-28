@@ -1,0 +1,23 @@
+/* Droits par personne (js/access-rights.js, js/main.js:applyAccessRights) - demande d'Antoine du 2026-09-28. */
+
+/* Commande interdite par les droits : grisée comme .v2-hf-locked (css/toolbar-v2.css), jamais masquée ni retirée. Pour la souris ; le clavier et les
+   .click() venus d'autres modules sont arrêtés en capture par js/main.js:wireAccessLockGuard. !important : un groupe à survol (export, qualité) ou un
+   bouton de #toolbar-top porte déjà ses propres règles d'opacité, plus spécifiques, qui l'emporteraient sinon. */
+.pp-access-locked { pointer-events: none !important; opacity: .35 !important; cursor: default; }
+
+/* Commentaires en mode Lecture - seulement pour une personne en lecture seule qui a le droit de commenter (js/comments.js:readerMode, classe posée par
+   js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap .comment-mark) ; partout ailleurs, le mode Lecture reste sans
+   commentaires, comme l'export. */
+#reader-container.pp-reader-comments .comment-mark { background: #fff3cf; border-bottom: 2px solid #f0c36d; cursor: pointer; }
+#reader-container.pp-reader-comments .comment-mark-resolved { background: transparent; border-bottom: 2px solid var(--text-faint); }
+
+/* Onglet Réglages > Accès. Un 6e onglet et cinq listes : à ~700x400 (panneau Grist réel), la fenêtre des réglages dépasse la hauteur visible - elle
+   défile alors en elle-même plutôt que de rogner son bouton Fermer. */
+#settings-modal .settings-modal-content { max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box; }
+.settings-access-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.settings-access-grid label { font-size: 13px; color: var(--text); }
+.settings-access-grid select { min-width: 0; width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 6px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); }
+.settings-access-grid select:disabled { opacity: .55; }
+.settings-access-status { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 12px 0 0; }
+.settings-access-locked { font-size: 12.5px; color: var(--danger); margin: 8px 0 0; }
+.settings-access-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
