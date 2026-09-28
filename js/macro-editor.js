@@ -20,6 +20,103 @@ const MacroEditor = (function () {
   function coverSelect() { return document.getElementById('macro-editor-cover'); }
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
+  // Colonnes de la table Grist courante (celle du Select By, demande d'Antoine 2026-09-28 : "que le champ ... soit une liste des colonnes de la page
+  // sur laquelle est le widget" - liste toujours à jour, pas un texte libre où un id de colonne mal recopié cassait silencieusement la condition sans
+  // aucun message d'erreur). GristAPI.getColumns/getCurrentTableId (js/grist-api.js) - déjà utilisés ailleurs (ex. l'insertion #Variable).
+  function currentTableColumns() {
+    const tableId = GristAPI.getCurrentTableId();
+    return tableId ? GristAPI.getColumns(tableId) : [];
+  }
+
+  // Libellé du type Grist affiché en petit à côté du champ colonne - aide à comprendre le format attendu dans le champ valeur (ex. Antoine, 2026-09-28,
+  // condition sans effet sur une colonne Date : la valeur saisie n'était jamais dans le même format que ce que Grist renvoie réellement).
+  function friendlyTypeLabel(type) {
+    const t = String(type || '');
+    if (t === 'Date') return I18n.t('macro.modal.typeDate');
+    if (t.indexOf('DateTime') === 0) return I18n.t('macro.modal.typeDateTime');
+    if (t === 'Bool') return I18n.t('macro.modal.typeBool');
+    if (t.indexOf('Ref:') === 0 || t.indexOf('RefList:') === 0) return I18n.t('macro.modal.typeRef');
+    if (t === 'Numeric' || t === 'Int') return I18n.t('macro.modal.typeNumeric');
+    return '';
+  }
+
+  const ADVANCED_COLUMN_VALUE = '__advanced__';
+
+  // Remplace l'ancien <input type="text"> libre par un <select> des colonnes réelles de la table courante, plus une option "avancé" qui révèle un champ
+  // texte pour le cas rare cross-table ("Table.Colonne", cf. js/macro-templates.js:parseColumnRef) - jamais retiré, pour ne pas régresser sur une
+  // capacité déjà là (règle de non-régression du projet), juste sorti du chemin principal. `onTypeChange(type)` : notifie le champ valeur du type Grist
+  // de la colonne choisie (ou null), pour adapter son placeholder - le format attendu (ex. une date) est précisément ce qu'Antoine n'arrivait pas à
+  // deviner (2026-09-28).
+  function buildColumnField(rule, onTypeChange) {
+    const wrap = document.createElement('span');
+    wrap.className = 'macro-rule-column-wrap';
+
+    const select = document.createElement('select');
+    select.className = 'macro-rule-column';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = I18n.t('macro.modal.columnChoosePlaceholder');
+    select.appendChild(empty);
+    const cols = currentTableColumns();
+    cols.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c;
+      o.textContent = c;
+      select.appendChild(o);
+    });
+    const advancedOpt = document.createElement('option');
+    advancedOpt.value = ADVANCED_COLUMN_VALUE;
+    advancedOpt.textContent = I18n.t('macro.modal.columnAdvanced');
+    select.appendChild(advancedOpt);
+
+    const advancedInput = document.createElement('input');
+    advancedInput.type = 'text';
+    advancedInput.className = 'macro-rule-column-advanced';
+    advancedInput.placeholder = I18n.t('macro.modal.columnAdvancedPlaceholder');
+
+    const typeHint = document.createElement('span');
+    typeHint.className = 'macro-rule-column-type';
+
+    function updateTypeHint() {
+      const tableId = GristAPI.getCurrentTableId();
+      const col = select.value === ADVANCED_COLUMN_VALUE ? null : select.value;
+      const type = (col && tableId) ? GristAPI.getColumnType(tableId, col) : null;
+      typeHint.textContent = type ? friendlyTypeLabel(type) : '';
+      if (onTypeChange) onTypeChange(type);
+    }
+
+    const currentValue = rule.column || '';
+    // Valeur déjà enregistrée qui ne correspond à aucune colonne de la liste (cross-table "Table.Colonne", ou colonne absente de la table courante) :
+    // reprise telle quelle en saisie avancée, jamais silencieusement effacée ni remplacée par la première colonne venue.
+    if (currentValue && cols.indexOf(currentValue) === -1) {
+      select.value = ADVANCED_COLUMN_VALUE;
+      advancedInput.value = currentValue;
+      advancedInput.hidden = false;
+    } else {
+      select.value = currentValue;
+      advancedInput.hidden = true;
+    }
+    updateTypeHint();
+
+    select.addEventListener('change', () => {
+      if (select.value === ADVANCED_COLUMN_VALUE) {
+        advancedInput.hidden = false;
+        advancedInput.focus();
+        rule.column = advancedInput.value;
+      } else {
+        advancedInput.hidden = true;
+        rule.column = select.value;
+      }
+      updateTypeHint();
+    });
+    advancedInput.addEventListener('input', () => { rule.column = advancedInput.value; });
+
+    wrap.appendChild(select);
+    wrap.appendChild(advancedInput);
+    wrap.appendChild(typeHint);
+    return wrap;
+  }
+
   function fillModeleSelect(select, selectedId, placeholderKey) {
     select.innerHTML = '';
     const empty = document.createElement('option');
@@ -74,26 +171,26 @@ const MacroEditor = (function () {
         connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
         row.appendChild(connector);
 
-        const colInput = document.createElement('input');
-        colInput.type = 'text';
-        colInput.className = 'macro-rule-column';
-        colInput.placeholder = I18n.t('macro.modal.columnPlaceholder');
-        colInput.value = rule.column || '';
-        colInput.addEventListener('input', () => { rule.column = colInput.value; });
-        row.appendChild(colInput);
-
-        const opSelect = document.createElement('select');
-        OPERATORS.forEach(op => { const o = document.createElement('option'); o.value = op; o.textContent = op; opSelect.appendChild(o); });
-        opSelect.value = rule.operator || '=';
-        opSelect.addEventListener('change', () => { rule.operator = opSelect.value; });
-        row.appendChild(opSelect);
-
         const valInput = document.createElement('input');
         valInput.type = 'text';
         valInput.className = 'macro-rule-value';
         valInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
         valInput.value = rule.value || '';
         valInput.addEventListener('input', () => { rule.value = valInput.value; });
+
+        row.appendChild(buildColumnField(rule, (type) => {
+          const t = String(type || '');
+          if (t === 'Date') valInput.placeholder = I18n.t('macro.modal.valuePlaceholderDate');
+          else if (t.indexOf('DateTime') === 0) valInput.placeholder = I18n.t('macro.modal.valuePlaceholderDate');
+          else if (t === 'Bool') valInput.placeholder = I18n.t('macro.modal.valuePlaceholderBool');
+          else valInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
+        }));
+
+        const opSelect = document.createElement('select');
+        OPERATORS.forEach(op => { const o = document.createElement('option'); o.value = op; o.textContent = op; opSelect.appendChild(o); });
+        opSelect.value = rule.operator || '=';
+        opSelect.addEventListener('change', () => { rule.operator = opSelect.value; });
+        row.appendChild(opSelect);
         row.appendChild(valInput);
 
         const arrow = document.createElement('span');
