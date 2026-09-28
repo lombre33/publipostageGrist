@@ -45,8 +45,36 @@
       await GristAPI.saveLinkRule('VcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
       await GristAPI.saveLinkRule('VcContacts', { mode: 'match', colonneCible: 'Dossier', colonneSource: 'id' });
     }
+    if (opts && opts.refAttrs) seedReferenceAttributes(stub);
+    await GristAPI.refreshSchema();
     stub.fireRecord(Object.assign({}, RECORD_1), 'VcDossiers');
     await h.sleep(50);
+  }
+
+  // Attributs eux-mêmes Référence / liste de références / choix multiples, sous la forme que le vrai fetchTable leur donne : l'id référencé (0 si vide),
+  // ["L", …] pour une liste, et la valeur affichée dans la colonne d'aide « gristHelper_Display… » de la MÊME table, pointée par displayCol (retour
+  // d'Antoine du 2026-09-28 : « Autres attributs » affichait l'id d'un attribut lui-même Référence).
+  function seedReferenceAttributes(stub) {
+    stub.setVariables('VcServices', { Nom: 'Text' });
+    stub.setRows('VcServices', [{ id: 3, Nom: 'Juridique' }, { id: 4, Nom: 'Fiscal' }]);
+    stub.setVariables('VcAnnuaire', {
+      NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Service: 'Ref:VcServices', Competences: 'RefList:VcServices', Langues: 'ChoiceList',
+      gristHelper_Display: 'Text', gristHelper_Display2: 'Any',
+    }, null, { Service: 'gristHelper_Display', Competences: 'gristHelper_Display2' });
+    stub.setRows('VcAnnuaire', [
+      { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Service: 3, Competences: ['L', 3, 4], Langues: ['L', 'fr', 'en'],
+        gristHelper_Display: 'Juridique', gristHelper_Display2: ['L', 'Juridique', 'Fiscal'] },
+      { id: 8, NomPrenom: 'Martin Anne', Telephone: '06 55 66 77 88', Naissance: 662688000, Service: 0, Competences: null, Langues: null,
+        gristHelper_Display: '', gristHelper_Display2: null },
+    ]);
+    // La Référence Responsable de la page, affichée par Annuaire.NomPrenom : même colonne d'aide dans VcDossiers.
+    stub.setVariables('VcDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:VcAnnuaire', Montant: 'Numeric', gristHelper_Display: 'Text' },
+      null, { Responsable: 'gristHelper_Display' });
+    stub.setRows('VcDossiers', [
+      { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, gristHelper_Display: 'Dupont Jean' },
+      { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50, gristHelper_Display: 'Martin Anne' },
+      { id: 3, Titre: 'Dossier C', Statut: 'Urgent', Responsable: 0, Montant: 10, gristHelper_Display: '' },
+    ]);
   }
 
   async function renderReader(html, hf) {
@@ -339,6 +367,77 @@
         && JSON.stringify(cols) === JSON.stringify(['NomPrenom', 'Telephone', 'Naissance'])
         && JSON.stringify(keys) === JSON.stringify(['VcDossiers.Responsable', 'VcAnnuaire.Telephone']) && text.includes('06 11 22 33 44');
       return { pass, notes: JSON.stringify({ rule, cols, keys, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_reference_attribute_shows_displayed_value',
+    description: 'Autres attributs : un attribut lui-même Référence (ou liste de références, choix multiples) montre sa valeur affichée, pas son id, dans la fenêtre comme en lecture',
+    run: async (h) => {
+      await seed(h, { refAttrs: true });
+      Editor.setHTML(`<p>${badgeHtml('VcAnnuaire', 'NomPrenom')}</p>`);
+      const ed = await selectBadge(h, 'NomPrenom');
+      pressToolbarButton('var-linked');
+      await h.sleep(250);
+      const modal = document.getElementById('var-linked-modal');
+      const values = {};
+      modal.querySelectorAll('.var-linked-row').forEach(r => { values[r.dataset.col] = r.querySelector('.var-linked-value').textContent; });
+      ['Service', 'Competences', 'Langues'].forEach(col => {
+        const input = modal.querySelector(`.var-linked-row[data-col="${col}"] input`);
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(80);
+      const keys = badgeNodes(ed).map(b => b.node.attrs.key);
+      const reader = await renderReader(Editor.getHTML());
+      const text = reader.querySelector('.reader-content').textContent;
+      const pass = values.Service === 'Juridique' && values.Competences === 'Juridique, Fiscal' && values.Langues === 'fr, en'
+        && !Object.keys(values).some(c => c.indexOf('gristHelper_') === 0)
+        && keys.length === 4 && text === 'Dupont Jean Juridique Juridique, Fiscal fr, en';
+      return { pass, notes: JSON.stringify({ values, keys, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_raw_rows_use_displayed_value',
+    description: 'Lignes lues par fetchTable (export en lot, aperçu de la fenêtre de condition) : une Référence vaut sa valeur affichée, comme en lecture, pour la bulle comme pour la condition',
+    run: async (h) => {
+      await seed(h, { refAttrs: true });
+      const rows = await GristAPI.fetchTableRows('VcDossiers');
+      const onResponsable = { mode: 'all', rules: [{ column: 'Responsable', operator: '=', value: 'Dupont Jean' }] };
+      const onService = { mode: 'all', rules: [{ column: 'VcAnnuaire.Service', operator: '=', value: 'Juridique' }] };
+      const html = `<p>${badgeHtml('VcDossiers', 'Responsable')}|${badgeHtml('VcAnnuaire', 'Service')}|${badgeHtml('VcDossiers', 'Titre', onService)}</p>`;
+      const box = document.createElement('div');
+      box.innerHTML = await ReaderMode.preview(html, 'VcDossiers', rows[0]);
+      const batchRow1 = box.textContent;
+      box.innerHTML = await ReaderMode.preview(html, 'VcDossiers', rows[1]);
+      const batchRow2 = box.textContent;
+      const holds = [
+        await ConditionRules.conditionHolds(onResponsable, 'VcDossiers', rows[0]),
+        await ConditionRules.conditionHolds(onResponsable, 'VcDossiers', rows[1]),
+        await ConditionRules.conditionHolds(onService, 'VcDossiers', GristAPI.getCurrentRecord()),
+      ];
+      // Même règle dans la fenêtre de condition : la ligne sélectionnée et le décompte sur toutes les lignes doivent dire la même chose.
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Responsable')}</p>`);
+      await selectBadge(h, 'Responsable');
+      pressToolbarButton('var-condition');
+      await h.sleep(50);
+      const modal = document.getElementById('var-condition-modal');
+      const row = modal.querySelector('.macro-rule-row');
+      const columnOptions = Array.from(row.querySelectorAll('select.macro-rule-column option')).map(o => o.value);
+      setSelect(row.querySelector('select.macro-rule-column'), 'Responsable');
+      await h.sleep(30);
+      setInput(row.querySelector('.macro-rule-value'), 'Dupont Jean');
+      await h.sleep(700);
+      const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      modal.querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click();
+      await h.sleep(50);
+      const pass = batchRow1 === 'Dupont Jean|Juridique|Dossier A' && batchRow2 === 'Martin Anne||' && JSON.stringify(holds) === '[true,false,true]'
+        && !columnOptions.some(v => v.indexOf('gristHelper_') !== -1)
+        && debug[1] === I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 3 }) + ' '
+          + I18n.t('varCond.debug.first', { id: 1, label: ' (Dossier A)', value: 'Dupont Jean' });
+      return { pass, notes: JSON.stringify({ batchRow1, batchRow2, holds, debug, helperOptions: columnOptions.filter(v => v.indexOf('gristHelper_') !== -1) }) };
     },
   });
 

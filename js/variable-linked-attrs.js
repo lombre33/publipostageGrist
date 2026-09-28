@@ -144,8 +144,9 @@ const VariableLinkedAttrs = (function () {
 
   function displayValue(rows, col) {
     if (GristAPI.getColumnType(state.target, col) === 'Attachments') return I18n.t('varLinked.attachmentValue');
-    const raw = rows.length === 1 ? rows[0][col] : rows.map(r => r[col]);
-    return Variables.formatValue(raw, null, state.target, col);
+    // Même lecture que la bulle insérée (Variables.cellValue) : la valeur affichée d'une Référence, jamais son id.
+    const values = rows.map(r => Variables.cellValue(state.target, col, r));
+    return Variables.formatValue(values.length === 1 ? values[0] : values, null, state.target, col);
   }
   // Valeurs de la ligne liée à la ligne sélectionnée dans Grist - même recherche que la résolution des bulles (Variables.resolveLinkedRows), donc ce que
   // les attributs afficheront en lecture.
