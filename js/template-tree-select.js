@@ -15,6 +15,11 @@ const TemplateTreeSelect = (function () {
   let wrap, trigger, triggerIcon, triggerLabel, popup;
   let mo = null;
   let outsideClickHandler = null;
+  // Dossiers dépliés/repliés À LA MAIN pendant que le panneau est ouvert (chemin -> ouvert ?). Le panneau se redessine en entier à chaque
+  // écriture (clic sur une épingle...) : sans cette mémoire, chaque dossier retomberait sur son état par défaut sous les yeux de la
+  // personne. Vidée à chaque ouverture (openPopup) : l'état par défaut de l'utilisateur s'applique alors de nouveau. Map, pas {} : un
+  // dossier nommé "constructor" ou "__proto__" (cf. TemplateOrganizer.buildView).
+  const folderOverrides = new Map();
 
   function iconSpan(typeModele) {
     const span = document.createElement('span');
@@ -43,11 +48,20 @@ const TemplateTreeSelect = (function () {
     return makeLeafRow(node, depth);
   }
 
+  // Un dossier s'ouvre déplié, sauf si CETTE personne l'a réglé "replié par défaut" (js/template-preferences.js:isFolderCollapsed, posé depuis
+  // "Organiser mes modèles") ou l'a basculé à la main depuis l'ouverture du panneau.
+  function isFolderOpen(chemin) {
+    if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
+    return !(typeof TemplatePreferences !== 'undefined' && TemplatePreferences.isFolderCollapsed(chemin));
+  }
+
   function makeFolderRow(node, depth) {
     const li = document.createElement('div');
     li.className = 'tts-row tts-row-folder';
     li.setAttribute('role', 'treeitem');
-    li.setAttribute('aria-expanded', 'true');
+    const open = isFolderOpen(node.chemin);
+    li.setAttribute('aria-expanded', open ? 'true' : 'false');
+    li.dataset.folderPath = node.chemin;
     li.setAttribute('tabindex', '-1');
     li.style.setProperty('--tts-depth', String(depth));
     const caret = document.createElement('span');
@@ -67,6 +81,7 @@ const TemplateTreeSelect = (function () {
     // hériterait de la profondeur du groupe parent.
     group.style.setProperty('--tts-depth', String(depth));
     group.setAttribute('role', 'group');
+    group.classList.toggle('is-collapsed', !open);
     node.enfants.forEach((child) => group.appendChild(makeRow(child, depth + 1)));
 
     li.addEventListener('click', (e) => {
@@ -88,6 +103,7 @@ const TemplateTreeSelect = (function () {
     const expanded = li.getAttribute('aria-expanded') !== 'false';
     li.setAttribute('aria-expanded', expanded ? 'false' : 'true');
     group.classList.toggle('is-collapsed', expanded);
+    if (li.dataset.folderPath) folderOverrides.set(li.dataset.folderPath, !expanded);
   }
 
   function makeLeafRow(node, depth) {
@@ -292,6 +308,7 @@ const TemplateTreeSelect = (function () {
   let outsideScrollHandler = null;
   function openPopup() {
     if (popup.classList.contains('is-open')) return;
+    folderOverrides.clear(); // chaque ouverture repart de l'état par défaut de l'utilisateur (cf. folderOverrides)
     render();
     popup.classList.add('is-open');
     positionPopup();

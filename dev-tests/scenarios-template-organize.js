@@ -385,6 +385,230 @@
     },
   });
 
+  // --- Dossier déplié / replié par défaut dans la liste déroulante (29/09, demande d'Antoine) : interrupteur .tom-folder-default-btn par ligne
+  // dossier, réglage PAR UTILISATEUR (js/template-preferences.js, ligne d'état ModeleId 0 + colonne Replie). La lecture côté liste déroulante a ses
+  // propres cas dans dev-tests/scenarios-template-tree.js. ---
+  function defaultBtn(label) { const r = folderRowByLabel(label); return r && r.querySelector('.tom-folder-default-btn'); }
+  function stateRows(dossier) {
+    const t = stub().state.rows[TABLE];
+    return t.id.map((id, i) => ({ id, u: t.Utilisateur[i], m: t.ModeleId[i], d: t.Dossier[i], r: t.Replie ? t.Replie[i] : undefined }))
+      .filter((r) => r.m === 0 && (dossier === undefined || r.d === dossier));
+  }
+  const writes = () => stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE) + stub().countActions('AddVisibleColumn', TABLE);
+  async function fileInto(h, nom, dossier) {
+    const id = await createTemplate(h, nom);
+    await TemplatePreferences.setFolder(id, dossier);
+    return id;
+  }
+  async function tidy(paths, ids) {
+    TemplateOrganizeModal.close();
+    for (const path of paths) await TemplatePreferences.setFolderCollapsed(path, false);
+    for (const id of ids) { await TemplatePreferences.setFolder(id, ''); await TemplatePreferences.setPinned(id, false); }
+  }
+  function treeFolder(path) { return popup() && popup().querySelector('.tts-row-folder[data-folder-path="' + path + '"]'); }
+  async function closeTree(h) { if (popupOpen()) { popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(30); } }
+
+  cases.push({
+    id: 'organize_folder_default_toggle_persists_per_folder_and_tree_follows',
+    description: 'Le clic sur l’interrupteur d’un dossier le règle « replié par défaut » (une ligne d’état écrite, mise à jour sur place au second clic), sans replier la ligne de la modale, et la liste déroulante l’ouvre replié puis déplié',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Modèle 1', 'Interrupteur-D1');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const first = defaultBtn('Interrupteur-D1');
+      const initial = { exists: !!first, pressed: first && first.getAttribute('aria-pressed'), tip: first && first.title, rows: stateRows('Interrupteur-D1').length };
+      await clickEl(h, first);
+      await h.sleep(60);
+      const on = defaultBtn('Interrupteur-D1');
+      const collapsedState = { pressed: on.getAttribute('aria-pressed'), cls: on.classList.contains('is-collapsed'), tip: on.title, rows: stateRows('Interrupteur-D1'), modalRowExpanded: folderRowByLabel('Interrupteur-D1').getAttribute('aria-expanded'), modalOpen: modalOpen() };
+      TemplateOrganizeModal.close();
+      await openTreePopup(h);
+      const treeCollapsed = { expanded: treeFolder('Interrupteur-D1').getAttribute('aria-expanded'), groupDisplay: getComputedStyle(treeFolder('Interrupteur-D1').nextElementSibling).display };
+      await closeTree(h);
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await clickEl(h, defaultBtn('Interrupteur-D1'));
+      await h.sleep(60);
+      const off = defaultBtn('Interrupteur-D1');
+      const expandedState = { pressed: off.getAttribute('aria-pressed'), rows: stateRows('Interrupteur-D1') };
+      TemplateOrganizeModal.close();
+      await openTreePopup(h);
+      const treeExpanded = treeFolder('Interrupteur-D1').getAttribute('aria-expanded');
+      await closeTree(h);
+      await tidy(['Interrupteur-D1'], [id]);
+      const pass = initial.exists && initial.pressed === 'false' && /déplié/.test(initial.tip) && initial.rows === 0
+        && collapsedState.pressed === 'true' && collapsedState.cls && /replié/.test(collapsedState.tip)
+        && collapsedState.rows.length === 1 && collapsedState.rows[0].r === true && collapsedState.rows[0].u === ''
+        && collapsedState.modalRowExpanded === 'true' && collapsedState.modalOpen
+        && treeCollapsed.expanded === 'false' && treeCollapsed.groupDisplay === 'none'
+        && expandedState.pressed === 'false' && expandedState.rows.length === 1 && expandedState.rows[0].r === false
+        && treeExpanded === 'true';
+      return { pass, notes: JSON.stringify({ initial, collapsedState, treeCollapsed, expandedState, treeExpanded }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_default_toggle_keeps_focus_and_list_scroll_and_escape_still_closes',
+    description: 'Après un clic sur l’interrupteur (la liste est redessinée), le focus reste sur lui, la liste garde son défilement et Échap ferme encore la modale - à 700x400 le bouton « Fermer » est hors de la fenêtre',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Focus', 'Interrupteur-Focus');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      list().style.maxHeight = '70px';
+      const btn = defaultBtn('Interrupteur-Focus');
+      btn.focus(); // amène le bouton dans la fenêtre de 70 px : c'est CE défilement-là qui doit survivre au redessin
+      const scrollBefore = list().scrollTop;
+      await clickEl(h, btn);
+      await h.sleep(60);
+      const active = document.activeElement;
+      const result = {
+        scrollBefore, scrollAfter: list().scrollTop,
+        focusKey: active && active.dataset.focusKey, focusInModal: modal().contains(active),
+      };
+      active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      result.closedByEscape = !modalOpen();
+      list().style.maxHeight = '';
+      await tidy(['Interrupteur-Focus'], [id]);
+      const pass = scrollBefore > 0 && result.scrollAfter === scrollBefore && result.focusKey === 'folder-default:Interrupteur-Focus' && result.focusInModal && result.closedByEscape;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_pending_folder_default_is_written_only_when_the_folder_becomes_real',
+    description: 'L’interrupteur d’un dossier « en attente » ne fait aucune écriture Grist ; l’état « replié » est écrit quand un modèle y est rangé (« Ranger ici »), et un dossier laissé déplié n’écrit aucune ligne d’état',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'Interrupteur - Attente A');
+      const idB = await createTemplate(h, 'Interrupteur - Attente B');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt('Attente-Repliee', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      const pendingBtn = list().querySelector('.tom-pending-folder .tom-folder-default-btn');
+      const w0 = writes();
+      await clickEl(h, pendingBtn);
+      await h.sleep(40);
+      const pendingPressed = list().querySelector('.tom-pending-folder .tom-folder-default-btn').getAttribute('aria-pressed');
+      const noWriteWhilePending = writes() === w0;
+      await clickEl(h, rowByName('Interrupteur - Attente A').querySelector('.tom-place-here-btn'));
+      await h.sleep(120);
+      const real = defaultBtn('Attente-Repliee');
+      const collapsedRows = stateRows('Attente-Repliee');
+      // second dossier : interrupteur non touché -> aucune ligne d'état
+      await withPrompt('Attente-Depliee', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      await clickEl(h, rowByName('Interrupteur - Attente B').querySelector('.tom-place-here-btn'));
+      await h.sleep(120);
+      const expandedRows = stateRows('Attente-Depliee');
+      TemplateOrganizeModal.close();
+      await openTreePopup(h);
+      const tree = { collapsed: treeFolder('Attente-Repliee').getAttribute('aria-expanded'), expanded: treeFolder('Attente-Depliee').getAttribute('aria-expanded') };
+      await closeTree(h);
+      await tidy(['Attente-Repliee'], [idA, idB]);
+      const pass = pendingPressed === 'true' && noWriteWhilePending
+        && !!real && real.getAttribute('aria-pressed') === 'true' && collapsedRows.length === 1 && collapsedRows[0].r === true
+        && expandedRows.length === 0 && tree.collapsed === 'false' && tree.expanded === 'true';
+      return { pass, notes: JSON.stringify({ pendingPressed, noWriteWhilePending, collapsedRows, expandedRows, tree }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_default_toggle_adds_missing_column_once_before_writing',
+    description: 'Document créé avant cette fonction (colonne Replie absente) : le premier clic ajoute la colonne UNE fois, AVANT d’écrire la ligne d’état (sinon Grist annule tout) ; les clics suivants ne la rajoutent pas',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Migration', 'Interrupteur-Migration');
+      stub().dropColumn(TABLE, 'Replie');
+      await TemplatePreferences.loadForCurrentUser(); // relit le schéma : la colonne manque
+      const addColumnBefore = stub().countActions('AddVisibleColumn', TABLE);
+      const logStart = stub().getActionLog().length;
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await clickEl(h, defaultBtn('Interrupteur-Migration'));
+      await h.sleep(200);
+      const log = stub().getActionLog().slice(logStart).filter((a) => a[1] === TABLE);
+      const idxColumn = log.findIndex((a) => a[0] === 'AddVisibleColumn' && a[2] === 'Replie');
+      const idxRecord = log.findIndex((a) => a[0] === 'AddRecord' && a[3] && a[3].ModeleId === 0);
+      await clickEl(h, defaultBtn('Interrupteur-Migration'));
+      await h.sleep(200);
+      const columnAddsTotal = stub().countActions('AddVisibleColumn', TABLE) - addColumnBefore;
+      const columnPresent = 'Replie' in stub().state.rows[TABLE];
+      const rows = stateRows('Interrupteur-Migration');
+      await tidy(['Interrupteur-Migration'], [id]);
+      const pass = idxColumn !== -1 && idxRecord !== -1 && idxColumn < idxRecord && columnAddsTotal === 1 && columnPresent && rows.length === 1;
+      return { pass, notes: JSON.stringify({ idxColumn, idxRecord, columnAddsTotal, columnPresent, rows }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_default_rapid_clicks_write_one_row_and_end_on_the_last_state',
+    description: 'Trois clics rapides sur le même interrupteur (avant la réponse de Grist) n’écrivent qu’UNE ligne d’état pour ce dossier et finissent sur le dernier état',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Rafale', 'Interrupteur-Rafale');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      for (let i = 0; i < 3; i++) defaultBtn('Interrupteur-Rafale').click(); // bouton redessiné entre deux clics, comme un vrai double-clic
+      await h.sleep(300);
+      const rows = stateRows('Interrupteur-Rafale');
+      const pressed = defaultBtn('Interrupteur-Rafale').getAttribute('aria-pressed');
+      const cached = TemplatePreferences.isFolderCollapsed('Interrupteur-Rafale');
+      await tidy(['Interrupteur-Rafale'], [id]);
+      const pass = rows.length === 1 && rows[0].r === true && pressed === 'true' && cached === true;
+      return { pass, notes: JSON.stringify({ rows, pressed, cached }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_default_toggle_reverts_when_grist_refuses_the_write',
+    description: 'Si Grist refuse l’écriture, l’interrupteur revient à l’état confirmé (pas d’état affiché qui ne serait jamais enregistré) et aucune ligne n’est créée',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Refus', 'Interrupteur-Refus');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const api = grist.docApi, original = api.applyUserActions;
+      const quiet = console.error; console.error = () => {};
+      api.applyUserActions = async (actions) => {
+        if (actions.some((a) => a[1] === TABLE && a[3] && a[3].ModeleId === 0)) throw new Error('refus simulé');
+        return original.call(api, actions);
+      };
+      let result;
+      try {
+        await clickEl(h, defaultBtn('Interrupteur-Refus'));
+        await h.sleep(150);
+        result = { pressed: defaultBtn('Interrupteur-Refus').getAttribute('aria-pressed'), cached: TemplatePreferences.isFolderCollapsed('Interrupteur-Refus'), rows: stateRows('Interrupteur-Refus').length };
+      } finally {
+        api.applyUserActions = original;
+        console.error = quiet;
+      }
+      await tidy(['Interrupteur-Refus'], [id]);
+      const pass = result.pressed === 'false' && result.cached === false && result.rows === 0;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_default_toggle_glyphs_differ_by_state_and_from_pin_and_caret_and_are_not_squeezed',
+    description: 'Une icône = une fonction : les deux états de l’interrupteur ont chacun un tracé propre, différent de la punaise et du caret ; glyphe rendu à 16 px, sans le padding natif du <button> qui l’écraserait',
+    run: async (h) => {
+      const id = await fileInto(h, 'Interrupteur - Tracés', 'Interrupteur-Traces');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const maskOf = (el, pseudo) => { const cs = getComputedStyle(el, pseudo); return cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage; };
+      const btnA = defaultBtn('Interrupteur-Traces');
+      const expandedMask = maskOf(btnA, '::before');
+      const size = { w: getComputedStyle(btnA, '::before').width, h: getComputedStyle(btnA, '::before').height, padding: getComputedStyle(btnA).paddingLeft };
+      await clickEl(h, btnA);
+      await h.sleep(60);
+      const collapsedMask = maskOf(defaultBtn('Interrupteur-Traces'), '::before');
+      const pinMask = maskOf(rowByName('Interrupteur - Tracés').querySelector('.tts-pin-btn'), '::before');
+      const caretMask = maskOf(folderRowByLabel('Interrupteur-Traces').querySelector('.tts-folder-caret'), null);
+      const masks = [expandedMask, collapsedMask, pinMask, caretMask];
+      const allDefined = masks.every((m) => !!m && m !== 'none');
+      const allDistinct = new Set(masks).size === masks.length;
+      await tidy(['Interrupteur-Traces'], [id]);
+      const pass = allDefined && allDistinct && size.w === '16px' && size.h === '16px' && size.padding === '0px';
+      return { pass, notes: JSON.stringify({ allDefined, allDistinct, size }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateOrganize = cases;
 })();

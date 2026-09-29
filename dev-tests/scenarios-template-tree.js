@@ -596,6 +596,94 @@
     },
   });
 
+  // --- Dossier déplié / replié par défaut (29/09, demande d'Antoine) : réglage PAR UTILISATEUR, écrit depuis « Organiser mes modèles »
+  // (dev-tests/scenarios-template-organize.js), lu ici à chaque ouverture de la liste. Ligne d'état = une ligne de la table de préférences avec
+  // ModeleId 0 et le chemin du dossier (cf. js/template-preferences.js). ---
+  function folderRowByPath(path) { return popup() && popup().querySelector('.tts-row-folder[data-folder-path="' + path + '"]'); }
+  function groupOf(folderRow) { return folderRow && folderRow.nextElementSibling; }
+  function isLaidOut(el) { const r = el && el.getBoundingClientRect(); return !!r && r.width > 0 && r.height > 0; }
+  async function closeTree(h) { if (popupOpen()) { popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(30); } }
+  async function tidyFolders(paths, ids) {
+    for (const path of paths) await TemplatePreferences.setFolderCollapsed(path, false);
+    for (const id of ids) { await TemplatePreferences.setFolder(id, ''); await TemplatePreferences.setPinned(id, false); }
+  }
+
+  cases.push({
+    id: 'tree_folder_set_collapsed_by_default_opens_collapsed_and_other_folders_stay_expanded',
+    description: 'Un dossier réglé « replié par défaut » par cette personne s’ouvre replié dans la liste (contenu masqué, caret fermé), un autre dossier reste déplié - le comportement historique (tout déplié) ne change pas sans réglage',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Repli A');
+      const idB = await createTemplate(h, 'document', 'Arbre - Repli B');
+      await TemplatePreferences.setFolder(idA, 'Arbre-Repli-1');
+      await TemplatePreferences.setFolder(idB, 'Arbre-Repli-2');
+      await openPopup(h);
+      const before = { one: folderRowByPath('Arbre-Repli-1').getAttribute('aria-expanded'), two: folderRowByPath('Arbre-Repli-2').getAttribute('aria-expanded') };
+      await closeTree(h);
+      await TemplatePreferences.setFolderCollapsed('Arbre-Repli-2', true);
+      await openPopup(h);
+      const one = folderRowByPath('Arbre-Repli-1'), two = folderRowByPath('Arbre-Repli-2');
+      const result = {
+        before,
+        oneExpanded: one.getAttribute('aria-expanded'), oneLeafShown: isLaidOut(rowFor(idA)),
+        twoExpanded: two.getAttribute('aria-expanded'), twoGroupDisplay: getComputedStyle(groupOf(two)).display, twoLeafShown: isLaidOut(rowFor(idB)),
+      };
+      await closeTree(h);
+      await tidyFolders(['Arbre-Repli-2'], [idA, idB]);
+      const pass = before.one === 'true' && before.two === 'true' && result.oneExpanded === 'true' && result.oneLeafShown
+        && result.twoExpanded === 'false' && result.twoGroupDisplay === 'none' && !result.twoLeafShown;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_folder_opened_by_hand_stays_open_while_panel_redraws_and_defaults_again_on_reopen',
+    description: 'Un dossier replié par défaut, déplié à la main, reste déplié quand le panneau se redessine (clic sur une épingle) ; fermé puis rouvert, il redevient replié',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Repli main A');
+      const idB = await createTemplate(h, 'document', 'Arbre - Repli main B');
+      await TemplatePreferences.setFolder(idA, 'Arbre-Main-1');
+      await TemplatePreferences.setFolder(idB, 'Arbre-Main-2');
+      await TemplatePreferences.setFolderCollapsed('Arbre-Main-2', true);
+      await openPopup(h);
+      await clickEl(h, folderRowByPath('Arbre-Main-2'));
+      const opened = { expanded: folderRowByPath('Arbre-Main-2').getAttribute('aria-expanded'), shown: isLaidOut(rowFor(idB)) };
+      await clickEl(h, rowFor(idA).querySelector('.tts-pin-btn')); // écriture -> render() pendant que le panneau est ouvert
+      await h.sleep(60);
+      const afterRedraw = { open: popupOpen(), expanded: folderRowByPath('Arbre-Main-2').getAttribute('aria-expanded'), shown: isLaidOut(rowFor(idB)) };
+      await closeTree(h);
+      await openPopup(h);
+      const reopened = { expanded: folderRowByPath('Arbre-Main-2').getAttribute('aria-expanded'), shown: isLaidOut(rowFor(idB)) };
+      await closeTree(h);
+      await tidyFolders(['Arbre-Main-2'], [idA, idB]);
+      const pass = opened.expanded === 'true' && opened.shown && afterRedraw.open && afterRedraw.expanded === 'true' && afterRedraw.shown
+        && reopened.expanded === 'false' && !reopened.shown;
+      return { pass, notes: JSON.stringify({ opened, afterRedraw, reopened }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_folder_default_is_per_user_and_state_rows_do_not_leak_into_pins_and_folders',
+    description: 'L’état d’un dossier posé par UNE AUTRE personne est ignoré ; celui de la personne courante survit à un rechargement des préférences ; les lignes d’état (ModeleId 0) ne se retrouvent ni dans getCached(), ni dans les dossiers proposés',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Repli perso');
+      await TemplatePreferences.setFolder(id, 'Arbre-Perso-1');
+      await TemplatePreferences.setFolderCollapsed('Arbre-Perso-2', true); // dossier sans modèle : l'état existe quand même
+      await stub().applyUserActions([['AddRecord', TABLE, null, { Utilisateur: 'autre@exemple.fr', ModeleId: 0, Epingle: false, Dossier: 'Arbre-Perso-1', Replie: true }]]);
+      await TemplatePreferences.loadForCurrentUser();
+      const result = {
+        otherUserIgnored: TemplatePreferences.isFolderCollapsed('Arbre-Perso-1') === false,
+        ownStateSurvivesReload: TemplatePreferences.isFolderCollapsed('Arbre-Perso-2') === true,
+        noZeroKeyInCache: !('0' in TemplatePreferences.getCached()),
+        foldersListed: TemplatePreferences.listFolders(),
+      };
+      await TemplatePreferences.setFolderCollapsed('Arbre-Perso-2', false);
+      await tidyFolders([], [id]);
+      const pass = result.otherUserIgnored && result.ownStateSurvivesReload && result.noZeroKeyInCache
+        && result.foldersListed.includes('Arbre-Perso-1') && !result.foldersListed.includes('Arbre-Perso-2');
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateTree = cases;
 })();

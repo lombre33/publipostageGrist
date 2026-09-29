@@ -33,6 +33,10 @@ const I18n = (function () {
     'organize.modal.newFolderPendingHint': { fr: 'Pas encore créé : glissez un modèle ici, ou cliquez « Ranger ici » sur un modèle ci-dessous.', en: 'Not created yet: drop a template here, or click “Place here” on a template below.' },
     'organize.modal.newFolderCancelAria': { fr: 'Annuler la création de ce dossier', en: 'Cancel creating this folder' },
     'organize.modal.placeHereButton': { fr: 'Ranger ici', en: 'Place here' },
+    // Interrupteur "ce dossier s'ouvre déplié / replié dans la liste" (une ligne par dossier, choix personnel enregistré par utilisateur).
+    'organize.modal.folderDefault.aria': { fr: 'Dossier replié par défaut dans la liste des modèles', en: 'Folder collapsed by default in the template list' },
+    'organize.modal.folderDefault.expandedTip': { fr: 'S’ouvre déplié dans la liste : cliquer pour qu’il s’ouvre replié', en: 'Opens expanded in the list: click to make it open collapsed' },
+    'organize.modal.folderDefault.collapsedTip': { fr: 'S’ouvre replié dans la liste : cliquer pour qu’il s’ouvre déplié', en: 'Opens collapsed in the list: click to make it open expanded' },
     'toolbar.organizeTemplates': { fr: 'Organiser mes modèles', en: 'Organize my templates' },
     'toolbar.new': { fr: 'Nouveau modèle', en: 'New template' },
     'toolbar.newDocument': { fr: 'Nouveau document', en: 'New document' },

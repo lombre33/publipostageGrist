@@ -10,8 +10,8 @@ const TABLE_NAME = 'Publipostage_PreferencesModeles';
 // Une instance vm.createContext + loadScript par scénario : TemplatePreferences garde un état
 // module-niveau (cache, cachedEmail, tableChecked) qui ne doit pas fuiter d'un scénario à l'autre,
 // exactement comme un vrai rechargement de page recharge js/template-preferences.js à zéro.
-function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false } = {}) {
-  const docApi = new FakeDocApi(initialTables);
+function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = false, docOptions } = {}) {
+  const docApi = new FakeDocApi(initialTables, docOptions);
   const ctx = createContext({
     grist: { docApi },
     GristAPI: {
@@ -120,6 +120,65 @@ async function main() {
     check('normalisation à l’écriture', await run('TemplatePreferences.getFolder(1)') === 'Factures/2024');
     await run('TemplatePreferences.setFolder(1, "")');
     check('dossier vidé -> null (pas une chaîne vide)', await run('TemplatePreferences.getFolder(1)') === null);
+  }
+
+  // 7. Dossier replié par défaut (29/09) : une ligne d'état par (utilisateur × dossier), ModeleId 0, qui ne fuit ni dans le cache des modèles, ni
+  // dans les dossiers proposés, mise à jour SUR PLACE, isolée par utilisateur.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME] });
+    docApi.seedRows(TABLE_NAME, [
+      { Utilisateur: 'b@exemple.fr', ModeleId: 0, Epingle: false, Dossier: 'Factures', Replie: true },
+    ]);
+    await run('TemplatePreferences.loadForCurrentUser()');
+    check('état de dossier : la ligne d’une AUTRE personne est ignorée', await run('TemplatePreferences.isFolderCollapsed("Factures")') === false);
+    await run('TemplatePreferences.setFolderCollapsed("Factures", true)');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 0 && r.Utilisateur === 'a@exemple.fr');
+    check('état de dossier : une ligne écrite (ModeleId 0, Dossier, Replie vrai)', rows.length === 1 && rows[0].Dossier === 'Factures' && rows[0].Replie === true, rows);
+    check('état de dossier : jamais dans getCached()', (await run('Object.keys(TemplatePreferences.getCached())')).length === 0);
+    check('état de dossier : jamais dans les dossiers proposés', (await run('TemplatePreferences.listFolders()')).length === 0);
+    await run('TemplatePreferences.setFolderCollapsed("Factures", false)');
+    const after = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 0 && r.Utilisateur === 'a@exemple.fr');
+    check('état de dossier : repasser à « déplié » met la MÊME ligne à jour (pas de doublon)', after.length === 1 && after[0].Replie === false, after);
+    await run('TemplatePreferences.setFolderCollapsed("  Factures / / 2024 ", true)');
+    check('état de dossier : le chemin est normalisé comme celui des modèles', await run('TemplatePreferences.isFolderCollapsed("Factures/2024")') === true);
+    check('état de dossier : un dossier vide ("") n’écrit rien', (await run('TemplatePreferences.setFolderCollapsed("", true)')) === null);
+    // relu par une nouvelle session
+    const second = freshModule({ initialTables: [TABLE_NAME] });
+    second.docApi.rows[TABLE_NAME] = docApi.rows[TABLE_NAME];
+    await second.run('TemplatePreferences.loadForCurrentUser()');
+    check('état de dossier : relu après rechargement', await second.run('TemplatePreferences.isFolderCollapsed("Factures/2024")') === true
+      && await second.run('TemplatePreferences.isFolderCollapsed("Factures")') === false);
+    check('état de dossier : relu, jamais dans getCached() ni dans les dossiers proposés (les lignes d’état ne sont pas des modèles)',
+      (await second.run('Object.keys(TemplatePreferences.getCached())')).length === 0 && (await second.run('TemplatePreferences.listFolders()')).length === 0);
+  }
+
+  // 8. Colonne Replie absente (document créé avant la fonction) : ajoutée UNE fois, avant toute écriture, même pour deux dossiers réglés en
+  // même temps avec une vraie latence (sinon deux AddVisibleColumn simultanés donnent Replie et Replie2).
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { withReplie: false, latencyMs: 8 } });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('Promise.all([TemplatePreferences.setFolderCollapsed("A", true), TemplatePreferences.setFolderCollapsed("B", true)])');
+    check('colonne absente : ajoutée une seule fois, sans « Replie2 »', docApi.addedColumns.length === 1 && docApi.addedColumns[0] === 'Replie', docApi.addedColumns);
+    const firstColumn = docApi.journal.indexOf('AddVisibleColumn'), firstRecord = docApi.journal.indexOf('AddRecord');
+    check('colonne absente : ajoutée AVANT la première écriture de ligne', firstColumn !== -1 && firstRecord !== -1 && firstColumn < firstRecord, docApi.journal);
+    check('colonne absente : les deux dossiers sont bien enregistrés', docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 0 && r.Replie === true).length === 2);
+  }
+
+  // 9. Clics rapides : une seule ligne, dernier état gagnant ; un refus de Grist rend l'état confirmé sans bloquer les écritures suivantes.
+  {
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { latencyMs: 8 } });
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('Promise.all([TemplatePreferences.setFolderCollapsed("R", true), TemplatePreferences.setFolderCollapsed("R", false), TemplatePreferences.setFolderCollapsed("R", true)])');
+    const rows = docApi.rows[TABLE_NAME].filter((r) => r.ModeleId === 0 && r.Dossier === 'R');
+    check('rafale : une seule ligne pour le dossier, dernier état gagnant', rows.length === 1 && rows[0].Replie === true && await run('TemplatePreferences.isFolderCollapsed("R")') === true, rows);
+
+    docApi.failNext = true;
+    let refused = null;
+    try { await run('TemplatePreferences.setFolderCollapsed("S", true)'); } catch (e) { refused = e; }
+    check('refus de Grist : l’erreur remonte à l’appelant', !!refused);
+    check('refus de Grist : l’état affiché revient à l’état confirmé', await run('TemplatePreferences.isFolderCollapsed("S")') === false);
+    await run('TemplatePreferences.setFolderCollapsed("S", true)');
+    check('refus de Grist : la file n’est pas bloquée, l’écriture suivante réussit', docApi.rows[TABLE_NAME].some((r) => r.Dossier === 'S' && r.Replie === true));
   }
 
   summarizeAndExit();

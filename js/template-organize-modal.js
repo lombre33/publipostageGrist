@@ -15,10 +15,18 @@
 // ligne "en attente" disparaît naturellement au render() suivant. Le bouton "Déplacer vers…" (chemin
 // tapé à la main, prompt() texte libre) reste utilisable en toutes circonstances, y compris pour créer un
 // dossier directement par ce biais - les "+"/le glisser-déposer sont additifs, pas un remplacement.
+//
+// Dossier déplié ou replié par défaut dans la liste déroulante (29/09, demande d'Antoine) : chaque ligne
+// dossier porte un interrupteur (.tom-folder-default-btn) dont l'état est enregistré PAR UTILISATEUR
+// (TemplatePreferences.setFolderCollapsed) et lu par js/template-tree-select.js à chaque ouverture de la
+// liste. Cette modale-ci garde ses dossiers dépliés (il faut tout voir pour ranger) : l'interrupteur ne
+// règle que la liste déroulante. Un dossier "en attente" n'existant pas en base, son interrupteur reste
+// local (pendingCollapsed) et n'est écrit qu'au moment où un modèle y est rangé.
 const TemplateOrganizeModal = (function () {
   let modal, searchInput, list, newFolderBtn;
   let searchTerm = '';
   let pendingFolder = null;
+  let pendingCollapsed = false; // interrupteur du dossier en attente, écrit seulement quand il devient réel (cf. applyPendingFolderState)
 
   function currentTemplates() {
     return (typeof Templates !== 'undefined' && Templates.getCached()) || [];
@@ -59,9 +67,22 @@ const TemplateOrganizeModal = (function () {
     return TemplatePreferences.normalizeFolderPath(full);
   }
 
+  // Le dossier en attente vient d'être créé en y rangeant un modèle : son interrupteur "replié par défaut", resté local jusque-là, est écrit
+  // maintenant. Un échec ici ne défait pas le rangement (le dossier existe, déplié) : il est seulement journalisé.
+  async function applyPendingFolderState(path) {
+    if (!path || pendingFolder !== path || !pendingCollapsed) return;
+    pendingCollapsed = false;
+    try {
+      await TemplatePreferences.setFolderCollapsed(path, true);
+    } catch (e) {
+      console.error('[template-organize-modal] échec de l’état replié du nouveau dossier', e);
+    }
+  }
+
   async function dropOnFolder(id, path) {
     try {
       await TemplatePreferences.setFolder(id, path);
+      await applyPendingFolderState(path);
       if (pendingFolder === path) pendingFolder = null;
       render();
       refreshTree();
@@ -79,6 +100,7 @@ const TemplateOrganizeModal = (function () {
     if (value === null) return; // Annulé : ne rien écrire (distinct d'une chaîne vide, qui vide le dossier).
     try {
       await TemplatePreferences.setFolder(id, value);
+      await applyPendingFolderState(TemplatePreferences.normalizeFolderPath(value));
       render();
       refreshTree();
     } catch (e) {
@@ -96,6 +118,38 @@ const TemplateOrganizeModal = (function () {
     } catch (e) {
       console.error('[template-organize-modal] échec épinglage', e);
     }
+  }
+
+  // Bascule "s'ouvre déplié / replié" d'un dossier RÉEL. Le nouvel état est lu au moment du clic (pas dans la ligne dessinée : deux clics
+  // rapides doivent bien revenir à l'état de départ) et l'interface suit tout de suite ; si Grist refuse l'écriture, le module revient au
+  // dernier état confirmé et on redessine.
+  async function toggleFolderDefault(path) {
+    const pending = TemplatePreferences.setFolderCollapsed(path, !TemplatePreferences.isFolderCollapsed(path));
+    render();
+    refreshTree();
+    try {
+      await pending;
+    } catch (e) {
+      console.error('[template-organize-modal] échec de l’état du dossier', e);
+      render();
+      refreshTree();
+    }
+  }
+
+  // Interrupteur d'une ligne dossier (réelle ou en attente). Deux tracés distincts (dossier déplié : le contenu se lit sous l'en-tête ; replié :
+  // l'en-tête seul et trois points), volontairement ni la punaise, ni l'étoile, ni un chevron (une icône = une fonction). L'info-bulle
+  // dit l'état courant ET ce que fait le clic, comme celle de l'épingle.
+  function makeFolderDefaultButton(collapsed, focusKey, onToggle) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tom-folder-default-btn';
+    btn.dataset.focusKey = focusKey; // cf. render() : le bouton retrouve le focus après le redessin
+    btn.classList.toggle('is-collapsed', collapsed);
+    btn.setAttribute('aria-pressed', String(collapsed));
+    btn.setAttribute('aria-label', I18n.t('organize.modal.folderDefault.aria'));
+    btn.title = I18n.t(collapsed ? 'organize.modal.folderDefault.collapsedTip' : 'organize.modal.folderDefault.expandedTip');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); onToggle(); });
+    return btn;
   }
 
   // folderLabel : uniquement pour les lignes épinglées (affichées à plat en tête, donc sans indentation
@@ -191,9 +245,11 @@ const TemplateOrganizeModal = (function () {
       const path = promptNewFolderName(node.chemin);
       if (!path) return;
       pendingFolder = path;
+      pendingCollapsed = false;
       render();
     });
     row.appendChild(addSubBtn);
+    row.appendChild(makeFolderDefaultButton(TemplatePreferences.isFolderCollapsed(node.chemin), 'folder-default:' + node.chemin, () => toggleFolderDefault(node.chemin)));
 
     const group = document.createElement('div');
     group.className = 'tts-group';
@@ -249,12 +305,13 @@ const TemplateOrganizeModal = (function () {
     hint.className = 'tom-pending-hint';
     hint.textContent = I18n.t('organize.modal.newFolderPendingHint');
     row.appendChild(hint);
+    row.appendChild(makeFolderDefaultButton(pendingCollapsed, 'folder-default:pending', () => { pendingCollapsed = !pendingCollapsed; render(); }));
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'tom-cancel-pending-btn';
     cancelBtn.setAttribute('aria-label', I18n.t('organize.modal.newFolderCancelAria'));
     cancelBtn.textContent = '×';
-    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); pendingFolder = null; render(); });
+    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); pendingFolder = null; pendingCollapsed = false; render(); });
     row.appendChild(cancelBtn);
 
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('tom-drop-target'); });
@@ -268,7 +325,23 @@ const TemplateOrganizeModal = (function () {
     return row;
   }
 
+  // Redessine la liste ET garde le focus et le défilement là où ils étaient. list.innerHTML = '' détruit le bouton qu'on vient de cliquer : le
+  // focus retombait sur <body>, et Échap (écouté par la modale elle-même, cf. wireModalAccessibility dans js/main.js) ne fermait plus
+  // rien - or à 700x400 le bouton « Fermer » est hors de la fenêtre. Le bouton est retrouvé par data-focus-key ; à défaut (le bouton a
+  // disparu avec le redessin, ex. « Ranger ici ») le focus va à la liste elle-même (tabindex -1, hors piège de Tab).
   function render() {
+    const active = document.activeElement;
+    const focusInList = !!(active && list.contains(active));
+    const focusKey = focusInList ? (active.dataset.focusKey || null) : null;
+    const scrollTop = list.scrollTop;
+    renderList();
+    list.scrollTop = scrollTop;
+    if (!focusInList) return;
+    const again = focusKey && list.querySelector('[data-focus-key="' + CSS.escape(focusKey) + '"]');
+    (again || list).focus({ preventScroll: true });
+  }
+
+  function renderList() {
     list.innerHTML = '';
     const term = searchTerm.trim().toLowerCase();
     const templates = currentTemplates().filter((t) => !term || String(t.nom ?? '').toLowerCase().includes(term));
@@ -309,6 +382,7 @@ const TemplateOrganizeModal = (function () {
     modal.style.display = 'flex';
     searchTerm = '';
     pendingFolder = null;
+    pendingCollapsed = false;
     if (searchInput) searchInput.value = '';
     render();
     if (searchInput) searchInput.focus();
@@ -319,12 +393,14 @@ const TemplateOrganizeModal = (function () {
     // Aucune trace, aucune écriture Grist n'a eu lieu pour un dossier resté "en attente" (cf. commentaire
     // d'en-tête) - fermer la modale l'abandonne silencieusement, comme annuler le prompt "Déplacer vers…".
     pendingFolder = null;
+    pendingCollapsed = false;
   }
 
   function onNewRootFolder() {
     const path = promptNewFolderName('');
     if (!path) return;
     pendingFolder = path;
+    pendingCollapsed = false;
     render();
   }
 
@@ -338,6 +414,7 @@ const TemplateOrganizeModal = (function () {
     newFolderBtn = document.getElementById('template-organize-new-folder');
     const closeBtn = document.getElementById('template-organize-close');
     if (!modal || !searchInput || !list || !newFolderBtn || !closeBtn) return;
+    list.tabIndex = -1; // focusable par programme seulement (cf. render), jamais dans l'ordre de Tab
     closeBtn.addEventListener('click', close);
     newFolderBtn.addEventListener('click', onNewRootFolder);
     searchInput.addEventListener('input', () => { searchTerm = searchInput.value || ''; render(); });

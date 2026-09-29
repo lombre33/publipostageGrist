@@ -72,3 +72,17 @@
 .tom-pending-hint { flex: 1; min-width: 0; font-size: 11px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
 .tom-cancel-pending-btn:hover { background: var(--surface-sunken); color: var(--text); }
+
+/* Interrupteur "ce dossier s'ouvre déplié / replié dans la liste déroulante" (29/09, demande d'Antoine), une icône par ligne dossier - réelle ou en
+   attente. Deux tracés qui montrent l'état : le contenu lisible sous l'en-tête (déplié), l'en-tête seul et trois points (replié, accent).
+   Volontairement ni la punaise (favori), ni l'étoile (modèle par défaut), ni un chevron (le caret de la ligne). Toujours visible, contrairement
+   à l'épingle : c'est un état à lire d'un coup d'oeil sur toute la liste. padding: 0 - le padding natif d'un <button> écrase sinon le glyphe
+   (même piège que .tts-pin-btn, css/template-tree-select.css). */
+.tom-folder-default-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); cursor: pointer; }
+.tom-folder-default-btn.is-collapsed { color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .tom-folder-default-btn:hover { background: var(--surface); }
+}
+.tom-folder-default-btn::before { content: ""; display: inline-block; width: 16px; height: 16px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+.tom-folder-default-btn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16'/%3E%3Cpath d='M6.5 9v8'/%3E%3Cpath d='M10.5 12h9.5M10.5 17h9.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16'/%3E%3Cpath d='M6.5 9v8'/%3E%3Cpath d='M10.5 12h9.5M10.5 17h9.5'/%3E%3C/svg%3E"); }
+.tom-folder-default-btn.is-collapsed::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16'/%3E%3Cpath d='M8 13h.01M12 13h.01M16 13h.01' stroke-width='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16'/%3E%3Cpath d='M8 13h.01M12 13h.01M16 13h.01' stroke-width='3'/%3E%3C/svg%3E"); }
