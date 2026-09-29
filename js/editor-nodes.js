@@ -10,11 +10,11 @@ const EditorNodes = (function () {
     } catch (e) { return '#'; }
   }
 
-  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau trop étroite tronque le MILIEU du nom (« #Projets.Det…Fonctionnement » plutôt
-  // que « #Projets.Details_depense_s_Fonc… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au bout. La fin est le dernier mot du nom en
-  // entier (« Fonctionnement », « Email ») complété des mots qui le précèdent tant qu'elle reste courte (« du_client », « s_Personnel ») ; un dernier mot trop long
-  // est coupé à ses derniers caractères. C'est la case qui dit ensuite combien de cette fin se voit (css/variable-actions.css : elle se coupe par la gauche, jamais
-  // par la droite, donc le bout du nom reste lisible). Un nom court n'est pas coupé.
+  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau ou une colonne de zone 2 colonnes trop étroite tronque le MILIEU du nom
+  // (« #Projets.Det…Fonctionnement » plutôt que « #Projets.Details_depense_s_Fonc… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au
+  // bout. La fin est le dernier mot du nom en entier (« Fonctionnement », « Email ») complété des mots qui le précèdent tant qu'elle reste courte
+  // (« du_client », « s_Personnel ») ; un dernier mot trop long est coupé à ses derniers caractères. C'est la case qui dit ensuite combien de cette fin se voit
+  // (css/variable-actions.css : elle se coupe par la gauche, jamais par la droite, donc le bout du nom reste lisible). Un nom court n'est pas coupé.
   const BADGE_TAIL_MAX = 12;
   const BADGE_LAST_WORD_MAX = 16;
   function splitBadgeLabel(label) {
@@ -81,10 +81,11 @@ const EditorNodes = (function () {
       renderHTML({ HTMLAttributes, node }) {
         return badgeSpec(HTMLAttributes, node);
       },
-      // Vue de l'éditeur SEULEMENT : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau trop étroite tronque le MILIEU du nom
-      // avec « … » (css/variable-actions.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et même texte que renderHTML (badgeSpec), donc
-      // getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le rend entier aux lecteurs d'écran. Pas de `update` :
-      // ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait avec renderHTML.
+      // Vue de l'éditeur SEULEMENT : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau ou une colonne de zone 2
+      // colonnes trop étroite tronque le MILIEU du nom avec « … » (css/variable-actions.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et
+      // même texte que renderHTML (badgeSpec), donc getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le
+      // rend entier aux lecteurs d'écran. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait
+      // avec renderHTML.
       addNodeView() {
         return ({ node, HTMLAttributes }) => {
           const [, attrs, label] = badgeSpec(HTMLAttributes, node);
@@ -98,7 +99,7 @@ const EditorNodes = (function () {
           let tail = null;
           let tailText = null;
           if (parts.tail) {
-            // La fin est dans une boîte qui la cale à droite : quand la case est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
+            // La fin est dans une boîte qui la cale à droite : quand la case ou la colonne est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
             tail = document.createElement('span');
             tail.className = 'var-badge-tail';
             tailText = document.createElement('span');
@@ -106,7 +107,7 @@ const EditorNodes = (function () {
             tail.appendChild(tailText);
             dom.appendChild(tail);
           }
-          // Nom coupé par la case : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
+          // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
           // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la gauche, ce que
           // scrollWidth ne compte pas : on compare les rectangles.
           dom.addEventListener('mouseenter', () => {

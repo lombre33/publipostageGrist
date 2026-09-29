@@ -7,16 +7,18 @@
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
-/* Bulle dans une case de tableau (Antoine, 29/09) : un nom plus long que la case la traversait et recouvrait la case voisine. Le nom y est coupé au MILIEU par
-   « … » (début tronqué, fin gardée) plutôt que rendu à la ligne, qui ferait grandir la ligne du tableau bien au-delà de ce que l'export produira avec la valeur.
+/* Bulle dans une case de tableau (Antoine, 29/09) ou dans une colonne de zone 2 colonnes (Antoine, 29/09, « oui, les deux colonnes ») : un nom plus long que la
+   case la traversait et recouvrait la case voisine ; dans une colonne, `overflow-wrap: anywhere` (css/style.css) le faisait passer sur 2 ou 3 lignes, si bien que
+   la zone était plus haute dans l'éditeur qu'en lecture et à l'export. Le nom y est coupé au MILIEU par « … » (début tronqué, fin gardée) plutôt que rendu à la
+   ligne, qui ferait grandir la ligne du tableau ou la zone bien au-delà de ce que l'export produira avec la valeur.
    Le texte entier reste dans le DOM (js/editor-nodes.js, addNodeView) et en info-bulle quand il est coupé. `overflow` seulement sur le début et la fin, jamais
-   sur la bulle : il rognerait le point bleu du format (`::after`, hors de la boîte). Ailleurs que dans une case, la bulle garde son rendu en ligne.
-   Le début rétrécit d'abord (poids de rétrécissement énorme : la fin ne perd rien tant qu'il peut encore céder) mais garde au moins la place de « #… » : sans ce
-   plancher, une case un peu trop étroite laissait une tranche de « # » sans « … », et le nom passait pour entier. Au-delà, c'est la fin qui rétrécit, en se
+   sur la bulle : il rognerait le point bleu du format (`::after`, hors de la boîte). Ailleurs que dans une case ou une colonne de zone, la bulle garde son rendu
+   en ligne. Le début rétrécit d'abord (poids de rétrécissement énorme : la fin ne perd rien tant qu'il peut encore céder) mais garde au moins la place de « #… » :
+   sans ce plancher, une case un peu trop étroite laissait une tranche de « # » sans « … », et le nom passait pour entier. Au-delà, c'est la fin qui rétrécit, en se
    coupant par la GAUCHE (boîte en flex, contenu calé à droite) : le bout du nom, ce qui distingue une variable d'une autre, reste toujours visible. */
-.tiptap :where(td, th) .var-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }
-.tiptap :where(td, th) .var-badge-head { flex: 0 1000000 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tiptap :where(td, th) .var-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
+.tiptap :where(td, th, .two-columns-column) .var-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }
+.tiptap :where(td, th, .two-columns-column) .var-badge-head { flex: 0 1000000 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tiptap :where(td, th, .two-columns-column) .var-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
 
 /* === Barre flottante : actions à gauche, séparateur visible avant les réglages nombre/date (masqué pour une colonne sans réglage) === */
 .v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }

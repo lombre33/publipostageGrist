@@ -10,6 +10,8 @@
 // le début ne laissait qu'une tranche de « # » sans « … » (« #nctionnement » passait pour un nom entier), et la fin commençait au milieu d'un mot alors que la case
 // avait la place de « Fonctionnement » en entier. Désormais le repère « #… » est toujours là, la fin est le dernier mot du nom et c'est elle qui se coupe, par la
 // GAUCHE, quand la case est trop étroite : le bout du nom, qui distingue une variable d'une autre, reste toujours visible.
+// Même règle dans les deux colonnes d'une zone 2 colonnes (Antoine, 29/09 : « Oui, les deux colonnes ») : dans la colonne de gauche (26 % de sa capture, ~187 px)
+// un nom long passait sur 2 ou 3 lignes (`overflow-wrap: anywhere` de css/style.css) et rendait la zone plus haute dans l'éditeur qu'en lecture et à l'export.
 // Lancé par run-headless.mjs (groupe Node "chipCellMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chip-cell-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -126,14 +128,16 @@ const settle = () => sleep(600);
 // Noms pris chez Antoine : une colonne au nom long (~30 caractères) et une adresse, bien plus larges que des cases de ~100 px.
 const LONG = 'Nom_de_famille_du_proprietaire';
 const LONG2 = 'Adresse_postale_complete_du_client';
+// ~110 caractères : plus large que la colonne de DROITE d'une zone 2 colonnes (~500 px), pas seulement que sa colonne de gauche.
+const LONG3 = 'Adresse_postale_complete_du_client_avec_tous_les_complements_et_le_bureau_distributeur_final_de_livraison';
 const LABEL = c => '#Clients.' + c;
-await page.evaluate(async () => {
-  window.__gristStub.setVariables('Clients', { Nom: 'Text', Nom_de_famille_du_proprietaire: 'Text', Adresse_postale_complete_du_client: 'Text' });
+await page.evaluate(async ({ long3 }) => {
+  window.__gristStub.setVariables('Clients', { Nom: 'Text', Nom_de_famille_du_proprietaire: 'Text', Adresse_postale_complete_du_client: 'Text', [long3]: 'Text' });
   await GristAPI.refreshSchema();
   // Ce que Ctrl+C met dans le presse-papiers (lu par un écouteur du document, qui passe après celui de l'éditeur).
   window.__copied = null;
   document.addEventListener('copy', e => { window.__copied = { html: e.clipboardData.getData('text/html') }; });
-});
+}, { long3: LONG3 });
 const chip = (column, extra) => `<span class="var-badge" data-table="Clients" data-column="${column}" data-key="Clients.${column}"${extra || ''}>#Clients.${column}</span>`;
 const FMT = ' data-format="{&quot;type&quot;:&quot;number&quot;}"';
 const LOOP = ' data-loop="{&quot;table&quot;:&quot;Clients&quot;,&quot;via&quot;:&quot;Nom&quot;,&quot;repeat&quot;:&quot;inline&quot;}" data-loop-repeat="inline"';
@@ -143,12 +147,14 @@ async function loadDoc(html) {
   await settle();
 }
 
-// Ce qu'on voit de chaque bulle : sa place par rapport à son paragraphe (donc à sa case), ses deux morceaux et ce que chacun coupe. La fin se coupe par la
-// gauche (son texte est calé à droite de sa boîte), donc `tailClipped` compare des rectangles : scrollWidth ne compte pas ce débordement-là.
+// Ce qu'on voit de chaque bulle : sa place par rapport à son paragraphe (donc à sa case ou à sa colonne), ses deux morceaux et ce que chacun coupe. La fin se coupe
+// par la gauche (son texte est calé à droite de sa boîte), donc `tailClipped` compare des rectangles : scrollWidth ne compte pas ce débordement-là.
 const chipsInfo = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap span.var-badge')).map((b, index) => {
   const r = b.getBoundingClientRect();
   const p = b.closest('p');
   const c = p.getBoundingClientRect();
+  const column = b.closest('.two-columns-column');
+  const cr = column ? column.getBoundingClientRect() : null;
   const head = b.querySelector('.var-badge-head');
   const tail = b.querySelector('.var-badge-tail');
   const tailText = tail ? tail.firstElementChild : null;
@@ -157,6 +163,9 @@ const chipsInfo = () => page.evaluate(() => Array.from(document.querySelectorAll
   const tt = tailText ? tailText.getBoundingClientRect() : null;
   const info = {
     index, key: b.dataset.key, label: b.textContent, inCell: !!b.closest('td, th'),
+    // Colonne de zone 2 colonnes (0 = gauche, 1 = droite, -1 = hors d'une zone) et ce que la bulle déborde sur la colonne voisine.
+    col: column ? Array.from(column.parentElement.children).filter(e => e.classList.contains('two-columns-column')).indexOf(column) : -1,
+    colOutLeft: cr ? Math.round((cr.left - r.left) * 10) / 10 : null, colOutRight: cr ? Math.round((r.right - cr.right) * 10) / 10 : null,
     outLeft: Math.round((c.left - r.left) * 10) / 10, outRight: Math.round((r.right - c.right) * 10) / 10, h: Math.round(r.height * 10) / 10, w: Math.round(r.width),
     head: head ? head.textContent : null, tail: tailText ? tailText.textContent : null,
     headW: hb ? Math.round(hb.width * 10) / 10 : null,
@@ -335,6 +344,125 @@ check('colonnes de 96 à 200 px : dès que le nom est coupé, le début garde la
 check('colonnes de 96 à 200 px : le bout du nom reste toujours visible (la fin se coupe par la gauche, jamais par la droite)', sweep.every(c => c.tailAtEnd), sweep.map((c, i) => [widths[i], c.tailAtEnd]));
 const roomy = sweep[sweep.length - 1];
 check('colonne de 200 px : la fin du nom est le dernier mot en entier (« Fonctionnement », rien de rogné)', roomy.tail === 'Fonctionnement' && !roomy.tailClipped && roomy.headW > 1.25 * roomy.em, roomy);
+
+// 11) Zone 2 colonnes (Antoine, 29/09 : « Oui, les deux colonnes »). Colonne de gauche à 26 % (~187 px de mise en page, comme sur sa capture), colonne de droite ~500 px.
+// Avant : dans la colonne de gauche un nom long passait sur 2 ou 3 lignes (`overflow-wrap: anywhere`) et la zone était plus haute dans l'éditeur que dans l'export.
+const zoneDoc = (left, right, pct) => `<div class="two-columns-zone" style="--layout-left: ${pct || 26}%;"><div class="two-columns-column">${left}</div><div class="two-columns-column">${right}</div></div>`;
+await loadDoc('<p>Avant</p>' + zoneDoc(
+  '<p>Objet : Notification Décision n° ' + chip(LONG) + '</p>'
+  + '<p>' + chip(LONG2) + '</p>'
+  + '<p>' + chip('Nom') + '</p>'
+  + '<p>' + chip(LONG, FMT) + '</p>'
+  + '<p>' + chip(LONG, LOOP) + '</p>'
+  + '<ul><li><p>' + chip(LONG2) + '</p></li></ul>',
+  '<p style="text-align: right;">' + chip('Nom') + ' ' + chip(LONG) + '</p>'
+  + '<p>' + chip(LONG3) + '</p>'
+  + '<p>Texte ' + chip(LONG2) + ' suite</p>'
+  + '<p>' + chip(LONG, FMT) + '</p>') + '<p>Après</p>');
+const zoneList = await chipsInfo();
+const zLeft = zoneList.filter(c => c.col === 0);
+const zRight = zoneList.filter(c => c.col === 1);
+const stays = c => c.outLeft <= 0.5 && c.outRight <= 0.5 && c.colOutLeft <= 0.5 && c.colOutRight <= 0.5;
+check('zone 2 colonnes : 6 bulles dans la colonne de gauche, 5 dans celle de droite', zLeft.length === 6 && zRight.length === 5 && zoneList.length === 11, zoneList.map(c => [c.key, c.col]));
+check('chaque bulle reste dans sa colonne et dans son paragraphe (aucune ne déborde sur la colonne voisine)', zoneList.every(stays), zoneList.map(c => [c.key, c.col, c.outLeft, c.outRight, c.colOutLeft, c.colOutRight]));
+check('chaque bulle tient sur une seule ligne, dont celle d\'une puce de liste et celle qui suit du texte (la zone ne grandit plus avec les noms)', zoneList.every(c => c.h < 24), zoneList.map(c => [c.key, c.col, c.h]));
+const zCut = zLeft.filter(c => c.label.length > 20);
+check('colonne de gauche : les 5 noms longs perdent le milieu (début coupé, repère « #… », fin = dernier mot calée sur le bout du nom)',
+  zCut.length === 5 && zCut.every(c => c.display === 'inline-flex' && c.head + c.tail === c.label && c.label.endsWith(c.tail) && c.headCut && c.headW >= 1.25 * c.em && c.tailAtEnd),
+  zCut.map(c => [c.key, c.display, c.head, c.tail, c.headCut, c.headW, c.em, c.tailAtEnd]));
+check('colonne de gauche : la fin est le dernier mot du nom (« proprietaire », « du_client »)',
+  zCut.filter(c => c.key === 'Clients.' + LONG).every(c => c.tail === 'proprietaire') && zCut.filter(c => c.key === 'Clients.' + LONG2).every(c => c.tail === 'du_client'), zCut.map(c => [c.key, c.tail]));
+const zShort = zLeft.find(c => c.key === 'Clients.Nom');
+check('colonne de gauche : la bulle courte n\'est pas coupée', !!zShort && !zShort.tail && !zShort.headCut, zShort);
+const rightWhole = zRight.filter(c => c.label.length < 60);
+const rightHuge = zRight.find(c => c.key === 'Clients.' + LONG3);
+check('colonne de droite : les noms qui tiennent (« #Clients.Nom_de_famille_du_proprietaire », l\'adresse) restent entiers, sans aucune coupure',
+  rightWhole.length === 4 && rightWhole.every(c => !c.headCut && !c.tailClipped), rightWhole.map(c => [c.key, c.headCut, c.tailClipped]));
+check('colonne de droite : un nom de ~110 caractères, plus large que la colonne, est coupé lui aussi (début coupé, bout du nom visible)',
+  !!rightHuge && rightHuge.headCut && rightHuge.tail === 'de_livraison' && rightHuge.tailAtEnd && rightHuge.headW >= 1.25 * rightHuge.em, rightHuge);
+const zoneHtml = await page.evaluate(() => {
+  const doc = new DOMParser().parseFromString(Editor.getHTML(), 'text/html');
+  const spans = Array.from(doc.querySelectorAll('.two-columns-zone span.var-badge'));
+  return { count: spans.length, wholeText: spans.every(s => s.childNodes.length === 1 && s.firstChild.nodeType === 3 && s.textContent === '#' + s.dataset.key), noParts: !/var-badge-(head|tail)/.test(Editor.getHTML()), zones: doc.querySelectorAll('.two-columns-zone').length };
+});
+check('zone 2 colonnes : getHTML() garde le nom entier de chaque bulle dans un seul texte, sans trace du découpage', zoneHtml.count === 11 && zoneHtml.zones === 1 && zoneHtml.wholeText && zoneHtml.noParts, zoneHtml);
+
+// Le point bleu du format (hors de la boîte de la bulle) n'est pas rogné dans une colonne non plus : aucune bulle ne porte d'`overflow`, et le coin d'une bulle à
+// format de la colonne de DROITE (loin de la poignée de la zone, qui recouvre le bord de la colonne de gauche) est atteint.
+const zoneDot = await page.evaluate(() => {
+  const all = Array.from(document.querySelectorAll('.tiptap .two-columns-column .var-badge'));
+  const b = document.querySelectorAll('.tiptap .two-columns-column')[1].querySelector('.var-badge[data-format]');
+  b.scrollIntoView({ block: 'center' });
+  const r = b.getBoundingClientRect();
+  const el = document.elementFromPoint(r.right, r.top);
+  return { visibleOverflow: all.every(x => getComputedStyle(x).overflowX === 'visible' && getComputedStyle(x).overflowY === 'visible'), onChip: el === b, tag: el && el.tagName, cls: el && el.className };
+});
+check('zone 2 colonnes : le point bleu du format n\'est pas rogné (aucune bulle n\'a d\'overflow ; on atteint le coin d\'une bulle à format)', zoneDot.visibleOverflow && zoneDot.onChip, zoneDot);
+
+// Survol, clic et Ctrl+C à la vraie souris sur des bulles de la zone (on les amène à l'écran d'abord : le panneau ne montre que ~200 px de feuille).
+async function reveal(index) {
+  await page.evaluate(i => document.querySelectorAll('.tiptap span.var-badge')[i].scrollIntoView({ block: 'center', inline: 'nearest' }), index);
+  await sleep(250);
+  return (await chipsInfo())[index];
+}
+const zLong = await reveal(zLeft[0].index);
+await hoverOn(zLong);
+check('survol d\'une bulle coupée de la colonne de gauche : le nom entier en info-bulle', (await chipsInfo())[zLeft[0].index].title === LABEL(LONG), (await chipsInfo())[zLeft[0].index].title);
+const zWhole = await reveal(zRight[1].index);
+await hoverOn(zWhole);
+check('survol d\'une bulle entière de la colonne de droite : pas d\'info-bulle', (await chipsInfo())[zRight[1].index].title === '', (await chipsInfo())[zRight[1].index].title);
+const zHuge = await reveal(zRight[2].index);
+await hoverOn(zHuge);
+check('survol du nom de ~110 caractères de la colonne de droite : le nom entier en info-bulle', (await chipsInfo())[zRight[2].index].title === LABEL(LONG3), (await chipsInfo())[zRight[2].index].title);
+const zClick = await reveal(zLeft[0].index);
+await page.mouse.click(zClick.x, zClick.y);
+await sleep(300);
+const zSelected = await page.evaluate(() => {
+  const s = EditorCore.getEditor().state.selection;
+  return { key: s.node ? s.node.attrs.key : null, marked: document.querySelectorAll('.tiptap span.var-badge.ProseMirror-selectednode').length };
+});
+check('clic sur une bulle coupée de la colonne de gauche : c\'est elle qui est sélectionnée', zSelected.key === 'Clients.' + LONG && zSelected.marked === 1, zSelected);
+const zCondBtn = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+check('... et la barre de variable s\'ouvre, son icône Condition atteignable à 700x400', zCondBtn.found && zCondBtn.inViewport && zCondBtn.onTop, zCondBtn);
+await page.evaluate(() => { window.__copied = null; });
+await page.keyboard.press('Control+c');
+await sleep(250);
+const zCopied = await page.evaluate(() => window.__copied);
+check('Ctrl+C sur cette bulle : le presse-papiers reçoit la bulle entière, pas un début et une fin',
+  !!zCopied && zCopied.html.includes(`>${LABEL(LONG)}</span>`) && !/var-badge-(head|tail)/.test(zCopied.html), zCopied);
+await page.mouse.click(2, 2);
+
+// Poignée de la zone glissée à la vraie souris : colonne de gauche élargie, les noms y tiennent en entier ; ramenée, ils sont de nouveau coupés dans leur colonne.
+async function dragZoneGrip(dx) {
+  const grip = await page.evaluate(() => {
+    const g = document.querySelector('.tiptap .two-columns-resize-grip');
+    g.scrollIntoView({ block: 'center' });
+    const r = g.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    return { x, y, onTop: document.elementFromPoint(x, y) === g, leftW: document.querySelector('.tiptap .two-columns-column').getBoundingClientRect().width };
+  });
+  await page.mouse.move(grip.x - 40, grip.y);
+  await page.mouse.move(grip.x, grip.y, { steps: 4 });
+  await sleep(200);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + dx, grip.y, { steps: 10 });
+  await page.mouse.up();
+  await settle();
+  const leftW = await page.evaluate(() => document.querySelector('.tiptap .two-columns-column').getBoundingClientRect().width);
+  return { onTop: grip.onTop, before: grip.leftW, after: leftW };
+}
+const gripWide = await dragZoneGrip(250);
+const wideList = await chipsInfo();
+const wideLeft = wideList.filter(c => c.col === 0);
+check('poignée glissée vers la droite : la colonne de gauche s\'élargit (poignée atteinte à la souris)', gripWide.onTop && gripWide.after > gripWide.before + 150, gripWide);
+check('colonne de gauche élargie : les noms y sont entiers (plus de coupure), sur une ligne, dans la colonne',
+  wideLeft.length === 6 && wideLeft.every(c => !c.headCut && !c.tailClipped && c.h < 24 && stays(c)), wideLeft.map(c => [c.key, c.headCut, c.tailClipped, c.h, c.colOutRight]));
+check('... et toutes les bulles de la zone restent dans leur colonne (celle de droite, devenue étroite, en coupe à son tour)', wideList.every(stays) && wideList.every(c => c.h < 24), wideList.map(c => [c.key, c.col, c.colOutRight, c.h]));
+const gripBack = await dragZoneGrip(-250);
+const backList = await chipsInfo();
+check('poignée ramenée à gauche : la colonne de gauche se rétrécit', gripBack.after < gripWide.after - 150, { gripWide, gripBack });
+check('colonne de gauche rétrécie : les noms longs sont de nouveau coupés au milieu, chacun dans sa colonne, sur une ligne',
+  backList.filter(c => c.col === 0 && c.label.length > 20).every(c => c.headCut && c.tailAtEnd) && backList.every(stays) && backList.every(c => c.h < 24), backList.map(c => [c.key, c.col, c.headCut, c.colOutRight, c.h]));
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

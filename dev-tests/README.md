@@ -38,7 +38,7 @@ apparaît) :
 | `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
 | `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
-| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes **+ le script Node `chipCellMouse`** si le changement touche la bulle `varBadge` (`addNodeView`, `splitBadgeLabel` : nom coupé au milieu dans une case de tableau) **+ `varFormat`, `varCondition`, `varLoop`** (la bulle porte leur point bleu, leur pointillé et leur icône) |
+| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes **+ le script Node `chipCellMouse`** si le changement touche la bulle `varBadge` (`addNodeView`, `splitBadgeLabel` : nom coupé au milieu dans une case de tableau ou une colonne de zone 2 colonnes) **+ `varFormat`, `varCondition`, `varLoop`** (la bulle porte leur point bleu, leur pointillé et leur icône) |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) |
 | `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) ; le texte du numéro de page (`pageNumberText`, `resolvePageNumberBadges`) sert aussi à l'aperçu paginé, au mode Lecture et au PDF : **+ `headerFooter`** (scénario `hf_page_numbers_resolved_in_editor_preview_and_reader`) **et `pdfBatch`** |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
@@ -144,8 +144,14 @@ Deux options utiles :
   que la fin soit le dernier mot du nom quand la case a la place, que `getHTML()` garde le nom entier dans un seul texte, qu'une bulle hors tableau garde son
   rendu en ligne et que le point bleu du format (hors de la boîte de la bulle) ne soit pas rogné. Il rejoue aussi la capture « Budget validé » d'Antoine
   (colonne de 118 px, Details_depense_s_Fonctionnement / Investissement / Personnel) et balaie les largeurs de colonne de 96 à 200 px.
+  Même règle dans les deux colonnes d'une zone 2 colonnes (Antoine, 29/09 : « Oui, les deux colonnes ») : le test y met 11 bulles (colonne de gauche à 26 %, dont
+  un nom en plein texte, dans une puce de liste, avec format et en boucle ; colonne de droite avec un nom de ~110 caractères), exige une seule ligne par bulle,
+  le nom coupé seulement quand la colonne est trop étroite (les noms qui tiennent restent entiers, sans info-bulle), puis glisse la poignée de la zone à la vraie
+  souris : colonne de gauche élargie, les noms y sont entiers ; ramenée, ils sont de nouveau coupés, chacun dans sa colonne.
   Avant le correctif du 29/09 (`js/editor-nodes.js`, `css/variable-actions.css`), la bulle traversait sa case (jusqu'à 190 px de trop) et recouvrait la voisine ;
-  la première version du correctif laissait, entre deux largeurs, une tranche de « # » sans « … » et une fin qui commençait au milieu d'un mot.
+  la première version du correctif laissait, entre deux largeurs, une tranche de « # » sans « … » et une fin qui commençait au milieu d'un mot. Dans une colonne
+  de zone, un nom long passait sur 2 ou 3 lignes (`overflow-wrap: anywhere`, css/style.css) : la zone du document d'Antoine faisait ~940 px dans l'éditeur, ~910 px
+  avec la coupure (la colonne de droite décide alors de la hauteur).
 - Un huitième, `codeHygiene` (`dev-tests/verify-code-hygiene.mjs`), est du Node pur, sans navigateur (moins d'une seconde) : il lit les sources et refuse
   ce que rien n'appelle plus et qu'aucun test fonctionnel ne peut voir. Une clé de `js/i18n.js` que ni un script ni `index.html` ne demande (ni comme
   chaîne, ni par un préfixe construit comme `'varLoop.repeat.' + kind`), une clé déclarée deux fois, une variable CSS déclarée que personne ne lit, une règle
