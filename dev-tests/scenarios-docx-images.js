@@ -53,11 +53,10 @@
       await h.sleep(60);
       if (align !== 'left') { document.getElementById('v2-btn-align-' + align).click(); await h.sleep(30); }
     }
-    const origPrompt = window.prompt;
-    window.prompt = () => PNG_1PX;
+    const dialogs = h.stubDialogs({ prompt: PNG_1PX });
     document.getElementById('v2-btn-image').click();
     await h.sleep(120);
-    window.prompt = origPrompt;
+    dialogs.restore();
     const container = context === 'tableCell'
       ? h.tiptap().querySelectorAll('table td')[h.tiptap().querySelectorAll('table td').length - 1]
       : (context === 'mainFlow' ? h.tiptap() : h.tiptap().querySelectorAll('.two-columns-column')[context === 'twoColumnsLeft' ? 0 : 1]);

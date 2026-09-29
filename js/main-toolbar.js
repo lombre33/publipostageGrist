@@ -326,7 +326,7 @@ const MainToolbar = (function () {
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
-      const url = window.prompt(I18n.t('image.urlPrompt'));
+      const url = await Dialogs.prompt({ title: I18n.t('dialog.imageUrl.title'), label: I18n.t('image.urlPrompt'), confirmLabel: I18n.t('common.insert') });
       if (!url) return;
       const src = await urlToDataUriOrWarn(url);
       await Editor.insertImageAtDefaultSize(src);

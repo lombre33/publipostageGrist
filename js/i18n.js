@@ -185,6 +185,12 @@ const I18n = (function () {
     'common.cancel': { fr: 'Annuler', en: 'Cancel' },
     'common.confirm': { fr: 'Valider', en: 'Confirm' },
     'common.save': { fr: 'Enregistrer', en: 'Save' },
+    'common.create': { fr: 'Créer', en: 'Create' },
+    'common.delete': { fr: 'Supprimer', en: 'Delete' },
+    'common.insert': { fr: 'Insérer', en: 'Insert' },
+    'common.continue': { fr: 'Continuer', en: 'Continue' },
+    'common.generate': { fr: 'Générer', en: 'Generate' },
+    'common.move': { fr: 'Déplacer', en: 'Move' },
 
     // --- Modale "Tables liées" / configuration de correspondance ---
     'linkRules.title': { fr: 'Tables liées (correspondance pour #Variable)', en: 'Linked tables (matching for #Variable)' },
@@ -383,7 +389,13 @@ const I18n = (function () {
     'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
     'autosave.conflict.reload': { fr: 'Recharger la dernière version', en: 'Reload latest version' },
 
-    // --- Confirmations / invites (main.js) ---
+    // --- Confirmations / invites (main.js) ; titres des fenêtres de saisie et de confirmation (js/dialogs.js), qui prennent aussi les textes des clés voisines ---
+    'dialog.imageUrl.title': { fr: 'Insérer une image', en: 'Insert an image' },
+    'dialog.newTable.title': { fr: 'Nouvelle table Grist', en: 'New Grist table' },
+    'dialog.newFolder.title': { fr: 'Nouveau dossier', en: 'New folder' },
+    'dialog.moveFolder.title': { fr: 'Déplacer vers un dossier', en: 'Move to a folder' },
+    'dialog.emailTooLong.title': { fr: 'Email trop long', en: 'Email too long' },
+    'dialog.batchExport.title': { fr: 'Exporter toutes les lignes', en: 'Export all rows' },
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
     'confirm.deleteTemplate': { fr: 'Supprimer ce modèle ?', en: 'Delete this template?' },
     'confirm.batchExport': { fr: 'Générer un PDF pour chacune des {count} lignes de « {table} » et les regrouper dans une archive ZIP ?', en: 'Generate a PDF for each of the {count} rows in “{table}” and bundle them into a ZIP archive?' },

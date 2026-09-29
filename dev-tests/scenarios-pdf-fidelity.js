@@ -212,10 +212,9 @@
       await h.sleep(50);
       await h.focusAtEnd();
       await h.typeText('Texte porteur pour ancrage');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       await h.clickButton('v2-btn-image');
-      window.prompt = origPrompt;
+      dialogs.restore();
       await h.sleep(80);
       const img = h.tiptap().querySelector('img.editor-image');
       await h.selectAtomNode(img);
@@ -357,11 +356,10 @@
       await h.sleep(50);
       await h.typeText('Texte de colonne droite pour ancrage, assez long pour occuper plusieurs lignes dans cette colonne etroite.');
       document.execCommand('insertParagraph');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       document.getElementById('v2-btn-image').click();
       await h.sleep(120);
-      window.prompt = origPrompt;
+      dialogs.restore();
       const img = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('img.editor-image');
       await h.selectAtomNode(img);
       await h.sleep(80);
@@ -402,11 +400,10 @@
       await h.sleep(50);
       await h.typeText('XXXXXXXXXX');
       document.execCommand('insertParagraph');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       document.getElementById('v2-btn-image').click();
       await h.sleep(120);
-      window.prompt = origPrompt;
+      dialogs.restore();
       const img = h.tiptap().querySelectorAll('.two-columns-column')[1].querySelector('img.editor-image');
       await h.selectAtomNode(img);
       await h.sleep(80);
@@ -452,11 +449,10 @@
         ed.commands.setTextSelection(ed.view.posAtDOM(colP, 0));
         ed.commands.focus();
         await h.sleep(50);
-        const origPrompt = window.prompt;
-        window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
         document.getElementById('v2-btn-image').click();
         await h.sleep(120);
-        window.prompt = origPrompt;
+        dialogs.restore();
         const img = document.querySelectorAll('.two-columns-column')[colIndex].querySelector('img.editor-image');
         await h.selectAtomNode(img);
         await h.sleep(80);
@@ -488,11 +484,10 @@
       document.getElementById('editor-container').classList.add('a4-preview');
       await h.focusAtEnd();
       await h.typeText('Ceci est un paragraphe de texte reel suffisamment long pour envelopper sur plusieurs lignes meme a pleine largeur de page, afin de verifier que l\'ancrage ne compte pas deux fois la hauteur du paragraphe porteur.');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       document.getElementById('v2-btn-image').click();
       await h.sleep(120);
-      window.prompt = origPrompt;
+      dialogs.restore();
       const img = h.tiptap().querySelector('img.editor-image');
       await h.selectAtomNode(img);
       await h.sleep(80);
@@ -557,11 +552,10 @@
       await h.sleep(50);
       await h.typeText('Texte de colonne gauche pour ancrage, assez long pour occuper plusieurs lignes dans cette colonne etroite.');
       document.execCommand('insertParagraph');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       document.getElementById('v2-btn-image').click();
       await h.sleep(120);
-      window.prompt = origPrompt;
+      dialogs.restore();
       const img = h.tiptap().querySelectorAll('.two-columns-column')[0].querySelector('img.editor-image');
       await h.selectAtomNode(img);
       await h.sleep(80);
@@ -595,10 +589,9 @@
       await h.resetEditor();
       await h.focusAtEnd();
       await h.typeText('AAA ');
-      const origPrompt = window.prompt;
-      window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
       await h.clickButton('v2-btn-image');
-      window.prompt = origPrompt;
+      dialogs.restore();
       await h.sleep(80);
       const img = h.tiptap().querySelector('img.editor-image');
       const parentP = img.closest('p');
@@ -655,11 +648,10 @@
     await h.sleep(50);
     await h.typeText('XXXXXXXXXX texte ancre');
     if (anchorType === 'above') { ed.commands.enter(); await h.sleep(60); }
-    const origPrompt = window.prompt;
-    window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
     document.getElementById('v2-btn-image').click();
     await h.sleep(120);
-    window.prompt = origPrompt;
+    dialogs.restore();
     const container = context === 'tableCell'
       ? h.tiptap().querySelectorAll('table td')[h.tiptap().querySelectorAll('table td').length - 1]
       : h.tiptap().querySelectorAll('.two-columns-column')[context === 'twoColumnsLeft' ? 0 : 1];

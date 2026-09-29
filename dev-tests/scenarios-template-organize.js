@@ -66,10 +66,10 @@
     return Templates.getCurrentId();
   }
 
+  // Réponse toute faite à la saisie du widget (Dialogs.prompt) le temps de `fn` : `null` = saisie annulée. Le vrai clic dans la fenêtre : dialogsMouse.
   function withPrompt(returnValue, fn) {
-    const orig = window.prompt;
-    window.prompt = () => returnValue;
-    return Promise.resolve(fn()).finally(() => { window.prompt = orig; });
+    const dialogs = TestHelpers.stubDialogs({ prompt: returnValue });
+    return Promise.resolve(fn()).finally(() => dialogs.restore());
   }
 
   cases.push({

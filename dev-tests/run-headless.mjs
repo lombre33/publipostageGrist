@@ -88,6 +88,7 @@ const NODE_SCRIPTS = {
   wheelScroll: 'verify-wheel-scroll.mjs',
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   modalBaseMouse: 'verify-modal-base-mouse.mjs', // base commune des fenêtres (js/modal-base.js) : Condition, Autres attributs, Boucle - titre et boutons fixes, Tab, Échap
+  dialogsMouse: 'verify-dialogs-mouse.mjs', // saisies et confirmations (js/dialogs.js) à la place de prompt/confirm : au-dessus des autres fenêtres, Tab, Échap, focus rendu
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400

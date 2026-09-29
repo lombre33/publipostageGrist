@@ -651,8 +651,25 @@ window.TestHelpers = (function () {
     return '';
   }
 
+  // Saisies et confirmations du widget (js/dialogs.js) : remplace Dialogs.prompt / Dialogs.confirm par des réponses toutes faites, comme ces suites remplaçaient
+  // window.prompt / window.confirm avant que ces boîtes deviennent des fenêtres du widget (29/09). `answers` : { prompt?, confirm? }, chacune une valeur ou une
+  // fonction des options reçues ; sans réponse donnée : saisie annulée (null), confirmation refusée (false). `asked` liste les demandes reçues ({ kind, ...options }),
+  // `restore()` remet les vraies fenêtres. Le clic réel dans la fenêtre a son propre test : dialogsMouse (dev-tests/verify-dialogs-mouse.mjs).
+  function stubDialogs(answers) {
+    const orig = { prompt: Dialogs.prompt, confirm: Dialogs.confirm };
+    const asked = [];
+    const answerFor = (kind, fallback) => async opts => {
+      asked.push(Object.assign({ kind }, opts));
+      const a = (answers || {})[kind];
+      return typeof a === 'function' ? a(opts) : (a === undefined ? fallback : a);
+    };
+    Dialogs.prompt = answerFor('prompt', null);
+    Dialogs.confirm = answerFor('confirm', false);
+    return { asked, restore() { Dialogs.prompt = orig.prompt; Dialogs.confirm = orig.confirm; } };
+  }
+
   return {
-    sleep, tiptap, resetEditor, focusAtEnd, focusInElement, typeText,
+    sleep, tiptap, resetEditor, stubDialogs, focusAtEnd, focusInElement, typeText,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth,

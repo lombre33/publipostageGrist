@@ -339,7 +339,7 @@
 
   async function onSaveAs() {
     if (isReadOnly()) return;
-    const nom = prompt(I18n.t('prompt.newTemplateName'));
+    const nom = await Dialogs.prompt({ title: I18n.t('toolbar.saveAs'), label: I18n.t('prompt.newTemplateName'), confirmLabel: I18n.t('common.save') });
     if (!nom) return;
     // Copie un macro-modèle par sa composition (mêmes slots, nouvel id Grist) plutôt que de passer par onSave() ci-dessus, qui rouvrirait la modale au
     // lieu d'enregistrer quoi que ce soit - "sous" doit ici dupliquer directement, comme pour un document normal.
@@ -365,7 +365,7 @@
     if (isReadOnly()) return;
     const id = Templates.getCurrentId();
     if (!id) { setStatus(I18n.t('status.noTemplateSelected'), true); return; }
-    if (!confirm(I18n.t('confirm.deleteTemplate'))) return;
+    if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
     await Templates.remove(id);
     await refreshTemplateList();
     onNew();
@@ -801,7 +801,9 @@
       const bodyText = MailtoExport.plainTextFromHtml(resolvedContent ? resolvedContent.innerHTML : readerContainer.innerHTML);
       const url = MailtoExport.buildMailtoUrl({ to: resolved.destinataires, cc: resolved.cc, bcc: resolved.cci, subject: resolved.objet, bodyText });
       const check = MailtoExport.checkUrlLength(url);
-      if (!check.safe && !window.confirm(I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }))) {
+      if (!check.safe && !(await Dialogs.confirm({
+        title: I18n.t('dialog.emailTooLong.title'), message: I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }), confirmLabel: I18n.t('common.continue'),
+      }))) {
         setStatus('');
         return;
       }
@@ -890,7 +892,7 @@
       return;
     }
     if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
-    const proceed = window.confirm(I18n.t(cfg.confirm, { count: rows.length, table: tableId }));
+    const proceed = await Dialogs.confirm({ title: I18n.t('dialog.batchExport.title'), message: I18n.t(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
     if (!proceed) return;
 
     // JSZip fait partie du même lot de bibliothèques PDF chargées à la demande (cf. js/pdf-export.js:ensurePdfLibsLoaded) - plus chargé d'office au démarrage
@@ -1262,7 +1264,7 @@
       }
       if (!schema || !schema.columns.length) { setStatus(I18n.t('status.noColumnsDefined'), true); return; }
       const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
-      const tableName = window.prompt(I18n.t('prompt.newTableName'), defaultName);
+      const tableName = await Dialogs.prompt({ title: I18n.t('dialog.newTable.title'), label: I18n.t('prompt.newTableName'), value: defaultName, confirmLabel: I18n.t('common.create') });
       if (!tableName) return;
       // Les badges #Variable du HTML statique pointent vers schema.tableName - si Grist crée la table sous un autre nom (renommée dans le prompt, ou
       // dédupliquée), il faut réaligner ces références avant de charger le HTML, ou les variables pointeraient vers une table inexistante.

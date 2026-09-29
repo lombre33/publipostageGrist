@@ -312,7 +312,7 @@ const Comments = (function () {
       deleteBtn.addEventListener('mousedown', async event => {
         event.preventDefault();
         if (!canComment) return;
-        if (!confirm(I18n.t('comments.confirmDelete'))) return;
+        if (!(await Dialogs.confirm({ title: I18n.t('comments.confirmDelete'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
         // Mode Lecture : la marque retirée est d'abord enregistrée dans le modèle, les lignes du fil ne partent qu'ensuite - un échec remet la marque,
         // jamais un fil supprimé dont la marque resterait surlignée.
         const ranges = readerMode ? findMarkRanges(commentId) : [];

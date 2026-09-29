@@ -13,7 +13,7 @@
 // le bouton de repli "Ranger ici" (glisser-déposer n'a pas d'équivalent clavier/tactile fiable). Dès cette
 // première écriture, TemplateOrganizer.buildView fait apparaître un vrai nœud dossier à cette place et la
 // ligne "en attente" disparaît naturellement au render() suivant. Le bouton "Déplacer vers…" (chemin
-// tapé à la main, prompt() texte libre) reste utilisable en toutes circonstances, y compris pour créer un
+// tapé à la main, saisie de texte libre) reste utilisable en toutes circonstances, y compris pour créer un
 // dossier directement par ce biais - les "+"/le glisser-déposer sont additifs, pas un remplacement.
 //
 // Dossier déplié ou replié par défaut dans la liste déroulante (29/09, demande d'Antoine) : chaque ligne
@@ -60,8 +60,8 @@ const TemplateOrganizeModal = (function () {
 
   // Nom du seul nouveau segment (pas le chemin complet) : le préfixe du parent est géré ici, pas tapé par
   // l'utilisateur - cf. commentaire d'en-tête sur pendingFolder.
-  function promptNewFolderName(parentPath) {
-    const value = window.prompt(I18n.t('organize.modal.newFolderPrompt'), '');
+  async function promptNewFolderName(parentPath) {
+    const value = await Dialogs.prompt({ title: I18n.t('dialog.newFolder.title'), label: I18n.t('organize.modal.newFolderPrompt'), confirmLabel: I18n.t('common.create') });
     if (value === null) return null;
     const full = parentPath ? parentPath + '/' + value : value;
     return TemplatePreferences.normalizeFolderPath(full);
@@ -96,7 +96,7 @@ const TemplateOrganizeModal = (function () {
     const hint = folders.length
       ? I18n.t('organize.modal.moveHint', { folders: folders.join(', ') })
       : I18n.t('organize.modal.moveHintEmpty');
-    const value = window.prompt(hint, currentFolder || '');
+    const value = await Dialogs.prompt({ title: I18n.t('dialog.moveFolder.title'), message: hint, value: currentFolder || '', confirmLabel: I18n.t('common.move') });
     if (value === null) return; // Annulé : ne rien écrire (distinct d'une chaîne vide, qui vide le dossier).
     try {
       await TemplatePreferences.setFolder(id, value);
@@ -240,9 +240,9 @@ const TemplateOrganizeModal = (function () {
     addSubBtn.className = 'tom-add-subfolder-btn';
     addSubBtn.setAttribute('aria-label', I18n.t('organize.modal.newSubfolderAria'));
     addSubBtn.textContent = '+';
-    addSubBtn.addEventListener('click', (e) => {
+    addSubBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const path = promptNewFolderName(node.chemin);
+      const path = await promptNewFolderName(node.chemin);
       if (!path) return;
       pendingFolder = path;
       pendingCollapsed = false;
@@ -398,13 +398,13 @@ const TemplateOrganizeModal = (function () {
   function close() {
     if (modal) modal.style.display = 'none';
     // Aucune trace, aucune écriture Grist n'a eu lieu pour un dossier resté "en attente" (cf. commentaire
-    // d'en-tête) - fermer la modale l'abandonne silencieusement, comme annuler le prompt "Déplacer vers…".
+    // d'en-tête) - fermer la modale l'abandonne silencieusement, comme annuler la saisie "Déplacer vers…".
     pendingFolder = null;
     pendingCollapsed = false;
   }
 
-  function onNewRootFolder() {
-    const path = promptNewFolderName('');
+  async function onNewRootFolder() {
+    const path = await promptNewFolderName('');
     if (!path) return;
     pendingFolder = path;
     pendingCollapsed = false;

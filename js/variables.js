@@ -868,14 +868,14 @@ const Variables = (function () {
       btnDelete.setAttribute('aria-label', I18n.t('linkRules.delete')); btnDelete.title = I18n.t('linkRules.delete');
       btnDelete.addEventListener('click', async () => {
         const affected = findTemplatesUsingTable(rule.tableCible);
-        let message = I18n.t('linkRules.confirmDelete', { table: rule.tableCible });
-        if (affected.length) {
-          message += I18n.t('linkRules.confirmDeleteAffected', {
+        // La question fait le titre de la fenêtre ; les modèles touchés et leur conséquence sont le message (deux lignes ; le texte commence par deux retours à la ligne, que la fenêtre n'a pas à afficher).
+        const message = affected.length
+          ? I18n.t('linkRules.confirmDeleteAffected', {
             names: affected.map(t => t.nom || I18n.t('linkRules.unnamed')).join(', '),
             plural: affected.length > 1 ? I18n.t('linkRules.theseTemplates') : I18n.t('linkRules.thisTemplate'),
-          });
-        }
-        if (!confirm(message)) return;
+          }).trim()
+          : '';
+        if (!(await Dialogs.confirm({ title: I18n.t('linkRules.confirmDelete', { table: rule.tableCible }), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
         await GristAPI.deleteLinkRule(rule.tableCible);
         refreshLinkRulesPanel();
       });

@@ -26,15 +26,14 @@
     await h.sleep(80);
   }
 
-  // Clique la ligne du menu et attend le téléchargement : confirm() accepté et noté, le <a download> intercepté au lieu d'un vrai téléchargement.
+  // Clique la ligne du menu et attend le téléchargement : la confirmation acceptée et notée (options reçues), le <a download> intercepté au lieu d'un vrai téléchargement.
   async function clickExportRow(h, rowId) {
     const downloads = [];
     const confirms = [];
     const blobsByUrl = new Map();
-    const origConfirm = window.confirm;
     const origCreate = URL.createObjectURL;
     const origClick = HTMLAnchorElement.prototype.click;
-    window.confirm = msg => { confirms.push(msg); return true; };
+    const dialogs = h.stubDialogs({ confirm: opts => { confirms.push(opts.message); return true; } });
     URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
     HTMLAnchorElement.prototype.click = function () {
       if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
@@ -52,7 +51,7 @@
       await h.sleep(50); // le statut final est posé juste après le clic du <a>
     } finally {
       statusObserver.disconnect();
-      window.confirm = origConfirm;
+      dialogs.restore();
       URL.createObjectURL = origCreate;
       HTMLAnchorElement.prototype.click = origClick;
     }

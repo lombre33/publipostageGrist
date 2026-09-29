@@ -5,7 +5,7 @@
 // Le clavier est tenu ici, une fois pour toutes :
 //  - Tab et Maj+Tab tournent DANS la fenêtre, y compris quand le focus est tombé sur <body> (un champ redessiné, un bouton retiré) ;
 //  - Échap ferme la fenêtre où que soit le focus, sauf si un composant l'a déjà pris (la liste avec recherche referme son seul panneau, cf. js/search-select.js)
-//    ou si une fenêtre d'un autre module est ouverte par-dessus (le choix de la clé de correspondance, `#link-config-modal`, garde son propre Annuler).
+//    ou si une fenêtre d'un autre module est ouverte AU-DESSUS (le choix de la clé de correspondance, `#link-config-modal`, garde son propre Annuler).
 // L'écouteur est posé sur le document, pas sur la fenêtre : posé sur elle, il ne voyait plus rien dès que le focus en sortait, et Échap ne fermait plus rien.
 // Un clic sur le voile ne ferme rien, à dessein : il protège une saisie en cours. Aucun texte ici (les fenêtres portent les leurs, en français et en anglais).
 const ModalBase = (function () {
@@ -26,11 +26,14 @@ const ModalBase = (function () {
       !e.disabled && e.tabIndex >= 0 && !e.closest('[hidden]') && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
   }
 
-  // Une fenêtre modale d'un AUTRE module est visible (le voile de #link-config-modal, ouvert par-dessus la condition d'affichage) : le clavier est à elle.
-  function foreignModalVisible() {
+  // Une fenêtre modale d'un AUTRE module est visible ET AU-DESSUS de `win` (le voile de #link-config-modal, z-index 2000, ouvert par-dessus la condition
+  // d'affichage, 1990) : le clavier est à elle. Une fenêtre écrite dans index.html restée OUVERTE EN DESSOUS (Organiser, Tables liées : z-index 2000, sous une
+  // saisie ou une confirmation à 2100) ne prend rien : c'est la fenêtre du dessus qui a le clavier.
+  function foreignModalAbove(win) {
+    const z = Number(getComputedStyle(win.overlay).zIndex) || 0;
     return Array.from(document.querySelectorAll('[aria-modal="true"]')).some(m => {
       for (const overlay of overlays) if (overlay.contains(m)) return false;
-      return m.getClientRects().length > 0;
+      return m.getClientRects().length > 0 && (Number(getComputedStyle(m).zIndex) || 0) > z;
     });
   }
 
@@ -49,7 +52,7 @@ const ModalBase = (function () {
   function onKeydown(event) {
     const win = stack[stack.length - 1];
     if (!win || event.defaultPrevented || (event.key !== 'Escape' && event.key !== 'Tab')) return;
-    if (foreignModalVisible()) return;
+    if (foreignModalAbove(win)) return;
     if (event.key === 'Escape') { event.preventDefault(); win.onEscape(); }
     else trapTab(win, event);
   }

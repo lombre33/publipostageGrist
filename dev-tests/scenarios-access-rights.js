@@ -153,10 +153,9 @@
       const calls = [];
       const origPdf = PdfExport.exportCurrentRecord;
       const origDocx = DocxExport.exportCurrentRecord;
-      const origConfirm = window.confirm;
       PdfExport.exportCurrentRecord = async () => { calls.push('pdf'); };
       DocxExport.exportCurrentRecord = async () => { calls.push('docx'); };
-      window.confirm = () => { calls.push('confirm'); return false; };
+      const dialogs = h.stubDialogs({ confirm: () => { calls.push('confirm'); return false; } });
       try {
         ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'btn-create-email']
           .forEach(id => document.getElementById(id).click());
@@ -164,7 +163,7 @@
       } finally {
         PdfExport.exportCurrentRecord = origPdf;
         DocxExport.exportCurrentRecord = origDocx;
-        window.confirm = origConfirm;
+        dialogs.restore();
       }
       const greyed = ['v2-export-pdf-group', 'v2-quality-group', 'btn-create-email'].filter(locked);
       const editFree = !locked('btn-save') && !locked('btn-mode-edit') && !inReadMode();

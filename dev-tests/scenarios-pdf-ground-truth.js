@@ -45,11 +45,10 @@
       await h.sleep(60);
       if (align !== 'left') { document.getElementById('v2-btn-align-' + align).click(); await h.sleep(30); }
     }
-    const origPrompt = window.prompt;
-    window.prompt = () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const dialogs = h.stubDialogs({ prompt: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' });
     document.getElementById('v2-btn-image').click();
     await h.sleep(120);
-    window.prompt = origPrompt;
+    dialogs.restore();
     const container = context === 'tableCell'
       ? h.tiptap().querySelectorAll('table td')[h.tiptap().querySelectorAll('table td').length - 1]
       : (context === 'mainFlow' ? h.tiptap() : h.tiptap().querySelectorAll('.two-columns-column')[context === 'twoColumnsLeft' ? 0 : 1]);
@@ -114,11 +113,10 @@
         document.getElementById('editor-container').classList.add('a4-preview');
         await h.focusAtEnd();
         const tinyPngDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-        const origPrompt = window.prompt;
-        window.prompt = () => tinyPngDataUri;
+        const dialogs = h.stubDialogs({ prompt: tinyPngDataUri });
         document.getElementById('v2-btn-image').click();
         await h.sleep(120);
-        window.prompt = origPrompt;
+        dialogs.restore();
         const img = h.tiptap().querySelector('img.editor-image');
         if (!img) return { pass: false, notes: 'image non insérée' };
         await h.selectAtomNode(img);

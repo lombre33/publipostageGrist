@@ -225,10 +225,12 @@ check('fermé puis rouvert : « Litiges » redevient replié (état par défaut)
 await page.keyboard.press('Escape'); await page.waitForTimeout(100);
 
 // dossier en attente : interrupteur local, écrit seulement quand un modèle y est rangé.
-await page.evaluate(() => { window.prompt = () => 'Archives'; TemplateOrganizeModal.open(); });
+await page.evaluate(() => TemplateOrganizeModal.open());
 await page.waitForTimeout(250);
 const nb = await center(page, '#template-organize-new-folder');
 await page.mouse.click(nb.x, nb.y); await page.waitForTimeout(250);
+// Le nom se tape dans la fenêtre de saisie du widget (js/dialogs.js), puis Entrée.
+await page.keyboard.type('Archives'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
 const pendBtn = await page.evaluate(() => { const b = document.querySelector('#template-organize-list .tom-pending-folder .tom-folder-default-btn'); if (!b) return null; const r = b.getBoundingClientRect(); const l = document.getElementById('template-organize-list').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, inList: r.top >= l.top - 1 && r.bottom <= l.bottom + 1 && r.bottom <= innerHeight }; });
 check('700x400 : le dossier tout juste créé est ramené en vue dans la liste, sans agrandir la fenêtre', !!pendBtn && pendBtn.inList, pendBtn);
 check('dossier en attente : il porte lui aussi l’interrupteur', !!pendBtn);

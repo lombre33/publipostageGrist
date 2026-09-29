@@ -13,10 +13,9 @@
   const cases = [];
 
   async function insertImageViaToolbar(h) {
-    const origPrompt = window.prompt;
-    window.prompt = () => DATA_PNG;
+    const dialogs = h.stubDialogs({ prompt: DATA_PNG });
     await h.clickButton('v2-btn-image');
-    window.prompt = origPrompt;
+    dialogs.restore();
     await h.sleep(80);
     return h.tiptap().querySelector('img.editor-image');
   }
@@ -40,10 +39,9 @@
       await h.focusAtEnd();
       // Chemin relatif servi par le serveur de test lui-même (même origine que la page) : un
       // vrai fetch() a bien lieu, sans dépendre d'un hôte externe ni se heurter au CORS.
-      const origPrompt = window.prompt;
-      window.prompt = () => '/img/grist-factory-logo.jpg';
+      const dialogs = h.stubDialogs({ prompt: '/img/grist-factory-logo.jpg' });
       await h.clickButton('v2-btn-image');
-      window.prompt = origPrompt;
+      dialogs.restore();
       await h.sleep(150);
       const img = h.tiptap().querySelector('img.editor-image');
       const src = img && img.getAttribute('src');
@@ -60,10 +58,9 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const origPrompt = window.prompt;
+      const dialogs = h.stubDialogs({ prompt: '/img/n-existe-pas-404.png' });
       const origAlert = window.alert;
       let alertShown = false;
-      window.prompt = () => '/img/n-existe-pas-404.png';
       window.alert = () => { alertShown = true; };
       await h.clickButton('v2-btn-image');
       // clickButton ne fait qu'un sleep(30) fixe - le bind() du bouton est async (fetch 404 puis
@@ -75,7 +72,7 @@
       while (!alertShown && !h.tiptap().querySelector('img.editor-image') && Date.now() < deadline) {
         await h.sleep(20);
       }
-      window.prompt = origPrompt;
+      dialogs.restore();
       window.alert = origAlert;
       await h.sleep(50);
       const img = h.tiptap().querySelector('img.editor-image');

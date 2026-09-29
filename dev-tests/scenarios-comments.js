@@ -195,10 +195,9 @@
       await pressPopupButton(h, '.v2-comment-popup-post');
       if (rowsFor(id).length !== 2) return { pass: false, notes: 'le fil ne compte pas 2 messages avant suppression : ' + rowsFor(id).length };
 
-      const vraiConfirm = window.confirm;
-      window.confirm = () => true; // le bouton Supprimer demande confirmation
+      const dialogs = h.stubDialogs({ confirm: true }); // le bouton Supprimer demande confirmation
       try { await pressPopupButton(h, '.v2-comment-popup-delete'); }
-      finally { window.confirm = vraiConfirm; }
+      finally { dialogs.restore(); }
 
       const rowsRestantes = rowsFor(id).length;
       const markGone = !document.querySelector('.tiptap .comment-mark[data-comment-id="' + id + '"]');
