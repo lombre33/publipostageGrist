@@ -395,11 +395,21 @@
     else el.removeAttribute('aria-disabled');
   }
 
+  // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule ET dès que le mode Lecture est affiché, choisi ou imposé. L'éditeur y est
+  // masqué mais ses commandes restaient actives : un clic sur Tableau, Sommaire ou Citation modifiait le modèle caché, et l'auto-save l'enregistrait sans
+  // rien montrer (audit du 2026-09-29, F1). Commenter suit son propre droit, jamais le mode. Modes, aperçu A4, réglages, arbre des modèles et export ne font
+  // pas partie de #v2-toolbar : ils restent actifs. Rappelée par applyAccessRights (droits) et switchMode (mode).
+  function applyFormattingBarLock() {
+    const formattingBar = document.getElementById('v2-toolbar');
+    if (!formattingBar) return;
+    const locked = isReadOnly() || currentMode === 'read';
+    Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked); });
+  }
+
   function applyAccessRights() {
     const rights = AccessRights.get();
     READ_ONLY_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), rights.readOnly));
-    const formattingBar = document.getElementById('v2-toolbar');
-    if (formattingBar) Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, rights.readOnly); });
+    applyFormattingBarLock();
     setAccessLocked(document.getElementById('v2-btn-comment'), !rights.canComment);
     EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport));
     READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
@@ -414,7 +424,8 @@
     if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
   }
 
-  // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights est arrêté en capture, avant tout gestionnaire.
+  // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en capture,
+  // avant tout gestionnaire.
   function wireAccessLockGuard() {
     document.addEventListener('click', event => {
       const target = event.target;
@@ -982,6 +993,7 @@
     if (isReadOnly()) mode = 'read';
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
+    applyFormattingBarLock();
     btnEdit.classList.toggle('active', mode === 'edit');
     btnRead.classList.toggle('active', mode === 'read');
     syncEditorVisibilityForMode();

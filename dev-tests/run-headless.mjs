@@ -88,6 +88,7 @@ const NODE_SCRIPTS = {
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
+  readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',

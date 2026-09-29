@@ -430,6 +430,46 @@
     },
   });
 
+  // Mode Lecture ordinaire (tous les droits, aucun réglage) - audit du 2026-09-29, F1 : l'éditeur y est masqué mais la barre de mise en forme restait
+  // active, un clic sur Tableau, Sommaire ou Citation modifiait le modèle caché et l'auto-save l'enregistrait sans rien montrer.
+  cases.push({
+    id: 'access_read_mode_greys_formatting_bar_and_writes_nothing',
+    description: 'Mode Lecture choisi (tous les droits) : barre de mise en forme grisée sauf Commenter, ses clics ne modifient ni le document ni le modèle enregistré ; tout redevient actif en Édition',
+    run: async (h) => {
+      const templateId = await savedTemplate(h, 'Lecture barre grisée');
+      const children = () => Array.from(document.getElementById('v2-toolbar').children);
+      const barLocked = () => children().filter(el => el.id !== 'v2-btn-comment').every(el => el.classList.contains('pp-access-locked') && el.getAttribute('aria-disabled') === 'true');
+      const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && !el.hasAttribute('aria-disabled'));
+      const stored = () => stub().getRow('Publipostage_Modeles', templateId).Contenu;
+      const modelWrites = () => stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
+      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-citation'];
+      const freeBefore = barFree();
+      document.getElementById('btn-mode-read').click();
+      await sleep(400);
+      const read = inReadMode();
+      const lockedInRead = barLocked();
+      // Ce qui doit rester actif en Lecture : les modes, l'aperçu A4, les réglages, l'arbre des modèles, l'export, Enregistrer et Commenter.
+      const stillActiveIds = ['btn-mode-edit', 'btn-mode-read', 'v2-a4-toggle', 'v2-btn-settings', 'tts-trigger', 'v2-export-pdf-group', 'v2-quality-group', 'btn-create-email', 'btn-save', 'v2-btn-comment'];
+      const wronglyGreyed = stillActiveIds.filter(id => locked(id));
+      const docBefore = Editor.getHTML();
+      const storedBefore = stored();
+      const writesBefore = modelWrites();
+      // Pas d'Annuler ici : les clics tombent dans un même groupe d'historique, un seul Annuler rendrait le document intact et masquerait les insertions.
+      insertIds.concat(['v2-btn-track-changes', 'v2-btn-bold']).forEach(id => document.getElementById(id).click());
+      await sleep(3000); // plus d'un tick d'auto-save (2,5 s)
+      const docUnchanged = Editor.getHTML() === docBefore;
+      const storedUnchanged = stored() === storedBefore && modelWrites() === writesBefore;
+      document.getElementById('btn-mode-edit').click();
+      await sleep(400);
+      const freeAgain = barFree() && !inReadMode();
+      document.getElementById('v2-btn-table').click();
+      await sleep(300);
+      const editStillInserts = (Editor.getHTML().match(/<table/g) || []).length === 1;
+      const pass = freeBefore && read && lockedInRead && wronglyGreyed.length === 0 && docUnchanged && storedUnchanged && freeAgain && editStillInserts;
+      return { pass, notes: JSON.stringify({ freeBefore, read, lockedInRead, wronglyGreyed, docUnchanged, storedUnchanged, freeAgain, editStillInserts }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();
