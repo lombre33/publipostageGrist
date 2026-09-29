@@ -287,7 +287,7 @@
         && JSON.stringify(level1.arrows) === JSON.stringify(['Service']) && level1.email === 'jean.dupont@ex.fr'
         && back.title === start.title && back.crumbsHidden
         && JSON.stringify(level1b.crumbs) === JSON.stringify(['VpProjet', 'Porteur']) && level1b.email === 'anne.martin@ex.fr' && level1b.emailChecked === false
-        && count === I18n.t('varLinked.insert', { count: 3 }) && !visible(modal())
+        && count === I18n.t('varLinked.insert', { count: 3 }) && count === 'Insérer 3 attributs' && !visible(modal())
         && JSON.stringify(seq) === JSON.stringify(['#VpProjet.Nom', ' ', '#VpProjet.Accompagnateur.Email', ' ', '#VpProjet.Porteur.NomPrenom', ' ', '#VpProjet.Porteur.Email'])
         && text === 'Projet Alpha jean.dupont@ex.fr Martin Anne anne.martin@ex.fr' && rules.every(r => !r);
       return { pass, notes: JSON.stringify({ start, level1, back, level1b, count, seq, text, rules }) };
@@ -316,7 +316,7 @@
       modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       await h.sleep(60);
       const nodes = badgeNodes(ed).length;
-      const pass = JSON.stringify(filtered) === JSON.stringify(['Email']) && clearedUp && stillChecked && count === I18n.t('varLinked.insert', { count: 1 }) && focused
+      const pass = JSON.stringify(filtered) === JSON.stringify(['Email']) && clearedUp && stillChecked && count === I18n.t('varLinked.insert', { count: 1 }) && count === 'Insérer 1 attribut' && focused
         && !visible(modal()) && nodes === 1;
       return { pass, notes: JSON.stringify({ filtered, clearedUp, stillChecked, count, focused, nodes }) };
     },

@@ -264,7 +264,7 @@
       const pass = opened && closed && JSON.stringify(saved) === JSON.stringify(COND_URGENT) && html.includes('data-condition') && activeAfterSave
         && removeShown && afterRemove == null
         && debug[0].includes(I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }))
-        && debug[1].includes(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 }));
+        && debug[1].includes(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 })) && debug[1].includes('2 lignes sur 3 remplissent la condition');
       return { pass, notes: JSON.stringify({ opened, closed, saved, activeAfterSave, removeShown, afterRemove, debug }) };
     },
   });
@@ -337,7 +337,7 @@
       para.forEach(n => seq.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
       const tel = rows.find(r => r.col === 'Telephone');
       const self = rows.find(r => r.col === 'NomPrenom');
-      const pass = opened && !visible(modal) && disabledAtZero && label === I18n.t('varLinked.insert', { count: 2 })
+      const pass = opened && !visible(modal) && disabledAtZero && label === I18n.t('varLinked.insert', { count: 2 }) && label === 'Insérer 2 attributs'
         && self && self.disabled && tel && !tel.disabled && tel.value === '06 11 22 33 44'
         && JSON.stringify(seq) === JSON.stringify(['Responsable : ', '#VcAnnuaire.NomPrenom', ' ', '#VcAnnuaire.Telephone', ' ', '#VcAnnuaire.Naissance', ' fin']);
       return { pass, notes: JSON.stringify({ opened, rows, disabledAtZero, label, seq }) };
@@ -436,6 +436,7 @@
       await h.sleep(50);
       const pass = batchRow1 === 'Dupont Jean|Juridique|Dossier A' && batchRow2 === 'Martin Anne||' && JSON.stringify(holds) === '[true,false,true]'
         && !columnOptions.some(v => v.indexOf('gristHelper_') !== -1)
+        && debug[1].startsWith('Dans « VcDossiers » : 1 ligne sur 3 remplit la condition.')
         && debug[1] === I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 3 }) + ' '
           + I18n.t('varCond.debug.first', { id: 1, label: ' (Dossier A)', value: 'Dupont Jean' });
       return { pass, notes: JSON.stringify({ batchRow1, batchRow2, holds, debug, helperOptions: columnOptions.filter(v => v.indexOf('gristHelper_') !== -1) }) };

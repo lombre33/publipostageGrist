@@ -7,7 +7,7 @@ const I18n = (function () {
   const STRINGS = {
     // --- Bandeau du haut : cluster modèle / actions ---
     'template.select': { fr: 'Modèle', en: 'Template' },
-    'template.newOption': { fr: '-- Nouveau modèle --', en: '-- New template --' },
+    'template.newOption': { fr: '— Nouveau modèle —', en: '— New template —' },
     'template.namePlaceholder': { fr: 'Nom du modèle', en: 'Template name' },
     'template.rename.tip': { fr: 'Renommer', en: 'Rename' },
     'template.rename.aria': { fr: 'Renommer le modèle', en: 'Rename template' },
@@ -42,7 +42,7 @@ const I18n = (function () {
     'toolbar.newDocument': { fr: 'Nouveau document', en: 'New document' },
     'toolbar.newEmail': { fr: 'Nouvel email', en: 'New email' },
     'toolbar.newMacro': { fr: 'Nouveau macro-modèle', en: 'New macro template' },
-    'toolbar.newFromTemplate': { fr: 'Créer à partir d’un template…', en: 'Create from a template…' },
+    'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
     'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
     'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },
     'toolbar.delete': { fr: 'Supprimer', en: 'Delete' },
@@ -191,17 +191,17 @@ const I18n = (function () {
     'linkConfig.changeMatch': { fr: 'Changer de correspondance', en: 'Change matching' },
 
     // --- Galerie de templates ---
-    'gallery.title': { fr: 'Créer à partir d’un template', en: 'Create from a template' },
+    'gallery.title': { fr: 'Créer à partir d’un modèle', en: 'Create from a template' },
     'gallery.searchPlaceholder': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
-    'gallery.useTemplate': { fr: 'Utiliser ce template', en: 'Use this template' },
+    'gallery.useTemplate': { fr: 'Utiliser ce modèle', en: 'Use this template' },
     'gallery.useWithNewTable': { fr: 'Utiliser avec une nouvelle table de données', en: 'Use with a new data table' },
     'gallery.backToGallery': { fr: 'Retour à la galerie', en: 'Back to gallery' },
-    'gallery.noMatch': { fr: 'Aucun template ne correspond à ce filtre.', en: 'No template matches this filter.' },
+    'gallery.noMatch': { fr: 'Aucun modèle ne correspond à ce filtre.', en: 'No template matches this filter.' },
     'gallery.allTag': { fr: 'Tous', en: 'All' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
-    'macro.modal.title': { fr: 'Macro modèle', en: 'Macro template' },
+    'macro.modal.title': { fr: 'Macro-modèle', en: 'Macro template' },
     'macro.modal.intro': { fr: 'Page de garde toujours incluse, puis des annexes choisies selon des règles évaluées sur la même ligne.', en: 'Cover page always included, then annexes chosen by rules evaluated on the same row.' },
     'macro.modal.nameLabel': { fr: 'Nom du macro-modèle', en: 'Macro template name' },
     'macro.modal.namePlaceholder': { fr: 'Nom du macro-modèle', en: 'Macro template name' },
@@ -212,7 +212,7 @@ const I18n = (function () {
     'macro.modal.removeSlot': { fr: 'Supprimer cette annexe', en: 'Remove this annex' },
     'macro.modal.ruleIf': { fr: 'Si', en: 'If' },
     'macro.modal.ruleOrIf': { fr: 'Ou si', en: 'Or if' },
-    'macro.modal.columnChoosePlaceholder': { fr: '-- Choisir une colonne --', en: '-- Choose a column --' },
+    'macro.modal.columnChoosePlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },
     'macro.modal.columnAdvanced': { fr: 'Autre (colonne d\'une autre table…)', en: 'Other (column from another table…)' },
     'macro.modal.columnAdvancedPlaceholder': { fr: 'Table.Colonne', en: 'Table.Column' },
     'macro.modal.typeDate': { fr: 'date', en: 'date' },
@@ -225,9 +225,9 @@ const I18n = (function () {
     'macro.modal.valuePlaceholder': { fr: 'Valeur', en: 'Value' },
     'macro.modal.valuePlaceholderDate': { fr: 'Valeur (ex. 2026-09-26 ou 26/09/2026)', en: 'Value (e.g. 2026-09-26)' },
     'macro.modal.valuePlaceholderBool': { fr: 'Valeur (Oui / Non)', en: 'Value (Yes / No)' },
-    'macro.modal.valueChoosePlaceholder': { fr: '-- Choisir une valeur --', en: '-- Choose a value --' },
+    'macro.modal.valueChoosePlaceholder': { fr: '— Choisir une valeur —', en: '— Choose a value —' },
     'macro.modal.valueAdvanced': { fr: 'Autre valeur…', en: 'Other value…' },
-    'macro.modal.choosePlaceholder': { fr: '-- Choisir un modèle --', en: '-- Choose a template --' },
+    'macro.modal.choosePlaceholder': { fr: '— Choisir un modèle —', en: '— Choose a template —' },
     'macro.modal.removeRule': { fr: 'Supprimer cette règle', en: 'Remove this rule' },
     'macro.modal.addRule': { fr: '+ Ajouter une condition (ou si)', en: '+ Add a condition (or if)' },
     'macro.modal.defaultLabel': { fr: 'Si aucune règle ne correspond', en: 'If no rule matches' },
@@ -238,7 +238,7 @@ const I18n = (function () {
     'macro.modal.saveError': { fr: 'Échec de l’enregistrement du macro-modèle.', en: 'Failed to save the macro template.' },
     'macro.summary.empty': { fr: 'Aucune page de garde ni annexe définie pour l’instant.', en: 'No cover page or annex defined yet.' },
     'macro.summary.noCover': { fr: 'aucune', en: 'none' },
-    'macro.summary.text': { fr: 'Page de garde : {cover} — {count} annexe(s) conditionnelle(s).', en: 'Cover page: {cover} — {count} conditional annex(es).' },
+    'macro.summary.text': { fr: 'Page de garde : {cover} — {count} {count|annexe conditionnelle|annexes conditionnelles}.', en: 'Cover page: {cover} — {count} conditional {count|annex|annexes}.' },
     'status.macroSaved': { fr: 'Macro-modèle enregistré.', en: 'Macro template saved.' },
 
     // --- Panneau Réglages ---
@@ -357,25 +357,25 @@ const I18n = (function () {
     'status.batchExportProgress': { fr: 'Export PDF en lot : {current}/{total}...', en: 'Batch PDF export: {current}/{total}...' },
     'status.exportError': { fr: 'Échec de l’export : aucun PDF généré.', en: 'Export failed: no PDF generated.' },
     'status.zipCompressing': { fr: 'Compression de l’archive ZIP...', en: 'Compressing the ZIP archive...' },
-    'status.batchExportDoneWithFailures': { fr: '{ok} PDF générés, {failed} échec(s) (voir la console) — archive ZIP téléchargée.', en: '{ok} PDFs generated, {failed} failure(s) (see console) — ZIP archive downloaded.' },
+    'status.batchExportDoneWithFailures': { fr: '{ok} PDF générés, {failed} {failed|échec|échecs} (voir la console) — archive ZIP téléchargée.', en: '{ok} PDFs generated, {failed} {failed|failure|failures} (see console) — ZIP archive downloaded.' },
     'status.batchExportDone': { fr: '{ok} PDF générés — archive ZIP téléchargée.', en: '{ok} PDFs generated — ZIP archive downloaded.' },
     // Export DOCX de toutes les lignes (ZIP) : mêmes messages que le lot PDF, avec le bon format (avant le 29/09, il annonçait des PDF).
     'status.loadingExportLibs': { fr: 'Chargement des bibliothèques d’export...', en: 'Loading export libraries...' },
     'status.exportLibsLoadError': { fr: 'Échec de chargement des bibliothèques d’export.', en: 'Failed to load export libraries.' },
     'status.batchExportProgressDocx': { fr: 'Export DOCX en lot : {current}/{total}...', en: 'Batch DOCX export: {current}/{total}...' },
     'status.exportErrorDocx': { fr: 'Échec de l’export : aucun DOCX généré.', en: 'Export failed: no DOCX generated.' },
-    'status.batchExportDoneWithFailuresDocx': { fr: '{ok} DOCX générés, {failed} échec(s) (voir la console) — archive ZIP téléchargée.', en: '{ok} DOCX files generated, {failed} failure(s) (see console) — ZIP archive downloaded.' },
+    'status.batchExportDoneWithFailuresDocx': { fr: '{ok} DOCX générés, {failed} {failed|échec|échecs} (voir la console) — archive ZIP téléchargée.', en: '{ok} DOCX files generated, {failed} {failed|failure|failures} (see console) — ZIP archive downloaded.' },
     'status.batchExportDoneDocx': { fr: '{ok} DOCX générés — archive ZIP téléchargée.', en: '{ok} DOCX files generated — ZIP archive downloaded.' },
     'status.pdfMerging': { fr: 'Assemblage du PDF unique...', en: 'Assembling the single PDF...' },
-    'status.mergedExportDoneWithFailures': { fr: '{ok} lignes réunies dans un seul PDF, {failed} échec(s) (voir la console) — fichier téléchargé.', en: '{ok} rows combined into a single PDF, {failed} failure(s) (see console) — file downloaded.' },
+    'status.mergedExportDoneWithFailures': { fr: '{ok} lignes réunies dans un seul PDF, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} rows combined into a single PDF, {failed} {failed|failure|failures} (see console) — file downloaded.' },
     'status.mergedExportDone': { fr: '{ok} lignes réunies dans un seul PDF — fichier téléchargé.', en: '{ok} rows combined into a single PDF — file downloaded.' },
-    'status.galleryLoadError': { fr: 'Impossible de charger la galerie de templates.', en: 'Unable to load the template gallery.' },
-    'status.templateLoadError': { fr: 'Impossible de charger ce template.', en: 'Unable to load this template.' },
-    'status.templateSavedAsNew': { fr: 'Template « {name} » enregistré comme nouveau modèle.', en: 'Template “{name}” saved as a new template.' },
-    'status.schemaLoadError': { fr: 'Impossible de charger le schéma de colonnes de ce template.', en: 'Unable to load this template’s column schema.' },
-    'status.noColumnsDefined': { fr: 'Ce template ne définit aucune colonne.', en: 'This template defines no columns.' },
+    'status.galleryLoadError': { fr: 'Impossible de charger la galerie de modèles.', en: 'Unable to load the template gallery.' },
+    'status.templateLoadError': { fr: 'Impossible de charger ce modèle.', en: 'Unable to load this template.' },
+    'status.templateSavedAsNew': { fr: 'Modèle « {name} » enregistré comme nouveau modèle.', en: 'Template “{name}” saved as a new template.' },
+    'status.schemaLoadError': { fr: 'Impossible de charger le schéma de colonnes de ce modèle.', en: 'Unable to load this template’s column schema.' },
+    'status.noColumnsDefined': { fr: 'Ce modèle ne définit aucune colonne.', en: 'This template defines no columns.' },
     'status.tableCreationError': { fr: 'Échec de la création de la table « {table} ».', en: 'Failed to create table “{table}”.' },
-    'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} colonne(s), modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} column(s), template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
+    'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} {count|colonne|colonnes}, modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} {count|column|columns}, template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
 
     // --- Auto-save (bandeau de conflit, main.js) ---
     'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
@@ -399,7 +399,7 @@ const I18n = (function () {
     'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
 
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
-    'linkConfig.columnPlaceholder': { fr: '— Choisissez une colonne —', en: '— Choose a column —' },
+    'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },
     'linkConfig.rowId': { fr: 'Identifiant de ligne', en: 'Row ID' },
     // Indice entre parenthèses derrière le nom d'une colonne Référence dans les listes de la fenêtre (Variables.describeColumn) : la table visée.
     'linkConfig.refHint': { fr: 'Référence → {table}', en: 'Reference → {table}' },
@@ -409,7 +409,7 @@ const I18n = (function () {
     // Liste déroulante avec recherche (js/search-select.js) : textes par défaut, la fenêtre de liaison passe les siens ci-dessus.
     'searchSelect.placeholder': { fr: 'Rechercher…', en: 'Search…' },
     'searchSelect.empty': { fr: 'Aucun résultat.', en: 'No results.' },
-    'searchSelect.count': { fr: '{count} résultat(s)', en: '{count} result(s)' },
+    'searchSelect.count': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
     // Même liste avec recherche pour une TABLE (Réglages > Accès) et pour un MODÈLE (macro-modèle) : SearchSelect.attachTables / attachTemplates.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
     'searchSelect.noTableMatch': { fr: 'Aucune table ne correspond.', en: 'No table matches.' },
@@ -422,7 +422,7 @@ const I18n = (function () {
     'linkConfig.previewComputing': { fr: 'Calcul de l’aperçu…', en: 'Computing preview…' },
     'linkConfig.previewTableEmpty': { fr: '« {table} » est vide.', en: '“{table}” is empty.' },
     'linkConfig.previewSingleton': { fr: 'Toujours la ligne n°{id} de « {table} », quelle que soit la ligne courante.', en: 'Always row #{id} of “{table}”, regardless of the current row.' },
-    'linkConfig.previewMatches': { fr: '{count} ligne(s) trouvée(s) dans « {table} » (n° {ids}).', en: '{count} row(s) found in “{table}” (# {ids}).' },
+    'linkConfig.previewMatches': { fr: '{count} {count|ligne trouvée|lignes trouvées} dans « {table} » (n° {ids}).', en: '{count} {count|row|rows} found in “{table}” (# {ids}).' },
     'linkConfig.previewNoMatch': { fr: 'Aucune ligne de « {table} » ne correspond à la ligne courante (valeur recherchée : {value}).', en: 'No row in “{table}” matches the current row (searched value: {value}).' },
     'linkConfig.previewUnavailable': { fr: 'Aperçu indisponible.', en: 'Preview unavailable.' },
     'linkConfig.chooseBeforeConfirm': { fr: 'Choisissez les deux colonnes avant de valider.', en: 'Choose both columns before confirming.' },
@@ -562,7 +562,7 @@ const I18n = (function () {
     'varCond.debug.computing': { fr: 'Calcul de l’aperçu…', en: 'Computing preview…' },
     'varCond.debug.currentMet': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la variable affiche « {value} ».', en: 'Selected row (#{id}): condition met, the variable shows “{value}”.' },
     'varCond.debug.currentNotMet': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la variable est masquée.', en: 'Selected row (#{id}): condition not met, the variable is hidden.' },
-    'varCond.debug.count': { fr: 'Dans « {table} » : {count} ligne(s) sur {total} remplissent la condition.', en: 'In “{table}”: {count} of {total} row(s) meet the condition.' },
+    'varCond.debug.count': { fr: 'Dans « {table} » : {count} {count|ligne|lignes} sur {total} {count|remplit|remplissent} la condition.', en: 'In “{table}”: {count} of {total} {total|row|rows} {count|meets|meet} the condition.' },
     'varCond.debug.first': { fr: 'Première : n° {id}{label}, qui afficherait « {value} ».', en: 'First: #{id}{label}, which would show “{value}”.' },
     'varCond.debug.none': { fr: 'Dans « {table} » : aucune des {total} lignes ne remplit la condition.', en: 'In “{table}”: none of the {total} rows meets the condition.' },
     'varCond.debug.emptyValue': { fr: '(vide)', en: '(empty)' },
@@ -592,7 +592,7 @@ const I18n = (function () {
     'varLinked.noteNoRecord': { fr: 'Aucune ligne sélectionnée dans Grist : valeurs indisponibles.', en: 'No row selected in Grist: values unavailable.' },
     'varLinked.noteNoLinkedRow': { fr: 'Aucune ligne de « {table} » liée à la ligne sélectionnée (n° {id}).', en: 'No row of “{table}” is linked to the selected row (#{id}).' },
     'varLinked.noteInsert': { fr: 'Les attributs cochés s’insèrent juste après la variable, séparés par une espace.', en: 'Checked attributes are inserted right after the variable, separated by a space.' },
-    'varLinked.insert': { fr: 'Insérer {count} attribut(s)', en: 'Insert {count} attribute(s)' },
+    'varLinked.insert': { fr: 'Insérer {count} {count|attribut|attributs}', en: 'Insert {count} {count|attribute|attributes}' },
     'varLinked.empty': { fr: 'Aucune autre colonne dans « {table} ».', en: 'No other column in “{table}”.' },
     'varLinked.noFilterMatch': { fr: 'Aucune colonne ne correspond au filtre.', en: 'No column matches the filter.' },
     'varLinked.attachmentValue': { fr: '(pièce jointe)', en: '(attachment)' },
@@ -647,15 +647,15 @@ const I18n = (function () {
     'varLoop.empty.blank': { fr: 'Laisser vide', en: 'Leave empty' },
     'varLoop.empty.textLabel': { fr: 'Texte affiché', en: 'Text shown' },
     'varLoop.empty.textPlaceholder': { fr: 'Ex. Aucune ligne', en: 'E.g. No rows' },
-    'varLoop.preview.linked': { fr: 'Ligne sélectionnée (n° {id}) : {count} ligne(s) liée(s).', en: 'Selected row (#{id}): {count} linked row(s).' },
-    'varLoop.preview.kept': { fr: 'Ligne sélectionnée (n° {id}) : {count} ligne(s) sur {total} retenue(s).', en: 'Selected row (#{id}): {count} of {total} row(s) kept.' },
+    'varLoop.preview.linked': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|ligne liée|lignes liées}.', en: 'Selected row (#{id}): {count} linked {count|row|rows}.' },
+    'varLoop.preview.kept': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|ligne|lignes} sur {total} {count|retenue|retenues}.', en: 'Selected row (#{id}): {count} of {total} {total|row|rows} kept.' },
     'varLoop.preview.noneLinked': { fr: 'Ligne sélectionnée (n° {id}) : aucune ligne liée.', en: 'Selected row (#{id}): no linked row.' },
-    'varLoop.preview.noneKept': { fr: 'Ligne sélectionnée (n° {id}) : aucune des {total} ligne(s) liée(s) n’est retenue.', en: 'Selected row (#{id}): none of the {total} linked row(s) is kept.' },
+    'varLoop.preview.noneKept': { fr: 'Ligne sélectionnée (n° {id}) : {total|la ligne liée n’est pas retenue|aucune des {total} lignes liées n’est retenue}.', en: 'Selected row (#{id}): {total|the linked row is not kept|none of the {total} linked rows is kept}.' },
     'varLoop.preview.noSource': { fr: 'Ligne sélectionnée (n° {id}) : la boucle ne trouve aucune ligne à parcourir depuis cette page.', en: 'Selected row (#{id}): the loop finds no rows to go over from this page.' },
     'varLoop.preview.row': { fr: 'Le tableau en affiche {count} : {values}.', en: 'The table shows {count}: {values}.' },
     'varLoop.preview.item': { fr: 'La liste en affiche {count} : {values}.', en: 'The list shows {count}: {values}.' },
-    'varLoop.preview.paragraph': { fr: 'Le paragraphe se répète {count} fois : {values}.', en: 'The paragraph repeats {count} time(s): {values}.' },
-    'varLoop.preview.heading': { fr: 'Le titre se répète {count} fois : {values}.', en: 'The heading repeats {count} time(s): {values}.' },
+    'varLoop.preview.paragraph': { fr: 'Le paragraphe se répète {count} fois : {values}.', en: 'The paragraph repeats {count} {count|time|times}: {values}.' },
+    'varLoop.preview.heading': { fr: 'Le titre se répète {count} fois : {values}.', en: 'The heading repeats {count} {count|time|times}: {values}.' },
     'varLoop.preview.inline': { fr: 'La phrase affiche « {text} ».', en: 'The sentence shows “{text}”.' },
     'varLoop.effect.header': { fr: 'Le tableau garde son en-tête seul.', en: 'The table keeps its header only.' },
     'varLoop.effect.rowText': { fr: 'Le tableau affiche une ligne « {text} ».', en: 'The table shows a row “{text}”.' },
@@ -666,9 +666,9 @@ const I18n = (function () {
     'varLoop.effect.text': { fr: 'Le paragraphe affiche « {text} ».', en: 'The paragraph shows “{text}”.' },
     'varLoop.effect.blank': { fr: 'Le paragraphe reste vide.', en: 'The paragraph stays empty.' },
     'varLoop.effect.inlineBlank': { fr: 'La variable reste vide.', en: 'The variable stays empty.' },
-    'varLoop.stats.same': { fr: 'Dans « {table} » : {count} ligne(s) retenue(s) pour chaque ligne.', en: 'In “{table}”: {count} row(s) kept for every row.' },
+    'varLoop.stats.same': { fr: 'Dans « {table} » : {count} {count|ligne retenue|lignes retenues} pour chaque ligne.', en: 'In “{table}”: {count} {count|row|rows} kept for every row.' },
     'varLoop.stats.all': { fr: 'Dans « {table} » : de {min} à {max} lignes retenues par ligne, aucune ligne sans.', en: 'In “{table}”: {min} to {max} rows kept per row, none without.' },
-    'varLoop.stats.some': { fr: 'Dans « {table} » : {count} ligne(s) sur {total} ont au moins une ligne retenue. Pour la ligne n° {id}, aucune : {effect}', en: 'In “{table}”: {count} of {total} row(s) have at least one row kept. For row #{id}, none: {effect}' },
+    'varLoop.stats.some': { fr: 'Dans « {table} » : {count} {count|ligne|lignes} sur {total} {count|a|ont} au moins une ligne retenue. Pour la ligne n° {id}, aucune : {effect}', en: 'In “{table}”: {count} of {total} {total|row|rows} {count|has|have} at least one row kept. For row #{id}, none: {effect}' },
     'varLoop.stats.none': { fr: 'Dans « {table} » : aucune des {total} lignes n’a de ligne retenue.', en: 'In “{table}”: none of the {total} rows has a row kept.' },
     'varLoop.remove': { fr: 'Retirer la boucle', en: 'Remove loop' },
     'varLoop.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : la boucle n’a pas été enregistrée.', en: 'The variable was moved or deleted while editing: the loop was not saved.' },
@@ -676,12 +676,46 @@ const I18n = (function () {
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';
 
+  // Pluriel sans parenthèses : `{n|forme au singulier|forme au pluriel}` prend l'une ou l'autre selon la valeur de la variable `n` (règles de la langue :
+  // en français 0 et 1 sont au singulier, en anglais seul 1) - « {count} {count|ligne trouvée|lignes trouvées} » donne « 1 ligne trouvée », « 3 lignes
+  // trouvées ». Une forme peut contenir d'autres `{variable}` ou un autre pluriel. Traité AVANT les variables simples, pour que le texte d'une variable
+  // (nom de colonne, valeur saisie) ne soit jamais lu comme un pluriel.
+  const pluralRules = {};
+  function expandPlurals(s, vars) {
+    let out = '';
+    let i = 0;
+    while (i < s.length) {
+      const open = s.indexOf('{', i);
+      if (open < 0) return out + s.slice(i);
+      out += s.slice(i, open);
+      const head = /^\{(\w+)\|/.exec(s.slice(open));
+      if (!head || !vars || !(head[1] in vars)) { out += '{'; i = open + 1; continue; }
+      let depth = 0;
+      let split = -1;
+      let close = -1;
+      for (let j = open; j < s.length && close < 0; j++) {
+        if (s[j] === '{') depth++;
+        else if (s[j] === '}') { if (--depth === 0) close = j; }
+        else if (s[j] === '|' && depth === 1 && j >= open + head[0].length && split < 0) split = j;
+      }
+      if (close < 0 || split < 0) { out += '{'; i = open + 1; continue; }
+      const rules = pluralRules[lang] || (pluralRules[lang] = new Intl.PluralRules(lang));
+      const chosen = rules.select(Number(vars[head[1]])) === 'one' ? s.slice(open + head[0].length, split) : s.slice(split + 1, close);
+      out += expandPlurals(chosen, vars);
+      i = close + 1;
+    }
+    return out;
+  }
+
   function t(key, vars) {
     const entry = STRINGS[key];
     if (!entry) { console.warn('[I18n] clé inconnue :', key); return key; }
     if (!entry[lang]) console.warn('[I18n] traduction "' + lang + '" manquante pour "' + key + '" (repli FR).');
     let s = entry[lang] || entry.fr;
-    if (vars) Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+    if (vars) {
+      s = expandPlurals(s, vars);
+      Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+    }
     return s;
   }
 

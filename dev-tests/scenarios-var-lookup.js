@@ -221,7 +221,7 @@
       document.getElementById('link-config-cancel').click();
       await closed;
       const expected = I18n.t('linkConfig.previewMatches', { count: 1, table: 'LkProjets', ids: '1' });
-      const pass = source.value === 'Projet_Code' && cible.value === 'Code' && preview === expected;
+      const pass = source.value === 'Projet_Code' && cible.value === 'Code' && preview === expected && preview === '1 ligne trouvée dans « LkProjets » (n° 1).';
       return { pass, notes: JSON.stringify({ preview, expected, source: source.value, cible: cible.value }) };
     },
   });

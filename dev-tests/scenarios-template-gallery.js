@@ -1,4 +1,4 @@
-// Suite "templateGallery" - galerie « Créer à partir d'un template » (js/template-gallery.js, câblée par js/main.js:wireTemplateGalleryModal).
+// Suite "templateGallery" - galerie « Créer à partir d'un modèle » (js/template-gallery.js, câblée par js/main.js:wireTemplateGalleryModal).
 //
 // Les trois modèles de templates-gallery-dev/ (« Test — … », « Vitrine des fonctionnalités ») ne servent qu'au protocole de test manuel : le dossier reste
 // publié sur Pages, mais la galerie ne le lit que si l'adresse du widget contient `?dev`. Un utilisateur ordinaire ne les voit donc jamais, ni dans la
@@ -90,7 +90,7 @@
 
   cases.push({
     id: 'gallery_window_lists_only_real_templates_without_dev_and_still_opens_a_card',
-    description: 'La fenêtre « Créer à partir d’un template », ouverte sans ?dev, ne montre aucune carte de test ; les vrais modèles y sont et s’ouvrent',
+    description: 'La fenêtre « Créer à partir d’un modèle », ouverte sans ?dev, ne montre aucune carte de test ; les vrais modèles y sont et s’ouvrent',
     run: async () => {
       const restore = setSearch('');
       const open = document.getElementById('v2-btn-new-from-template');

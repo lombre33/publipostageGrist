@@ -302,6 +302,7 @@
       const pass = opened && closed && title === I18n.t('varLoop.title', { table: 'LpLignes' })
         && source.includes(I18n.t('varLoop.source.link', { table: 'LpLignes', via: 'LpLignes.Facture' }))
         && JSON.stringify(segs) === JSON.stringify([I18n.t('varLoop.repeat.row') + '*', I18n.t('varLoop.repeat.cell')])
+        && before[0].startsWith('Ligne sélectionnée (n° 1) : 3 lignes liées.')
         && before[0] === I18n.t('varLoop.preview.linked', { id: 1, count: 3 }) + ' '
           + I18n.t('varLoop.preview.row', { count: 3, values: 'Livret stagiaire imprimé, Journée de formation intra, Déplacement du formateur' })
         && before[1] === I18n.t('varLoop.stats.some', { table: 'LpFactures', count: 2, total: 3, id: 3, effect: 'le tableau garde son en-tête seul.' })
@@ -353,6 +354,7 @@
         && JSON.stringify(directionLabels) === JSON.stringify([I18n.t('varLoop.sort.az'), I18n.t('varLoop.sort.za')])
         && lines[0] === I18n.t('varLoop.preview.kept', { id: 1, count: 3, total: 5 }) + ' '
           + I18n.t('varLoop.preview.inline', { text: 'Karim Benali, Léa Fontaine' + I18n.t('varLoop.lastSeparatorDefault') + 'Sophie Laurent' })
+        && lines[1].startsWith('Dans « LpFactures » : 1 ligne sur 3 a au moins une ligne retenue.')
         && lines[1] === I18n.t('varLoop.stats.some', { table: 'LpFactures', count: 1, total: 3, id: 2, effect: 'le paragraphe disparaît.' })
         && JSON.stringify(saved) === JSON.stringify({
           repeat: 'inline', table: 'LpParticipants', filter: { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Présent' }] },

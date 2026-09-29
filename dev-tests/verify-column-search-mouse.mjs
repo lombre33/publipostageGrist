@@ -235,7 +235,7 @@ const SECTIONS = {
     const open = await panelInfo(cond);
     check('condition : un vrai clic ouvre la liste, entièrement dans le panneau Grist, la zone de recherche a le focus', !!open && open.inside && open.searchFocused, open);
     check('condition : le choix « rien » en tête, un intitulé par table, la saisie avancée en dernier, le type derrière les colonnes',
-      !!open && open.rows[0] === '-- Choisir une colonne --' && open.rows[open.rows.length - 1] === 'Autre (colonne d\'une autre table…)' && open.heads.length === 6
+      !!open && open.rows[0] === '— Choisir une colonne —' && open.rows[open.rows.length - 1] === 'Autre (colonne d\'une autre table…)' && open.heads.length === 6
       && open.heads[0] === 'CsDossiers (table de la page)' && open.rows.includes('Responsable (référence)') && open.rows.includes('Actif (case à cocher)'), open);
     check('condition : la liste défile (colonnes nombreuses)', !!open && open.scrollable, open);
     const list = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-list');
@@ -452,8 +452,8 @@ const SECTIONS = {
     check('macro : le clic choisit Responsable, l’indication de type s’affiche, la fenêtre reste ouverte', chosen.value === 'Responsable' && chosen.hint === 'référence' && chosen.modalOpen, chosen);
     const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
     const lists = [
-      { name: 'de la page de garde', trigger: '#macro-editor-cover + .ss-wrap .ss-trigger', select: '#macro-editor-cover', rows: ['-- Choisir un modèle --'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
-      { name: 'du modèle d’une règle', trigger: '.macro-rule-modele + .ss-wrap .ss-trigger', select: '.macro-rule-modele', rows: ['-- Choisir un modèle --'].concat(documents), typed: 'bu', row: 'Notification_bureau', value: '12' },
+      { name: 'de la page de garde', trigger: '#macro-editor-cover + .ss-wrap .ss-trigger', select: '#macro-editor-cover', rows: ['— Choisir un modèle —'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
+      { name: 'du modèle d’une règle', trigger: '.macro-rule-modele + .ss-wrap .ss-trigger', select: '.macro-rule-modele', rows: ['— Choisir un modèle —'].concat(documents), typed: 'bu', row: 'Notification_bureau', value: '12' },
       { name: '« Si aucune règle ne correspond »', trigger: '.macro-slot-default-select + .ss-wrap .ss-trigger', select: '.macro-slot-default-select', rows: ['Ne rien inclure'].concat(documents.map(nom => 'Utiliser « ' + nom + ' »')), typed: 'base', row: 'Utiliser « Notification_base »', value: '11' },
     ];
     for (const list of lists) {
