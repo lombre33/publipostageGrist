@@ -257,7 +257,7 @@ const ReaderMode = (function () {
     resolveTocMarkers(wrapper);
     if (renderId !== renderGeneration) return;
     container.innerHTML = '';
-    if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = 'Attention : certaines variables n\'ont pas pu être résolues.'; container.appendChild(warn); }
+    if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
     await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
   }
@@ -272,8 +272,8 @@ const ReaderMode = (function () {
     tocMarkers.forEach(marker => {
       marker.innerHTML = '';
       marker.classList.add('toc-resolved');
-      const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = 'Sommaire'; marker.appendChild(title);
-      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = 'Aucun titre trouvé.'; marker.appendChild(empty); return; }
+      const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = I18n.t('pdf.tocTitle'); marker.appendChild(title);
+      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = I18n.t('pdf.tocEmpty'); marker.appendChild(empty); return; }
       entries.forEach(entry => {
         const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
         marker.appendChild(line);

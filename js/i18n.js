@@ -122,6 +122,7 @@ const I18n = (function () {
     'font.sizeDecrease': { fr: 'Diminuer la taille', en: 'Decrease size' },
     'font.sizeIncrease': { fr: 'Augmenter la taille', en: 'Increase size' },
     'font.family': { fr: 'Police', en: 'Font' },
+    'font.robotoDefault': { fr: 'Roboto (par défaut)', en: 'Roboto (default)' },
     'color.text.tip': { fr: 'Couleur de police', en: 'Font color' },
     'color.text.aria': { fr: 'Appliquer la dernière couleur de police', en: 'Apply last font color' },
     'color.textCaret.tip': { fr: 'Choisir une couleur', en: 'Choose a color' },
@@ -307,9 +308,10 @@ const I18n = (function () {
       en: 'Grist Factory builds free and open-source widgets for Grist. Publipostage+ is one of them: write contracts, invoices and letters straight from your data, without a single line of code.',
     },
 
-    // --- Mode Lecture : état vide (js/reader-mode.js:render, aucune ligne sélectionnée) ---
+    // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue ---
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
     'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
+    'reader.unresolvedVariables': { fr: 'Attention : certaines variables n’ont pas pu être résolues.', en: 'Warning: some variables could not be resolved.' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
@@ -477,7 +479,7 @@ const I18n = (function () {
     'footnotePopup.ok': { fr: 'OK', en: 'OK' },
     'footnotePopup.placeholder': { fr: 'Texte de la note…', en: 'Note text…' },
 
-    // --- Sommaire (placeholder avant résolution) ---
+    // --- Sommaire (placeholder avant résolution) : montré par l'éditeur (NodeView) ET écrit dans le HTML enregistré/copié (renderHTML, js/editor-nodes.js) ---
     'toc.placeholder': { fr: 'Sommaire (généré automatiquement à partir des titres)', en: 'Table of contents (generated automatically from headings)' },
 
     // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
@@ -504,6 +506,9 @@ const I18n = (function () {
     // --- Pastille flottante d'édition d'en-tête/pied (js/editor.js:renderHfPill) ---
     'hf.zoneHeader': { fr: 'En-tête', en: 'Header' },
     'hf.zoneFooter': { fr: 'Pied de page', en: 'Footer' },
+    // Zones fantômes de la page vide (js/header-footer-preview.js:renderPaginationOverlay) : un clic y ouvre l'édition.
+    'hf.addHeader': { fr: 'Ajouter un en-tête', en: 'Add a header' },
+    'hf.addFooter': { fr: 'Ajouter un pied de page', en: 'Add a footer' },
     'hf.differentFirstPage': { fr: 'Première page différente', en: 'Different first page' },
     'hf.variantDefault': { fr: 'Pages normales', en: 'Regular pages' },
     'hf.variantFirst': { fr: 'Page 1', en: 'Page 1' },
@@ -513,7 +518,8 @@ const I18n = (function () {
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
 
-    // --- Sommaire exporté en PDF (js/pdf-export.js:buildTocStack) ---
+    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack) et affiché en mode Lecture (js/reader-mode.js:resolveTocMarkers) : les deux
+    // disent la même chose, le mode Lecture étant l'aperçu de l'export ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
 

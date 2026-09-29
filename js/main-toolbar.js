@@ -406,7 +406,7 @@ const MainToolbar = (function () {
 
   const FONT_SIZE_PRESETS = ['8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt', '20pt', '24pt', '28pt', '32pt', '36pt', '48pt', '72pt'];
   const FONT_FAMILY_PRESETS = [
-    { value: 'Roboto', label: 'Roboto (par défaut)' },
+    { value: 'Roboto', labelKey: 'font.robotoDefault' },
     { value: 'Arial', label: 'Arial' },
     { value: 'Times New Roman', label: 'Times New Roman' },
     { value: 'Georgia', label: 'Georgia' },
@@ -417,7 +417,10 @@ const MainToolbar = (function () {
   function wireCompactFontSizeControls() {
     const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
 
-    const fontHtml = FONT_FAMILY_PRESETS.map(o => `<button data-action="${o.value}">${o.label}</button>`).join('');
+    // data-i18n : le panneau flotte dans <body>, donc I18n.setLang() retraduit ce bouton sans qu'il faille rebâtir le panneau.
+    const fontHtml = FONT_FAMILY_PRESETS.map(o => o.labelKey
+      ? `<button data-action="${o.value}" data-i18n="${o.labelKey}">${I18n.t(o.labelKey)}</button>`
+      : `<button data-action="${o.value}">${o.label}</button>`).join('');
     const fontPanel = EditorCore.createFloatingPanel('v2-format-panel', fontHtml, (value) => {
       withSavedSelection(chain => chain.setFontFamily(value));
       EditorCore.closeDropdownPanel();

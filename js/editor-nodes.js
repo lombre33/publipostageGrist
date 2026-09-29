@@ -1010,8 +1010,9 @@ const EditorNodes = (function () {
     });
   }
 
-  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder statique (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu
-  // vivant via un NodeView, isolé du modèle par `ignoreMutation`.
+  // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu vivant via
+  // un NodeView, isolé du modèle par `ignoreMutation`. Le texte du placeholder suit la langue de l'interface (même clé que le NodeView) : il n'est lu par
+  // personne au rechargement (`parseHTML` ne regarde que la classe), mais Ctrl+C le colle tel quel dans un autre document ou une autre application.
   function createTocNode(Node) {
     return Node.create({
       name: 'toc',
@@ -1019,7 +1020,7 @@ const EditorNodes = (function () {
       atom: true,
       selectable: true,
       parseHTML() { return [{ tag: 'div.toc-marker' }]; },
-      renderHTML() { return ['div', { class: 'toc-marker' }, 'Sommaire (généré automatiquement à partir des titres)']; },
+      renderHTML() { return ['div', { class: 'toc-marker' }, I18n.t('toc.placeholder')]; },
       addCommands() {
         return { insertToc: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
       },
