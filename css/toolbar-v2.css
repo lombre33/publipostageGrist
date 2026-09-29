@@ -259,6 +259,9 @@
 .macro-rule-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .macro-rule-line-detail { padding-left: 39px; box-sizing: border-box; }
 .macro-rule-line-detail .macro-rule-value-slot { min-width: 90px; }
+/* L'indication de type (« nombre », « date »…) et l'avertissement « colonne absente », enfants directs de la règle, commencent sous la colonne comme la seconde
+   ligne, et comme dans la fenêtre de condition (css/variable-actions.css : .var-condition-rules .macro-rule-column-type) ; le sélecteur ne vaut que si la règle a un corps. */
+.macro-rule-body ~ .macro-rule-column-type { padding-left: 39px; box-sizing: border-box; }
 .macro-rule-connector { flex: none; font-size: 11px; font-weight: 700; color: var(--text-muted); width: 34px; }
 .macro-rule-column, .macro-rule-value { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-row select { flex: none; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); }

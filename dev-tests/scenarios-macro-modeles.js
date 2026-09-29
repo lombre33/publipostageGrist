@@ -504,21 +504,21 @@
 
   // --- Règle d'une annexe sur DEUX lignes (audit UX/UI du 2026-09-29, F8) : cinq contrôles sur une seule ligne se chevauchaient dans la fenêtre de 520 px - la
   // liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait. Ligne 1 : « Si », colonne, opérateur ; ligne 2, sous la colonne : valeur, →, modèle ;
-  // la croix, à droite, retire la règle entière ; l'avertissement « colonne absente » reste sur sa propre ligne, en dessous. Vérifie l'état RENDU (rectangles et
+  // la croix, à droite, retire la règle entière ; l'avertissement « colonne absente » et l'indication de type (« nombre ») restent sur leur propre ligne, en dessous, et commencent sous la colonne (choix « Aligner » d'Antoine, 2026-09-29). Vérifie l'état RENDU (rectangles et
   // elementFromPoint), à la taille du harnais ; le même point est mesuré à 700×400, à la vraie souris, en clair et en sombre, par la section `ruleRows` de
   // verify-column-search-mouse.mjs (avec la fenêtre de condition et le filtre d'une boucle, qui gardent leur ligne unique). ---
   cases.push({
     id: 'macro_rule_two_lines_no_overlap',
-    description: 'La règle d’une annexe tient sur deux lignes (« Si », colonne, opérateur ; puis valeur, →, modèle sous la colonne), aucun contrôle n’en recouvre un autre, la croix est centrée sur les deux et l’avertissement passe dessous',
+    description: 'La règle d’une annexe tient sur deux lignes (« Si », colonne, opérateur ; puis valeur, →, modèle sous la colonne), aucun contrôle n’en recouvre un autre, la croix est centrée sur les deux, l’avertissement et l’indication de type passent dessous, sous la colonne',
     run: async (h) => {
       await h.resetEditor();
-      window.__gristStub.setVariables('DossiersRuleTwoLinesTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      window.__gristStub.setVariables('DossiersRuleTwoLinesTest', { TypeDossier: 'Text', Montant: 'Numeric', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
       await GristAPI.refreshSchema();
-      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier' }, 'DossiersRuleTwoLinesTest'); // Statut absent du record : l'avertissement s'affiche plus bas
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier', Montant: 10 }, 'DossiersRuleTwoLinesTest'); // Statut absent du record : l'avertissement s'affiche plus bas
       MacroEditor.openModal({ id: null, nom: 'x', macroSlots: { slots: [
         { type: 'conditional', rules: [
           { column: 'TypeDossier', operator: '≠', value: 'Entreprise', modeleId: null },
-          { column: 'TypeDossier', operator: '=', value: 'Particulier', modeleId: null },
+          { column: 'Montant', operator: '>', value: '5', modeleId: null },
         ], defaultModeleId: null },
       ] } });
       await h.sleep(30);
@@ -536,6 +536,8 @@
         remove: row.querySelector('.macro-rule-remove'),
       });
       const overlap = (a, c) => Math.min(a.r, c.r) - Math.max(a.l, c.l) > 0.5 && Math.min(a.b, c.b) - Math.max(a.t, c.t) > 0.5;
+      // Le bord gauche du TEXTE d'un élément (pas de sa boîte : l'indication de type prend toute la largeur de la règle et se décale par son retrait).
+      const textLeft = el => { const range = document.createRange(); range.selectNodeContents(el); const rects = range.getClientRects(); return rects.length ? rects[0].left : null; };
 
       const rows = Array.from(document.querySelectorAll('#macro-editor-modal .macro-rule-row'));
       const problems = [];
@@ -573,6 +575,13 @@
       });
       // Deux règles se suivent sans se chevaucher.
       if (rows.length === 2 && rows[1].getBoundingClientRect().top < rows[0].getBoundingClientRect().bottom - 0.5) problems.push('les deux règles se chevauchent');
+      // L'indication de type (« nombre ») de la seconde règle : sous la seconde ligne, et son texte commence sous la colonne, comme dans la fenêtre de condition.
+      const typeHint = rows[1] && rows[1].querySelector('.macro-rule-column-type');
+      if (!typeHint || typeHint.textContent.trim() !== 'nombre') problems.push('l’indication de type « nombre » ne s’affiche pas (' + (typeHint ? typeHint.textContent : 'absente') + ')');
+      else if (measured[1]) {
+        if (Math.abs(textLeft(typeHint) - measured[1].column.l) > 2) problems.push('l’indication de type ne commence pas sous la colonne (' + Math.round(textLeft(typeHint)) + ' au lieu de ' + Math.round(measured[1].column.l) + ')');
+        if (box(typeHint).t < Math.max(measured[1].value.b, measured[1].model.b) - 0.5) problems.push('l’indication de type n’est pas sous la seconde ligne');
+      }
 
       // L'avertissement « colonne absente » : sur sa propre ligne, sous la valeur et le modèle, sans rien recouvrir.
       const firstRow = rows[0];
@@ -588,6 +597,7 @@
         const lower = Math.max(box(parts.value).b, box(parts.model).b);
         if (hb.t < lower - 0.5) problems.push('l’avertissement n’est pas sous la seconde ligne (' + Math.round(hb.t) + ' < ' + Math.round(lower) + ')');
         ['column', 'operator', 'value', 'arrow', 'model', 'remove'].forEach(k => { if (overlap(hb, box(parts[k]))) problems.push('l’avertissement recouvre ' + k); });
+        if (Math.abs(textLeft(hint) - box(parts.column).l) > 2) problems.push('l’avertissement ne commence pas sous la colonne (' + Math.round(textLeft(hint)) + ' au lieu de ' + Math.round(box(parts.column).l) + ')');
       }
       return { pass: problems.length === 0, notes: JSON.stringify({ problems, firstRule: measured[0] && Object.fromEntries(Object.entries(measured[0]).map(([k, v]) => [k, [Math.round(v.l), Math.round(v.t), Math.round(v.w), Math.round(v.h)]])) }) };
     },

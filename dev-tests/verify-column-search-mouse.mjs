@@ -570,6 +570,29 @@ const SECTIONS = {
         !!rule && b.column.w >= 150 && b.model.w >= 150 && b.operator.w >= 40 && b.value.w >= 90, rule && { column: b.column.w, model: b.model.w, operator: b.operator.w, value: b.value.w });
       check(`macro (${label}) : la croix est à droite des deux lignes et centrée dessus`,
         !!rule && b.remove.l >= Math.max(b.operator.r, b.model.r) - 0.5 && Math.abs(b.remove.cy - (b.column.t + b.model.b) / 2) <= 3, rule);
+      // Une colonne typée choisie à la vraie souris : son indication de type (« nombre ») s'affiche sous la seconde ligne et commence sous la colonne, comme dans la fenêtre de condition.
+      const columnField = await reveal(macro + ' .macro-rule-column-wrap .ss-trigger', macro + ' .modal-content');
+      await page.mouse.click(columnField.x, columnField.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type('mont');
+      await page.waitForTimeout(100);
+      const amount = await rowCenter(macro, 'Montant');
+      if (amount) await page.mouse.click(amount.x, amount.y);
+      await page.waitForTimeout(200);
+      const typed = await page.evaluate(() => {
+        const row = document.querySelector('#macro-editor-modal .macro-rule-row');
+        const hint = row.querySelector('.macro-rule-column-type');
+        const range = document.createRange();
+        range.selectNodeContents(hint);
+        const text = range.getClientRects()[0];
+        const box = el => el.getBoundingClientRect();
+        return {
+          text: hint.textContent, textLeft: text ? text.left : null, columnLeft: box(row.querySelector('.macro-rule-column-wrap .ss-trigger')).left,
+          hintTop: box(hint).top, modelBottom: box(row.querySelector('.macro-rule-modele + .ss-wrap .ss-trigger')).bottom, hintRight: box(hint).right, rowRight: box(row).right,
+        };
+      });
+      check(`macro (${label}) : la colonne « Montant » choisie à la vraie souris affiche « nombre » sous la seconde ligne, à partir de la colonne (comme dans la fenêtre de condition)`,
+        typed.text === 'nombre' && typed.textLeft !== null && Math.abs(typed.textLeft - typed.columnLeft) <= 2 && typed.hintTop >= typed.modelBottom - 0.5 && typed.hintRight <= typed.rowRight + 0.5, typed);
       // Un vrai clic sur la croix retire la règle entière ; deux « + Ajouter une condition » en remettent deux, l'une sous l'autre.
       await clickCenter(macro + ' .macro-rule-remove');
       const afterRemove = await count();
