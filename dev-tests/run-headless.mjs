@@ -69,6 +69,7 @@ const GROUPS = {
   varCondition: 'scenarios-var-condition',
   varLoop: 'scenarios-var-loop',
   varPath: 'scenarios-var-path',
+  varLookup: 'scenarios-var-lookup',
   linkConfig: 'scenarios-link-config',
   pdfBatch: 'scenarios-pdf-batch',
   accessRights: 'scenarios-access-rights',

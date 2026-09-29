@@ -311,6 +311,18 @@ const Variables = (function () {
     return (Array.isArray(value) && value[0] === 'L') ? value.slice(1) : value;
   }
 
+  // Ligne brute (fetchTable) de la ligne courante de la page, pour une colonne que grist.onRecord n'a PAS livrée (`record[colonne] === undefined`, la clé
+  // absente : un champ rapporté - colonne à formule créée depuis une autre vue - qui n'est pas cochée dans les colonnes de CE widget tant que
+  // includeColumns:'normal' ne l'a pas complétée, cf. js/grist-api.js:init). Lue une seule fois par ligne livrée : chaque livraison est un NOUVEL objet, la
+  // WeakMap oublie donc d'elle-même la lecture précédente, et plusieurs colonnes absentes de la même ligne partagent une seule lecture de la table.
+  // null sans identifiant de ligne (ligne « nouvelle ») ou si la lecture échoue.
+  const rawRowByRecord = new WeakMap();
+  function rawRowOf(table, record) {
+    if (!record || typeof record !== 'object' || record.id == null) return Promise.resolve(null);
+    if (!rawRowByRecord.has(record)) rawRowByRecord.set(record, GristAPI.fetchRowById(table, record.id).catch(() => null));
+    return rawRowByRecord.get(record);
+  }
+
   // Valeur de la colonne source d'une règle "match" pour la ligne courante. Une colonne Référence comparée à l'identifiant de ligne de la table cible doit
   // fournir l'identifiant RÉFÉRENCÉ : fetchTable (export en lot) le donne tel quel, un entier, mais grist.onRecord (mode Lecture, export de la ligne
   // courante) livre la valeur de la colonne AFFICHÉE par la référence (ex. "Dupont Jean"), ou un objet Reference quand cette valeur est un nombre
@@ -322,10 +334,15 @@ const Variables = (function () {
     if (rule.colonneSource === 'id') return record.id;
     // Ligne de fetchTable (export en lot) : l'id brut pour une comparaison à l'identifiant de ligne, sinon la valeur affichée - celle que compare la même
     // règle en mode Lecture, où grist.onRecord la livre déjà.
-    if (GristAPI.isRawRow(record)) {
-      return rule.colonneCible === 'id' ? unwrapRefValue(record[rule.colonneSource]) : cellValue(currentTableId, rule.colonneSource, record);
-    }
+    const fromRawRow = row => (rule.colonneCible === 'id' ? unwrapRefValue(row[rule.colonneSource]) : cellValue(currentTableId, rule.colonneSource, row));
+    if (GristAPI.isRawRow(record)) return fromRawRow(record);
     const value = unwrapRefValue(record[rule.colonneSource]);
+    // Colonne source non livrée par grist.onRecord (un champ rapporté de la page comme clé de liaison) : lue sur la ligne brute, sous la forme d'une ligne
+    // de fetchTable ci-dessus. Sans ça la règle n'avait aucune valeur à chercher et la variable de l'autre table restait vide.
+    if (value === undefined) {
+      const row = await rawRowOf(currentTableId, record);
+      if (row && rule.colonneSource in row) return fromRawRow(row);
+    }
     if (rule.colonneCible !== 'id' || typeof value === 'number' || record.id == null) return value;
     const type = GristAPI.getColumnType(currentTableId, rule.colonneSource);
     if (!type || type.indexOf('Ref:') !== 0) return value;
@@ -453,7 +470,13 @@ const Variables = (function () {
         } catch (e) { /* repli sur record[varColumn] ci-dessous */ }
       }
       // Ligne de fetchTable (export en lot, aperçu de la fenêtre de condition) : ramenée à la valeur affichée, comme celle de grist.onRecord.
-      return { value: GristAPI.isRawRow(record) ? cellValue(varTable, varColumn, record) : record[varColumn] };
+      if (GristAPI.isRawRow(record)) return { value: cellValue(varTable, varColumn, record) };
+      const value = record[varColumn];
+      if (value !== undefined) return { value };
+      // Colonne non livrée par grist.onRecord (champ rapporté de la page, cf. rawRowOf) : lue sur la ligne brute, ramenée à la valeur affichée. Vide, comme
+      // avant, si la colonne n'existe pas non plus dans la table.
+      const row = await rawRowOf(varTable, record);
+      return { value: row && varColumn in row ? cellValue(varTable, varColumn, row) : undefined };
     }
     const rule = GristAPI.getLinkRule(varTable);
     if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record, resolvedTableId, opts);
