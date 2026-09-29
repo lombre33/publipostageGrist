@@ -534,13 +534,141 @@ async function hoverMenus(width, height) {
   await browser.close();
 }
 
-// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups email menusSurvol
+// === 7. Saisie assistée après le point dans À / Cc / Cci et dans le nom du PDF : « #Projets.Accompagnateur. » propose les colonnes de l'annuaire ===
+// (Antoine, 29/09, carte « Oui, la proposer ») Vrai clavier (page.keyboard.type : keydown/input/keyup à chaque caractère) et vraie souris sur la liste : pas de
+// dispatchEvent. La liste #autocomplete-box doit rester entière dans la fenêtre, se laisser cliquer (elementFromPoint), et se fermer une fois le choix posé.
+async function emailPathPopup(width, height) {
+  console.log(`\n=== Chemins de références dans les champs texte à ${width}x${height} ===`);
+  const vp = { width, height };
+  const { browser, page } = await openAt(width, height);
+  await page.evaluate(async () => {
+    const stub = window.__gristStub;
+    stub.setVariables('Annuaire', { NomPrenom: 'Text', Email: 'Text', Telephone: 'Text', Service: 'Text', gristHelper_Display: 'Text' });
+    stub.setRows('Annuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Email: 'jean.dupont@ex.fr', Telephone: '0102030405', Service: 'Juridique', gristHelper_Display: '' }]);
+    stub.setVariables('Projets', { Titre: 'Text', Accompagnateur: 'Ref:Annuaire', gristHelper_Display: 'Text' }, null, { Accompagnateur: 'gristHelper_Display' });
+    stub.setRows('Projets', [{ id: 1, Titre: 'Alpha', Accompagnateur: 7, gristHelper_Display: 'Dupont Jean' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Titre: 'Alpha', Accompagnateur: 'Dupont Jean' }, 'Projets');
+  });
+  await page.waitForTimeout(100);
+  await enterEmailWithCci(page);
+  const COLUMNS = ['Projets.Accompagnateur.NomPrenom', 'Projets.Accompagnateur.Email', 'Projets.Accompagnateur.Telephone', 'Projets.Accompagnateur.Service'];
+  const opened = () => page.waitForFunction(() => {
+    const b = document.getElementById('autocomplete-box');
+    return !!b && getComputedStyle(b).display !== 'none' && !!b.querySelector('.ac-item');
+  }, null, { timeout: 3000 }).then(() => true, () => false);
+  const listed = () => page.evaluate(() => {
+    const b = document.getElementById('autocomplete-box');
+    return b && getComputedStyle(b).display !== 'none' ? [...b.querySelectorAll('.ac-item')].map(e => e.textContent) : null;
+  });
+  const focusField = async id => {
+    const f = await boxOf(page, '#' + id);
+    await page.mouse.click(f.right - 8, (f.top + f.bottom) / 2);
+    return f;
+  };
+  const valueOf = id => page.evaluate(id => document.getElementById(id).value, id);
+  const clear = async id => {
+    await page.keyboard.press('Escape');
+    await page.evaluate(id => { const el = document.getElementById(id); el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }, id);
+  };
+
+  // À : clavier - la liste s'ouvre après le point, se filtre à la frappe, Entrée pose le chemin entier.
+  let field = await focusField('v2-email-to');
+  await page.keyboard.type('Suivi ');
+  await page.keyboard.type('#Projets.Accompagnateur.');
+  const toOpened = await opened();
+  const toItems = await listed();
+  const toBox = await boxOf(page, '#autocomplete-box');
+  check(`${width}x${height} - À : "#Projets.Accompagnateur." tapé au clavier -> les 4 colonnes de l'annuaire (sans colonne d'aide), liste entière dans la fenêtre`,
+    toOpened && JSON.stringify(toItems) === JSON.stringify(COLUMNS) && insideViewport(toBox, vp), { toItems, toBox, field });
+  await page.keyboard.type('em');
+  const toFiltered = await listed();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(100);
+  const toValue = await valueOf('v2-email-to');
+  const toClosed = await listed();
+  check(`${width}x${height} - À : "em" filtre sur Email, Entrée pose "#Projets.Accompagnateur.Email" à la suite du texte et ferme la liste`,
+    JSON.stringify(toFiltered) === JSON.stringify(['Projets.Accompagnateur.Email']) && toValue === 'Suivi #Projets.Accompagnateur.Email' && toClosed === null, { toFiltered, toValue, toClosed });
+  await clear('v2-email-to');
+
+  // Cc : vraie souris - un clic sur la troisième ligne de la liste la choisit, le champ garde le focus.
+  field = await focusField('v2-email-cc');
+  await page.keyboard.type('#Projets.Accompagnateur.');
+  await opened();
+  const third = await page.evaluate(() => {
+    const el = document.querySelectorAll('#autocomplete-box .ac-item')[2];
+    if (!el) return null;
+    el.scrollIntoView({ block: 'nearest' });
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return { x: cx, y: cy, text: el.textContent, hit: document.elementFromPoint(cx, cy) === el };
+  });
+  if (third) await page.mouse.click(third.x, third.y);
+  await page.waitForTimeout(100);
+  const ccValue = await valueOf('v2-email-cc');
+  const ccState = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, open: (() => { const b = document.getElementById('autocomplete-box'); return !!b && getComputedStyle(b).display !== 'none'; })() }));
+  check(`${width}x${height} - Cc : clic de la souris sur la 3e ligne -> "#Projets.Accompagnateur.Telephone", liste fermée, le focus reste dans le champ`,
+    !!third && third.hit && ccValue === '#Projets.Accompagnateur.Telephone' && ccState.focus === 'v2-email-cc' && ccState.open === false, { third, ccValue, ccState });
+  await clear('v2-email-cc');
+
+  // Cci : flèche bas puis Entrée.
+  field = await focusField('v2-email-cci');
+  await page.keyboard.type('#Projets.Accompagnateur.');
+  await opened();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(100);
+  const cciValue = await valueOf('v2-email-cci');
+  check(`${width}x${height} - Cci : flèche bas puis Entrée -> la 2e colonne (#Projets.Accompagnateur.Email)`, cciValue === '#Projets.Accompagnateur.Email', { cciValue });
+  await clear('v2-email-cci');
+
+  // Une colonne qui n'est pas une Référence n'ouvre rien après le point ; une clé complète tapée à la main non plus ; et Tab n'est pas avalé quand rien n'est ouvert.
+  field = await focusField('v2-email-to');
+  await page.keyboard.type('#Projets.Titre.');
+  await page.waitForTimeout(150);
+  const notReference = await listed();
+  await clear('v2-email-to');
+  await page.keyboard.type('#Projets.Accompagnateur.Email');
+  await page.waitForTimeout(150);
+  const typedInFull = await listed();
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(100);
+  const afterTab = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  check(`${width}x${height} - "#Projets.Titre." (pas une Référence) et "#Projets.Accompagnateur.Email" tapé en entier -> aucune liste, Tab passe au champ suivant`,
+    notReference === null && typedInFull === null && afterTab !== 'v2-email-to', { notReference, typedInFull, afterTab });
+  await clear('v2-email-to');
+
+  // Nom du PDF : le bouton de la barre ouvre le champ, même liste, même clavier.
+  const toggle = await boxOf(page, '#btn-toggle-pdf-filename');
+  if (toggle) {
+    await page.mouse.click((toggle.left + toggle.right) / 2, (toggle.top + toggle.bottom) / 2);
+    await page.waitForTimeout(100);
+    const pdfField = await boxOf(page, '#pdf-filename-template');
+    if (pdfField) {
+      await page.mouse.click(pdfField.right - 8, (pdfField.top + pdfField.bottom) / 2);
+      await page.keyboard.type('Fiche_#Projets.Accompagnateur.');
+      const pdfOpened = await opened();
+      const pdfItems = await listed();
+      const pdfBox = await boxOf(page, '#autocomplete-box');
+      await page.keyboard.type('nom');
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(100);
+      const pdfValue = await valueOf('pdf-filename-template');
+      check(`${width}x${height} - Nom du PDF : "Fiche_#Projets.Accompagnateur." -> les 4 colonnes entières dans la fenêtre, "nom" + Entrée pose "#Projets.Accompagnateur.NomPrenom"`,
+        pdfOpened && JSON.stringify(pdfItems) === JSON.stringify(COLUMNS) && insideViewport(pdfBox, vp) && pdfValue === 'Fiche_#Projets.Accompagnateur.NomPrenom', { pdfItems, pdfBox, pdfValue });
+    } else check(`${width}x${height} - Nom du PDF : le champ s'ouvre au clic sur son bouton`, false, { toggle, pdfField });
+  } else check(`${width}x${height} - Nom du PDF : le bouton du champ est visible dans la barre`, false, { toggle });
+  await browser.close();
+}
+
+// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups chemins email menusSurvol
 const SECTIONS = {
   infoBulles: async () => { await tooltipSweep(600, 400); await tooltipSweep(700, 400); await tooltipSweep(800, 400); },
   infoBulleCollee: () => stuckTooltip(700, 400),
   email: async () => { await emailLayout(600, 400); await emailLayout(700, 400); },
   statut: () => statusStability(400),
   popups: () => popups(700, 400),
+  chemins: async () => { await emailPathPopup(600, 400); await emailPathPopup(700, 400); await emailPathPopup(800, 400); },
   menusSurvol: () => hoverMenus(700, 400),
 };
 const only = process.argv.slice(2);
