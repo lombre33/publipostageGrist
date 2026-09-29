@@ -415,12 +415,12 @@ const ReaderMode = (function () {
       return { node: attachmentImages(ids), isError: false };
     }
     try {
-      const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding));
-      const isError = typeof value === 'string' && value.indexOf('[ERREUR') === 0;
-      const span = document.createElement('span'); span.textContent = value; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
+      // isError vient de Variables.resolveVariableResult, jamais des premiers mots du texte : le message d'erreur suit la langue de l'interface.
+      const { text, isError } = await Variables.resolveVariableResult(table, column, tableId, record, format, loopOpts(binding));
+      const span = document.createElement('span'); span.textContent = text; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
       return { node: span, isError };
     } catch (e) {
-      const span = document.createElement('span'); span.textContent = '[ERREUR: ' + e.message + ']'; span.className = 'resolved-var error-msg';
+      const span = document.createElement('span'); span.textContent = I18n.t('variables.error.generic', { message: e.message }); span.className = 'resolved-var error-msg';
       return { node: span, isError: true };
     }
   }

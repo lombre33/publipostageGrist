@@ -386,6 +386,34 @@
     },
   });
 
+  // Le titre du sommaire exporté en PDF suit la langue de l'interface (carte d'Antoine du 29/09, « Oui, les deux »). Chemin normal (buildTocStack) et repli
+  // (js/pdf-export.js : le bloc garde son titre seul quand buildTocStack échoue) - le repli portait « Sommaire » en dur. Pour atteindre le repli sans toucher au
+  // code de l'export, la clé du texte « aucun titre » lève une exception le temps de l'appel : buildTocStack échoue APRÈS avoir lu le titre, le bloc garde le
+  // titre du repli.
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'toc_pdf_title_follows_interface_language_' + lang,
+    description: 'Le titre du sommaire exporté en PDF (' + lang + ') est celui de la langue de l\'interface, aussi dans le repli du sommaire',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      const realT = I18n.t;
+      const realWarn = console.warn;
+      try {
+        I18n.setLang(lang);
+        const wanted = lang === 'en' ? 'Table of Contents' : 'Sommaire';
+        const other = lang === 'en' ? 'Sommaire' : 'Table of Contents';
+        const titles = (result, text) => h.findTextBlocks(result.content, b => h.blockPlainText(b) === text).length;
+        const normal = await h.exportPdfContent('<div class="toc-marker"></div><h1>Alpha</h1><p>texte</p>', null);
+        I18n.t = (key, vars) => { if (key === 'pdf.tocEmpty') throw new Error('test : texte du sommaire vide indisponible'); return realT.call(I18n, key, vars); };
+        console.warn = () => {};
+        let fallback;
+        try { fallback = await h.exportPdfContent('<div class="toc-marker"></div><p>juste du texte</p>', null); }
+        finally { I18n.t = realT; console.warn = realWarn; }
+        const counts = { normal: titles(normal, wanted), normalOther: titles(normal, other), fallback: titles(fallback, wanted), fallbackOther: titles(fallback, other) };
+        return { pass: counts.normal === 1 && counts.fallback === 1 && counts.normalOther === 0 && counts.fallbackOther === 0, notes: JSON.stringify(counts) };
+      } finally { I18n.t = realT; console.warn = realWarn; I18n.setLang(previousLang); }
+    },
+  }));
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pageBreakToc = cases;
 })();

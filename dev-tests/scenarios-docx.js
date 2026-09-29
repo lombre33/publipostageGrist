@@ -458,6 +458,20 @@
       return { pass: textes[0] === 'Sommaire' && textes.length >= 2, notes: JSON.stringify(textes) };
     });
 
+  // Le titre suit la langue de l'interface (mêmes clés que le PDF et le mode Lecture), jamais « Sommaire » écrit en dur (carte d'Antoine du 29/09, « Oui, les deux »).
+  ['fr', 'en'].forEach(lang => add('docx_toc_title_follows_interface_language_' + lang,
+    'Le titre du sommaire de l\'export DOCX est écrit dans la langue de l\'interface (' + lang + ') : « Sommaire » en français, « Table of Contents » en anglais',
+    async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        const parts = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2>');
+        const textes = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
+        const wanted = lang === 'en' ? 'Table of Contents' : 'Sommaire';
+        return { pass: textes[0] === wanted && textes.includes('Alpha') && textes.includes('Beta') && !textes.includes(lang === 'en' ? 'Sommaire' : 'Table of Contents'), notes: JSON.stringify(textes) };
+      } finally { I18n.setLang(previousLang); }
+    }));
+
   add('docx_toc_ignored_inside_table',
     'Un sommaire égaré dans une cellule est ignoré silencieusement plutôt que de faire planter la sérialisation',
     async (h) => {

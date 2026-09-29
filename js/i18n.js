@@ -451,6 +451,16 @@ const I18n = (function () {
     'linkRules.theseTemplates': { fr: 'ces modèles', en: 'these templates' },
     'linkRules.unnamed': { fr: '(sans nom)', en: '(unnamed)' },
 
+    // --- Messages d'erreur d'une #Variable (js/variables.js : baseRows, followReference, resolveRawValue, resolveVariableResult ; js/reader-mode.js :
+    // resolveBadgeNode). Écrits dans le document à la place de la valeur (mode Lecture, exports PDF et DOCX), donc dans la langue de l'interface de qui lit ou
+    // exporte. Le mode Lecture ne les reconnaît pas à leurs premiers mots mais au drapeau `isError` de Variables.resolveVariableResult ---
+    'variables.error.noCurrentTable': { fr: '[ERREUR: table courante indisponible]', en: '[ERROR: current table unavailable]' },
+    'variables.error.noMatching': { fr: '[ERREUR: aucune correspondance configurée pour {table} — réinsérez la variable pour la configurer]', en: '[ERROR: no matching configured for {table} — reinsert the variable to configure it]' },
+    'variables.error.rowNotFound': { fr: '[ERREUR: ligne introuvable dans {table}]', en: '[ERROR: row not found in {table}]' },
+    'variables.error.notReference': { fr: '[ERREUR: {table}.{column} n’est pas une colonne Référence]', en: '[ERROR: {table}.{column} is not a Reference column]' },
+    'variables.error.failed': { fr: '[ERREUR: résolution de {table}.{column} impossible]', en: '[ERROR: could not resolve {table}.{column}]' },
+    'variables.error.generic': { fr: '[ERREUR: {message}]', en: '[ERROR: {message}]' },
+
     // --- Titres d'infobulles construits en JS (toolbars flottantes image/tableau) ---
     'colorDropdown.custom': { fr: 'Couleur personnalisée', en: 'Custom color' },
     'colorDropdown.customLabel': { fr: 'Personnalisé…', en: 'Custom…' },
@@ -530,8 +540,8 @@ const I18n = (function () {
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
 
-    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack) et affiché en mode Lecture (js/reader-mode.js:resolveTocMarkers) : les deux
-    // disent la même chose, le mode Lecture étant l'aperçu de l'export ---
+    // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocParagraphs) et affiché en mode
+    // Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
 

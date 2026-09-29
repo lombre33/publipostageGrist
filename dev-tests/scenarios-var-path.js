@@ -394,6 +394,119 @@
     },
   });
 
+  // --- Messages d'erreur d'une variable, dans la langue de l'interface (carte d'Antoine du 29/09, réponse « Oui, les deux » : les « [ERREUR : … ] » que le widget
+  // écrit dans le document suivent la langue de qui lit ou exporte). Vérifié sur ce que la personne LIT - le texte exact, en français et en anglais - et sur le
+  // drapeau `isError` que le mode Lecture utilise pour son avertissement : il ne dépend plus des premiers mots du message. Les cinq messages, à chacun des
+  // endroits du code qui les écrit (colonne simple et chemin de références). ---
+  const ERROR_TEXTS = {
+    fr: {
+      noCurrentTable: '[ERREUR: table courante indisponible]',
+      noMatching: '[ERREUR: aucune correspondance configurée pour VpServices — réinsérez la variable pour la configurer]',
+      rowNotFound: '[ERREUR: ligne introuvable dans VpProjet]',
+      notReference: '[ERREUR: VpProjet.Nom n’est pas une colonne Référence]',
+      failed: '[ERREUR: résolution de VpProjet.Nom impossible]',
+    },
+    en: {
+      noCurrentTable: '[ERROR: current table unavailable]',
+      noMatching: '[ERROR: no matching configured for VpServices — reinsert the variable to configure it]',
+      rowNotFound: '[ERROR: row not found in VpProjet]',
+      notReference: '[ERROR: VpProjet.Nom is not a Reference column]',
+      failed: '[ERROR: could not resolve VpProjet.Nom]',
+    },
+  };
+
+  // Ce que la personne lit (resolveVariable) et le drapeau que le mode Lecture consulte (resolveVariableResult) pour chaque situation d'erreur :
+  // { type de message: [résultat de la colonne simple, résultat du chemin] }. Le texte est lu à part du drapeau pour qu'une différence de texte ne soit jamais masquée.
+  async function readVar(table, column, tableId, row) {
+    const text = await Variables.resolveVariable(table, column, tableId, row);
+    let isError;
+    try { isError = (await Variables.resolveVariableResult(table, column, tableId, row)).isError; } catch (e) { isError = 'exception : ' + e.message; }
+    return { text, isError };
+  }
+  async function errorResults() {
+    const record = GristAPI.getCurrentRecord();
+    const out = {};
+    // Ni la table de la page ni celle qu'on a passée : rien à quoi rattacher la variable.
+    const realCurrentTable = GristAPI.getCurrentTableId;
+    GristAPI.getCurrentTableId = () => null;
+    try { out.noCurrentTable = [await readVar('VpProjet', 'Nom', null, record), await readVar('VpProjet', 'Accompagnateur.Email', null, record)]; }
+    finally { GristAPI.getCurrentTableId = realCurrentTable; }
+    // VpServices : ni règle de liaison, ni colonne Référence de la page qui y mène.
+    out.noMatching = [await readVar('VpServices', 'Nom', 'VpNotifications', record), await readVar('VpServices', 'Nom.Email', 'VpNotifications', record)];
+    // Nom est un texte : on ne descend pas plus loin.
+    out.notReference = [await readVar('VpProjet', 'Nom.Email', 'VpNotifications', record)];
+    // Une lecture qui plante en route (règle de liaison illisible) : le message général de la variable.
+    const realGetLinkRule = GristAPI.getLinkRule;
+    GristAPI.getLinkRule = () => { throw new Error('test : règle illisible'); };
+    const realConsoleError = console.error;
+    console.error = () => {};
+    try { out.failed = [await readVar('VpProjet', 'Nom', 'VpNotifications', record)]; }
+    finally { GristAPI.getLinkRule = realGetLinkRule; console.error = realConsoleError; }
+    return out;
+  }
+  // VpProjet sans règle : la Référence Projet de la page mène à une ligne (99) qui n'existe pas.
+  async function missingRowResults(h) {
+    await seed(h, { noProjetRule: true });
+    const row = { id: 3, Titre: 'Notif 3', Projet: 99 };
+    return [await readVar('VpProjet', 'Nom', 'VpNotifications', row), await readVar('VpProjet', 'Nom.Email', 'VpNotifications', row)];
+  }
+
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'varpath_error_messages_follow_the_interface_language_' + lang,
+    description: 'Une variable qui ne se résout pas écrit son message d’erreur dans la langue de l’interface (' + lang + '), aux huit endroits du code qui l’écrivent, et le signale par isError ; une valeur ordinaire n’est jamais marquée',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        await seed(h);
+        const got = await errorResults();
+        got.rowNotFound = await missingRowResults(h);
+        await seed(h);
+        const wanted = ERROR_TEXTS[lang];
+        const wrong = [];
+        Object.keys(wanted).forEach(kind => {
+          const results = got[kind] || [];
+          if (results.length < 1) wrong.push(kind + ' : aucun résultat');
+          results.forEach((r, i) => {
+            if (r.text !== wanted[kind]) wrong.push(kind + '[' + i + '] texte « ' + r.text + ' » au lieu de « ' + wanted[kind] + ' »');
+            if (r.isError !== true) wrong.push(kind + '[' + i + '] isError = ' + r.isError);
+          });
+        });
+        const record = GristAPI.getCurrentRecord();
+        const plain = await readVar('VpProjet', 'Nom', 'VpNotifications', record);
+        if (plain.text !== 'Projet Alpha' || plain.isError !== false) wrong.push('valeur ordinaire : ' + JSON.stringify(plain));
+        return { pass: wrong.length === 0, notes: JSON.stringify(wrong) };
+      } finally { I18n.setLang(previousLang); }
+    },
+  }));
+
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'varpath_reader_warns_about_an_error_in_any_language_' + lang,
+    description: 'Mode Lecture (' + lang + ') : une variable en erreur montre son message dans la langue de l’interface ET déclenche l’avertissement « variables non résolues » ; une valeur de cellule qui commence par « [ERREUR » ou « [ERROR » n’est pas prise pour une erreur',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        await seed(h);
+        let reader = await renderReader(`<p>Z=${badgeHtml('VpServices', 'Nom')}</p>`);
+        const broken = reader.querySelector('.reader-content .resolved-var');
+        const brokenOut = { text: broken && broken.textContent, flagged: !!(broken && broken.classList.contains('error-msg')), warning: reader.querySelector(':scope > p.error-msg') && reader.querySelector(':scope > p.error-msg').textContent };
+        const lookalikes = [];
+        for (const title of ['[ERREUR 12] à revoir', '[ERROR 12] to review']) {
+          window.__gristStub.fireRecord({ id: 1, Titre: title, Projet: 'Projet Alpha' }, 'VpNotifications');
+          await h.sleep(50);
+          reader = await renderReader(`<p>${badgeHtml('VpNotifications', 'Titre')}</p>`);
+          const shown = reader.querySelector('.reader-content .resolved-var');
+          lookalikes.push({ text: shown && shown.textContent, flagged: !!(shown && shown.classList.contains('error-msg')), warned: !!reader.querySelector(':scope > p.error-msg') });
+        }
+        const wantedWarning = lang === 'en' ? 'Warning: some variables could not be resolved.' : 'Attention : certaines variables n’ont pas pu être résolues.';
+        const pass = brokenOut.text === ERROR_TEXTS[lang].noMatching && brokenOut.flagged && brokenOut.warning === wantedWarning
+          && lookalikes.length === 2 && lookalikes.every((l, i) => l.text === ['[ERREUR 12] à revoir', '[ERROR 12] to review'][i] && !l.flagged && !l.warned);
+        return { pass, notes: JSON.stringify({ brokenOut, lookalikes }) };
+      } finally { I18n.setLang(previousLang); }
+    },
+  }));
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varPath = cases;
 })();

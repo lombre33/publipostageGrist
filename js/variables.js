@@ -405,8 +405,9 @@ const Variables = (function () {
     });
   }
   // Trouve la valeur brute d'une #Variable avant tout formatage, réutilisable par resolveAttachmentIds (ne doit jamais passer par formatValue/String).
-  // Retourne { value } ou { error } (déjà formaté "[ERREUR: ...]"). En mode "match", `value` est un tableau (une valeur par ligne liée) et `multi` le
-  // signale : js/condition-rules.js:matches teste alors chaque ligne liée, sans confondre avec une ChoiceList, elle aussi un tableau.
+  // Retourne { value } ou { error } (message déjà rédigé dans la langue de l'interface : clés 'variables.error.*' de js/i18n.js). En mode "match", `value` est un
+  // tableau (une valeur par ligne liée) et `multi` le signale : js/condition-rules.js:matches teste alors chaque ligne liée, sans confondre avec une ChoiceList,
+  // elle aussi un tableau.
   async function resolveRawValueWithRule(varTable, varColumn, rule, record, currentTableId, opts) {
     const rows = await resolveLinkedRows(varTable, rule, record, currentTableId, opts);
     if (rule.mode === 'singleton') return { value: rows.length ? cellValue(varTable, varColumn, rows[0]) : null };
@@ -426,7 +427,7 @@ const Variables = (function () {
   async function baseRows(varTable, resolvedTableId, record, opts) {
     const loopRow = opts && opts.loop && opts.loop.rows && opts.loop.rows[varTable];
     if (loopRow) return { rows: [loopRow] };
-    if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
+    if (!resolvedTableId) return { error: I18n.t('variables.error.noCurrentTable') };
     if (varTable === resolvedTableId) {
       if (GristAPI.isRawRow(record)) return { rows: [record] };
       const row = record.id != null ? await GristAPI.fetchRowById(varTable, record.id) : null;
@@ -435,18 +436,18 @@ const Variables = (function () {
     const rule = GristAPI.getLinkRule(varTable);
     if (rule) return { rows: await resolveLinkedRows(varTable, rule, record, resolvedTableId, opts), multi: rule.mode !== 'singleton' };
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
-    if (refCols.length === 0) return { error: `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]` };
+    if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
     const refId = record[refCols[0]];
     if (!refId) return { rows: [] };
     const linkedRow = await GristAPI.fetchRowById(varTable, unwrapRefValue(refId));
-    if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
+    if (!linkedRow) return { error: I18n.t('variables.error.rowNotFound', { table: varTable }) };
     return { rows: [linkedRow] };
   }
   // Un pas de plus : la ligne que désigne la colonne Référence `column` sur chacune des lignes `rows` (null quand la cellule est vide ou que la ligne
   // référencée n'existe plus). Retourne { table, rows } - la table atteinte et une ligne (ou null) par ligne de départ.
   async function followReference(table, column, rows, opts) {
     const type = GristAPI.getColumnType(table, column) || '';
-    if (type.indexOf('Ref:') !== 0) return { error: `[ERREUR: ${table}.${column} n'est pas une colonne Référence]` };
+    if (type.indexOf('Ref:') !== 0) return { error: I18n.t('variables.error.notReference', { table, column }) };
     const target = type.slice(4);
     if (!rows.some(Boolean)) return { table: target, rows: rows.map(() => null) };
     const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
@@ -494,7 +495,7 @@ const Variables = (function () {
       const row = loop.rows && loop.rows[varTable];
       if (row) return { value: cellValue(varTable, varColumn, row) };
     }
-    if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
+    if (!resolvedTableId) return { error: I18n.t('variables.error.noCurrentTable') };
     if (varTable === resolvedTableId) {
       // `record` vient de grist.onRecord, encodage Attachments non garanti identique à fetchRowById - resolveAttachmentIds force `forceRawFetch` pour
       // repasser par ce dernier ; resolveVariable n'active jamais l'option.
@@ -516,24 +517,30 @@ const Variables = (function () {
     const rule = GristAPI.getLinkRule(varTable);
     if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record, resolvedTableId, opts);
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
-    if (refCols.length === 0) return { error: `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]` };
+    if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
     const refId = record[refCols[0]];
     if (!refId) return { value: null };
     const rowId = unwrapRefValue(refId);
     const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
-    if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
+    if (!linkedRow) return { error: I18n.t('variables.error.rowNotFound', { table: varTable }) };
     return { value: cellValue(varTable, varColumn, linkedRow) };
   }
-  // `opts.loop` (facultatif) : ligne du tour d'une zone répétée, cf. resolveRawValue.
-  async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
+  // { text, isError } : le texte de la bulle et, À PART, le fait que ce texte est un message d'erreur. Le mode Lecture s'en sert pour son avertissement
+  // « variables non résolues » sans reconnaître le message à ses premiers mots (« [ERREUR » / « [ERROR » : ils changent avec la langue de l'interface, et une
+  // valeur de cellule peut elle-même commencer par un crochet). `opts.loop` (facultatif) : ligne du tour d'une zone répétée, cf. resolveRawValue.
+  async function resolveVariableResult(varTable, varColumn, currentTableId, record, format, opts) {
     try {
       const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, opts);
-      if (error) return error;
-      return formatValue(value, format, varTable, varColumn);
+      if (error) return { text: error, isError: true };
+      return { text: formatValue(value, format, varTable, varColumn), isError: false };
     } catch (e) {
       console.error('[variables] échec résolution', e);
-      return `[ERREUR: résolution de ${varTable}.${varColumn} impossible]`;
+      return { text: I18n.t('variables.error.failed', { table: varTable, column: varColumn }), isError: true };
     }
+  }
+  // Le texte seul, pour ce qui l'écrit tel quel (nom de fichier, champs du mode email, boucles en ligne, aperçus des fenêtres).
+  async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
+    return (await resolveVariableResult(varTable, varColumn, currentTableId, record, format, opts)).text;
   }
 
   // Variables d'un texte brut - champs Objet/À/Cc/Cci du mode email et nom du fichier PDF, de simples <input> sans badge : à chaque déclencheur, la plus longue
@@ -888,7 +895,7 @@ const Variables = (function () {
   // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue/cellValue : fenêtres de condition et d'autres attributs d'une
   // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable.
   return {
-    createExtension, resolveVariable, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, cellValue,
   };
 })();

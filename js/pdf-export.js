@@ -1180,7 +1180,7 @@ const PdfExport = (function () {
       if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; floatCarry = null; return; }
       if (node.classList.contains('heading-numbering-config')) return;
       if (node.classList.contains('toc-marker')) {
-        const tocBlock = { stack: [{ text: 'Sommaire', bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
+        const tocBlock = { stack: [{ text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
         push(tocBlock, node); tocBlocks.push(tocBlock); pendingPageBreak = false; floatCarry = null;
         return;
       }
@@ -1219,7 +1219,7 @@ const PdfExport = (function () {
       for (const child of Array.from(node.childNodes)) { await visit(child); }
     };
     for (const child of Array.from(root.childNodes)) { await visit(child); }
-    // Repli si structure de titres inattendue : le tocBlock garde son stack par défaut (titre "Sommaire" seul, posé à sa création) plutôt que de faire
+    // Repli si structure de titres inattendue : le tocBlock garde son stack par défaut (le titre du sommaire seul, posé à sa création) plutôt que de faire
     // échouer tout l'export - même granularité de repli que blockFrom pour un bloc de contenu.
     tocBlocks.forEach(tocBlock => {
       try {

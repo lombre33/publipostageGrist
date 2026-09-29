@@ -6,10 +6,12 @@
 //   - « Roboto (default) » : première ligne du menu de police (js/main-toolbar.js) ;
 //   - « Table of contents (generated automatically from headings) » : le sommaire, dans l'éditeur (déjà traduit) ET dans le HTML enregistré et copié (js/editor-nodes.js,
 //     renderHTML : un modèle enregistré avec l'interface française se rouvre avec son sommaire, et le réenregistrer écrit le texte de la langue courante) ;
-//   - mode Lecture (js/reader-mode.js) : « Table of Contents », « No heading found. » et « Warning: some variables could not be resolved. ».
+//   - mode Lecture (js/reader-mode.js) : « Table of Contents », « No heading found. » et « Warning: some variables could not be resolved. » ;
+//   - le message d'une variable qui ne se résout pas, en Lecture : « [ERROR: no matching configured for Contrats — reinsert the variable to configure it] » (js/variables.js,
+//     carte d'Antoine du 29/09 « Oui, les deux »). L'avertissement ci-dessus doit rester affiché : la Lecture repère l'erreur par un drapeau, plus par les premiers mots du message.
 // Le passage en français par Réglages, sans recharger, doit tout remettre en français (zones fantômes et ligne Roboto suivent la langue, le reste au rendu suivant), avec les
 // textes d'origine : le français ne bouge pas (seule l'apostrophe de l'avertissement devient typographique, comme dans les autres textes de js/i18n.js).
-// Les messages « [ERREUR : … ] » de js/variables.js et le titre du sommaire de l'export DOCX ne sont pas concernés.
+// Le titre du sommaire des exports DOCX et PDF, et les autres messages d'erreur d'une variable, sont vérifiés dans les groupes en page (docx, pageBreakToc, varPath).
 // Lancé par run-headless.mjs (groupe Node "englishTextsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-english-texts-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -170,11 +172,13 @@ const EN = {
   addHeader: '+ Add a header', addFooter: '+ Add a footer', roboto: 'Roboto (default)',
   toc: 'Table of contents (generated automatically from headings)',
   tocTitle: 'Table of Contents', tocEmpty: 'No heading found.', warning: 'Warning: some variables could not be resolved.',
+  badgeError: '[ERROR: no matching configured for Contrats — reinsert the variable to configure it]',
 };
 const FR = {
   addHeader: '+ Ajouter un en-tête', addFooter: '+ Ajouter un pied de page', roboto: 'Roboto (par défaut)',
   toc: 'Sommaire (généré automatiquement à partir des titres)',
   tocTitle: 'Sommaire', tocEmpty: 'Aucun titre trouvé.', warning: 'Attention : certaines variables n’ont pas pu être résolues.',
+  badgeError: '[ERREUR: aucune correspondance configurée pour Contrats — réinsérez la variable pour la configurer]',
 };
 
 console.log('1. L\'interface est bien en anglais, comme chez un utilisateur qui l\'a choisi');
@@ -304,6 +308,7 @@ check('le mode Lecture affiche le document', await page.evaluate(() => !!documen
 check('titre du sommaire : "Table of Contents"', await textOf('#reader-container .toc-title') === EN.tocTitle, await textOf('#reader-container .toc-title'));
 check('sommaire vide : "No heading found."', await textOf('#reader-container .toc-empty') === EN.tocEmpty, await textOf('#reader-container .toc-empty'));
 check('avertissement : "Warning: some variables could not be resolved."', await textOf('#reader-container > p.error-msg') === EN.warning, await textOf('#reader-container > p.error-msg'));
+check('la variable en erreur dit son message en anglais', await textOf('#reader-container .reader-content .resolved-var.error-msg') === EN.badgeError, await textOf('#reader-container .reader-content .resolved-var.error-msg'));
 await backToEditor();
 // Document avec des titres et sans variable cassée : la liste des titres, et aucun avertissement.
 await loadDoc(`<h1>Alpha</h1>${TOC}<h2>Beta</h2><p>Hello</p>`);
@@ -347,6 +352,7 @@ await openReader();
 check('Lecture : "Sommaire"', await textOf('#reader-container .toc-title') === FR.tocTitle, await textOf('#reader-container .toc-title'));
 check('Lecture : "Aucun titre trouvé."', await textOf('#reader-container .toc-empty') === FR.tocEmpty, await textOf('#reader-container .toc-empty'));
 check('Lecture : "Attention : certaines variables n’ont pas pu être résolues."', await textOf('#reader-container > p.error-msg') === FR.warning, await textOf('#reader-container > p.error-msg'));
+check('Lecture : la variable en erreur redit son message en français', await textOf('#reader-container .reader-content .resolved-var.error-msg') === FR.badgeError, await textOf('#reader-container .reader-content .resolved-var.error-msg'));
 await backToEditor();
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
