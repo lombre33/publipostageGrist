@@ -1,0 +1,30 @@
+/* Base commune des fenêtres (js/modal-base.js) : le voile, le cadre et ses trois zones - titre, contenu, boutons. Le cadre reste un `.modal-content` (css/style.css :
+   fond, coins, ombre) ; ce fichier n'y ajoute que la mise en page. Seul le CONTENU défile : le titre et les boutons ne bougent pas, la fenêtre tient dans le
+   panneau de 700x400 de Grist (règle d'Antoine, 2026-09-29). Chargé après css/style.css (il en remplace le padding et les largeurs de `.modal-content`) et avant
+   css/variable-actions.css (l'aspect des boutons et du contenu de chaque fenêtre est chez elle). */
+:root {
+  /* Trois largeurs pour les fenêtres (elles en avaient sept : 360, 380, 400, 420, 480, 520 et 684 px). */
+  --pp-modal-w-sm: 400px;
+  --pp-modal-w-md: 480px;
+  --pp-modal-w-lg: 684px;
+  /* Marge entre le cadre et le bord du panneau, en haut comme en bas : il reste 376 px à la fenêtre dans 400 px de haut. */
+  --pp-modal-gap: 12px;
+}
+
+/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). z-index 1990 : sous #link-config-modal (2000), que le choix de la clé d'une table pas encore
+   liée ouvre PAR-DESSUS la fenêtre de condition, et sous la barre flottante d'une bulle (2000, masquée tant que la fenêtre est ouverte). */
+.pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990; }
+
+/* max-height en % de l'écran (le voile est fixe sur tout le panneau) et flex en colonne : le contenu prend la place qui reste, le titre et les boutons gardent
+   la leur. Pas d'overflow sur le cadre : il rognerait les coins et défilerait à sa guise quand un champ prend le focus. */
+.pp-modal-box { display: flex; flex-direction: column; box-sizing: border-box; padding: 0; min-width: 0; width: var(--pp-modal-w, var(--pp-modal-w-md)); max-width: calc(100% - 2 * var(--pp-modal-gap)); max-height: calc(100% - 2 * var(--pp-modal-gap)); font-family: var(--font-ui); }
+.pp-modal-box[data-size="sm"] { --pp-modal-w: var(--pp-modal-w-sm); }
+.pp-modal-box[data-size="lg"] { --pp-modal-w: var(--pp-modal-w-lg); }
+/* Le voile et le cadre prennent le focus par programme (clic à côté, ouverture sans champ) : pas de liseré autour d'un élément qui n'est pas un contrôle. */
+.pp-modal:focus, .pp-modal-box:focus { outline: none; }
+.pp-modal-header { flex: none; padding: 18px 20px 6px; }
+.pp-modal-header h3 { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+/* overscroll-behavior : au bout de la zone, la molette ne fait pas défiler la page derrière le voile. */
+.pp-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px; }
+/* 20 px au-dessus des boutons, comme avant (16 px de marge + 4 px de la ligne collante) : les fenêtres qui tenaient sans défiler gardent leur hauteur. */
+.pp-modal-actions { flex: none; display: flex; align-items: center; gap: 8px; padding: 20px 20px 18px; }

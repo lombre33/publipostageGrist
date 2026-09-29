@@ -193,7 +193,8 @@ async function openWindowFor(column, action, modalSelector) {
 const windowState = modalSelector => page.evaluate(sel => ({
   open: document.querySelector(sel).style.display !== 'none',
   boxTop: document.querySelector(sel + ' .modal-content').getBoundingClientRect().top,
-  boxScroll: document.querySelector(sel + ' .modal-content').scrollTop,
+  // Ce qui défile dans la fenêtre : la zone de contenu de la base commune (js/modal-base.js), sinon le cadre lui-même (fenêtres écrites dans index.html).
+  boxScroll: (document.querySelector(sel + ' .pp-modal-body') || document.querySelector(sel + ' .modal-content')).scrollTop,
   docTop: document.scrollingElement.scrollTop,
 }), modalSelector);
 // Ce que montre le panneau ouvert d'une liste : ses lignes, ses intitulés, son cadre, et si la zone de recherche a le focus.

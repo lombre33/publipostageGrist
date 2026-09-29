@@ -7,7 +7,7 @@
 // (js/floating-toolbars.js:wireVariableFloatingToolbar). « Copier » / « Coller » (demande d'Antoine, 2026-09-29) : la condition affichée dans la fenêtre
 // d'une variable se recolle dans la fenêtre d'une autre - Coller remplace les règles de la fenêtre comme un brouillon, « Enregistrer » les applique.
 const VariableCondition = (function () {
-  let modalEl = null;
+  let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
   // { editor, pos, node, hadCondition, working: { mode, rules } } - `working` est une copie : rien n'est écrit dans la bulle avant « Enregistrer ».
   let state = null;
@@ -48,17 +48,15 @@ const VariableCondition = (function () {
   }
 
   function ensureModal() {
-    if (modalEl) return;
-    modalEl = el('div');
-    modalEl.id = 'var-condition-modal';
-    modalEl.style.display = 'none';
-    modalEl.tabIndex = -1;
-    const box = el('div', 'modal-content var-modal-content var-condition-modal-content');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-labelledby', 'var-condition-title');
-    const title = el('h3');
-    title.id = 'var-condition-title';
+    if (win) return;
+    // Cadre, titre, zone qui défile et ligne de boutons : js/modal-base.js. Échap ferme la fenêtre où que soit le focus (sauf si le choix de la clé est ouvert
+    // par-dessus : la base lui laisse le clavier) ; le focus revient à l'éditeur (cf. close), pas à l'élément qui l'avait à l'ouverture.
+    win = ModalBase.create({
+      id: 'var-condition-modal', titleId: 'var-condition-title', boxClass: 'var-modal-content var-condition-modal-content', actionsClass: 'var-modal-actions',
+      onEscape: close, restoreFocus: false,
+    });
+    const box = win.box;
+    const title = win.title;
     const intro = el('p', 'var-modal-intro');
     const modeRow = el('div', 'var-condition-mode');
     const modeBefore = el('span');
@@ -71,7 +69,6 @@ const VariableCondition = (function () {
     const debugCurrent = el('div', 'var-condition-debug-line');
     const debugCount = el('div', 'var-condition-debug-line');
     debug.append(debugCurrent, debugCount);
-    const actions = el('div', 'var-modal-actions');
     const removeBtn = el('button', 'var-modal-danger');
     removeBtn.type = 'button';
     const spacer = el('span', 'var-modal-spacer');
@@ -79,7 +76,7 @@ const VariableCondition = (function () {
     cancelBtn.type = 'button';
     const saveBtn = el('button', 'var-modal-primary');
     saveBtn.type = 'button';
-    actions.append(removeBtn, spacer, cancelBtn, saveBtn);
+    win.actions.append(removeBtn, spacer, cancelBtn, saveBtn);
     // Copier / Coller : un seul groupe de nœuds, replacé à chaque tracé des règles sur la ligne de « + Ajouter une condition » (cf. renderRules).
     const clip = el('span', 'var-condition-clip');
     const copyBtn = el('button', 'var-condition-clip-btn');
@@ -89,9 +86,7 @@ const VariableCondition = (function () {
     const clipStatus = el('span', 'var-condition-clip-status');
     clipStatus.setAttribute('role', 'status');
     clip.append(copyBtn, pasteBtn, clipStatus);
-    box.append(title, intro, modeRow, rulesBox, debug, actions);
-    modalEl.appendChild(box);
-    document.body.appendChild(modalEl);
+    win.body.append(intro, modeRow, rulesBox, debug);
     refs = { title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, debugCurrent, debugCount, removeBtn, cancelBtn, saveBtn };
 
     modeSelect.addEventListener('change', () => {
@@ -108,14 +103,6 @@ const VariableCondition = (function () {
     // Toute saisie dans les lignes (colonne, opérateur, valeur, « au moins une ») relance l'aperçu, avec un court délai pour ne pas recalculer à chaque touche.
     box.addEventListener('input', scheduleDebug);
     box.addEventListener('change', scheduleDebug);
-    modalEl.addEventListener('keydown', event => {
-      if (event.key !== 'Escape' || !state) return;
-      // Échap appartient à la fenêtre de choix de la clé tant qu'elle est ouverte par-dessus (elle garde son propre Annuler).
-      const linkModal = document.getElementById('link-config-modal');
-      if (linkModal && linkModal.style.display !== 'none') return;
-      event.preventDefault();
-      close();
-    });
   }
 
   // Colonne d'une table pas encore liée : la fenêtre de choix de la clé s'ouvre avant d'adopter la colonne (Annuler remet la précédente, via
@@ -357,9 +344,9 @@ const VariableCondition = (function () {
   }
 
   function close() {
-    if (!modalEl) return;
+    if (!win) return;
     const editor = state && state.editor;
-    modalEl.style.display = 'none';
+    win.hide();
     state = null;
     debugGeneration += 1;
     clearTimeout(debugTimer);
@@ -399,9 +386,7 @@ const VariableCondition = (function () {
     renderRules();
     // La barre flottante (z-index 2000) passerait sinon par-dessus le voile de cette fenêtre (1990, sous la fenêtre de choix de la clé).
     EditorCore.hideFloatingContextToolbars();
-    modalEl.style.display = 'flex';
-    const firstSelect = refs.rulesBox.querySelector('select.macro-rule-column');
-    if (firstSelect) firstSelect.focus();
+    win.show(() => refs.rulesBox.querySelector('select.macro-rule-column'));
     updateDebug();
   }
 

@@ -15,7 +15,7 @@
 // Condition d'affichage (demande d'Antoine du 2026-09-29) : quand la variable d'origine en a une, chaque bulle insérée la reprend, par défaut - une ligne
 // « Reprendre la condition d'affichage », cochée, permet de les insérer sans. Une copie par bulle : elles se modifient ensuite chacune de leur côté.
 const VariableLinkedAttrs = (function () {
-  let modalEl = null;
+  let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
   // { editor, pos, node, base, refColumn, minHops, hops, picks } pendant que la fenêtre est ouverte. `base` : table dont partent les chemins ; `hops` : colonnes
   // Référence suivies depuis elle jusqu'au niveau affiché (vide : les colonnes de `base` elle-même) ; `picks` : cases cochées, { hops, col }, dans l'ordre du
@@ -73,17 +73,13 @@ const VariableLinkedAttrs = (function () {
   }
 
   function ensureModal() {
-    if (modalEl) return;
-    modalEl = el('div');
-    modalEl.id = 'var-linked-modal';
-    modalEl.style.display = 'none';
-    modalEl.tabIndex = -1;
-    const box = el('div', 'modal-content var-modal-content var-linked-modal-content');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-labelledby', 'var-linked-title');
-    const title = el('h3');
-    title.id = 'var-linked-title';
+    if (win) return;
+    // Cadre, titre, zone qui défile et ligne de boutons : js/modal-base.js (Échap ferme où que soit le focus ; le focus revient à l'éditeur, cf. close).
+    win = ModalBase.create({
+      id: 'var-linked-modal', titleId: 'var-linked-title', boxClass: 'var-modal-content var-linked-modal-content', actionsClass: 'var-modal-actions',
+      onEscape: () => close(), restoreFocus: false,
+    });
+    const title = win.title;
     const subtitle = el('p', 'var-modal-intro');
     const path = el('nav', 'var-linked-path');
     path.hidden = true;
@@ -100,16 +96,13 @@ const VariableLinkedAttrs = (function () {
     const inheritText = el('span', 'var-linked-inherit-text');
     const inheritSummary = el('span', 'var-linked-inherit-summary');
     inheritRow.append(inheritBox, inheritText, inheritSummary);
-    const actions = el('div', 'var-modal-actions');
     const spacer = el('span', 'var-modal-spacer');
     const cancelBtn = el('button');
     cancelBtn.type = 'button';
     const insertBtn = el('button', 'var-modal-primary');
     insertBtn.type = 'button';
-    actions.append(spacer, cancelBtn, insertBtn);
-    box.append(title, subtitle, inheritRow, path, filter, list, note, actions);
-    modalEl.appendChild(box);
-    document.body.appendChild(modalEl);
+    win.actions.append(spacer, cancelBtn, insertBtn);
+    win.body.append(subtitle, inheritRow, path, filter, list, note);
     refs = { title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, insertBtn };
 
     filter.addEventListener('input', applyFilter);
@@ -122,9 +115,6 @@ const VariableLinkedAttrs = (function () {
     });
     cancelBtn.addEventListener('click', close);
     insertBtn.addEventListener('click', insert);
-    modalEl.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && state) { event.preventDefault(); close(); }
-    });
   }
 
   // Cases cochées : gardées dans `state.picks` (et non lues dans la liste) pour survivre à un changement de niveau.
@@ -375,9 +365,9 @@ const VariableLinkedAttrs = (function () {
   }
 
   function close(opts) {
-    if (!modalEl) return;
+    if (!win) return;
     const editor = state && state.editor;
-    modalEl.style.display = 'none';
+    win.hide();
     state = null;
     valuesGeneration += 1;
     if (editor && !(opts && opts.keepFocus)) editor.view.focus();
@@ -404,8 +394,7 @@ const VariableLinkedAttrs = (function () {
     cancelBtn.textContent = I18n.t('common.cancel');
     renderInheritOption();
     renderLevel();
-    modalEl.style.display = 'flex';
-    filter.focus();
+    win.show(filter);
   }
 
   return { open, close, isOpen, isAvailable };

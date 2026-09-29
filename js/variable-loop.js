@@ -10,7 +10,7 @@ const VariableLoop = (function () {
   // Valeurs citées dans l'aperçu d'une zone répétée : les premières seulement, la suite en « … ».
   const PREVIEW_VALUES = 3;
 
-  let modalEl = null;
+  let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
   // { editor, pos, node, had, place, source, working } - `working` est une copie : rien n'est écrit dans la bulle avant « Enregistrer ».
   let state = null;
@@ -125,17 +125,15 @@ const VariableLoop = (function () {
 
   // === Fenêtre ===
   function ensureModal() {
-    if (modalEl) return;
-    modalEl = el('div');
-    modalEl.id = 'var-loop-modal';
-    modalEl.style.display = 'none';
-    modalEl.tabIndex = -1;
-    const box = el('div', 'modal-content var-modal-content var-loop-modal-content');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-labelledby', 'var-loop-title');
-    const title = el('h3');
-    title.id = 'var-loop-title';
+    if (win) return;
+    // Cadre, titre, zone qui défile et ligne de boutons : js/modal-base.js. Échap ferme la fenêtre où que soit le focus (sauf si le choix de la clé est ouvert
+    // par-dessus, « Modifier le lien » : la base lui laisse le clavier) ; le focus revient à l'éditeur (cf. close), pas à l'élément qui l'avait à l'ouverture.
+    win = ModalBase.create({
+      id: 'var-loop-modal', titleId: 'var-loop-title', boxClass: 'var-modal-content var-loop-modal-content', actionsClass: 'var-modal-actions',
+      onEscape: close, restoreFocus: false,
+    });
+    const box = win.box;
+    const title = win.title;
     const intro = el('p', 'var-modal-intro');
 
     const sourceLabel = el('div', 'var-loop-label');
@@ -200,7 +198,6 @@ const VariableLoop = (function () {
     const statsLine = el('div', 'var-condition-debug-line');
     preview.append(currentLine, statsLine);
 
-    const actions = el('div', 'var-modal-actions');
     const removeBtn = el('button', 'var-modal-danger');
     removeBtn.type = 'button';
     const spacer = el('span', 'var-modal-spacer');
@@ -208,11 +205,9 @@ const VariableLoop = (function () {
     cancelBtn.type = 'button';
     const saveBtn = el('button', 'var-modal-primary');
     saveBtn.type = 'button';
-    actions.append(removeBtn, spacer, cancelBtn, saveBtn);
+    win.actions.append(removeBtn, spacer, cancelBtn, saveBtn);
 
-    box.append(title, intro, sourceLabel, sourceBox, repeatLabelEl, repeatSeg, separatorRow, filterLabel, filterBox, two, emptyTextRow, preview, actions);
-    modalEl.appendChild(box);
-    document.body.appendChild(modalEl);
+    win.body.append(intro, sourceLabel, sourceBox, repeatLabelEl, repeatSeg, separatorRow, filterLabel, filterBox, two, emptyTextRow, preview);
     refs = {
       title, intro, sourceLabel, sourceText, sourceEdit, repeatLabelEl, repeatSeg, separatorRow, sepLabel, sepInput, lastLabel, lastInput, sepHint,
       filterLabel, filterBox, sortLabel, sortColumn, sortSearch: null, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyTextLabel, emptyTextInput,
@@ -244,14 +239,6 @@ const VariableLoop = (function () {
     // Toute saisie (séparateurs, filtre, tri, choix « si aucune ligne ») relance l'aperçu, avec un court délai pour ne pas recalculer à chaque touche.
     box.addEventListener('input', schedulePreview);
     box.addEventListener('change', schedulePreview);
-    modalEl.addEventListener('keydown', event => {
-      if (event.key !== 'Escape' || !state) return;
-      // Échap appartient à la fenêtre de choix de la clé tant qu'elle est ouverte par-dessus (« Modifier le lien », elle garde son propre Annuler).
-      const linkModal = document.getElementById('link-config-modal');
-      if (linkModal && linkModal.style.display !== 'none') return;
-      event.preventDefault();
-      close();
-    });
   }
 
   function renderIntro() {
@@ -537,9 +524,9 @@ const VariableLoop = (function () {
   }
 
   function close() {
-    if (!modalEl) return;
+    if (!win) return;
     const editor = state && state.editor;
-    modalEl.style.display = 'none';
+    win.hide();
     state = null;
     previewGeneration += 1;
     clearTimeout(previewTimer);
@@ -602,9 +589,7 @@ const VariableLoop = (function () {
     renderEmpty();
     // La barre flottante (z-index 2000) passerait sinon par-dessus le voile de cette fenêtre (1990, sous la fenêtre de choix de la clé).
     EditorCore.hideFloatingContextToolbars();
-    modalEl.style.display = 'flex';
-    const pressed = r.repeatSeg.querySelector('button[aria-pressed="true"]');
-    if (pressed) pressed.focus();
+    win.show(() => r.repeatSeg.querySelector('button[aria-pressed="true"]'));
     updatePreview();
   }
 

@@ -30,15 +30,10 @@
 /* « vide » / « non vide » : le champ Valeur ne sert pas, grisé (partagé avec la fenêtre des macro-modèles, js/condition-fields.js:syncValueDisabled). */
 .macro-rule-value-slot.is-disabled { opacity: .45; }
 
-/* === Fenêtres === z-index sous #link-config-modal (2000, css/style.css) : le choix de la clé d'une table pas encore liée s'ouvre PAR-DESSUS la fenêtre
-   de condition. max-height + actions collantes : Enregistrer/Annuler restent atteignables dans un panneau Grist bas (~700x400), comme la fenêtre macro. */
-#var-condition-modal, #var-linked-modal, #var-loop-modal { position: fixed; inset: 0; background: var(--pp-scrim, rgba(15, 23, 42, .45)); display: flex; align-items: center; justify-content: center; z-index: 1990; }
-.var-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; max-height: 90vh; overflow-y: auto; box-sizing: border-box; }
-.var-linked-modal-content { width: 420px; }
-.var-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); overflow-wrap: anywhere; }
+/* === Fenêtres === Le voile, le cadre, le titre, la zone qui défile et la ligne de boutons viennent de la base commune (js/modal-base.js, css/modal-base.css) :
+   dans un panneau Grist bas (~700x400), le titre et Enregistrer / Annuler restent visibles et seul le contenu défile. Ici : l'aspect du contenu et des boutons. */
 .var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 12px; overflow-wrap: anywhere; }
 .var-modal-intro .var-badge { border-style: dashed; border-color: #5b7fc0; font-size: 11.5px; }
-.var-modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; position: sticky; bottom: 0; background: var(--surface); padding-top: 4px; }
 .var-modal-actions .var-modal-spacer { flex: 1; }
 .var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .var-modal-actions button:hover { background: var(--surface-sunken); }
@@ -114,8 +109,6 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    « … » plutôt que d'élargir la fenêtre. */
 .var-linked-inherit { display: flex; align-items: center; gap: 6px; margin: -4px 0 10px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
 .var-linked-inherit[hidden] { display: none; }
-/* La ligne ajoute 23 px de haut : 6 px de moins entre la note et les boutons, pour qu'une fenêtre de quelques colonnes tienne encore sans défiler à 400 px. */
-.var-linked-inherit:not([hidden]) ~ .var-modal-actions { margin-top: 10px; }
 .var-linked-inherit input { flex: none; margin: 0; }
 .var-linked-inherit-text { flex: none; }
 .var-linked-inherit-summary { flex: 0 1 auto; min-width: 0; font-weight: 600; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
