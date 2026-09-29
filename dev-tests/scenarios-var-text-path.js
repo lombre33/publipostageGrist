@@ -2,6 +2,8 @@
 // carte « Oui, l'ajouter » : #Projet.Accompagnateur.Email doit se résoudre là aussi, comme dans le corps du modèle - cf. scenarios-var-path.js). Ces champs sont
 // de simples <input> sans bulle : Variables.findTextVariables scanne le texte, une clé de colonne Référence se prolonge par « .Colonne » de la ligne qu'elle
 // désigne, et le reste (fin de phrase, « .pdf ») demeure du texte. Un seul scan pour tous les champs (Variables.resolveTextVariables, ReaderMode.resolveFilename).
+// Deuxième carte d'Antoine (« Oui, la proposer ») : la liste # de ces champs propose aussi, après « #Projet.Accompagnateur. », les colonnes de la ligne que
+// désigne la Référence (Variables.pathItems, dans checkForFilenameTrigger) - le clavier et la souris réels à 700x400 sont dans verify-small-panel.mjs.
 (function () {
   const cases = [];
 
@@ -24,7 +26,7 @@
       { id: 9, NomPrenom: 'Durand Paul', Email: 'durand:paul@ex.fr', Service: 4, gristHelper_Display: 'Fiscal' },
     ]);
     stub.setVariables('TpProjet', {
-      Nom: 'Text', Statut: 'Text', Accompagnateur: 'Ref:TpAnnuaire', Porteur: 'Ref:TpAnnuaire', gristHelper_Display: 'Text', gristHelper_Display2: 'Text',
+      Nom: 'Text', NomLong: 'Text', Statut: 'Text', Accompagnateur: 'Ref:TpAnnuaire', Porteur: 'Ref:TpAnnuaire', gristHelper_Display: 'Text', gristHelper_Display2: 'Text',
     }, null, { Accompagnateur: 'gristHelper_Display', Porteur: 'gristHelper_Display2' });
     stub.setRows('TpProjet', [
       { id: 1, Nom: 'Projet Alpha', Statut: 'En cours', Accompagnateur: 7, Porteur: 8, gristHelper_Display: 'Dupont Jean', gristHelper_Display2: 'Martin Anne' },
@@ -149,6 +151,141 @@
       }
       const pass = storage && viaText === 'jean.dupont@ex.fr' && viaFilename === 'Suivi_jean.dupont@ex.fr' && leftover === '#TpProjet.Nom';
       return { pass, notes: JSON.stringify({ storage, viaText, viaFilename, leftover }) };
+    },
+  });
+
+  // --- Saisie assistée : la liste # sous les champs texte. `type` pose la valeur, le curseur à la fin et l'évènement input, comme le fait le navigateur à chaque
+  // frappe ; `listed` relit les lignes de la liste comme on les lit à l'écran (null = fermée). ---
+  const acBox = () => document.getElementById('autocomplete-box');
+  const listed = () => (acBox() && acBox().style.display !== 'none' ? Array.from(acBox().querySelectorAll('.ac-item')).map(e => e.textContent) : null);
+  async function type(h, input, value) {
+    input.value = value;
+    input.setSelectionRange(value.length, value.length);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await h.sleep(30);
+  }
+  const press = (input, key) => input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  async function reset(h, input) { press(input, 'Escape'); input.value = ''; await h.sleep(10); }
+  const field = id => document.getElementById(id);
+  const sameSet = (got, expected) => JSON.stringify((got || []).slice().sort()) === JSON.stringify(expected.slice().sort());
+
+  cases.push({
+    id: 'vartextpath_assist_lists_the_columns_of_the_linked_row_after_the_dot',
+    description: 'Dans le champ À, après « #TpProjet.Accompagnateur. » la liste propose les colonnes de l’annuaire (sans colonne d’aide), se filtre à la frappe, et Entrée met le chemin entier à la place de la saisie ; le chemin se résout ensuite en l’email',
+    run: async (h) => {
+      await seed(h);
+      const to = field('v2-email-to');
+      await type(h, to, '#TpProjet.Accompagnateur.');
+      const all = listed();
+      await type(h, to, '#TpProjet.Accompagnateur.em');
+      const filtered = listed();
+      press(to, 'Enter');
+      await h.sleep(30);
+      const value = to.value;
+      const closed = listed() === null;
+      const resolved = await text(value);
+      await reset(h, to);
+      const pass = sameSet(all, ['TpProjet.Accompagnateur.NomPrenom', 'TpProjet.Accompagnateur.Email', 'TpProjet.Accompagnateur.Service'])
+        && JSON.stringify(filtered) === JSON.stringify(['TpProjet.Accompagnateur.Email']) && value === '#TpProjet.Accompagnateur.Email' && closed && resolved === 'jean.dupont@ex.fr';
+      return { pass, notes: JSON.stringify({ all, filtered, value, closed, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_assist_continues_through_a_second_reference_and_after_text',
+    description: 'La liste continue de référence en référence (« #TpProjet.Accompagnateur.Service. » propose les colonnes des services), même au milieu d’une phrase, et le texte avant le # est conservé à l’insertion',
+    run: async (h) => {
+      await seed(h);
+      const subject = field('v2-email-subject');
+      await type(h, subject, 'Suivi de #TpProjet.Accompagnateur.Service.');
+      const second = listed();
+      press(subject, 'Enter');
+      await h.sleep(30);
+      const value = subject.value;
+      const resolved = await text(value);
+      await reset(h, subject);
+      const pass = JSON.stringify(second) === JSON.stringify(['TpProjet.Accompagnateur.Service.Nom']) && value === 'Suivi de #TpProjet.Accompagnateur.Service.Nom' && resolved === 'Suivi de Juridique';
+      return { pass, notes: JSON.stringify({ second, value, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_assist_plain_list_filters_across_the_dot_and_closes_on_text',
+    description: 'Une saisie qui n’est pas un chemin de références filtre les clés « Table.Colonne » (le point ne ferme plus la liste : « #TpProjet.Acc » propose TpProjet.Accompagnateur) ; après une colonne qui n’est pas une Référence, une colonne ou une table inconnue, ou du texte sans #, la liste se ferme',
+    run: async (h) => {
+      await seed(h);
+      const cc = field('v2-email-cc');
+      const seen = {};
+      for (const [name, value] of Object.entries({
+        table: '#TpProjet', dotted: '#TpProjet.Acc', notReference: '#TpProjet.Nom.', unknownColumn: '#TpProjet.Inconnue.', unknownTable: '#Inconnue.Nom.', noTrigger: 'Bonjour.',
+        endOfSentence: 'Voir #TpProjet.Nom.',
+      })) {
+        await type(h, cc, value);
+        seen[name] = listed();
+        await reset(h, cc);
+      }
+      const pass = !!seen.table && seen.table.includes('TpProjet.Nom') && seen.table.includes('TpProjet.Accompagnateur')
+        && JSON.stringify(seen.dotted) === JSON.stringify(['TpProjet.Accompagnateur']) && seen.notReference === null && seen.unknownColumn === null && seen.unknownTable === null
+        && seen.noTrigger === null && seen.endOfSentence === null;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_assist_works_in_the_pdf_filename_field_and_a_click_picks_an_entry',
+    description: 'Le champ « Nom de fichier PDF » a la même liste (chemin, texte avant le #, nom de fichier résolu) ; un clic sur une ligne de la liste insère sa clé, comme avant pour une clé simple',
+    run: async (h) => {
+      await seed(h);
+      const name = field('pdf-filename-template');
+      await type(h, name, 'Suivi_#TpProjet.Porteur.NomP');
+      const listedPath = listed();
+      press(name, 'Enter');
+      await h.sleep(30);
+      const pathValue = name.value;
+      const fileName = await filename(pathValue);
+      await reset(h, name);
+      await type(h, name, '#TpProjet.No');
+      const plainRow = acBox() && Array.from(acBox().querySelectorAll('.ac-item')).find(e => e.textContent === 'TpProjet.Nom');
+      if (plainRow) plainRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      const plainValue = name.value;
+      const closedAfterClick = listed() === null;
+      await reset(h, name);
+      const pass = JSON.stringify(listedPath) === JSON.stringify(['TpProjet.Porteur.NomPrenom']) && pathValue === 'Suivi_#TpProjet.Porteur.NomPrenom' && fileName === 'Suivi_Martin Anne'
+        && !!plainRow && plainValue === '#TpProjet.Nom' && closedAfterClick;
+      return { pass, notes: JSON.stringify({ listedPath, pathValue, fileName, plainValue, closedAfterClick, plainRow: !!plainRow }) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_assist_stays_closed_after_a_pick_and_behind_a_complete_key',
+    description: 'La liste ne se rouvre pas sur la clé qu’un choix vient de poser (même quand une autre clé la contient : TpProjet.Nom / TpProjet.NomLong), ni quand une clé tapée en entier est seule à correspondre, ni quand le curseur revient derrière une variable complète (Début, Fin) ; elle reste ouverte tant que la saisie peut encore se compléter',
+    run: async (h) => {
+      await seed(h);
+      const to = field('v2-email-to');
+      await type(h, to, '#TpProjet.Nom');
+      const ambiguous = listed();
+      press(to, 'Enter');
+      await h.sleep(30);
+      const afterPick = { value: to.value, list: listed() };
+      await reset(h, to);
+      await type(h, to, '#TpProjet.Accompagnateur.Email');
+      const typedInFull = listed();
+      to.setSelectionRange(0, 0);
+      to.dispatchEvent(new KeyboardEvent('keyup', { key: 'Home', bubbles: true }));
+      await h.sleep(30);
+      const caretAtStart = listed();
+      to.setSelectionRange(to.value.length, to.value.length);
+      to.dispatchEvent(new KeyboardEvent('keyup', { key: 'End', bubbles: true }));
+      await h.sleep(30);
+      const caretBehind = listed();
+      await reset(h, to);
+      await type(h, to, '#TpProjet.Accompagnateur.Emai');
+      const almostComplete = listed();
+      await reset(h, to);
+      const pass = JSON.stringify(ambiguous) === JSON.stringify(['TpProjet.Nom', 'TpProjet.NomLong']) && afterPick.value === '#TpProjet.Nom' && afterPick.list === null
+        && typedInFull === null && caretAtStart === null && caretBehind === null && JSON.stringify(almostComplete) === JSON.stringify(['TpProjet.Accompagnateur.Email']);
+      return { pass, notes: JSON.stringify({ ambiguous, afterPick, typedInFull, caretAtStart, caretBehind, almostComplete }) };
     },
   });
 

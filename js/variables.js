@@ -215,11 +215,42 @@ const Variables = (function () {
   // Champ "Nom de fichier PDF" : un <input> plein texte, pas de @tiptap/suggestion possible (pas un contenteditable) - réutilise le même
   // acBox/currentItems/selectedIndex que l'éditeur (jamais actifs ensemble). `filenameInputState` distingue l'origine, `latestCommand` étant partagé.
   let filenameInputState = null;
+  // Vrai le temps qu'insertFilenameVariable prévient le champ (évènement input) : sans lui la liste se rouvrirait sur la clé qu'on vient de poser, le point de « Table.Colonne »
+  // faisant maintenant partie de ce que la liste lit.
+  let insertingFilenameVariable = false;
+  // Saisie « Table.Colonne.…» d'un champ texte (`raw`, casse tapée) : si ce qui précède le dernier point est un chemin de colonnes Référence qui part d'une table
+  // (« Projet.Accompagnateur »), les colonnes de la table atteinte dont le nom contient ce qui suit le point, sous forme de variables (clé
+  // « Projet.Accompagnateur.Email », colonne « Accompagnateur.Email » - le même chemin que findTextVariables résout). null quand le début n'est pas un tel chemin :
+  // la saisie se filtre alors comme une clé simple.
+  function pathItems(raw) {
+    const cut = raw.lastIndexOf('.');
+    if (cut === -1) return null;
+    const parts = raw.slice(0, cut).split('.');
+    if (parts.length < 2) return null;
+    const named = (names, wanted) => names.find(n => n.toLowerCase() === wanted.toLowerCase());
+    const table = named(GristAPI.getTables(), parts[0]);
+    if (!table) return null;
+    const hops = [];
+    let reached = table;
+    for (const part of parts.slice(1)) {
+      const column = named(GristAPI.getColumns(reached), part);
+      reached = column && GristAPI.tableAtEndOf(reached, [column]);
+      if (!reached) return null;
+      hops.push(column);
+    }
+    const partial = raw.slice(cut + 1).toLowerCase();
+    // Sans les colonnes d'aide « gristHelper_… » (le texte affiché d'une Référence, que Grist range dans la même table) : elles ne se tapent jamais.
+    return GristAPI.getColumns(reached).filter(c => c.indexOf('gristHelper_') !== 0 && c.toLowerCase().includes(partial)).map(c => {
+      const path = hops.concat(c).join('.');
+      return { key: table + '.' + path, table, column: path };
+    });
+  }
   function checkForFilenameTrigger(el) {
+    if (insertingFilenameVariable) return;
     const caret = el.selectionStart;
     if (caret == null) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     const text = el.value.slice(0, caret);
-    const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_]*)$'));
+    const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_.]*)$'));
     if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     // Même rafraîchissement "une fois par session" que le déclencheur de l'éditeur, déclenché dès le 1er caractère tapé après # - sans ça, chercher une
     // colonne toute juste ajoutée ne trouverait jamais rien, la branche !items.length ci-dessous fermant le popup avant d'avoir pu rafraîchir.
@@ -229,8 +260,11 @@ const Variables = (function () {
     }
     const query = match[1].toLowerCase();
     const all = GristAPI.getAllVariables();
-    const items = all.filter(v => v.key.toLowerCase().includes(query)).slice(0, 50);
-    if (!items.length) { hide(); filenameInputState = null; return; }
+    // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie filtre les clés « Table.Colonne ».
+    const items = (pathItems(match[1]) || all.filter(v => v.key.toLowerCase().includes(query))).slice(0, 50);
+    // Une clé tapée en entier, seule proposition : rien à compléter (clé tapée à la main, curseur qui revient derrière une variable posée) - la liste restait fermée
+    // là tant que le point la fermait.
+    if (!items.length || (items.length === 1 && items[0].key.toLowerCase() === query)) { hide(); filenameInputState = null; return; }
     filenameInputState = { el, start: caret - match[0].length, end: caret };
     currentItems = items;
     selectedIndex = 0;
@@ -254,7 +288,8 @@ const Variables = (function () {
     filenameInputState = null;
     el.focus();
     el.setSelectionRange(newCaret, newCaret);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    insertingFilenameVariable = true;
+    try { el.dispatchEvent(new Event('input', { bubbles: true })); } finally { insertingFilenameVariable = false; }
   }
   // À appeler depuis main.js une fois le champ de nom de fichier PDF présent dans le DOM (indépendant de createExtension, qui ne concerne que l'éditeur).
   function initFilenameInput(el) {
