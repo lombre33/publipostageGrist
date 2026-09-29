@@ -21,6 +21,14 @@ const MacroEditor = (function () {
   // Champs Colonne / Opérateur / Valeur d'une règle (liste des colonnes, choix réels d'une colonne Choice, indication de type, avertissement
   // "colonne absente de la ligne") : js/condition-fields.js, partagé avec les variables conditionnelles - jamais recopié ici.
 
+  // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne (demande d'Antoine du 2026-09-29). Le <select> reste la source de la
+  // valeur - et la liste native si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un
+  // <select> déjà équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
+  function searchable(select, opts) {
+    try { return SearchSelect.attachTemplates(select, opts); }
+    catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
+  }
+
   function fillModeleSelect(select, selectedId, placeholderKey) {
     select.innerHTML = '';
     const empty = document.createElement('option');
@@ -91,6 +99,7 @@ const MacroEditor = (function () {
         fillModeleSelect(modeleSelect, rule.modeleId, 'macro.modal.choosePlaceholder');
         modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
         row.appendChild(modeleSelect);
+        searchable(modeleSelect, { inline: true });
 
         const removeRuleBtn = document.createElement('button');
         removeRuleBtn.type = 'button';
@@ -132,6 +141,7 @@ const MacroEditor = (function () {
       const skipOpt = document.createElement('option');
       skipOpt.value = '';
       skipOpt.textContent = I18n.t('macro.modal.defaultSkip');
+      skipOpt.dataset.placeholder = 'false'; // liste avec recherche : « Ne rien inclure » est un vrai choix, pas un « rien » grisé
       defaultSelect.appendChild(skipOpt);
       availableTemplates().forEach(t => {
         const o = document.createElement('option');
@@ -142,6 +152,7 @@ const MacroEditor = (function () {
       defaultSelect.value = slot.defaultModeleId != null ? String(slot.defaultModeleId) : '';
       defaultSelect.addEventListener('change', () => { slot.defaultModeleId = defaultSelect.value || null; });
       card.appendChild(defaultSelect);
+      searchable(defaultSelect);
 
       container.appendChild(card);
     });
@@ -154,7 +165,11 @@ const MacroEditor = (function () {
     slots = JSON.parse(JSON.stringify(existingSlots.filter(s => s.type === 'conditional')));
     const cover = existingSlots.find(s => s.type === 'fixed');
     if (nameInput()) nameInput().value = tpl ? tpl.nom : '';
-    if (coverSelect()) fillModeleSelect(coverSelect(), cover ? cover.modeleId : null, 'macro.modal.choosePlaceholder');
+    if (coverSelect()) {
+      fillModeleSelect(coverSelect(), cover ? cover.modeleId : null, 'macro.modal.choosePlaceholder');
+      const coverSearch = searchable(coverSelect());
+      if (coverSearch) coverSearch.sync();
+    }
     renderSlots();
     const m = modal();
     if (m) m.style.display = 'flex';

@@ -19,6 +19,10 @@
 .ss-hint { margin-left: .35em; font-size: 11.5px; color: var(--text-faint); }
 .ss-chevron { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 
+/* Fenêtre du macro-modèle (js/macro-editor.js) : la liste « Si aucune règle ne correspond » garde la hauteur et le corps de l'ancien <select> (28 px, 12 px) ;
+   la page de garde garde ceux des champs de la fenêtre (30 px, 12,5 px : le défaut), les listes des règles sont `inline`. */
+.macro-slot-default-select + .ss-wrap .ss-trigger { height: 28px; padding: 0 6px; font-size: 12px; }
+
 /* Menu sans champ fermé (`popup: true`, « Image depuis une variable » de la barre) : seul le panneau se voit, ouvert par le code à côté de la ligne qui l'a
    demandé, au-dessus de la barre d'outils comme l'ancienne liste simple (z-index de #v2-image-var-picker, css/toolbar-v2.css). */
 .ss-popup .ss-trigger { display: none; }

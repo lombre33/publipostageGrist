@@ -400,6 +400,11 @@ const I18n = (function () {
     'searchSelect.placeholder': { fr: 'Rechercher…', en: 'Search…' },
     'searchSelect.empty': { fr: 'Aucun résultat.', en: 'No results.' },
     'searchSelect.count': { fr: '{count} résultat(s)', en: '{count} result(s)' },
+    // Même liste avec recherche pour une TABLE (Réglages > Accès) et pour un MODÈLE (macro-modèle) : SearchSelect.attachTables / attachTemplates.
+    'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
+    'searchSelect.noTableMatch': { fr: 'Aucune table ne correspond.', en: 'No table matches.' },
+    'searchSelect.searchTemplates': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
+    'searchSelect.noTemplateMatch': { fr: 'Aucun modèle ne correspond.', en: 'No template matches.' },
     'linkConfig.describeSingleton': { fr: 'une seule ligne (paramètres)', en: 'a single row (settings)' },
     'linkConfig.describeRowId': { fr: 'identifiant de ligne', en: 'row ID' },
     'linkConfig.previewChooseColumns': { fr: 'Choisissez les deux colonnes pour voir un aperçu.', en: 'Choose both columns to see a preview.' },
