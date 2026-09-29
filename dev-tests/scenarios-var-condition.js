@@ -467,6 +467,25 @@
       value: row.querySelector('.macro-rule-value').value,
     }));
   }
+  // Ce que dit le champ fermé de la colonne de chaque règle (liste avec recherche, js/search-select.js) : le nom seul, comme à l'écran.
+  function shownColumns(modal) {
+    return Array.from(modal.querySelectorAll('.macro-rule-row')).map(row => { const field = row.querySelector('.macro-rule-column-wrap .ss-trigger'); return field ? field.textContent : null; });
+  }
+  // Choisit une colonne comme une personne, dans le champ avec recherche : clic sur le champ visible, frappe du nom puis Entrée sur le premier résultat ; un nom
+  // vide prend le choix « rien » de la liste. Le <select> masqué, source de la valeur, reçoit `change` comme avant.
+  async function pickColumn(h, row, name) {
+    row.querySelector('.macro-rule-column-wrap .ss-trigger').click();
+    await h.sleep(30);
+    const panel = row.querySelector('.macro-rule-column-wrap .ss-panel');
+    if (name === '') panel.querySelector('.ss-option.is-empty').click();
+    else {
+      const input = panel.querySelector('.ss-input');
+      setInput(input, name);
+      await h.sleep(10);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    }
+    await h.sleep(40);
+  }
   function windowMode(modal) {
     const row = modal.querySelector('.var-condition-mode');
     return { shown: !row.hidden, value: row.querySelector('select').value };
@@ -495,12 +514,12 @@
       await h.sleep(30);
       const afterEmptyClicks = { rules: windowRules(modal), paste: clipInfo(paste) };
       // 2) Deux règles saisies à l'écran, sans enregistrer : Copier s'active et emporte ce qui est affiché.
-      setSelect(modal.querySelector('select.macro-rule-column'), 'Statut');
+      await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Statut');
       await h.sleep(30);
       setInput(modal.querySelector('.macro-rule-value'), 'Urgent');
       modal.querySelector('.var-condition-add').click();
       await h.sleep(30);
-      setSelect(modal.querySelectorAll('.macro-rule-row')[1].querySelector('select.macro-rule-column'), 'VcContacts.Role');
+      await pickColumn(h, modal.querySelectorAll('.macro-rule-row')[1], 'VcContacts.Role');
       await h.sleep(60);
       setInput(modal.querySelectorAll('.macro-rule-row')[1].querySelector('.macro-rule-value'), 'Avocat');
       setSelect(modal.querySelector('.var-condition-mode select'), 'any');
@@ -517,7 +536,7 @@
       const otherWindow = { copy: clipInfo(copy), paste: clipInfo(paste) };
       paste.click();
       await h.sleep(60);
-      const pasted = { rules: windowRules(modal), mode: windowMode(modal), bubble: conditionOf(ed, 'Montant') };
+      const pasted = { rules: windowRules(modal), shown: shownColumns(modal), mode: windowMode(modal), bubble: conditionOf(ed, 'Montant') };
       // Modifier la copie collée puis Annuler : la bulle reste sans condition et le presse-papier garde « Urgent ».
       setInput(modal.querySelector('.macro-rule-value'), 'Normal');
       cancelWindow(modal);
@@ -543,7 +562,8 @@
         && afterCopy.paste.title === I18n.t('varCond.clip.pasteTitle', { summary })
         && titreAfterCancel == null
         && otherWindow.copy.text === I18n.t('varCond.clip.copy') && !otherWindow.copy.done && otherWindow.copy.disabled === 'true' && otherWindow.paste.disabled === 'false'
-        && JSON.stringify(pasted.rules) === JSON.stringify(expected.rules) && pasted.mode.shown && pasted.mode.value === 'any' && pasted.bubble == null
+        && JSON.stringify(pasted.rules) === JSON.stringify(expected.rules) && JSON.stringify(pasted.shown) === JSON.stringify(['Statut', 'VcContacts.Role'])
+        && pasted.mode.shown && pasted.mode.value === 'any' && pasted.bubble == null
         && afterCancel == null
         && JSON.stringify(secondPaste.rules) === JSON.stringify(expected.rules) && secondPaste.holds
         && JSON.stringify(saved) === JSON.stringify(expected) && conditionOf(ed, 'Titre') == null && (html.match(/data-condition=/g) || []).length === 1;
@@ -564,12 +584,11 @@
       let modal = await openWindow(h, 'Statut');
       let { copy, paste } = clipButtons(modal);
       if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
-      const select = modal.querySelector('select.macro-rule-column');
       const noColumn = clipInfo(copy);
-      setSelect(select, 'Titre');
+      await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Titre');
       await h.sleep(400);
       const withColumn = clipInfo(copy);
-      setSelect(select, '');
+      await pickColumn(h, modal.querySelector('.macro-rule-row'), '');
       await h.sleep(400);
       const columnRemoved = clipInfo(copy);
       cancelWindow(modal);
@@ -586,7 +605,7 @@
       const before = { rules: windowRules(modal), paste: clipInfo(paste) };
       paste.click();
       await h.sleep(60);
-      const after = { rules: windowRules(modal), mode: windowMode(modal), removeShown: !modal.querySelector('.var-modal-danger').hidden };
+      const after = { rules: windowRules(modal), shown: shownColumns(modal), mode: windowMode(modal), removeShown: !modal.querySelector('.var-modal-danger').hidden };
       saveWindow(modal);
       await h.sleep(80);
       const summary = 'Statut vide ' + I18n.t('varCond.ruleAnd').toLowerCase() + ' Montant ≥ 100';
@@ -595,7 +614,8 @@
         && saved.disabled === 'false'
         && JSON.stringify(before.rules) === JSON.stringify(COND_NORMAL.rules) && before.paste.disabled === 'false'
         && before.paste.title === I18n.t('varCond.clip.pasteTitle', { summary })
-        && JSON.stringify(after.rules) === JSON.stringify(onTitre.rules) && after.removeShown && after.mode.shown && after.mode.value === 'all'
+        && JSON.stringify(after.rules) === JSON.stringify(onTitre.rules) && JSON.stringify(after.shown) === JSON.stringify(['Statut', 'Montant'])
+        && after.removeShown && after.mode.shown && after.mode.value === 'all'
         && JSON.stringify(conditionOf(ed, 'Montant')) === JSON.stringify(onTitre) && JSON.stringify(conditionOf(ed, 'Titre')) === JSON.stringify(onTitre);
       return { pass, notes: JSON.stringify({ noColumn, withColumn, columnRemoved, saved, before, after, montant: conditionOf(ed, 'Montant') }) };
     },

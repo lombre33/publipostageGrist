@@ -552,7 +552,7 @@ const footLayout = () => page.evaluate(sel => {
 await openConditionFor('Titre');
 const clipEmpty = [await clipInfo(1), await clipInfo(2)];
 check('fenêtre de « Titre » sans condition : Copier et Coller sont là et grisés', !clipEmpty[0].missing && !clipEmpty[1].missing && clipEmpty[0].disabled === 'true' && clipEmpty[1].disabled === 'true', clipEmpty);
-await page.selectOption(`${MODAL} select.macro-rule-column`, 'Statut');
+check('colonne Statut choisie à la vraie souris dans la liste avec recherche (condition de « Titre »)', await pickColumn(MODAL, 'Statut'));
 await page.waitForTimeout(100);
 const firstValue = await hitTest(`${MODAL} .macro-rule-value`);
 if (firstValue.found) { await page.mouse.click(firstValue.x, firstValue.y); await page.keyboard.type('Urgent'); }
@@ -560,7 +560,7 @@ const addRule = await hitTest(`${MODAL} .var-condition-add`);
 check('« + Ajouter une condition » visible et non recouvert', addRule.found && addRule.inViewport && addRule.onTop, addRule);
 if (addRule.found) await page.mouse.click(addRule.x, addRule.y);
 await page.waitForTimeout(150);
-await page.selectOption(`${MODAL} .macro-rule-row:nth-of-type(2) select.macro-rule-column`, 'Montant');
+check('colonne Montant choisie à la vraie souris dans la liste avec recherche (deuxième règle)', await pickColumn(`${MODAL} .macro-rule-row:nth-of-type(2)`, 'Montant'));
 await page.waitForTimeout(100);
 await page.selectOption(`${MODAL} .macro-rule-row:nth-of-type(2) > select`, '≥');
 const secondValue = await hitTest(`${MODAL} .macro-rule-row:nth-of-type(2) .macro-rule-value`);
@@ -609,10 +609,13 @@ const afterPaste = await page.evaluate(() => ({
   rules: Array.from(document.querySelectorAll('#var-condition-modal .macro-rule-row')).map(row => ({
     column: row.querySelector('select.macro-rule-column').value, operator: row.querySelector(':scope > select').value, value: row.querySelector('.macro-rule-value').value,
   })),
+  // Ce que la personne lit dans le champ fermé de chaque règle (liste avec recherche, js/search-select.js) : la colonne collée doit s'y voir, pas seulement dans le <select> masqué.
+  shown: Array.from(document.querySelectorAll('#var-condition-modal .macro-rule-row')).map(row => { const name = row.querySelector('.macro-rule-column-wrap .ss-trigger .ss-name'); return name ? name.textContent : null; }),
   mode: (() => { const r = document.querySelector('#var-condition-modal .var-condition-mode'); return { shown: !r.hidden, value: r.querySelector('select').value }; })(),
   focusInWindow: document.getElementById('var-condition-modal').contains(document.activeElement) && document.activeElement !== document.body,
 }));
 const pasteFocus = await clipInfo(2);
+check('Entrée sur Coller : chaque colonne collée se lit dans son champ fermé (Statut, Montant)', JSON.stringify(afterPaste.shown) === JSON.stringify(['Statut', 'Montant']), afterPaste.shown);
 check('Entrée sur Coller : les deux règles et « au moins une » arrivent dans la fenêtre, le focus reste sur Coller',
   JSON.stringify(afterPaste.rules) === JSON.stringify([{ column: 'Statut', operator: '=', value: 'Urgent' }, { column: 'Montant', operator: '≥', value: '100' }])
   && afterPaste.mode.shown && afterPaste.mode.value === 'any' && afterPaste.focusInWindow && pasteFocus.focused, { afterPaste, pasteFocus });
