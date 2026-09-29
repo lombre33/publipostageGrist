@@ -10,24 +10,22 @@ const EditorNodes = (function () {
     } catch (e) { return '#'; }
   }
 
-  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau trop étroite tronque le MILIEU du nom (« #Projet.Accomp…Email » plutôt
-  // que « #Projet.Accompagnateur.Em… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au bout. La fin est le dernier élément du chemin
-  // quand il est court (Email, Nom), sinon les derniers caractères en commençant sur un mot entier s'il y en a un (« du_client » plutôt que « te_du_client ») ;
-  // un nom court n'est pas coupé.
+  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau trop étroite tronque le MILIEU du nom (« #Projets.Det…Fonctionnement » plutôt
+  // que « #Projets.Details_depense_s_Fonc… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au bout. La fin est le dernier mot du nom en
+  // entier (« Fonctionnement », « Email ») complété des mots qui le précèdent tant qu'elle reste courte (« du_client », « s_Personnel ») ; un dernier mot trop long
+  // est coupé à ses derniers caractères. C'est la case qui dit ensuite combien de cette fin se voit (css/variable-actions.css : elle se coupe par la gauche, jamais
+  // par la droite, donc le bout du nom reste lisible). Un nom court n'est pas coupé.
   const BADGE_TAIL_MAX = 12;
-  const BADGE_TAIL_MIN = 5;
+  const BADGE_LAST_WORD_MAX = 16;
   function splitBadgeLabel(label) {
     if (label.length <= BADGE_TAIL_MAX + 4) return { head: label, tail: '' };
-    let cut = label.length - BADGE_TAIL_MAX;
-    const dot = label.lastIndexOf('.');
-    const lastSegment = label.length - dot - 1;
-    if (dot > 0 && lastSegment >= 4 && lastSegment <= BADGE_TAIL_MAX) {
-      cut = dot + 1;
-    } else {
-      const separator = label.slice(cut).search(/[_\s-]/);
-      if (separator >= 0 && label.length - (cut + separator + 1) >= BADGE_TAIL_MIN) cut += separator + 1;
-    }
-    return { head: label.slice(0, cut), tail: label.slice(cut) };
+    // Les mots du nom, chacun suivi de son séparateur (_ . - espace) : « #Projets. », « Details_ », « depense_ », « s_ », « Fonctionnement ».
+    const words = label.match(/[^_.\s-]*[_.\s-]*/g).filter(Boolean);
+    let tail = words.length > 1 ? words[words.length - 1] : label;
+    if (tail.length > BADGE_LAST_WORD_MAX) tail = tail.slice(-BADGE_TAIL_MAX);
+    // Le premier mot (la table) reste toujours dans le début.
+    for (let i = words.length - 2; i >= 1 && (words[i] + tail).length <= BADGE_TAIL_MAX; i--) tail = words[i] + tail;
+    return { head: label.slice(0, label.length - tail.length), tail };
   }
 
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
@@ -98,17 +96,22 @@ const EditorNodes = (function () {
           head.textContent = parts.head;
           dom.appendChild(head);
           let tail = null;
+          let tailText = null;
           if (parts.tail) {
+            // La fin est dans une boîte qui la cale à droite : quand la case est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
             tail = document.createElement('span');
             tail.className = 'var-badge-tail';
-            tail.textContent = parts.tail;
+            tailText = document.createElement('span');
+            tailText.textContent = parts.tail;
+            tail.appendChild(tailText);
             dom.appendChild(tail);
           }
           // Nom coupé par la case : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
-          // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document).
+          // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la gauche, ce que
+          // scrollWidth ne compte pas : on compare les rectangles.
           dom.addEventListener('mouseenter', () => {
             if (dom.classList.contains('var-badge-broken')) return;
-            const cut = head.scrollWidth > head.clientWidth || (tail && tail.scrollWidth > tail.clientWidth);
+            const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
             if (cut) dom.title = label;
             else if (dom.title === label) dom.removeAttribute('title');
           });

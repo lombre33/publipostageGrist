@@ -6,6 +6,10 @@
 // en un début et une fin, css/variable-actions.css les rétrécit dans une case ; tout le reste ne doit pas bouger : getHTML() garde le nom entier dans un seul texte,
 // copier donne la bulle entière, le clic la sélectionne et ouvre la barre de variable, hors d'un tableau la bulle garde son rendu en ligne, le point bleu du format
 // (hors de la boîte de la bulle) n'est pas rogné, une bulle cassée garde son propre message d'erreur.
+// Sa capture « Budget validé » (colonne de ~118 px, noms en Details_depense_s_Fonctionnement) a montré deux défauts de la première version : à certaines largeurs
+// le début ne laissait qu'une tranche de « # » sans « … » (« #nctionnement » passait pour un nom entier), et la fin commençait au milieu d'un mot alors que la case
+// avait la place de « Fonctionnement » en entier. Désormais le repère « #… » est toujours là, la fin est le dernier mot du nom et c'est elle qui se coupe, par la
+// GAUCHE, quand la case est trop étroite : le bout du nom, qui distingue une variable d'une autre, reste toujours visible.
 // Lancé par run-headless.mjs (groupe Node "chipCellMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chip-cell-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -139,21 +143,37 @@ async function loadDoc(html) {
   await settle();
 }
 
-// Ce qu'on voit de chaque bulle : sa place par rapport à son paragraphe (donc à sa case), ses deux morceaux et ce que chacun coupe.
+// Ce qu'on voit de chaque bulle : sa place par rapport à son paragraphe (donc à sa case), ses deux morceaux et ce que chacun coupe. La fin se coupe par la
+// gauche (son texte est calé à droite de sa boîte), donc `tailClipped` compare des rectangles : scrollWidth ne compte pas ce débordement-là.
 const chipsInfo = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap span.var-badge')).map((b, index) => {
   const r = b.getBoundingClientRect();
   const p = b.closest('p');
   const c = p.getBoundingClientRect();
   const head = b.querySelector('.var-badge-head');
   const tail = b.querySelector('.var-badge-tail');
-  return {
+  const tailText = tail ? tail.firstElementChild : null;
+  const hb = head ? head.getBoundingClientRect() : null;
+  const tb = tail ? tail.getBoundingClientRect() : null;
+  const tt = tailText ? tailText.getBoundingClientRect() : null;
+  const info = {
     index, key: b.dataset.key, label: b.textContent, inCell: !!b.closest('td, th'),
     outLeft: Math.round((c.left - r.left) * 10) / 10, outRight: Math.round((r.right - c.right) * 10) / 10, h: Math.round(r.height * 10) / 10, w: Math.round(r.width),
-    head: head ? head.textContent : null, tail: tail ? tail.textContent : null,
-    headCut: head ? head.scrollWidth > head.clientWidth : false, tailCut: tail ? tail.scrollWidth > tail.clientWidth : false,
+    head: head ? head.textContent : null, tail: tailText ? tailText.textContent : null,
+    headW: hb ? Math.round(hb.width * 10) / 10 : null,
+    headCut: head ? head.scrollWidth > head.clientWidth : false,
+    tailW: tb ? Math.round(tb.width * 10) / 10 : null,
+    tailClipped: tt ? tt.width > tb.width + 0.5 : false,
+    tailAtEnd: tt ? Math.abs(tb.right - tt.right) < 0.5 : false,
     display: getComputedStyle(b).display, title: b.title, broken: b.classList.contains('var-badge-broken'),
     x: r.left + r.width / 2, y: r.top + r.height / 2,
   };
+  // Un em de la bulle en pixels écran (la feuille est réduite par un zoom dans le panneau) : sonde d'un em posée dans le paragraphe puis retirée.
+  const probe = document.createElement('span');
+  probe.style.cssText = 'display:inline-block;width:1em;height:0';
+  p.appendChild(probe);
+  info.em = Math.round(probe.getBoundingClientRect().width * parseFloat(getComputedStyle(b).fontSize) / parseFloat(getComputedStyle(p).fontSize) * 100) / 100;
+  probe.remove();
+  return info;
 }));
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan.
 async function hitTest(selector) {
@@ -183,8 +203,11 @@ check('7 bulles dans les cases du tableau, 1 hors tableau', inCell.length === 6 
 check('chaque bulle reste dans sa case : elle ne dépasse ni à gauche ni à droite de son paragraphe', inCell.every(c => c.outLeft <= 0.5 && c.outRight <= 0.5), inCell.map(c => [c.key, c.outLeft, c.outRight]));
 check('chaque bulle d\'une case tient sur une seule ligne (la ligne du tableau ne grandit pas)', inCell.every(c => c.h < 24), inCell.map(c => [c.key, c.h]));
 const cut = inCell.filter(c => c.label.length > 20);
-check('les bulles trop longues gardent leur fin (dernier mot du nom) et perdent le milieu : début coupé, fin entière',
-  cut.length === 5 && cut.every(c => c.head !== null && c.tail && c.tail.length >= 5 && c.label.endsWith(c.tail) && c.head + c.tail === c.label && c.headCut && !c.tailCut), cut.map(c => [c.key, c.head, c.tail, c.headCut, c.tailCut]));
+check('les bulles trop longues perdent le milieu : début coupé, repère « #… » toujours visible, fin calée sur le bout du nom',
+  cut.length === 5 && cut.every(c => c.head !== null && c.tail && c.label.endsWith(c.tail) && c.head + c.tail === c.label && c.headCut && c.headW >= 1.25 * c.em && c.tailAtEnd),
+  cut.map(c => [c.key, c.head, c.tail, c.headCut, c.headW, c.em, c.tailAtEnd]));
+check('la fin est le dernier mot du nom (« proprietaire », « du_client »), pas un bout de mot',
+  cut.filter(c => c.key === 'Clients.' + LONG).every(c => c.tail === 'proprietaire') && cut.filter(c => c.key === 'Clients.' + LONG2).every(c => c.tail === 'du_client'), cut.map(c => [c.key, c.tail]));
 const shortChip = inCell.find(c => c.key === 'Clients.Nom');
 check('la bulle courte n\'est pas coupée', !!shortChip && !shortChip.tail && !shortChip.headCut && shortChip.label === '#Clients.Nom', shortChip);
 const outside = list.find(c => !c.inCell);
@@ -274,13 +297,44 @@ check('avant d\'élargir : la bulle est coupée', before.headCut && before.outRi
 const wider = await dragFirstBorder(260);
 const widened = (await chipsInfo())[0];
 check('bordure glissée vers la droite : la colonne s\'élargit (poignée de colonne atteinte)', wider.handle && wider.after > wider.before + 150, wider);
-check('colonne élargie : le nom apparaît en entier (plus de coupure) et reste dans la case', !widened.headCut && !widened.tailCut && widened.outRight <= 0.5, widened);
+check('colonne élargie : le nom apparaît en entier (plus de coupure) et reste dans la case', !widened.headCut && !widened.tailClipped && widened.outRight <= 0.5, widened);
 await hoverOn(widened);
 check('colonne élargie : plus d\'info-bulle du nom (il est entier)', (await chipsInfo())[0].title === '', (await chipsInfo())[0].title);
 const narrower = await dragFirstBorder(-260);
 const narrowed = (await chipsInfo())[0];
 check('bordure ramenée à gauche : la colonne se rétrécit', narrower.after < wider.after - 150, { wider, narrower });
-check('colonne rétrécie : la bulle est de nouveau coupée au milieu, dans sa case', narrowed.headCut && !narrowed.tailCut && narrowed.outRight <= 0.5 && narrowed.outLeft <= 0.5, narrowed);
+check('colonne rétrécie : la bulle est de nouveau coupée au milieu, dans sa case', narrowed.headCut && narrowed.outRight <= 0.5 && narrowed.outLeft <= 0.5, narrowed);
+
+// 9) Sa capture « Budget validé » : la colonne « Type de ressources » (~118 px) et ses trois bulles Details_depense_s_*. Mêmes proportions que sur sa capture (la
+// feuille est réduite par le même zoom pour la case et pour le texte). Les trois se distinguent par leur bout, le repère « #… » est là, elles tiennent dans la case.
+await page.evaluate(async () => {
+  window.__gristStub.setVariables('Projets', { Details_depense_s_Fonctionnement: 'Text', Details_depense_s_Investissement: 'Text', Details_depense_s_Personnel: 'Text' });
+  await GristAPI.refreshSchema();
+});
+const budget = column => `<span class="var-badge" data-table="Projets" data-column="${column}" data-key="Projets.${column}">#Projets.${column}</span>`;
+const budgetRow = (label, column) => `<tr>${cell(160, label)}${cell(118, budget(column))}${cell(88, '')}</tr>`;
+await loadDoc('<p>Avant</p><table><tbody>'
+  + `<tr>${cell(160, 'Catégorie')}${cell(118, 'Type de ressources')}${cell(88, 'Montant')}</tr>`
+  + budgetRow('Fonctionnement (Masse 10)', 'Details_depense_s_Fonctionnement') + budgetRow('Investissement (Masse 20)', 'Details_depense_s_Investissement') + budgetRow('Personnel (Masse 30)', 'Details_depense_s_Personnel')
+  + '</tbody></table><p>Après</p>');
+const budgetChips = await chipsInfo();
+check('Budget validé : les trois bulles sont dans la colonne de 118 px, sur une ligne, sans rien qui dépasse',
+  budgetChips.length === 3 && budgetChips.every(c => c.inCell && c.outLeft <= 0.5 && c.outRight <= 0.5 && c.h < 24), budgetChips.map(c => [c.key, c.outLeft, c.outRight, c.h]));
+check('Budget validé : chacune se reconnaît à son bout (Fonctionnement, Investissement, s_Personnel), sous un « #… » visible',
+  budgetChips.map(c => c.tail).join('|') === 'Fonctionnement|Investissement|s_Personnel' && budgetChips.every(c => c.headCut && c.headW >= 1.25 * c.em && c.tailAtEnd), budgetChips.map(c => [c.tail, c.headW, c.em, c.tailAtEnd]));
+
+// 10) Toutes les largeurs de colonne, de 96 à 200 px : la bulle reste dans sa case, le repère « #… » ne devient jamais une tranche de « # » sans « … », le bout du nom
+// reste visible ; et quand la case a la place, la fin est le dernier mot en entier.
+const widths = [96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 140, 160, 200];
+await loadDoc('<p>Avant</p>' + widths.map(w => `<table><tbody><tr>${cell(w, budget('Details_depense_s_Fonctionnement'))}${cell(40, String(w))}</tr></tbody></table>`).join(''));
+const sweep = await chipsInfo();
+check('colonnes de 96 à 200 px : la bulle reste dans sa case à chaque largeur', sweep.length === widths.length && sweep.every(c => c.outLeft <= 0.5 && c.outRight <= 0.5 && c.h < 24), sweep.map((c, i) => [widths[i], c.outLeft, c.outRight]));
+const withCue = sweep.filter(c => c.headCut);
+check('colonnes de 96 à 200 px : dès que le nom est coupé, le début garde la place de « #… » (jamais une tranche de « # » sans « … »)',
+  withCue.length >= 10 && withCue.every(c => c.headW >= 1.25 * c.em), sweep.map((c, i) => [widths[i], c.headW, c.em, c.headCut]));
+check('colonnes de 96 à 200 px : le bout du nom reste toujours visible (la fin se coupe par la gauche, jamais par la droite)', sweep.every(c => c.tailAtEnd), sweep.map((c, i) => [widths[i], c.tailAtEnd]));
+const roomy = sweep[sweep.length - 1];
+check('colonne de 200 px : la fin du nom est le dernier mot en entier (« Fonctionnement », rien de rogné)', roomy.tail === 'Fonctionnement' && !roomy.tailClipped && roomy.headW > 1.25 * roomy.em, roomy);
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

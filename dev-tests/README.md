@@ -135,9 +135,13 @@ Deux options utiles :
   cases de tableau de ~100 px (dont une bulle formatée, une bulle en boucle et une bulle cassée) et s'en sert à la vraie souris : survol (le nom entier en
   info-bulle seulement quand il est coupé, le message d'une bulle cassée intact), clic (la bulle est sélectionnée, la barre de variable atteignable), Ctrl+C
   (la bulle entière dans le presse-papiers), bordure de colonne glissée à droite puis à gauche (la bulle se redéploie puis se recoupe toute seule). Il exige
-  que chaque bulle reste dans son paragraphe, sur une ligne, avec le début coupé par « … » et la fin du nom entière, que `getHTML()` garde le nom entier
-  dans un seul texte, qu'une bulle hors tableau garde son rendu en ligne et que le point bleu du format (hors de la boîte de la bulle) ne soit pas rogné.
-  Avant le correctif du 29/09 (`js/editor-nodes.js`, `css/variable-actions.css`), la bulle traversait sa case (jusqu'à 190 px de trop) et recouvrait la voisine.
+  que chaque bulle reste dans son paragraphe, sur une ligne, avec le début coupé par « … », un repère « #… » toujours visible (jamais une tranche de « # »
+  sans « … ») et la fin du nom calée à droite (elle se coupe par la gauche : le bout du nom reste lisible, c'est la fin qui distingue une variable d'une autre),
+  que la fin soit le dernier mot du nom quand la case a la place, que `getHTML()` garde le nom entier dans un seul texte, qu'une bulle hors tableau garde son
+  rendu en ligne et que le point bleu du format (hors de la boîte de la bulle) ne soit pas rogné. Il rejoue aussi la capture « Budget validé » d'Antoine
+  (colonne de 118 px, Details_depense_s_Fonctionnement / Investissement / Personnel) et balaie les largeurs de colonne de 96 à 200 px.
+  Avant le correctif du 29/09 (`js/editor-nodes.js`, `css/variable-actions.css`), la bulle traversait sa case (jusqu'à 190 px de trop) et recouvrait la voisine ;
+  la première version du correctif laissait, entre deux largeurs, une tranche de « # » sans « … » et une fin qui commençait au milieu d'un mot.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via
