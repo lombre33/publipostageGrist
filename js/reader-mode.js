@@ -51,6 +51,15 @@ const ReaderMode = (function () {
     document.body.removeChild(host);
     return h;
   }
+  // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
+  // cet aperçu, qui ne coupe pas le DOM, traite d'une pièce. Même règle que js/header-footer-preview.js:isSplittableByExport, sur le HTML sérialisé de la
+  // Lecture (zone `two-columns-zone` et tableau sans l'enveloppe de l'éditeur).
+  function isSplittableByExport(el) {
+    return el.classList.contains('two-columns-zone') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
+  }
+  // Un bloc qui ne tient pas passe entier à la page suivante, sauf s'il est de ceux que l'export coupe et que sa plus grande partie tient dans la place restante :
+  // il reste alors sur sa page et le repère tombe derrière lui. Le déplacer en entier revient à se tromper de tout ce qui tenait dans la page (un tableau ou une
+  // zone 2 colonnes qui déborde de ~30 px envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde, alors que l'export coupe au pixel.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = layoutZoom(rootEl);
@@ -65,7 +74,8 @@ const ReaderMode = (function () {
         consumed = 0;
         return;
       }
-      if (consumed > 0 && consumed + height > pageContentHeightPx) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = height; }
+      const staysOnPage = isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
+      if (consumed > 0 && consumed + height > pageContentHeightPx && !staysOnPage) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = height; }
       else { consumed += height; }
     });
     return offsets;

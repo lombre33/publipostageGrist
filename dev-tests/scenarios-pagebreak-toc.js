@@ -240,6 +240,86 @@
     },
   });
 
+  // --- Même règle dans le mode Lecture (Antoine, 29/09 : « Oui, aussi en Lecture ») ---
+  // computePageBreakOffsets (js/reader-mode.js) est la copie locale de computePageBreaks : elle gardait l'ancienne règle et aurait fait sauter en entier en page suivante
+  // une zone, un tableau ou une liste qui déborde de peu dès que les valeurs affichées auraient été plus longues. Le HTML de la Lecture n'a pas l'enveloppe de
+  // l'éditeur : `div.two-columns-zone` et `table` directement, sans `.two-columns-zone-outer` ni `.tableWrapper`. Le paragraphe vide final reste, lui, compté en
+  // Lecture comme à l'export (ligne vide conservée par keepBlankLines) : seul l'éditeur l'ignore.
+  const READER_PICK = {
+    zone: k => k.classList.contains('two-columns-zone'),
+    table: k => k.tagName === 'TABLE',
+    list: k => k.tagName === 'UL',
+  };
+  const readerLayoutHeight = el => {
+    const sheet = el.closest('.reader-content');
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return el.getBoundingClientRect().height / ((isFinite(z) && z > 0) ? z : 1);
+  };
+  // Rend le document en Lecture à marges par défaut pour mesurer les blocs, règle la page pour que le bloc déborde de `overshootPx`, rend à nouveau et compte les
+  // repères de page posés au-dessus du bloc (0 : il est resté sur sa page ; 1 : il est passé en entier à la page suivante).
+  async function paginateBigBlockInReader(h, kind, prelude, overshootPx) {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    const html = prelude + BIG_BLOCKS[kind].html;
+    const pick = READER_PICK[kind];
+    const blocksOf = wrapper => Array.from(wrapper.children).filter(k => k.tagName !== 'STYLE');
+    let wrapper = await h.renderReaderMode(html);
+    await h.sleep(250);
+    const first = blocksOf(wrapper);
+    const target0 = first.find(pick);
+    const before = first.slice(0, first.indexOf(target0)).reduce((sum, k) => sum + readerLayoutHeight(k), 0);
+    const blockPx = readerLayoutHeight(target0);
+    setPageContentHeight(before + blockPx - overshootPx);
+    wrapper = await h.renderReaderMode(html);
+    await h.sleep(350);
+    const target = blocksOf(wrapper).find(pick);
+    const targetTop = target.getBoundingClientRect().top;
+    const bands = Array.from(document.querySelectorAll('#reader-container .v2-page-band'));
+    return { before, blockPx, room: blockPx - overshootPx, bandsAbove: bands.filter(b => b.getBoundingClientRect().top < targetTop).length, bands: bands.length };
+  }
+  const restoreReader = () => {
+    PageLayout.setMarginsMm(null);
+    document.getElementById('reader-container').style.display = '';
+    document.getElementById('editor-container').style.display = '';
+  };
+
+  cases.push({
+    id: 'pagebreak_readmode_big_zone_after_images_stays_on_page',
+    description: 'En mode Lecture, deux images en haut de page puis une zone 2 colonnes d\'une page, ~30 px trop haute : la zone reste en page 1, pas de « Page 2 » entre les images et elle',
+    run: async (h) => {
+      try {
+        const r = await paginateBigBlockInReader(h, 'zone', lettreImages(), 30);
+        return { pass: r.bandsAbove === 0 && r.blockPx > r.room, notes: JSON.stringify(r) };
+      } finally { restoreReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_readmode_table_and_list_follow_the_same_rule',
+    description: 'En mode Lecture, un tableau ou une liste qui déborde de peu de la page ne saute pas non plus en entier vers la page suivante',
+    run: async (h) => {
+      try {
+        const prelude = '<p>Titre du document</p><p></p>';
+        const table = await paginateBigBlockInReader(h, 'table', prelude, 30);
+        const list = await paginateBigBlockInReader(h, 'list', prelude, 30);
+        return { pass: table.bandsAbove === 0 && list.bandsAbove === 0 && table.blockPx > table.room && list.blockPx > list.room, notes: JSON.stringify({ table, list }) };
+      } finally { restoreReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_readmode_block_mostly_beyond_page_still_moves_whole',
+    description: 'En mode Lecture, un gros bloc dont moins de la moitié tient sur la page passe toujours en entier à la page suivante',
+    run: async (h) => {
+      try {
+        const zoneProbe = await paginateBigBlockInReader(h, 'zone', lettreImages(), 30);
+        const r = await paginateBigBlockInReader(h, 'zone', lettreImages(), zoneProbe.blockPx * 0.7);
+        return { pass: r.bandsAbove === 1, notes: JSON.stringify(r) };
+      } finally { restoreReader(); }
+    },
+  });
+
   cases.push({
     id: 'toc_insert_and_detect_headings',
     description: 'Le sommaire détecte les titres présents dans le document',
