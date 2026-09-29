@@ -86,8 +86,27 @@ const PageLayout = (function () {
     root.setProperty('--pp-margin-left', px.left + 'px');
   }
 
+  // Texte d'un numéro de page pour l'un des trois formats du badge .page-number-badge (data-format : 'n', 'page-n', 'n-slash-total'). Pure. Source unique :
+  // l'aperçu paginé de l'éditeur (js/header-footer-preview.js), le mode Lecture (js/reader-mode.js) et l'export PDF (js/pdf-export.js) recopiaient chacun cette
+  // conversion (l'export DOCX, lui, pose de vrais champs PAGE/NUMPAGES : js/docx-export.js).
+  function pageNumberText(format, pageNum, totalPages) {
+    if (format === 'page-n') return 'Page ' + pageNum;
+    if (format === 'n-slash-total') return pageNum + '/' + totalPages;
+    return String(pageNum);
+  }
+  // Résout chaque badge .page-number-badge d'un fragment HTML en son texte pour cette page ; renvoie le HTML résolu.
+  function resolvePageNumberBadges(html, pageNum, totalPages) {
+    const host = document.createElement('div');
+    host.innerHTML = html || '';
+    host.querySelectorAll('.page-number-badge').forEach(badge => {
+      badge.textContent = pageNumberText(badge.getAttribute('data-format') || 'n', pageNum, totalPages);
+    });
+    return host.innerHTML;
+  }
+
   return {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_MM,
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
+    pageNumberText, resolvePageNumberBadges,
   };
 })();

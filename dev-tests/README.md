@@ -40,7 +40,7 @@ apparaît) :
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
 | `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes **+ le script Node `chipCellMouse`** si le changement touche la bulle `varBadge` (`addNodeView`, `splitBadgeLabel` : nom coupé au milieu dans une case de tableau) **+ `varFormat`, `varCondition`, `varLoop`** (la bulle porte leur point bleu, leur pointillé et leur icône) |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) |
-| `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) |
+| `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) ; le texte du numéro de page (`pageNumberText`, `resolvePageNumberBadges`) sert aussi à l'aperçu paginé, au mode Lecture et au PDF : **+ `headerFooter`** (scénario `hf_page_numbers_resolved_in_editor_preview_and_reader`) **et `pdfBatch`** |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
@@ -152,7 +152,7 @@ Deux options utiles :
   (un nom cité seulement dans un commentaire compte comme utilisé) : il ne doit jamais faire échouer un changement légitime. Une classe posée par une
   bibliothèque (TipTap, prosemirror-tables) va dans `LIBRARY_CLASSES`, avec sa source. Il refuse aussi qu'une aide d'export (chargeur de script CDN,
   téléchargement d'un Blob, mesure des colonnes d'un tableau, hôte de mesure, résolution des variables d'en-tête/pied) soit recopiée dans un exporteur au lieu
-  d'être appelée dans `js/export-common.js`. Avant le nettoyage du 29/09, il aurait relevé 3 clés i18n, 6 variables CSS, 7 règles CSS mortes et 9 copies d'aides
+  d'être appelée dans `js/export-common.js`. Même règle pour la conversion du numéro de page (« Page n », « n/total »), qui n'existe que dans `js/page-layout.js`. Avant le nettoyage du 29/09, il aurait relevé 3 clés i18n, 6 variables CSS, 7 règles CSS mortes et 9 copies d'aides
   d'export.
 - `templateOrganizerUnit` (`dev-tests/unit-template-organizer.mjs`, 26 vérifications) et `templatePreferencesUnit` (`dev-tests/unit-template-preferences.mjs`, 34
   vérifications) sont du Node pur (module chargé dans un contexte `vm`, faux `docApi` de `dev-tests/fake-grist-doc-api.mjs`) : ils tournaient déjà à la main mais

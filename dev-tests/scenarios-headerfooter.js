@@ -173,6 +173,46 @@
     },
   });
 
+  // Le texte d'un numéro de page vient d'une seule fonction (PageLayout.resolvePageNumberBadges) pour l'aperçu paginé de l'éditeur ET le mode Lecture : ce
+  // scénario lit ce que la personne voit dans les deux, bande par bande, sur un document de 3 pages (en-tête « Page n », pied « n/total »).
+  cases.push({
+    id: 'hf_page_numbers_resolved_in_editor_preview_and_reader',
+    description: 'Aperçu paginé de l\'éditeur et mode Lecture affichent le vrai numéro de chaque page dans les bandes d\'en-tête et de pied (« Page 2 », « 2/3 »)',
+    run: async (h) => {
+      const badge = format => '<span class="page-number-badge" contenteditable="false" data-format="' + format + '">#</span>';
+      const hf = { enabled: true, differentFirstPage: false, header: { default: '<p>' + badge('page-n') + '</p>', first: '' }, footer: { default: '<p>' + badge('n-slash-total') + '</p>', first: '' } };
+      const body = '<p>Un</p><div class="page-break-marker">Saut de page</div><p>Deux</p><div class="page-break-marker">Saut de page</div><p>Trois</p>';
+      const texts = (root, sel) => Array.from(root.querySelectorAll(sel)).map(el => el.textContent.replace(/\s+/g, ' ').trim());
+      const read = root => ({
+        edgeTop: texts(root, '.v2-page-edge-top'), edgeBottom: texts(root, '.v2-page-edge-bottom'),
+        footers: texts(root, '.v2-page-band-footer'), headers: texts(root, '.v2-page-band-header'),
+      });
+
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
+      Editor.setHeaderFooterData(hf);
+      Editor.setHTML(body);
+      await h.sleep(250);
+      const editorSide = read(document.getElementById('editor-container'));
+
+      document.getElementById('editor-container').style.display = 'none';
+      const readerContainer = document.getElementById('reader-container');
+      readerContainer.style.display = 'block';
+      readerContainer.classList.add('a4-preview');
+      await ReaderMode.render(body, 'FakeTable', {}, hf);
+      await h.sleep(250);
+      const readerSide = read(readerContainer);
+      document.getElementById('editor-container').style.display = '';
+      readerContainer.style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+
+      const expected = { edgeTop: ['Page 1'], edgeBottom: ['3/3'], footers: ['1/3', '2/3'], headers: ['Page 2', 'Page 3'] };
+      const same = side => JSON.stringify(side) === JSON.stringify(expected);
+      return { pass: same(editorSide) && same(readerSide), notes: JSON.stringify({ editorSide, readerSide }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

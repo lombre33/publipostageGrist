@@ -80,15 +80,6 @@ const ReaderMode = (function () {
     });
     return offsets;
   }
-  function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
-    const host = document.createElement('div');
-    host.innerHTML = html || '';
-    host.querySelectorAll('.page-number-badge').forEach(badge => {
-      const format = badge.getAttribute('data-format') || 'n';
-      badge.textContent = format === 'page-n' ? ('Page ' + pageNum) : format === 'n-slash-total' ? (pageNum + '/' + totalPages) : String(pageNum);
-    });
-    return host.innerHTML;
-  }
   // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un
   // <br class="ProseMirror-trailingBreak"> absent de ce HTML, et les paragraphes n'ont ici aucune marge (margin:0) : sans hauteur propre, l'espacement entre
   // deux blocs disparaissait en Lecture alors que l'éditeur et l'export PDF/DOCX le gardent (Antoine, 2026-09-29). Appelée APRÈS la résolution des bulles :
@@ -163,13 +154,13 @@ const ReaderMode = (function () {
     if (headerForPage(1)) {
       const edgeTop = document.createElement('div');
       edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
-      edgeTop.innerHTML = resolvePageNumberBadgesForPreview(headerForPage(1), 1, totalPages);
+      edgeTop.innerHTML = PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages);
       container.insertBefore(edgeTop, wrapper);
     }
     if (footerForPage(totalPages)) {
       const edgeBottom = document.createElement('div');
       edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-      edgeBottom.innerHTML = resolvePageNumberBadgesForPreview(footerForPage(totalPages), totalPages, totalPages);
+      edgeBottom.innerHTML = PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages);
       container.appendChild(edgeBottom);
     }
 
@@ -200,9 +191,9 @@ const ReaderMode = (function () {
         seam.appendChild(label);
       } else {
         seam.className = 'v2-page-band v2-page-seam';
-        if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages); seam.appendChild(f); }
+        if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages); seam.appendChild(f); }
         const divider = document.createElement('div'); divider.className = 'v2-page-seam-divider'; seam.appendChild(divider);
-        if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages); seam.appendChild(h); }
+        if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages); seam.appendChild(h); }
       }
       overlay.appendChild(seam);
       seam.style.left = wrapperOffsetLeft + 'px';

@@ -67,17 +67,6 @@ const LoopRules = (function () {
     if (!rule || rule.mode !== 'match' || rule.colonneCible === 'id') return null;
     return { table: attrs.table, via: null };
   }
-  function sameSource(a, b) {
-    if (!a || !b || a.table !== b.table) return false;
-    if (!a.via || !b.via) return !a.via && !b.via;
-    return a.via.table === b.via.table && a.via.column === b.via.column;
-  }
-  // Vrai pour une bulle qui prend, à chaque tour, la valeur de la ligne parcourue : une variable de la table de la boucle, ou la colonne Liste de
-  // références qui la fournit (elle affiche alors la fiche du tour).
-  function isBound(loop, table, column) {
-    return table === loop.table || !!(loop.via && table === loop.via.table && column === loop.via.column);
-  }
-
   // Lecture mémorisée des tables, pour un rendu (plusieurs boucles sur la même table) ou un aperçu sur toutes les lignes de la page.
   function memoFetchRows() {
     const cache = new Map();
@@ -342,7 +331,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, parseLoop, sourceFor, sameSource, isBound, createContext, iterate, itemBinding, bindingOf,
+    EMPTY_MODES, defaultEmpty, normalizeLoop, parseLoop, sourceFor, createContext, iterate, itemBinding, bindingOf,
     expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, joinValues,
   };
 })();

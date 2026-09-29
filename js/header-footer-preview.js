@@ -252,17 +252,6 @@ const HeaderFooterPreview = (function () {
     return breaks;
   }
 
-  // Résout chaque badge .page-number-badge en son texte réel pour cette page (même conversion que formatPageNumberText côté pdf-export.js, dupliquée).
-  function resolvePageNumberBadgesForPreview(html, pageNum, totalPages) {
-    const host = document.createElement('div');
-    host.innerHTML = html || '';
-    host.querySelectorAll('.page-number-badge').forEach(badge => {
-      const format = badge.getAttribute('data-format') || 'n';
-      badge.textContent = format === 'page-n' ? ('Page ' + pageNum) : format === 'n-slash-total' ? (pageNum + '/' + totalPages) : String(pageNum);
-    });
-    return host.innerHTML;
-  }
-
   let paginationOverlayEl = null;
   let paginationEdgeTopEl = null;
   let paginationEdgeBottomEl = null;
@@ -308,7 +297,7 @@ const HeaderFooterPreview = (function () {
     }
   }
   function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
-    const resolved = html ? resolvePageNumberBadgesForPreview(html, pageNum, totalPages) : '';
+    const resolved = html ? PageLayout.resolvePageNumberBadges(html, pageNum, totalPages) : '';
     // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte) serait traitée à tort comme vide (même correctif que resolveZone,
     // pdf-export.js).
     const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
@@ -343,7 +332,7 @@ const HeaderFooterPreview = (function () {
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const mPx = marginsPx();
     const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
-    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, topExtraPx, bottomExtraPx, pageContentHeightPx };
+    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx };
   }
 
   // Ancêtre direct de .tiptap contenant `el` (computePageBreaks ne regarde jamais plus profond qu'un enfant direct - une zone 2-colonnes/un tableau compte
@@ -462,7 +451,7 @@ const HeaderFooterPreview = (function () {
     }
     paginationOverlayEl.innerHTML = '';
 
-    const { enabled, differentFirstPage, headerForPage, footerForPage, topExtraPx, bottomExtraPx, pageContentHeightPx } = currentPageGeometry();
+    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx } = currentPageGeometry();
     // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
     clearPageBreakMargins();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
@@ -503,7 +492,7 @@ const HeaderFooterPreview = (function () {
         if (footerText) {
           const f = document.createElement('div');
           f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
-          f.innerHTML = resolvePageNumberBadgesForPreview(footerText, pageEnding, totalPages);
+          f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages);
           f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
           seam.appendChild(f);
         }
@@ -513,7 +502,7 @@ const HeaderFooterPreview = (function () {
         if (headerText) {
           const h = document.createElement('div');
           h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
-          h.innerHTML = resolvePageNumberBadgesForPreview(headerText, pageStarting, totalPages);
+          h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages);
           h.onclick = () => enterHeaderFooterMode('header', 'default');
           seam.appendChild(h);
         }

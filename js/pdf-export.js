@@ -1635,12 +1635,6 @@ const PdfExport = (function () {
     if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
-  // Numéro de page (en-tête/pied de page, incrément 2.2) - pure, aucun accès au DOM/à pdfmake.
-  function formatPageNumberText(format, currentPage, pageCount) {
-    if (format === 'page-n') return 'Page ' + currentPage;
-    if (format === 'n-slash-total') return currentPage + '/' + pageCount;
-    return String(currentPage);
-  }
   // Clone-et-parcours remplaçant chaque run marqué `_pendingPageNumber` par son texte résolu - appelé à chaque invocation du callback header/footer natif.
   // currentPage/pageCount sont déjà connus à ce stade, contrairement au sommaire/images en calque : pas besoin d'une 2e passe de mesure.
   function resolvePageNumberPlaceholders(node, currentPage, pageCount) {
@@ -1648,7 +1642,7 @@ const PdfExport = (function () {
     if (!node || typeof node !== 'object') return node;
     const out = Object.assign({}, node);
     if (out._pendingPageNumber) {
-      out.text = formatPageNumberText(out._pendingPageNumber.format, currentPage, pageCount);
+      out.text = PageLayout.pageNumberText(out._pendingPageNumber.format, currentPage, pageCount);
       delete out._pendingPageNumber;
     } else if (Array.isArray(out.text)) {
       out.text = out.text.map(t => resolvePageNumberPlaceholders(t, currentPage, pageCount));
