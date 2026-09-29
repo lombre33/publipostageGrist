@@ -15,8 +15,8 @@
 //    ne la rende pas inatteignable.
 //
 // Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, attachTables pour une
-// TABLE, attachTemplates pour un MODÈLE : mêmes textes partout pour chaque sorte de liste) puis, à la fermeture de la fenêtre, .destroy() (le <select> natif
-// réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
+// TABLE, attachTemplates pour un MODÈLE, attachValues pour une VALEUR possible d'une colonne : mêmes textes partout pour chaque sorte de liste) puis, à la
+// fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
 // Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
 // pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
 // ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
@@ -31,6 +31,7 @@ const SearchSelect = (function () {
   const PREFERRED_HEIGHT = 250;  // hauteur visée (zone de recherche + une dizaine de lignes) ; réduite dans un panneau Grist bas
   const MIN_HEIGHT = 120;
   const PAGE = 6;                // lignes sautées par Page↓/Page↑
+  const MAX_ROWS = 500;          // résultats posés dans la page : 20 000 lignes (les valeurs d'une Référence vers une grande table) mettent plus d'une seconde à s'afficher
   let _uid = 0;
   const _controllers = new WeakMap();
 
@@ -187,16 +188,29 @@ const SearchSelect = (function () {
     }
 
     function render() {
-      visible = filterItems(items, query);
+      const found = filterItems(items, query);
       const current = select.value;
       const searching = query.trim() !== '';
       // Les résultats proprement dits : ni la ligne épinglée ni le choix « rien », qui ne comptent pas comme une réponse à la recherche.
-      const matches = visible.filter(item => !item.pinned && !item.empty);
+      const matches = found.filter(item => !item.pinned && !item.empty);
+      // Liste très longue : seuls les MAX_ROWS premiers résultats sont posés, une ligne dit d'affiner la recherche (le champ cherche dans tous, le nombre annoncé
+      // est le total). Aucune liste de fenêtre n'en approche : ça ne change que les valeurs d'une Référence vers une très grande table.
+      const dropped = matches.length > MAX_ROWS ? new Set(matches.slice(MAX_ROWS)) : null;
+      visible = dropped ? found.filter(item => !dropped.has(item)) : found;
       list.textContent = '';
       list.appendChild(empty);
       rows = [];
       let lastGroup = '';
+      let moreShown = !dropped;
+      // La ligne « Encore N résultats » vient après les résultats, avant la ligne épinglée (la saisie avancée reste en dernier).
+      const addMore = () => {
+        const more = el('li', 'ss-more', I18n.t('searchSelect.more', { count: dropped.size }));
+        more.setAttribute('role', 'presentation');
+        list.appendChild(more);
+        moreShown = true;
+      };
       visible.forEach((item, i) => {
+        if (!moreShown && item.pinned) addMore();
         if (item.group && item.group !== lastGroup) {
           const header = el('li', 'ss-group', item.group);
           header.setAttribute('role', 'presentation');
@@ -213,6 +227,7 @@ const SearchSelect = (function () {
         list.appendChild(row);
         rows.push(row);
       });
+      if (!moreShown) addMore();
       // Message quand la recherche ne trouve rien (ou qu'il n'y a rien à lister) ; pas pour une liste qui ne propose que « rien », sans recherche.
       empty.hidden = matches.length > 0 || (!searching && visible.length > 0);
       status.textContent = !searching ? '' : (matches.length ? I18n.t('searchSelect.count', { count: matches.length }) : emptyText);
@@ -315,7 +330,7 @@ const SearchSelect = (function () {
         case 'PageDown': event.preventDefault(); move(PAGE); break;
         case 'PageUp': event.preventDefault(); move(-PAGE); break;
         case 'Enter': event.preventDefault(); if (visible[active]) choose(visible[active]); break;
-        // Échap ferme le panneau SEUL : la fenêtre qui le contient (cf. wireModalAccessibility) se fermerait sinon avec lui.
+        // Échap ferme le panneau SEUL : la fenêtre qui le contient (js/modal-base.js : ModalBase.create, ModalBase.adopt ; js/main.js:wirePageModals) se fermerait sinon avec lui.
         case 'Escape': event.preventDefault(); event.stopPropagation(); closePanel(true); break;
         // Le focus revient au champ avant l'action par défaut de Tab, qui part donc de lui : champ suivant (Maj+Tab : précédent).
         case 'Tab': closePanel(true); break;
@@ -386,6 +401,14 @@ const SearchSelect = (function () {
   function attachTables(select, opts) { return attachKind(select, opts, 'searchSelect.searchTables', 'searchSelect.noTableMatch'); }
   // Liste de MODÈLES (page de garde, annexes et modèle par défaut d'un macro-modèle).
   function attachTemplates(select, opts) { return attachKind(select, opts, 'searchSelect.searchTemplates', 'searchSelect.noTemplateMatch'); }
+  // Liste de VALEURS possibles d'une colonne (choix d'une colonne Choix, valeurs affichées d'une colonne Référence : champ Valeur d'une règle).
+  function attachValues(select, opts) { return attachKind(select, opts, 'searchSelect.searchValues', 'searchSelect.noValueMatch'); }
+  // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ; sans effet
+  // sur un <select> que le composant n'a pas pris (liste native de repli) - pour un code qui ne garde pas le contrôleur, comme le grisage d'un champ Valeur.
+  function sync(select) {
+    const controller = _controllers.get(select);
+    if (controller) controller.sync();
+  }
 
-  return { attach, attachColumns, attachTables, attachTemplates, filterItems, readItems, normalize };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, sync, filterItems, readItems, normalize };
 })();

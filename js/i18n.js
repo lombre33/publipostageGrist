@@ -233,6 +233,8 @@ const I18n = (function () {
     'macro.modal.valuePlaceholderDate': { fr: 'Valeur (ex. 2026-09-26 ou 26/09/2026)', en: 'Value (e.g. 2026-09-26)' },
     'macro.modal.valuePlaceholderBool': { fr: 'Valeur (Oui / Non)', en: 'Value (Yes / No)' },
     'macro.modal.valueChoosePlaceholder': { fr: '— Choisir une valeur —', en: '— Choose a value —' },
+    // Champ Valeur d'une colonne Référence, le temps de lire les lignes de la table liée (GristAPI.getReferenceValues).
+    'macro.modal.valueLoading': { fr: '— Chargement… —', en: '— Loading… —' },
     'macro.modal.valueAdvanced': { fr: 'Autre valeur…', en: 'Other value…' },
     'macro.modal.choosePlaceholder': { fr: '— Choisir un modèle —', en: '— Choose a template —' },
     'macro.modal.removeRule': { fr: 'Supprimer cette règle', en: 'Remove this rule' },
@@ -424,11 +426,16 @@ const I18n = (function () {
     'searchSelect.placeholder': { fr: 'Rechercher…', en: 'Search…' },
     'searchSelect.empty': { fr: 'Aucun résultat.', en: 'No results.' },
     'searchSelect.count': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
-    // Même liste avec recherche pour une TABLE (Réglages > Accès) et pour un MODÈLE (macro-modèle) : SearchSelect.attachTables / attachTemplates.
+    // Liste de plus de 500 résultats : seuls les premiers sont posés, cette ligne dit combien d'autres restent.
+    'searchSelect.more': { fr: 'Encore {count} {count|résultat|résultats} : précisez la recherche.', en: '{count} more {count|result|results}: refine your search.' },
+    // Même liste avec recherche pour une TABLE (Réglages > Accès), un MODÈLE (macro-modèle) et une VALEUR possible d'une colonne (champ Valeur d'une règle) :
+    // SearchSelect.attachTables / attachTemplates / attachValues.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
     'searchSelect.noTableMatch': { fr: 'Aucune table ne correspond.', en: 'No table matches.' },
     'searchSelect.searchTemplates': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
     'searchSelect.noTemplateMatch': { fr: 'Aucun modèle ne correspond.', en: 'No template matches.' },
+    'searchSelect.searchValues': { fr: 'Rechercher une valeur…', en: 'Search for a value…' },
+    'searchSelect.noValueMatch': { fr: 'Aucune valeur ne correspond.', en: 'No value matches.' },
     'linkConfig.describeSingleton': { fr: 'une seule ligne (paramètres)', en: 'a single row (settings)' },
     'linkConfig.describeRowId': { fr: 'identifiant de ligne', en: 'row ID' },
     'linkConfig.previewChooseColumns': { fr: 'Choisissez les deux colonnes pour voir un aperçu.', en: 'Choose both columns to see a preview.' },

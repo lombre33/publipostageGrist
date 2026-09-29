@@ -4,7 +4,8 @@
 // tournent DANS la page (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint le champ, ni que le panneau de la liste tient dans un panneau bas sans
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
-// clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre.
+// clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
+// à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -808,6 +809,247 @@ const SECTIONS = {
     await page.waitForTimeout(250);
     images = await inserted();
     check('image : un vrai clic ailleurs referme la liste sans rien insérer', await hostGone() && images.length === 2, images);
+  },
+
+  // Valeurs possibles d'une colonne Choix ou Référence dans le champ Valeur d'une règle (Antoine, 2026-09-29 : « quand on indique une colonne à choix ou à référence,
+  // mettre de l'autocompletion ou un dropdown des valeurs possibles ») : à la vraie souris, dans la fenêtre de condition et dans le macro-modèle, en clair et en sombre.
+  // Une liste de 1 201 valeurs (une Référence vers une grande table) ne pose que 500 lignes et le dit. Avant withoutComponent : elle ajoute des tables, et rend la page.
+  async values() {
+    const macro = '#macro-editor-modal';
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      window.__csValuesCached = Templates.getCached;
+      Templates.getCached = () => [{ id: 11, nom: 'Notification_base', typeModele: 'document' }, { id: 12, nom: 'Notification_bureau', typeModele: 'document' }];
+      stub.setVariables('CsClients', { Nom: 'Text' });
+      const clients = [{ id: 5000, Nom: 'Zola Émile' }];
+      for (let i = 1; i <= 1200; i++) clients.push({ id: 100 + i, Nom: 'Client ' + String(i).padStart(4, '0') });
+      stub.setRows('CsClients', clients);
+      stub.setRows('CsAnnuaire', [
+        { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 }, { id: 8, NomPrenom: 'Martin Paul', Telephone: '', Naissance: null },
+        { id: 9, NomPrenom: 'Zola Émile', Telephone: '', Naissance: null }, { id: 10, NomPrenom: 'Bernard Léa', Telephone: '', Naissance: null },
+        { id: 11, NomPrenom: 'Dupont Jean ', Telephone: '', Naissance: null },
+      ]);
+      stub.setVariables('CsSuivi', { Titre: 'Text', Priorite: 'Choice', Responsable: 'Ref:CsAnnuaire', Client: 'Ref:CsClients' }, { Priorite: ['Haute', 'Normale', 'Basse'] }, undefined,
+        { Responsable: 'NomPrenom', Client: 'Nom' });
+      stub.setRows('CsSuivi', [{ id: 1, Titre: 'Suivi A', Priorite: 'Haute', Responsable: 7, Client: 101 }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Suivi A', Priorite: 'Haute', Responsable: 'Dupont Jean', Client: 'Client 0001' }, 'CsSuivi');
+    });
+    // Lecture d'une propriété d'un élément qui peut manquer (ancien code : pas de liste) : null, pas d'exception.
+    await page.evaluate(() => { window.__csQ = (selector, property) => { const el = document.querySelector(selector); return el ? el[property] : null; }; });
+    const freshDocument = async () => {
+      await page.evaluate(() => Editor.setHTML('<p>Objet : <span class="var-badge" data-table="CsSuivi" data-column="Titre" data-key="CsSuivi.Titre"></span></p>'));
+      await page.waitForTimeout(250);
+    };
+    // Clic réel au centre d'un champ mesuré par hitTest ; sans champ (ancien code, liste absente) rien ne part et les mesures suivantes échouent une à une, au lieu d'un plantage.
+    const clickAt = async box => { if (box && typeof box.x === 'number' && box.width > 0) await page.mouse.click(box.x, box.y); };
+    const savedConditions = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.condition); });
+      return out;
+    });
+    // La colonne de la première règle choisie comme le ferait une personne : clic sur le champ, frappe, clic sur la ligne. La lecture de la table liée d'une
+    // Référence a le temps d'aboutir avant la suite.
+    const pickColumn = async (scope, typed, column) => {
+      const field = await reveal(scope + ' .macro-rule-column-wrap .ss-trigger', scope + ' .modal-content');
+      await clickAt(field);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(typed);
+      await page.waitForTimeout(100);
+      const row = await rowCenter(scope, column);
+      if (row) await page.mouse.click(row.x, row.y);
+      await page.waitForTimeout(350);
+    };
+    const valueTrigger = scope => scope + ' .macro-rule-value-wrap .ss-trigger';
+    const closeWith = async (scope, selector) => {
+      const button = await reveal(selector, scope + ' .modal-content');
+      if (button.found) await page.mouse.click(button.x, button.y);
+      await page.waitForTimeout(250);
+    };
+    const cancelOf = scope => scope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
+    const saveOf = scope => scope + ' .var-modal-actions .var-modal-primary';
+    const contrastOf = selector => page.evaluate(sel => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const parse = c => (c.match(/[\d.]+/g) || []).slice(0, 4).map(Number);
+      const luminance = ([r, g, b]) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      let background = null;
+      for (let node = el; node && !background; node = node.parentElement) {
+        const c = parse(getComputedStyle(node).backgroundColor);
+        if (c.length >= 3 && (c.length === 3 || c[3] > 0.99)) background = c;
+      }
+      const a = luminance(parse(getComputedStyle(el).color)), b = luminance(background || [255, 255, 255]);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }, selector);
+    const dimming = scope => page.evaluate(sel => {
+      const slot = document.querySelector(sel + ' .macro-rule-value-slot');
+      const trigger = slot && slot.querySelector('.ss-trigger');
+      return trigger ? { slot: getComputedStyle(slot).opacity, trigger: getComputedStyle(trigger).opacity, disabled: trigger.disabled } : null;
+    }, scope);
+    const CHOOSE = '— Choisir une valeur —', OTHER = 'Autre valeur…';
+    for (const theme of ['light', 'dark']) {
+      const label = theme === 'dark' ? 'sombre' : 'clair';
+      await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+      await page.waitForTimeout(100);
+
+      // Fenêtre de condition, colonne à choix.
+      await freshDocument();
+      await openWindowFor('Titre', 'var-condition', cond);
+      await pickColumn(cond, 'prio', 'Priorite');
+      const field = await reveal(valueTrigger(cond), cond + ' .modal-content');
+      const nativeValue = await hitTest(cond + ' select.macro-rule-value');
+      check(`valeurs (${label}) : condition, colonne à choix : le champ Valeur est une liste (visible, au premier plan, lisible), le <select> natif est masqué`,
+        field.found && field.inViewport && field.onTop && field.width > 80 && nativeValue.width === 0, { field, nativeValue });
+      await clickAt(field);
+      await page.waitForTimeout(150);
+      const open = await panelInfo(cond);
+      check(`valeurs (${label}) : condition : un vrai clic ouvre la liste des choix, entièrement dans le panneau, la zone de recherche a le focus, « Autre valeur… » en dernier`,
+        !!open && open.inside && open.searchFocused && JSON.stringify(open.rows) === JSON.stringify([CHOOSE, 'Haute', 'Normale', 'Basse', OTHER]), open);
+      await page.keyboard.type('nor');
+      await page.waitForTimeout(100);
+      const typed = await panelInfo(cond);
+      check(`valeurs (${label}) : condition : « nor » réduit la liste à Normale, « Autre valeur… » reste`, !!typed && JSON.stringify(typed.rows) === JSON.stringify(['Normale', OTHER]), typed);
+      const normal = await rowCenter(cond, 'Normale');
+      if (normal) await page.mouse.click(normal.x, normal.y);
+      await page.waitForTimeout(150);
+      const chosen = await page.evaluate(() => ({
+        value: __csQ('#var-condition-modal select.macro-rule-value', 'value'), shown: __csQ('#var-condition-modal .macro-rule-value-wrap .ss-trigger', 'textContent'),
+        listOpen: !!document.querySelector('#var-condition-modal .ss-panel:not([hidden])'), windowOpen: document.getElementById('var-condition-modal').style.display !== 'none',
+      }));
+      check(`valeurs (${label}) : condition : le clic sur Normale choisit le choix, ferme la liste, la fenêtre reste ouverte`, !!normal && normal.onTop && chosen.value === 'Normale' && chosen.shown === 'Normale' && !chosen.listOpen && chosen.windowOpen, { normal, chosen });
+      // « vide » : le champ Valeur ne sert pas, il est grisé UNE fois (le conteneur, pas en plus le champ) et ne s'ouvre plus ; « = » le rend.
+      await page.selectOption(cond + ' .macro-rule-row > select', 'vide');
+      await page.waitForTimeout(150);
+      const greyed = await dimming(cond);
+      const greyedBox = await hitTest(valueTrigger(cond));
+      await clickAt(greyedBox);
+      await page.waitForTimeout(150);
+      const openedWhenGreyed = !!(await panelInfo(cond));
+      await page.selectOption(cond + ' .macro-rule-row > select', '=');
+      await page.waitForTimeout(150);
+      const back = await dimming(cond);
+      check(`valeurs (${label}) : condition : « vide » grise la liste une seule fois (conteneur à 0,45, champ à 1), elle ne s'ouvre plus au clic ; « = » la rend`,
+        !!greyed && greyed.slot === '0.45' && greyed.trigger === '1' && greyed.disabled && !openedWhenGreyed && !!back && back.slot === '1' && back.trigger === '1' && !back.disabled, { greyed, openedWhenGreyed, back });
+      // « Autre valeur… » : le champ libre apparaît avec le focus, la frappe réelle s'y fait, la valeur s'enregistre.
+      const field2 = await hitTest(valueTrigger(cond));
+      await clickAt(field2);
+      await page.waitForTimeout(150);
+      const other = await rowCenter(cond, OTHER);
+      if (other) await page.mouse.click(other.x, other.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type('Critique');
+      const free = await page.evaluate(() => {
+        const input = document.querySelector('#var-condition-modal .macro-rule-value-advanced');
+        if (!input) return { hidden: true, focused: false, value: null, width: 0 };
+        return { hidden: input.hidden, focused: document.activeElement === input, value: input.value, width: input.getBoundingClientRect().width };
+      });
+      check(`valeurs (${label}) : condition : « Autre valeur… » montre le champ libre (focus, lisible), la frappe s'y fait`, !!other && other.onTop && !free.hidden && free.focused && free.value === 'Critique' && free.width > 60, { other, free });
+      await closeWith(cond, saveOf(cond));
+      const saved = await savedConditions();
+      check(`valeurs (${label}) : condition : Enregistrer garde la règle « Priorite = Critique »`,
+        !!saved[0] && saved[0].rules.length === 1 && saved[0].rules[0].column === 'Priorite' && saved[0].rules[0].operator === '=' && saved[0].rules[0].value === 'Critique', saved);
+
+      // Colonne Référence : les valeurs affichées de la table liée, jamais l'id de la ligne.
+      await freshDocument();
+      await openWindowFor('Titre', 'var-condition', cond);
+      await pickColumn(cond, 'resp', 'Responsable');
+      const refField = await reveal(valueTrigger(cond), cond + ' .modal-content');
+      await clickAt(refField);
+      await page.waitForTimeout(150);
+      const refOpen = await panelInfo(cond);
+      check(`valeurs (${label}) : condition, colonne Référence : la liste propose les noms de la table liée, triés, sans doublon, dans le panneau`,
+        !!refOpen && refOpen.inside && JSON.stringify(refOpen.rows) === JSON.stringify([CHOOSE, 'Bernard Léa', 'Dupont Jean', 'Martin Paul', 'Zola Émile', OTHER]), refOpen);
+      await page.keyboard.type('zo');
+      await page.waitForTimeout(100);
+      const zola = await rowCenter(cond, 'Zola Émile');
+      if (zola) await page.mouse.click(zola.x, zola.y);
+      await page.waitForTimeout(150);
+      await closeWith(cond, saveOf(cond));
+      const savedRef = await savedConditions();
+      check(`valeurs (${label}) : condition, colonne Référence : « zo » puis un vrai clic sur Zola Émile, et Enregistrer garde le nom (pas l'id)`,
+        !!zola && zola.onTop && !!savedRef[0] && savedRef[0].rules[0].column === 'Responsable' && savedRef[0].rules[0].value === 'Zola Émile', { zola, savedRef });
+
+      // Très grande table liée : 500 lignes dans la page, une ligne qui dit d'affiner, la recherche atteint le reste.
+      await freshDocument();
+      await openWindowFor('Titre', 'var-condition', cond);
+      await pickColumn(cond, 'clien', 'Client');
+      const bigField = await reveal(valueTrigger(cond), cond + ' .modal-content');
+      const startedAt = Date.now();
+      await clickAt(bigField);
+      await page.waitForFunction(() => !!document.querySelector('#var-condition-modal .ss-panel:not([hidden]) .ss-option'), null, { timeout: 4000 }).catch(() => {});
+      const openedIn = Date.now() - startedAt;
+      const bigOpen = await panelInfo(cond);
+      const moreLine = await page.evaluate(() => { const line = document.querySelector('#var-condition-modal .ss-panel .ss-more'); return line ? line.textContent : null; });
+      check(`valeurs (${label}) : condition, 1 201 valeurs : 500 lignes posées (+ « Choisir » et « Autre valeur… »), la ligne « Encore 701 résultats » les suit, la liste s'ouvre vite`,
+        !!bigOpen && bigOpen.inside && bigOpen.rows.length === 502 && bigOpen.rows[1] === 'Client 0001' && bigOpen.rows[500] === 'Client 0500' && bigOpen.rows[501] === OTHER
+        && moreLine === 'Encore 701 résultats : précisez la recherche.' && openedIn < 2000, { openedIn, rows: bigOpen && bigOpen.rows.length, moreLine });
+      // Molette réelle jusqu'au bas de la liste : la ligne « Encore… » et « Autre valeur… » se voient, non recouvertes.
+      const bigList = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-list');
+      if (typeof bigList.x === 'number') await page.mouse.move(bigList.x, bigList.y);
+      for (let i = 0; i < 6; i++) {
+        await page.mouse.wheel(0, 40000);
+        await page.waitForTimeout(80);
+      }
+      const bottom = await page.evaluate(() => {
+        const list = document.querySelector('#var-condition-modal .ss-panel:not([hidden]) .ss-list');
+        const line = list && list.querySelector('.ss-more');
+        if (!line) return { atBottom: !!list && list.scrollTop + list.clientHeight >= list.scrollHeight - 2, lineInside: false, lineOnTop: false };
+        const lineBox = line.getBoundingClientRect(), listBox = list.getBoundingClientRect();
+        const hit = document.elementFromPoint((lineBox.left + lineBox.right) / 2, (lineBox.top + lineBox.bottom) / 2);
+        return { atBottom: list.scrollTop + list.clientHeight >= list.scrollHeight - 2, lineInside: lineBox.top >= listBox.top - 0.5 && lineBox.bottom <= listBox.bottom + 0.5, lineOnTop: !!hit && (hit === line || line.contains(hit)) };
+      });
+      const otherBottom = await rowCenter(cond, OTHER);
+      const moreContrast = await contrastOf(cond + ' .ss-panel:not([hidden]) .ss-more');
+      check(`valeurs (${label}) : condition, 1 201 valeurs : à la molette, le bas de la liste montre « Encore… » puis « Autre valeur… », au premier plan ; le texte de la ligne est lisible (contraste 4,5:1)`,
+        bottom.atBottom && bottom.lineInside && bottom.lineOnTop && !!otherBottom && otherBottom.onTop && otherBottom.inViewport && moreContrast >= 4.5, { bottom, otherBottom, moreContrast });
+      await page.keyboard.type('zola');
+      await page.waitForTimeout(150);
+      const beyond = await panelInfo(cond);
+      const beyondRow = await rowCenter(cond, 'Zola Émile');
+      check(`valeurs (${label}) : condition, 1 201 valeurs : « zola » trouve une valeur au-delà des 500 premières lignes, sans la ligne « Encore… »`,
+        !!beyond && JSON.stringify(beyond.rows) === JSON.stringify(['Zola Émile', OTHER]) && !(await page.evaluate(() => !!document.querySelector('#var-condition-modal .ss-panel .ss-more'))), beyond);
+      if (beyondRow) await page.mouse.click(beyondRow.x, beyondRow.y);
+      await page.waitForTimeout(150);
+      const beyondChosen = await page.evaluate(() => ({ value: __csQ('#var-condition-modal select.macro-rule-value', 'value'), shown: __csQ('#var-condition-modal .macro-rule-value-wrap .ss-trigger', 'textContent') }));
+      check(`valeurs (${label}) : condition, 1 201 valeurs : un vrai clic sur cette valeur la choisit`, !!beyondRow && beyondRow.onTop && beyondChosen.value === 'Zola Émile' && beyondChosen.shown === 'Zola Émile', { beyondRow, beyondChosen });
+      await closeWith(cond, cancelOf(cond));
+
+      // Macro-modèle : la règle d'une annexe, sur ses deux lignes.
+      await page.evaluate(() => MacroEditor.openModal(null));
+      await page.waitForTimeout(200);
+      await reveal('#macro-editor-add-slot', macro + ' .modal-content');
+      await clickCenter('#macro-editor-add-slot');
+      await pickColumn(macro, 'prio', 'Priorite');
+      const macroField = await reveal(valueTrigger(macro), macro + ' .modal-content');
+      const macroRule = await ruleBoxes(macro);
+      check(`valeurs (${label}) : macro-modèle : le champ Valeur (colonne à choix) est une liste lisible (90 px), sur la seconde ligne sous la colonne, au premier plan`,
+        macroField.found && macroField.inViewport && macroField.onTop && macroField.width >= 90 && !!macroRule && macroRule.twoLines && macroRule.boxes.value.t >= macroRule.boxes.column.b - 1 && overlapping(macroRule.boxes).length === 0,
+        { macroField, macroRule });
+      await clickAt(macroField);
+      await page.waitForTimeout(150);
+      const macroOpen = await panelInfo(macro);
+      check(`valeurs (${label}) : macro-modèle : la liste des choix s'ouvre entièrement dans le panneau, la zone de recherche a le focus`,
+        !!macroOpen && macroOpen.inside && macroOpen.searchFocused && JSON.stringify(macroOpen.rows) === JSON.stringify([CHOOSE, 'Haute', 'Normale', 'Basse', OTHER]), macroOpen);
+      await page.keyboard.type('hau');
+      await page.waitForTimeout(100);
+      const haute = await rowCenter(macro, 'Haute');
+      if (haute) await page.mouse.click(haute.x, haute.y);
+      await page.waitForTimeout(150);
+      const macroChosen = await page.evaluate(() => ({
+        value: __csQ('#macro-editor-modal select.macro-rule-value', 'value'), shown: __csQ('#macro-editor-modal .macro-rule-value-wrap .ss-trigger', 'textContent'),
+        listOpen: !!document.querySelector('#macro-editor-modal .ss-panel:not([hidden])'),
+      }));
+      check(`valeurs (${label}) : macro-modèle : « hau » puis un vrai clic sur Haute choisit le choix et ferme la liste`, !!haute && haute.onTop && macroChosen.value === 'Haute' && macroChosen.shown === 'Haute' && !macroChosen.listOpen, { haute, macroChosen });
+      await closeWith(macro, '#macro-editor-cancel');
+    }
+    await page.evaluate(theme => {
+      Templates.getCached = window.__csValuesCached;
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+      const stub = window.__gristStub;
+      stub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 }]);
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    }, previousTheme);
   },
 
   // Le composant ne se charge pas (fichier introuvable) : l'application démarre quand même et chaque choix de colonne reste la liste native d'avant, qui

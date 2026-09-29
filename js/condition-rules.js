@@ -75,17 +75,23 @@ const ConditionRules = (function () {
   // Reference/ReferenceList N'EST PAS géré ici : une 1ère tentative (colonne toujours un tableau [id, valeur affichée]) s'est révélée fausse sur les
   // deux chemins réels (audit du coordinateur, 2026-09-28) et provoquait même une régression sur ReferenceList (repli sur comparaison générique en
   // texte, désormais explicitement conservé) - condition non fiable sur ce type de colonne pour l'instant, à traiter séparément.
-  // ChoiceList non plus (comparaison "=" ou "contient" ambiguë sur un choix multiple - laquelle des valeurs cochées ? toutes ? une seule ? - jamais
-  // demandée précisément par Antoine ; deviner sans confirmation reproduirait exactement l'erreur Reference/ReferenceList ci-dessus). Déjà cassé avant
-  // ce correctif (audit du coordinateur, 2026-09-28) - pas une régression introduite ici, mais un gap connu à traiter séparément une fois la sémantique
-  // voulue confirmée. Choice (sélection UNIQUE, une simple chaîne) n'a pas ce problème et passe déjà par le repli générique ci-dessous.
-  // Sans `columnType` (repli identique au comportement d'avant ce correctif, ex. les tests qui appellent compareValues sans ce 4e paramètre), ces deux
-  // cas sont simplement ignorés et la comparaison générique s'applique comme avant.
+  // Une LISTE (choix multiples, liste de références : un tableau) : « = » veut dire « contient ce choix » et « ≠ » « ne le contient pas » - choix d'Antoine
+  // du 2026-09-29 (« = Projet » retient donc aussi une ligne Projet + Urgent), le même sens que le filtre d'une boucle (js/loop-rules.js:ruleHolds). Avant, le
+  // tableau retombait sur sa forme texte « Projet,Urgent » : « = Projet » était faux et « ≠ Projet » vrai pour une ligne qui a pourtant ce choix. Une règle
+  // sur une valeur seule (Choice, texte...) ne change pas ; les autres opérateurs sur une liste non plus.
+  // Choice (sélection UNIQUE, une simple chaîne) passe par le repli générique ci-dessous.
+  // Sans `columnType` (repli identique au comportement d'avant ce correctif, ex. les tests qui appellent compareValues sans ce 4e paramètre), les cas Bool et
+  // Date sont simplement ignorés et la comparaison générique s'applique comme avant.
   function compareValues(actual, operator, expected, columnType) {
     const type = String(columnType || '');
 
     if (operator === 'vide') return isEmpty(actual);
     if (operator === 'non vide') return !isEmpty(actual);
+
+    if (Array.isArray(actual) && (operator === '=' || operator === '≠')) {
+      const contains = actual.some(item => compareValues(item, '=', expected, type));
+      return operator === '=' ? contains : !contains;
+    }
 
     if (type === 'Bool' && (actual === true || actual === false)) {
       const expectedBool = parseBoolExpected(expected);
@@ -185,7 +191,7 @@ const ConditionRules = (function () {
     // Colonne d'une autre table liée par correspondance (règle "match") : une valeur PAR ligne liée, la bulle les affichant séparées par des virgules.
     // La règle est remplie si AU MOINS UNE ligne liée la remplit - comparer le tableau entier retombait sur String(tableau) ("a,b"), donc jamais une date,
     // un booléen ou « vide » correctement, même pour une seule ligne liée. Réservé à ce cas (`multi`, posé par js/variables.js) : une ChoiceList ou une
-    // RefList de la table courante arrive elle aussi en tableau, et sa sémantique reste le gap connu décrit au-dessus de compareValues.
+    // RefList de la table courante arrive elle aussi en tableau, que compareValues lit comme une liste (« = » : contient ce choix).
     if (perLinkedRow && Array.isArray(actual)) {
       if (!actual.length) return compareValues(null, rule.operator, rule.value, columnType);
       return actual.some(v => compareValues(v, rule.operator, rule.value, columnType));

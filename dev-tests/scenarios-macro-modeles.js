@@ -104,6 +104,44 @@
     },
   });
 
+  // --- compareValues sur une LISTE (choix multiples, liste de références : un tableau). Antoine, 2026-09-29, carte « Sur une colonne à choix multiples, que doit
+  // tester « = » dans une règle ? » : « Contient ce choix » - « = Projet » retient aussi une ligne Projet + Urgent, « ≠ Projet » l'exclut. Avant, le tableau retombait
+  // sur sa forme texte « Projet,Urgent » : « = Projet » était faux et « ≠ Projet » vrai pour une ligne qui a pourtant ce choix. Le même sens que le filtre d'une
+  // boucle (js/loop-rules.js:ruleHolds). Une règle sur une valeur seule, et les autres opérateurs, ne changent pas. ---
+  cases.push({
+    id: 'macro_compare_list_contains',
+    description: '« = » sur une liste (ChoiceList, liste de références) veut dire « contient ce choix » et « ≠ » « ne le contient pas » ; une valeur seule et les autres opérateurs ne changent pas',
+    run: async () => {
+      const c = MacroTemplates.compareValues;
+      const both = ['Projet', 'Urgent'];
+      const checks = [
+        [c(both, '=', 'Projet', 'ChoiceList'), true, '= Projet retient Projet + Urgent'],
+        [c(both, '=', 'Urgent', 'ChoiceList'), true, '= Urgent retient Projet + Urgent'],
+        [c(both, '=', 'Interne', 'ChoiceList'), false, '= Interne ne retient pas Projet + Urgent'],
+        [c(both, '≠', 'Projet', 'ChoiceList'), false, '≠ Projet exclut Projet + Urgent'],
+        [c(both, '≠', 'Interne', 'ChoiceList'), true, '≠ Interne retient Projet + Urgent'],
+        [c(['Projet'], '=', 'Projet', 'ChoiceList'), true, 'liste d’un seul choix : ='],
+        [c(['Projet'], '≠', 'Projet', 'ChoiceList'), false, 'liste d’un seul choix : ≠'],
+        [c(['Projet', 'Urgent'], '=', ' Urgent ', 'ChoiceList'), true, 'la valeur saisie est rognée, comme pour une valeur seule'],
+        [c(['Dupont Jean', 'Martin Paul'], '=', 'Martin Paul', 'RefList:Annuaire'), true, 'liste de références : la valeur affichée'],
+        [c(['Dupont Jean', 'Martin Paul'], '≠', 'Martin Paul', 'RefList:Annuaire'), false, 'liste de références : ≠'],
+        [c([1, 2, 3], '=', '2'), true, 'liste de nombres : comparaison numérique de chaque élément'],
+        [c([], '=', 'Projet', 'ChoiceList'), false, 'liste vide : = faux'],
+        [c([], '≠', 'Projet', 'ChoiceList'), true, 'liste vide : ≠ vrai'],
+        // Inchangé : une valeur seule (Choice, texte), qu'une chaîne « Projet,Urgent » n'est pas une liste, et les autres opérateurs.
+        [c('Projet', '=', 'Projet', 'Choice'), true, 'Choice = : inchangé'],
+        [c('Projet', '≠', 'Projet', 'Choice'), false, 'Choice ≠ : inchangé'],
+        [c('Projet,Urgent', '=', 'Projet'), false, 'une chaîne n’est pas une liste'],
+        [c(both, 'contient', 'proj', 'ChoiceList'), true, 'contient sur une liste : inchangé'],
+        [c(both, 'non vide', null, 'ChoiceList'), true, 'non vide sur une liste : inchangé'],
+        [c(null, '=', 'Projet', 'ChoiceList'), false, 'cellule vide : = faux'],
+        [c(null, '≠', 'Projet', 'ChoiceList'), true, 'cellule vide : ≠ vrai'],
+      ];
+      const failed = checks.filter(([actual, expected]) => actual !== expected);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify(failed.map(f => f[2])) : 'OK' };
+    },
+  });
+
   // --- parseColumnRef : colonne nue (table courante) vs "Table.Colonne" (cross-table, même mécanisme que #Variable). ---
   cases.push({
     id: 'macro_parse_column_ref',
@@ -175,6 +213,26 @@
       const record = { id: 9, TypeDossier: 'Association' };
       const chosen = await MacroTemplates.pickModeleId(slot, 'Dossiers', record);
       return { pass: chosen === null, notes: 'chosen=' + chosen };
+    },
+  });
+
+  // --- pickModeleId sur une colonne à choix multiples (Antoine, 2026-09-29) : la ligne coche « Projet » et « Urgent » (grist.onRecord livre un tableau), la règle
+  // « Etiquettes = Projet » la retient. ---
+  cases.push({
+    id: 'macro_pick_conditional_list_column_equals_contains',
+    description: 'pickModeleId : une règle « = Projet » sur une colonne à choix multiples retient la ligne qui coche Projet et Urgent ; « ≠ Projet » la laisse de côté',
+    run: async () => {
+      const record = { id: 10, Etiquettes: ['Projet', 'Urgent'] };
+      const slot = operator => ({
+        type: 'conditional',
+        rules: [{ column: 'Etiquettes', operator, value: 'Projet', modeleId: 'annexe-projet' }],
+        defaultModeleId: 'annexe-defaut',
+      });
+      const equals = await MacroTemplates.pickModeleId(slot('='), 'Dossiers', record);
+      const differs = await MacroTemplates.pickModeleId(slot('≠'), 'Dossiers', record);
+      const other = await MacroTemplates.pickModeleId(slot('='), 'Dossiers', { id: 11, Etiquettes: ['Interne'] });
+      const pass = equals === 'annexe-projet' && differs === 'annexe-defaut' && other === 'annexe-defaut';
+      return { pass, notes: JSON.stringify({ equals, differs, other }) };
     },
   });
 
@@ -490,7 +548,8 @@
       ] } });
       await h.sleep(20);
       const row = document.querySelector('.macro-rule-row');
-      const valueSelect = row.querySelector('select.macro-rule-value');
+      // Liste avec recherche (js/search-select.js) : le <select> est masqué, c'est son champ voisin qui occupe la place à l'écran.
+      const valueSelect = row.querySelector('.macro-rule-value-wrap .ss-trigger') || row.querySelector('select.macro-rule-value');
       const valueAdvanced = row.querySelector('.macro-rule-value-advanced');
 
       const selectWidth = valueSelect.getBoundingClientRect().width;
@@ -659,6 +718,75 @@
       const pass = Array.isArray(statutChoices) && statutChoices.join(',') === 'Urgent,En cours,Clos'
         && typeDossierChoices === null && unknownColChoices === null;
       return { pass, notes: JSON.stringify({ statutChoices, typeDossierChoices, unknownColChoices }) };
+    },
+  });
+
+  // --- GristAPI.getReferenceColumn / getReferenceValues (js/grist-api.js) - la « Colonne à afficher » (visibleCol) d'une Référence ou d'une liste de références
+  // et les valeurs qu'elle prend dans la table liée, source de la liste des valeurs possibles d'une règle (Antoine, 2026-09-29 : « quand on indique une colonne à
+  // choix ou à référence, mettre de l'autocompletion ou un dropdown des valeurs possibles »). ---
+  cases.push({
+    id: 'macro_get_reference_values',
+    description: 'GristAPI.getReferenceColumn dit la colonne montrée par une Référence (texte ou nombre seulement) et getReferenceValues en lit les valeurs : rognées, sans doublon, triées, une seule lecture pour deux demandes simultanées',
+    run: async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('RefValAnnuaire', { NomPrenom: 'Text', Age: 'Int', Naissance: 'Date', Divers: 'Any' });
+      stub.setVariables('RefValDossiers', {
+        Titre: 'Text', Responsable: 'Ref:RefValAnnuaire', Equipe: 'RefList:RefValAnnuaire', Age: 'Ref:RefValAnnuaire', SansColonne: 'Ref:RefValAnnuaire',
+        DateMontree: 'Ref:RefValAnnuaire', Divers: 'Ref:RefValAnnuaire',
+      }, undefined, undefined, { Responsable: 'NomPrenom', Equipe: 'NomPrenom', Age: 'Age', DateMontree: 'Naissance', Divers: 'Divers' });
+      stub.setRows('RefValAnnuaire', [
+        { id: 1, NomPrenom: 'Martin Paul', Age: 30, Naissance: 631152000, Divers: 'x' },
+        { id: 2, NomPrenom: 'Dupont Jean', Age: 4, Naissance: 631152000, Divers: 12 },
+        { id: 3, NomPrenom: 'Dupont Jean ', Age: 30, Naissance: 631152000, Divers: true },
+        { id: 4, NomPrenom: 'Bernard Léa', Age: 100, Naissance: 631152000, Divers: ['L', 'a'] },
+        { id: 5, NomPrenom: '', Age: null, Naissance: null, Divers: null },
+        { id: 6, NomPrenom: '   ', Age: null, Naissance: null, Divers: '  ' },
+        { id: 7, NomPrenom: 'zola Émile', Age: 4, Naissance: null, Divers: 'x' },
+      ]);
+      await GristAPI.refreshSchema();
+      const column = c => GristAPI.getReferenceColumn('RefValDossiers', c);
+      const columns = {
+        responsable: column('Responsable'), equipe: column('Equipe'), age: column('Age'), sansColonne: column('SansColonne'),
+        date: column('DateMontree'), divers: column('Divers'), titre: column('Titre'), inconnue: column('Inconnue'),
+      };
+      const shape = (source, table, col) => !!source && source.table === table && source.column === col;
+      const columnsOk = shape(columns.responsable, 'RefValAnnuaire', 'NomPrenom') && shape(columns.equipe, 'RefValAnnuaire', 'NomPrenom')
+        && shape(columns.age, 'RefValAnnuaire', 'Age') && shape(columns.divers, 'RefValAnnuaire', 'Divers')
+        && columns.sansColonne === null && columns.date === null && columns.titre === null && columns.inconnue === null;
+
+      // Lectures de la table liée comptées, et retardées pour que deux demandes se chevauchent.
+      const realFetch = grist.docApi.fetchTable;
+      let reads = 0;
+      grist.docApi.fetchTable = async (tableId) => {
+        if (tableId === 'RefValAnnuaire') { reads++; await new Promise(resolve => setTimeout(resolve, 30)); }
+        return realFetch(tableId);
+      };
+      let values = null, both = null, numbers = null, mixed = null, none = null, refreshed = null, failure = null, afterFailure = null;
+      try {
+        both = await Promise.all([GristAPI.getReferenceValues('RefValDossiers', 'Responsable'), GristAPI.getReferenceValues('RefValDossiers', 'Equipe')]);
+        values = both[0];
+        const readsForTwo = reads;
+        numbers = await GristAPI.getReferenceValues('RefValDossiers', 'Age');
+        mixed = await GristAPI.getReferenceValues('RefValDossiers', 'Divers');
+        none = [await GristAPI.getReferenceValues('RefValDossiers', 'SansColonne'), await GristAPI.getReferenceValues('RefValDossiers', 'DateMontree'), await GristAPI.getReferenceValues('RefValDossiers', 'Titre')];
+        // Sans mémoire : une ligne ajoutée dans Grist entre deux ouvertures apparaît à la suivante.
+        stub.setRows('RefValAnnuaire', [{ id: 1, NomPrenom: 'Nouveau Nom', Age: 1, Naissance: null, Divers: null }]);
+        refreshed = await GristAPI.getReferenceValues('RefValDossiers', 'Responsable');
+        // Table liée illisible : la demande est rejetée, et la suivante repart d'une lecture neuve.
+        grist.docApi.fetchTable = async (tableId) => { if (tableId === 'RefValAnnuaire') throw new Error('illisible'); return realFetch(tableId); };
+        failure = await GristAPI.getReferenceValues('RefValDossiers', 'Responsable').then(() => 'résolue', e => 'rejetée : ' + e.message);
+        grist.docApi.fetchTable = realFetch;
+        afterFailure = await GristAPI.getReferenceValues('RefValDossiers', 'Responsable');
+        values = { values, readsForTwo, same: JSON.stringify(both[0]) === JSON.stringify(both[1]) };
+      } finally { grist.docApi.fetchTable = realFetch; }
+      const pass = columnsOk
+        && JSON.stringify(values.values) === JSON.stringify(['Bernard Léa', 'Dupont Jean', 'Martin Paul', 'zola Émile']) && values.same && values.readsForTwo === 1
+        && JSON.stringify(numbers) === JSON.stringify(['4', '30', '100'])
+        && JSON.stringify(mixed) === JSON.stringify(['12', 'x'])
+        && JSON.stringify(none) === '[[],[],[]]'
+        && JSON.stringify(refreshed) === '["Nouveau Nom"]'
+        && failure === 'rejetée : illisible' && JSON.stringify(afterFailure) === '["Nouveau Nom"]';
+      return { pass, notes: JSON.stringify({ columns, values, numbers, mixed, none, refreshed, failure, afterFailure }) };
     },
   });
 

@@ -30,6 +30,7 @@
     columns: {}, // { tableId: { colId: type } }
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
+    visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
     // recevant CHAQUE événement indépendamment (grist-plugin-api.ts : chaque appel à onRecord() ajoute son propre écouteur 'message' interne) - donc
@@ -100,23 +101,27 @@
     return Math.floor(ms / 1000); // secondes entières depuis l'epoch, jamais des millisecondes (cf. doc citée ci-dessus)
   }
 
-  function setVariables(tableId, columns, choicesByCol, displayCols) {
+  function setVariables(tableId, columns, choicesByCol, displayCols, visibleCols) {
     // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
     // choicesByCol (optionnel) : { colId: string[] } pour une colonne Choice/ChoiceList - même clé "choices" que le vrai widgetOptions JSON de Grist
     // (grist-core ChoiceTextBox.ts: this.options.prop("choices")), vérifié à la source le 2026-09-28.
     // displayCols (optionnel) : { colRef: colonneAide } - une Référence affichée par une colonne de la table cible a, dans le vrai Grist, une colonne
     // d'aide « gristHelper_Display… » dans SA table (à déclarer dans `columns` et remplir via setRows, comme fetchTable la renvoie) et son displayCol
     // pointe dessus (schema.ts, ColumnRec.displayColModel, vérifié à la source le 2026-09-28). Absent = aucune : la Référence s'affiche par son id.
+    // visibleCols (optionnel) : { colRef: colonneDeLaTableLiée } - la « Colonne à afficher » d'une Référence ou d'une liste de références, dite par le nom de
+    // la colonne de la table liée (déclarée dans son propre setVariables) ; le vrai visibleCol en est l'id de ligne dans _grist_Tables_column (schema.ts,
+    // Ref:_grist_Tables_column). Absent = 0 : la Référence montre l'id de la ligne.
     if (state.tables.indexOf(tableId) === -1) state.tables.push(tableId);
     state.columns[tableId] = columns;
     if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(Object.keys(columns));
     if (choicesByCol) state.choices[tableId] = Object.assign({}, state.choices[tableId], choicesByCol);
     state.displayCols[tableId] = Object.assign({}, displayCols);
+    state.visibleCols[tableId] = Object.assign({}, visibleCols);
     // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
     // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
     // reconstruit tout à chaque fois à partir de state.tables/columns/choices.
     const gt = columnarEmpty(['tableId']);
-    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol']);
     let rowId = 1;
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = rowId++; }));
@@ -128,6 +133,9 @@
         gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tIdx + 1); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
         gtc.widgetOptions.push(choices ? JSON.stringify({ choices }) : '');
         gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
+        const shown = state.visibleCols[t] && state.visibleCols[t][colId];
+        const linked = /^Ref(?:List)?:(.+)$/.exec(state.columns[t][colId]);
+        gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
       });
     });
     state.rows._grist_Tables = gt;

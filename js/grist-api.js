@@ -22,6 +22,9 @@ const GristAPI = (function () {
   // { tableId: { colId: colonne d'affichage } } - pour une Référence, la colonne d'aide (« gristHelper_Display… ») que Grist calcule dans la même table
   // avec la valeur affichée, cf. getDisplayColumn.
   let _displayColByTable = {};
+  // { tableId: { colId: { table, column } } } - pour une colonne Référence / liste de références, la colonne de la table liée que Grist affiche à la
+  // place de l'id (visibleCol, « Colonne à afficher » du panneau de droite), cf. getReferenceColumn. Seules celles dont le type se lit comme du texte ou un nombre.
+  let _referenceColumnByTable = {};
   // Lignes lues par fetchTable (fetchTableRows/fetchRowById) : forme BRUTE (une Référence = id de ligne), contrairement à la ligne livrée par
   // grist.onRecord (valeur affichée) - cf. isRawRow.
   const _rawRows = new WeakSet();
@@ -279,19 +282,25 @@ const GristAPI = (function () {
     await refreshColumnTypes();
   }
 
+  // Types de la « colonne à afficher » d'une Référence dont les valeurs se proposent dans un champ Valeur (getReferenceValues). « Any » : une colonne à
+  // formule dont Grist n'a pas encore fixé le type ; ses valeurs qui ne sont ni du texte ni un nombre sont écartées à la lecture.
+  const REFERENCE_SHOWN_TYPES = ['Text', 'Choice', 'Int', 'Numeric', 'Any'];
+
   // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale dans la modale de liaison qu'une colonne est une Référence, pour que l'utilisateur
   // la compare à l'Identifiant de ligne, pas à une colonne texte.
   async function refreshColumnTypes() {
     _columnTypesByTable = {};
     _columnChoicesByTable = {};
     _displayColByTable = {};
+    _referenceColumnByTable = {};
     try {
       const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
       const tableIdByRowId = {};
       for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
       const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const colIdByRowId = {};
-      for (let i = 0; i < colsMeta.id.length; i++) colIdByRowId[colsMeta.id[i]] = colsMeta.colId[i];
+      const colIndexByRowId = {};
+      for (let i = 0; i < colsMeta.id.length; i++) { colIdByRowId[colsMeta.id[i]] = colsMeta.colId[i]; colIndexByRowId[colsMeta.id[i]] = i; }
       for (let i = 0; i < colsMeta.id.length; i++) {
         const tableId = tableIdByRowId[colsMeta.parentId[i]];
         if (!tableId) continue;
@@ -303,6 +312,18 @@ const GristAPI = (function () {
         if (displayRef && displayRef !== colsMeta.id[i] && colIdByRowId[displayRef]) {
           if (!_displayColByTable[tableId]) _displayColByTable[tableId] = {};
           _displayColByTable[tableId][colsMeta.colId[i]] = colIdByRowId[displayRef];
+        }
+        // visibleCol (schema.ts : Ref:_grist_Tables_column, 0 = aucune, la Référence montre alors l'id de la ligne) : la colonne de la TABLE LIÉE dont la valeur
+        // s'affiche (vérifié à la source grist-core le 2026-09-29). Retenue seulement si elle porte du texte ou un nombre, seules valeurs qu'une règle peut
+        // proposer : une date ou un booléen s'afficheraient sous une autre forme que la valeur brute lue dans la table liée.
+        const refType = String(colsMeta.type[i] || '');
+        const refColon = refType.indexOf(':');
+        if (refColon !== -1 && (refType.slice(0, refColon) === 'Ref' || refType.slice(0, refColon) === 'RefList') && refType.length > refColon + 1) {
+          const shown = colIndexByRowId[colsMeta.visibleCol ? colsMeta.visibleCol[i] : 0];
+          if (shown !== undefined && REFERENCE_SHOWN_TYPES.indexOf(colsMeta.type[shown]) !== -1) {
+            if (!_referenceColumnByTable[tableId]) _referenceColumnByTable[tableId] = {};
+            _referenceColumnByTable[tableId][colsMeta.colId[i]] = { table: refType.slice(refColon + 1), column: colsMeta.colId[shown] };
+          }
         }
         // Choix d'une colonne Choice/ChoiceList : widgetOptions est un JSON stocké en Text (schema.ts), clé "choices" (vérifié à la source grist-core,
         // ChoiceTextBox.ts: this.options.prop("choices")) - un tableau de chaînes. widgetOptions absent/mal formé ne doit jamais faire planter tout
@@ -355,6 +376,36 @@ const GristAPI = (function () {
   // si la colonne s'affiche elle-même (identifiant de ligne) ou n'est pas une Référence.
   function getDisplayColumn(tableId, colId) {
     return (_displayColByTable[tableId] && _displayColByTable[tableId][colId]) || null;
+  }
+  // Colonne de la table liée que montre une colonne Référence / liste de références ({ table, column }), null si la colonne n'en est pas une, si elle
+  // montre l'id de la ligne, ou si la colonne montrée n'est ni du texte ni un nombre - pas de valeurs à lui proposer (js/condition-fields.js:buildValueField).
+  function getReferenceColumn(tableId, colId) {
+    return (_referenceColumnByTable[tableId] && _referenceColumnByTable[tableId][colId]) || null;
+  }
+  // Lectures de table en cours, par colonne lue : les règles d'une même fenêtre qui portent sur la même Référence partagent UNE lecture (sans mémoire
+  // ensuite : une ligne ajoutée dans Grist entre deux ouvertures apparaît à la suivante).
+  const _referenceValuesPending = {};
+  // Valeurs qu'une colonne Référence / liste de références peut afficher, telles que le compare une règle : celles de la colonne montrée (getReferenceColumn)
+  // sur toutes les lignes de la table liée, texte ou nombre écrits en texte, sans espaces autour (compareValues les rogne), sans doublon, dans l'ordre alphabétique
+  // (chiffres compris). [] si la colonne n'a rien à proposer ; rejette si la table liée est illisible.
+  function getReferenceValues(tableId, colId) {
+    const source = getReferenceColumn(tableId, colId);
+    if (!source) return Promise.resolve([]);
+    const key = source.table + '\u0000' + source.column;
+    if (!_referenceValuesPending[key]) {
+      const read = grist.docApi.fetchTable(source.table).then(data => {
+        const seen = new Set();
+        ((data && data[source.column]) || []).forEach(value => {
+          const text = typeof value === 'string' ? value : (typeof value === 'number' && isFinite(value) ? String(value) : '');
+          if (text.trim()) seen.add(text.trim());
+        });
+        return Array.from(seen).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      });
+      const done = () => { if (_referenceValuesPending[key] === read) delete _referenceValuesPending[key]; };
+      read.then(done, done);
+      _referenceValuesPending[key] = read;
+    }
+    return _referenceValuesPending[key];
   }
   // Vrai pour une ligne lue par fetchTableRows/fetchRowById (forme brute), faux pour la ligne de grist.onRecord - js/variables.js:cellValue ne
   // convertit que la première.
@@ -630,5 +681,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow, resolveColumnPath, tableAtEndOf };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
 })();

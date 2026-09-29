@@ -443,6 +443,38 @@
     },
   });
 
+  // Colonne à choix multiples et liste de références (Antoine, 2026-09-29, carte « Sur une colonne à choix multiples, que doit tester « = » dans une règle ? » :
+  // « Contient ce choix ») : « = Français » retient la ligne qui coche Français ET Anglais, « ≠ Français » l'exclut. Lignes lues par fetchTable, sous leur forme
+  // brute (["L", …]) : celles de l'aperçu de la fenêtre de condition et de l'export en lot ; la bulle suit dans le texte lu.
+  cases.push({
+    id: 'varcond_list_column_equals_means_contains',
+    description: 'Colonne à choix multiples et liste de références : « = » retient la ligne dont la liste contient la valeur et « ≠ » l’exclut (lignes lues par fetchTable) ; la bulle conditionnée apparaît ou disparaît en conséquence',
+    run: async (h) => {
+      await seed(h, { refAttrs: true });
+      const rows = await GristAPI.fetchTableRows('VcAnnuaire');
+      const holds = (column, operator, value, row) => ConditionRules.conditionHolds({ mode: 'all', rules: [{ column, operator, value }] }, 'VcAnnuaire', row);
+      const dupont = rows.find(r => r.id === 7);
+      const martin = rows.find(r => r.id === 8);
+      const results = {
+        langues: [await holds('Langues', '=', 'fr', dupont), await holds('Langues', '=', 'en', dupont), await holds('Langues', '=', 'de', dupont), await holds('Langues', '=', 'fr', martin)],
+        languesDiffer: [await holds('Langues', '≠', 'fr', dupont), await holds('Langues', '≠', 'de', dupont), await holds('Langues', '≠', 'fr', martin)],
+        competences: [await holds('Competences', '=', 'Fiscal', dupont), await holds('Competences', '=', 'Juridique', dupont), await holds('Competences', '≠', 'Fiscal', dupont), await holds('Competences', '=', 'Fiscal', martin)],
+      };
+      const onFr = { mode: 'all', rules: [{ column: 'Langues', operator: '=', value: 'fr' }] };
+      const notFr = { mode: 'all', rules: [{ column: 'Langues', operator: '≠', value: 'fr' }] };
+      const html = `<p>[${badgeHtml('VcAnnuaire', 'NomPrenom', onFr)}][${badgeHtml('VcAnnuaire', 'Telephone', notFr)}]</p>`;
+      const box = document.createElement('div');
+      box.innerHTML = await ReaderMode.preview(html, 'VcAnnuaire', dupont);
+      const readDupont = box.textContent;
+      box.innerHTML = await ReaderMode.preview(html, 'VcAnnuaire', martin);
+      const readMartin = box.textContent;
+      const pass = JSON.stringify(results.langues) === '[true,true,false,false]' && JSON.stringify(results.languesDiffer) === '[false,true,true]'
+        && JSON.stringify(results.competences) === '[true,true,false,false]'
+        && readDupont === '[Dupont Jean][]' && readMartin === '[][06 55 66 77 88]';
+      return { pass, notes: JSON.stringify({ results, readDupont, readMartin }) };
+    },
+  });
+
   // === Copier / Coller la condition d'une variable (demande d'Antoine, 2026-09-29) ===
   function conditionModal() { return document.getElementById('var-condition-modal'); }
   function clipButtons(modal) {

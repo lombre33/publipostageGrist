@@ -202,12 +202,107 @@ const ConditionFields = (function () {
 
   const ADVANCED_VALUE = '__advanced_value__';
 
-  // Remplace le champ Valeur en texte libre par un <select> des choix réels (widgetOptions.choices, GristAPI.getColumnChoices) quand la colonne est de
-  // type Choice/ChoiceList - même raison et même patron que buildColumnField pour la colonne : une valeur tapée à la main qui ne correspond pas
-  // EXACTEMENT au choix stocké (casse, accent, espace) ne matche jamais, silencieusement (Antoine, 2026-09-28 : "colonne à choix unique, opérateur '='
-  // ne fonctionne pas"). Repli sur le texte libre (placeholder adapté au type) pour tout le reste, et pour une colonne Choice/ChoiceList sans
-  // widgetOptions.choices connu (colonne pas encore vue par refreshSchema, ou vidée) - jamais un champ qui disparaît.
-  // `table` : table de la colonne choisie (celle de la page par défaut) - une colonne Choice d'une autre table a ses propres choix.
+  function valueOption(value, text) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    return o;
+  }
+
+  // Champ Valeur en texte libre (colonne sans valeurs à proposer, et repli si la liste ne peut pas se remplir) ; placeholder adapté au type (date, oui/non).
+  function buildValueText(rule, type) {
+    const valInput = document.createElement('input');
+    valInput.type = 'text';
+    valInput.className = 'macro-rule-value';
+    valInput.placeholder = valuePlaceholderForType(type);
+    valInput.value = rule.value || '';
+    valInput.addEventListener('input', () => { rule.value = valInput.value; });
+    return valInput;
+  }
+
+  // Champ Valeur en LISTE des valeurs possibles, posé dans `wrap` : un <select> (source de la valeur et des évènements `change`) dont la dernière option
+  // « Autre valeur… » révèle un champ texte, avec par-dessus la liste avec recherche de js/search-select.js (repli : si elle échoue, le <select> natif reste
+  // affiché et la règle marche pareil). Renvoie de quoi le remplir : `fill(valeurs)` (re)pose les options - tout de suite pour les choix d'une colonne Choix,
+  // au retour de la lecture de la table liée pour une Référence -, `showLoading()` le texte d'attente, `toText()` le retour au texte libre.
+  function buildValueList(rule, wrap, type) {
+    const select = document.createElement('select');
+    select.className = 'macro-rule-value';
+    const advancedInput = document.createElement('input');
+    advancedInput.type = 'text';
+    advancedInput.className = 'macro-rule-value-advanced';
+    advancedInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
+    advancedInput.hidden = true;
+    wrap.appendChild(select);
+    wrap.appendChild(advancedInput);
+
+    select.addEventListener('change', () => {
+      if (select.value === ADVANCED_VALUE) {
+        advancedInput.hidden = false;
+        advancedInput.focus();
+        rule.value = advancedInput.value;
+      } else {
+        advancedInput.hidden = true;
+        rule.value = select.value;
+      }
+    });
+    advancedInput.addEventListener('input', () => { rule.value = advancedInput.value; });
+
+    let search = null;
+    try { search = SearchSelect.attachValues(select, { inline: true }); }
+    catch (e) { console.warn('[ConditionFields] recherche de valeur indisponible, liste native conservée', e); }
+
+    // Le panneau ouvert lit ses lignes à l'ouverture : celui qu'on ouvre pendant la lecture n'aurait que l'attente, on le referme au retour.
+    function refresh() {
+      if (!search) return;
+      if (search.isOpen()) search.close(false);
+      search.sync();
+    }
+    return {
+      showLoading() {
+        select.textContent = '';
+        select.appendChild(valueOption('', I18n.t('macro.modal.valueLoading')));
+        refresh();
+      },
+      fill(values) {
+        select.textContent = '';
+        select.appendChild(valueOption('', I18n.t('macro.modal.valueChoosePlaceholder')));
+        values.forEach(v => select.appendChild(valueOption(v, v)));
+        const advancedOpt = valueOption(ADVANCED_VALUE, I18n.t('macro.modal.valueAdvanced'));
+        advancedOpt.dataset.pinned = 'true'; // liste avec recherche : jamais filtrée, toujours en bas
+        select.appendChild(advancedOpt);
+        // Même garde qu'en colonne (buildColumnField) : une valeur déjà enregistrée qui ne correspond à aucune valeur connue (choix retiré depuis côté Grist,
+        // ligne supprimée de la table liée, ou widgetOptions pas encore chargé au moment de la 1ère saisie) reste visible en « Autre valeur… », jamais
+        // silencieusement effacée.
+        const currentValue = rule.value == null ? '' : String(rule.value);
+        if (currentValue && values.indexOf(currentValue) === -1) {
+          select.value = ADVANCED_VALUE;
+          advancedInput.value = currentValue;
+          advancedInput.hidden = false;
+        } else {
+          select.value = currentValue;
+          advancedInput.hidden = true;
+        }
+        refresh();
+      },
+      toText() {
+        if (search) search.destroy();
+        const input = buildValueText(rule, type);
+        input.disabled = select.disabled; // grisé ou non par l'opérateur (syncValueDisabled), pas par ce champ
+        wrap.replaceChildren(input);
+      },
+    };
+  }
+
+  // Remplace le champ Valeur en texte libre par une LISTE AVEC RECHERCHE des valeurs possibles quand la colonne en propose - même raison et même patron que
+  // buildColumnField pour la colonne : une valeur tapée à la main qui ne correspond pas EXACTEMENT à la valeur stockée (casse, accent, espace) ne matche jamais,
+  // silencieusement (Antoine, 2026-09-28 : "colonne à choix unique, opérateur '=' ne fonctionne pas" ; 2026-09-29 : "autocomplétion ou dropdown des valeurs
+  // possibles" pour une colonne à choix ou à référence). Deux sources : les choix de la colonne Choice/ChoiceList (widgetOptions.choices,
+  // GristAPI.getColumnChoices), tout de suite ; et, pour une Référence ou une liste de références, les valeurs de la colonne que Grist affiche dans la table
+  // liée (GristAPI.getReferenceValues), lues de façon asynchrone - la liste dit « Chargement… » le temps de la lecture, puis se remplit. « Autre valeur… »
+  // reste proposée (jamais retirée, règle de non-régression) : une valeur hors liste, ou une table liée illisible ou vide, garde un texte libre. Repli sur le texte
+  // libre (placeholder adapté au type) pour tout le reste, et pour une colonne sans valeur connue (Choice sans widgetOptions.choices - colonne pas encore vue
+  // par refreshSchema, ou vidée -, Référence qui montre l'id de la ligne ou une date) - jamais un champ qui disparaît.
+  // `table` : table de la colonne choisie (celle de la page par défaut) - une colonne d'une autre table a ses propres valeurs.
   function buildValueField(rule, columnType, colId, table) {
     const wrap = document.createElement('span');
     wrap.className = 'macro-rule-value-wrap';
@@ -216,64 +311,23 @@ const ConditionFields = (function () {
     const choices = (type === 'Choice' || type === 'ChoiceList') && colId && tableId ? GristAPI.getColumnChoices(tableId, colId) : null;
 
     if (choices && choices.length) {
-      const select = document.createElement('select');
-      select.className = 'macro-rule-value';
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = I18n.t('macro.modal.valueChoosePlaceholder');
-      select.appendChild(empty);
-      choices.forEach(ch => {
-        const o = document.createElement('option');
-        o.value = ch;
-        o.textContent = ch;
-        select.appendChild(o);
-      });
-      const advancedOpt = document.createElement('option');
-      advancedOpt.value = ADVANCED_VALUE;
-      advancedOpt.textContent = I18n.t('macro.modal.valueAdvanced');
-      select.appendChild(advancedOpt);
-
-      const advancedInput = document.createElement('input');
-      advancedInput.type = 'text';
-      advancedInput.className = 'macro-rule-value-advanced';
-      advancedInput.placeholder = I18n.t('macro.modal.valuePlaceholder');
-
-      const currentValue = rule.value || '';
-      // Même garde qu'en colonne (buildColumnField) : une valeur déjà enregistrée qui ne correspond à aucun choix connu (choix retiré depuis côté Grist,
-      // ou widgetOptions pas encore chargé au moment de la 1ère saisie) reste visible en saisie avancée, jamais silencieusement effacée.
-      if (currentValue && choices.indexOf(currentValue) === -1) {
-        select.value = ADVANCED_VALUE;
-        advancedInput.value = currentValue;
-        advancedInput.hidden = false;
-      } else {
-        select.value = currentValue;
-        advancedInput.hidden = true;
-      }
-
-      select.addEventListener('change', () => {
-        if (select.value === ADVANCED_VALUE) {
-          advancedInput.hidden = false;
-          advancedInput.focus();
-          rule.value = advancedInput.value;
-        } else {
-          advancedInput.hidden = true;
-          rule.value = select.value;
-        }
-      });
-      advancedInput.addEventListener('input', () => { rule.value = advancedInput.value; });
-
-      wrap.appendChild(select);
-      wrap.appendChild(advancedInput);
+      buildValueList(rule, wrap, type).fill(choices);
       return wrap;
     }
 
-    const valInput = document.createElement('input');
-    valInput.type = 'text';
-    valInput.className = 'macro-rule-value';
-    valInput.placeholder = valuePlaceholderForType(type);
-    valInput.value = rule.value || '';
-    valInput.addEventListener('input', () => { rule.value = valInput.value; });
-    wrap.appendChild(valInput);
+    if ((type.indexOf('Ref:') === 0 || type.indexOf('RefList:') === 0) && colId && tableId && GristAPI.getReferenceColumn(tableId, colId)) {
+      const list = buildValueList(rule, wrap, type);
+      list.showLoading();
+      GristAPI.getReferenceValues(tableId, colId).then(values => {
+        if (values.length) list.fill(values); else list.toText();
+      }, e => {
+        console.warn('[ConditionFields] valeurs de la table liée illisibles, texte libre conservé', e);
+        list.toText();
+      });
+      return wrap;
+    }
+
+    wrap.appendChild(buildValueText(rule, type));
     return wrap;
   }
 
@@ -288,7 +342,11 @@ const ConditionFields = (function () {
   function syncValueDisabled(valueSlot, operator) {
     const disabled = VALUELESS_OPERATORS.indexOf(operator) !== -1;
     valueSlot.classList.toggle('is-disabled', disabled);
-    valueSlot.querySelectorAll('select, input').forEach(el => { el.disabled = disabled; });
+    valueSlot.querySelectorAll('select, input').forEach(el => {
+      el.disabled = disabled;
+      // La liste avec recherche ne lit l'état grisé de son <select> masqué qu'à sa demande (aucun évènement ne le lui dit).
+      if (el.tagName === 'SELECT' && typeof SearchSelect !== 'undefined') SearchSelect.sync(el);
+    });
   }
 
   // `options` : transmis à buildColumnField (fenêtre de condition d'une variable : { allTables, onColumnChosen }), plus { onColumnResolved(table, colonne,

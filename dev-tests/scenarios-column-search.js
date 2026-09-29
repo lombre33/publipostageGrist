@@ -1251,6 +1251,531 @@
     },
   });
 
+  // === Valeurs possibles du champ Valeur d'une règle (Antoine, 2026-09-29 : « quand on indique une colonne à choix ou à référence, mettre de l'autocompletion ou
+  // un dropdown des valeurs possibles ») - js/condition-fields.js:buildValueField, GristAPI.getReferenceValues. Placés en dernier : ils ajoutent la table CsSuivi. ===
+  // Page sur CsSuivi : une colonne à choix (Priorite), à choix multiples (Etiquettes), trois Références vers CsAnnuaire dont la « colonne à afficher » est le nom
+  // (Responsable), l'id de la ligne (Interlocuteur : rien à proposer) ou une date (Anniversaire : rien non plus), une liste de références (Equipe), un texte.
+  async function seedValues(h) {
+    await seed(h);
+    const stub = window.__gristStub;
+    stub.setVariables('CsSuivi', {
+      Titre: 'Text', Priorite: 'Choice', Etiquettes: 'ChoiceList', Responsable: 'Ref:CsAnnuaire', Equipe: 'RefList:CsAnnuaire', Interlocuteur: 'Ref:CsAnnuaire', Anniversaire: 'Ref:CsAnnuaire',
+    }, { Priorite: ['Haute', 'Normale', 'Basse'], Etiquettes: ['Projet', 'Urgent', 'Interne'] }, undefined, { Responsable: 'NomPrenom', Equipe: 'NomPrenom', Anniversaire: 'Naissance' });
+    stub.setRows('CsAnnuaire', [
+      { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 },
+      { id: 8, NomPrenom: 'Martin Paul', Telephone: '', Naissance: null },
+      { id: 9, NomPrenom: 'Zola Émile', Telephone: '', Naissance: null },
+      { id: 10, NomPrenom: 'Bernard Léa', Telephone: '', Naissance: null },
+      { id: 11, NomPrenom: 'Dupont Jean ', Telephone: '', Naissance: null },
+    ]);
+    stub.setRows('CsSuivi', [{ id: 1, Titre: 'Suivi A', Priorite: 'Haute', Etiquettes: ['L', 'Projet', 'Urgent'], Responsable: 7, Equipe: ['L', 7, 8], Interlocuteur: 8, Anniversaire: 7 }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Titre: 'Suivi A', Priorite: 'Haute', Etiquettes: ['Projet', 'Urgent'], Responsable: 'Dupont Jean', Equipe: ['Dupont Jean', 'Martin Paul'], Interlocuteur: 'Martin Paul', Anniversaire: 631152000 }, 'CsSuivi');
+    await h.sleep(50);
+  }
+  async function openSuiviWindow(h) {
+    Editor.setHTML(`<p>Objet : ${badgeHtml('CsSuivi', 'Titre')}</p>`);
+    await selectBadge(h, 'CsSuivi.Titre');
+    pressToolbarButton('var-condition');
+    await h.sleep(60);
+    return conditionModal();
+  }
+  // Choisit la colonne de la première règle (le <select> masqué, source de la valeur, reçoit `change` comme après un choix dans la liste), puis laisse la lecture
+  // des valeurs d'une Référence se terminer.
+  async function chooseColumn(h, modal, column, wait) {
+    const select = modal.querySelector('select.macro-rule-column');
+    select.value = column;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await h.sleep(wait === undefined ? 40 : wait);
+  }
+  // Ce que montre le champ Valeur de la première règle : le champ visible (liste avec recherche), le <select> masqué, le champ de « Autre valeur… », ou le texte libre.
+  function valueParts(modal) {
+    const wrap = modal.querySelector('.macro-rule-row .macro-rule-value-wrap');
+    return {
+      wrap, trigger: wrap.querySelector('.ss-trigger'), panel: wrap.querySelector('.ss-panel'), select: wrap.querySelector('select.macro-rule-value'),
+      advanced: wrap.querySelector('.macro-rule-value-advanced'), text: wrap.querySelector('input.macro-rule-value'),
+    };
+  }
+  const valueRows = parts => rowsOf(parts.panel);
+  const VALUE_CHOOSE = () => I18n.t('macro.modal.valueChoosePlaceholder');
+  const VALUE_OTHER = () => I18n.t('macro.modal.valueAdvanced');
+  // Lecture de la table liée retardée à la main : `release()` la laisse aboutir (ou échouer, si `failing` est posé) ; `reads` compte les lectures de CsAnnuaire.
+  function holdAnnuaireReads() {
+    const realFetch = grist.docApi.fetchTable;
+    const hold = { reads: 0, failing: false };
+    let open;
+    const opened = new Promise(resolve => { open = resolve; });
+    grist.docApi.fetchTable = async (tableId) => {
+      if (tableId !== 'CsAnnuaire') return realFetch(tableId);
+      hold.reads++;
+      await opened;
+      if (hold.failing) throw new Error('lecture impossible (test)');
+      return realFetch(tableId);
+    };
+    hold.release = () => open();
+    hold.restore = () => { grist.docApi.fetchTable = realFetch; };
+    return hold;
+  }
+  function countAnnuaireReads() {
+    const realFetch = grist.docApi.fetchTable;
+    const counter = { reads: 0, restore: () => { grist.docApi.fetchTable = realFetch; } };
+    grist.docApi.fetchTable = async (tableId) => { if (tableId === 'CsAnnuaire') counter.reads++; return realFetch(tableId); };
+    return counter;
+  }
+
+  cases.push({
+    id: 'colsearch_value_choice_column_lists_its_choices_with_search_and_saves_the_choice',
+    description: 'Colonne à choix : le champ Valeur est une liste avec recherche des choix de la colonne (le <select> est masqué), « Autre valeur… » toujours en bas ; un choix se cherche, se prend à la souris ou à Entrée, et s’enregistre ; une valeur libre aussi, et se retrouve à la réouverture',
+    run: async (h) => {
+      await seedValues(h);
+      let modal = await openSuiviWindow(h);
+      const ed = EditorCore.getEditor();
+      await chooseColumn(h, modal, 'Priorite');
+      let parts = valueParts(modal);
+      const closed = { shown: parts.trigger.textContent, width: parts.trigger.getBoundingClientRect().width, nativeWidth: parts.select.getBoundingClientRect().width, placeholder: parts.trigger.classList.contains('is-placeholder') };
+      parts.trigger.click();
+      await h.sleep(30);
+      const all = valueRows(parts);
+      const searchPlaceholder = inputOf(parts.panel).placeholder;
+      setInput(inputOf(parts.panel), 'no');
+      await h.sleep(10);
+      const filtered = valueRows(parts);
+      setInput(inputOf(parts.panel), 'zzz');
+      await h.sleep(10);
+      const none = { rows: valueRows(parts), message: parts.panel.querySelector('.ss-empty').textContent, shown: !parts.panel.querySelector('.ss-empty').hidden };
+      setInput(inputOf(parts.panel), 'bas');
+      await h.sleep(10);
+      press(inputOf(parts.panel), 'Enter');
+      await h.sleep(40);
+      const byKeyboard = { value: parts.select.value, shown: parts.trigger.textContent, closed: parts.panel.hidden };
+      parts.trigger.click();
+      await h.sleep(30);
+      Array.from(parts.panel.querySelectorAll('.ss-option')).find(r => label(r) === 'Normale').click();
+      await h.sleep(40);
+      const byMouse = { value: parts.select.value, shown: parts.trigger.textContent };
+      saveButton(modal).click();
+      await h.sleep(80);
+      const savedChoice = badgeNodes(ed)[0].node.attrs.condition;
+      // « Autre valeur… » : le champ libre apparaît avec le focus, sa frappe est la valeur de la règle.
+      await selectBadge(h, 'CsSuivi.Titre');
+      pressToolbarButton('var-condition');
+      await h.sleep(60);
+      modal = conditionModal();
+      parts = valueParts(modal);
+      const reopenedChoice = { shown: parts.trigger.textContent, value: parts.select.value, advancedHidden: parts.advanced.hidden };
+      parts.trigger.click();
+      await h.sleep(30);
+      parts.panel.querySelector('.ss-option.is-pinned').click();
+      await h.sleep(40);
+      const other = { visible: !parts.advanced.hidden, focused: document.activeElement === parts.advanced, shown: parts.trigger.textContent };
+      setInput(parts.advanced, 'Critique');
+      await h.sleep(20);
+      saveButton(modal).click();
+      await h.sleep(80);
+      const savedOther = badgeNodes(ed)[0].node.attrs.condition;
+      await selectBadge(h, 'CsSuivi.Titre');
+      pressToolbarButton('var-condition');
+      await h.sleep(60);
+      modal = conditionModal();
+      parts = valueParts(modal);
+      const reopenedOther = { select: parts.select.value, advancedValue: parts.advanced.value, advancedHidden: parts.advanced.hidden, shown: parts.trigger.textContent };
+      dismiss(modal);
+      const pass = closed.shown === VALUE_CHOOSE() && closed.width > 80 && closed.nativeWidth === 0 && closed.placeholder
+        && JSON.stringify(all) === JSON.stringify([VALUE_CHOOSE(), 'Haute', 'Normale', 'Basse', VALUE_OTHER()])
+        && searchPlaceholder === I18n.t('searchSelect.searchValues')
+        && JSON.stringify(filtered) === JSON.stringify(['Normale', VALUE_OTHER()])
+        && JSON.stringify(none.rows) === JSON.stringify([VALUE_OTHER()]) && none.shown && none.message === I18n.t('searchSelect.noValueMatch')
+        && byKeyboard.value === 'Basse' && byKeyboard.shown === 'Basse' && byKeyboard.closed
+        && byMouse.value === 'Normale' && byMouse.shown === 'Normale'
+        && !!savedChoice && savedChoice.rules.length === 1 && savedChoice.rules[0].column === 'Priorite' && savedChoice.rules[0].value === 'Normale'
+        && reopenedChoice.shown === 'Normale' && reopenedChoice.value === 'Normale' && reopenedChoice.advancedHidden
+        && other.visible && other.focused && other.shown === VALUE_OTHER()
+        && !!savedOther && savedOther.rules[0].value === 'Critique'
+        && reopenedOther.select === '__advanced_value__' && reopenedOther.advancedValue === 'Critique' && !reopenedOther.advancedHidden && reopenedOther.shown === VALUE_OTHER();
+      return { pass, notes: JSON.stringify({ closed, all, searchPlaceholder, filtered, none, byKeyboard, byMouse, savedChoice, reopenedChoice, other, savedOther, reopenedOther }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_reference_column_lists_the_displayed_values_of_the_linked_table',
+    description: 'Colonne Référence (ou liste de références) dont la colonne à afficher est un texte : le champ Valeur liste ces valeurs affichées de la table liée, triées, sans doublon, et enregistre le texte choisi (jamais l’id de la ligne) ; une Référence qui montre l’id ou une date, une colonne texte : champ libre, sans lecture de la table liée',
+    run: async (h) => {
+      await seedValues(h);
+      const modal = await openSuiviWindow(h);
+      const ed = EditorCore.getEditor();
+      await chooseColumn(h, modal, 'Responsable');
+      let parts = valueParts(modal);
+      parts.trigger.click();
+      await h.sleep(30);
+      const responsable = valueRows(parts);
+      Array.from(parts.panel.querySelectorAll('.ss-option')).find(r => label(r) === 'Martin Paul').click();
+      await h.sleep(40);
+      const chosen = { value: parts.select.value, shown: parts.trigger.textContent };
+      await chooseColumn(h, modal, 'Equipe');
+      parts = valueParts(modal);
+      parts.trigger.click();
+      await h.sleep(30);
+      const equipe = valueRows(parts);
+      parts.trigger.click();
+      await h.sleep(10);
+      // Rien à proposer : champ libre (le placeholder du type), et la table liée n'est même pas lue.
+      const counter = countAnnuaireReads();
+      let free;
+      try {
+        free = [];
+        for (const column of ['Interlocuteur', 'Anniversaire', 'Titre']) {
+          await chooseColumn(h, modal, column);
+          const p = valueParts(modal);
+          free.push({ column, text: !!p.text, list: !!p.trigger, placeholder: p.text && p.text.placeholder });
+        }
+      } finally { counter.restore(); }
+      await chooseColumn(h, modal, 'Responsable');
+      valueParts(modal).trigger.click();
+      await h.sleep(30);
+      Array.from(valueParts(modal).panel.querySelectorAll('.ss-option')).find(r => label(r) === 'Bernard Léa').click();
+      await h.sleep(40);
+      saveButton(modal).click();
+      await h.sleep(80);
+      const saved = badgeNodes(ed)[0].node.attrs.condition;
+      const names = [VALUE_CHOOSE(), 'Bernard Léa', 'Dupont Jean', 'Martin Paul', 'Zola Émile', VALUE_OTHER()];
+      const pass = JSON.stringify(responsable) === JSON.stringify(names) && chosen.value === 'Martin Paul' && chosen.shown === 'Martin Paul'
+        && JSON.stringify(equipe) === JSON.stringify(names)
+        && free.length === 3 && free.every(f => f.text && !f.list && f.placeholder === I18n.t('macro.modal.valuePlaceholder')) && counter.reads === 0
+        && !!saved && saved.rules[0].column === 'Responsable' && saved.rules[0].value === 'Bernard Léa';
+      return { pass, notes: JSON.stringify({ responsable, chosen, equipe, free, reads: counter.reads, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_reference_says_loading_then_lists_and_keeps_the_saved_value_or_falls_back_to_free_text',
+    description: 'Colonne Référence : « Chargement… » (liste grisée d’attente, un seul champ) le temps de lire la table liée, puis la liste ; la valeur déjà enregistrée reste choisie, ou reste visible dans « Autre valeur… » si la table ne la contient plus ; une table illisible ou vide laisse le champ libre avec la valeur enregistrée ; changer de colonne pendant la lecture ne laisse rien derrière',
+    run: async (h) => {
+      await seedValues(h);
+      const ed = EditorCore.getEditor();
+      let modal = await openSuiviWindow(h);
+      // Une valeur enregistrée : Martin Paul.
+      await chooseColumn(h, modal, 'Responsable');
+      let parts = valueParts(modal);
+      parts.trigger.click();
+      await h.sleep(30);
+      Array.from(parts.panel.querySelectorAll('.ss-option')).find(r => label(r) === 'Martin Paul').click();
+      await h.sleep(40);
+      saveButton(modal).click();
+      await h.sleep(80);
+      const reopen = async () => {
+        await selectBadge(h, 'CsSuivi.Titre');
+        pressToolbarButton('var-condition');
+        await h.sleep(30);
+        return conditionModal();
+      };
+      const hold = holdAnnuaireReads();
+      let loading, loaded, gone, failed, empty, changed;
+      try {
+        // 1. Attente, puis liste avec la valeur enregistrée choisie.
+        modal = await reopen();
+        parts = valueParts(modal);
+        loading = {
+          shown: parts.trigger.textContent, options: Array.from(parts.select.options).map(o => o.textContent), lists: modal.querySelectorAll('.macro-rule-row .macro-rule-value-wrap .ss-trigger').length,
+          placeholder: parts.trigger.classList.contains('is-placeholder'), text: !!parts.text,
+        };
+        hold.release();
+        await h.sleep(40);
+        parts = valueParts(modal);
+        loaded = { shown: parts.trigger.textContent, value: parts.select.value, advancedHidden: parts.advanced.hidden, options: Array.from(parts.select.options).map(o => o.value) };
+        dismiss(modal);
+      } finally { hold.restore(); }
+      // 2. La table ne contient plus la valeur enregistrée : elle reste visible dans « Autre valeur… », jamais effacée.
+      window.__gristStub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '', Naissance: null }]);
+      modal = await reopen();
+      await h.sleep(40);
+      parts = valueParts(modal);
+      gone = { select: parts.select.value, advancedValue: parts.advanced.value, advancedHidden: parts.advanced.hidden, shown: parts.trigger.textContent };
+      dismiss(modal);
+      // 3. Table liée illisible : champ libre avec la valeur enregistrée, la règle marche comme avant.
+      const failing = holdAnnuaireReads();
+      const warn = console.warn;
+      console.warn = () => {};
+      try {
+        failing.failing = true;
+        modal = await reopen();
+        failing.release();
+        await h.sleep(40);
+        parts = valueParts(modal);
+        failed = { text: !!parts.text, value: parts.text && parts.text.value, list: !!parts.trigger, native: !!parts.select, advanced: !!parts.advanced };
+        setInput(parts.text, 'Autre Nom');
+        saveButton(modal).click();
+        await h.sleep(80);
+        failed.saved = badgeNodes(ed)[0].node.attrs.condition.rules[0].value;
+      } finally { failing.restore(); console.warn = warn; }
+      // 4. Table liée sans aucune valeur : champ libre aussi.
+      window.__gristStub.setRows('CsAnnuaire', []);
+      modal = await reopen();
+      await h.sleep(40);
+      parts = valueParts(modal);
+      empty = { text: !!parts.text, value: parts.text && parts.text.value, list: !!parts.trigger };
+      // 5. Colonne changée pendant la lecture : le champ de la nouvelle colonne, sans reste de l'ancien, et rien ne casse quand la lecture aboutit.
+      window.__gristStub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '', Naissance: null }, { id: 8, NomPrenom: 'Martin Paul', Telephone: '', Naissance: null }]);
+      const late = holdAnnuaireReads();
+      try {
+        await chooseColumn(h, modal, 'Responsable', 20);
+        const duringLoad = valueParts(modal).trigger.textContent;
+        await chooseColumn(h, modal, 'Titre', 20);
+        late.release();
+        await h.sleep(40);
+        parts = valueParts(modal);
+        changed = { duringLoad, text: !!parts.text, lists: modal.querySelectorAll('.macro-rule-row .macro-rule-value-wrap .ss-trigger').length, wraps: modal.querySelectorAll('.macro-rule-row .macro-rule-value-wrap').length };
+      } finally { late.restore(); dismiss(modal); }
+      const pass = loading.shown === I18n.t('macro.modal.valueLoading') && JSON.stringify(loading.options) === JSON.stringify([I18n.t('macro.modal.valueLoading')]) && loading.lists === 1 && loading.placeholder && !loading.text
+        && loaded.shown === 'Martin Paul' && loaded.value === 'Martin Paul' && loaded.advancedHidden && JSON.stringify(loaded.options) === JSON.stringify(['', 'Bernard Léa', 'Dupont Jean', 'Martin Paul', 'Zola Émile', '__advanced_value__'])
+        && gone.select === '__advanced_value__' && gone.advancedValue === 'Martin Paul' && !gone.advancedHidden && gone.shown === VALUE_OTHER()
+        && failed.text && failed.value === 'Martin Paul' && !failed.list && !failed.native && !failed.advanced && failed.saved === 'Autre Nom'
+        && empty.text && empty.value === 'Autre Nom' && !empty.list
+        && changed.duringLoad === I18n.t('macro.modal.valueLoading') && changed.text && changed.lists === 0 && changed.wraps === 1;
+      return { pass, notes: JSON.stringify({ loading, loaded, gone, failed, empty, changed }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_list_is_greyed_by_the_empty_operators_including_while_it_loads',
+    description: '« vide » et « non vide » grisent la liste des valeurs (le champ visible, pas seulement le <select> masqué) et elle ne s’ouvre plus ; « = » la rend ; une lecture de Référence qui aboutit après coup ne la dégrise pas, et un texte libre de repli reste grisé',
+    run: async (h) => {
+      await seedValues(h);
+      const modal = await openSuiviWindow(h);
+      const operator = () => modal.querySelector('.macro-rule-row > select');
+      const setOperator = async value => { operator().value = value; operator().dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(20); };
+      const state = () => {
+        const p = valueParts(modal);
+        const slot = modal.querySelector('.macro-rule-value-slot');
+        return { greyed: slot.classList.contains('is-disabled'), trigger: p.trigger ? p.trigger.disabled : null, select: p.select ? p.select.disabled : null, text: p.text ? p.text.disabled : null };
+      };
+      await chooseColumn(h, modal, 'Priorite');
+      const enabled = state();
+      await setOperator('vide');
+      const greyed = state();
+      valueParts(modal).trigger.click();
+      await h.sleep(30);
+      const opensWhenGreyed = !valueParts(modal).panel.hidden;
+      await setOperator('=');
+      const back = state();
+      // Référence : opérateur « non vide » posé AVANT que la lecture n'aboutisse.
+      await setOperator('non vide');
+      const hold = holdAnnuaireReads();
+      let whileLoading, afterLoad, fallback;
+      try {
+        await chooseColumn(h, modal, 'Responsable', 20);
+        whileLoading = state();
+        hold.release();
+        await h.sleep(40);
+        afterLoad = state();
+        await setOperator('=');
+        afterLoad.backEnabled = state();
+      } finally { hold.restore(); }
+      // Table liée illisible, opérateur grisé : le champ libre de repli l'est aussi.
+      const failing = holdAnnuaireReads();
+      const warn = console.warn;
+      console.warn = () => {};
+      try {
+        failing.failing = true;
+        await setOperator('vide');
+        await chooseColumn(h, modal, 'Titre', 20);
+        await chooseColumn(h, modal, 'Equipe', 20);
+        failing.release();
+        await h.sleep(40);
+        fallback = state();
+      } finally { failing.restore(); console.warn = warn; dismiss(modal); }
+      const pass = !enabled.greyed && enabled.trigger === false && enabled.select === false
+        && greyed.greyed && greyed.trigger === true && greyed.select === true && !opensWhenGreyed
+        && !back.greyed && back.trigger === false && back.select === false
+        && whileLoading.greyed && whileLoading.trigger === true
+        && afterLoad.greyed && afterLoad.trigger === true && afterLoad.select === true && afterLoad.backEnabled.trigger === false && afterLoad.backEnabled.select === false
+        && fallback.greyed && fallback.text === true && fallback.trigger === null;
+      return { pass, notes: JSON.stringify({ enabled, greyed, opensWhenGreyed, back, whileLoading, afterLoad, fallback }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_native_list_stays_when_the_component_fails',
+    description: 'Si le composant de recherche est indisponible, le champ Valeur garde le <select> natif (visible, mêmes valeurs) pour une colonne à choix comme pour une Référence, et la règle marche comme avant',
+    run: async (h) => {
+      await seedValues(h);
+      const realAttach = SearchSelect.attachValues;
+      const warn = console.warn;
+      let result;
+      try {
+        console.warn = () => {};
+        SearchSelect.attachValues = () => { throw new Error('composant indisponible (test)'); };
+        const modal = await openSuiviWindow(h);
+        const ed = EditorCore.getEditor();
+        await chooseColumn(h, modal, 'Priorite');
+        let parts = valueParts(modal);
+        const choice = { native: visible(parts.select) && parts.select.getBoundingClientRect().width > 60, field: !!parts.trigger, options: Array.from(parts.select.options).map(o => o.value) };
+        parts.select.value = 'Basse';
+        parts.select.dispatchEvent(new Event('change', { bubbles: true }));
+        await chooseColumn(h, modal, 'Responsable');
+        parts = valueParts(modal);
+        const reference = { native: visible(parts.select) && parts.select.getBoundingClientRect().width > 60, field: !!parts.trigger, options: Array.from(parts.select.options).map(o => o.value) };
+        parts.select.value = 'Zola Émile';
+        parts.select.dispatchEvent(new Event('change', { bubbles: true }));
+        saveButton(modal).click();
+        await h.sleep(80);
+        result = { choice, reference, saved: badgeNodes(ed)[0].node.attrs.condition };
+      } finally {
+        SearchSelect.attachValues = realAttach;
+        console.warn = warn;
+      }
+      const pass = result.choice.native && !result.choice.field && result.choice.options.join('|') === '|Haute|Normale|Basse|__advanced_value__'
+        && result.reference.native && !result.reference.field && result.reference.options.join('|') === '|Bernard Léa|Dupont Jean|Martin Paul|Zola Émile|__advanced_value__'
+        && !!result.saved && result.saved.rules[0].column === 'Responsable' && result.saved.rules[0].value === 'Zola Émile';
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_list_texts_follow_the_language',
+    description: 'Les textes de la liste des valeurs (zone de recherche, « Aucune valeur ne correspond. », « Choisir une valeur », « Autre valeur… », « Chargement… ») sont traduits en anglais et reviennent en français',
+    run: async (h) => {
+      await seedValues(h);
+      const readTexts = async lang => {
+        I18n.setLang(lang);
+        const modal = await openSuiviWindow(h);
+        await chooseColumn(h, modal, 'Priorite');
+        const parts = valueParts(modal);
+        parts.trigger.click();
+        await h.sleep(30);
+        setInput(inputOf(parts.panel), 'zzz');
+        await h.sleep(10);
+        const texts = { search: inputOf(parts.panel).placeholder, empty: parts.panel.querySelector('.ss-empty').textContent, other: valueRows(parts)[0], choose: null, loading: null };
+        setInput(inputOf(parts.panel), '');
+        await h.sleep(10);
+        texts.choose = valueRows(parts)[0];
+        parts.trigger.click();
+        await h.sleep(10);
+        const hold = holdAnnuaireReads();
+        try {
+          await chooseColumn(h, modal, 'Responsable', 20);
+          texts.loading = valueParts(modal).trigger.textContent;
+          hold.release();
+          await h.sleep(30);
+        } finally { hold.restore(); dismiss(modal); }
+        return texts;
+      };
+      let fr, en, back;
+      try {
+        fr = await readTexts('fr');
+        en = await readTexts('en');
+        back = await readTexts('fr');
+      } finally { I18n.setLang('fr'); }
+      const pass = fr.search === 'Rechercher une valeur…' && fr.empty === 'Aucune valeur ne correspond.' && fr.choose === '— Choisir une valeur —' && fr.other === 'Autre valeur…' && fr.loading === '— Chargement… —'
+        && en.search === 'Search for a value…' && en.empty === 'No value matches.' && en.choose === '— Choose a value —' && en.other === 'Other value…' && en.loading === '— Loading… —'
+        && JSON.stringify(back) === JSON.stringify(fr);
+      return { pass, notes: JSON.stringify({ fr, en, back }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_very_long_list_puts_500_rows_in_the_page_says_how_many_more_and_the_search_reaches_all',
+    description: 'Référence vers une très grande table (1 201 valeurs) : 500 lignes seulement dans la page, une ligne « Encore 701 résultats : précisez la recherche. » avant « Autre valeur… » (toujours en dernier) ; la recherche porte sur toutes les valeurs, le nombre annoncé est le total, la ligne disparaît quand les résultats tiennent, et une valeur au-delà des 500 premières se choisit, s’enregistre et se retrouve',
+    run: async (h) => {
+      await seedValues(h);
+      const stub = window.__gristStub;
+      const people = [{ id: 5000, NomPrenom: 'Zola Émile', Telephone: '', Naissance: null }];
+      for (let i = 1; i <= 1200; i++) people.push({ id: 100 + i, NomPrenom: 'Personne ' + String(i).padStart(4, '0'), Telephone: '', Naissance: null });
+      stub.setRows('CsAnnuaire', people);
+      let result;
+      try {
+        let modal = await openSuiviWindow(h);
+        const ed = EditorCore.getEditor();
+        await chooseColumn(h, modal, 'Responsable', 120);
+        let parts = valueParts(modal);
+        const more = () => parts.panel.querySelector('.ss-more');
+        const status = () => parts.panel.querySelector('.ss-status').textContent;
+        const state = () => {
+          const rows = valueRows(parts);
+          const line = more();
+          return {
+            rows: rows.length, head: rows[0], second: rows[1], beforeLast: rows[rows.length - 2], last: rows[rows.length - 1],
+            more: line ? line.textContent : null,
+            moreBetween: line ? (line.previousElementSibling.classList.contains('ss-option') && label(line.previousElementSibling) === rows[rows.length - 2] && line.nextElementSibling === parts.panel.querySelector('.ss-option.is-pinned')) : null,
+            status: status(),
+          };
+        };
+        parts.trigger.click();
+        await h.sleep(60);
+        const opened = state();
+        setInput(inputOf(parts.panel), 'personne');
+        await h.sleep(30);
+        const allPeople = state();
+        setInput(inputOf(parts.panel), 'personne 110');
+        await h.sleep(30);
+        const narrow = state();
+        setInput(inputOf(parts.panel), 'zola');
+        await h.sleep(30);
+        const beyond = state();
+        press(inputOf(parts.panel), 'Enter');
+        await h.sleep(40);
+        const picked = { value: parts.select.value, shown: parts.trigger.textContent, closed: parts.panel.hidden };
+        saveButton(modal).click();
+        await h.sleep(80);
+        const saved = badgeNodes(ed)[0].node.attrs.condition;
+        await selectBadge(h, 'CsSuivi.Titre');
+        pressToolbarButton('var-condition');
+        await h.sleep(60);
+        modal = conditionModal();
+        await h.sleep(120);
+        parts = valueParts(modal);
+        const reopened = { shown: parts.trigger.textContent, value: parts.select.value };
+        parts.trigger.click();
+        await h.sleep(60);
+        const reopenedPanel = state();
+        dismiss(modal);
+        // Les textes de la ligne, dans les deux langues (singulier et pluriel).
+        const sentences = {};
+        ['fr', 'en'].forEach(lang => {
+          I18n.setLang(lang);
+          sentences[lang] = [1, 2, 701].map(count => I18n.t('searchSelect.more', { count }));
+        });
+        I18n.setLang('en');
+        modal = await openSuiviWindow(h);
+        await chooseColumn(h, modal, 'Responsable', 120);
+        parts = valueParts(modal);
+        parts.trigger.click();
+        await h.sleep(60);
+        const english = { more: more() ? more().textContent : null };
+        dismiss(modal);
+        result = { opened, allPeople, narrow, beyond, picked, saved: saved && saved.rules[0], reopened, reopenedPanel, sentences, english };
+      } finally {
+        I18n.setLang('fr');
+        stub.setRows('CsAnnuaire', [
+          { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 },
+          { id: 8, NomPrenom: 'Martin Paul', Telephone: '', Naissance: null },
+          { id: 9, NomPrenom: 'Zola Émile', Telephone: '', Naissance: null },
+          { id: 10, NomPrenom: 'Bernard Léa', Telephone: '', Naissance: null },
+          { id: 11, NomPrenom: 'Dupont Jean ', Telephone: '', Naissance: null },
+        ]);
+      }
+      const r = result;
+      // Les mots de la recherche se cherchent n'importe où dans la valeur : « personne 110 » retient tout nom dont le numéro contient 110.
+      const expectedNarrow = people.filter(person => person.NomPrenom.indexOf('110') !== -1).length;
+      const pass = r.opened.rows === 502 && r.opened.head === VALUE_CHOOSE() && r.opened.second === 'Personne 0001' && r.opened.beforeLast === 'Personne 0500' && r.opened.last === VALUE_OTHER()
+        && r.opened.more === 'Encore 701 résultats : précisez la recherche.' && r.opened.moreBetween === true && r.opened.status === ''
+        // Tout ce qui correspond compte, pas seulement les lignes posées : 1 200 personnes, 700 de plus que les 500 lignes (la ligne « Choisir » n'existe plus pendant une recherche).
+        && r.allPeople.rows === 501 && r.allPeople.head === 'Personne 0001' && r.allPeople.beforeLast === 'Personne 0500' && r.allPeople.last === VALUE_OTHER()
+        && r.allPeople.more === 'Encore 700 résultats : précisez la recherche.' && r.allPeople.moreBetween === true && r.allPeople.status === '1200 résultats'
+        // Assez de résultats pour tenir sans la ligne : elle disparaît, « Autre valeur… » reste la dernière ligne.
+        && expectedNarrow > 1 && expectedNarrow < 500 && r.narrow.rows === expectedNarrow + 1 && r.narrow.more === null && r.narrow.status === expectedNarrow + ' résultats' && r.narrow.last === VALUE_OTHER()
+        // Une valeur qui n'était pas dans les 500 premières lignes s'atteint par la recherche.
+        && r.beyond.rows === 2 && r.beyond.head === 'Zola Émile' && r.beyond.last === VALUE_OTHER() && r.beyond.more === null && r.beyond.status === '1 résultat'
+        && r.picked.value === 'Zola Émile' && r.picked.shown === 'Zola Émile' && r.picked.closed
+        && !!r.saved && r.saved.column === 'Responsable' && r.saved.value === 'Zola Émile'
+        // À la réouverture, la valeur enregistrée (hors des 500 premières lignes) reste celle du champ, et la liste garde ses 500 lignes.
+        && r.reopened.shown === 'Zola Émile' && r.reopened.value === 'Zola Émile' && r.reopenedPanel.rows === 502 && r.reopenedPanel.more === 'Encore 701 résultats : précisez la recherche.'
+        && JSON.stringify(r.sentences.fr) === JSON.stringify(['Encore 1 résultat : précisez la recherche.', 'Encore 2 résultats : précisez la recherche.', 'Encore 701 résultats : précisez la recherche.'])
+        && JSON.stringify(r.sentences.en) === JSON.stringify(['1 more result: refine your search.', '2 more results: refine your search.', '701 more results: refine your search.'])
+        && r.english.more === '701 more results: refine your search.';
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.columnSearch = cases;
 })();
