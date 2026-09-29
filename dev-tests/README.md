@@ -118,7 +118,7 @@ Deux options utiles :
   Commenter puis Publier cliqués pour de vrai.
 - Un cinquième, `columnSearchMouse` (`dev-tests/verify-column-search-mouse.mjs`), ouvre à 700×400 les fenêtres qui
   proposent un choix de colonne (condition d'affichage d'une bulle, filtre et « Trier par » d'une boucle, règles d'un macro-modèle,
-  Réglages > Accès ; sections `condition`, `loop`, `loopSort`, `macro`, `access` lançables seules) et s'en sert comme une personne : clic sur le champ visible
+  Réglages > Accès ; sections `condition`, `loop`, `loopSort`, `macro`, `access` et `withoutComponent` lançables seules ; la dernière recharge la page sans `js/search-select.js` : chaque choix de colonne doit rester la liste native, qui marche) et s'en sert comme une personne : clic sur le champ visible
   (le `<select>` est masqué par la liste avec recherche, `js/search-select.js` : Playwright ne peut plus le
   sélectionner), frappe, molette sur la liste, clic sur le résultat, Échap, Tab. Il vérifie que le panneau de la liste
   tient dans la fenêtre Grist, que ses lignes et la saisie avancée sont au premier plan, et que ni la page ni la fenêtre

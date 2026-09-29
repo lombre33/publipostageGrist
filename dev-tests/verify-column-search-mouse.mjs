@@ -113,7 +113,9 @@ await page.waitForFunction(() => {
 
 
 // Jeu de données : la page est sur CsDossiers ; CsAnnuaire liée par Responsable ; CsContacts et CsFactures pas encore liées ; CsLignes liée par Facture
-// (plusieurs lignes par facture : la fenêtre Boucle s'ouvre sur ses variables) ; CsLarge, 40 colonnes, pour une liste qui défile.
+// (plusieurs lignes par facture : la fenêtre Boucle s'ouvre sur ses variables) ; CsLarge, 40 colonnes, pour une liste qui défile. Rejoué après un
+// rechargement de la page (section withoutComponent).
+async function seedData() {
 await page.evaluate(async () => {
   const stub = window.__gristStub;
   stub.setVariables('CsAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date' });
@@ -137,6 +139,8 @@ await page.evaluate(async () => {
   Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
 });
 await page.waitForTimeout(300);
+}
+await seedData();
 
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan (un champ recouvert par autre chose ne recevrait pas le clic).
 async function hitTest(selector) {
@@ -499,6 +503,71 @@ const SECTIONS = {
     await page.waitForTimeout(200);
     await page.evaluate(() => window.__gristStub.setWidgetOptions(null));
     await page.waitForTimeout(200);
+  },
+
+  // Le composant ne se charge pas (fichier introuvable) : l'application démarre quand même et chaque choix de colonne reste la liste native d'avant, qui
+  // marche. Dernière section : elle recharge la page.
+  async withoutComponent() {
+    const pattern = '**/js/search-select.js*';
+    await page.route(pattern, route => route.fulfill({ status: 404, contentType: 'text/plain', body: 'introuvable' }));
+    await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+    await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+    await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+    await seedData();
+    const missing = await page.evaluate(() => typeof SearchSelect === 'undefined');
+    check('sans composant : le fichier ne se charge pas et l’application démarre quand même', missing);
+    // Condition d'affichage.
+    await openWindowFor('Titre', 'var-condition', cond);
+    const conditionField = await hitTest(cond + ' select.macro-rule-column');
+    const conditionTriggers = await page.evaluate(() => document.querySelectorAll('#var-condition-modal .ss-trigger').length);
+    check('sans composant : la colonne de la condition est la liste native, visible et au premier plan', conditionField.found && conditionField.width > 80 && conditionField.onTop && conditionTriggers === 0, { conditionField, conditionTriggers });
+    await page.selectOption(cond + ' select.macro-rule-column', 'Statut');
+    await page.waitForTimeout(150);
+    const conditionChosen = await page.evaluate(() => ({ value: document.querySelector('#var-condition-modal select.macro-rule-column').value, valueField: !!document.querySelector('#var-condition-modal .macro-rule-value') }));
+    check('sans composant : choisir une colonne dans la liste native affiche le champ Valeur', conditionChosen.value === 'Statut' && conditionChosen.valueField, conditionChosen);
+    const conditionCancel = await hitTest(cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+    if (conditionCancel.found) await page.mouse.click(conditionCancel.x, conditionCancel.y);
+    await page.waitForTimeout(200);
+    // « Trier par » d'une boucle.
+    const loopScope = '#var-loop-modal';
+    await openWindowFor('Designation', 'var-loop', loopScope);
+    const sortField = await reveal(loopScope + ' #var-loop-sort', loopScope + ' .modal-content');
+    check('sans composant : « Trier par » est la liste native, visible et au premier plan', sortField.found && sortField.width > 40 && sortField.onTop && await page.evaluate(() => !document.querySelector('#var-loop-modal .ss-trigger')), sortField);
+    await page.selectOption(loopScope + ' #var-loop-sort', 'Montant');
+    await page.waitForTimeout(300);
+    check('sans composant : choisir une colonne de tri dans la liste native marche', await page.evaluate(() => document.querySelector('#var-loop-modal #var-loop-sort').value === 'Montant'));
+    const loopCancel = await reveal(loopScope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)', loopScope + ' .modal-content');
+    if (loopCancel.found) await page.mouse.click(loopCancel.x, loopCancel.y);
+    await page.waitForTimeout(200);
+    // Réglages > Accès.
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsDroits', { Email: 'Text', Nom: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+      stub.setRows('CsDroits', [{ id: 1, Email: 'a@exemple.fr', Nom: 'A', LectureSeule: false, Export: true, Commentaires: true }]);
+      await GristAPI.refreshSchema();
+      stub.setWidgetOptions(null);
+    });
+    await clickCenter('#v2-btn-settings');
+    await page.waitForTimeout(300);
+    await clickCenter('#settings-modal .settings-tab[data-settings-tab="access"]');
+    await page.selectOption('#settings-access-table', 'CsDroits');
+    await page.waitForTimeout(400);
+    await page.selectOption('#settings-access-readonly', 'LectureSeule');
+    await page.waitForTimeout(400);
+    const access = await page.evaluate(() => {
+      const option = window.__gristStub.state.options && window.__gristStub.state.options.droitsAcces;
+      return {
+        triggers: document.querySelectorAll('#settings-modal .ss-trigger').length, email: document.getElementById('settings-access-email').value,
+        emailVisible: document.getElementById('settings-access-email').getBoundingClientRect().width > 100, option,
+      };
+    });
+    check('sans composant : les colonnes de Réglages > Accès sont des listes natives qui marchent et écrivent l’option du widget',
+      access.triggers === 0 && access.emailVisible && access.email === 'Email' && !!access.option && access.option.readOnlyColumn === 'LectureSeule', access);
+    const close = await reveal('#settings-close', '#settings-modal .modal-content');
+    if (close.found) await page.mouse.click(close.x, close.y);
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.__gristStub.setWidgetOptions(null));
+    await page.unroute(pattern);
   },
 };
 const only = process.argv.slice(2);
