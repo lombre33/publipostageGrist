@@ -116,7 +116,11 @@ await page.evaluate(async () => {
   const stub = window.__gristStub;
   stub.setVariables('VcAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date' });
   stub.setVariables('VcDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:VcAnnuaire', Montant: 'Numeric' });
-  stub.setVariables('VcContacts', { Dossier: 'Ref:VcDossiers', Role: 'Text' }); // table PAS encore liée : son choix de clé s'ouvre par-dessus la fenêtre
+  // Table PAS encore liée : son choix de clé s'ouvre par-dessus la fenêtre. Assez de colonnes pour que sa liste avec recherche défile dans 400 px.
+  stub.setVariables('VcContacts', {
+    Dossier: 'Ref:VcDossiers', Role: 'Text', Telephone: 'Text', Courriel: 'Text', Adresse: 'Text', Ville: 'Text', CodePostal: 'Text', Pays: 'Text',
+    Notes: 'Text', Origine: 'Text', Priorite: 'Text', Societe: 'Text', Service: 'Text', Fonction: 'Text', Langue: 'Text', Civilite: 'Text',
+  });
   stub.setRows('VcAnnuaire', [
     { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 },
     { id: 8, NomPrenom: 'Martin Anne', Telephone: '06 55 66 77 88', Naissance: 662688000 },
@@ -198,6 +202,66 @@ const keyConfirm = await hitTest('#link-config-confirm');
 const keyCancel = await hitTest('#link-config-cancel');
 check('choix de la clé ouvert au-dessus de la fenêtre de condition, Valider et Annuler non recouverts',
   keyConfirm.found && keyConfirm.inViewport && keyConfirm.onTop && keyCancel.inViewport && keyCancel.onTop, { keyConfirm, keyCancel });
+
+// 2 ter) Listes de colonnes avec recherche (retour d'Antoine 2026-09-29) : vrai clic sur le champ de la table cible (16+ colonnes), le panneau tient dans
+// les 400 px et sa liste défile à la molette réelle sans bouger la fenêtre, la frappe réelle filtre la liste, un vrai clic sur le résultat le choisit.
+const cibleField = await hitTest('#link-config-modal .link-config-bridge-col:last-child .ss-trigger');
+check('liste des colonnes de la table cible : champ visible, dans le panneau et au premier plan', cibleField.found && cibleField.inViewport && cibleField.onTop, cibleField);
+if (cibleField.found) await page.mouse.click(cibleField.x, cibleField.y);
+await page.waitForTimeout(150);
+const PANEL = '#link-config-modal .ss-panel:not([hidden])';
+const listPanel = await hitTest(PANEL);
+const searchFocused = await page.evaluate(() => !!document.activeElement && document.activeElement.classList.contains('ss-input'));
+check('clic sur le champ : le panneau de recherche s’ouvre entièrement dans le panneau Grist, la zone de recherche a le focus', listPanel.found && listPanel.inViewport && searchFocused, { listPanel, searchFocused });
+const listSizes = await page.evaluate(sel => { const l = document.querySelector(sel + ' .ss-list'); return { scrollHeight: l.scrollHeight, clientHeight: l.clientHeight, rows: l.children.length }; }, PANEL);
+check('la liste défile dans le panneau quand les colonnes sont nombreuses (la fenêtre garde sa taille)', listSizes.scrollHeight > listSizes.clientHeight && listSizes.rows >= 17, listSizes);
+const listBox = await hitTest(PANEL + ' .ss-list');
+const before = await page.evaluate(sel => ({ panelTop: document.querySelector(sel).getBoundingClientRect().top, modalTop: document.querySelector('#link-config-modal .modal-content').getBoundingClientRect().top }), PANEL);
+await page.mouse.move(listBox.x, listBox.y);
+await page.mouse.wheel(0, 300);
+await page.waitForTimeout(150);
+const afterWheel = await page.evaluate(sel => ({
+  listTop: document.querySelector(sel + ' .ss-list').scrollTop, docTop: document.scrollingElement.scrollTop, panelTop: document.querySelector(sel).getBoundingClientRect().top,
+  modalTop: document.querySelector('#link-config-modal .modal-content').getBoundingClientRect().top,
+}), PANEL);
+check('molette réelle sur la liste : la liste défile, ni la page, ni la fenêtre, ni le panneau ne bougent',
+  afterWheel.listTop > 0 && afterWheel.docTop === 0 && afterWheel.panelTop === before.panelTop && afterWheel.modalTop === before.modalTop, { before, afterWheel });
+await page.keyboard.type('tel');
+await page.waitForTimeout(100);
+const typedRows = await page.evaluate(sel => Array.from(document.querySelectorAll(sel + ' .ss-option')).map(r => r.textContent), PANEL);
+check('frappe réelle « tel » : la liste se réduit à la colonne Telephone, avec sa table entre parenthèses', typedRows.length === 1 && typedRows[0] === 'Telephone(VcContacts)', typedRows);
+const resultRow = await hitTest(PANEL + ' .ss-option');
+check('le résultat est visible et non recouvert', resultRow.found && resultRow.inViewport && resultRow.onTop, resultRow);
+if (resultRow.found) await page.mouse.click(resultRow.x, resultRow.y);
+await page.waitForTimeout(150);
+const afterPick = await page.evaluate(() => ({
+  value: document.getElementById('link-config-col-cible').value,
+  shown: document.querySelector('#link-config-modal .link-config-bridge-col:last-child .ss-trigger').textContent,
+  listOpen: !!document.querySelector('#link-config-modal .ss-panel:not([hidden])'),
+  windowOpen: document.getElementById('link-config-modal').style.display !== 'none',
+}));
+check('vrai clic sur le résultat : la colonne est choisie, affichée dans le champ, la liste se referme et la fenêtre reste ouverte',
+  afterPick.value === 'Telephone' && afterPick.shown.indexOf('Telephone') === 0 && !afterPick.listOpen && afterPick.windowOpen, afterPick);
+// Liste de la table de la page (colonne source) : ouverte au clavier réel, Échap la referme SEULE (la fenêtre reste), Entrée choisit le 1er résultat.
+const sourceField = await hitTest('#link-config-modal .link-config-bridge-col:first-child .ss-trigger');
+if (sourceField.found) await page.mouse.click(sourceField.x, sourceField.y);
+await page.waitForTimeout(150);
+const sourcePanel = await hitTest(PANEL);
+check('liste de la table de la page : panneau entièrement dans le panneau Grist', sourcePanel.found && sourcePanel.inViewport, sourcePanel);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(100);
+const afterEscape = await page.evaluate(() => ({
+  listOpen: !!document.querySelector('#link-config-modal .ss-panel:not([hidden])'),
+  windowOpen: document.getElementById('link-config-modal').style.display !== 'none',
+  focusOnField: document.activeElement === document.querySelector('#link-config-modal .link-config-bridge-col:first-child .ss-trigger'),
+}));
+check('Échap referme la liste seule : la fenêtre reste ouverte et le champ reprend le focus', !afterEscape.listOpen && afterEscape.windowOpen && afterEscape.focusOnField, afterEscape);
+await page.keyboard.press('ArrowDown');
+await page.keyboard.type('stat');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(150);
+const afterEnter = await page.evaluate(() => ({ value: document.getElementById('link-config-col-source').value, listOpen: !!document.querySelector('#link-config-modal .ss-panel:not([hidden])') }));
+check('au clavier réel : ↓ ouvre, « stat » filtre, Entrée choisit Statut', afterEnter.value === 'Statut' && !afterEnter.listOpen, afterEnter);
 if (keyCancel.found) await page.mouse.click(keyCancel.x, keyCancel.y);
 await page.waitForTimeout(200);
 const afterKeyCancel = await page.evaluate(() => ({

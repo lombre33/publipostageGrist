@@ -389,8 +389,15 @@ const I18n = (function () {
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisissez une colonne —', en: '— Choose a column —' },
     'linkConfig.rowId': { fr: 'Identifiant de ligne', en: 'Row ID' },
-    'linkConfig.reference': { fr: '{col} (Référence → {table})', en: '{col} (Reference → {table})' },
-    'linkConfig.referenceList': { fr: '{col} (Références → {table})', en: '{col} (References → {table})' },
+    // Indice entre parenthèses derrière le nom d'une colonne Référence dans les listes de la fenêtre (Variables.describeColumn) : la table visée.
+    'linkConfig.refHint': { fr: 'Référence → {table}', en: 'Reference → {table}' },
+    'linkConfig.refListHint': { fr: 'Références → {table}', en: 'References → {table}' },
+    'linkConfig.searchColumns': { fr: 'Rechercher une colonne…', en: 'Search for a column…' },
+    'linkConfig.noColumnMatch': { fr: 'Aucune colonne ne correspond.', en: 'No column matches.' },
+    // Liste déroulante avec recherche (js/search-select.js) : textes par défaut, la fenêtre de liaison passe les siens ci-dessus.
+    'searchSelect.placeholder': { fr: 'Rechercher…', en: 'Search…' },
+    'searchSelect.empty': { fr: 'Aucun résultat.', en: 'No results.' },
+    'searchSelect.count': { fr: '{count} résultat(s)', en: '{count} result(s)' },
     'linkConfig.describeSingleton': { fr: 'une seule ligne (paramètres)', en: 'a single row (settings)' },
     'linkConfig.describeRowId': { fr: 'identifiant de ligne', en: 'row ID' },
     'linkConfig.previewChooseColumns': { fr: 'Choisissez les deux colonnes pour voir un aperçu.', en: 'Choose both columns to see a preview.' },

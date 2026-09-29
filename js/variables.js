@@ -464,13 +464,41 @@ const Variables = (function () {
   // --- Configuration des correspondances entre tables (à l'insertion + panneau de gestion), dans une modale séparée (#link-rules-modal, cf. index.html)
   // plutôt qu'un volet repliable dédié pour ce seul besoin.
 
-  // Signale dans le libellé qu'une colonne est une Référence (et vers quelle table) - sans ça, rien dans la modale n'indique qu'une colonne stocke en réalité
-  // un identifiant de ligne plutôt qu'un texte.
-  function describeColumnOption(tableId, colId) {
-    const type = GristAPI.getColumnType(tableId, colId);
-    if (type && type.indexOf('Ref:') === 0) return I18n.t('linkConfig.reference', { col: colId, table: type.slice(4) });
-    if (type && type.indexOf('RefList:') === 0) return I18n.t('linkConfig.referenceList', { col: colId, table: type.slice(8) });
-    return colId;
+  // Nom de la colonne et table où se trouve sa donnée réelle, pour les listes de la fenêtre de liaison (demande d'Antoine du 2026-09-29 : « entre
+  // parenthèses le nom de la table où est la donnée réelle de chaque colonne »). Une Référence ou une liste de références : la table visée, avec la mention
+  // qu'elle stocke un identifiant de ligne et non un texte - sans ça, rien n'indique de la comparer à l'Identifiant de ligne. La colonne d'aide
+  // « gristHelper_Display… » que Grist crée derrière une Référence (elle porte le texte affiché, ex. le nom de la personne) : la table de cette Référence, où
+  // se trouve ce texte. Toute autre colonne : sa propre table.
+  function describeColumn(tableId, colId) {
+    const type = GristAPI.getColumnType(tableId, colId) || '';
+    if (type.indexOf('Ref:') === 0) return { name: colId, hint: I18n.t('linkConfig.refHint', { table: type.slice(4) }) };
+    if (type.indexOf('RefList:') === 0) return { name: colId, hint: I18n.t('linkConfig.refListHint', { table: type.slice(8) }) };
+    if (colId.indexOf('gristHelper_') === 0) {
+      const shownBy = GristAPI.getColumns(tableId).find(c => GristAPI.getDisplayColumn(tableId, c) === colId);
+      const shownType = (shownBy && GristAPI.getColumnType(tableId, shownBy)) || '';
+      if (shownType.indexOf('Ref:') === 0) return { name: colId, hint: shownType.slice(4) };
+      if (shownType.indexOf('RefList:') === 0) return { name: colId, hint: shownType.slice(8) };
+    }
+    return { name: colId, hint: tableId };
+  }
+  // Remplit une liste de colonnes de la fenêtre de liaison. Un placeholder désactivé en 1ère position force un choix explicite - sans lui, un <select> non
+  // touché par l'utilisateur reste silencieusement sur « Identifiant de ligne » (1ère option), ce qui peut produire une règle qui a l'air valide mais compare
+  // deux identifiants de ligne sans rapport. Options construites par le DOM (texte, jamais du HTML) : un colId ou un nom de table créé via l'API REST Grist en
+  // contournant l'UI standard (cf. AUDIT_CODE.md §3.2) ne peut rien injecter. Le nom et l'indice sont aussi en data-name/data-hint pour SearchSelect.
+  function fillColumnSelect(select, tableId) {
+    select.textContent = '';
+    const placeholder = new Option(I18n.t('linkConfig.columnPlaceholder'), '');
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    select.appendChild(placeholder);
+    const add = (value, name, hint) => {
+      const option = new Option(name + ' (' + hint + ')', value);
+      option.dataset.name = name;
+      option.dataset.hint = hint;
+      select.appendChild(option);
+    };
+    add('id', I18n.t('linkConfig.rowId'), tableId);
+    GristAPI.getColumns(tableId).forEach(colId => { const column = describeColumn(tableId, colId); add(colId, column.name, column.hint); });
   }
   function describeRule(rule) {
     if (rule.mode === 'singleton') return I18n.t('linkConfig.describeSingleton');
@@ -511,14 +539,8 @@ const Variables = (function () {
     title.textContent = `${currentTableId} → ${targetTable}`;
     cibleLabel.textContent = targetTable;
     sourceLabel.textContent = currentTableId;
-    // Un placeholder désactivé en 1ère position force un choix explicite - sans lui, un <select> non touché par l'utilisateur reste silencieusement sur
-    // "Identifiant de ligne" (1ère option), ce qui peut produire une règle qui a l'air valide mais compare deux identifiants de ligne sans rapport.
-    const placeholder = `<option value="" disabled selected>${I18n.t('linkConfig.columnPlaceholder')}</option>`;
-    const rowIdOption = `<option value="id">${I18n.t('linkConfig.rowId')}</option>`;
-    // HtmlSanitize.clean() en filet de sécurité : colId/nom de table viennent du schéma Grist réel, normalement déjà contraints à des identifiants valides
-    // par l'UI standard - mais rien ne le garantit si l'un d'eux est créé via l'API REST Grist en contournant cette UI (cf. AUDIT_CODE.md §3.2).
-    selectCible.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(targetTable).map(c => `<option value="${c}">${describeColumnOption(targetTable, c)}</option>`).join(''));
-    selectSource.innerHTML = HtmlSanitize.clean(placeholder + rowIdOption + GristAPI.getColumns(currentTableId).map(c => `<option value="${c}">${describeColumnOption(currentTableId, c)}</option>`).join(''));
+    fillColumnSelect(selectCible, targetTable);
+    fillColumnSelect(selectSource, currentTableId);
 
     // Par défaut, mode "match" (le cas normal) - "singleton" doit être un choix actif, pas un état par défaut dans lequel on tombe sans le réaliser.
     let initialMode = existingRule ? existingRule.mode : 'match';
@@ -538,6 +560,20 @@ const Variables = (function () {
     }
     if (initialCible) selectCible.value = initialCible;
     if (initialSource) selectSource.value = initialSource;
+    // Listes avec recherche (js/search-select.js) par-dessus les deux <select>, qui restent la source des valeurs et des évènements `change`. Si le composant
+    // échoue, les <select> natifs restent affichés et la fenêtre marche comme avant.
+    const searchLists = [];
+    [[selectSource, 'link-config-table-source-name'], [selectCible, 'link-config-table-cible-name']].forEach(([select, labelId]) => {
+      try {
+        searchLists.push(SearchSelect.attach(select, {
+          labelledBy: labelId,
+          searchPlaceholder: I18n.t('linkConfig.searchColumns'),
+          emptyText: I18n.t('linkConfig.noColumnMatch'),
+        }));
+      } catch (e) {
+        console.warn('[variables] showLinkConfigModal: recherche de colonne indisponible, liste native conservée', e);
+      }
+    });
     // Le cas rare ("ligne fixe") est un lien texte plutôt qu'un choix à égalité avec le cas normal - `currentMode` remplace les radios, togglé par les 2
     // boutons-liens.
     let currentMode = initialMode;
@@ -599,6 +635,7 @@ const Variables = (function () {
     return new Promise((resolve) => {
       function cleanup() {
         modal.style.display = 'none';
+        searchLists.forEach(list => list.destroy());
         toggleSingletonBtn.removeEventListener('click', onToggleSingleton);
         toggleMatchBtn.removeEventListener('click', onToggleMatch);
         selectCible.removeEventListener('change', updatePreview);
