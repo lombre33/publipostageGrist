@@ -736,6 +736,20 @@
     el.style.pointerEvents = locked ? 'none' : '';
     el.style.opacity = locked ? '.5' : '';
   }
+  // Un bouton grisé perd le focus (le navigateur le rend au corps de la page) : sans ce rappel, le clavier repartirait du début de la page à la fin d'un export ou
+  // quand la fenêtre « Email trop long » se referme (elle n'a alors plus d'élément d'origine à retrouver). Seul un focus posé au clavier (cadre de focus visible)
+  // est rendu : à la souris rien ne change. Rien n'est rendu si le focus est allé ailleurs pendant l'export ; un élément resté actif mais masqué (le bouton de la
+  // fenêtre qui vient de se fermer) n'est pas un focus déplacé.
+  function keyboardFocusedElement() {
+    const el = document.activeElement;
+    return el && el !== document.body && el.matches(':focus-visible') ? el : null;
+  }
+  function restoreKeyboardFocus(el) {
+    if (!el || !el.isConnected) return;
+    const now = document.activeElement;
+    const movedElsewhere = now && now !== document.body && now !== el && now.getClientRects().length > 0;
+    if (!movedElsewhere) el.focus({ preventScroll: true });
+  }
   function withExportLock(fn) {
     return async (...args) => {
       if (exportOperationInProgress || !AccessRights.get().canExport) return;
@@ -746,6 +760,7 @@
       const btnDocx = document.getElementById('v2-btn-export-docx');
       const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
       const btnEmail = document.getElementById('btn-create-email');
+      const keyboardFocus = keyboardFocusedElement();
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
       setExportControlLocked(btnMerged, true);
@@ -762,6 +777,7 @@
         setExportControlLocked(btnDocx, false);
         setExportControlLocked(btnDocxBatch, false);
         setExportControlLocked(btnEmail, false);
+        restoreKeyboardFocus(keyboardFocus);
       }
     };
   }

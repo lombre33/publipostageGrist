@@ -4,6 +4,8 @@
 // 2026-09-29). Deux parties : 1) la fenêtre elle-même (run) ; 2) les endroits du widget qui l'appellent (runSites), chacun déclenché par le vrai clic sur
 // le vrai bouton : image par adresse, enregistrer sous, supprimer un modèle, email trop long, les trois exports en lot, la table créée depuis la galerie,
 // supprimer un fil de commentaires, nouveau dossier / sous-dossier / déplacer vers un dossier (Organiser mes modèles), supprimer une correspondance de tables.
+// Le verrou d'export (withExportLock, js/main.js) grise le bouton avant que la fenêtre « Email trop long » s'ouvre : lancé au clavier (vraies touches Tab et Entrée),
+// le clavier doit revenir sur « Créer l'email » et sur « Exporter en PDF » à la fermeture ; lancé à la souris, rien ne change (aucun cadre de focus).
 // Les scénarios qui tournent dans la page ne voient ni le focus rendu à l'élément d'origine, ni la fenêtre posée AU-DESSUS d'une autre (Organiser mes modèles,
 // la galerie, Tables liées : z-index 2000), ni qu'un Tab ou un Échap n'atteint que la fenêtre du dessus.
 // Lancé par run-headless.mjs (groupe Node "dialogsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-dialogs-mouse.mjs
@@ -363,6 +365,22 @@ async function realHover(selector) {
   await page.waitForTimeout(450);
 }
 const statusText = () => page.evaluate(() => document.getElementById('status-msg').textContent);
+// L'élément qui a le focus, et s'il porte le cadre de focus du clavier (:focus-visible) ; `outline` : ce que ce cadre dessine réellement.
+const active = () => page.evaluate(() => {
+  const a = document.activeElement, cs = getComputedStyle(a);
+  return { id: a.id || a.tagName, focusVisible: a.matches(':focus-visible'), outline: cs.outlineStyle + ' ' + cs.outlineWidth };
+});
+// De vrais appuis sur Tab (ou Maj+Tab) depuis un point de départ connu jusqu'à ce que l'élément voulu ait le focus : le cadre de focus est celui d'une navigation au clavier.
+async function pressUntil(id, from, key = 'Tab') {
+  await page.evaluate(f => document.getElementById(f).focus(), from);
+  const path = [];
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press(key);
+    path.push(await page.evaluate(() => document.activeElement.id || document.activeElement.tagName));
+    if (path[path.length - 1] === id) break;
+  }
+  return path;
+}
 const tr = (key, params) => page.evaluate(({ key, params }) => I18n.t(key, params), { key, params });
 const templateNames = () => page.evaluate(() => Templates.getCached().map(t => t.nom));
 
@@ -456,13 +474,76 @@ async function runSites(theme) {
   await snap(`${T}-s4-email`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
-  // Le focus ne revient pas au bouton ici : le verrou d'export (withExportLock, js/main.js) désactive « Créer l'email » AVANT que la fenêtre s'ouvre, le navigateur
-  // en retire le focus, et la fenêtre n'a alors plus d'élément d'origine à retrouver. Comportement du verrou, le même pour un export lancé au clavier.
   check(`${T}, email trop long : Échap laisse le statut vide, la fenêtre est fermée et le bouton est de nouveau actif`, (await statusText()) === '' && !(await isOpen()) && await page.evaluate(() => !document.getElementById('btn-create-email').disabled), await statusText());
+  // Lancé à la souris, rien ne change : le bouton grisé a perdu le focus, il ne lui est pas rendu et aucun cadre de focus n'apparaît (le clavier n'était pas en jeu).
+  let a = await active();
+  check(`${T}, email trop long lancé à la souris : Échap ne fait apparaître aucun cadre de focus, le focus reste sur la page`, a.id === 'BODY' && !a.focusVisible, a);
   await realClick('#btn-create-email', 600);
   await click(OK);
   await page.waitForTimeout(600);
   check(`${T}, email trop long : « Continuer » (clic réel) poursuit la création de l’email`, (await statusText()) === await tr('status.emailCreated'), await statusText());
+  a = await active();
+  check(`${T}, email trop long lancé à la souris : « Continuer » ne fait apparaître aucun cadre de focus non plus`, a.id === 'BODY' && !a.focusVisible, a);
+
+  // 4 bis) Au clavier : le verrou d'export grise « Créer l'email » avant que la fenêtre s'ouvre, le navigateur en retire le focus, et la fenêtre n'a plus d'élément d'origine à
+  // retrouver. À la fermeture (Échap, Annuler ou Continuer) le clavier revient sur le bouton, avec son cadre de focus, au lieu de repartir du début de la page.
+  const emailByKeyboard = async () => {
+    const path = await pressUntil('btn-create-email', 'btn-export-pdf');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(700);
+    return { path, dialog: await state(), buttonDisabled: await page.evaluate(() => document.getElementById('btn-create-email').disabled) };
+  };
+  let k = await emailByKeyboard();
+  check(`${T}, email trop long au clavier : Tab amène sur « Créer l’email », Entrée ouvre la fenêtre pendant que le bouton est grisé`,
+    k.path[k.path.length - 1] === 'btn-create-email' && k.dialog.open && k.dialog.title === 'Email trop long' && k.buttonDisabled, { path: k.path, open: k.dialog.open, title: k.dialog.title, disabled: k.buttonDisabled });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  a = await active();
+  check(`${T}, email trop long au clavier : Échap rend le clavier à « Créer l’email », avec son cadre de focus`, a.id === 'btn-create-email' && a.focusVisible && !(await isOpen()), a);
+  await snap(`${T}-s4-email-clavier`);
+  await emailByKeyboard();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  a = await active();
+  check(`${T}, email trop long au clavier : Annuler (Maj+Tab puis Entrée) rend aussi le clavier au bouton, sans rien créer`, a.id === 'btn-create-email' && a.focusVisible && !(await isOpen()) && (await statusText()) === '', { a, status: await statusText() });
+  await emailByKeyboard();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  a = await active();
+  check(`${T}, email trop long au clavier : Continuer (Entrée) crée l’email et rend le clavier au bouton`, (await statusText()) === await tr('status.emailCreated') && a.id === 'btn-create-email' && a.focusVisible, { a, status: await statusText() });
+  await emailByKeyboard();
+  await click(CANCEL);
+  a = await active();
+  check(`${T}, email trop long lancé au clavier mais fermé à la souris : aucun cadre de focus ne s’affiche`, !(await isOpen()) && !a.focusVisible, a);
+
+  // Les exports lancés au clavier passent par le même verrou : à la fin de l'export le clavier revient sur « Exporter en PDF » ; si le focus est allé ailleurs pendant
+  // l'export (clic réel dans le document), il n'est pas ramené au bouton. L'export lui-même est remplacé par une promesse qu'on libère à la main.
+  await page.evaluate(() => {
+    window.__realExportCurrent = PdfExport.exportCurrentRecord;
+    PdfExport.exportCurrentRecord = () => new Promise(done => { window.__releaseExport = done; });
+    document.getElementById('status-msg').textContent = '';
+  });
+  const pdfByKeyboard = async () => {
+    const path = await pressUntil('btn-export-pdf', 'btn-toggle-pdf-filename', 'Shift+Tab');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+    return { path, buttonDisabled: await page.evaluate(() => document.getElementById('btn-export-pdf').disabled) };
+  };
+  k = await pdfByKeyboard();
+  check(`${T}, export PDF au clavier : Maj+Tab amène sur « Exporter en PDF », Entrée lance l’export et grise le bouton`, k.path[k.path.length - 1] === 'btn-export-pdf' && k.buttonDisabled, k);
+  await page.evaluate(() => window.__releaseExport());
+  await page.waitForTimeout(500);
+  a = await active();
+  check(`${T}, export PDF au clavier : à la fin de l’export le clavier revient sur « Exporter en PDF », avec son cadre de focus`,
+    (await statusText()) === await tr('status.pdfGenerated') && a.id === 'btn-export-pdf' && a.focusVisible, { a, status: await statusText() });
+  await pdfByKeyboard();
+  await realClick('.tiptap p', 300);
+  await page.evaluate(() => window.__releaseExport());
+  await page.waitForTimeout(500);
+  a = await active();
+  check(`${T}, export PDF au clavier : si le focus est allé dans le document pendant l’export, il n’est pas ramené au bouton`, a.id !== 'btn-export-pdf' && await page.evaluate(() => !!document.activeElement.closest('.tiptap')), a);
+  await page.evaluate(() => { PdfExport.exportCurrentRecord = window.__realExportCurrent; });
 
   // 5) Les trois exports en lot : même fenêtre, message propre à chacun, « Générer » ; Annuler n'exporte rien, « Générer » lance le chargement.
   const exportsCases = [
