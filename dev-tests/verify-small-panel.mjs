@@ -6,7 +6,8 @@
 //  - mode email + Cci à 600x400 : texte de l'éditeur visible, page sans débordement vertical ;
 //  - hauteur de la barre indépendante du message d'état (entre ~740 et 880px elle sautait de 33px à chaque auto-save) ;
 //  - popups #Variable (éditeur et champs), fil de commentaires et "Image depuis une variable" tenus dans la fenêtre ;
-//  - menus au survol (.v2-hover-group, dont Exporter en PDF et Image) : ils ne se referment plus quand la souris y descend lentement (29/09, css/editor-v2.css).
+//  - menus au survol (.v2-hover-group, dont Exporter en PDF et Image) : ils ne se referment plus quand la souris y descend lentement, et leurs boutons ne portent
+//    plus de petit point bleu (29/09, css/editor-v2.css).
 // Les scénarios de dev-tests/scenarios-*.js tournent DANS la page (dispatchEvent) : ni :hover réel, ni pixels, ni le :focus-visible qu'un vrai Échap
 // déclenche. Lancé par run-headless.mjs (groupe Node "smallPanel", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-small-panel.mjs
 import { createServer } from 'node:http';
@@ -157,6 +158,24 @@ async function darkRatio(page, rect) {
     let dark = 0;
     for (let i = 0; i < d.length; i += 4) if (Math.max(d[i], d[i + 1], d[i + 2]) < 80) dark++;
     return dark / (d.length / 4);
+  }, png.toString('base64'));
+}
+// Couleur moyenne [r, g, b] d'un carré de VRAIE capture d'écran (décodée dans la page, comme darkRatio).
+async function meanColor(page, x, y, w, h) {
+  const png = await page.screenshot({ clip: { x, y, width: w, height: h } });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const n = d.length / 4;
+    let r = 0, g = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    return [r / n, g / n, b / n];
   }, png.toString('base64'));
 }
 async function pageOverflow(page) {
@@ -493,12 +512,25 @@ async function hoverMenus(width, height) {
     await page.waitForTimeout(60);
     if (await isOpen(sel)) stayedOpen.push(name);
   }
+  // Souris partie, au repos : le coin bas-droit de chaque bouton à menu ne porte plus de point bleu (retiré à la demande d'Antoine le 29/09 : un rond de 4px
+  // à 2px du coin, .v2-hover-group > button::after). Lu sur une vraie capture : le carré de 4x4px du coin bas-droit, comparé au même carré du coin bas-gauche -
+  // le rond n'était que d'un côté, et la comparaison ne dépend pas de la couleur du bouton (Exporter en PDF est plein bleu, où le rond de même teinte ne se voyait pas).
+  const dotted = [];
+  for (const name of names) {
+    const c = await page.evaluate(sel => { const r = document.querySelector(sel + ' > button').getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom }; }, `[data-sp-group="${name}"]`);
+    const y = Math.round(c.bottom) - 6;
+    const rightCorner = await meanColor(page, Math.round(c.right) - 6, y, 4, 4);
+    const leftCorner = await meanColor(page, Math.round(c.left) + 2, y, 4, 4);
+    const ecart = Math.round(Math.max(...rightCorner.map((v, i) => Math.abs(v - leftCorner[i]))));
+    if (ecart > 24) dotted.push({ name, ecart });
+  }
   const label = `${width}x${height} - menus au survol`;
   check(`${label} : tous les menus s'ouvrent au survol du bouton (${names.length} menus, dont Exporter en PDF, Image et Numéro de page)`, names.length >= 8 && notOpened.length === 0, { names, notOpened });
   check(`${label} : descente lente (1px par pas) du bouton à une ligne du menu, le menu reste ouvert de bout en bout`, Object.keys(descentClosed).length === 0 && notLanded.length === 0, { descentClosed, notLanded });
   check(`${label} : remontée lente du menu au bouton, le menu reste ouvert de bout en bout`, Object.keys(ascentClosed).length === 0, ascentClosed);
   check(`${label} : souris partie ailleurs, chaque menu se referme`, stayedOpen.length === 0, stayedOpen);
   check(`${label} : menu ouvert, le bas du bouton reste cliquable et la page ne déborde pas`, stolenClick.length === 0 && overflowing.length === 0, { stolenClick, overflowing });
+  check(`${label} : au repos, aucun point bleu dans le coin des boutons à menu (${names.length} boutons)`, dotted.length === 0, dotted);
   await browser.close();
 }
 

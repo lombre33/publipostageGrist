@@ -101,7 +101,9 @@ Deux options utiles :
   page jamais décalable, pas d'info-bulle collée après un clic puis Échap, email+Cci lisible, hauteur de
   barre indépendante du message d'état, popups #Variable/commentaires/image tenus dans la fenêtre, menus au
   survol (`.v2-hover-group`) qui restent ouverts quand la souris y descend ou en remonte lentement (un pixel
-  par pas, état relevé à chaque pas : un geste d'un seul bond saute la bande de 2px et ne voit rien).
+  par pas, état relevé à chaque pas : un geste d'un seul bond saute la bande de 2px et ne voit rien), et
+  sans petit point bleu au coin des boutons de ces menus (retiré à la demande d'Antoine le 29/09 ; comparé sur
+  une vraie capture au coin opposé du même bouton, à ne pas remettre sans lui demander).
   Sections lançables seules : `node dev-tests/verify-small-panel.mjs popups email menusSurvol`.
 - Un quatrième, `accessRightsMouse` (`dev-tests/verify-access-rights-mouse.mjs`), démarre à 700×400 avec des
   droits déjà réglés (lecture seule, sans export, commentaires permis) : widget ouvert directement en Lecture,

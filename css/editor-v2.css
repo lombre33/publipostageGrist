@@ -550,11 +550,9 @@
 #v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
 #v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
 #v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; }
-/* Petit point discret sur le bouton principal, seul indice visuel qu'un survol révèle plus d'options. */
-.v2-hover-group > button::after {
-  content: ''; position: absolute; right: 2px; bottom: 2px; width: 4px; height: 4px;
-  border-radius: 50%; background: var(--accent, #2f6fed); opacity: .55; pointer-events: none;
-}
+/* Aucun indice visuel sur le bouton principal d'un groupe au survol : le petit point bleu qui le marquait (`.v2-hover-group > button::after`) a été retiré à la
+   demande d'Antoine (2026-09-29) - « on peut les retirer complètement ». Le bouton garde aria-haspopup/aria-expanded (js/editor-core.js). Ne pas le remettre
+   sans lui demander. */
 /* Couleur de police / surlignage - DEUX boutons indépendants : le premier (icône) applique directement la DERNIÈRE couleur choisie, le second (chevron)
    ouvre le menu de nuances (.v2-color-dropdown) - même geste que Word/Google Docs. C'est l'icône elle-même qui se teinte (setColorIcon). */
 .v2-color-split { display: inline-flex; align-items: stretch; height: 28px; border-radius: 5px; overflow: hidden; }
