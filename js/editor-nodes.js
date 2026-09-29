@@ -10,9 +10,42 @@ const EditorNodes = (function () {
     } catch (e) { return '#'; }
   }
 
+  // Coupe le libellé d'une bulle en un DÉBUT et une FIN, pour qu'une case de tableau trop étroite tronque le MILIEU du nom (« #Projet.Accomp…Email » plutôt
+  // que « #Projet.Accompagnateur.Em… ») : ce qui identifie une variable, c'est sa table au début et sa colonne au bout. La fin est le dernier élément du chemin
+  // quand il est court (Email, Nom), sinon les derniers caractères en commençant sur un mot entier s'il y en a un (« du_client » plutôt que « te_du_client ») ;
+  // un nom court n'est pas coupé.
+  const BADGE_TAIL_MAX = 12;
+  const BADGE_TAIL_MIN = 5;
+  function splitBadgeLabel(label) {
+    if (label.length <= BADGE_TAIL_MAX + 4) return { head: label, tail: '' };
+    let cut = label.length - BADGE_TAIL_MAX;
+    const dot = label.lastIndexOf('.');
+    const lastSegment = label.length - dot - 1;
+    if (dot > 0 && lastSegment >= 4 && lastSegment <= BADGE_TAIL_MAX) {
+      cut = dot + 1;
+    } else {
+      const separator = label.slice(cut).search(/[_\s-]/);
+      if (separator >= 0 && label.length - (cut + separator + 1) >= BADGE_TAIL_MIN) cut += separator + 1;
+    }
+    return { head: label.slice(0, cut), tail: label.slice(cut) };
+  }
+
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
   // data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
   function createVarBadgeNode(Node, mergeAttributes) {
+    // Spécification DOM de la bulle, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
+    function badgeSpec(HTMLAttributes, node) {
+      const attrs = mergeAttributes(HTMLAttributes, {
+        class: 'var-badge', contenteditable: 'false',
+        'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
+      });
+      if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+      if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+      // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
+      if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
+      // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
+      return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
+    }
     return Node.create({
       name: 'varBadge',
       group: 'inline',
@@ -48,16 +81,39 @@ const EditorNodes = (function () {
         }];
       },
       renderHTML({ HTMLAttributes, node }) {
-        const attrs = mergeAttributes(HTMLAttributes, {
-          class: 'var-badge', contenteditable: 'false',
-          'data-table': node.attrs.table, 'data-column': node.attrs.column, 'data-key': node.attrs.key,
-        });
-        if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
-        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
-        // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
-        if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
-        // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
-        return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
+        return badgeSpec(HTMLAttributes, node);
+      },
+      // Vue de l'éditeur SEULEMENT : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau trop étroite tronque le MILIEU du nom
+      // avec « … » (css/variable-actions.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et même texte que renderHTML (badgeSpec), donc
+      // getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le rend entier aux lecteurs d'écran. Pas de `update` :
+      // ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait avec renderHTML.
+      addNodeView() {
+        return ({ node, HTMLAttributes }) => {
+          const [, attrs, label] = badgeSpec(HTMLAttributes, node);
+          const dom = document.createElement('span');
+          Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+          const parts = splitBadgeLabel(label);
+          const head = document.createElement('span');
+          head.className = 'var-badge-head';
+          head.textContent = parts.head;
+          dom.appendChild(head);
+          let tail = null;
+          if (parts.tail) {
+            tail = document.createElement('span');
+            tail.className = 'var-badge-tail';
+            tail.textContent = parts.tail;
+            dom.appendChild(tail);
+          }
+          // Nom coupé par la case : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
+          // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document).
+          dom.addEventListener('mouseenter', () => {
+            if (dom.classList.contains('var-badge-broken')) return;
+            const cut = head.scrollWidth > head.clientWidth || (tail && tail.scrollWidth > tail.clientWidth);
+            if (cut) dom.title = label;
+            else if (dom.title === label) dom.removeAttribute('title');
+          });
+          return { dom };
+        };
       },
     });
   }

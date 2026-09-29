@@ -7,6 +7,16 @@
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
+/* Bulle dans une case de tableau (Antoine, 29/09) : un nom plus long que la case la traversait et recouvrait la case voisine. Le nom y est coupé au MILIEU par
+   « … » (début tronqué, fin gardée) plutôt que rendu à la ligne, qui ferait grandir la ligne du tableau bien au-delà de ce que l'export produira avec la valeur.
+   Le texte entier reste dans le DOM (js/editor-nodes.js, addNodeView) et en info-bulle quand il est coupé. `overflow` seulement sur le début et la fin, jamais
+   sur la bulle : il rognerait le point bleu du format (`::after`, hors de la boîte). Ailleurs que dans une case, la bulle garde son rendu en ligne.
+   Le début rétrécit d'abord (poids de rétrécissement énorme : la fin perd moins d'un soixante-quatrième de pixel, donc pas de « … » parasite) ; la fin ne
+   rétrécit, avec son propre « … », que dans une case plus étroite qu'elle. */
+.tiptap :where(td, th) .var-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }
+.tiptap :where(td, th) .var-badge-head { flex: 0 1000000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tiptap :where(td, th) .var-badge-tail { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* === Barre flottante : actions à gauche, séparateur visible avant les réglages nombre/date (masqué pour une colonne sans réglage) === */
 .v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }
 .v2-varfmt-toolbar .v2-floating-sep[data-var-sep] { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }

@@ -38,7 +38,7 @@ apparaît) :
 | `js/reader-mode.js` | **Toujours `readModeFidelity`** (seul point d'entrée du mode Lecture) + le(s) groupe(s) du domaine touché si le changement touche aussi une logique partagée avec l'éditeur |
 | `css/editor-v2.css`, `css/style.css` (règle touchant `.reader-content`) | **Toujours `readModeFidelity`** en plus des groupes déjà listés plus bas pour ce fichier |
 | `js/floating-toolbars.js` | `images`, `twoColumns`, `tables` (toolbars tableau/image), `formatting` (pickers couleur), **toujours `varFormat`** (barre flottante nombre/date d'une bulle #Variable - même fichier, cf. Bug 5 dans BUGS.md) |
-| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes |
+| `js/editor-nodes.js` | `images`, `twoColumns`, `lists`, `chips`, **+ `pageLayout`** si le changement touche la zone 2-colonnes **+ le script Node `chipCellMouse`** si le changement touche la bulle `varBadge` (`addNodeView`, `splitBadgeLabel` : nom coupé au milieu dans une case de tableau) **+ `varFormat`, `varCondition`, `varLoop`** (la bulle porte leur point bleu, leur pointillé et leur icône) |
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) |
 | `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
@@ -131,6 +131,13 @@ Deux options utiles :
   aussi large que la page. Il exige qu'un seul Ctrl+Z ramène le tableau exactement à son état d'avant (HTML identique), le suivant l'action précédente,
   et que Ctrl+Y les rejoue dans l'ordre. Avant le correctif du 29/09 (js/editor.js), la correction de largeurs d'`onUpdate` formait son propre
   événement d'historique : Ctrl+Z ne défaisait qu'elle, `onUpdate` la rejouait aussitôt, et l'ajout de colonne ne s'annulait jamais.
+- Un septième, `chipCellMouse` (`dev-tests/verify-chip-cell-mouse.mjs`), met à 700×400 des bulles #Variable aux noms de 40 caractères et plus dans des
+  cases de tableau de ~100 px (dont une bulle formatée, une bulle en boucle et une bulle cassée) et s'en sert à la vraie souris : survol (le nom entier en
+  info-bulle seulement quand il est coupé, le message d'une bulle cassée intact), clic (la bulle est sélectionnée, la barre de variable atteignable), Ctrl+C
+  (la bulle entière dans le presse-papiers), bordure de colonne glissée à droite puis à gauche (la bulle se redéploie puis se recoupe toute seule). Il exige
+  que chaque bulle reste dans son paragraphe, sur une ligne, avec le début coupé par « … » et la fin du nom entière, que `getHTML()` garde le nom entier
+  dans un seul texte, qu'une bulle hors tableau garde son rendu en ligne et que le point bleu du format (hors de la boîte de la bulle) ne soit pas rogné.
+  Avant le correctif du 29/09 (`js/editor-nodes.js`, `css/variable-actions.css`), la bulle traversait sa case (jusqu'à 190 px de trop) et recouvrait la voisine.
 - Un groupe Node à part, `wheelScroll` (`dev-tests/verify-wheel-scroll.mjs`),
   tourne automatiquement en plus des groupes `EditorTestSuites` ci-dessus dans
   un `run-headless.mjs` sans argument (ou seul via

@@ -90,6 +90,7 @@ const NODE_SCRIPTS = {
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
+  chipCellMouse: 'verify-chip-cell-mouse.mjs',
 };
 
 const argv = process.argv.slice(2);
