@@ -250,6 +250,15 @@
 /* flex-wrap:wrap (au lieu du nowrap implicite) : sans ça, les zones flex:1 (min-width:0) de la ligne se réduisaient jusqu'à l'illisible plutôt que de
    passer à la ligne - mesuré par le coordinateur (2026-09-28, panneau étroit ET avertissement colonne absente) : sélecteur de colonne réduit à 10px. */
 .macro-rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 0; }
+/* Règle d'une annexe du macro-modèle sur DEUX lignes (js/macro-editor.js:renderSlots ; audit UX/UI du 2026-09-29, F8 : cinq contrôles sur une ligne se
+   chevauchaient à 520 px - la liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait). Ligne 1 : « Si », colonne, opérateur. Ligne 2, sous la
+   colonne (même retrait de 39 px que .macro-rule-column-type dans la fenêtre de condition) : valeur, flèche, modèle. La croix (.macro-rule-remove), centrée à
+   droite, retire la règle entière. Ces trois classes ne servent qu'à la fenêtre du macro-modèle : la condition d'une bulle et le filtre d'une boucle gardent
+   .macro-rule-row en une seule ligne. */
+.macro-rule-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.macro-rule-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.macro-rule-line-detail { padding-left: 39px; box-sizing: border-box; }
+.macro-rule-line-detail .macro-rule-value-slot { min-width: 90px; }
 .macro-rule-connector { flex: none; font-size: 11px; font-weight: 700; color: var(--text-muted); width: 34px; }
 .macro-rule-column, .macro-rule-value { flex: 1; min-width: 0; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-row select { flex: none; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); }

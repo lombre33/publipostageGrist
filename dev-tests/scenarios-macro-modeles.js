@@ -502,6 +502,97 @@
     },
   });
 
+  // --- Règle d'une annexe sur DEUX lignes (audit UX/UI du 2026-09-29, F8) : cinq contrôles sur une seule ligne se chevauchaient dans la fenêtre de 520 px - la
+  // liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait. Ligne 1 : « Si », colonne, opérateur ; ligne 2, sous la colonne : valeur, →, modèle ;
+  // la croix, à droite, retire la règle entière ; l'avertissement « colonne absente » reste sur sa propre ligne, en dessous. Vérifie l'état RENDU (rectangles et
+  // elementFromPoint), à la taille du harnais ; le même point est mesuré à 700×400, à la vraie souris, en clair et en sombre, par la section `ruleRows` de
+  // verify-column-search-mouse.mjs (avec la fenêtre de condition et le filtre d'une boucle, qui gardent leur ligne unique). ---
+  cases.push({
+    id: 'macro_rule_two_lines_no_overlap',
+    description: 'La règle d’une annexe tient sur deux lignes (« Si », colonne, opérateur ; puis valeur, →, modèle sous la colonne), aucun contrôle n’en recouvre un autre, la croix est centrée sur les deux et l’avertissement passe dessous',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('DossiersRuleTwoLinesTest', { TypeDossier: 'Text', Statut: 'Choice' }, { Statut: ['Urgent', 'Clos'] });
+      await GristAPI.refreshSchema();
+      window.__gristStub.fireRecord({ id: 1, TypeDossier: 'Particulier' }, 'DossiersRuleTwoLinesTest'); // Statut absent du record : l'avertissement s'affiche plus bas
+      MacroEditor.openModal({ id: null, nom: 'x', macroSlots: { slots: [
+        { type: 'conditional', rules: [
+          { column: 'TypeDossier', operator: '≠', value: 'Entreprise', modeleId: null },
+          { column: 'TypeDossier', operator: '=', value: 'Particulier', modeleId: null },
+        ], defaultModeleId: null },
+      ] } });
+      await h.sleep(30);
+
+      const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }; };
+      // Le champ VISIBLE d'une liste : le déclencheur de la liste avec recherche (js/search-select.js), le <select> lui-même si le composant n'est pas là.
+      const visibleField = (row, selector) => { const s = row.querySelector(selector); const w = s && s.nextElementSibling; return w && w.classList.contains('ss-wrap') ? w.querySelector('.ss-trigger') : s; };
+      const controls = row => ({
+        connector: row.querySelector('.macro-rule-connector'),
+        column: visibleField(row, 'select.macro-rule-column'),
+        operator: Array.from(row.querySelectorAll('select')).find(s => !s.matches('.macro-rule-column, .macro-rule-modele, .macro-rule-value')),
+        value: row.querySelector('.macro-rule-value-slot'),
+        arrow: row.querySelector('.macro-rule-arrow'),
+        model: visibleField(row, 'select.macro-rule-modele'),
+        remove: row.querySelector('.macro-rule-remove'),
+      });
+      const overlap = (a, c) => Math.min(a.r, c.r) - Math.max(a.l, c.l) > 0.5 && Math.min(a.b, c.b) - Math.max(a.t, c.t) > 0.5;
+
+      const rows = Array.from(document.querySelectorAll('#macro-editor-modal .macro-rule-row'));
+      const problems = [];
+      if (rows.length !== 2) problems.push('2 règles attendues, ' + rows.length + ' trouvées');
+      const measured = rows.map((row, i) => {
+        const parts = controls(row);
+        const missing = Object.keys(parts).filter(k => !parts[k]);
+        if (missing.length) { problems.push('règle ' + (i + 1) + ' : contrôle introuvable (' + missing.join(', ') + ')'); return null; }
+        const b = {};
+        Object.keys(parts).forEach(k => { b[k] = box(parts[k]); });
+        const tag = 'règle ' + (i + 1) + ' : ';
+        // Ligne 1 : « Si », la colonne et l'opérateur, alignés ; ligne 2 : la valeur, la flèche et le modèle, alignés, en dessous de la colonne.
+        if (Math.abs(b.connector.cy - b.column.cy) > 3 || Math.abs(b.operator.cy - b.column.cy) > 3) problems.push(tag + '« Si », la colonne et l’opérateur ne sont pas sur une même ligne');
+        if (Math.abs(b.value.cy - b.model.cy) > 3 || Math.abs(b.arrow.cy - b.model.cy) > 3) problems.push(tag + 'la valeur, la flèche et le modèle ne sont pas sur une même ligne');
+        if (b.value.t < b.column.b - 1) problems.push(tag + 'la valeur n’est pas sous la colonne');
+        if (Math.abs(b.value.l - b.column.l) > 2) problems.push(tag + 'la valeur n’est pas alignée sous la colonne');
+        // Aucun contrôle n'en recouvre un autre, et chacun reçoit le clic en son centre (rien devant lui).
+        const names = Object.keys(b);
+        for (let x = 0; x < names.length; x++) for (let y = x + 1; y < names.length; y++) {
+          if (overlap(b[names[x]], b[names[y]])) problems.push(tag + names[x] + ' et ' + names[y] + ' se recouvrent');
+        }
+        names.forEach(k => {
+          const hit = document.elementFromPoint(b[k].cx, b[k].cy);
+          if (!(hit === parts[k] || (hit && parts[k].contains(hit)))) problems.push(tag + k + ' est recouvert en son centre');
+        });
+        // Largeurs lisibles : ni le « = » de l'opérateur ni le nom d'un modèle ne sont rognés.
+        if (b.column.w < 150) problems.push(tag + 'colonne trop étroite (' + Math.round(b.column.w) + ' px)');
+        if (b.model.w < 150) problems.push(tag + 'modèle trop étroit (' + Math.round(b.model.w) + ' px)');
+        if (b.operator.w < 40) problems.push(tag + 'opérateur trop étroit (' + Math.round(b.operator.w) + ' px)');
+        if (b.value.w < 90) problems.push(tag + 'valeur trop étroite (' + Math.round(b.value.w) + ' px)');
+        // La croix retire la règle entière : à droite des deux lignes, centrée verticalement sur elles.
+        if (b.remove.l < Math.max(b.operator.r, b.model.r) - 0.5) problems.push(tag + 'la croix n’est pas à droite des deux lignes');
+        if (Math.abs(b.remove.cy - (b.column.t + b.model.b) / 2) > 3) problems.push(tag + 'la croix n’est pas centrée sur les deux lignes');
+        return b;
+      });
+      // Deux règles se suivent sans se chevaucher.
+      if (rows.length === 2 && rows[1].getBoundingClientRect().top < rows[0].getBoundingClientRect().bottom - 0.5) problems.push('les deux règles se chevauchent');
+
+      // L'avertissement « colonne absente » : sur sa propre ligne, sous la valeur et le modèle, sans rien recouvrir.
+      const firstRow = rows[0];
+      const columnSelect = firstRow.querySelector('select.macro-rule-column');
+      columnSelect.value = 'Statut';
+      columnSelect.dispatchEvent(new Event('change'));
+      await h.sleep(30);
+      const hint = firstRow.querySelector('.macro-rule-column-type');
+      const parts = controls(firstRow);
+      if (!hint || !hint.textContent.trim()) problems.push('l’avertissement « colonne absente » ne s’affiche pas');
+      else {
+        const hb = box(hint);
+        const lower = Math.max(box(parts.value).b, box(parts.model).b);
+        if (hb.t < lower - 0.5) problems.push('l’avertissement n’est pas sous la seconde ligne (' + Math.round(hb.t) + ' < ' + Math.round(lower) + ')');
+        ['column', 'operator', 'value', 'arrow', 'model', 'remove'].forEach(k => { if (overlap(hb, box(parts[k]))) problems.push('l’avertissement recouvre ' + k); });
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, firstRule: measured[0] && Object.fromEntries(Object.entries(measured[0]).map(([k, v]) => [k, [Math.round(v.l), Math.round(v.t), Math.round(v.w), Math.round(v.h)]])) }) };
+    },
+  });
+
   // --- Défaut préexistant (pas de ce push) relevé en retouchant la même modale (coordinateur, 2026-09-28) : Enregistrer/Annuler sortaient de la fenêtre
   // dans un panneau bas (700×400 - la taille probable du panneau d'Antoine, cf. mémoire d'équipe section Environnement) dès qu'une règle est ajoutée,
   // la modale n'ayant ni hauteur maximale ni défilement interne. Vérifie l'état RENDU (elementFromPoint) à la taille de fenêtre réelle du harnais - un

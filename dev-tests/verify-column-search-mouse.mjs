@@ -3,8 +3,8 @@
 // (page.mouse / page.keyboard, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400) : les scénarios de dev-tests/scenarios-column-search.js
 // tournent DANS la page (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint le champ, ni que le panneau de la liste tient dans un panneau bas sans
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
-// Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles, Réglages > Accès (la table et les colonnes),
-// menu « Image depuis une variable » de la barre.
+// Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
+// clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre.
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -219,6 +219,41 @@ async function rowCenter(scope, text) {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && found.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight };
   }, { scope, text });
 }
+// Les contrôles de la première règle d'une fenêtre (« Si », colonne, opérateur, valeur ; pour un macro-modèle aussi la flèche, le modèle et la croix) : leur
+// rectangle et ce qui se trouve au premier plan en leur centre, pour dire sur combien de lignes la règle tient et si un contrôle en recouvre un autre.
+const ruleBoxes = (scope, index = 0) => page.evaluate(({ sel, index }) => {
+  const row = document.querySelectorAll(sel + ' .macro-rule-row')[index];
+  if (!row) return null;
+  const visibleField = selector => { const s = row.querySelector(selector); const w = s && s.nextElementSibling; return w && w.classList.contains('ss-wrap') ? w.querySelector('.ss-trigger') : s; };
+  const parts = {
+    connector: row.querySelector('.macro-rule-connector'),
+    column: visibleField('select.macro-rule-column'),
+    operator: Array.from(row.querySelectorAll('select')).find(s => !s.matches('.macro-rule-column, .macro-rule-modele, .macro-rule-value')),
+    value: row.querySelector('.macro-rule-value-slot'),
+    arrow: row.querySelector('.macro-rule-arrow'),
+    model: visibleField('select.macro-rule-modele'),
+    remove: row.querySelector('.macro-rule-remove'),
+  };
+  const boxes = {};
+  for (const [name, el] of Object.entries(parts)) {
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    boxes[name] = { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, onTop: !!top && (top === el || el.contains(top)) };
+  }
+  const rr = row.getBoundingClientRect();
+  return { boxes, row: { l: rr.left, r: rr.right, t: rr.top, b: rr.bottom }, twoLines: !!row.querySelector('.macro-rule-body') };
+}, { sel: scope, index });
+const overlapping = boxes => {
+  const names = Object.keys(boxes), out = [];
+  for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+    const a = boxes[names[i]], c = boxes[names[j]];
+    if (Math.min(a.r, c.r) - Math.max(a.l, c.l) > 0.5 && Math.min(a.b, c.b) - Math.max(a.t, c.t) > 0.5) out.push(names[i] + '/' + names[j]);
+  }
+  return out;
+};
+const sameLine = (...boxes) => boxes.every(b => Math.abs(b.cy - boxes[0].cy) <= 3);
+const insidePanel = boxes => Object.values(boxes).every(b => b.l >= 0 && b.t >= 0 && b.r <= WIDTH + 0.5 && b.b <= HEIGHT + 0.5);
 const cond = '#var-condition-modal';
 
 const SECTIONS = {
@@ -493,6 +528,85 @@ const SECTIONS = {
     if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
     await page.waitForTimeout(200);
     await page.evaluate(() => { Templates.getCached = window.__csRealCached; });
+  },
+
+  // Règle d'une annexe du macro-modèle sur DEUX lignes (audit UX/UI du 2026-09-29, F8), en clair puis en sombre : cinq contrôles sur une ligne se chevauchaient dans la
+  // fenêtre de 520 px (la liste des colonnes recouvrait l'opérateur, dont le « = » disparaissait). « Si », la colonne et l'opérateur sur la première ligne ; la valeur, la
+  // flèche et le modèle sur la seconde, sous la colonne ; la croix, à droite, retire la règle entière (vrai clic). La fenêtre de condition d'une bulle et le filtre d'une
+  // boucle partagent les classes .macro-rule-* : ils gardent leur ligne unique, sans recouvrement.
+  async ruleRows() {
+    const macro = '#macro-editor-modal';
+    const loop = '#var-loop-modal';
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await page.evaluate(() => {
+      window.__csRealCached = Templates.getCached;
+      Templates.getCached = () => [{ id: 11, nom: 'Notification_base', typeModele: 'document' }, { id: 12, nom: 'Notification_bureau', typeModele: 'document' }];
+    });
+    const count = () => page.evaluate(() => document.querySelectorAll('#macro-editor-modal .macro-rule-row').length);
+    const closeWindow = async (scope, selector) => {
+      const cancel = await reveal(selector, scope + ' .modal-content');
+      if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+      await page.waitForTimeout(200);
+    };
+    for (const theme of ['light', 'dark']) {
+      const label = theme === 'dark' ? 'sombre' : 'clair';
+      await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+      await page.waitForTimeout(100);
+      // Macro-modèle : une annexe et sa règle, puis une seconde règle.
+      await page.evaluate(() => MacroEditor.openModal(null));
+      await page.waitForTimeout(200);
+      await reveal('#macro-editor-add-slot', macro + ' .modal-content');
+      await clickCenter('#macro-editor-add-slot');
+      await reveal(macro + ' .macro-rule-modele + .ss-wrap .ss-trigger', macro + ' .modal-content');
+      const rule = await ruleBoxes(macro);
+      const b = rule && rule.boxes;
+      const horizontalScroll = await page.evaluate(() => { const box = document.querySelector('#macro-editor-modal .macro-editor-slots'); return box.scrollWidth > box.clientWidth + 1; });
+      check(`macro (${label}) : la règle tient sur deux lignes : « Si », la colonne et l’opérateur ; puis, sous la colonne, la valeur, la flèche et le modèle`,
+        !!rule && rule.twoLines && sameLine(b.connector, b.column, b.operator) && sameLine(b.value, b.arrow, b.model) && b.value.t >= b.column.b - 1 && Math.abs(b.value.l - b.column.l) <= 2, rule);
+      check(`macro (${label}) : aucun contrôle de la règle n’en recouvre un autre, chacun reçoit le clic en son centre, tous sont dans le panneau, sans défilement horizontal`,
+        !!rule && overlapping(b).length === 0 && Object.values(b).every(box => box.onTop) && insidePanel(b) && !horizontalScroll, { rule, overlaps: rule && overlapping(b), horizontalScroll });
+      check(`macro (${label}) : la colonne et le modèle gardent une largeur lisible (150 px), l’opérateur (40 px) et la valeur (90 px) aussi`,
+        !!rule && b.column.w >= 150 && b.model.w >= 150 && b.operator.w >= 40 && b.value.w >= 90, rule && { column: b.column.w, model: b.model.w, operator: b.operator.w, value: b.value.w });
+      check(`macro (${label}) : la croix est à droite des deux lignes et centrée dessus`,
+        !!rule && b.remove.l >= Math.max(b.operator.r, b.model.r) - 0.5 && Math.abs(b.remove.cy - (b.column.t + b.model.b) / 2) <= 3, rule);
+      // Un vrai clic sur la croix retire la règle entière ; deux « + Ajouter une condition » en remettent deux, l'une sous l'autre.
+      await clickCenter(macro + ' .macro-rule-remove');
+      const afterRemove = await count();
+      for (let i = 0; i < 2; i++) {
+        await reveal(macro + ' .macro-rule-add', macro + ' .modal-content');
+        await clickCenter(macro + ' .macro-rule-add');
+      }
+      const afterAdd = await count();
+      await reveal(macro + ' .macro-rule-row:nth-of-type(2) .macro-rule-modele + .ss-wrap .ss-trigger', macro + ' .modal-content');
+      const first = await ruleBoxes(macro, 0);
+      const second = await ruleBoxes(macro, 1);
+      check(`macro (${label}) : un vrai clic sur la croix retire la règle entière, « + Ajouter une condition » en remet, deux règles se suivent sans se chevaucher, chacune sur deux lignes`,
+        afterRemove === 0 && afterAdd === 2 && !!first && !!second && first.twoLines && second.twoLines && second.row.t >= first.row.b - 0.5
+        && overlapping(second.boxes).length === 0 && Object.values(second.boxes).every(box => box.onTop), { afterRemove, afterAdd, first, second });
+      await closeWindow(macro, '#macro-editor-cancel');
+
+      // Fenêtre de condition d'une bulle : la règle garde sa ligne unique, sans recouvrement.
+      await openWindowFor('Titre', 'var-condition', cond);
+      await reveal(cond + ' .macro-rule-remove', cond + ' .modal-content');
+      const condition = await ruleBoxes(cond);
+      check(`condition (${label}) : la règle garde sa ligne unique (« Si », colonne, opérateur, valeur, croix), sans recouvrement, chaque contrôle au premier plan`,
+        !!condition && !condition.twoLines && sameLine(...Object.values(condition.boxes)) && overlapping(condition.boxes).length === 0 && Object.values(condition.boxes).every(box => box.onTop), condition);
+      await closeWindow(cond, cond + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+
+      // Filtre d'une boucle : de même.
+      await openWindowFor('Designation', 'var-loop', loop);
+      await reveal(loop + ' .var-loop-filter .var-condition-add', loop + ' .modal-content');
+      await clickCenter(loop + ' .var-loop-filter .var-condition-add');
+      await reveal(loop + ' .var-loop-filter .macro-rule-remove', loop + ' .modal-content');
+      const filter = await ruleBoxes(loop + ' .var-loop-filter');
+      check(`boucle (${label}) : la règle du filtre garde sa ligne unique (« Si », colonne, opérateur, valeur, croix), sans recouvrement, chaque contrôle au premier plan`,
+        !!filter && !filter.twoLines && sameLine(...Object.values(filter.boxes)) && overlapping(filter.boxes).length === 0 && Object.values(filter.boxes).every(box => box.onTop), filter);
+      await closeWindow(loop, loop + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+    }
+    await page.evaluate(theme => {
+      Templates.getCached = window.__csRealCached;
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+    }, previousTheme);
   },
 
   // Réglages > Accès : la table des droits (liste native) et quatre choix de colonne avec recherche, dans une fenêtre qui défile à 700x400.

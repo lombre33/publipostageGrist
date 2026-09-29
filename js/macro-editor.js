@@ -78,27 +78,41 @@ const MacroEditor = (function () {
         const row = document.createElement('div');
         row.className = 'macro-rule-row';
 
+        // Une règle sur DEUX lignes (audit UX/UI du 2026-09-29, F8 : cinq contrôles sur une ligne se chevauchaient dans une fenêtre de 520 px, la liste des colonnes
+        // recouvrait l'opérateur dont le « = » disparaissait) : « Si », la colonne et l'opérateur ; puis, sous la colonne, la valeur et le modèle choisi (→). La
+        // croix, à droite, retire la règle entière. Propre à cette fenêtre : la condition d'une bulle et le filtre d'une boucle (js/variable-condition.js,
+        // js/variable-loop.js) construisent leur ligne avec les mêmes classes .macro-rule-* et gardent une seule ligne.
+        const body = document.createElement('div');
+        body.className = 'macro-rule-body';
+        const lineOne = document.createElement('div');
+        lineOne.className = 'macro-rule-line';
+        const lineTwo = document.createElement('div');
+        lineTwo.className = 'macro-rule-line macro-rule-line-detail';
+        body.appendChild(lineOne);
+        body.appendChild(lineTwo);
+        row.appendChild(body);
+
         const connector = document.createElement('span');
         connector.className = 'macro-rule-connector';
         connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
-        row.appendChild(connector);
+        lineOne.appendChild(connector);
 
         const fields = ConditionFields.buildConditionFields(rule);
-        row.appendChild(fields.columnWrap);
-        row.appendChild(fields.operatorSelect);
-        row.appendChild(fields.valueSlot);
+        lineOne.appendChild(fields.columnWrap);
+        lineOne.appendChild(fields.operatorSelect);
+        lineTwo.appendChild(fields.valueSlot);
 
         const arrow = document.createElement('span');
         arrow.className = 'macro-rule-arrow';
         arrow.setAttribute('aria-hidden', 'true');
         arrow.textContent = '→';
-        row.appendChild(arrow);
+        lineTwo.appendChild(arrow);
 
         const modeleSelect = document.createElement('select');
         modeleSelect.className = 'macro-rule-modele';
         fillModeleSelect(modeleSelect, rule.modeleId, 'macro.modal.choosePlaceholder');
         modeleSelect.addEventListener('change', () => { rule.modeleId = modeleSelect.value || null; });
-        row.appendChild(modeleSelect);
+        lineTwo.appendChild(modeleSelect);
         searchable(modeleSelect, { inline: true });
 
         const removeRuleBtn = document.createElement('button');
