@@ -520,6 +520,134 @@
     },
   });
 
+  // Réglages > Accès : la table des droits (liste native) puis quatre choix de colonne (email, lecture seule, export, commentaires).
+  const ACCESS = { table: 'settings-access-table', email: 'settings-access-email', readOnly: 'settings-access-readonly', exportCol: 'settings-access-export', comments: 'settings-access-comments' };
+  const accessSelect = id => document.getElementById(id);
+  const accessField = id => accessSelect(id).nextElementSibling.querySelector('.ss-trigger');
+  async function openAccessTab(h) {
+    document.getElementById('v2-btn-settings').click();
+    await h.sleep(300);
+    document.querySelector('#settings-tabs [data-settings-tab="access"]').click();
+    await h.sleep(60);
+  }
+  async function closeSettings(h) {
+    document.getElementById('settings-close').click();
+    await h.sleep(60);
+  }
+  async function pickInAccessList(h, id, text) {
+    const trigger = accessField(id);
+    trigger.click();
+    await h.sleep(30);
+    const input = inputOf(panelOf(trigger));
+    setInput(input, text);
+    await h.sleep(10);
+    press(input, 'Enter');
+    await h.sleep(350);
+  }
+
+  cases.push({
+    id: 'colsearch_access_settings_column_choices_are_searchable_lists',
+    description: 'Réglages > Accès : email, lecture seule, export et commentaires sont des listes avec recherche (« — Aucune — » en tête, seulement les colonnes du bon type, celle qui a disparu gardée), la liste des tables reste native ; un choix écrit l’option du widget, le champ le montre et le montre encore quand on rouvre les Réglages',
+    run: async (h) => {
+      await h.resetEditor();
+      const stub = window.__gristStub;
+      stub.setVariables('CsAnnuaire', { NomPrenom: 'Text' });
+      stub.setVariables('CsDroits', { Email: 'Text', Nom: 'Text', Service: 'Ref:CsAnnuaire', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+      stub.setRows('CsDroits', [{ id: 1, Email: 'a@exemple.fr', Nom: 'A', Service: 7, LectureSeule: false, Export: true, Commentaires: true }]);
+      await GristAPI.refreshSchema();
+      stub.setWidgetOptions(null);
+      await h.sleep(100);
+      await openAccessTab(h);
+      const none = I18n.t('settings.access.none');
+      const tableSelect = accessSelect(ACCESS.table);
+      const tableNative = visible(tableSelect) && !accessSelect(ACCESS.table).nextElementSibling.classList.contains('ss-wrap');
+      const fields = [ACCESS.email, ACCESS.readOnly, ACCESS.exportCol, ACCESS.comments].map(id => {
+        const trigger = accessField(id);
+        const rect = trigger.getBoundingClientRect();
+        return { id, hidden: accessSelect(id).getBoundingClientRect().width === 0, width: rect.width, height: rect.height, text: shownIn(trigger) };
+      });
+      const tableRect = tableSelect.getBoundingClientRect();
+      const sameHeight = fields.every(f => Math.abs(f.height - tableRect.height) < 1);
+      const labelFocuses = (() => { document.querySelector('label[for="' + ACCESS.email + '"]').click(); return document.activeElement === accessField(ACCESS.email); })();
+      const openRows = async id => { const trigger = accessField(id); trigger.click(); await h.sleep(30); const rows = rowsOf(panelOf(trigger)); const placeholder = inputOf(panelOf(trigger)).placeholder; trigger.click(); await h.sleep(20); return { rows, placeholder }; };
+      const beforeTable = await openRows(ACCESS.email);
+      tableSelect.value = 'CsDroits';
+      tableSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(350);
+      const afterTable = { email: shownIn(accessField(ACCESS.email)), value: accessSelect(ACCESS.email).value };
+      const emailList = await openRows(ACCESS.email);
+      const boolList = await openRows(ACCESS.readOnly);
+      // Recherche puis Entrée dans la liste des colonnes de droit : « exp » ne garde qu'Export ; le choix s'écrit dans l'option du widget.
+      const trigger = accessField(ACCESS.readOnly);
+      trigger.click();
+      await h.sleep(30);
+      const input = inputOf(panelOf(trigger));
+      setInput(input, 'exp');
+      await h.sleep(10);
+      const searched = rowsOf(panelOf(trigger));
+      press(input, 'Enter');
+      await h.sleep(350);
+      const option = stub.state.options && stub.state.options.droitsAcces;
+      const chosen = { value: accessSelect(ACCESS.readOnly).value, shown: shownIn(accessField(ACCESS.readOnly)), closed: panelOf(accessField(ACCESS.readOnly)).hidden };
+      await pickInAccessList(h, ACCESS.comments, 'commentaires');
+      await closeSettings(h);
+      // Réouverture : les champs montrent le réglage enregistré, y compris une colonne qui n'existe plus dans la table.
+      stub.setWidgetOptions({ droitsAcces: { table: 'CsDroits', emailColumn: 'Ancienne', readOnlyColumn: 'LectureSeule', exportColumn: '', commentsColumn: '' } });
+      await h.sleep(400);
+      await openAccessTab(h);
+      const reopened = { email: shownIn(accessField(ACCESS.email)), readOnly: shownIn(accessField(ACCESS.readOnly)), exportCol: shownIn(accessField(ACCESS.exportCol)), emailPlaceholder: accessField(ACCESS.email).classList.contains('is-placeholder'), exportPlaceholder: accessField(ACCESS.exportCol).classList.contains('is-placeholder') };
+      const keptList = await openRows(ACCESS.email);
+      await closeSettings(h);
+      stub.setWidgetOptions(null);
+      await h.sleep(200);
+      const pass = tableNative && fields.length === 4 && fields.every(f => f.hidden && f.width > 100) && sameHeight && labelFocuses
+        && fields.every(f => f.text === none) && JSON.stringify(beforeTable.rows) === JSON.stringify([none])
+        && afterTable.value === 'Email' && afterTable.email === 'Email'
+        && JSON.stringify(emailList.rows) === JSON.stringify([none, 'Email', 'Nom'])
+        && JSON.stringify(boolList.rows) === JSON.stringify([none, 'LectureSeule', 'Export', 'Commentaires']) && boolList.placeholder === I18n.t('linkConfig.searchColumns')
+        && JSON.stringify(searched) === JSON.stringify(['Export'])
+        && chosen.value === 'Export' && chosen.shown === 'Export' && chosen.closed
+        && !!option && option.table === 'CsDroits' && option.emailColumn === 'Email' && option.readOnlyColumn === 'Export' && option.exportColumn === '' && option.commentsColumn === ''
+        && reopened.email === 'Ancienne' && reopened.readOnly === 'LectureSeule' && reopened.exportCol === none && !reopened.emailPlaceholder && reopened.exportPlaceholder
+        && JSON.stringify(keptList.rows) === JSON.stringify([none, 'Email', 'Nom', 'Ancienne']);
+      return { pass, notes: JSON.stringify({ tableNative, fields, sameHeight, labelFocuses, beforeTable, afterTable, emailList, boolList, searched, chosen, option, reopened, keptList }) };
+    },
+  });
+
+  cases.push({
+    id: 'searchselect_texts_follow_the_language_at_each_opening',
+    description: 'Une liste posée une fois (Réglages, « Trier par ») relit à chaque ouverture ses textes (zone de recherche, « Aucune colonne ne correspond. ») : changer la langue de l’interface les change sans recharger la page',
+    run: async () => {
+      const box = document.createElement('div');
+      box.innerHTML = '<select id="cs-sel4"><option value="">— Aucune —</option><option value="a">Alpha</option></select>';
+      document.body.appendChild(box);
+      const controller = SearchSelect.attachColumns(box.querySelector('select'));
+      const panel = box.querySelector('.ss-panel');
+      const read = () => ({ placeholder: panel.querySelector('.ss-input').placeholder, aria: panel.querySelector('.ss-input').getAttribute('aria-label'), empty: panel.querySelector('.ss-empty').textContent });
+      const reading = (lang) => {
+        I18n.setLang(lang);
+        controller.open();
+        const out = read();
+        controller.close(false);
+        return out;
+      };
+      let fr, en, back;
+      try {
+        fr = reading('fr');
+        en = reading('en');
+        back = reading('fr');
+      } finally {
+        I18n.setLang('fr');
+        controller.destroy();
+        box.remove();
+      }
+      const pass = fr.placeholder === 'Rechercher une colonne…' && fr.aria === fr.placeholder && fr.empty === 'Aucune colonne ne correspond.'
+        && en.placeholder === 'Search for a column…' && en.aria === en.placeholder && en.empty === 'No column matches.'
+        && JSON.stringify(back) === JSON.stringify(fr);
+      return { pass, notes: JSON.stringify({ fr, en, back }) };
+    },
+  });
+
   cases.push({
     id: 'colsearch_native_lists_stay_when_the_component_fails',
     description: 'Si le composant de recherche est indisponible, la règle garde le <select> natif (visible, mêmes options) et marche comme avant',

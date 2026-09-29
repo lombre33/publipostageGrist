@@ -439,6 +439,67 @@ const SECTIONS = {
     if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
     await page.waitForTimeout(200);
   },
+
+  // Réglages > Accès : la table des droits (liste native) et quatre choix de colonne avec recherche, dans une fenêtre qui défile à 700x400.
+  async access() {
+    const scope = '#settings-modal';
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsDroits', { Email: 'Text', Nom: 'Text', Service: 'Ref:CsAnnuaire', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+      stub.setRows('CsDroits', [{ id: 1, Email: 'a@exemple.fr', Nom: 'A', Service: 7, LectureSeule: false, Export: true, Commentaires: true }]);
+      await GristAPI.refreshSchema();
+      stub.setWidgetOptions(null);
+    });
+    await clickCenter('#v2-btn-settings');
+    await page.waitForTimeout(300);
+    const tab = await clickCenter(scope + ' .settings-tab[data-settings-tab="access"]');
+    check('accès : le clic sur l’onglet Accès ouvre les Réglages et son panneau', tab.found && await page.evaluate(() => !document.querySelector('#settings-modal [data-settings-panel="access"]').hidden), tab);
+    await page.selectOption('#settings-access-table', 'CsDroits');
+    await page.waitForTimeout(400);
+    const field = await reveal(scope + ' #settings-access-readonly + .ss-wrap .ss-trigger', scope + ' .modal-content');
+    const native = await hitTest(scope + ' #settings-access-readonly');
+    const table = await hitTest(scope + ' #settings-access-table');
+    check('accès : le champ « Lecture seule » est visible, dans le panneau et au premier plan, le <select> natif masqué, à la hauteur de la liste des tables',
+      field.found && field.inViewport && field.onTop && field.width > 100 && native.width === 0 && table.found && Math.abs((field.bottom - field.top) - (table.bottom - table.top)) < 1, { field, native, table });
+    const emailShown = await page.evaluate(() => document.querySelector('#settings-access-email + .ss-wrap .ss-trigger').textContent);
+    check('accès : choisir la table pré-choisit la colonne email, et le champ visible la montre', emailShown === 'Email', emailShown);
+    await page.mouse.click(field.x, field.y);
+    await page.waitForTimeout(150);
+    const open = await panelInfo(scope);
+    check('accès : un vrai clic ouvre la liste, entièrement dans le panneau Grist, zone de recherche au focus, « — Aucune — » en tête puis les seules colonnes à cocher',
+      !!open && open.inside && open.searchFocused && open.heads.length === 0 && JSON.stringify(open.rows) === JSON.stringify(['— Aucune —', 'LectureSeule', 'Export', 'Commentaires']), open);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    const esc = await page.evaluate(() => ({
+      listOpen: !!document.querySelector('#settings-modal .ss-panel:not([hidden])'),
+      windowOpen: document.getElementById('settings-modal').style.display !== 'none',
+      focusOnField: document.activeElement === document.querySelector('#settings-access-readonly + .ss-wrap .ss-trigger'),
+    }));
+    check('accès : Échap referme la liste seule, les Réglages restent ouverts et le champ reprend le focus', !esc.listOpen && esc.windowOpen && esc.focusOnField, esc);
+    await clickCenter(scope + ' #settings-access-readonly + .ss-wrap .ss-trigger');
+    await page.keyboard.type('lect');
+    await page.waitForTimeout(100);
+    const row = await rowCenter(scope, 'LectureSeule');
+    check('accès : « lect » propose LectureSeule, visible et non recouvert', !!row && row.onTop && row.inViewport, row);
+    if (row) await page.mouse.click(row.x, row.y);
+    await page.waitForTimeout(400);
+    const chosen = await page.evaluate(() => {
+      const option = window.__gristStub.state.options && window.__gristStub.state.options.droitsAcces;
+      return {
+        value: document.getElementById('settings-access-readonly').value, shown: document.querySelector('#settings-access-readonly + .ss-wrap .ss-trigger').textContent,
+        listOpen: !!document.querySelector('#settings-modal .ss-panel:not([hidden])'), windowOpen: document.getElementById('settings-modal').style.display !== 'none', option,
+      };
+    });
+    check('accès : le clic choisit LectureSeule, referme la liste, écrit l’option du widget ; les Réglages restent ouverts',
+      chosen.value === 'LectureSeule' && chosen.shown === 'LectureSeule' && !chosen.listOpen && chosen.windowOpen
+      && !!chosen.option && chosen.option.table === 'CsDroits' && chosen.option.emailColumn === 'Email' && chosen.option.readOnlyColumn === 'LectureSeule', chosen);
+    const close = await reveal('#settings-close', scope + ' .modal-content');
+    check('accès : Fermer visible et non recouvert', close.found && close.inViewport && close.onTop, close);
+    if (close.found) await page.mouse.click(close.x, close.y);
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.__gristStub.setWidgetOptions(null));
+    await page.waitForTimeout(200);
+  },
 };
 const only = process.argv.slice(2);
 for (const [name, run] of Object.entries(SECTIONS)) if (!only.length || only.includes(name)) await run();

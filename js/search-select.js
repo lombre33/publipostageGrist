@@ -16,8 +16,9 @@
 //
 // Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, mêmes textes
 // partout) puis, à la fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
-// Options : labelledBy, searchPlaceholder, emptyText, placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins,
-// largeur qui suit la ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
+// Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
+// pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
+// ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
 const SearchSelect = (function () {
   const MARGIN = 8;              // marge minimale entre le panneau et le bord de la fenêtre
   const GAP = 4;                 // écart entre le champ et son panneau
@@ -75,8 +76,11 @@ const SearchSelect = (function () {
     opts = opts || {};
     const id = 'ss-' + (++_uid);
     const previousDisplay = select.style.display;
-    const searchPlaceholder = opts.searchPlaceholder || I18n.t('searchSelect.placeholder');
-    const emptyText = opts.emptyText || I18n.t('searchSelect.empty');
+    // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction qui les relit - relus à chaque ouverture du panneau, pour
+    // qu'une liste posée une fois sur une fenêtre qui reste (Réglages, « Trier par ») suive un changement de langue de l'interface.
+    const textOf = (value, key) => (typeof value === 'function' ? value() : value) || I18n.t(key);
+    let searchPlaceholder = textOf(opts.searchPlaceholder, 'searchSelect.placeholder');
+    let emptyText = textOf(opts.emptyText, 'searchSelect.empty');
 
     const wrap = el('div', 'ss-wrap' + (opts.inline ? ' ss-inline' : ''));
     const trigger = el('button', 'ss-trigger');
@@ -233,8 +237,17 @@ const SearchSelect = (function () {
       if (!panel.contains(event.target)) place();
     }
 
+    function refreshTexts() {
+      searchPlaceholder = textOf(opts.searchPlaceholder, 'searchSelect.placeholder');
+      emptyText = textOf(opts.emptyText, 'searchSelect.empty');
+      input.placeholder = searchPlaceholder;
+      input.setAttribute('aria-label', searchPlaceholder);
+      empty.textContent = emptyText;
+    }
+
     function openPanel(seed) {
       if (open || select.disabled) return;
+      refreshTexts();
       items = readItems(select);
       query = seed || '';
       input.value = query;
@@ -358,8 +371,8 @@ const SearchSelect = (function () {
   // et se cherche de la même façon (demande d'Antoine du 2026-09-29 : harmoniser dès qu'on propose un choix de colonne).
   function attachColumns(select, opts) {
     return attach(select, Object.assign({
-      searchPlaceholder: I18n.t('linkConfig.searchColumns'),
-      emptyText: I18n.t('linkConfig.noColumnMatch'),
+      searchPlaceholder: () => I18n.t('linkConfig.searchColumns'),
+      emptyText: () => I18n.t('linkConfig.noColumnMatch'),
     }, opts));
   }
 
