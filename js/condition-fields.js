@@ -43,10 +43,16 @@ const ConditionFields = (function () {
     if (rule.mode === 'singleton') return I18n.t('varCond.group.singleton', { table });
     return I18n.t('varCond.group.linkedVia', { table, via: Variables.describeLinkVia(table, rule, currentTableId) });
   }
-  function appendColumnOption(parent, value, label) {
+  // Une colonne de la liste. `value` : « Colonne » (table de la page) ou « Table.Colonne », aussi son nom à l'écran ; son type Grist (celui que dit l'indication
+  // sous le champ) est l'indice discret de la liste avec recherche - « Date de début (date) » - et permet de chercher « date » pour retrouver les dates. Le
+  // texte de l'<option> reste « nom (indice) » : c'est celui de la liste native, si le composant de recherche n'est pas disponible.
+  function appendColumnOption(parent, value, table, column) {
     const o = document.createElement('option');
+    const hint = friendlyTypeLabel(GristAPI.getColumnType(table, column));
     o.value = value;
-    o.textContent = label;
+    o.textContent = hint ? value + ' (' + hint + ')' : value;
+    o.dataset.name = value;
+    if (hint) o.dataset.hint = hint;
     parent.appendChild(o);
   }
   // Colonnes de la table de la page en valeur NUE (même forme que les macro-modèles), celles des autres tables en "Table.Colonne" (parseColumnRef).
@@ -59,7 +65,7 @@ const ConditionFields = (function () {
       // Sans les colonnes d'aide « gristHelper_… » (valeur affichée d'une Référence, cachées par Grist lui-même) : la Référence se compare déjà à sa
       // valeur affichée (js/variables.js:cellValue).
       GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0)
-        .forEach(c => appendColumnOption(group, table === currentTableId ? c : table + '.' + c, table === currentTableId ? c : table + '.' + c));
+        .forEach(c => appendColumnOption(group, table === currentTableId ? c : table + '.' + c, table, c));
       if (group.children.length) select.appendChild(group);
     });
   }
@@ -81,13 +87,14 @@ const ConditionFields = (function () {
     empty.value = '';
     empty.textContent = I18n.t('macro.modal.columnChoosePlaceholder');
     select.appendChild(empty);
-    if (opts.table) GristAPI.getColumns(opts.table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => appendColumnOption(select, c, c));
+    if (opts.table) GristAPI.getColumns(opts.table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => appendColumnOption(select, c, opts.table, c));
     else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId());
-    else currentTableColumns().forEach(c => appendColumnOption(select, c, c));
+    else { const tableId = GristAPI.getCurrentTableId(); currentTableColumns().forEach(c => appendColumnOption(select, c, tableId, c)); }
     const listed = Array.from(select.querySelectorAll('option')).map(o => o.value).filter(Boolean);
     const advancedOpt = document.createElement('option');
     advancedOpt.value = ADVANCED_COLUMN_VALUE;
     advancedOpt.textContent = I18n.t('macro.modal.columnAdvanced');
+    advancedOpt.dataset.pinned = 'true'; // liste avec recherche : jamais filtrée, toujours en bas
     select.appendChild(advancedOpt);
 
     const advancedInput = document.createElement('input');
@@ -133,8 +140,17 @@ const ConditionFields = (function () {
     }
     updateTypeHint();
 
+    // Liste avec recherche (js/search-select.js), posée plus bas par-dessus le <select> : il reste la source de la valeur et des évènements `change`, tout ce
+    // qui suit lit et écoute donc le <select> comme avant. Déclarée ici : les fonctions qui suivent doivent rafraîchir son champ quand elles remettent une
+    // valeur par programme.
+    let search = null;
     // Dernière valeur réellement adoptée par la liste (pas la saisie avancée) : remise si options.onColumnChosen refuse le nouveau choix.
     let adoptedSelectValue = select.value;
+    function restoreAdopted() {
+      select.value = adoptedSelectValue;
+      advancedInput.hidden = adoptedSelectValue !== ADVANCED_COLUMN_VALUE;
+      if (search) search.sync();
+    }
     function adopt(value) {
       advancedInput.hidden = true;
       rule.column = value;
@@ -154,18 +170,20 @@ const ConditionFields = (function () {
       if (!opts.onColumnChosen || !chosen) { adopt(chosen); return; }
       Promise.resolve(opts.onColumnChosen(ConditionRules.parseColumnRef(chosen, baseTable()), chosen)).then(ok => {
         if (ok) { adopt(chosen); return; }
-        select.value = adoptedSelectValue;
-        advancedInput.hidden = adoptedSelectValue !== ADVANCED_COLUMN_VALUE;
+        restoreAdopted();
       }, e => {
         console.error('[ConditionFields] choix de colonne interrompu', e);
-        select.value = adoptedSelectValue;
-        advancedInput.hidden = adoptedSelectValue !== ADVANCED_COLUMN_VALUE;
+        restoreAdopted();
       });
     });
     advancedInput.addEventListener('input', () => { rule.column = advancedInput.value; });
 
     wrap.appendChild(select);
     wrap.appendChild(advancedInput);
+    // L'indice de type est dans la liste, pas dans le champ fermé : il reste dit UNE fois, sous le champ (typeHint). Si le composant échoue, le <select> natif
+    // reste affiché et la règle marche comme avant.
+    try { search = SearchSelect.attachColumns(select, { inline: true, hintInTrigger: false }); }
+    catch (e) { console.warn('[ConditionFields] recherche de colonne indisponible, liste native conservée', e); }
     // typeHint N'EST PLUS un enfant de `wrap` (donc plus soumis à sa largeur flex:1, ~1/3 de la ligne) :
     // l'avertissement "colonne absente" peut faire 400px+ dans une ligne de ~460px (mesuré par le
     // coordinateur, 2026-09-28) et écrasait tout le reste de la ligne (select réduit à 10px). L'appelant

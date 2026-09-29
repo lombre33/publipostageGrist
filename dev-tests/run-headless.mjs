@@ -72,6 +72,7 @@ const GROUPS = {
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
   linkConfig: 'scenarios-link-config',
+  columnSearch: 'scenarios-column-search',
   pdfBatch: 'scenarios-pdf-batch',
   accessRights: 'scenarios-access-rights',
 };
@@ -86,6 +87,7 @@ const NODE_SCRIPTS = {
   varToolbarMouse: 'verify-var-toolbar-mouse.mjs',
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
+  columnSearchMouse: 'verify-column-search-mouse.mjs',
 };
 
 const argv = process.argv.slice(2);

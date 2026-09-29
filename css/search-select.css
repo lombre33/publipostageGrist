@@ -2,11 +2,17 @@
    contenant une zone de recherche et la liste des choix. Fichier propre à ce composant pour ne rien changer aux feuilles partagées ; couleurs par variables
    seulement, donc thème sombre compris. Le champ reprend la hauteur et la typographie des <select> des fenêtres (ex. .link-config-bridge-col select). */
 .ss-wrap { position: relative; width: 100%; }
+/* Champ d'une ligne de règle (Colonne / Opérateur / Valeur : js/condition-fields.js, tri de la boucle) : même hauteur et même corps de texte que les champs
+   voisins (26 px, 12 px), largeur qui suit la ligne comme le <select> qu'il remplace (flex 1 1 90px de .macro-rule-column-wrap). */
+.ss-wrap.ss-inline { flex: 1 1 90px; width: auto; min-width: 90px; }
+.ss-inline .ss-trigger { height: 26px; padding: 0 6px; font-size: 12px; }
 
 .ss-trigger { display: flex; align-items: center; gap: 6px; width: 100%; height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12.5px; text-align: left; cursor: pointer; }
 .ss-trigger:hover { border-color: var(--text-faint); }
 .ss-trigger:focus-visible, .ss-trigger[aria-expanded="true"] { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .ss-trigger.is-placeholder .ss-value { color: var(--text-faint); }
+.ss-trigger:disabled { opacity: .55; cursor: default; }
+.ss-trigger:disabled:hover { border-color: var(--border-strong); }
 /* Nom puis indice à la suite, sur une seule ligne coupée par des points de suspension à la fin (comme le texte d'un <select>) : on lit toujours le nom
    en premier, et le libellé complet est en info-bulle du champ. */
 .ss-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -24,9 +30,17 @@
 /* Une ligne : nom puis indice, à la suite (retour à la ligne aux espaces, jamais au milieu d'un nom), coche du choix courant calée à droite. */
 .ss-option { position: relative; padding: 5px 24px 5px 8px; border-radius: 5px; font-size: 12.5px; line-height: 1.35; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
 .ss-option.is-active { background: var(--surface-sunken); }
+/* Le choix « rien » (« -- Choisir une colonne -- », « — Aucune — ») en grisé ; la ligne épinglée (saisie avancée) sous un filet, toujours en bas. */
+.ss-option.is-empty { color: var(--text-faint); }
+.ss-option.is-empty[aria-selected="true"] .ss-name { font-weight: 400; }
+.ss-option.is-empty[aria-selected="true"]::after { content: none; }
+.ss-option.is-pinned { margin-top: 4px; padding-top: 7px; border-top: 1px solid var(--border); border-radius: 0 0 5px 5px; color: var(--text-muted); }
+/* Intitulé de groupe (<optgroup>) : la table, et son lien avec la page. Un filet le sépare du groupe précédent, pas du haut de la liste. */
+.ss-group { margin-top: 4px; padding: 7px 8px 3px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 700; line-height: 1.3; color: var(--text-muted); overflow-wrap: anywhere; }
+.ss-empty[hidden] + .ss-group, .ss-group:first-child { margin-top: 0; padding-top: 3px; border-top: 0; }
 .ss-option[aria-selected="true"] .ss-name { font-weight: 700; }
 .ss-option[aria-selected="true"]::after { content: "✓"; position: absolute; top: 5px; right: 8px; color: var(--accent); font-weight: 700; }
-.ss-empty { padding: 10px 12px; font-size: 12px; color: var(--text-faint); }
+.ss-empty { padding: 10px 12px; font-size: 12px; color: var(--text-faint); list-style: none; }
 .ss-empty[hidden] { display: none; }
 /* Annonce du nombre de résultats pour les lecteurs d'écran, sans rien afficher. */
 .ss-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

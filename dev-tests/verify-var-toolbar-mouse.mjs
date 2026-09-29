@@ -156,6 +156,24 @@ async function clickBadge() {
   await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(250);
 }
+// Choisit une colonne dans le champ d'une règle comme le fait une personne : clic sur le champ visible (le <select> est masqué par la liste avec recherche,
+// js/search-select.js), frappe du nom, clic sur la ligne au nom exact. Rend faux si la ligne n'est pas dans la liste.
+async function pickColumn(scope, name) {
+  const field = await hitTest(scope + ' .macro-rule-column-wrap .ss-trigger');
+  await page.mouse.click(field.x, field.y);
+  await page.waitForTimeout(120);
+  await page.keyboard.type(name);
+  await page.waitForTimeout(80);
+  const row = await page.evaluate(({ scope, name }) => {
+    const found = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+    if (!found) return null;
+    const r = found.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, { scope, name });
+  if (row) await page.mouse.click(row.x, row.y);
+  await page.waitForTimeout(150);
+  return !!row;
+}
 
 // 1) Clic réel sur la bulle : la barre apparaît, ses deux icônes sont visibles et cliquables.
 await clickBadge();
@@ -171,7 +189,7 @@ const condBox = await hitTest('#var-condition-modal .var-modal-content');
 check('fenêtre de condition ouverte et entièrement dans le panneau', condBox.found && condBox.inViewport, condBox);
 const toolbarHidden = await page.evaluate(() => !document.querySelector('.v2-varfmt-toolbar').classList.contains('visible'));
 check('la barre flottante ne passe pas par-dessus la fenêtre', toolbarHidden);
-await page.selectOption('#var-condition-modal select.macro-rule-column', 'Statut');
+check('colonne Statut choisie à la vraie souris dans la liste avec recherche', await pickColumn('#var-condition-modal', 'Statut'));
 await page.waitForTimeout(100);
 const valueField = await hitTest('#var-condition-modal .macro-rule-value');
 if (valueField.found) { await page.mouse.click(valueField.x, valueField.y); await page.keyboard.type('Urgent'); }
@@ -196,7 +214,7 @@ await clickBadge();
 const condBtn2 = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
 if (condBtn2.found) await page.mouse.click(condBtn2.x, condBtn2.y);
 await page.waitForTimeout(200);
-await page.selectOption('#var-condition-modal select.macro-rule-column', 'VcContacts.Role');
+check('colonne VcContacts.Role choisie à la vraie souris dans la liste avec recherche', await pickColumn('#var-condition-modal', 'VcContacts.Role'));
 await page.waitForTimeout(300);
 const keyConfirm = await hitTest('#link-config-confirm');
 const keyCancel = await hitTest('#link-config-cancel');

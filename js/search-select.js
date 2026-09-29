@@ -6,9 +6,17 @@
 // Une <option> peut porter `data-name` (le nom) et `data-hint` (ce qui s'affiche entre parenthèses, en plus discret) ; sans eux, son texte sert de nom.
 // Le libellé complet (« nom (indice) ») reste le texte de l'<option> : c'est ce que voit et cherche quiconque n'a pas le panneau, et la recherche porte
 // aussi sur l'indice. Une <option> désactivée (le « — Choisissez… — » de départ) n'est jamais proposée, elle ne sert qu'à l'affichage du champ fermé.
+// Trois autres cas, tous lus dans le <select> :
+//  - un <optgroup> : son libellé devient un intitulé au-dessus de ses lignes, et disparaît avec elles quand la recherche les écarte ;
+//  - une <option> sans valeur, mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche pas,
+//    écarté dès qu'on tape, et affiché en grisé dans le champ fermé ;
+//  - une <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche, pour qu'un mot sans résultat
+//    ne la rende pas inatteignable.
 //
-// Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) puis, à la fermeture de la fenêtre, .destroy() (le <select>
-// natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
+// Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, mêmes textes
+// partout) puis, à la fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
+// Options : labelledBy, searchPlaceholder, emptyText, placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins,
+// largeur qui suit la ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
 const SearchSelect = (function () {
   const MARGIN = 8;              // marge minimale entre le panneau et le bord de la fenêtre
   const GAP = 4;                 // écart entre le champ et son panneau
@@ -32,10 +40,11 @@ const SearchSelect = (function () {
   }
 
   // Éléments de `items` (produits par readItems) dont le libellé contient TOUS les mots de `query`, dans l'ordre d'origine ; tout si la recherche est vide.
+  // Une ligne épinglée reste toujours ; le choix « rien » (`empty`) ne se propose que sans recherche.
   function filterItems(items, query) {
     const words = normalize(query).split(/\s+/).filter(Boolean);
     if (!words.length) return items.slice();
-    return items.filter(item => words.every(word => item.haystack.indexOf(word) !== -1));
+    return items.filter(item => item.pinned || (!item.empty && words.every(word => item.haystack.indexOf(word) !== -1)));
   }
 
   function readItems(select) {
@@ -44,7 +53,13 @@ const SearchSelect = (function () {
       if (opt.disabled) return;
       const name = opt.dataset.name || opt.textContent;
       const hint = opt.dataset.hint || '';
-      items.push({ value: opt.value, name, hint, haystack: normalize(name + ' ' + hint) });
+      const parent = opt.parentElement;
+      items.push({
+        value: opt.value, name, hint, haystack: normalize(name + ' ' + hint),
+        group: parent && parent.tagName === 'OPTGROUP' ? parent.label : '',
+        pinned: opt.dataset.pinned === 'true',
+        empty: opt.value === '',
+      });
     });
     return items;
   }
@@ -57,7 +72,7 @@ const SearchSelect = (function () {
     const searchPlaceholder = opts.searchPlaceholder || I18n.t('searchSelect.placeholder');
     const emptyText = opts.emptyText || I18n.t('searchSelect.empty');
 
-    const wrap = el('div', 'ss-wrap');
+    const wrap = el('div', 'ss-wrap' + (opts.inline ? ' ss-inline' : ''));
     const trigger = el('button', 'ss-trigger');
     trigger.type = 'button';
     trigger.setAttribute('aria-haspopup', 'listbox');
@@ -70,7 +85,12 @@ const SearchSelect = (function () {
     const chevron = el('span', 'ss-chevron');
     chevron.setAttribute('aria-hidden', 'true');
     trigger.append(valueEl, chevron);
-    trigger.setAttribute('aria-labelledby', (opts.labelledBy ? opts.labelledBy + ' ' : '') + valueEl.id);
+    // Libellés du <select> (<label for>) : son nom accessible, et un clic dessus met le focus sur le champ visible (le <select>, masqué, ne le peut plus).
+    const labels = Array.prototype.slice.call(select.labels || []);
+    labels.forEach((label, i) => { if (!label.id) label.id = id + '-label-' + i; });
+    const labelIds = [opts.labelledBy].concat(labels.map(label => label.id)).filter(Boolean);
+    trigger.setAttribute('aria-labelledby', labelIds.concat(valueEl.id).join(' '));
+    const onLabelClick = () => trigger.focus({ preventScroll: true });
 
     const panel = el('div', 'ss-panel');
     panel.hidden = true;
@@ -89,30 +109,34 @@ const SearchSelect = (function () {
     const list = el('ul', 'ss-list');
     list.id = id + '-list';
     list.setAttribute('role', 'listbox');
-    const empty = el('div', 'ss-empty', emptyText);
+    const empty = el('li', 'ss-empty', emptyText);
+    empty.setAttribute('role', 'presentation');
     empty.hidden = true;
     const status = el('div', 'ss-status');
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    panel.append(searchRow, list, empty, status);
+    panel.append(searchRow, list, status);
     wrap.append(trigger, panel);
 
     let items = [];
     let visible = [];
+    let rows = [];   // les <li> des lignes de `visible`, dans le même ordre (la liste contient aussi le message et les intitulés de groupe)
     let active = -1;
     let query = '';
     let open = false;
     let lastX = -1;
     let lastY = -1;
 
-    // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ.
+    // Champ fermé : le choix courant (nom + indice discret), sinon le texte de l'<option> désactivée de départ. Le choix « rien » (option permise sans valeur)
+    // s'affiche en grisé, comme un texte de départ. Reprend aussi l'état grisé du <select>.
     function syncTrigger() {
       const opt = select.options[select.selectedIndex];
       const chosen = opt && !opt.disabled ? opt : null;
-      trigger.classList.toggle('is-placeholder', !chosen);
+      trigger.classList.toggle('is-placeholder', !chosen || chosen.value === '');
+      trigger.disabled = select.disabled;
       if (chosen) {
         nameEl.textContent = chosen.dataset.name || chosen.textContent;
-        hintEl.textContent = chosen.dataset.hint ? '(' + chosen.dataset.hint + ')' : '';
+        hintEl.textContent = chosen.dataset.hint && opts.hintInTrigger !== false ? '(' + chosen.dataset.hint + ')' : '';
         trigger.title = chosen.textContent;
       } else {
         const placeholder = Array.prototype.find.call(select.options, o => o.disabled);
@@ -125,15 +149,18 @@ const SearchSelect = (function () {
     // Fait défiler la liste juste ce qu'il faut pour montrer la ligne active. Sans scrollIntoView : il remonterait aussi les ancêtres défilants
     // (fenêtre Grist comprise) et ferait sauter la page.
     function scrollToActive() {
-      const row = list.children[active];
+      const row = rows[active];
       if (!row) return;
-      if (row.offsetTop < list.scrollTop) list.scrollTop = row.offsetTop;
+      // Première ligne d'un groupe : on la remonte avec son intitulé, sinon on la verrait sans savoir de quelle table elle est.
+      const before = row.previousElementSibling;
+      const top = before && before.classList.contains('ss-group') ? before.offsetTop : row.offsetTop;
+      if (top < list.scrollTop) list.scrollTop = top;
       else if (row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = row.offsetTop + row.offsetHeight - list.clientHeight;
     }
     function setActive(index, scroll) {
-      if (active >= 0 && list.children[active]) list.children[active].classList.remove('is-active');
+      if (active >= 0 && rows[active]) rows[active].classList.remove('is-active');
       active = index;
-      const row = list.children[active];
+      const row = rows[active];
       if (row) {
         row.classList.add('is-active');
         input.setAttribute('aria-activedescendant', row.id);
@@ -146,9 +173,21 @@ const SearchSelect = (function () {
     function render() {
       visible = filterItems(items, query);
       const current = select.value;
+      const searching = query.trim() !== '';
+      // Les résultats proprement dits : ni la ligne épinglée ni le choix « rien », qui ne comptent pas comme une réponse à la recherche.
+      const matches = visible.filter(item => !item.pinned && !item.empty);
       list.textContent = '';
+      list.appendChild(empty);
+      rows = [];
+      let lastGroup = '';
       visible.forEach((item, i) => {
-        const row = el('li', 'ss-option');
+        if (item.group && item.group !== lastGroup) {
+          const header = el('li', 'ss-group', item.group);
+          header.setAttribute('role', 'presentation');
+          list.appendChild(header);
+        }
+        lastGroup = item.group;
+        const row = el('li', 'ss-option' + (item.pinned ? ' is-pinned' : '') + (item.empty ? ' is-empty' : ''));
         row.id = id + '-opt-' + i;
         row.setAttribute('role', 'option');
         row.setAttribute('aria-selected', item.value === current ? 'true' : 'false');
@@ -156,18 +195,21 @@ const SearchSelect = (function () {
         row.appendChild(el('span', 'ss-name', item.name));
         if (item.hint) row.appendChild(el('span', 'ss-hint', '(' + item.hint + ')'));
         list.appendChild(row);
+        rows.push(row);
       });
-      empty.hidden = visible.length > 0;
-      const searching = query.trim() !== '';
-      status.textContent = !searching ? '' : (visible.length ? I18n.t('searchSelect.count', { count: visible.length }) : emptyText);
-      // Recherche en cours : la première ligne, pour que Entrée prenne le premier résultat. Sinon le choix courant ; rien de surligné tant qu'il n'y a
-      // ni recherche ni choix, pour qu'un Entrée à vide ne choisisse pas au hasard la première colonne.
-      setActive(searching ? (visible.length ? 0 : -1) : visible.findIndex(item => item.value === current), false);
+      // Message quand la recherche ne trouve rien (ou qu'il n'y a rien à lister) ; pas pour une liste qui ne propose que « rien », sans recherche.
+      empty.hidden = matches.length > 0 || (!searching && visible.length > 0);
+      status.textContent = !searching ? '' : (matches.length ? I18n.t('searchSelect.count', { count: matches.length }) : emptyText);
+      // Recherche en cours : le premier résultat, pour que Entrée le prenne (jamais la ligne épinglée : elle ne se choisit pas par mégarde). Sinon le choix
+      // courant ; rien de surligné tant qu'il n'y a ni recherche ni choix, pour qu'un Entrée à vide ne choisisse pas au hasard la première colonne.
+      setActive(searching ? (matches.length ? visible.indexOf(matches[0]) : -1) : visible.findIndex(item => item.value === current), false);
     }
 
     // Panneau en position fixe : hors de toute zone rognante (une fenêtre à défilement, un ancêtre overflow:hidden), sous le champ, ou au-dessus si la
     // place manque dessous (panneau Grist bas, ~700x400) ; sa hauteur suit la place disponible et la liste défile dedans.
     function place() {
+      // Champ retiré de la page pendant que le panneau est ouvert (règles redessinées) : refermer, sinon les écouteurs de la fenêtre resteraient.
+      if (!trigger.isConnected) { closePanel(false); return; }
       const rect = trigger.getBoundingClientRect();
       const viewWidth = window.innerWidth;
       const viewHeight = window.innerHeight;
@@ -186,7 +228,7 @@ const SearchSelect = (function () {
     }
 
     function openPanel(seed) {
-      if (open) return;
+      if (open || select.disabled) return;
       items = readItems(select);
       query = seed || '';
       input.value = query;
@@ -275,21 +317,28 @@ const SearchSelect = (function () {
       if (row && Number(row.dataset.index) !== active) setActive(Number(row.dataset.index), false);
     });
 
-    select.addEventListener('change', syncTrigger);
     syncTrigger();
+    // D'abord l'insertion, seule étape qui peut lever (<select> hors de la page) : si elle échoue, le <select> n'a encore rien reçu.
     select.parentNode.insertBefore(wrap, select.nextSibling);
     select.style.display = 'none';
+    select.addEventListener('change', syncTrigger);
+    labels.forEach(label => label.addEventListener('click', onLabelClick));
+    // Le <select> masqué ne peut plus prendre le focus : ce qui l'appelait (ouverture d'une fenêtre, bouton « Ajouter une condition ») le donne au champ visible.
+    select.focus = (options) => trigger.focus(options);
 
     const controller = {
       trigger,
       isOpen: () => open,
       open: openPanel,
       close: closePanel,
-      // À appeler après avoir changé `select.value` par programme (ça ne déclenche aucun évènement).
+      focus: (options) => trigger.focus(options),
+      // À appeler après avoir changé par programme `select.value`, ses options ou son état grisé (ça ne déclenche aucun évènement).
       sync: syncTrigger,
       destroy() {
         closePanel(false);
         select.removeEventListener('change', syncTrigger);
+        labels.forEach(label => label.removeEventListener('click', onLabelClick));
+        delete select.focus;
         wrap.remove();
         select.style.display = previousDisplay;
         _controllers.delete(select);
@@ -299,5 +348,14 @@ const SearchSelect = (function () {
     return controller;
   }
 
-  return { attach, filterItems, readItems, normalize };
+  // Liste de COLONNES : mêmes textes partout (zone de recherche, « Aucune colonne ne correspond. »), pour que chaque choix de colonne de l'interface se lise
+  // et se cherche de la même façon (demande d'Antoine du 2026-09-29 : harmoniser dès qu'on propose un choix de colonne).
+  function attachColumns(select, opts) {
+    return attach(select, Object.assign({
+      searchPlaceholder: I18n.t('linkConfig.searchColumns'),
+      emptyText: I18n.t('linkConfig.noColumnMatch'),
+    }, opts));
+  }
+
+  return { attach, attachColumns, filterItems, readItems, normalize };
 })();

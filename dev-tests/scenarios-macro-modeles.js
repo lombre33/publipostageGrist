@@ -464,7 +464,9 @@
       const rowRect = row.getBoundingClientRect();
       const hintOwnFullLine = hintRect.width >= rowRect.width - 20; // pleine largeur de LA LIGNE, pas seulement de columnField.wrap (~1/3)
 
-      const columnSelectRect = columnSelect.getBoundingClientRect();
+      // Le champ VISIBLE de la colonne : la liste avec recherche (js/search-select.js), qui masque le <select> (largeur 0) ; le <select> lui-même si le composant n'est pas là.
+      const columnField = row.querySelector('.macro-rule-column-wrap .ss-trigger') || columnSelect;
+      const columnSelectRect = columnField.getBoundingClientRect();
       const columnSelectReadable = columnSelectRect.width >= 80; // pas réduit à 10px par l'avertissement
 
       const pass = warningFullyHit && hintOwnFullLine && columnSelectReadable;
