@@ -341,6 +341,64 @@
     },
   });
 
+  // Fenêtre Réglages (audit UX/UI du 2026-09-29, défaut F2). Trois choses qu'un utilisateur voyait et qu'aucun test ne mesurait : la fenêtre, à 360 px,
+  // était trop étroite pour ses six onglets, qui passaient sur deux lignes ; sur l'onglet Accès, « Fermer » sortait du panneau de 700x400 (il fallait
+  // faire défiler la fenêtre entière, titre et onglets compris) ; et « Crédits » n'était plus atteignable. La mesure à la vraie souris, à 700x400, en
+  // clair et en sombre, est dans verify-settings-window-mouse.mjs. Ce cas-ci garde ce que le harnais en page établit quelle que soit la taille de la
+  // fenêtre du navigateur : la largeur, les six onglets sur une ligne et sans être coupés, un seul panneau visible à la fois (un `display` posé sur
+  // .settings-panel battrait [hidden] et montrerait les six panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par le
+  // panneau et non par la fenêtre, « Fermer » sous le panneau et dans la fenêtre. Français et anglais : les libellés d'onglet sont dans les deux langues.
+  cases.push({
+    id: 'settings_window_holds_six_tabs_on_one_row_and_only_the_panel_scrolls',
+    description: 'La fenêtre Réglages fait 480 px, ses six onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par le panneau et « Fermer » reste sous lui, dans la fenêtre (audit du 2026-09-29, défaut F2)',
+    run: async (h) => {
+      const modal = document.getElementById('settings-modal');
+      const content = modal.querySelector('.settings-modal-content');
+      const tabs = Array.from(modal.querySelectorAll('.settings-tab'));
+      const panels = Array.from(modal.querySelectorAll('.settings-panel'));
+      const closeBtn = document.getElementById('settings-close');
+      const expectedWidth = Math.min(480, window.innerWidth - 24);
+      const problems = [];
+      const checked = [];
+      try {
+        for (const lang of ['fr', 'en']) {
+          I18n.setLang(lang);
+          await h.clickButton('v2-btn-settings');
+          if (getComputedStyle(modal).display === 'none') { problems.push(lang + ' : la fenêtre ne s\'ouvre pas'); continue; }
+          for (const tab of tabs) {
+            const name = tab.getAttribute('data-settings-tab');
+            tab.click();
+            await h.sleep(20);
+            const box = content.getBoundingClientRect();
+            const closeBox = closeBtn.getBoundingClientRect();
+            const shown = panels.filter(p => getComputedStyle(p).display !== 'none').map(p => p.getAttribute('data-settings-panel'));
+            const panel = panels.find(p => p.getAttribute('data-settings-panel') === name);
+            const panelBox = panel.getBoundingClientRect();
+            const tops = tabs.map(t => t.getBoundingClientRect().top);
+            const row = { lang, name, width: Math.round(box.width), tabsSpread: Math.round(Math.max(...tops) - Math.min(...tops)), clippedTabs: tabs.filter(t => t.scrollWidth > t.clientWidth + 1).map(t => t.getAttribute('data-settings-tab')), shown: shown.join(','), panelOverflowY: getComputedStyle(panel).overflowY, windowOverflow: content.scrollHeight - content.clientHeight, closeOutside: closeBox.top < box.top - 1 || closeBox.bottom > box.bottom + 1 || closeBox.bottom > window.innerHeight + 1, closeUnderPanel: panelBox.bottom <= closeBox.top + 1, maxHeight: getComputedStyle(content).maxHeight };
+            checked.push(row);
+            if (Math.abs(box.width - expectedWidth) > 1) problems.push(lang + '/' + name + ' : largeur ' + row.width + ' au lieu de ' + expectedWidth);
+            if (row.tabsSpread > 4) problems.push(lang + '/' + name + ' : les onglets passent sur plusieurs lignes (écart ' + row.tabsSpread + ' px)');
+            if (row.clippedTabs.length) problems.push(lang + '/' + name + ' : onglet coupé (' + row.clippedTabs.join(',') + ')');
+            if (row.shown !== name) problems.push(lang + '/' + name + ' : panneaux affichés « ' + row.shown + ' »');
+            if (row.panelOverflowY !== 'auto') problems.push(lang + '/' + name + ' : le panneau ne défile pas (overflow-y ' + row.panelOverflowY + ')');
+            if (row.windowOverflow > 1) problems.push(lang + '/' + name + ' : la fenêtre entière déborde de ' + row.windowOverflow + ' px');
+            if (row.closeOutside) problems.push(lang + '/' + name + ' : « Fermer » hors de la fenêtre');
+            if (!row.closeUnderPanel) problems.push(lang + '/' + name + ' : « Fermer » recouvre le panneau');
+            if (Math.abs(parseFloat(row.maxHeight) - (window.innerHeight - 24)) > 1) problems.push(lang + '/' + name + ' : hauteur maximale ' + row.maxHeight + ' au lieu de ' + (window.innerHeight - 24) + 'px');
+          }
+          await h.clickButton('settings-close');
+          if (getComputedStyle(modal).display !== 'none') problems.push(lang + ' : « Fermer » ne ferme pas la fenêtre');
+        }
+      } finally {
+        I18n.setLang('fr');
+        modal.style.display = 'none';
+        tabs[0].click();
+      }
+      return { pass: problems.length === 0 && checked.length === 2 * tabs.length, notes: JSON.stringify({ expectedWidth, viewport: [window.innerWidth, window.innerHeight], problems: problems.slice(0, 8), sample: checked[0] }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();

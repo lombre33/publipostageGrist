@@ -346,10 +346,19 @@
 
 /* === Panneau Réglages (langue / touche de déclenchement / crédits) === Même gabarit que .link-config-modal-content ci-dessus - premier système d'onglets
    du projet : une rangée de boutons + un panneau par onglet, un seul visible via l'attribut `hidden` natif (pas de librairie/état complexe). */
-.settings-modal-content { font-family: var(--font-ui); width: 360px; }
-.settings-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
-.settings-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-.settings-tab { flex: 1; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 4px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+/* Trois étages : titre et onglets fixes en haut, « Fermer » fixe en bas, et SEUL le contenu de l'onglet visible défile (audit UX/UI du 29/09, F2). Avant : 360px
+   pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur trois, « Crédits » rogné) et une fenêtre entière qui défilait, donc
+   « Fermer » entièrement sous le bas visible d'un panneau de 400px dans Accès. border-box : 480px, marges intérieures comprises (au plus la largeur du panneau
+   moins 24px). */
+.settings-modal-content { font-family: var(--font-ui); box-sizing: border-box; width: 480px; min-width: 0; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+.settings-modal-content h3 { flex: none; font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+.settings-tabs { flex: none; display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+/* Une ligne, jamais deux : chaque onglet prend sa largeur de texte puis se partage le reste ; dans un panneau plus étroit que la fenêtre, un libellé se coupe par « … »
+   plutôt que de passer à la ligne. */
+.settings-tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 4px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+/* L'onglet affiché est l'étage qui défile. Pas de `display` ici : js/settings.js masque les cinq autres par l'attribut `hidden`, qu'une règle `display` battrait.
+   Marge négative + même marge intérieure : la couronne de focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
+.settings-panel { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; margin: -3px; padding: 3px; }
 .settings-tab:hover { background: var(--surface-sunken); }
 .settings-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 .settings-panel-intro { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
@@ -368,7 +377,7 @@
 .settings-credits-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
 .settings-credits-list dt { font-weight: 700; color: var(--text-muted); }
 .settings-credits-list dd { margin: 0; color: var(--text); }
-.settings-modal-content .modal-actions { margin-top: 16px; }
+.settings-modal-content .modal-actions { flex: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .settings-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 

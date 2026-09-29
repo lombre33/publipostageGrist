@@ -245,8 +245,8 @@ const I18n = (function () {
     'settings.tooltip': { fr: 'Réglages', en: 'Settings' },
     'settings.title': { fr: 'Réglages', en: 'Settings' },
     'settings.tab.language': { fr: 'Langue', en: 'Language' },
-    'settings.tab.triggerKey': { fr: 'Touche de déclenchement', en: 'Trigger key' },
-    'settings.tab.pageMargins': { fr: 'Marges de page', en: 'Page margins' },
+    'settings.tab.triggerKey': { fr: 'Déclencheur', en: 'Trigger' },
+    'settings.tab.pageMargins': { fr: 'Marges', en: 'Margins' },
     'settings.tab.theme': { fr: 'Thème', en: 'Theme' },
     'settings.theme.intro': {
       fr: "Apparence de l'interface. La page du document reste blanche dans les deux thèmes : c'est elle qui part à l'impression.",
