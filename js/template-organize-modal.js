@@ -327,9 +327,9 @@ const TemplateOrganizeModal = (function () {
   }
 
   // Redessine la liste ET garde le focus et le défilement là où ils étaient. list.innerHTML = '' détruit le bouton qu'on vient de cliquer : le
-  // focus retombait sur <body>, et Échap (écouté par la modale elle-même, cf. wireModalAccessibility dans js/main.js) ne fermait plus
-  // rien - or à 700x400 le bouton « Fermer » est hors de la fenêtre. Le bouton est retrouvé par data-focus-key ; à défaut (le bouton a
-  // disparu avec le redessin, ex. « Ranger ici ») le focus va à la liste elle-même (tabindex -1, hors piège de Tab).
+  // focus retombait sur <body> et le clavier repartait du début de la fenêtre (Échap, lui, ferme partout : la base commune l'écoute sur le
+  // document). Le bouton est retrouvé par data-focus-key ; à défaut (le bouton a disparu avec le redessin, ex. « Ranger ici ») le focus va à
+  // la liste elle-même (tabindex -1, hors piège de Tab).
   function render() {
     const active = document.activeElement;
     const focusInList = !!(active && list.contains(active));
@@ -412,8 +412,8 @@ const TemplateOrganizeModal = (function () {
     revealPendingFolder();
   }
 
-  // Branché une seule fois à l'init (js/main.js), même patron que MacroEditor.wire(). wireModalAccessibility()
-  // (js/main.js) prend en charge Échap/piège de focus/restauration une fois l'id ajouté à sa liste MODALS -
+  // Branché une seule fois à l'init (js/main.js), même patron que MacroEditor.wire(). La base commune des fenêtres
+  // (ModalBase.adopt, js/main.js:wirePageModals) prend en charge Échap, le piège de focus et sa restauration -
   // rien à refaire ici pour ça.
   function wire() {
     modal = document.getElementById('template-organize-modal');

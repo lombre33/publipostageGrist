@@ -159,11 +159,17 @@ const measure = page => page.evaluate(() => {
   const hit = document.elementFromPoint(closeRect.left + closeRect.width / 2, closeRect.top + closeRect.height / 2);
   const panel = box.querySelector('.settings-panel:not([hidden])');
   const panelStyle = panel ? getComputedStyle(panel) : null;
+  // Ce qui fait défiler le contenu de l'onglet : le premier ancêtre du panneau (lui compris) à défilement vertical, dans le cadre. Depuis la base commune des
+  // fenêtres c'est la zone de contenu (.settings-body, qui porte les six panneaux) ; avant, c'était le panneau lui-même.
+  let scroller = panel;
+  while (scroller && scroller !== box && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+  if (scroller === box) scroller = null;
   return {
     vw: innerWidth, vh: innerHeight,
     box: rect(box), boxScroll: { scrollHeight: box.scrollHeight, clientHeight: box.clientHeight },
     tabs, close: closeRect, closeTouched: hit === close || close.contains(hit),
     panel: panel ? Object.assign({ name: panel.getAttribute('data-settings-panel'), scrollHeight: panel.scrollHeight, clientHeight: panel.clientHeight, overflowY: panelStyle.overflowY, scrollTop: panel.scrollTop }, rect(panel)) : null,
+    scroller: scroller ? Object.assign({ scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, overflowY: getComputedStyle(scroller).overflowY, scrollTop: scroller.scrollTop, holdsTabs: box.querySelector('.settings-tab') ? scroller.contains(box.querySelector('.settings-tab')) : false }, rect(scroller)) : null,
     pageScrolls: document.scrollingElement.scrollHeight > document.scrollingElement.clientHeight || document.scrollingElement.scrollWidth > document.scrollingElement.clientWidth,
   };
 });
@@ -216,25 +222,27 @@ async function runTheme(theme) {
     await realClick(page, '#settings-modal .settings-tab[data-settings-tab="access"]');
     await page.waitForTimeout(150);
     const before = await measure(page);
-    check(`${tag} - Accès : le contenu défile dans son propre cadre (${before.panel ? before.panel.scrollHeight : '?'}px pour ${before.panel ? Math.round(before.panel.clientHeight) : '?'}px)`,
-      !!before.panel && /auto|scroll/.test(before.panel.overflowY) && before.panel.scrollHeight > before.panel.clientHeight + 4, before.panel);
-    const p = before.panel;
+    check(`${tag} - Accès : le contenu défile dans son propre cadre (${before.scroller ? before.scroller.scrollHeight : '?'}px pour ${before.scroller ? Math.round(before.scroller.clientHeight) : '?'}px), sans les onglets`,
+      !!before.scroller && /auto|scroll/.test(before.scroller.overflowY) && before.scroller.scrollHeight > before.scroller.clientHeight + 4 && !before.scroller.holdsTabs, before.scroller);
+    const p = before.scroller;
     if (p) {
       await page.mouse.move(p.left + p.width / 2, p.top + Math.min(20, p.height / 2), { steps: 3 });
       for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 250);
       await page.waitForTimeout(250);
     }
     const after = await measure(page);
+    // Vu depuis le cadre qui défile : la dernière note est entière dans ce que la fenêtre en montre (le contenu plus bas est rogné, pas visible).
     const lastHint = await page.evaluate(() => {
       const hints = document.querySelectorAll('.settings-panel:not([hidden]) .settings-access-hint');
       const h = hints[hints.length - 1];
-      const panel = document.querySelector('.settings-panel:not([hidden])');
-      if (!h || !panel) return null;
-      const r = h.getBoundingClientRect(), pr = panel.getBoundingClientRect();
-      return { top: r.top, bottom: r.bottom, panelTop: pr.top, panelBottom: pr.bottom, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1 };
+      let scroller = document.querySelector('.settings-panel:not([hidden])');
+      while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+      if (!h || !scroller) return null;
+      const r = h.getBoundingClientRect(), pr = scroller.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, scrollerTop: pr.top, scrollerBottom: pr.bottom, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1 };
     });
     check(`${tag} - Accès : la molette fait défiler le contenu, « Fermer » ne bouge pas, la dernière note devient visible`,
-      !!after.panel && after.panel.scrollTop > 0 && Math.abs(after.close.top - before.close.top) < 1 && after.closeTouched && !!lastHint && lastHint.inside, { scrollTop: after.panel && after.panel.scrollTop, closeBefore: before.close.top, closeAfter: after.close.top, lastHint });
+      !!after.scroller && after.scroller.scrollTop > 0 && Math.abs(after.close.top - before.close.top) < 1 && after.closeTouched && !!lastHint && lastHint.inside, { scrollTop: after.scroller && after.scroller.scrollTop, closeBefore: before.close.top, closeAfter: after.close.top, lastHint });
   }
 
   // Vrai clic sur Fermer : la fenêtre se ferme.

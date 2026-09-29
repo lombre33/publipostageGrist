@@ -414,7 +414,7 @@ for (const theme of ['light', 'dark']) {
         await page.keyboard.press('Tab');
         if (!(await page.evaluate(() => document.getElementById('link-config-modal').contains(document.activeElement)))) leftKey = true;
       }
-      check(`${T} : douze appuis sur Tab restent dans le choix de la clé (la base ne lui prend pas le clavier)`, !leftKey);
+      check(`${T} : douze appuis sur Tab restent dans le choix de la clé (le clavier est à la fenêtre du dessus)`, !leftKey);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(250);
       const afterFirst = { key: await page.evaluate(() => document.getElementById('link-config-modal').style.display !== 'none'), condition: await isOpen(id) };

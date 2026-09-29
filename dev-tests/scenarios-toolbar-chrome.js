@@ -346,11 +346,12 @@
   // faire défiler la fenêtre entière, titre et onglets compris) ; et « Crédits » n'était plus atteignable. La mesure à la vraie souris, à 700x400, en
   // clair et en sombre, est dans verify-settings-window-mouse.mjs. Ce cas-ci garde ce que le harnais en page établit quelle que soit la taille de la
   // fenêtre du navigateur : la largeur, les six onglets sur une ligne et sans être coupés, un seul panneau visible à la fois (un `display` posé sur
-  // .settings-panel battrait [hidden] et montrerait les six panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par le
-  // panneau et non par la fenêtre, « Fermer » sous le panneau et dans la fenêtre. Français et anglais : les libellés d'onglet sont dans les deux langues.
+  // .settings-panel battrait [hidden] et montrerait les six panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par la
+  // zone de contenu (.settings-body, celle de la base commune des fenêtres, qui contient le panneau affiché) et non par la fenêtre ni par les onglets, « Fermer »
+  // sous cette zone et dans la fenêtre. Français et anglais : les libellés d'onglet sont dans les deux langues.
   cases.push({
     id: 'settings_window_holds_six_tabs_on_one_row_and_only_the_panel_scrolls',
-    description: 'La fenêtre Réglages fait 480 px, ses six onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par le panneau et « Fermer » reste sous lui, dans la fenêtre (audit du 2026-09-29, défaut F2)',
+    description: 'La fenêtre Réglages fait 480 px, ses six onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par la zone de contenu (le titre et les onglets n\'y sont pas) et « Fermer » reste sous elle, dans la fenêtre (audit du 2026-09-29, défaut F2)',
     run: async (h) => {
       const modal = document.getElementById('settings-modal');
       const content = modal.querySelector('.settings-modal-content');
@@ -374,14 +375,16 @@
             const shown = panels.filter(p => getComputedStyle(p).display !== 'none').map(p => p.getAttribute('data-settings-panel'));
             const panel = panels.find(p => p.getAttribute('data-settings-panel') === name);
             const panelBox = panel.getBoundingClientRect();
+            const scroller = panel.closest('.settings-body');
             const tops = tabs.map(t => t.getBoundingClientRect().top);
-            const row = { lang, name, width: Math.round(box.width), tabsSpread: Math.round(Math.max(...tops) - Math.min(...tops)), clippedTabs: tabs.filter(t => t.scrollWidth > t.clientWidth + 1).map(t => t.getAttribute('data-settings-tab')), shown: shown.join(','), panelOverflowY: getComputedStyle(panel).overflowY, windowOverflow: content.scrollHeight - content.clientHeight, closeOutside: closeBox.top < box.top - 1 || closeBox.bottom > box.bottom + 1 || closeBox.bottom > window.innerHeight + 1, closeUnderPanel: panelBox.bottom <= closeBox.top + 1, maxHeight: getComputedStyle(content).maxHeight };
+            const row = { lang, name, width: Math.round(box.width), tabsSpread: Math.round(Math.max(...tops) - Math.min(...tops)), clippedTabs: tabs.filter(t => t.scrollWidth > t.clientWidth + 1).map(t => t.getAttribute('data-settings-tab')), shown: shown.join(','), scrollerOverflowY: scroller ? getComputedStyle(scroller).overflowY : 'aucune zone de contenu', tabsInScroller: !!scroller && tabs.some(t => scroller.contains(t)), windowOverflow: content.scrollHeight - content.clientHeight, closeOutside: closeBox.top < box.top - 1 || closeBox.bottom > box.bottom + 1 || closeBox.bottom > window.innerHeight + 1, closeUnderPanel: panelBox.bottom <= closeBox.top + 1, maxHeight: getComputedStyle(content).maxHeight };
             checked.push(row);
             if (Math.abs(box.width - expectedWidth) > 1) problems.push(lang + '/' + name + ' : largeur ' + row.width + ' au lieu de ' + expectedWidth);
             if (row.tabsSpread > 4) problems.push(lang + '/' + name + ' : les onglets passent sur plusieurs lignes (écart ' + row.tabsSpread + ' px)');
             if (row.clippedTabs.length) problems.push(lang + '/' + name + ' : onglet coupé (' + row.clippedTabs.join(',') + ')');
             if (row.shown !== name) problems.push(lang + '/' + name + ' : panneaux affichés « ' + row.shown + ' »');
-            if (row.panelOverflowY !== 'auto') problems.push(lang + '/' + name + ' : le panneau ne défile pas (overflow-y ' + row.panelOverflowY + ')');
+            if (row.scrollerOverflowY !== 'auto') problems.push(lang + '/' + name + ' : la zone de contenu ne défile pas (overflow-y ' + row.scrollerOverflowY + ')');
+            if (row.tabsInScroller) problems.push(lang + '/' + name + ' : les onglets défilent avec le contenu');
             if (row.windowOverflow > 1) problems.push(lang + '/' + name + ' : la fenêtre entière déborde de ' + row.windowOverflow + ' px');
             if (row.closeOutside) problems.push(lang + '/' + name + ' : « Fermer » hors de la fenêtre');
             if (!row.closeUnderPanel) problems.push(lang + '/' + name + ' : « Fermer » recouvre le panneau');

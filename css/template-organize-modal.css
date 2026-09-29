@@ -1,6 +1,6 @@
 /* Habillage de #template-organize-modal (js/template-organize-modal.js) - "Organiser mes modèles".
-   L'overlay/.modal-content viennent de css/style.css + la règle #template-organize-modal ajoutée à
-   css/editor-v2.css (même patron que #macro-editor-modal/#template-gallery-modal). Les lignes de la
+   Le voile, le cadre et ses trois zones viennent de la base commune des fenêtres (css/modal-base.css,
+   js/modal-base.js) ; les ajustements propres à cette fenêtre sont ci-dessous. Les lignes de la
    liste réutilisent TELLES QUELLES .tts-row/.tts-icon/.tts-pin-btn/.tts-folder-caret/.tts-section-label/
    .tts-group de css/template-tree-select.css (déjà chargé, déjà couvert par ses propres tests) plutôt que
    de dupliquer ce rendu - seul ce qui est vraiment nouveau ici (recherche, bouton "Déplacer vers…",
@@ -10,15 +10,14 @@
    aucune des propriétés que chaque modale soeur fixe explicitement (police, tailles, marges, bouton de
    fermeture) - tout héritait donc des défauts du navigateur/de <body>. Valeurs alignées sur les modales
    les plus proches en gabarit (#macro-editor-modal, #template-gallery-modal), cf. css/toolbar-v2.css. */
-.template-organize-modal-content { width: 480px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-ui); }
 /* Tient dans la fenêtre quelle que soit sa hauteur (29/09, Antoine : « la fenêtre se cale sur l'écran »). Avant, seule la liste était plafonnée (360 px) : à 700x400 la
    fenêtre faisait 568 px, centrée elle débordait de 84 px en haut (titre coupé) et en bas (bouton « Fermer » hors de l'écran, sans défilement possible - l'overlay est
-   fixe). 100% = la hauteur de l'overlay (#template-organize-modal, position: fixed, inset: 0), donc celle de la fenêtre du widget ; 60px = 12 px de marge de chaque côté
-   + les 36 px de padding vertical de .modal-content (box-sizing content-box : max-height ne les compte pas). Seule la liste rétrécit et défile. */
-.template-organize-modal-content { max-height: calc(100% - 60px); }
-.template-organize-modal-content > :not(.template-organize-list) { flex: none; }
-
-.template-organize-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+   fixe). Depuis la base commune des fenêtres (css/modal-base.css), le cadre se plafonne à la hauteur du panneau moins 12 px de chaque côté : le titre, l'explication et
+   la recherche forment l'en-tête fixe, « Fermer » reste en bas, et seule la liste rétrécit et défile (elle est la zone de contenu de la fenêtre). Écarts d'avant : 10 px
+   entre les blocs de l'en-tête et avant la liste, 24 px avant « Fermer ». */
+.template-organize-modal-content { --pp-modal-title-gap: 10px; --pp-modal-actions-gap: 24px; }
+.template-organize-modal-content .pp-modal-header { display: flex; flex-direction: column; gap: 10px; }
+.template-organize-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 
 .template-organize-intro { margin: 0; font-size: 11.5px; color: var(--text-faint); line-height: 1.4; }
 
@@ -28,9 +27,10 @@
 .tom-new-folder-btn { flex: none; height: 30px; padding: 0 10px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .tom-new-folder-btn:hover { background: var(--surface-sunken); }
 
-.template-organize-list { flex: 1 1 auto; min-height: 72px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px; }
+.template-organize-list { max-height: 360px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+/* Deux classes : la zone de contenu de la base (`.pp-modal-body`, css/modal-base.css, chargée après ce fichier) pose `min-height: 0` et `padding: 0 20px`, qu'une seule classe ne battrait pas. */
+.template-organize-modal-content .template-organize-list { min-height: 72px; margin: 0 20px; padding: 4px; }
 
-.template-organize-modal-content .modal-actions { margin-top: 14px; }
 .template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 

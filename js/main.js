@@ -1083,48 +1083,19 @@
     btn.setAttribute('aria-label', label);
   }
 
-  // Accessibilité RGAA des 5 modales du projet : role/aria-modal statiques, piège de focus (Tab/Shift+Tab), Échap, restauration du focus au ferme - générique
-  // via MutationObserver sur leur propre style.display plutôt que de toucher chaque site d'ouverture/fermeture existant (zéro risque sur leur logique).
-  function wireModalAccessibility() {
-    const MODALS = [
-      { id: 'link-rules-modal', closeId: 'link-rules-close' },
-      { id: 'link-config-modal', closeId: 'link-config-cancel' },
-      { id: 'template-gallery-modal', closeId: 'tpl-gallery-close' },
-      { id: 'template-preview-modal', closeId: 'tpl-preview-close' },
-      { id: 'settings-modal', closeId: 'settings-close' },
-      { id: 'macro-editor-modal', closeId: 'macro-editor-cancel' },
-      { id: 'template-organize-modal', closeId: 'template-organize-close' },
-    ];
-    MODALS.forEach(({ id, closeId }) => {
-      const modal = document.getElementById(id);
-      const closeBtn = document.getElementById(closeId);
-      if (!modal) return;
-      modal.setAttribute('role', 'dialog');
-      modal.setAttribute('aria-modal', 'true');
-      let restoreFocusTo = null;
-      const focusablesIn = () => Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]'))
-        .filter(el => !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null);
-      new MutationObserver(() => {
-        const isOpen = getComputedStyle(modal).display !== 'none';
-        if (isOpen && !restoreFocusTo) {
-          restoreFocusTo = document.activeElement;
-          (focusablesIn()[0] || modal).focus();
-        } else if (!isOpen && restoreFocusTo) {
-          const toFocus = restoreFocusTo;
-          restoreFocusTo = null;
-          if (toFocus && document.contains(toFocus)) toFocus.focus();
-        }
-      }).observe(modal, { attributes: true, attributeFilter: ['style'] });
-      modal.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') { event.preventDefault(); if (closeBtn) closeBtn.click(); return; }
-        if (event.key !== 'Tab') return;
-        const focusables = focusablesIn();
-        if (!focusables.length) return;
-        const first = focusables[0], last = focusables[focusables.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-      });
-    });
+  // Les sept fenêtres écrites dans index.html sont reprises par la base commune des fenêtres (js/modal-base.js) : Tab et Échap tenus dans la fenêtre du dessus
+  // où que soit le focus, focus à l'ouverture et rendu à l'élément d'origine à la fermeture. Leur module les ouvre et les ferme comme avant (style.display) ;
+  // Échap clique le bouton qui les ferme (le second nom de chaque paire), donc passe par la même sortie que la souris.
+  function wirePageModals() {
+    [
+      ['link-rules-modal', 'link-rules-close'],
+      ['link-config-modal', 'link-config-cancel'],
+      ['template-gallery-modal', 'tpl-gallery-close'],
+      ['template-preview-modal', 'tpl-preview-close'],
+      ['settings-modal', 'settings-close'],
+      ['macro-editor-modal', 'macro-editor-cancel'],
+      ['template-organize-modal', 'template-organize-close'],
+    ].forEach(([id, closeId]) => ModalBase.adopt(id, { closeId }));
   }
 
   // "Tables liées" (js/variables.js) : modale séparée, rafraîchit la liste à chaque ouverture (une règle a pu être ajoutée entre-temps via l'insertion d'une
@@ -1395,7 +1366,7 @@
     wirePdfFilenameToggle();
     wireQualityDropdown();
     Settings.wireSettingsModal();
-    wireModalAccessibility();
+    wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();
     decorateSaveButtonShortcut();

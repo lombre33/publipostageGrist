@@ -621,13 +621,6 @@
 /* État actif (ex. le calque courant du sélecteur normal/devant/derrière) - même traitement que la toolbar principale, essentiel pour voir lequel des 3 est actif. */
 .v2-floating-toolbar button.is-active { background: var(--accent-soft, #e8f0fe); color: var(--accent, #2f6fed); }
 
-/* Fenêtres (modales) : un même overlay plein écran, un ID par fenêtre car ce sont des modales DISTINCTES - « Tables liées » (js/variables.js), galerie de
-   modèles et aperçu (js/main.js wireTemplateGalleryModal), Réglages (js/settings.js), macro modèles (js/macro-editor.js, planning/feature-macro-modeles.md) et
-   « Organiser mes modèles » (js/template-organize-modal.js, planning/feature-rangement-tri-modeles.md §4). #link-config-modal, l'overlay du formulaire de
-   correspondance de tables, reste dans css/style.css. Le cadre (.modal-content) est dans css/style.css ; la mise en forme propre de chaque fenêtre est dans
-   css/toolbar-v2.css (.link-rules-modal-content, .macro-editor-modal-content, galerie, Réglages) et css/template-organize-modal.css. */
-#link-rules-modal, #template-gallery-modal, #template-preview-modal, #settings-modal, #macro-editor-modal, #template-organize-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-
 /* === Ajustement automatique de la page à la largeur disponible === Dans un panneau Grist étroit, la feuille A4 (793.71px + marges de l'espace de travail)
    dépasse le conteneur : elle restait atteignable au défilement horizontal, mais lire un document en le faisant glisser de gauche à droite n'a aucun sens.
    `zoom` plutôt que `transform: scale()` : `zoom` participe à la mise en page (le conteneur voit la taille réduite, donc plus de débordement horizontal) et

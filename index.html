@@ -80,16 +80,16 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
-<link rel="stylesheet" href="css/style.css?v=0.76">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.78">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.39">
+<link rel="stylesheet" href="css/style.css?v=0.77">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.79">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.40">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.11">
-<link rel="stylesheet" href="css/template-organize-modal.css?v=0.5">
+<link rel="stylesheet" href="css/template-organize-modal.css?v=0.6">
 <link rel="stylesheet" href="css/track-changes.css?v=0.1">
-<link rel="stylesheet" href="css/modal-base.css?v=0.2">
+<link rel="stylesheet" href="css/modal-base.css?v=0.3">
 <link rel="stylesheet" href="css/variable-actions.css?v=0.10">
 <link rel="stylesheet" href="css/search-select.css?v=0.4">
-<link rel="stylesheet" href="css/access-rights.css?v=0.3">
+<link rel="stylesheet" href="css/access-rights.css?v=0.4">
 </head>
 <body>
 <div id="app">
@@ -324,143 +324,155 @@
     </div>
   </div>
   <div id="reader-container" style="display:none;"></div>
-  <div id="link-rules-modal" style="display:none;" tabindex="-1"><div class="modal-content link-rules-modal-content">
-    <h3 data-i18n="linkRules.title">Tables liées (correspondance pour #Variable)</h3>
-    <div id="link-rules-list" class="link-rules-list"></div>
-    <div class="modal-actions"><button id="link-rules-close" data-i18n="common.close">Fermer</button></div>
+  <div id="link-rules-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content link-rules-modal-content" data-size="sm" role="dialog" aria-modal="true" aria-labelledby="link-rules-title" tabindex="-1">
+    <div class="pp-modal-header"><h3 id="link-rules-title" data-i18n="linkRules.title">Tables liées (correspondance pour #Variable)</h3></div>
+    <div id="link-rules-list" class="pp-modal-body link-rules-list"></div>
+    <div class="pp-modal-actions modal-actions"><button id="link-rules-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="link-config-modal" style="display:none;" tabindex="-1"><div class="modal-content link-config-modal-content">
-    <h3 id="link-config-title"></h3>
-    <div id="link-config-match-fields" class="link-config-bridge" hidden>
-      <div class="link-config-bridge-col"><label id="link-config-table-source-name"></label><select id="link-config-col-source"></select></div>
-      <span class="link-config-eq">=</span>
-      <div class="link-config-bridge-col"><label id="link-config-table-cible-name"></label><select id="link-config-col-cible"></select></div>
+  <div id="link-config-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content link-config-modal-content" data-size="sm" role="dialog" aria-modal="true" aria-labelledby="link-config-title" tabindex="-1">
+    <div class="pp-modal-header"><h3 id="link-config-title"></h3></div>
+    <div class="pp-modal-body">
+      <div id="link-config-match-fields" class="link-config-bridge" hidden>
+        <div class="link-config-bridge-col"><label id="link-config-table-source-name"></label><select id="link-config-col-source"></select></div>
+        <span class="link-config-eq">=</span>
+        <div class="link-config-bridge-col"><label id="link-config-table-cible-name"></label><select id="link-config-col-cible"></select></div>
+      </div>
+      <div id="link-config-preview" class="link-config-preview" aria-live="polite"></div>
+      <button type="button" id="link-config-toggle-singleton" class="link-config-toggle-link" data-i18n="linkConfig.useSingleton">Utiliser plutôt toujours la même ligne</button>
+      <button type="button" id="link-config-toggle-match" class="link-config-toggle-link" data-i18n="linkConfig.changeMatch" hidden>Changer de correspondance</button>
     </div>
-    <div id="link-config-preview" class="link-config-preview" aria-live="polite"></div>
-    <button type="button" id="link-config-toggle-singleton" class="link-config-toggle-link" data-i18n="linkConfig.useSingleton">Utiliser plutôt toujours la même ligne</button>
-    <button type="button" id="link-config-toggle-match" class="link-config-toggle-link" data-i18n="linkConfig.changeMatch" hidden>Changer de correspondance</button>
-    <div class="modal-actions"><button id="link-config-cancel" data-i18n="common.cancel">Annuler</button><button id="link-config-confirm" class="link-config-btn-primary" data-i18n="common.confirm">Valider</button></div>
+    <div class="pp-modal-actions modal-actions"><button id="link-config-cancel" data-i18n="common.cancel">Annuler</button><button id="link-config-confirm" class="link-config-btn-primary" data-i18n="common.confirm">Valider</button></div>
   </div></div>
-  <div id="template-gallery-modal" style="display:none;" tabindex="-1"><div class="modal-content template-gallery-modal-content">
-    <h3 data-i18n="gallery.title">Créer à partir d'un modèle</h3>
-    <div class="tpl-gallery-filters">
-      <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…" data-i18n-placeholder="gallery.searchPlaceholder">
-      <div class="tpl-gallery-tags" id="tpl-gallery-tags"></div>
+  <div id="template-gallery-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-gallery-modal-content" data-size="lg" role="dialog" aria-modal="true" aria-labelledby="tpl-gallery-title" tabindex="-1">
+    <div class="pp-modal-header">
+      <h3 id="tpl-gallery-title" data-i18n="gallery.title">Créer à partir d'un modèle</h3>
+      <div class="tpl-gallery-filters">
+        <input type="search" id="tpl-gallery-search" placeholder="Rechercher un modèle…" data-i18n-placeholder="gallery.searchPlaceholder">
+        <div class="tpl-gallery-tags" id="tpl-gallery-tags"></div>
+      </div>
     </div>
-    <div class="tpl-gallery-grid" id="tpl-gallery-grid"></div>
-    <div class="modal-actions"><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
+    <div class="pp-modal-body tpl-gallery-grid" id="tpl-gallery-grid"></div>
+    <div class="pp-modal-actions modal-actions"><button id="tpl-gallery-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="macro-editor-modal" style="display:none;" tabindex="-1"><div class="modal-content macro-editor-modal-content">
-    <h3 data-i18n="macro.modal.title">Macro-modèle</h3>
-    <p class="macro-editor-intro" data-i18n="macro.modal.intro">Page de garde toujours incluse, puis des annexes choisies selon des règles évaluées sur la même ligne.</p>
-    <div class="macro-editor-field">
-      <label for="macro-editor-name" data-i18n="macro.modal.nameLabel">Nom du macro-modèle</label>
-      <input type="text" id="macro-editor-name" data-i18n-placeholder="macro.modal.namePlaceholder" placeholder="Nom du macro-modèle">
+  <div id="macro-editor-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content macro-editor-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="macro-editor-title" tabindex="-1">
+    <div class="pp-modal-header"><h3 id="macro-editor-title" data-i18n="macro.modal.title">Macro-modèle</h3></div>
+    <div class="pp-modal-body">
+      <p class="macro-editor-intro" data-i18n="macro.modal.intro">Page de garde toujours incluse, puis des annexes choisies selon des règles évaluées sur la même ligne.</p>
+      <div class="macro-editor-field">
+        <label for="macro-editor-name" data-i18n="macro.modal.nameLabel">Nom du macro-modèle</label>
+        <input type="text" id="macro-editor-name" data-i18n-placeholder="macro.modal.namePlaceholder" placeholder="Nom du macro-modèle">
+      </div>
+      <div class="macro-editor-field">
+        <label for="macro-editor-cover" data-i18n="macro.modal.coverLabel">Page de garde</label>
+        <select id="macro-editor-cover"></select>
+      </div>
+      <div class="macro-editor-slots-header" data-i18n="macro.modal.annexesTitle">Annexes conditionnelles</div>
+      <div id="macro-editor-slots" class="macro-editor-slots"></div>
+      <button type="button" id="macro-editor-add-slot" class="macro-editor-add-slot" data-i18n="macro.modal.addSlot">+ Ajouter une annexe conditionnelle</button>
     </div>
-    <div class="macro-editor-field">
-      <label for="macro-editor-cover" data-i18n="macro.modal.coverLabel">Page de garde</label>
-      <select id="macro-editor-cover"></select>
-    </div>
-    <div class="macro-editor-slots-header" data-i18n="macro.modal.annexesTitle">Annexes conditionnelles</div>
-    <div id="macro-editor-slots" class="macro-editor-slots"></div>
-    <button type="button" id="macro-editor-add-slot" class="macro-editor-add-slot" data-i18n="macro.modal.addSlot">+ Ajouter une annexe conditionnelle</button>
-    <div class="modal-actions">
+    <div class="pp-modal-actions modal-actions">
       <button id="macro-editor-cancel" data-i18n="common.cancel">Annuler</button>
       <button id="macro-editor-save" class="link-config-btn-primary" data-i18n="common.save">Enregistrer</button>
     </div>
   </div></div>
-  <div id="template-organize-modal" style="display:none;" tabindex="-1"><div class="modal-content template-organize-modal-content">
-    <h3 data-i18n="organize.modal.title">Organiser mes modèles</h3>
-    <p class="template-organize-intro" data-i18n="organize.modal.intro">Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.</p>
-    <div class="template-organize-search">
-      <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un modèle…">
-      <button id="template-organize-new-folder" class="tom-new-folder-btn" data-i18n="organize.modal.newFolderRoot">+ Nouveau dossier</button>
+  <div id="template-organize-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-organize-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="template-organize-title" tabindex="-1">
+    <div class="pp-modal-header">
+      <h3 id="template-organize-title" data-i18n="organize.modal.title">Organiser mes modèles</h3>
+      <p class="template-organize-intro" data-i18n="organize.modal.intro">Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.</p>
+      <div class="template-organize-search">
+        <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un modèle…">
+        <button id="template-organize-new-folder" class="tom-new-folder-btn" data-i18n="organize.modal.newFolderRoot">+ Nouveau dossier</button>
+      </div>
     </div>
-    <div id="template-organize-list" class="template-organize-list"></div>
-    <div class="modal-actions"><button id="template-organize-close" data-i18n="common.close">Fermer</button></div>
+    <div id="template-organize-list" class="pp-modal-body template-organize-list"></div>
+    <div class="pp-modal-actions modal-actions"><button id="template-organize-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="template-preview-modal" style="display:none;" tabindex="-1"><div class="modal-content template-preview-modal-content">
-    <div class="tpl-preview-header">
+  <div id="template-preview-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-preview-modal-content" data-size="lg" role="dialog" aria-modal="true" aria-labelledby="tpl-preview-name" tabindex="-1">
+    <div class="pp-modal-header tpl-preview-header">
       <h3 id="tpl-preview-name"></h3>
       <div class="tpl-preview-actions">
         <button type="button" id="tpl-preview-use-empty" data-i18n="gallery.useTemplate">Utiliser ce modèle</button>
         <button type="button" id="tpl-preview-use-data" data-i18n="gallery.useWithNewTable" hidden>Utiliser avec une nouvelle table de données</button>
       </div>
     </div>
-    <div class="tpl-preview-body" id="tpl-preview-body"><div class="v2-page-sheet a4-preview"><div class="tiptap" id="tpl-preview-tiptap"></div></div></div>
-    <div class="modal-actions"><button id="tpl-preview-back" data-i18n="gallery.backToGallery">Retour à la galerie</button><button id="tpl-preview-close" data-i18n="common.close">Fermer</button></div>
+    <div class="pp-modal-body tpl-preview-body" id="tpl-preview-body"><div class="v2-page-sheet a4-preview"><div class="tiptap" id="tpl-preview-tiptap"></div></div></div>
+    <div class="pp-modal-actions modal-actions"><button id="tpl-preview-back" data-i18n="gallery.backToGallery">Retour à la galerie</button><button id="tpl-preview-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
-  <div id="settings-modal" style="display:none;" tabindex="-1"><div class="modal-content settings-modal-content">
-    <h3 data-i18n="settings.title">Réglages</h3>
-    <div class="settings-tabs" id="settings-tabs">
-      <button type="button" class="settings-tab active" data-settings-tab="language" data-i18n="settings.tab.language">Langue</button>
-      <button type="button" class="settings-tab" data-settings-tab="theme" data-i18n="settings.tab.theme">Thème</button>
-      <button type="button" class="settings-tab" data-settings-tab="triggerKey" data-i18n="settings.tab.triggerKey">Déclencheur</button>
-      <button type="button" class="settings-tab" data-settings-tab="pageMargins" data-i18n="settings.tab.pageMargins">Marges</button>
-      <button type="button" class="settings-tab" data-settings-tab="access" data-i18n="settings.tab.access">Accès</button>
-      <button type="button" class="settings-tab" data-settings-tab="credits" data-i18n="settings.tab.credits">Crédits</button>
-    </div>
-    <div class="settings-panel" data-settings-panel="language">
-      <p class="settings-panel-intro" data-i18n="settings.language.intro">Langue de l'interface (textes, infobulles, messages).</p>
-      <div class="settings-radio-row">
-        <label><input type="radio" name="settings-lang" value="fr"><span data-i18n="settings.language.fr">Français</span></label>
-        <label><input type="radio" name="settings-lang" value="en"><span data-i18n="settings.language.en">Anglais</span></label>
+  <div id="settings-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content settings-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+    <div class="pp-modal-header">
+      <h3 id="settings-title" data-i18n="settings.title">Réglages</h3>
+      <div class="settings-tabs" id="settings-tabs">
+        <button type="button" class="settings-tab active" data-settings-tab="language" data-i18n="settings.tab.language">Langue</button>
+        <button type="button" class="settings-tab" data-settings-tab="theme" data-i18n="settings.tab.theme">Thème</button>
+        <button type="button" class="settings-tab" data-settings-tab="triggerKey" data-i18n="settings.tab.triggerKey">Déclencheur</button>
+        <button type="button" class="settings-tab" data-settings-tab="pageMargins" data-i18n="settings.tab.pageMargins">Marges</button>
+        <button type="button" class="settings-tab" data-settings-tab="access" data-i18n="settings.tab.access">Accès</button>
+        <button type="button" class="settings-tab" data-settings-tab="credits" data-i18n="settings.tab.credits">Crédits</button>
       </div>
     </div>
-    <div class="settings-panel" data-settings-panel="theme" hidden>
-      <p class="settings-panel-intro" data-i18n="settings.theme.intro">Apparence de l'interface. La page du document reste blanche dans les deux thèmes : c'est elle qui part à l'impression.</p>
-      <div class="settings-radio-row">
-        <label><input type="radio" name="settings-theme" value="system"><span data-i18n="settings.theme.system">Système</span></label>
-        <label><input type="radio" name="settings-theme" value="light"><span data-i18n="settings.theme.light">Clair</span></label>
-        <label><input type="radio" name="settings-theme" value="dark"><span data-i18n="settings.theme.dark">Sombre</span></label>
+    <div class="pp-modal-body settings-body">
+      <div class="settings-panel" data-settings-panel="language">
+        <p class="settings-panel-intro" data-i18n="settings.language.intro">Langue de l'interface (textes, infobulles, messages).</p>
+        <div class="settings-radio-row">
+          <label><input type="radio" name="settings-lang" value="fr"><span data-i18n="settings.language.fr">Français</span></label>
+          <label><input type="radio" name="settings-lang" value="en"><span data-i18n="settings.language.en">Anglais</span></label>
+        </div>
+      </div>
+      <div class="settings-panel" data-settings-panel="theme" hidden>
+        <p class="settings-panel-intro" data-i18n="settings.theme.intro">Apparence de l'interface. La page du document reste blanche dans les deux thèmes : c'est elle qui part à l'impression.</p>
+        <div class="settings-radio-row">
+          <label><input type="radio" name="settings-theme" value="system"><span data-i18n="settings.theme.system">Système</span></label>
+          <label><input type="radio" name="settings-theme" value="light"><span data-i18n="settings.theme.light">Clair</span></label>
+          <label><input type="radio" name="settings-theme" value="dark"><span data-i18n="settings.theme.dark">Sombre</span></label>
+        </div>
+      </div>
+      <div class="settings-panel" data-settings-panel="triggerKey" hidden>
+        <p class="settings-panel-intro" data-i18n="settings.triggerKey.intro">Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.</p>
+        <select id="settings-trigger-char">
+          <option value="#">#</option>
+          <option value="@">@</option>
+          <option value="!">!</option>
+          <option value="~">~</option>
+          <option value="%">%</option>
+        </select>
+        <p class="settings-trigger-reload-notice" id="settings-trigger-reload-notice" hidden>
+          <span data-i18n="settings.triggerKey.reloadNotice">Rechargez la page pour appliquer ce changement.</span>
+          <button type="button" id="settings-trigger-reload-btn" data-i18n="settings.triggerKey.reloadButton">Recharger maintenant</button>
+        </p>
+      </div>
+      <div class="settings-panel" data-settings-panel="pageMargins" hidden>
+        <p class="settings-panel-intro" data-i18n="settings.pageMargins.intro">Marges de page (mm) - propres à ce modèle, appliquées à l'aperçu et aux exports PDF/DOCX.</p>
+        <div class="settings-margins-grid">
+          <label><span data-i18n="settings.pageMargins.top">Haut</span><input type="number" id="settings-margin-top" min="0" max="277" step="0.5"></label>
+          <label><span data-i18n="settings.pageMargins.right">Droite</span><input type="number" id="settings-margin-right" min="0" max="190" step="0.5"></label>
+          <label><span data-i18n="settings.pageMargins.bottom">Bas</span><input type="number" id="settings-margin-bottom" min="0" max="277" step="0.5"></label>
+          <label><span data-i18n="settings.pageMargins.left">Gauche</span><input type="number" id="settings-margin-left" min="0" max="190" step="0.5"></label>
+        </div>
+      </div>
+      <div class="settings-panel" data-settings-panel="access" hidden>
+        <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
+        <div class="settings-access-grid">
+          <label for="settings-access-table" data-i18n="settings.access.table">Table des droits</label><select id="settings-access-table"></select>
+          <label for="settings-access-email" data-i18n="settings.access.email">Colonne email</label><select id="settings-access-email"></select>
+          <label for="settings-access-readonly" data-i18n="settings.access.readOnly">Lecture seule</label><select id="settings-access-readonly"></select>
+          <label for="settings-access-export" data-i18n="settings.access.export">Export autorisé</label><select id="settings-access-export"></select>
+          <label for="settings-access-comments" data-i18n="settings.access.comments">Commentaires autorisés</label><select id="settings-access-comments"></select>
+        </div>
+        <p class="settings-access-status" id="settings-access-status" role="status" hidden></p>
+        <p class="settings-access-locked" id="settings-access-locked" data-i18n="settings.access.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+        <p class="settings-access-hint" data-i18n="settings.access.saveHint">Pour l'appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.</p>
+        <p class="settings-access-hint" data-i18n="settings.access.protectHint">Simple verrou d'interface : seules les règles d'accès de Grist protègent vraiment les modèles et les données.</p>
+      </div>
+      <div class="settings-panel" data-settings-panel="credits" hidden>
+        <dl class="settings-credits-list">
+          <dt data-i18n="settings.credits.author">Auteur</dt><dd id="settings-credits-author">Grist Factory</dd>
+          <dt data-i18n="settings.credits.website">Site</dt><dd id="settings-credits-website"><a href="https://grist-factory.fr" id="settings-credits-website-link" target="_blank" rel="noopener noreferrer">grist-factory.fr</a></dd>
+          <dt data-i18n="settings.credits.license">Licence</dt><dd id="settings-credits-license"><a href="https://github.com/grist-factory/Publipostage-Plus/blob/main/LICENSE" id="settings-credits-license-link" target="_blank" rel="noopener noreferrer">GNU GPL v3.0</a></dd>
+          <dt data-i18n="settings.credits.bio">Bio</dt><dd id="settings-credits-bio" data-i18n="settings.credits.bioText">Grist Factory conçoit des widgets libres pour Grist. Publipostage+ en est un : rédiger contrats, factures et courriers à partir de vos données, sans écrire une ligne de code.</dd>
+        </dl>
       </div>
     </div>
-    <div class="settings-panel" data-settings-panel="triggerKey" hidden>
-      <p class="settings-panel-intro" data-i18n="settings.triggerKey.intro">Caractère qui ouvre le panneau #Variable/Chips en cours de frappe.</p>
-      <select id="settings-trigger-char">
-        <option value="#">#</option>
-        <option value="@">@</option>
-        <option value="!">!</option>
-        <option value="~">~</option>
-        <option value="%">%</option>
-      </select>
-      <p class="settings-trigger-reload-notice" id="settings-trigger-reload-notice" hidden>
-        <span data-i18n="settings.triggerKey.reloadNotice">Rechargez la page pour appliquer ce changement.</span>
-        <button type="button" id="settings-trigger-reload-btn" data-i18n="settings.triggerKey.reloadButton">Recharger maintenant</button>
-      </p>
-    </div>
-    <div class="settings-panel" data-settings-panel="pageMargins" hidden>
-      <p class="settings-panel-intro" data-i18n="settings.pageMargins.intro">Marges de page (mm) - propres à ce modèle, appliquées à l'aperçu et aux exports PDF/DOCX.</p>
-      <div class="settings-margins-grid">
-        <label><span data-i18n="settings.pageMargins.top">Haut</span><input type="number" id="settings-margin-top" min="0" max="277" step="0.5"></label>
-        <label><span data-i18n="settings.pageMargins.right">Droite</span><input type="number" id="settings-margin-right" min="0" max="190" step="0.5"></label>
-        <label><span data-i18n="settings.pageMargins.bottom">Bas</span><input type="number" id="settings-margin-bottom" min="0" max="277" step="0.5"></label>
-        <label><span data-i18n="settings.pageMargins.left">Gauche</span><input type="number" id="settings-margin-left" min="0" max="190" step="0.5"></label>
-      </div>
-    </div>
-    <div class="settings-panel" data-settings-panel="access" hidden>
-      <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
-      <div class="settings-access-grid">
-        <label for="settings-access-table" data-i18n="settings.access.table">Table des droits</label><select id="settings-access-table"></select>
-        <label for="settings-access-email" data-i18n="settings.access.email">Colonne email</label><select id="settings-access-email"></select>
-        <label for="settings-access-readonly" data-i18n="settings.access.readOnly">Lecture seule</label><select id="settings-access-readonly"></select>
-        <label for="settings-access-export" data-i18n="settings.access.export">Export autorisé</label><select id="settings-access-export"></select>
-        <label for="settings-access-comments" data-i18n="settings.access.comments">Commentaires autorisés</label><select id="settings-access-comments"></select>
-      </div>
-      <p class="settings-access-status" id="settings-access-status" role="status" hidden></p>
-      <p class="settings-access-locked" id="settings-access-locked" data-i18n="settings.access.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
-      <p class="settings-access-hint" data-i18n="settings.access.saveHint">Pour l'appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.</p>
-      <p class="settings-access-hint" data-i18n="settings.access.protectHint">Simple verrou d'interface : seules les règles d'accès de Grist protègent vraiment les modèles et les données.</p>
-    </div>
-    <div class="settings-panel" data-settings-panel="credits" hidden>
-      <dl class="settings-credits-list">
-        <dt data-i18n="settings.credits.author">Auteur</dt><dd id="settings-credits-author">Grist Factory</dd>
-        <dt data-i18n="settings.credits.website">Site</dt><dd id="settings-credits-website"><a href="https://grist-factory.fr" id="settings-credits-website-link" target="_blank" rel="noopener noreferrer">grist-factory.fr</a></dd>
-        <dt data-i18n="settings.credits.license">Licence</dt><dd id="settings-credits-license"><a href="https://github.com/grist-factory/Publipostage-Plus/blob/main/LICENSE" id="settings-credits-license-link" target="_blank" rel="noopener noreferrer">GNU GPL v3.0</a></dd>
-        <dt data-i18n="settings.credits.bio">Bio</dt><dd id="settings-credits-bio" data-i18n="settings.credits.bioText">Grist Factory conçoit des widgets libres pour Grist. Publipostage+ en est un : rédiger contrats, factures et courriers à partir de vos données, sans écrire une ligne de code.</dd>
-      </dl>
-    </div>
-    <div class="modal-actions"><button id="settings-close" data-i18n="common.close">Fermer</button></div>
+    <div class="pp-modal-actions modal-actions"><button id="settings-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
 </div>
 <script src="js/html-sanitize.js?v=0.2"></script>
@@ -493,7 +505,7 @@
 <script src="js/settings.js?v=0.6"></script>
 <script src="js/condition-rules.js?v=0.2"></script>
 <script src="js/condition-fields.js?v=0.6"></script>
-<script src="js/modal-base.js?v=0.2"></script>
+<script src="js/modal-base.js?v=0.3"></script>
 <script src="js/dialogs.js?v=0.1"></script>
 <script src="js/variable-condition.js?v=0.4"></script>
 <script src="js/variable-linked-attrs.js?v=0.5"></script>
@@ -503,9 +515,9 @@
 <script src="js/macro-editor.js?v=0.34"></script>
 <script src="js/template-organizer.js?v=0.3"></script>
 <script src="js/template-preferences.js?v=0.2"></script>
-<script src="js/template-organize-modal.js?v=0.7"></script>
+<script src="js/template-organize-modal.js?v=0.8"></script>
 <script src="js/template-tree-select.js?v=0.10"></script>
 <script src="js/access-rights.js?v=0.3"></script>
-<script src="js/main.js?v=0.63"></script>
+<script src="js/main.js?v=0.64"></script>
 </body>
 </html>

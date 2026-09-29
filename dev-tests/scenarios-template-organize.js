@@ -248,7 +248,7 @@
 
   cases.push({
     id: 'organize_escape_closes_modal_via_shared_accessibility_wiring',
-    description: 'Échap referme la modale - confirme que son id a bien été ajouté à wireModalAccessibility (js/main.js), pas seulement dessiné',
+    description: 'Échap referme la modale - confirme qu\'elle est bien reprise par la base commune des fenêtres (ModalBase.adopt, js/main.js:wirePageModals), pas seulement dessinée',
     run: async (h) => {
       TemplateOrganizeModal.open();
       await h.sleep(30);

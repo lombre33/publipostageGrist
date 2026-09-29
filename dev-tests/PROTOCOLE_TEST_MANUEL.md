@@ -297,7 +297,7 @@ survols/menus déroulants/comportement de fermeture).
 3. **Fermeture au clic ailleurs** : ouvrir chaque modale et chaque menu déroulant, cliquer en
    dehors — vérifier la fermeture. Ouvrir une modale, appuyer sur Échap — vérifier la fermeture
    ET que le focus clavier revient sur le bouton qui l'avait ouverte (corrigé le 2026-09-13,
-   cf. `wireModalAccessibility` — à revérifier après tout changement sur les modales).
+   cf. `ModalBase.adopt` (`js/modal-base.js`, appelée par `wirePageModals` de `js/main.js`) — à revérifier après tout changement sur les modales).
 4. Sélection de texte à la souris près des bords de l'éditeur, d'une cellule, d'une image — pas
    de sélection qui "saute" ailleurs de façon inattendue.
 

@@ -197,8 +197,9 @@
 /* === Modale "Correspondance de tables" (#link-config-modal) === Maquette sobre : les 2 radios à égalité laissent place au cas normal ("Ligne
    correspondante", toujours affiché) avec le cas rare ("Ligne fixe") relégué à un simple lien texte. Les deux <select> portent chacun leur propre
    étiquette JUSTE AU-DESSUS (association select ↔ table sans ambiguïté). */
-.link-config-modal-content { font-family: var(--font-ui); width: 360px; }
-.link-config-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 14px; color: var(--text); }
+/* Cadre, titre, largeur et défilement : base commune des fenêtres (css/modal-base.css) ; ici seulement les deux écarts que cette fenêtre a toujours eus. 12 px
+   avant les boutons + les 4 px sous le dernier lien = les 16 px d'avant, où les deux marges se confondaient. */
+.link-config-modal-content { --pp-modal-title-gap: 14px; --pp-modal-actions-gap: 12px; }
 .link-config-bridge { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
 .link-config-bridge[hidden] { display: none; }
 .link-config-bridge-col { flex: 1; min-width: 0; }
@@ -210,9 +211,6 @@
 .link-config-toggle-link { font-size: 12px; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; font-family: var(--font-ui); font-weight: 600; display: block; margin-bottom: 4px; }
 .link-config-toggle-link:hover { color: var(--accent-hover); text-decoration: underline; }
 .link-config-toggle-link[hidden] { display: none; }
-.link-config-modal-content .modal-actions,
-.link-rules-modal-content .modal-actions,
-.macro-editor-modal-content .modal-actions { margin-top: 16px; }
 .link-config-modal-content .modal-actions button,
 .link-rules-modal-content .modal-actions button,
 .macro-editor-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
@@ -226,13 +224,9 @@
 
 /* === Modale "Macro modèle" (#macro-editor-modal, js/macro-editor.js) === Page de garde + liste de cartes "annexe conditionnelle", chaque carte reprenant
    .link-rule-row pour ses lignes de règle (même vocabulaire visuel que la modale "Tables liées" ci-dessus) plutôt qu'un nouveau patron de liste. */
-/* max-height + overflow-y sur LA MODALE ENTIÈRE (pas seulement .macro-editor-slots, déjà limité à 320px) : sans ça, Enregistrer/Annuler sortent de la
-   fenêtre dès qu'une seule règle est ajoutée dans un panneau bas (700×400, 600×400, 500×500, 900×450 - mesuré par le coordinateur, 2026-09-28), donc
-   inatteignables à la souris. position:sticky sur .modal-actions (juste en dessous) : les boutons restent visibles en bas du cadre visible même en
-   scrollant, au lieu de simplement faire défiler toute la boîte (qui les laisserait hors champ jusqu'à défiler tout en bas). */
-.macro-editor-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; max-height: 90vh; overflow-y: auto; }
-.macro-editor-modal-content .modal-actions { position: sticky; bottom: 0; background: var(--surface); padding-top: 4px; }
-.macro-editor-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); }
+/* Enregistrer/Annuler sortaient de la fenêtre dès qu'une seule règle était ajoutée dans un panneau bas (700×400, 600×400, 500×500, 900×450 - mesuré par le
+   coordinateur, 2026-09-28) : c'était alors le cadre entier qui défilait, boutons collés en bas. Depuis la base commune des fenêtres (js/modal-base.js), le titre
+   et les boutons sont fixes et seul le contenu défile, comme dans toutes les autres. */
 .macro-editor-intro { font-size: 11.5px; color: var(--text-faint); margin: 0 0 14px; }
 .macro-editor-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .macro-editor-field label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
@@ -303,9 +297,8 @@
 
 /* === Modale "Tables liées" (#link-rules-modal) === Liste des règles configurées ; chaque ligne avait 2 boutons texte bruts sans style, remplacés par des
    icônes cohérentes avec le reste de la toolbar (même crayon que le renommage, même corbeille que Supprimer). */
-.link-rules-modal-content { font-family: var(--font-ui); width: 340px; }
-.link-rules-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
-.link-rules-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
+.link-rules-modal-content { --pp-modal-title-gap: 12px; --pp-modal-actions-gap: 16px; }
+.link-rules-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; }
 .link-rule-row { display: flex; align-items: center; gap: 6px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
 .link-rule-row:last-child { border-bottom: none; }
 .link-rule-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
@@ -317,20 +310,20 @@
 .link-rule-btn-delete::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.1'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E"); }
 .link-rules-empty { font-size: 12.5px; color: var(--text-faint); margin: 0; }
 
-/* === Galerie de templates (#template-gallery-modal/#template-preview-modal) === Même overlay que #link-rules-modal, mais contenu bien plus large
-   (mosaïque) : .modal-content plafonne à 440px, élargi + repassé en colonne (en-tête fixe, grille scrollable, actions en bas). */
-.template-gallery-modal-content, .template-preview-modal-content {
-  font-family: var(--font-ui); width: min(920px, 92vw); max-width: none;
-  max-height: 85vh; display: flex; flex-direction: column;
-}
-.template-gallery-modal-content h3, .template-preview-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+/* === Galerie de templates (#template-gallery-modal/#template-preview-modal) === Même base que #link-rules-modal, mais contenu bien plus large (mosaïque) : taille
+   « lg » de la base commune (css/modal-base.css). Le titre et la recherche de la galerie, le titre et les boutons « Utiliser » de l'aperçu sont dans l'en-tête
+   fixe ; la grille (galerie) et la page (aperçu) sont la zone qui défile, les boutons du bas restent en place. */
+.template-gallery-modal-content { --pp-modal-title-gap: 0px; --pp-modal-actions-gap: 14px; }
+.template-preview-modal-content { --pp-modal-title-gap: 10px; --pp-modal-actions-gap: 14px; }
+.template-gallery-modal-content .pp-modal-header h3, .template-preview-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 .tpl-gallery-filters { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .tpl-gallery-filters input[type="search"] { flex: 1; min-width: 180px; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-size: 12.5px; background: var(--surface); color: var(--text); }
 .tpl-gallery-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .tpl-gallery-tag { font-family: var(--font-ui); font-size: 12px; font-weight: 600; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; }
 .tpl-gallery-tag:hover { background: var(--surface-sunken); }
 .tpl-gallery-tag.is-active { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
-.tpl-gallery-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; padding: 2px; }
+.tpl-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+.template-gallery-modal-content .tpl-gallery-grid { margin: 0 20px; padding: 2px; }
 .tpl-gallery-card { font-family: var(--font-ui); display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; text-align: left; }
 .tpl-gallery-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(20, 28, 46, .08); }
 .tpl-gallery-card img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-sunken); }
@@ -339,7 +332,7 @@
 .tpl-gallery-card-tags span { font-size: 10.5px; font-weight: 600; color: var(--text-faint); background: var(--surface-sunken); border-radius: 8px; padding: 1px 7px; }
 .tpl-gallery-empty { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 30px 0; }
 
-.tpl-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.tpl-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .tpl-preview-actions { display: flex; gap: 8px; flex: none; }
 .tpl-preview-actions button, .template-gallery-modal-content .modal-actions button, .template-preview-modal-content .modal-actions button {
   font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px;
@@ -348,29 +341,30 @@
 .tpl-preview-actions button:hover, .template-gallery-modal-content .modal-actions button:hover, .template-preview-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 .tpl-preview-actions #tpl-preview-use-empty, .tpl-preview-actions #tpl-preview-use-data { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
 .tpl-preview-actions #tpl-preview-use-empty:hover, .tpl-preview-actions #tpl-preview-use-data:hover { background: var(--accent-solid-hover); }
-.tpl-preview-body { flex: 1; overflow: auto; background: var(--surface-sunken); padding: 16px; border-radius: 6px; }
+.tpl-preview-body { background: var(--surface-sunken); border-radius: 6px; }
+.template-preview-modal-content .tpl-preview-body { margin: 0 20px; padding: 16px; }
 /* Le "look page A4" de .v2-page-sheet/.tiptap est normalement posé par des règles SCOPÉES à #editor-container.a4-preview - cette prévisualisation vit dans
    une modale, donc aucune ne s'applique ici. Reprend seulement les 2 constantes nécessaires (mêmes valeurs que editor-v2.css) ; tout le reste (styles des
    titres/listes/tableaux/badges #Variable) est générique, non scopé, donc déjà actif ici tel quel. */
 .tpl-preview-body .v2-page-sheet { box-sizing: border-box; width: 793.71px; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 4px 16px rgba(20, 28, 46, .1); }
 .tpl-preview-body .tiptap { box-sizing: border-box; padding: 37.33px; background: transparent; }
-.template-gallery-modal-content .modal-actions, .template-preview-modal-content .modal-actions { margin-top: 14px; }
 
 /* === Panneau Réglages (langue / touche de déclenchement / crédits) === Même gabarit que .link-config-modal-content ci-dessus - premier système d'onglets
    du projet : une rangée de boutons + un panneau par onglet, un seul visible via l'attribut `hidden` natif (pas de librairie/état complexe). */
-/* Trois étages : titre et onglets fixes en haut, « Fermer » fixe en bas, et SEUL le contenu de l'onglet visible défile (audit UX/UI du 29/09, F2). Avant : 360px
-   pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur trois, « Crédits » rogné) et une fenêtre entière qui défilait, donc
-   « Fermer » entièrement sous le bas visible d'un panneau de 400px dans Accès. border-box : 480px, marges intérieures comprises (au plus la largeur du panneau
-   moins 24px). */
-.settings-modal-content { font-family: var(--font-ui); box-sizing: border-box; width: 480px; min-width: 0; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
-.settings-modal-content h3 { flex: none; font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
+/* Trois étages : titre et onglets fixes en haut (l'en-tête de la base commune des fenêtres, css/modal-base.css), « Fermer » fixe en bas, et SEUL le contenu de
+   l'onglet visible défile (audit UX/UI du 29/09, F2). Avant : 360px pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur
+   trois, « Crédits » rogné) et une fenêtre entière qui défilait, donc « Fermer » entièrement sous le bas visible d'un panneau de 400px dans Accès. Taille
+   « md » de la base : 480px, marges intérieures comprises (au plus la largeur du panneau moins 24px). */
+.settings-modal-content { --pp-modal-title-gap: 0px; }
+.settings-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 .settings-tabs { flex: none; display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
 /* Une ligne, jamais deux : chaque onglet prend sa largeur de texte puis se partage le reste ; dans un panneau plus étroit que la fenêtre, un libellé se coupe par « … »
    plutôt que de passer à la ligne. */
 .settings-tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 4px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
-/* L'onglet affiché est l'étage qui défile. Pas de `display` ici : js/settings.js masque les cinq autres par l'attribut `hidden`, qu'une règle `display` battrait.
-   Marge négative + même marge intérieure : la couronne de focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
-.settings-panel { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; margin: -3px; padding: 3px; }
+/* Le contenu de l'onglet affiché est l'étage qui défile (.settings-body : la zone de contenu de la base). Pas de `display` sur .settings-panel : js/settings.js
+   masque les cinq autres par l'attribut `hidden`, qu'une règle `display` battrait. Marge négative + même marge intérieure sur .settings-body : la couronne de
+   focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
+.settings-modal-content .settings-body { overflow-x: hidden; margin: -3px 0; padding: 3px 20px; }
 .settings-tab:hover { background: var(--surface-sunken); }
 .settings-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 .settings-panel-intro { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
@@ -391,7 +385,7 @@
 .settings-credits-list dd { margin: 0; color: var(--text); }
 /* Liens des Crédits : le bleu par défaut du navigateur fait 1,65:1 sur le fond sombre ; la couleur d'accent suit le thème. */
 .settings-credits-list a { color: var(--accent); }
-.settings-modal-content .modal-actions { flex: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.settings-modal-content .modal-actions { margin: 12px 20px 0; padding: 12px 0 18px; border-top: 1px solid var(--border); }
 .settings-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .settings-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
