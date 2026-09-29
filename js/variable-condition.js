@@ -4,7 +4,8 @@
 // fenêtre existante de choix de la clé (js/variables.js:ensureLinkConfigured). Aperçu en direct pour déboguer : la ligne sélectionnée, puis combien de
 // lignes de la table remplissent la condition et la première d'entre elles. La condition vit dans l'attribut `condition` du nœud varBadge
 // (js/editor-nodes.js) : { mode: 'all'|'any', rules: [{ column, operator, value }] }. Ouverte depuis la barre flottante de la bulle
-// (js/floating-toolbars.js:wireVariableFloatingToolbar).
+// (js/floating-toolbars.js:wireVariableFloatingToolbar). « Copier » / « Coller » (demande d'Antoine, 2026-09-29) : la condition affichée dans la fenêtre
+// d'une variable se recolle dans la fenêtre d'une autre - Coller remplace les règles de la fenêtre comme un brouillon, « Enregistrer » les applique.
 const VariableCondition = (function () {
   let modalEl = null;
   let refs = null;
@@ -12,6 +13,10 @@ const VariableCondition = (function () {
   let state = null;
   let debugGeneration = 0;
   let debugTimer = null;
+  // Presse-papier interne : une copie { mode, rules } gardée le temps de la session du widget, d'une fenêtre et d'un modèle à l'autre. Jamais celui du
+  // système : un widget dans l'iframe d'un document Grist n'a pas l'autorisation de le lire.
+  let clipboard = null;
+  let copiedFlashTimer = null;
 
   function el(tag, className, text) {
     const e = document.createElement(tag);
@@ -21,6 +26,21 @@ const VariableCondition = (function () {
   }
   function emptyRule() { return { column: '', operator: '=', value: '' }; }
   function isOpen() { return !!state; }
+  // La forme enregistrée dans la bulle : règles sans colonne écartées, valeurs en texte, copie neuve (jamais un lien vers les règles que la fenêtre modifie
+  // en place) ; null sans aucune règle complète.
+  function plainCondition(condition) {
+    const normalized = ConditionRules.normalizeCondition(condition);
+    return normalized ? {
+      mode: normalized.mode,
+      rules: normalized.rules.map(r => ({ column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) })),
+    } : null;
+  }
+  // « Statut = Urgent et VcContacts.Role = Avocat » : ce que « Coller » va poser, sur une ligne, pour l'info-bulle du bouton.
+  function conditionSummary(condition) {
+    const glue = ' ' + I18n.t(condition.mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd').toLowerCase() + ' ';
+    const text = condition.rules.map(r => (r.column + ' ' + r.operator + ((r.operator === 'vide' || r.operator === 'non vide') ? '' : ' ' + r.value)).trim()).join(glue);
+    return text.length > 110 ? text.slice(0, 109) + '…' : text;
+  }
 
   function ensureModal() {
     if (modalEl) return;
@@ -55,10 +75,19 @@ const VariableCondition = (function () {
     const saveBtn = el('button', 'var-modal-primary');
     saveBtn.type = 'button';
     actions.append(removeBtn, spacer, cancelBtn, saveBtn);
+    // Copier / Coller : un seul groupe de nœuds, replacé à chaque tracé des règles sur la ligne de « + Ajouter une condition » (cf. renderRules).
+    const clip = el('span', 'var-condition-clip');
+    const copyBtn = el('button', 'var-condition-clip-btn');
+    copyBtn.type = 'button';
+    const pasteBtn = el('button', 'var-condition-clip-btn');
+    pasteBtn.type = 'button';
+    const clipStatus = el('span', 'var-condition-clip-status');
+    clipStatus.setAttribute('role', 'status');
+    clip.append(copyBtn, pasteBtn, clipStatus);
     box.append(title, intro, modeRow, rulesBox, debug, actions);
     modalEl.appendChild(box);
     document.body.appendChild(modalEl);
-    refs = { title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, debugCurrent, debugCount, removeBtn, cancelBtn, saveBtn };
+    refs = { title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, debugCurrent, debugCount, removeBtn, cancelBtn, saveBtn };
 
     modeSelect.addEventListener('change', () => {
       if (!state) return;
@@ -69,6 +98,8 @@ const VariableCondition = (function () {
     removeBtn.addEventListener('click', () => { if (state) { applyCondition(null); close(); } });
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
+    copyBtn.addEventListener('click', copyCondition);
+    pasteBtn.addEventListener('click', pasteCondition);
     // Toute saisie dans les lignes (colonne, opérateur, valeur, « au moins une ») relance l'aperçu, avec un court délai pour ne pas recalculer à chaque touche.
     box.addEventListener('input', scheduleDebug);
     box.addEventListener('change', scheduleDebug);
@@ -120,6 +151,8 @@ const VariableCondition = (function () {
     const rules = state.working.rules;
     modeRow.hidden = rules.length < 2;
     modeSelect.value = state.working.mode;
+    // Le groupe Copier / Coller est retiré puis replacé à chaque tracé : un de ses boutons qui avait le focus (Coller au clavier) le perdrait sans ça.
+    const clipFocus = refs.clip.contains(document.activeElement) ? document.activeElement : null;
     rulesBox.replaceChildren();
     rules.forEach((rule, index) => {
       const row = el('div', 'macro-rule-row');
@@ -157,7 +190,58 @@ const VariableCondition = (function () {
       const selects = rulesBox.querySelectorAll('select.macro-rule-column');
       if (selects.length) selects[selects.length - 1].focus();
     });
-    rulesBox.appendChild(addBtn);
+    // Copier / Coller portent sur l'ensemble des règles de cette boîte : sur la même ligne que « + Ajouter », à droite, sans hauteur en plus dans un panneau bas.
+    const foot = el('div', 'var-condition-foot');
+    foot.append(addBtn, refs.clip);
+    rulesBox.appendChild(foot);
+    if (clipFocus) clipFocus.focus();
+    syncClipboardButtons();
+  }
+
+  // === Copier / Coller ===
+  // Grisés (pas retirés, aria-disabled plutôt que disabled pour que l'info-bulle qui explique pourquoi reste visible) : Copier sans règle complète à copier,
+  // Coller tant que rien n'a été copié. Le clic revérifie l'état réel : la colonne d'une règle n'est adoptée qu'après le `change` du champ.
+  function setClipButton(btn, enabled, title) {
+    btn.classList.toggle('is-disabled', !enabled);
+    btn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    btn.title = title;
+  }
+  function syncClipboardButtons() {
+    if (!state || !refs) return;
+    const canCopy = !!plainCondition(state.working);
+    setClipButton(refs.copyBtn, canCopy, I18n.t(canCopy ? 'varCond.clip.copyTitle' : 'varCond.clip.copyEmpty'));
+    setClipButton(refs.pasteBtn, !!clipboard, clipboard ? I18n.t('varCond.clip.pasteTitle', { summary: conditionSummary(clipboard) }) : I18n.t('varCond.clip.pasteEmpty'));
+  }
+  // « Copiée » pendant un instant : seul retour visible d'une copie, qui ne change rien d'autre à l'écran.
+  function resetCopyLabel() {
+    clearTimeout(copiedFlashTimer);
+    if (!refs) return;
+    refs.copyBtn.textContent = I18n.t('varCond.clip.copy');
+    refs.copyBtn.classList.remove('is-done');
+  }
+  function copyCondition() {
+    if (!state || !refs) return;
+    const condition = plainCondition(state.working);
+    if (!condition) return;
+    clipboard = condition;
+    syncClipboardButtons();
+    resetCopyLabel();
+    refs.copyBtn.textContent = I18n.t('varCond.clip.copied');
+    refs.copyBtn.classList.add('is-done');
+    refs.clipStatus.textContent = I18n.t('varCond.clip.copiedStatus');
+    copiedFlashTimer = setTimeout(resetCopyLabel, 1600);
+  }
+  // Remplace les règles ET la combinaison (toutes / au moins une) de la fenêtre : rien n'est écrit dans la bulle avant « Enregistrer », Annuler abandonne.
+  function pasteCondition() {
+    if (!state || !refs || !clipboard) return;
+    state.working = plainCondition(clipboard);
+    renderRules();
+    scheduleDebug();
+    refs.clipStatus.textContent = I18n.t('varCond.clip.pastedStatus');
+  }
+  function clearClipboard() {
+    clipboard = null;
+    syncClipboardButtons();
   }
 
   // === Aperçu === Même évaluation que le mode Lecture (ConditionRules.conditionHolds) : d'abord la ligne sélectionnée dans Grist, puis toutes les lignes
@@ -204,6 +288,7 @@ const VariableCondition = (function () {
   }
   async function updateDebug() {
     if (!state || !refs) return;
+    syncClipboardButtons();
     const gen = ++debugGeneration;
     const stale = () => gen !== debugGeneration || !state;
     const { debugCurrent, debugCount } = refs;
@@ -262,12 +347,7 @@ const VariableCondition = (function () {
   }
   function save() {
     if (!state) return;
-    const normalized = ConditionRules.normalizeCondition(state.working);
-    const condition = normalized ? {
-      mode: normalized.mode,
-      rules: normalized.rules.map(r => ({ column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) })),
-    } : null;
-    applyCondition(condition);
+    applyCondition(plainCondition(state.working));
     close();
   }
 
@@ -278,6 +358,7 @@ const VariableCondition = (function () {
     state = null;
     debugGeneration += 1;
     clearTimeout(debugTimer);
+    clearTimeout(copiedFlashTimer);
     // La bulle est toujours sélectionnée : rendre le focus à l'éditeur fait réapparaître sa barre flottante.
     if (editor) editor.view.focus();
   }
@@ -307,6 +388,9 @@ const VariableCondition = (function () {
     removeBtn.hidden = !state.hadCondition;
     cancelBtn.textContent = I18n.t('common.cancel');
     saveBtn.textContent = I18n.t('common.save');
+    resetCopyLabel();
+    refs.pasteBtn.textContent = I18n.t('varCond.clip.paste');
+    refs.clipStatus.textContent = '';
     renderRules();
     // La barre flottante (z-index 2000) passerait sinon par-dessus le voile de cette fenêtre (1990, sous la fenêtre de choix de la clé).
     EditorCore.hideFloatingContextToolbars();
@@ -316,5 +400,5 @@ const VariableCondition = (function () {
     updateDebug();
   }
 
-  return { open, close, isOpen };
+  return { open, close, isOpen, clearClipboard };
 })();

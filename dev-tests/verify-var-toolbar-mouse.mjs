@@ -488,6 +488,123 @@ const nestedState = await page.evaluate(() => ({
 }));
 check('dans la ligne répétée, la Boucle d’une autre variable est grisée et un vrai clic n’ouvre rien', nestedBtn.found && nestedState.disabled === 'true' && !nestedState.modalOpen, { nestedBtn, nestedState });
 
+// 5) Copier / Coller la condition d'une variable sur une autre (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : deux règles saisies dans la
+// fenêtre de « Titre » (« au moins une »), Copier au clic, puis Coller dans la fenêtre de « Montant » - au clavier, le focus doit rester sur le bouton -, et
+// Enregistrer pose la même condition sur la seconde bulle. Les deux boutons partagent la ligne de « + Ajouter une condition » : sans chevauchement, dans la
+// fenêtre, sans débordement latéral, y compris dans un panneau étroit où la ligne passe à la suivante.
+await page.evaluate(async () => {
+  const badge = col => `<span class="var-badge" data-table="VcDossiers" data-column="${col}" data-key="VcDossiers.${col}"></span>`;
+  Editor.setHTML(`<p>Titre : ${badge('Titre')}</p><p>Montant : ${badge('Montant')}</p>`);
+});
+await page.waitForTimeout(300);
+const MODAL = '#var-condition-modal';
+const clipSel = n => `${MODAL} .var-condition-clip button:nth-of-type(${n})`;
+async function openConditionFor(column) {
+  const box = await hitTest(`.tiptap .var-badge[data-column="${column}"]`);
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(250);
+  const icon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+  if (icon.found) await page.mouse.click(icon.x, icon.y);
+  await page.waitForTimeout(300);
+}
+const clipInfo = n => page.evaluate(sel => {
+  const b = document.querySelector(sel);
+  return b ? { text: b.textContent, disabled: b.getAttribute('aria-disabled'), title: b.title, done: b.classList.contains('is-done'), focused: document.activeElement === b }
+    : { text: null, disabled: null, title: '', done: false, focused: false, missing: true };
+}, clipSel(n));
+const conditionOn = column => page.evaluate(col => {
+  let cond;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) cond = n.attrs.condition; });
+  return cond;
+}, column);
+const footLayout = () => page.evaluate(sel => {
+  // Élément absent (bouton pas encore là) : coordonnées NaN, donc des comparaisons fausses et un check en échec plutôt qu'une exception.
+  const rect = q => { const e = document.querySelector(q); if (!e) return { l: NaN, r: NaN, t: NaN, b: NaN }; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+  const content = document.querySelector('#var-condition-modal .var-modal-content');
+  const box = content.getBoundingClientRect();
+  return {
+    add: rect('#var-condition-modal .var-condition-add'), copy: rect(sel.copy), paste: rect(sel.paste), box: { l: box.left, r: box.right },
+    overflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+  };
+}, { copy: clipSel(1), paste: clipSel(2) });
+
+await openConditionFor('Titre');
+const clipEmpty = [await clipInfo(1), await clipInfo(2)];
+check('fenêtre de « Titre » sans condition : Copier et Coller sont là et grisés', !clipEmpty[0].missing && !clipEmpty[1].missing && clipEmpty[0].disabled === 'true' && clipEmpty[1].disabled === 'true', clipEmpty);
+await page.selectOption(`${MODAL} select.macro-rule-column`, 'Statut');
+await page.waitForTimeout(100);
+const firstValue = await hitTest(`${MODAL} .macro-rule-value`);
+if (firstValue.found) { await page.mouse.click(firstValue.x, firstValue.y); await page.keyboard.type('Urgent'); }
+const addRule = await hitTest(`${MODAL} .var-condition-add`);
+check('« + Ajouter une condition » visible et non recouvert', addRule.found && addRule.inViewport && addRule.onTop, addRule);
+if (addRule.found) await page.mouse.click(addRule.x, addRule.y);
+await page.waitForTimeout(150);
+await page.selectOption(`${MODAL} .macro-rule-row:nth-of-type(2) select.macro-rule-column`, 'Montant');
+await page.waitForTimeout(100);
+await page.selectOption(`${MODAL} .macro-rule-row:nth-of-type(2) > select`, '≥');
+const secondValue = await hitTest(`${MODAL} .macro-rule-row:nth-of-type(2) .macro-rule-value`);
+if (secondValue.found) { await page.mouse.click(secondValue.x, secondValue.y); await page.keyboard.type('100'); }
+await page.selectOption(`${MODAL} .var-condition-mode select`, 'any');
+await page.waitForTimeout(500);
+const copyBtnBox = await hitTest(clipSel(1));
+const pasteBtnBox = await hitTest(clipSel(2));
+check('Copier et Coller visibles, dans le panneau et au premier plan (à côté de « + Ajouter »)',
+  copyBtnBox.found && copyBtnBox.inViewport && copyBtnBox.onTop && pasteBtnBox.found && pasteBtnBox.inViewport && pasteBtnBox.onTop, { copyBtnBox, pasteBtnBox });
+const wide = await footLayout();
+check('à 700x400 : « + Ajouter », Copier et Coller se suivent sur la même ligne sans se chevaucher, dans la fenêtre, sans débordement latéral',
+  wide.add.r <= wide.copy.l && wide.copy.r <= wide.paste.l && wide.paste.r <= wide.box.r && wide.add.l >= wide.box.l
+  && Math.abs(wide.add.t - wide.copy.t) < 4 && wide.overflowX <= 0 && wide.docOverflowX <= 0, wide);
+const beforeCopy = [await clipInfo(1), await clipInfo(2)];
+check('deux règles saisies : Copier est actif, Coller reste grisé tant que rien n’est copié', beforeCopy[0].disabled === 'false' && beforeCopy[1].disabled === 'true', beforeCopy);
+if (copyBtnBox.found) await page.mouse.click(copyBtnBox.x, copyBtnBox.y);
+await page.waitForTimeout(150);
+const afterCopy = [await clipInfo(1), await clipInfo(2)];
+check('vrai clic sur Copier : « Copiée » un instant, Coller devient actif et son info-bulle résume la condition',
+  afterCopy[0].text === 'Copiée' && afterCopy[0].done && afterCopy[1].disabled === 'false' && afterCopy[1].title.includes('Statut = Urgent ou Montant ≥ 100'), afterCopy);
+// Panneau étroit : la ligne des trois boutons passe à la suivante au lieu de déborder.
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(250);
+const narrow = await footLayout();
+check('panneau de 360 px : Copier et Coller restent dans la fenêtre, sans débordement latéral de la fenêtre ni de la page',
+  narrow.copy.l >= narrow.box.l && narrow.paste.r <= narrow.box.r && narrow.copy.r <= narrow.paste.l && narrow.overflowX <= 0 && narrow.docOverflowX <= 0, narrow);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(250);
+const cancelClip = await hitTest(`${MODAL} .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)`);
+if (cancelClip.found) await page.mouse.click(cancelClip.x, cancelClip.y);
+await page.waitForTimeout(200);
+check('Annuler (vrai clic) ferme la fenêtre sans rien écrire : « Titre » reste sans condition', (await conditionOn('Titre')) == null && await page.evaluate(() => document.getElementById('var-condition-modal').style.display === 'none'));
+
+// Fenêtre de « Montant » : Coller au clavier (Tab depuis Copier), le focus reste sur le bouton même si les règles sont retracées, puis Enregistrer à la souris.
+await openConditionFor('Montant');
+const otherWindow = [await clipInfo(1), await clipInfo(2)];
+check('fenêtre de « Montant » : Copier revient à « Copier » et grisé, Coller est actif', otherWindow[0].text === 'Copier' && !otherWindow[0].done && otherWindow[0].disabled === 'true' && otherWindow[1].disabled === 'false', otherWindow);
+await page.focus(clipSel(1));
+await page.keyboard.press('Tab');
+const onPaste = await clipInfo(2);
+check('Tab depuis Copier amène sur Coller', onPaste.focused, onPaste);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(500);
+const afterPaste = await page.evaluate(() => ({
+  rules: Array.from(document.querySelectorAll('#var-condition-modal .macro-rule-row')).map(row => ({
+    column: row.querySelector('select.macro-rule-column').value, operator: row.querySelector(':scope > select').value, value: row.querySelector('.macro-rule-value').value,
+  })),
+  mode: (() => { const r = document.querySelector('#var-condition-modal .var-condition-mode'); return { shown: !r.hidden, value: r.querySelector('select').value }; })(),
+  focusInWindow: document.getElementById('var-condition-modal').contains(document.activeElement) && document.activeElement !== document.body,
+}));
+const pasteFocus = await clipInfo(2);
+check('Entrée sur Coller : les deux règles et « au moins une » arrivent dans la fenêtre, le focus reste sur Coller',
+  JSON.stringify(afterPaste.rules) === JSON.stringify([{ column: 'Statut', operator: '=', value: 'Urgent' }, { column: 'Montant', operator: '≥', value: '100' }])
+  && afterPaste.mode.shown && afterPaste.mode.value === 'any' && afterPaste.focusInWindow && pasteFocus.focused, { afterPaste, pasteFocus });
+check('... sans rien écrire sur la bulle avant Enregistrer', (await conditionOn('Montant')) == null);
+const saveClip = await hitTest(`${MODAL} .var-modal-primary`);
+check('Enregistrer visible et non recouvert avec deux règles', saveClip.found && saveClip.inViewport && saveClip.onTop, saveClip);
+if (saveClip.found) await page.mouse.click(saveClip.x, saveClip.y);
+await page.waitForTimeout(250);
+const expectedCondition = { mode: 'any', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }, { column: 'Montant', operator: '≥', value: '100' }] };
+const montantCondition = await conditionOn('Montant');
+check('Enregistrer (vrai clic) pose sur « Montant » la même condition que celle copiée sur « Titre »',
+  JSON.stringify(montantCondition) === JSON.stringify(expectedCondition) && (await conditionOn('Titre')) == null && await page.evaluate(() => document.getElementById('var-condition-modal').style.display === 'none'), montantCondition);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

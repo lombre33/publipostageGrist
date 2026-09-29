@@ -1,7 +1,8 @@
 // Suite "varCondition" - variables conditionnelles et autres attributs d'une bulle #Variable (maquette validée par Antoine le 2026-09-28) :
 // attribut `condition` du nœud varBadge (js/editor-nodes.js), bulle masquée en lecture/export (js/reader-mode.js), évaluation partagée
 // (js/condition-rules.js, une règle sur une autre table vraie si UNE des lignes liées la remplit), barre flottante sur toutes les variables
-// (js/floating-toolbars.js), fenêtres de condition (js/variable-condition.js) et des autres attributs (js/variable-linked-attrs.js).
+// (js/floating-toolbars.js), fenêtres de condition (js/variable-condition.js) et des autres attributs (js/variable-linked-attrs.js). Copier / Coller la
+// condition d'une variable sur une autre (demande d'Antoine, 2026-09-29) : cas `varcond_clip_*`, qui pilotent les vrais boutons de la fenêtre.
 // Ligne courante livrée comme par le vrai grist.onRecord : une colonne Référence y arrive avec la valeur AFFICHÉE ("Dupont Jean"), jamais l'id (vérifié
 // à la source grist-core le 2026-09-28, cf. js/variables.js:ruleSourceValue) - c'est ce qui cachait la ligne liée par une colonne Référence en lecture.
 (function () {
@@ -438,6 +439,208 @@
         && debug[1] === I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 1, total: 3 }) + ' '
           + I18n.t('varCond.debug.first', { id: 1, label: ' (Dossier A)', value: 'Dupont Jean' });
       return { pass, notes: JSON.stringify({ batchRow1, batchRow2, holds, debug, helperOptions: columnOptions.filter(v => v.indexOf('gristHelper_') !== -1) }) };
+    },
+  });
+
+  // === Copier / Coller la condition d'une variable (demande d'Antoine, 2026-09-29) ===
+  function conditionModal() { return document.getElementById('var-condition-modal'); }
+  function clipButtons(modal) {
+    const buttons = Array.from(modal.querySelectorAll('.var-condition-clip button'));
+    return { copy: buttons[0], paste: buttons[1] };
+  }
+  function clipInfo(btn) {
+    return btn ? { text: btn.textContent, disabled: btn.getAttribute('aria-disabled'), title: btn.title, done: btn.classList.contains('is-done') } : null;
+  }
+  async function openWindow(h, column) {
+    await selectBadge(h, column);
+    pressToolbarButton('var-condition');
+    await h.sleep(60);
+    return conditionModal();
+  }
+  function cancelWindow(modal) { modal.querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click(); }
+  function saveWindow(modal) { modal.querySelector('.var-modal-actions .var-modal-primary').click(); }
+  // Les règles telles qu'affichées : colonne, opérateur (seul <select> enfant direct de la ligne) et valeur.
+  function windowRules(modal) {
+    return Array.from(modal.querySelectorAll('.macro-rule-row')).map(row => ({
+      column: row.querySelector('select.macro-rule-column').value,
+      operator: row.querySelector(':scope > select').value,
+      value: row.querySelector('.macro-rule-value').value,
+    }));
+  }
+  function windowMode(modal) {
+    const row = modal.querySelector('.var-condition-mode');
+    return { shown: !row.hidden, value: row.querySelector('select').value };
+  }
+  function conditionOf(ed, column) {
+    const found = badgeNodes(ed).find(b => b.node.attrs.column === column);
+    return found ? found.node.attrs.condition : undefined;
+  }
+  const NO_CLIP_BUTTONS = { pass: false, notes: 'boutons Copier / Coller absents de la fenêtre de condition' };
+
+  cases.push({
+    id: 'varcond_clip_copy_paste_between_variables',
+    description: 'Copier / Coller : la condition à l’écran dans la fenêtre d’une variable (deux règles, « au moins une », pas enregistrée) se recolle dans celle d’une autre ; rien n’est écrit avant Enregistrer, Annuler abandonne, et modifier la copie collée ne change pas le presse-papier',
+    run: async (h) => {
+      await seed(h);
+      VariableCondition.clearClipboard();
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')} ${badgeHtml('VcDossiers', 'Montant')}</p>`);
+      const ed = EditorCore.getEditor();
+      // 1) Fenêtre encore vide : ni Copier ni Coller ne servent, et un clic dessus ne fait rien.
+      let modal = await openWindow(h, 'Titre');
+      let { copy, paste } = clipButtons(modal);
+      if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
+      const emptyState = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      copy.click();
+      paste.click();
+      await h.sleep(30);
+      const afterEmptyClicks = { rules: windowRules(modal), paste: clipInfo(paste) };
+      // 2) Deux règles saisies à l'écran, sans enregistrer : Copier s'active et emporte ce qui est affiché.
+      setSelect(modal.querySelector('select.macro-rule-column'), 'Statut');
+      await h.sleep(30);
+      setInput(modal.querySelector('.macro-rule-value'), 'Urgent');
+      modal.querySelector('.var-condition-add').click();
+      await h.sleep(30);
+      setSelect(modal.querySelectorAll('.macro-rule-row')[1].querySelector('select.macro-rule-column'), 'VcContacts.Role');
+      await h.sleep(60);
+      setInput(modal.querySelectorAll('.macro-rule-row')[1].querySelector('.macro-rule-value'), 'Avocat');
+      setSelect(modal.querySelector('.var-condition-mode select'), 'any');
+      await h.sleep(400);
+      const beforeCopy = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      copy.click();
+      const afterCopy = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      cancelWindow(modal);
+      await h.sleep(30);
+      const titreAfterCancel = conditionOf(ed, 'Titre');
+      // 3) Fenêtre d'une autre variable, sans condition : Coller est proposé, « Copier » n'affiche plus « Copiée », rien n'est écrit avant Enregistrer.
+      modal = await openWindow(h, 'Montant');
+      ({ copy, paste } = clipButtons(modal));
+      const otherWindow = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      paste.click();
+      await h.sleep(60);
+      const pasted = { rules: windowRules(modal), mode: windowMode(modal), bubble: conditionOf(ed, 'Montant') };
+      // Modifier la copie collée puis Annuler : la bulle reste sans condition et le presse-papier garde « Urgent ».
+      setInput(modal.querySelector('.macro-rule-value'), 'Normal');
+      cancelWindow(modal);
+      await h.sleep(30);
+      const afterCancel = conditionOf(ed, 'Montant');
+      modal = await openWindow(h, 'Montant');
+      clipButtons(modal).paste.click();
+      await h.sleep(700);
+      const secondPaste = { rules: windowRules(modal), holds: !!modal.querySelector('.var-condition-debug-line.is-good') };
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Montant');
+      const html = Editor.getHTML();
+      const expected = {
+        mode: 'any',
+        rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }, { column: 'VcContacts.Role', operator: '=', value: 'Avocat' }],
+      };
+      const summary = 'Statut = Urgent ' + I18n.t('varCond.ruleOr').toLowerCase() + ' VcContacts.Role = Avocat';
+      const pass = emptyState.copy.disabled === 'true' && emptyState.paste.disabled === 'true' && emptyState.paste.title === I18n.t('varCond.clip.pasteEmpty')
+        && afterEmptyClicks.rules.length === 1 && afterEmptyClicks.rules[0].column === '' && afterEmptyClicks.paste.disabled === 'true'
+        && beforeCopy.copy.disabled === 'false' && beforeCopy.copy.text === I18n.t('varCond.clip.copy') && beforeCopy.paste.disabled === 'true'
+        && afterCopy.copy.text === I18n.t('varCond.clip.copied') && afterCopy.copy.done && afterCopy.paste.disabled === 'false'
+        && afterCopy.paste.title === I18n.t('varCond.clip.pasteTitle', { summary })
+        && titreAfterCancel == null
+        && otherWindow.copy.text === I18n.t('varCond.clip.copy') && !otherWindow.copy.done && otherWindow.copy.disabled === 'true' && otherWindow.paste.disabled === 'false'
+        && JSON.stringify(pasted.rules) === JSON.stringify(expected.rules) && pasted.mode.shown && pasted.mode.value === 'any' && pasted.bubble == null
+        && afterCancel == null
+        && JSON.stringify(secondPaste.rules) === JSON.stringify(expected.rules) && secondPaste.holds
+        && JSON.stringify(saved) === JSON.stringify(expected) && conditionOf(ed, 'Titre') == null && (html.match(/data-condition=/g) || []).length === 1;
+      return { pass, notes: JSON.stringify({ emptyState, afterEmptyClicks, beforeCopy, afterCopy, titreAfterCancel, otherWindow, pasted, afterCancel, secondPaste, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_clip_copy_needs_a_column_and_paste_replaces_saved_condition',
+    description: 'Copier reste grisé tant qu’aucune colonne n’est choisie ; Coller remplace la condition déjà enregistrée sur la variable (Retirer reste proposé) et son info-bulle résume la copie (« vide » sans valeur)',
+    run: async (h) => {
+      await seed(h);
+      VariableCondition.clearClipboard();
+      const onTitre = { mode: 'all', rules: [{ column: 'Statut', operator: 'vide', value: 'zzz' }, { column: 'Montant', operator: '≥', value: '100' }] };
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', onTitre)} ${badgeHtml('VcDossiers', 'Montant', COND_NORMAL)} ${badgeHtml('VcDossiers', 'Statut')}</p>`);
+      const ed = EditorCore.getEditor();
+      // Variable sans condition : Copier n'est proposé qu'une fois une colonne choisie, et se regrise si on la retire.
+      let modal = await openWindow(h, 'Statut');
+      let { copy, paste } = clipButtons(modal);
+      if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
+      const select = modal.querySelector('select.macro-rule-column');
+      const noColumn = clipInfo(copy);
+      setSelect(select, 'Titre');
+      await h.sleep(400);
+      const withColumn = clipInfo(copy);
+      setSelect(select, '');
+      await h.sleep(400);
+      const columnRemoved = clipInfo(copy);
+      cancelWindow(modal);
+      // Variable qui a déjà une condition enregistrée : Copier est proposé d'emblée.
+      modal = await openWindow(h, 'Titre');
+      ({ copy, paste } = clipButtons(modal));
+      const saved = clipInfo(copy);
+      copy.click();
+      cancelWindow(modal);
+      await h.sleep(30);
+      // Coller remplace la condition enregistrée sur Montant (Statut = Normal) ; Retirer la condition reste proposé.
+      modal = await openWindow(h, 'Montant');
+      ({ copy, paste } = clipButtons(modal));
+      const before = { rules: windowRules(modal), paste: clipInfo(paste) };
+      paste.click();
+      await h.sleep(60);
+      const after = { rules: windowRules(modal), mode: windowMode(modal), removeShown: !modal.querySelector('.var-modal-danger').hidden };
+      saveWindow(modal);
+      await h.sleep(80);
+      const summary = 'Statut vide ' + I18n.t('varCond.ruleAnd').toLowerCase() + ' Montant ≥ 100';
+      const pass = noColumn.disabled === 'true' && noColumn.title === I18n.t('varCond.clip.copyEmpty')
+        && withColumn.disabled === 'false' && withColumn.title === I18n.t('varCond.clip.copyTitle') && columnRemoved.disabled === 'true'
+        && saved.disabled === 'false'
+        && JSON.stringify(before.rules) === JSON.stringify(COND_NORMAL.rules) && before.paste.disabled === 'false'
+        && before.paste.title === I18n.t('varCond.clip.pasteTitle', { summary })
+        && JSON.stringify(after.rules) === JSON.stringify(onTitre.rules) && after.removeShown && after.mode.shown && after.mode.value === 'all'
+        && JSON.stringify(conditionOf(ed, 'Montant')) === JSON.stringify(onTitre) && JSON.stringify(conditionOf(ed, 'Titre')) === JSON.stringify(onTitre);
+      return { pass, notes: JSON.stringify({ noColumn, withColumn, columnRemoved, saved, before, after, montant: conditionOf(ed, 'Montant') }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_clip_survives_template_switch_and_speaks_english',
+    description: 'Le presse-papier reste quand un autre contenu est chargé dans l’éditeur (autre modèle) ; en anglais les deux boutons, leurs info-bulles et les messages sont traduits',
+    run: async (h) => {
+      await seed(h);
+      VariableCondition.clearClipboard();
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', COND_URGENT)}</p>`);
+      let modal = await openWindow(h, 'Titre');
+      let { copy, paste } = clipButtons(modal);
+      if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
+      copy.click();
+      cancelWindow(modal);
+      await h.sleep(30);
+      // Un autre modèle prend la place dans l'éditeur : la copie reste disponible.
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Montant')}</p>`);
+      const lang = I18n.getLang();
+      const keys = ['copy', 'paste', 'copied', 'copyTitle', 'copyEmpty', 'pasteTitle', 'pasteEmpty', 'copiedStatus', 'pastedStatus'].map(k => 'varCond.clip.' + k);
+      let english = null;
+      let translations = null;
+      try {
+        I18n.setLang('fr');
+        const fr = keys.map(k => I18n.t(k, { summary: 'S' }));
+        I18n.setLang('en');
+        const en = keys.map(k => I18n.t(k, { summary: 'S' }));
+        translations = keys.map((k, i) => ({ key: k, fr: fr[i], en: en[i] })).filter(t => t.en === t.fr || t.en === t.key);
+        modal = await openWindow(h, 'Montant');
+        ({ copy, paste } = clipButtons(modal));
+        const before = { copy: clipInfo(copy), paste: clipInfo(paste) };
+        paste.click();
+        await h.sleep(60);
+        english = { before, rules: windowRules(modal), status: modal.querySelector('.var-condition-clip-status').textContent };
+        cancelWindow(modal);
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = translations.length === 0
+        && english.before.copy.text === 'Copy' && english.before.paste.text === 'Paste' && english.before.paste.disabled === 'false'
+        && english.before.paste.title === 'Paste the copied condition in place of this one: Statut = Urgent'
+        && JSON.stringify(english.rules) === JSON.stringify(COND_URGENT.rules) && english.status === 'Condition pasted. Save to apply it to the variable.';
+      return { pass, notes: JSON.stringify({ untranslated: translations, english }) };
     },
   });
 

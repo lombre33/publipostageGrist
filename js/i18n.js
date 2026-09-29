@@ -555,6 +555,15 @@ const I18n = (function () {
     'varCond.debug.imageValue': { fr: '(image)', en: '(image)' },
     'varCond.remove': { fr: 'Retirer la condition', en: 'Remove condition' },
     'varCond.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The variable was moved or deleted while editing: the condition was not saved.' },
+    'varCond.clip.copy': { fr: 'Copier', en: 'Copy' },
+    'varCond.clip.paste': { fr: 'Coller', en: 'Paste' },
+    'varCond.clip.copied': { fr: 'Copiée', en: 'Copied' },
+    'varCond.clip.copyTitle': { fr: 'Copier cette condition pour la coller sur une autre variable', en: 'Copy this condition to paste it on another variable' },
+    'varCond.clip.copyEmpty': { fr: 'Rien à copier : choisissez d’abord une colonne.', en: 'Nothing to copy: pick a column first.' },
+    'varCond.clip.pasteTitle': { fr: 'Coller la condition copiée à la place de celle-ci : {summary}', en: 'Paste the copied condition in place of this one: {summary}' },
+    'varCond.clip.pasteEmpty': { fr: 'Rien à coller : copiez d’abord la condition d’une variable avec « Copier ».', en: 'Nothing to paste: first copy a variable’s condition with “Copy”.' },
+    'varCond.clip.copiedStatus': { fr: 'Condition copiée.', en: 'Condition copied.' },
+    'varCond.clip.pastedStatus': { fr: 'Condition collée. Enregistrez pour l’appliquer à la variable.', en: 'Condition pasted. Save to apply it to the variable.' },
 
     // --- Fenêtre « Autres attributs » d'une variable (js/variable-linked-attrs.js) ---
     'varLinked.title': { fr: 'Autres attributs de « {table} »', en: 'Other attributes of “{table}”' },
