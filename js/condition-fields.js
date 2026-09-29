@@ -67,9 +67,11 @@ const ConditionFields = (function () {
   // `options` (facultatif, fenêtre de condition d'une variable) : { allTables: true } liste les colonnes de TOUTES les tables (cf. appendAllTablesOptions)
   // au lieu de la seule table de la page ; { onColumnChosen(ref, value) } est appelé avant d'adopter une colonne choisie dans la liste - s'il renvoie (ou
   // résout) false, la colonne précédente est remise (ex. choix de la clé annulé pour une table pas encore liée). Sans options : comportement des
-  // macro-modèles, inchangé.
+  // macro-modèles, inchangé. { table } (fenêtre de boucle, js/variable-loop.js) : les colonnes de CETTE table seule, en valeur nue - le filtre d'une boucle
+  // porte sur les lignes parcourues (js/loop-rules.js:ruleHolds lit la colonne dans la table de la boucle).
   function buildColumnField(rule, onTypeChange, options) {
     const opts = options || {};
+    const baseTable = () => opts.table || GristAPI.getCurrentTableId();
     const wrap = document.createElement('span');
     wrap.className = 'macro-rule-column-wrap';
 
@@ -79,9 +81,9 @@ const ConditionFields = (function () {
     empty.value = '';
     empty.textContent = I18n.t('macro.modal.columnChoosePlaceholder');
     select.appendChild(empty);
-    const cols = currentTableColumns();
-    if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId());
-    else cols.forEach(c => appendColumnOption(select, c, c));
+    if (opts.table) GristAPI.getColumns(opts.table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => appendColumnOption(select, c, c));
+    else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId());
+    else currentTableColumns().forEach(c => appendColumnOption(select, c, c));
     const listed = Array.from(select.querySelectorAll('option')).map(o => o.value).filter(Boolean);
     const advancedOpt = document.createElement('option');
     advancedOpt.value = ADVANCED_COLUMN_VALUE;
@@ -107,7 +109,7 @@ const ConditionFields = (function () {
     function updateTypeHint() {
       const tableId = GristAPI.getCurrentTableId();
       const value = select.value === ADVANCED_COLUMN_VALUE ? null : select.value;
-      const ref = value ? ConditionRules.parseColumnRef(value, tableId) : null;
+      const ref = value ? ConditionRules.parseColumnRef(value, baseTable()) : null;
       const col = ref ? ref.column : null;
       const table = ref ? ref.table : null;
       const type = (col && table) ? GristAPI.getColumnType(table, col) : null;
@@ -150,7 +152,7 @@ const ConditionFields = (function () {
       }
       const chosen = select.value;
       if (!opts.onColumnChosen || !chosen) { adopt(chosen); return; }
-      Promise.resolve(opts.onColumnChosen(ConditionRules.parseColumnRef(chosen, GristAPI.getCurrentTableId()), chosen)).then(ok => {
+      Promise.resolve(opts.onColumnChosen(ConditionRules.parseColumnRef(chosen, baseTable()), chosen)).then(ok => {
         if (ok) { adopt(chosen); return; }
         select.value = adoptedSelectValue;
         advancedInput.hidden = adoptedSelectValue !== ADVANCED_COLUMN_VALUE;

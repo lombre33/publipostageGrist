@@ -1,7 +1,8 @@
-/* Variables conditionnelles et autres attributs d'une bulle #Variable (maquette validée par Antoine le 2026-09-28) : groupe d'actions de la barre
-   flottante (js/floating-toolbars.js), fenêtre de condition (js/variable-condition.js) et fenêtre des autres attributs (js/variable-linked-attrs.js).
-   Fichier propre à ces trois éléments pour ne rien changer aux feuilles partagées ; les lignes de règle réutilisent telles quelles les classes
-   .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles, js/condition-fields.js). */
+/* Variables conditionnelles, autres attributs et boucle d'une bulle #Variable (maquettes validées par Antoine le 2026-09-28) : groupe d'actions de la
+   barre flottante (js/floating-toolbars.js), fenêtre de condition (js/variable-condition.js), fenêtre des autres attributs (js/variable-linked-attrs.js),
+   fenêtre de boucle (js/variable-loop.js) et repères de la boucle dans l'éditeur. Fichier propre à ces éléments pour ne rien changer aux feuilles
+   partagées ; les lignes de règle réutilisent telles quelles les classes .macro-rule-* de css/toolbar-v2.css (mêmes champs que les macro-modèles,
+   js/condition-fields.js). */
 
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
@@ -18,7 +19,7 @@
 
 /* === Fenêtres === z-index sous #link-config-modal (2000, css/style.css) : le choix de la clé d'une table pas encore liée s'ouvre PAR-DESSUS la fenêtre
    de condition. max-height + actions collantes : Enregistrer/Annuler restent atteignables dans un panneau Grist bas (~700x400), comme la fenêtre macro. */
-#var-condition-modal, #var-linked-modal { position: fixed; inset: 0; background: var(--pp-scrim, rgba(15, 23, 42, .45)); display: flex; align-items: center; justify-content: center; z-index: 1990; }
+#var-condition-modal, #var-linked-modal, #var-loop-modal { position: fixed; inset: 0; background: var(--pp-scrim, rgba(15, 23, 42, .45)); display: flex; align-items: center; justify-content: center; z-index: 1990; }
 .var-modal-content { font-family: var(--font-ui); width: 480px; max-width: 92vw; max-height: 90vh; overflow-y: auto; box-sizing: border-box; }
 .var-linked-modal-content { width: 420px; }
 .var-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 6px; color: var(--text); overflow-wrap: anywhere; }
@@ -68,3 +69,69 @@
 .var-linked-value { flex: 1; min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .var-linked-empty { padding: 8px 10px; font-size: 12px; color: var(--text-faint); }
 .var-linked-note { font-size: 11.5px; line-height: 1.45; color: var(--text-faint); margin: 8px 0 0; }
+
+/* === Fenêtre de boucle (js/variable-loop.js) === Mêmes champs que la fenêtre de condition ; la bulle de l'introduction garde son trait plein (pas de
+   condition ici). */
+.var-loop-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
+.var-loop-label { display: block; margin: 12px 0 5px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.var-loop-link { padding: 0; border: none; background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.var-loop-link[hidden] { display: none; }
+.var-loop-seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.var-loop-seg button { height: 28px; padding: 0 11px; border: none; background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap; }
+.var-loop-seg button + button { border-left: 1px solid var(--border); }
+.var-loop-seg button:hover { background: var(--surface-sunken); }
+.var-loop-seg button.is-on { background: var(--accent-soft, #e8f0fe); color: var(--accent-hover, #2558c4); }
+.var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+.var-loop-seps[hidden] { display: none; }
+.var-loop-seps label + input { margin-right: 6px; }
+.var-loop-seps input, .var-loop-empty-text input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-seps .var-loop-sep-input { width: 44px; }
+.var-loop-seps .var-loop-last-input { width: 52px; }
+.var-loop-hint { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
+.var-loop-filter-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.var-loop-filter-empty .var-condition-add { margin-top: 0; }
+.var-loop-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.var-loop-sort-row { display: flex; gap: 6px; }
+.var-loop-two select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-sort-row select:first-child { flex: 1; }
+.var-loop-two .var-loop-empty-select { width: 100%; }
+.var-loop-empty-text { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+.var-loop-empty-text[hidden] { display: none; }
+.var-loop-empty-text input { flex: 1; min-width: 0; }
+
+/* === Repères de boucle dans l'éditeur === La zone répétée (ligne de tableau, élément de liste, paragraphe ou titre qui contient une bulle en boucle) est
+   teintée, avec un onglet dans la marge de gauche ; une bulle en boucle « dans la phrase » porte une petite icône. CSS seul, lu sur l'attribut
+   data-loop-repeat de la bulle (js/editor-nodes.js) : rien n'est ajouté au document, et la lecture comme l'export remplacent la bulle, donc aucun repère.
+   :where() garde la spécificité basse : la couleur choisie pour une cellule et la cellule sélectionnée l'emportent. L'onglet ne prend aucune place
+   (flottant de largeur extérieure nulle, ou position absolue dans la cellule, déjà position:relative) : la mise en page de l'aperçu A4 ne bouge pas. */
+:root {
+  --pp-loop-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2312406b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
+  --pp-loop-icon-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fed' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
+}
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th) { background-color: #f5f9ff; box-shadow: inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child { box-shadow: inset 1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):last-child { box-shadow: inset -1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):only-child { box-shadow: inset 0 0 0 1px #b7cdf2; }
+.tiptap :where(li:has(> p .var-badge[data-loop-repeat="item"], > div > p .var-badge[data-loop-repeat="item"])),
+.tiptap :where(p, h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"]) { background-color: #f5f9ff; box-shadow: inset 0 0 0 1px #b7cdf2; border-radius: 2px; }
+/* Onglet : ligne de tableau, dans la marge à gauche de la première cellule, centré sur la ligne. */
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child::before,
+.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p .var-badge[data-loop-repeat="item"])::before,
+.tiptap p:has(.var-badge[data-loop-repeat="paragraph"])::before,
+.tiptap :where(h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"])::after {
+  content: ''; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid #b7cdf2; border-radius: 4px;
+  background: #eaf2ff var(--pp-loop-icon) center / 12px 12px no-repeat; pointer-events: none;
+}
+.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child::before { position: absolute; left: -30px; top: 50%; margin-top: -10px; }
+/* Paragraphe et élément de liste : flottant « suspendu » dans la marge (marge gauche négative compensée à droite, largeur extérieure nulle : le texte ne
+   bouge pas). Le titre prend ::after, son ::before étant la numérotation des titres (css/editor-v2.css). Élément de liste : à gauche de sa puce. */
+.tiptap p:has(.var-badge[data-loop-repeat="paragraph"])::before,
+.tiptap :where(h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"])::after { float: left; margin: 0 10px 0 -30px; }
+.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p .var-badge[data-loop-repeat="item"])::before { float: left; margin: 0 calc(1.4em + 6px) 0 calc(-1.4em - 26px); }
+/* Mode classique (sans aperçu A4) : pas de marge de page, l'onglet serait coupé - un peu de place à gauche, seulement si le document a une zone
+   répétée, et le cadre défilant d'un tableau répété s'étend dans cette place. */
+#editor-container:not(.a4-preview) .tiptap:has(.var-badge[data-loop-repeat="row"], .var-badge[data-loop-repeat="item"], .var-badge[data-loop-repeat="paragraph"]) { padding-left: 22px; }
+#editor-container:not(.a4-preview) .tiptap .tableWrapper:has(.var-badge[data-loop-repeat="row"]) { padding-left: 32px; margin-left: -32px; }
+/* Bulle en boucle « dans la phrase » : petite icône bleue à droite dans la bulle (fond, pour laisser ::after aux autres repères de la bulle). */
+.tiptap .var-badge[data-loop-repeat="inline"], .var-modal-intro .var-badge[data-loop-repeat="inline"] { padding-right: 17px; background-image: var(--pp-loop-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }

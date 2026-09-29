@@ -67,6 +67,7 @@ const GROUPS = {
   templateOrganize: 'scenarios-template-organize',
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
+  varLoop: 'scenarios-var-loop',
   pdfBatch: 'scenarios-pdf-batch',
   accessRights: 'scenarios-access-rights',
 };

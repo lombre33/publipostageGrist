@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Barre flottante d'une bulle #Variable et ses deux fenêtres (condition d'affichage, autres attributs), à la VRAIE souris (page.mouse, Node/Playwright)
+// Barre flottante d'une bulle #Variable et ses fenêtres (condition d'affichage, autres attributs, boucle), à la VRAIE souris (page.mouse, Node/Playwright)
 // et à la taille du panneau Grist d'Antoine (~700x400) : les scénarios de dev-tests/scenarios-var-condition.js tournent DANS la page (dispatchEvent),
 // ils ne prouvent ni qu'un vrai clic atteint l'icône, ni que la fenêtre et ses boutons tiennent dans un panneau bas sans être recouverts.
 // Lancé par run-headless.mjs (groupe Node "varToolbarMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-var-toolbar-mouse.mjs
@@ -236,6 +236,94 @@ const seq = await page.evaluate(() => {
   return out;
 });
 check('Insérer (vrai clic) ajoute #VcAnnuaire.Telephone juste après la variable', JSON.stringify(seq) === JSON.stringify(['Dossier suivi par ', '#VcAnnuaire.NomPrenom', ' ', '#VcAnnuaire.Telephone', ' jusqu’à la clôture.']), seq);
+// 4) Boucle (maquette validée le 2026-09-28) : 3e icône de la barre, sur une variable d'une cellule de tableau, en aperçu A4 (réglage par défaut du
+// widget) - l'icône est atteignable, la barre ne fait pas déborder la page, la fenêtre tient dans le panneau et « Enregistrer » se clique ; l'onglet de
+// la ligne répétée reste dans la partie visible de l'éditeur ; dans cette ligne, la Boucle d'une autre variable est grisée.
+const overflowBefore = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  stub.setVariables('VcTaches', { Dossier: 'Ref:VcDossiers', Libelle: 'Text', Echeance: 'Date' });
+  stub.setRows('VcTaches', [
+    { id: 1, Dossier: 1, Libelle: 'Relancer le client', Echeance: 1790208000 },
+    { id: 2, Dossier: 1, Libelle: 'Préparer l’audience', Echeance: 1790812800 },
+    { id: 3, Dossier: 2, Libelle: 'Archiver', Echeance: 1791417600 },
+  ]);
+  await GristAPI.refreshSchema();
+  await GristAPI.saveLinkRule('VcTaches', { mode: 'match', colonneCible: 'Dossier', colonneSource: 'id' });
+  document.getElementById('editor-container').classList.add('a4-preview');
+  const badge = col => `<span class="var-badge" data-table="VcTaches" data-column="${col}" data-key="VcTaches.${col}"></span>`;
+  Editor.setHTML('<p>Tâches du dossier :</p><table><tbody><tr><th><p>Tâche</p></th><th><p>Échéance</p></th></tr>'
+    + `<tr><td><p>${badge('Libelle')}</p></td><td><p>${badge('Echeance')}</p></td></tr></tbody></table>`);
+});
+await page.waitForTimeout(300);
+const taskBadge = await hitTest('.tiptap td .var-badge[data-column="Libelle"]');
+check('bulle d’une cellule de tableau visible dans le panneau (aperçu A4)', taskBadge.found && taskBadge.inViewport && taskBadge.onTop, taskBadge);
+if (taskBadge.found) await page.mouse.click(taskBadge.x, taskBadge.y);
+await page.waitForTimeout(250);
+const loopBtn = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+const loopBtnState = await page.evaluate(() => {
+  const b = document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]');
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  const r = bar ? bar.getBoundingClientRect() : null;
+  return { disabled: b && b.getAttribute('aria-disabled'), bar: r && { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, overflow: document.documentElement.scrollWidth - innerWidth };
+});
+check('icône Boucle (3e de la barre) visible, au premier plan et active pour une variable liée à plusieurs lignes',
+  loopBtn.found && loopBtn.inViewport && loopBtn.onTop && loopBtnState.disabled === 'false', { loopBtn, loopBtnState });
+check('la barre à trois icônes tient dans le panneau, sans débordement de page en plus',
+  !!loopBtnState.bar && loopBtnState.bar.left >= 0 && loopBtnState.bar.right <= WIDTH && loopBtnState.bar.top >= 0 && loopBtnState.bar.bottom <= HEIGHT
+  && loopBtnState.overflow <= overflowBefore, { loopBtnState, overflowBefore });
+if (loopBtn.found) await page.mouse.click(loopBtn.x, loopBtn.y);
+await page.waitForTimeout(700);
+const loopBox = await hitTest('#var-loop-modal .var-modal-content');
+check('fenêtre Boucle ouverte et entièrement dans le panneau', loopBox.found && loopBox.inViewport, loopBox);
+const loopPreview = await page.evaluate(() => Array.from(document.querySelectorAll('#var-loop-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+check('aperçu : les deux tâches du dossier sélectionné', loopPreview.length > 0 && /Relancer le client/.test(loopPreview[0]) && /Préparer l’audience/.test(loopPreview[0]), loopPreview);
+// « Trier par » et « Si aucune ligne » se partagent la largeur de la fenêtre : chaque liste doit montrer son choix en entier (« Ordre de la table »
+// y était coupé en « Ordre de la ta »). Largeur naturelle mesurée sur un clone réduit à l'option choisie et posé dans le même parent, donc avec la
+// même police.
+const loopSelects = await page.evaluate(() => ['#var-loop-sort', '.var-loop-sort-row select:last-child', '#var-loop-empty'].map(sel => {
+  const el = document.querySelector('#var-loop-modal ' + sel);
+  const clone = el.cloneNode(false);
+  clone.removeAttribute('id');
+  clone.appendChild(new Option(el.options[el.selectedIndex].text));
+  Object.assign(clone.style, { position: 'absolute', visibility: 'hidden', width: 'auto', flex: 'none' });
+  el.parentNode.appendChild(clone);
+  const natural = clone.getBoundingClientRect().width;
+  clone.remove();
+  return { sel, text: el.options[el.selectedIndex].text, width: el.getBoundingClientRect().width, natural };
+}));
+check('listes « Trier par », sens du tri et « Si aucune ligne » : le choix affiché n’est pas coupé', loopSelects.every(s => s.natural <= s.width + 0.5), loopSelects);
+const loopSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('Enregistrer de la fenêtre Boucle visible et non recouvert à 700x400', loopSave.found && loopSave.inViewport && loopSave.onTop, loopSave);
+if (loopSave.found) await page.mouse.click(loopSave.x, loopSave.y);
+await page.waitForTimeout(250);
+const afterLoop = await page.evaluate(() => {
+  let loop = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Libelle') loop = n.attrs.loop; });
+  const td = document.querySelector('.tiptap tr:nth-child(2) > td');
+  const r = td.getBoundingClientRect();
+  const tab = getComputedStyle(td, '::before');
+  return {
+    loop, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none', tint: getComputedStyle(td).backgroundColor,
+    tabContent: tab.content, tabLeft: r.left - 30, editorLeft: document.getElementById('editor-container').getBoundingClientRect().left,
+  };
+});
+check('Enregistrer (vrai clic) pose la boucle « ligne du tableau » et ferme la fenêtre',
+  !afterLoop.modalOpen && !!afterLoop.loop && afterLoop.loop.repeat === 'row' && afterLoop.loop.table === 'VcTaches', afterLoop);
+check('repère de la ligne répétée : teinte, onglet dans la partie visible de l’éditeur',
+  afterLoop.tint === 'rgb(245, 249, 255)' && afterLoop.tabContent !== 'none' && afterLoop.tabLeft >= afterLoop.editorLeft, afterLoop);
+const echeance = await hitTest('.tiptap td .var-badge[data-column="Echeance"]');
+if (echeance.found) await page.mouse.click(echeance.x, echeance.y);
+await page.waitForTimeout(250);
+const nestedBtn = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+if (nestedBtn.found) await page.mouse.click(nestedBtn.x, nestedBtn.y);
+await page.waitForTimeout(200);
+const nestedState = await page.evaluate(() => ({
+  disabled: document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]').getAttribute('aria-disabled'),
+  modalOpen: document.getElementById('var-loop-modal').style.display !== 'none',
+}));
+check('dans la ligne répétée, la Boucle d’une autre variable est grisée et un vrai clic n’ouvre rien', nestedBtn.found && nestedState.disabled === 'true' && !nestedState.modalOpen, { nestedBtn, nestedState });
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

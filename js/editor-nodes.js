@@ -27,7 +27,9 @@ const EditorNodes = (function () {
         // wireVariableFloatingToolbar), `null` tant que l'utilisateur n'a rien réglé (comportement historique, String(val) brut).
         // `condition` : { mode:'all'|'any', rules:[{ column, operator, value }] } - condition d'affichage (js/variable-condition.js), évaluée en lecture et
         // à l'export par js/reader-mode.js ; `null` = toujours affichée.
-        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender, condition: noBareRender };
+        // `loop` : { table, via, repeat, filter, sort, empty, … } - boucle sur les lignes liées (js/variable-loop.js), déroulée en lecture et à l'export par
+        // js/loop-rules.js ; `repeat` dit ce qui se répète autour de la bulle (sa ligne de tableau, son élément de liste, son paragraphe, ou elle seule).
+        return { table: noBareRender, column: noBareRender, key: noBareRender, format: noBareRender, condition: noBareRender, loop: noBareRender };
       },
       parseHTML() {
         return [{
@@ -40,7 +42,7 @@ const EditorNodes = (function () {
             };
             return {
               table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
-              format: parseJsonAttr('data-format'), condition: parseJsonAttr('data-condition'),
+              format: parseJsonAttr('data-format'), condition: parseJsonAttr('data-condition'), loop: parseJsonAttr('data-loop'),
             };
           },
         }];
@@ -52,6 +54,8 @@ const EditorNodes = (function () {
         });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
         if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+        // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
+        if (node.attrs.loop) { attrs['data-loop'] = JSON.stringify(node.attrs.loop); attrs['data-loop-repeat'] = node.attrs.loop.repeat || 'inline'; }
         // Préfixe décoratif régénéré à chaque rendu (jamais stocké) : suit la touche de déclenchement configurée, rétroactif sans migration.
         return ['span', attrs, varBadgeTriggerChar() + node.attrs.key];
       },

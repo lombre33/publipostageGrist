@@ -53,7 +53,7 @@ const Variables = (function () {
         e.preventDefault();
         if (activeTab === tab.dataset.tab) return;
         activeTab = tab.dataset.tab;
-        if (latestProps) updateItems(Object.assign({}, latestProps, { items: computeItems(latestProps.query) }));
+        if (latestProps) updateItems(Object.assign({}, latestProps, { items: computeItems(latestProps.query, latestProps.editor) }));
       });
     });
     tabs.appendChild(tabVariables); tabs.appendChild(tabChips);
@@ -67,7 +67,8 @@ const Variables = (function () {
 
   // Source des items selon l'onglet actif - centralisé pour être appelé à la fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur
   // un onglet.
-  function computeItems(query) {
+  // `editor` (facultatif) : dans une zone répétée par une boucle (js/variable-loop.js:loopTableAt), les colonnes de la table parcourue viennent en tête.
+  function computeItems(query, editor) {
     const q = (query || '').toLowerCase();
     if (activeTab === 'chips') {
       // Note de bas de page exclue en édition d'en-tête/pied : cette zone est répétée sur chaque page, sans repère de page physique auquel ancrer une note.
@@ -79,7 +80,13 @@ const Variables = (function () {
       GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
     }
     const all = GristAPI.getAllVariables();
-    return all.filter(v => v.key.toLowerCase().includes(q)).slice(0, 50);
+    const found = all.filter(v => v.key.toLowerCase().includes(q));
+    const loopTable = editor ? VariableLoop.loopTableAt(editor.state, editor.state.selection.from) : null;
+    if (loopTable) {
+      const first = found.filter(v => v.table === loopTable);
+      return first.concat(found.filter(v => v.table !== loopTable)).slice(0, 50);
+    }
+    return found.slice(0, 50);
   }
 
   function currentTabEl(tabName) {
@@ -164,7 +171,7 @@ const Variables = (function () {
             // fois ici, à la construction de l'éditeur - cf. triggerChar() ci-dessus).
             char: triggerChar(),
             // GristAPI, const racine chargée avant ce script, visible par identifiant nu - jamais window.GristAPI (ne s'y attache pas).
-            items: ({ query }) => computeItems(query),
+            items: ({ query, editor }) => computeItems(query, editor),
             // Async : une variable d'une autre table peut exiger de configurer une règle de correspondance avant insertion (ensureLinkConfigured plus bas).
             // `range` reste valide pendant l'attente (position ProseMirror pure, pas liée au focus DOM).
             command: ({ editor, range, props }) => {
@@ -191,7 +198,9 @@ const Variables = (function () {
                 return;
               }
               (async () => {
-                const ok = await ensureLinkConfigured(props);
+                // Dans une zone répétée pour cette table, la variable lit la ligne du tour : aucun lien à configurer (js/loop-rules.js).
+                const inLoop = VariableLoop.loopTableAt(editor.state, range.from) === props.table;
+                const ok = inLoop || await ensureLinkConfigured(props);
                 if (!ok) return;
                 editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: props.table, column: props.column, key: props.key } }).run();
               })();
@@ -355,6 +364,15 @@ const Variables = (function () {
   async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     if (!record) return { value: null };
+    // Élément copié par une zone répétée (js/loop-rules.js:itemBinding) : une variable de la table de la boucle lit la ligne du tour (brute, lue par
+    // fetchTable), et la colonne Liste de références qui mène à ces lignes ne vaut que la valeur affichée de l'élément du tour.
+    const loop = opts && opts.loop;
+    if (loop) {
+      const anchorKey = varTable + '.' + varColumn;
+      if (loop.anchors && Object.prototype.hasOwnProperty.call(loop.anchors, anchorKey)) return { value: loop.anchors[anchorKey] };
+      const row = loop.rows && loop.rows[varTable];
+      if (row) return { value: cellValue(varTable, varColumn, row) };
+    }
     if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
     if (varTable === resolvedTableId) {
       // `record` vient de grist.onRecord, encodage Attachments non garanti identique à fetchRowById - resolveAttachmentIds force `forceRawFetch` pour
@@ -379,9 +397,10 @@ const Variables = (function () {
     if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
     return { value: cellValue(varTable, varColumn, linkedRow) };
   }
-  async function resolveVariable(varTable, varColumn, currentTableId, record, format) {
+  // `opts.loop` (facultatif) : ligne du tour d'une zone répétée, cf. resolveRawValue.
+  async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
     try {
-      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record);
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, opts);
       if (error) return error;
       return formatValue(value, format, varTable, varColumn);
     } catch (e) {
@@ -431,9 +450,9 @@ const Variables = (function () {
     if (value && typeof value === 'object' && typeof value.id === 'number') return [value.id];
     return [];
   }
-  async function resolveAttachmentIds(varTable, varColumn, currentTableId, record) {
+  async function resolveAttachmentIds(varTable, varColumn, currentTableId, record, opts) {
     try {
-      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, { forceRawFetch: true });
+      const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, Object.assign({}, opts, { forceRawFetch: true }));
       if (error) return [];
       return flattenToNumbers(value);
     } catch (e) {

@@ -324,14 +324,15 @@ const FloatingToolbars = (function () {
   }
 
   // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur TOUTES les variables depuis la maquette validée le 2026-09-28 : un groupe
-  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne - de la place pour les suivantes, ex. boucle), puis, pour une colonne
-  // nombre/date seulement, le sous-panneau de formatage choisi par le type de colonne Grist (inchangé).
+  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne, boucle sur les lignes liées), puis, pour une colonne nombre/date
+  // seulement, le sous-panneau de formatage choisi par le type de colonne Grist (inchangé).
   function wireVariableFloatingToolbar() {
     const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
       '<div class="v2-varbadge-actions">',
       `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
       `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
+      `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
       '</div>',
       '<span class="v2-floating-sep" data-var-sep></span>',
       '<div data-var-panel="number">',
@@ -385,6 +386,11 @@ const FloatingToolbars = (function () {
         VariableLinkedAttrs.open(editor, editor.state.selection.from);
         return;
       }
+      if (action === 'var-loop') {
+        if (!VariableLoop.status(editor, editor.state.selection.from, node).enabled) return;
+        VariableLoop.open(editor, editor.state.selection.from);
+        return;
+      }
       if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
       if (action === 'num-words') {
         const current = node.attrs.format || {};
@@ -427,6 +433,15 @@ const FloatingToolbars = (function () {
         linkedBtn.setAttribute('aria-disabled', available ? 'false' : 'true');
         linkedBtn.title = I18n.t(available ? 'varToolbar.linked' : 'varToolbar.linkedDisabled');
       }
+      // Boucle : active (bleue) quand posée ; grisée pour une variable qui ne montre qu'une ligne, ou déjà répétée avec une autre bulle (js/variable-loop.js).
+      const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
+      if (loopBtn) {
+        const loop = VariableLoop.status(editor, editor.state.selection.from, node);
+        loopBtn.classList.toggle('is-active', loop.active);
+        loopBtn.classList.toggle('is-disabled', !loop.enabled);
+        loopBtn.setAttribute('aria-disabled', loop.enabled ? 'false' : 'true');
+        loopBtn.title = loop.title;
+      }
       // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
       const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
       const style = format.type === 'number' ? (format.style || defaultStyle) : defaultStyle;
@@ -459,8 +474,8 @@ const FloatingToolbars = (function () {
       // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
       const node = selectedVarBadgeNode();
       if (!node) { panel.hide(); return; }
-      // Fenêtre de condition / d'autres attributs ouverte sur cette bulle : la barre (z-index 2000) passerait par-dessus son voile.
-      if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen()) { panel.hide(); return; }
+      // Fenêtre de condition / d'autres attributs / de boucle ouverte sur cette bulle : la barre (z-index 2000) passerait par-dessus son voile.
+      if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen()) { panel.hide(); return; }
       const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
       const isNumber = type === 'Numeric' || type === 'Int';
       const isDate = type === 'Date' || type === 'DateTime';

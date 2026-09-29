@@ -7,14 +7,17 @@ const ReaderMode = (function () {
     if (!raw) return null;
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
+  // Options de résolution d'un élément copié par une zone répétée (js/loop-rules.js) : sa valeur est lue dans la ligne du tour.
+  function loopOpts(binding) { return binding ? { loop: binding } : undefined; }
   // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de l'export, le
   // texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle (js/condition-rules.js:matches).
-  async function badgeConditionHolds(badge, tableId, record) {
+  // `binding` : ligne du tour d'une zone répétée (js/loop-rules.js:bindingOf) - une règle sur une colonne de la table de la boucle lit alors cette ligne.
+  async function badgeConditionHolds(badge, tableId, record, binding) {
     const raw = badge.getAttribute('data-condition');
     if (!raw) return true;
     let condition = null;
     try { condition = JSON.parse(raw); } catch (e) { console.error('[ReaderMode] condition de variable illisible', e); return false; }
-    try { return await ConditionRules.conditionHolds(condition, tableId, record); }
+    try { return await ConditionRules.conditionHolds(condition, tableId, record, loopOpts(binding)); }
     catch (e) { console.error('[ReaderMode] échec de l\'évaluation d\'une condition de variable', e); return false; }
   }
   // === Aperçu paginé réel - mode Lecture === Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt qu'importé (pas de mécanisme de module
@@ -81,13 +84,19 @@ const ReaderMode = (function () {
   async function resolveHeaderFooterZone(html, tableId, record) {
     if (!html) return html;
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
+    const loopCtx = LoopRules.createContext();
+    await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     const badges = wrapper.querySelectorAll('.var-badge');
     await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
-      if (!(await badgeConditionHolds(badge, tableId, record))) { badge.replaceWith(document.createTextNode('')); return; }
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
+      const binding = LoopRules.bindingOf(badge);
+      if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
+      const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
+      if (inline) { badge.replaceWith(inline.node); return; }
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
     }));
+    LoopRules.removeHiddenBlocks(wrapper);
     // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
     // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
@@ -211,13 +220,17 @@ const ReaderMode = (function () {
     // Rafraîchit le schéma avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments
     // récemment ajoutée.
     await GristAPI.refreshSchema().catch(() => {});
+    // Zones répétées d'une boucle (js/loop-rules.js) déroulées AVANT la résolution : chaque copie porte la ligne de son tour, lue par resolveBadgeNode.
+    const loopCtx = LoopRules.createContext();
+    await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
-      const { node, isError } = await resolveBadgeNode(badge, tableId, record, format);
+      const { node, isError } = await resolveBadgeNode(badge, tableId, record, format, loopCtx);
       return { badge, node, isError };
     }));
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
+    LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
@@ -278,7 +291,7 @@ const ReaderMode = (function () {
       const table = img.getAttribute('data-var-table');
       const column = img.getAttribute('data-var-column');
       let ids = [];
-      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
+      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(LoopRules.bindingOf(img))); }
       catch (e) { ids = []; }
       if (!ids.length) { img.remove(); return; }
       // data-var-table/-column/-key restent posés : c'est le marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe, image mise à
@@ -326,31 +339,64 @@ const ReaderMode = (function () {
   }
   // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
   // par GristAPI.hydrateAttachmentImages, appelé juste après.
-  async function resolveBadgeNode(badge, tableId, record, format) {
-    if (!(await badgeConditionHolds(badge, tableId, record))) return { node: document.createTextNode(''), isError: false };
+  function attachmentImages(ids) {
+    const frag = document.createDocumentFragment();
+    ids.forEach(id => {
+      const img = document.createElement('img');
+      img.className = 'editor-image';
+      img.dataset.source = 'attachment';
+      img.dataset.attachmentId = String(id);
+      // Largeur par défaut explicite (même valeur que l'insertion normale) : cette image n'existe qu'au moment de la résolution, donc sans elle une
+      // photo haute résolution s'afficherait à sa pleine largeur intrinsèque, plus grande qu'un logo n'a besoin de l'être.
+      img.style.width = '320px';
+      frag.appendChild(img);
+    });
+    return frag;
+  }
+  // Bulle en boucle « dans la phrase » (js/loop-rules.js) : ses valeurs pour chaque ligne retenue, jointes par les séparateurs de la boucle (les images
+  // d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire.
+  async function resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx) {
+    const loop = LoopRules.inlineLoopOf(badge);
+    if (!loop) return null;
+    try {
+      if (GristAPI.getColumnType(table, column) === 'Attachments') {
+        const ids = [];
+        const res = await LoopRules.resolveInline(badge, loop, tableId, record, loopCtx, async binding => {
+          const found = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(binding));
+          ids.push(...found);
+          return found.length ? 'x' : '';
+        });
+        if (!res) return null;
+        return { node: res.node || attachmentImages(ids), isError: false };
+      }
+      const res = await LoopRules.resolveInline(badge, loop, tableId, record, loopCtx,
+        binding => Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)));
+      if (!res) return null;
+      if (res.node) return { node: res.node, isError: false };
+      const span = document.createElement('span'); span.textContent = res.text; span.className = 'resolved-var';
+      return { node: span, isError: false };
+    } catch (e) {
+      console.error('[ReaderMode] échec de la boucle d\'une variable', e);
+      return null;
+    }
+  }
+  async function resolveBadgeNode(badge, tableId, record, format, loopCtx) {
+    const binding = LoopRules.bindingOf(badge);
+    if (!(await badgeConditionHolds(badge, tableId, record, binding))) return { node: document.createTextNode(''), isError: false };
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
+    const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
+    if (inline) return inline;
     const isAttachments = GristAPI.getColumnType(table, column) === 'Attachments';
     if (isAttachments) {
       let ids = [];
-      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record); }
+      try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(binding)); }
       catch (e) { return { node: document.createTextNode(''), isError: true }; }
       if (!ids.length) return { node: document.createTextNode(''), isError: false };
-      const frag = document.createDocumentFragment();
-      ids.forEach(id => {
-        const img = document.createElement('img');
-        img.className = 'editor-image';
-        img.dataset.source = 'attachment';
-        img.dataset.attachmentId = String(id);
-        // Largeur par défaut explicite (même valeur que l'insertion normale) : cette image n'existe qu'au moment de la résolution, donc sans elle une
-        // photo haute résolution s'afficherait à sa pleine largeur intrinsèque, plus grande qu'un logo n'a besoin de l'être.
-        img.style.width = '320px';
-        frag.appendChild(img);
-      });
-      return { node: frag, isError: false };
+      return { node: attachmentImages(ids), isError: false };
     }
     try {
-      const value = await Variables.resolveVariable(table, column, tableId, record, format);
+      const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding));
       const isError = typeof value === 'string' && value.indexOf('[ERREUR') === 0;
       const span = document.createElement('span'); span.textContent = value; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
       return { node: span, isError };
@@ -360,14 +406,19 @@ const ReaderMode = (function () {
     }
   }
   async function preview(htmlContent, tableId, record) {
-    const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent); const badges = wrapper.querySelectorAll('.var-badge');
+    const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
+    // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.
+    const loopCtx = LoopRules.createContext();
+    await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
+    const badges = wrapper.querySelectorAll('.var-badge');
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
-      const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format);
+      const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format, loopCtx);
       badge.replaceWith(node);
     }));
+    LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
