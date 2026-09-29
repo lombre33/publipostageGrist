@@ -35,11 +35,16 @@ const VariableCondition = (function () {
       rules: normalized.rules.map(r => ({ column: r.column, operator: r.operator || '=', value: r.value == null ? '' : String(r.value) })),
     } : null;
   }
-  // « Statut = Urgent et VcContacts.Role = Avocat » : ce que « Coller » va poser, sur une ligne, pour l'info-bulle du bouton.
-  function conditionSummary(condition) {
+  // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne - ce que « Coller » va poser (info-bulle du bouton), la condition que
+  // reprennent les attributs insérés (js/variable-linked-attrs.js). Sans valeur pour « vide » / « non vide ». Coupée à 110 caractères, sauf `full` (la ligne
+  // des attributs insérés la tronque elle-même à l'écran et la donne en entier dans son info-bulle).
+  function conditionSummary(condition, opts) {
     const glue = ' ' + I18n.t(condition.mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd').toLowerCase() + ' ';
-    const text = condition.rules.map(r => (r.column + ' ' + r.operator + ((r.operator === 'vide' || r.operator === 'non vide') ? '' : ' ' + r.value)).trim()).join(glue);
-    return text.length > 110 ? text.slice(0, 109) + '…' : text;
+    const text = condition.rules.map(r => {
+      const operator = r.operator || '=';
+      return (r.column + ' ' + operator + ((operator === 'vide' || operator === 'non vide' || r.value == null) ? '' : ' ' + r.value)).trim();
+    }).join(glue);
+    return (opts && opts.full) || text.length <= 110 ? text : text.slice(0, 109) + '…';
   }
 
   function ensureModal() {
@@ -400,5 +405,5 @@ const VariableCondition = (function () {
     updateDebug();
   }
 
-  return { open, close, isOpen, clearClipboard };
+  return { open, close, isOpen, clearClipboard, describe: conditionSummary };
 })();

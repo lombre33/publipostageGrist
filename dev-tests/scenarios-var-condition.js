@@ -644,6 +644,129 @@
     },
   });
 
+  // === Attributs insérés : ils reprennent la condition de la variable d'origine (demande d'Antoine, 2026-09-29) ===
+  function linkedModal() { return document.getElementById('var-linked-modal'); }
+  async function openLinked(h, column) {
+    await selectBadge(h, column);
+    pressToolbarButton('var-linked');
+    await h.sleep(250);
+    return linkedModal();
+  }
+  function inheritRow(modal) { return modal.querySelector('.var-linked-inherit'); }
+  function inheritInfo(modal) {
+    const row = inheritRow(modal);
+    return row ? {
+      shown: !row.hidden, checked: row.querySelector('input').checked,
+      text: row.querySelector('.var-linked-inherit-text').textContent, summary: row.querySelector('.var-linked-inherit-summary').textContent, title: row.title,
+    } : null;
+  }
+  function tickLinked(modal, cols) {
+    cols.forEach(col => {
+      const input = modal.querySelector(`.var-linked-row[data-col="${col}"] input`);
+      input.checked = true;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  function cancelLinked(modal) { modal.querySelector('.var-modal-actions button:not(.var-modal-primary)').click(); }
+  const NO_INHERIT_ROW = { pass: false, notes: 'ligne « Reprendre la condition d’affichage » absente de la fenêtre Autres attributs' };
+
+  cases.push({
+    id: 'varlinked_inserted_attributes_inherit_the_condition_by_default',
+    description: 'Autres attributs depuis une variable qui a une condition : « Reprendre la condition d’affichage » est cochée d’office (résumé de la condition à côté), chaque attribut inséré reçoit une copie de la condition, et tous disparaissent ensemble en lecture quand elle n’est pas remplie',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom', COND_URGENT)} fin</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openLinked(h, 'NomPrenom');
+      const option = inheritInfo(modal);
+      if (!option) { cancelLinked(modal); return NO_INHERIT_ROW; }
+      tickLinked(modal, ['Telephone', 'Naissance']);
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(80);
+      const badges = badgeNodes(ed).map(b => ({ key: b.node.attrs.key, condition: b.node.attrs.condition }));
+      const html = Editor.getHTML();
+      // Ligne courante « Urgent » : la condition est remplie, les trois valeurs s'affichent ; ligne courante « Normal » : les trois disparaissent avec elle.
+      const shownBox = document.createElement('div');
+      shownBox.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_1, { Statut: 'Normal' }), 'VcDossiers');
+      await h.sleep(50);
+      const hiddenBox = document.createElement('div');
+      hiddenBox.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      const conditions = badges.map(b => JSON.stringify(b.condition));
+      const pass = option.shown && option.checked && option.text === I18n.t('varLinked.inherit') && option.summary === '· Statut = Urgent'
+        && option.title === I18n.t('varLinked.inheritTitle', { badge: '#VcAnnuaire.NomPrenom', summary: 'Statut = Urgent' })
+        && JSON.stringify(badges.map(b => b.key)) === JSON.stringify(['VcAnnuaire.NomPrenom', 'VcAnnuaire.Telephone', 'VcAnnuaire.Naissance'])
+        && conditions.every(c => c === JSON.stringify(COND_URGENT)) && (html.match(/data-condition=/g) || []).length === 3
+        && ['Dupont Jean', '06 11 22 33 44', '1990'].every(part => shownBox.textContent.includes(part))
+        && !/Dupont|06 11|1990/.test(hiddenBox.textContent);
+      return { pass, notes: JSON.stringify({ option, badges, shown: shownBox.textContent, hidden: hiddenBox.textContent }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_inherit_can_be_unticked_and_is_checked_again_on_each_opening',
+    description: 'Décochée, « Reprendre la condition d’affichage » insère les attributs sans condition (la variable d’origine garde la sienne) ; elle est de nouveau cochée à l’ouverture suivante ; traduite en anglais',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom', COND_URGENT)} fin</p>`);
+      const ed = EditorCore.getEditor();
+      let modal = await openLinked(h, 'NomPrenom');
+      const row = inheritRow(modal);
+      if (!row) { cancelLinked(modal); return NO_INHERIT_ROW; }
+      const box = row.querySelector('input');
+      box.checked = false;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      tickLinked(modal, ['Telephone']);
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(80);
+      const inserted = badgeNodes(ed).map(b => ({ key: b.node.attrs.key, condition: b.node.attrs.condition }));
+      // Deuxième ouverture, sur la même variable : cochée de nouveau.
+      modal = await openLinked(h, 'NomPrenom');
+      const reopened = inheritInfo(modal);
+      cancelLinked(modal);
+      // Anglais : la case et son info-bulle ont leur traduction (ni la clé, ni le texte français).
+      const lang = I18n.getLang();
+      let english = null;
+      try {
+        I18n.setLang('fr');
+        const fr = [I18n.t('varLinked.inherit'), I18n.t('varLinked.inheritTitle', { badge: 'B', summary: 'S' })];
+        I18n.setLang('en');
+        modal = await openLinked(h, 'NomPrenom');
+        english = { fr, info: inheritInfo(modal) };
+        cancelLinked(modal);
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = inserted.length === 2 && inserted[0].key === 'VcAnnuaire.NomPrenom' && JSON.stringify(inserted[0].condition) === JSON.stringify(COND_URGENT)
+        && inserted[1].key === 'VcAnnuaire.Telephone' && inserted[1].condition == null
+        && reopened.shown && reopened.checked
+        && english.info.text === 'Reuse the display condition' && english.info.text !== english.fr[0]
+        && english.info.title === 'Each inserted variable gets the same display condition as #VcAnnuaire.NomPrenom: Statut = Urgent. Untick to insert them without a condition.';
+      return { pass, notes: JSON.stringify({ inserted, reopened, english }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_no_inherit_option_and_no_condition_when_origin_has_none',
+    description: 'Une variable sans condition : la ligne « Reprendre la condition d’affichage » reste masquée et les attributs insérés n’en reçoivent aucune (comportement d’avant)',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom')} fin</p>`);
+      const ed = EditorCore.getEditor();
+      const modal = await openLinked(h, 'NomPrenom');
+      const row = inheritRow(modal);
+      if (!row) { cancelLinked(modal); return NO_INHERIT_ROW; }
+      const hiddenRow = row.hidden;
+      tickLinked(modal, ['Telephone', 'Naissance']);
+      modal.querySelector('.var-modal-primary').click();
+      await h.sleep(80);
+      const html = Editor.getHTML();
+      const conditions = badgeNodes(ed).map(b => b.node.attrs.condition);
+      const pass = hiddenRow && conditions.length === 3 && conditions.every(c => c == null) && !html.includes('data-condition');
+      return { pass, notes: JSON.stringify({ hiddenRow, conditions }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

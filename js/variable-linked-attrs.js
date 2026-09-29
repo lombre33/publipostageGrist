@@ -11,6 +11,9 @@
 // table qu'elle désigne, et sur une variable elle-même Référence la fenêtre s'ouvre d'emblée sur la ligne qu'elle désigne (l'élément le plus bas).
 // La bulle insérée porte alors un chemin, #Projet.Accompagnateur.Email (GristAPI.resolveColumnPath) : sa table reste celle de la règle de liaison, le reste
 // suit les références de cette ligne, sans nouvelle règle. Les cases cochées se gardent d'un niveau à l'autre ; un fil d'Ariane remonte.
+//
+// Condition d'affichage (demande d'Antoine du 2026-09-29) : quand la variable d'origine en a une, chaque bulle insérée la reprend, par défaut - une ligne
+// « Reprendre la condition d'affichage », cochée, permet de les insérer sans. Une copie par bulle : elles se modifient ensuite chacune de leur côté.
 const VariableLinkedAttrs = (function () {
   let modalEl = null;
   let refs = null;
@@ -89,6 +92,14 @@ const VariableLinkedAttrs = (function () {
     const list = el('div', 'var-linked-list');
     const note = el('p', 'var-linked-note');
     note.setAttribute('aria-live', 'polite');
+    // Proposée seulement si la variable d'origine a une condition (cf. renderInheritOption), cochée à chaque ouverture.
+    const inheritRow = el('label', 'var-linked-inherit');
+    inheritRow.hidden = true;
+    const inheritBox = el('input');
+    inheritBox.type = 'checkbox';
+    const inheritText = el('span', 'var-linked-inherit-text');
+    const inheritSummary = el('span', 'var-linked-inherit-summary');
+    inheritRow.append(inheritBox, inheritText, inheritSummary);
     const actions = el('div', 'var-modal-actions');
     const spacer = el('span', 'var-modal-spacer');
     const cancelBtn = el('button');
@@ -96,10 +107,10 @@ const VariableLinkedAttrs = (function () {
     const insertBtn = el('button', 'var-modal-primary');
     insertBtn.type = 'button';
     actions.append(spacer, cancelBtn, insertBtn);
-    box.append(title, subtitle, path, filter, list, note, actions);
+    box.append(title, subtitle, inheritRow, path, filter, list, note, actions);
     modalEl.appendChild(box);
     document.body.appendChild(modalEl);
-    refs = { title, subtitle, path, filter, list, note, cancelBtn, insertBtn };
+    refs = { title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, insertBtn };
 
     filter.addEventListener('input', applyFilter);
     list.addEventListener('change', onPickChange);
@@ -319,6 +330,26 @@ const VariableLinkedAttrs = (function () {
     return out;
   }
 
+  // Copie de la condition d'affichage de la bulle d'origine (règles complètes seulement, comme la fenêtre de condition les enregistre), ou null : chaque
+  // bulle insérée en reçoit une neuve.
+  function inheritedCondition(node) {
+    const condition = ConditionRules.normalizeCondition(node.attrs.condition);
+    return condition ? JSON.parse(JSON.stringify(condition)) : null;
+  }
+  // La ligne « Reprendre la condition d'affichage » : visible seulement si la variable d'origine a une condition, et cochée à chaque ouverture (reprendre est le
+  // comportement par défaut ; on décoche au cas par cas). Le résumé de la condition est à côté, l'info-bulle dit ce que la case fait.
+  function renderInheritOption() {
+    const { inheritRow, inheritBox, inheritText, inheritSummary } = refs;
+    const condition = inheritedCondition(state.node);
+    inheritRow.hidden = !condition;
+    inheritBox.checked = true;
+    if (!condition) return;
+    const summary = VariableCondition.describe(condition, { full: true });
+    inheritText.textContent = I18n.t('varLinked.inherit');
+    inheritSummary.textContent = '· ' + summary;
+    inheritRow.title = I18n.t('varLinked.inheritTitle', { badge: Variables.triggerChar() + (state.node.attrs.key || ''), summary });
+  }
+
   function insert() {
     if (!state || !state.picks.length) return;
     const { editor, pos, node: original, base } = state;
@@ -329,11 +360,14 @@ const VariableLinkedAttrs = (function () {
       close();
       return;
     }
+    const inherits = !refs.inheritRow.hidden && refs.inheritBox.checked;
     const content = [];
     orderedPicks().forEach(p => {
       const column = p.hops.concat(p.col).join('.');
+      const attrs = { table: base, column, key: base + '.' + column };
+      if (inherits) attrs.condition = inheritedCondition(node);
       content.push({ type: 'text', text: ' ' });
-      content.push({ type: 'varBadge', attrs: { table: base, column, key: base + '.' + column } });
+      content.push({ type: 'varBadge', attrs });
     });
     const insertAt = pos + node.nodeSize;
     close({ keepFocus: true });
@@ -368,6 +402,7 @@ const VariableLinkedAttrs = (function () {
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
     cancelBtn.textContent = I18n.t('common.cancel');
+    renderInheritOption();
     renderLevel();
     modalEl.style.display = 'flex';
     filter.focus();

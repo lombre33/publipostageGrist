@@ -96,6 +96,16 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-linked-value { flex: 1; min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .var-linked-empty { padding: 8px 10px; font-size: 12px; color: var(--text-faint); }
 .var-linked-note { font-size: 11.5px; line-height: 1.45; color: var(--text-faint); margin: 8px 0 0; }
+/* « Reprendre la condition d'affichage » (demande d'Antoine, 2026-09-29) : seulement si la variable d'origine a une condition, cochée par défaut, sous le
+   sous-titre - en haut, donc visible à l'ouverture même quand une longue liste de colonnes fait défiler la fenêtre ; le résumé de la condition se coupe par
+   « … » plutôt que d'élargir la fenêtre. */
+.var-linked-inherit { display: flex; align-items: center; gap: 6px; margin: -4px 0 10px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; }
+.var-linked-inherit[hidden] { display: none; }
+/* La ligne ajoute 23 px de haut : 6 px de moins entre la note et les boutons, pour qu'une fenêtre de quelques colonnes tienne encore sans défiler à 400 px. */
+.var-linked-inherit:not([hidden]) ~ .var-modal-actions { margin-top: 10px; }
+.var-linked-inherit input { flex: none; margin: 0; }
+.var-linked-inherit-text { flex: none; }
+.var-linked-inherit-summary { flex: 0 1 auto; min-width: 0; font-weight: 600; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* === Fenêtre de boucle (js/variable-loop.js) === Mêmes champs que la fenêtre de condition ; la bulle de l'introduction garde son trait plein (pas de
    condition ici). */

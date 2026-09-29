@@ -605,6 +605,118 @@ const montantCondition = await conditionOn('Montant');
 check('Enregistrer (vrai clic) pose sur « Montant » la même condition que celle copiée sur « Titre »',
   JSON.stringify(montantCondition) === JSON.stringify(expectedCondition) && (await conditionOn('Titre')) == null && await page.evaluate(() => document.getElementById('var-condition-modal').style.display === 'none'), montantCondition);
 
+// 6) Attributs insérés depuis une variable qui a une condition (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : la ligne « Reprendre la
+// condition d'affichage » est visible, cochée d'office, au premier plan, sans faire défiler la fenêtre ni déborder (même avec une condition longue, même à 360 px) ;
+// un vrai clic sur son texte la décoche puis la recoche ; Insérer reste atteignable, et les bulles insérées portent la condition - ou aucune, case décochée.
+const COND_STATUT = { mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] };
+const setOriginBubble = condition => page.evaluate(cond => {
+  const attr = cond ? ` data-condition="${JSON.stringify(cond).replace(/"/g, '&quot;')}"` : '';
+  Editor.setHTML(`<p>Dossier suivi par <span class="var-badge" data-table="VcAnnuaire" data-column="NomPrenom" data-key="VcAnnuaire.NomPrenom"${attr}></span> jusqu’à la clôture.</p>`);
+}, condition);
+const inheritState = () => page.evaluate(() => {
+  const modal = document.getElementById('var-linked-modal');
+  const row = modal.querySelector('.var-linked-inherit');
+  if (!row) return { missing: true };
+  const content = modal.querySelector('.var-modal-content');
+  const r = row.getBoundingClientRect(), c = content.getBoundingClientRect();
+  return {
+    shown: !row.hidden && r.height > 0, checked: row.querySelector('input').checked, text: row.querySelector('.var-linked-inherit-text').textContent,
+    summary: row.querySelector('.var-linked-inherit-summary').textContent, title: row.title, height: Math.round(r.height),
+    inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5, scrolls: content.scrollHeight - content.clientHeight,
+    contentOverflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+const bubbleConditions = () => page.evaluate(() => {
+  const out = [];
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') out.push({ key: n.attrs.key, condition: n.attrs.condition }); });
+  return out;
+});
+const cancelLinkedWindow = async () => {
+  const cancel = await hitTest('#var-linked-modal .var-modal-actions button:not(.var-modal-primary)');
+  if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+  await page.waitForTimeout(200);
+};
+
+await setOriginBubble(COND_STATUT);
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const inheritOpen = await inheritState();
+check('Autres attributs sur une variable à condition : « Reprendre la condition d’affichage » est là, cochée d’office, avec le résumé « Statut = Urgent »',
+  !inheritOpen.missing && inheritOpen.shown && inheritOpen.checked && inheritOpen.text === 'Reprendre la condition d’affichage' && inheritOpen.summary === '· Statut = Urgent', inheritOpen);
+const inheritText = await hitTest('#var-linked-modal .var-linked-inherit-text');
+const inheritBox = await hitTest('#var-linked-modal .var-linked-inherit input');
+check('la ligne est visible, dans la fenêtre et au premier plan (case et texte atteignables) ; fenêtre sans défilement ni débordement à 700x400',
+  inheritText.found && inheritText.inViewport && inheritText.onTop && inheritBox.found && inheritBox.inViewport && inheritBox.onTop
+  && inheritOpen.inside && inheritOpen.scrolls <= 0 && inheritOpen.contentOverflowX <= 0 && inheritOpen.docOverflowX <= 0 && inheritOpen.height < 32, { inheritText, inheritBox, inheritOpen });
+const telephoneRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+if (telephoneRow.found) await page.mouse.click(telephoneRow.x, telephoneRow.y);
+await page.waitForTimeout(80);
+if (inheritText.found) await page.mouse.click(inheritText.x, inheritText.y);
+await page.waitForTimeout(80);
+const unticked = await inheritState();
+if (inheritText.found) await page.mouse.click(inheritText.x, inheritText.y);
+await page.waitForTimeout(80);
+const reticked = await inheritState();
+check('un vrai clic sur le texte de la ligne décoche la case, un second la recoche', !unticked.missing && !unticked.checked && !reticked.missing && reticked.checked, { unticked, reticked });
+const insertInherit = await hitTest('#var-linked-modal .var-modal-primary');
+check('Insérer reste visible, au premier plan et actif avec la ligne en plus', insertInherit.found && insertInherit.inViewport && insertInherit.onTop
+  && await page.evaluate(() => !document.querySelector('#var-linked-modal .var-modal-primary').disabled), insertInherit);
+if (insertInherit.found) await page.mouse.click(insertInherit.x, insertInherit.y);
+await page.waitForTimeout(250);
+const inheritedBubbles = await bubbleConditions();
+check('Insérer (vrai clic, case cochée) : #VcAnnuaire.Telephone reçoit la condition de #VcAnnuaire.NomPrenom, qui garde la sienne',
+  inheritedBubbles.length === 2 && inheritedBubbles[0].key === 'VcAnnuaire.NomPrenom' && inheritedBubbles[1].key === 'VcAnnuaire.Telephone'
+  && inheritedBubbles.every(b => JSON.stringify(b.condition) === JSON.stringify(COND_STATUT)), inheritedBubbles);
+const conditionalInDom = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .var-badge[data-condition]')).map(b => b.dataset.key));
+check('... et les deux bulles sont marquées conditionnelles dans l’éditeur', JSON.stringify(conditionalInDom) === JSON.stringify(['VcAnnuaire.NomPrenom', 'VcAnnuaire.Telephone']), conditionalInDom);
+
+// Deuxième ouverture, case décochée à la souris : l'attribut est inséré sans condition, la case est de nouveau cochée à l'ouverture suivante.
+await openLinkedFor('NomPrenom');
+const inheritAgain = await inheritState();
+check('à l’ouverture suivante la case est de nouveau cochée', !inheritAgain.missing && inheritAgain.shown && inheritAgain.checked, inheritAgain);
+const naissanceRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Naissance"] .var-linked-pick');
+if (naissanceRow.found) await page.mouse.click(naissanceRow.x, naissanceRow.y);
+const inheritBox2 = await hitTest('#var-linked-modal .var-linked-inherit input');
+if (inheritBox2.found) await page.mouse.click(inheritBox2.x, inheritBox2.y);
+await page.waitForTimeout(80);
+const untickedByBox = await inheritState();
+check('un vrai clic sur la case elle-même la décoche', !untickedByBox.missing && !untickedByBox.checked, untickedByBox);
+const insertPlain = await hitTest('#var-linked-modal .var-modal-primary');
+if (insertPlain.found) await page.mouse.click(insertPlain.x, insertPlain.y);
+await page.waitForTimeout(250);
+const plainBubbles = await bubbleConditions();
+check('Insérer (vrai clic, case décochée) : #VcAnnuaire.Naissance arrive sans condition, les autres bulles gardent la leur',
+  plainBubbles.length === 3 && plainBubbles[0].key === 'VcAnnuaire.NomPrenom' && plainBubbles[1].key === 'VcAnnuaire.Naissance' && plainBubbles[2].key === 'VcAnnuaire.Telephone'
+  && JSON.stringify(plainBubbles[0].condition) === JSON.stringify(COND_STATUT) && plainBubbles[1].condition == null && JSON.stringify(plainBubbles[2].condition) === JSON.stringify(COND_STATUT), plainBubbles);
+
+// Condition longue (trois règles, valeurs longues) : le résumé est tronqué avec « … » sur la même ligne, sans rien faire déborder, à 700 px comme à 360 px.
+await setOriginBubble({ mode: 'any', rules: [
+  { column: 'Statut', operator: '=', value: 'Urgent à traiter avant la fin de la semaine prochaine' },
+  { column: 'Titre', operator: 'contient', value: 'Convocation devant le tribunal judiciaire de Paris' },
+  { column: 'Montant', operator: '≥', value: '1000000' },
+] });
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const inheritLong = await inheritState();
+check('condition longue à 700 px : la ligne reste sur une seule ligne, dans la fenêtre, sans défilement ni débordement',
+  !inheritLong.missing && inheritLong.shown && inheritLong.inside && inheritLong.height < 32 && inheritLong.scrolls <= 0 && inheritLong.contentOverflowX <= 0 && inheritLong.docOverflowX <= 0, inheritLong);
+check('... et l’info-bulle de la ligne donne la condition en entier', !inheritLong.missing && inheritLong.title.includes('Convocation devant le tribunal judiciaire de Paris') && inheritLong.title.includes('1000000'), inheritLong);
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(250);
+const inheritNarrow = await inheritState();
+check('condition longue à 360 px : la ligne reste dans la fenêtre, sans débordement latéral de la fenêtre ni de la page',
+  !inheritNarrow.missing && inheritNarrow.shown && inheritNarrow.inside && inheritNarrow.contentOverflowX <= 0 && inheritNarrow.docOverflowX <= 0, inheritNarrow);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(250);
+await cancelLinkedWindow();
+// Variable sans condition : pas de ligne du tout (la fenêtre reste telle qu'avant).
+await setOriginBubble(null);
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const inheritNone = await inheritState();
+check('variable sans condition : la ligne « Reprendre la condition d’affichage » n’est pas montrée', inheritNone.missing || !inheritNone.shown, inheritNone);
+await cancelLinkedWindow();
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

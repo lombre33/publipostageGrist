@@ -587,6 +587,8 @@ const I18n = (function () {
     'varLinked.descend': { fr: 'Voir les colonnes de « {table} » (via {column})', en: 'Show the columns of “{table}” (via {column})' },
     'varLinked.path': { fr: 'Chemin des références', en: 'Reference path' },
     'varLinked.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
+    'varLinked.inherit': { fr: 'Reprendre la condition d’affichage', en: 'Reuse the display condition' },
+    'varLinked.inheritTitle': { fr: 'Chaque variable insérée reçoit la même condition d’affichage que {badge} : {summary}. Décochez pour les insérer sans condition.', en: 'Each inserted variable gets the same display condition as {badge}: {summary}. Untick to insert them without a condition.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
 
     // --- Fenêtre « Boucle » d'une variable (js/variable-loop.js ; moteur js/loop-rules.js) ---
