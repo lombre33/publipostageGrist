@@ -392,6 +392,36 @@
     },
   });
 
+  // Ce mode Lecture-là bâtit son HTML autrement (Comments.buildReaderHtml : chaque texte dans un <span data-pp-pos>, positions du modèle) : les sauts de
+  // ligne y passent par un chemin de plus que le mode Lecture ordinaire (dev-tests/scenarios-readmode-fidelity.js), d'où un scénario ici aussi.
+  cases.push({
+    id: 'access_reader_comments_html_keeps_blank_lines_and_line_breaks',
+    description: 'Lecture seule + commentaires : les lignes vides du modèle, les retours à la ligne saisis et ceux d’une valeur de cellule gardent leur hauteur',
+    run: async (h) => {
+      const address = 'Rue de la Paix\n75002 Paris\nFrance';
+      const badge = '<span class="var-badge" data-table="' + DATA_TABLE + '" data-column="Adresse" data-key="' + DATA_TABLE + '.Adresse"></span>';
+      const html = '<p>Madame, Monsieur,</p><p></p><p>Cellule : ' + badge + '</p><p>Saisie : Rue de la Paix<br>75002 Paris<br>France</p><p>Fin repère</p>';
+      await savedTemplate(h, 'Droits lignes vides en lecture', html);
+      stub().setVariables(DATA_TABLE, { Nom: 'Text', Adresse: 'Text' });
+      stub().setRows(DATA_TABLE, [{ id: 1, Nom: 'Dupont', Adresse: address }]);
+      await GristAPI.refreshSchema();
+      stub().fireRecord({ id: 1, Nom: 'Dupont', Adresse: address }, DATA_TABLE);
+      const applied = await applyRights({ readOnly: true, export: false, comments: true });
+      await sleep(300);
+      const readerClass = document.getElementById('reader-container').classList.contains('pp-reader-comments');
+      const content = document.querySelector('#reader-container .reader-content');
+      const annotated = !!content && !!content.querySelector('[data-pp-pos]');
+      const ps = content ? Array.from(content.querySelectorAll(':scope > p')) : [];
+      const line = ps.length ? parseFloat(getComputedStyle(ps[0]).lineHeight) : 0;
+      const heights = ps.map(p => p.getBoundingClientRect().height);
+      await cleanup();
+      const pass = applied && readerClass && annotated && ps.length === 5 && line > 0
+        && heights[1] > 0.9 * line
+        && heights[2] > 2.5 * line && Math.abs(heights[2] - heights[3]) <= 1.5;
+      return { pass, notes: JSON.stringify({ applied, readerClass, annotated, line, heights }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();

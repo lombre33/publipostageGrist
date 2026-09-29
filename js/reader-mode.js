@@ -79,6 +79,22 @@ const ReaderMode = (function () {
     });
     return host.innerHTML;
   }
+  // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un
+  // <br class="ProseMirror-trailingBreak"> absent de ce HTML, et les paragraphes n'ont ici aucune marge (margin:0) : sans hauteur propre, l'espacement entre
+  // deux blocs disparaissait en Lecture alors que l'éditeur et l'export PDF/DOCX le gardent (Antoine, 2026-09-29). Appelée APRÈS la résolution des bulles :
+  // un paragraphe qui ne contenait qu'une bulle vide ou masquée par sa condition garde lui aussi sa ligne, comme dans l'export. Un <br> saisi (Maj+Entrée)
+  // compte comme du contenu et n'est jamais doublé : le PDF n'ajoute pas non plus de ligne après un retour à la ligne placé en fin de paragraphe.
+  const BLANK_LINE_BLOCKS = 'p, h1, h2, h3, h4, h5, h6';
+  // Ce qui occupe une ligne sans porter de texte : le marqueur de note de bas de page n'a que le numéro de son compteur CSS.
+  const NON_TEXT_CONTENT = 'img, br, svg, canvas, video, audio, iframe, object, embed, input, .footnote-ref-marker';
+  function keepBlankLines(root) {
+    root.querySelectorAll(BLANK_LINE_BLOCKS).forEach(block => {
+      if (block.textContent !== '' || block.querySelector(NON_TEXT_CONTENT)) return;
+      const filler = document.createElement('br');
+      filler.className = 'pp-blank-line';
+      block.appendChild(filler);
+    });
+  }
   // #Variable d'un fragment d'en-tête/pied - même résolution que le corps (badges .var-badge remplacés par leur valeur réelle), avec le VRAI enregistrement
   // Grist affiché en mode Lecture.
   async function resolveHeaderFooterZone(html, tableId, record) {
@@ -100,6 +116,7 @@ const ReaderMode = (function () {
     // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
     // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
+    keepBlankLines(wrapper);
     return wrapper.innerHTML;
   }
   // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
@@ -233,6 +250,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
+    keepBlankLines(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Variables déjà résolues (texte des titres définitif) : peut construire le sommaire maintenant, avant le swap DOM final ci-dessous.
     resolveTocMarkers(wrapper);

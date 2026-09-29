@@ -297,6 +297,150 @@
     },
   });
 
+  // === Sauts de ligne (Antoine, 2026-09-29 : « les sauts de ligne ne s'affichent pas en mode lecture, ok à l'export ») ===
+  // Editor.getHTML() sérialise une ligne vide en <p></p> : dans l'éditeur, ProseMirror lui garde sa ligne par un <br class="ProseMirror-trailingBreak"> que
+  // le HTML exporté ne contient pas, et ici les paragraphes n'ont aucune marge (margin:0) - sans hauteur propre, la ligne vide (l'espacement entre deux
+  // paragraphes) disparaissait en Lecture alors que l'éditeur et l'export PDF/DOCX la gardent. Jamais couvert : compareEditorReaderPosition ne comparait
+  // que des textes non vides. Les retours à la ligne d'une VALEUR de cellule Grist sont couverts aussi (corps : déjà bons, garde-fou ; en-tête/pied : la
+  // zone n'était pas en white-space:break-spaces comme .reader-content, la valeur s'aplatissait sur une seule ligne).
+  const NO_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  const RM_TABLE = 'RmLignes';
+  const RM_ADDRESS = 'Rue de la Paix\n75002 Paris\nFrance';
+  const RM_ADDRESS_HTML = 'Rue de la Paix<br>75002 Paris<br>France';
+  function varBadge(column) { return '<span class="var-badge" data-table="' + RM_TABLE + '" data-column="' + column + '" data-key="' + RM_TABLE + '.' + column + '"></span>'; }
+  // Ligne courante livrée comme par grist.onRecord : une colonne vide et une adresse sur trois lignes.
+  async function seedRecord(h) {
+    const stub = window.__gristStub;
+    stub.setVariables(RM_TABLE, { Vide: 'Text', Adresse: 'Text' });
+    stub.setRows(RM_TABLE, [{ id: 1, Vide: '', Adresse: RM_ADDRESS }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Vide: '', Adresse: RM_ADDRESS }, RM_TABLE);
+    await h.sleep(50);
+  }
+  // Comme TestHelpers.renderReaderMode, mais sur la vraie table et la vraie ligne : les bulles #Variable se résolvent.
+  async function renderResolved(html, hf) {
+    const readerContainer = document.getElementById('reader-container');
+    readerContainer.style.display = 'block';
+    document.getElementById('editor-container').style.display = 'block';
+    await ReaderMode.render(html, RM_TABLE, GristAPI.getCurrentRecord(), hf || NO_HF);
+    return readerContainer.querySelector('.reader-content');
+  }
+  const lineHeightOf = el => { const v = parseFloat(getComputedStyle(el).lineHeight); return isFinite(v) ? v : 0; };
+  const heightOf = el => (el ? el.getBoundingClientRect().height : 0);
+
+  cases.push({
+    id: 'readmode_blank_paragraph_keeps_its_line',
+    description: 'Une ou deux lignes vides du modèle (paragraphes vides) gardent leur hauteur en mode Lecture : le texte qui suit est à la même position qu\'en éditeur',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Madame, Monsieur,</p><p></p><p>Objet repère</p><p></p><p></p><p>Cordialement repère</p>';
+      Editor.setHTML(html);
+      h.setA4Preview(true);
+      await h.sleep(150);
+      await h.renderReaderMode(html, null);
+      await h.sleep(150);
+      const afterOneBlank = h.compareEditorReaderPosition('Objet repère');
+      const afterTwoBlank = h.compareEditorReaderPosition('Cordialement repère');
+      const pass = afterOneBlank.found && afterOneBlank.pass && afterTwoBlank.found && afterTwoBlank.pass;
+      return { pass, notes: JSON.stringify({ afterOneBlank, afterTwoBlank }) };
+    },
+  });
+
+  cases.push({
+    id: 'readmode_blank_heading_keeps_its_line',
+    description: 'Un titre vide garde sa ligne (à la hauteur du titre) en mode Lecture, comme en éditeur',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Avant le titre vide</p><h2></h2><p>Après le titre vide repère</p>';
+      Editor.setHTML(html);
+      h.setA4Preview(true);
+      await h.sleep(150);
+      await h.renderReaderMode(html, null);
+      await h.sleep(150);
+      const cmp = h.compareEditorReaderPosition('Après le titre vide repère');
+      return { pass: cmp.found && cmp.pass, notes: JSON.stringify(cmp) };
+    },
+  });
+
+  cases.push({
+    id: 'readmode_blank_table_row_keeps_its_line',
+    description: 'Une ligne de tableau dont toutes les cellules sont vides garde la hauteur d\'une ligne de texte en mode Lecture (comme la ligne suivante, remplie)',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<table><tbody><tr><td><p></p></td><td><p></p></td></tr><tr><td><p>gauche</p></td><td><p>droite</p></td></tr></tbody></table>';
+      h.setA4Preview(true);
+      const content = await h.renderReaderMode(html, null);
+      await h.sleep(150);
+      const rows = content.querySelectorAll('tr');
+      const blank = heightOf(rows[0]);
+      const filled = heightOf(rows[1]);
+      return { pass: rows.length === 2 && filled > 20 && Math.abs(blank - filled) <= 1.5, notes: JSON.stringify({ blank, filled }) };
+    },
+  });
+
+  cases.push({
+    id: 'readmode_paragraph_emptied_by_a_variable_keeps_its_line',
+    description: 'Un paragraphe dont la seule bulle #Variable se résout en valeur vide garde sa ligne en mode Lecture (comme dans l\'export PDF, et comme la bulle en éditeur)',
+    run: async (h) => {
+      await h.resetEditor();
+      await seedRecord(h);
+      const html = '<p>Avant la variable vide</p><p>' + varBadge('Vide') + '</p><p>Après la variable vide repère</p>';
+      Editor.setHTML(html);
+      h.setA4Preview(true);
+      await h.sleep(150);
+      await renderResolved(html);
+      await h.sleep(150);
+      const cmp = h.compareEditorReaderPosition('Après la variable vide repère');
+      return { pass: cmp.found && cmp.pass, notes: JSON.stringify(cmp) };
+    },
+  });
+
+  cases.push({
+    id: 'readmode_multiline_cell_value_keeps_its_line_breaks',
+    description: 'Une valeur de cellule sur trois lignes occupe trois lignes en mode Lecture, comme les mêmes lignes séparées par des retours à la ligne saisis dans le modèle',
+    run: async (h) => {
+      await h.resetEditor();
+      await seedRecord(h);
+      h.setA4Preview(true);
+      const content = await renderResolved('<p>Adresse : ' + varBadge('Adresse') + '</p><p>Suite</p>');
+      await h.sleep(150);
+      const fromCell = heightOf(content.querySelector('p'));
+      const typed = await renderResolved('<p>Adresse : ' + RM_ADDRESS_HTML + '</p><p>Suite</p>');
+      await h.sleep(150);
+      const fromTemplate = heightOf(typed.querySelector('p'));
+      const line = lineHeightOf(typed.querySelector('p'));
+      return { pass: line > 0 && fromTemplate > 2.5 * line && Math.abs(fromCell - fromTemplate) <= 1.5, notes: JSON.stringify({ fromCell, fromTemplate, line }) };
+    },
+  });
+
+  cases.push({
+    id: 'readmode_headerfooter_multiline_cell_value_and_blank_line',
+    description: 'En-tête et pied de page en mode Lecture : une valeur de cellule sur trois lignes garde ses trois lignes, une ligne vide garde sa hauteur',
+    run: async (h) => {
+      await h.resetEditor();
+      await seedRecord(h);
+      h.setA4Preview(true);
+      const zoneHeights = async (header, footer) => {
+        await renderResolved('<p>Corps repère</p>', { enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: footer, first: '' } });
+        await h.sleep(150);
+        const top = document.querySelector('#reader-container .v2-page-edge-top');
+        const bottom = document.querySelector('#reader-container .v2-page-edge-bottom');
+        const tops = top ? Array.from(top.querySelectorAll('p')).map(heightOf) : [];
+        const bottoms = bottom ? Array.from(bottom.querySelectorAll('p')).map(heightOf) : [];
+        return { tops, bottoms, line: top ? lineHeightOf(top.querySelector('p')) : 0 };
+      };
+      const fromCell = await zoneHeights('<p>Expéditeur</p><p></p><p>Adresse : ' + varBadge('Adresse') + '</p>', '<p>Pied : ' + varBadge('Adresse') + '</p>');
+      const typed = await zoneHeights('<p>Expéditeur</p><p></p><p>Adresse : ' + RM_ADDRESS_HTML + '</p>', '<p>Pied : ' + RM_ADDRESS_HTML + '</p>');
+      const line = typed.line;
+      const pass = line > 0
+        && typed.tops.length === 3 && fromCell.tops.length === 3 && fromCell.bottoms.length === 1 && typed.bottoms.length === 1
+        && typed.tops[1] > 0.9 * line && fromCell.tops[1] > 0.9 * line
+        && typed.tops[2] > 2.5 * line && Math.abs(fromCell.tops[2] - typed.tops[2]) <= 1.5
+        && typed.bottoms[0] > 2.5 * line && Math.abs(fromCell.bottoms[0] - typed.bottoms[0]) <= 1.5;
+      return { pass, notes: JSON.stringify({ fromCell, typed }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.readModeFidelity = cases;
 })();

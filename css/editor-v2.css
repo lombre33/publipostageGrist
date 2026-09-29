@@ -275,6 +275,10 @@
 #reader-container.a4-preview .v2-page-edge-top { margin-bottom: 8px; }
 #reader-container.a4-preview .v2-page-edge-bottom { margin-top: 8px; }
 #reader-container.a4-preview .v2-page-band { background: #fff; box-shadow: 0 0 0 1px #d7dde3; }
+/* Mêmes retours à la ligne que le corps (`white-space: break-spaces` de .reader-content plus haut) : sans cette règle, la valeur d'une cellule Grist sur
+   plusieurs lignes (une adresse) s'aplatissait en une seule ligne dans l'en-tête/pied, alors que measureHtmlHeightPx (hôte .reader-content) l'avait
+   mesurée sur plusieurs et que l'export les garde. */
+#reader-container.a4-preview .v2-page-edge-spacer, #reader-container.a4-preview .v2-page-band { white-space: break-spaces; }
 /* Éditeur : les zones sont maintenant DANS `.v2-page-sheet`, collées à `.tiptap` (aucune marge/fond/liseré propre, elles laissent voir le fond du sheet
    parent) - seule une frontière en pointillé, posée UNIQUEMENT quand la zone a du contenu, signale où s'arrête l'en-tête/où commence le pied. */
 #editor-container.a4-preview .v2-page-sheet .v2-page-edge-spacer.v2-hf-zone-filled.v2-page-edge-top { border-bottom: 1px dashed #c3cad6; }
