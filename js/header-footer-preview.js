@@ -205,14 +205,32 @@ const HeaderFooterPreview = (function () {
     return h;
   }
 
+  // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
+  // l'aperçu, qui ne peut pas couper le DOM d'une zone 2 colonnes ou d'un tableau, doit traiter d'une pièce.
+  function isSplittableByExport(el) {
+    return el.classList.contains('two-columns-zone-outer') || el.classList.contains('tableWrapper') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
+  }
+  // Paragraphe sans texte ni objet (un <br> décoratif ne compte pas) : la ligne vide que l'éditeur ajoute derrière un bloc (zone, tableau, image) pour pouvoir y
+  // poser le curseur.
+  function isBlankParagraph(el) {
+    return el.tagName === 'P' && !el.textContent.trim() && !el.querySelector(':scope > :not(br)');
+  }
+
   // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en deux), pas du
   // pixel comme pdfmake. Retourne le bloc après lequel insérer la coupure (afterEl), pour poser un margin-bottom réel dessus.
+  // Deux exceptions à « un bloc qui ne tient pas passe entier à la page suivante », pour ne pas afficher une coupure que l'export (qui coupe au pixel) ni le mode
+  // Lecture (dont les valeurs sont plus courtes que les noms de variables affichés ici) n'ont :
+  //  - un bloc que l'export coupe (isSplittableByExport) reste sur la page où sa plus grande partie tient, et le repère tombe derrière lui. Le déplacer en
+  //    entier revient à se tromper de tout ce qui tenait dans la page (deux images en haut d'une lettre, une zone 2 colonnes de ~940 px pour ~910 px de place :
+  //    « Page 2 » juste sous les images, page 1 vide) au lieu de se tromper de ce qui déborde (~30 px) ;
+  //  - le paragraphe vide qui termine le document (celui que l'éditeur ajoute derrière ce bloc) ne compte pas : seul, il ouvrait une page vide.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
     const zoom = layoutZoom(tiptapEl);
     let consumed = 0;
     let lastBlock = null;
-    Array.from(tiptapEl.children).forEach(child => {
+    const children = Array.from(tiptapEl.children);
+    children.forEach((child, index) => {
       const height = child.getBoundingClientRect().height / zoom;
       if (child.classList.contains('page-break-marker')) {
         breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
@@ -220,7 +238,10 @@ const HeaderFooterPreview = (function () {
         lastBlock = child;
         return;
       }
-      if (consumed > 0 && consumed + height > pageContentHeightPx) {
+      if (index === children.length - 1 && isBlankParagraph(child)) return;
+      const room = pageContentHeightPx - consumed;
+      const staysOnPage = isSplittableByExport(child) && room > height / 2;
+      if (consumed > 0 && height > room && !staysOnPage) {
         breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
         consumed = height;
       } else {

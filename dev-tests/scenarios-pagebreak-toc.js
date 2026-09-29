@@ -121,6 +121,125 @@
     },
   });
 
+  // --- Pagination de l'aperçu : un bloc que l'export coupe reste sur sa page quand sa plus grande partie y tient ---
+  // Antoine (29/09) : deux images en haut de page, sans en-tête, puis une zone 2 colonnes d'à peu près une page. computePageBreaks traite chaque bloc de premier
+  // niveau comme insécable ; la zone, une trentaine de pixels trop haute parce que l'éditeur affiche des NOMS de variables (longs, à la ligne dans la colonne
+  // étroite) là où Lecture et l'export mettent des valeurs, sautait en entier en page 2 et laissait la page 1 aux seules images. Le paragraphe vide que l'éditeur
+  // ajoute derrière un bloc (zone, tableau, image) partait lui aussi seul en « Page 2 ». Aucun commit de main n'a changé cette mise en page (mesuré sur les 69).
+  const A4_HEIGHT_PX = 841.89 * 96 / 72;
+  const sheetZoom = () => {
+    const sheet = document.querySelector('#editor-container .v2-page-sheet');
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(z) && z > 0) ? z : 1;
+  };
+  const layoutHeight = el => el.getBoundingClientRect().height / sheetZoom();
+  const tinyPng = (w, hgt, color) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = hgt;
+    const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, hgt);
+    return c.toDataURL('image/png');
+  };
+  // Les deux images d'Antoine, mêmes attributs et mêmes tailles d'affichage (228 px de large en ligne ; 71 px en calque derrière le texte), mais des PNG minuscules
+  // de même rapport (1280x448 et 377x370) : la hauteur rendue ne dépend que du rapport et de la largeur.
+  const lettreImages = () => '<p><img class="editor-image" draggable="false" src="' + tinyPng(20, 7, '#3a3a3a') + '" alt="Image" style="width: 228px;" data-layer="normal" data-wrap="inline">'
+    + '<img class="editor-image" draggable="false" src="' + tinyPng(38, 37, '#2f6fed') + '" alt="Image" style="width: 71px; position: absolute; left: 674px; top: 34px; z-index: -1;" data-layer="behind" data-wrap="inline" data-align="right" data-page-index="0" data-page-left-pt="477.5" data-page-top-pt="-2.5"></p><p></p>';
+  const emptyLines = n => Array.from({ length: n }, () => '<p></p>').join('');
+  const bigZoneHtml = lines => '<div class="two-columns-zone" style="--layout-left: 26%;"><div class="two-columns-column"><p><strong>Vice-présidence</strong></p>' + emptyLines(lines) + '<p>Adresse postale</p></div>'
+    + '<div class="two-columns-column"><p style="text-align: right;">Madame, Monsieur,</p>' + emptyLines(Math.round(lines / 2)) + '</div></div>';
+  const bigTableHtml = rows => '<table><tbody>' + Array.from({ length: rows }, (_, i) => '<tr><td><p>Ligne ' + i + '</p></td><td><p>Valeur</p></td></tr>').join('') + '</tbody></table>';
+  const bigListHtml = items => '<ul>' + Array.from({ length: items }, (_, i) => '<li><p>Élément ' + i + '</p></li>').join('') + '</ul>';
+  // Règle la hauteur utile d'une page (marges haut/bas seulement : les marges latérales, donc la largeur et la hauteur des blocs, ne bougent pas).
+  function setPageContentHeight(contentPx) {
+    const halfMm = (A4_HEIGHT_PX - contentPx) / 2 / PageLayout.MM_TO_PX;
+    PageLayout.setMarginsMm({ top: halfMm, bottom: halfMm, left: PageLayout.DEFAULT_MARGIN_MM, right: PageLayout.DEFAULT_MARGIN_MM });
+  }
+  const BIG_BLOCKS = {
+    zone: { html: bigZoneHtml(40), pick: k => k.classList.contains('two-columns-zone-outer') },
+    table: { html: bigTableHtml(30), pick: k => k.classList.contains('tableWrapper') },
+    list: { html: bigListHtml(38), pick: k => k.tagName === 'UL' },
+  };
+  // Charge `prelude` + un gros bloc, puis règle la page pour qu'il déborde de `overshootPx` (négatif : marge de reste). Renvoie ce qu'il faut pour juger.
+  async function paginateBigBlock(h, kind, prelude, overshootPx) {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    const block = BIG_BLOCKS[kind];
+    Editor.setHTML(prelude + block.html);
+    await h.sleep(500);
+    const kids = () => Array.from(h.tiptap().children);
+    const target = kids().find(block.pick);
+    const before = kids().slice(0, kids().indexOf(target)).reduce((sum, k) => sum + layoutHeight(k), 0);
+    const blockPx = layoutHeight(target);
+    setPageContentHeight(before + blockPx - overshootPx);
+    Editor.refreshPaginationPreview();
+    await h.sleep(350);
+    const targetTop = target.getBoundingClientRect().top;
+    const bands = Array.from(document.querySelectorAll('#editor-container .v2-page-band'));
+    return { before, blockPx, room: blockPx - overshootPx, bandsAbove: bands.filter(b => b.getBoundingClientRect().top < targetTop).length, bands: bands.length };
+  }
+  const restoreMargins = () => PageLayout.setMarginsMm(null);
+
+  cases.push({
+    id: 'pagebreak_editor_big_zone_after_images_no_phantom_first_page',
+    description: 'Deux images en haut de page puis une zone 2 colonnes d\'une page, ~30 px trop haute : la zone reste en page 1, pas de « Page 2 » entre les images et elle',
+    run: async (h) => {
+      try {
+        const r = await paginateBigBlock(h, 'zone', lettreImages(), 30);
+        return { pass: r.bandsAbove === 0 && r.blockPx > r.room, notes: JSON.stringify(r) };
+      } finally { restoreMargins(); }
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_editor_table_and_list_follow_the_same_rule',
+    description: 'Un tableau ou une liste qui déborde de peu de la page ne saute pas non plus en entier vers la page suivante',
+    run: async (h) => {
+      try {
+        const prelude = '<p>Titre du document</p><p></p>';
+        const table = await paginateBigBlock(h, 'table', prelude, 30);
+        const list = await paginateBigBlock(h, 'list', prelude, 30);
+        return { pass: table.bandsAbove === 0 && list.bandsAbove === 0 && table.blockPx > table.room && list.blockPx > list.room, notes: JSON.stringify({ table, list }) };
+      } finally { restoreMargins(); }
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_editor_block_mostly_beyond_page_still_moves_whole',
+    description: 'Un gros bloc dont moins de la moitié tient sur la page passe toujours en entier à la page suivante (la règle ne garde que le bloc qui est surtout là)',
+    run: async (h) => {
+      try {
+        const zoneProbe = await paginateBigBlock(h, 'zone', lettreImages(), 30);
+        // Place restante : 30 % de la hauteur de la zone, donc moins de la moitié.
+        const r = await paginateBigBlock(h, 'zone', lettreImages(), zoneProbe.blockPx * 0.7);
+        return { pass: r.bandsAbove === 1, notes: JSON.stringify(r) };
+      } finally { restoreMargins(); }
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_editor_trailing_empty_paragraph_makes_no_page',
+    description: 'Le paragraphe vide que l\'éditeur ajoute derrière le dernier bloc ne crée pas à lui seul une « Page 2 » quand il ne reste que quelques pixels',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        h.setA4Preview(true);
+        PageLayout.setMarginsMm(null);
+        // Un tableau en dernier : l'éditeur y ajoute un <p></p> vide (nœud de fin), que rien d'autre ne suit.
+        Editor.setHTML(Array.from({ length: 20 }, (_, i) => '<p>Ligne ' + i + '</p>').join('') + bigTableHtml(3));
+        await h.sleep(400);
+        const kids = Array.from(h.tiptap().children);
+        const last = kids[kids.length - 1];
+        const trailingIsBlank = last.tagName === 'P' && !last.textContent.trim();
+        const contentPx = kids.slice(0, -1).reduce((sum, k) => sum + layoutHeight(k), 0);
+        // 6 px de reste : moins qu'une ligne (~20 px), donc le paragraphe final ne tient pas.
+        setPageContentHeight(contentPx + 6);
+        Editor.refreshPaginationPreview();
+        await h.sleep(350);
+        const bands = document.querySelectorAll('#editor-container .v2-page-band').length;
+        return { pass: trailingIsBlank && layoutHeight(last) > 6 && bands === 0, notes: JSON.stringify({ trailingIsBlank, contentPx, bands }) };
+      } finally { restoreMargins(); }
+    },
+  });
+
   cases.push({
     id: 'toc_insert_and_detect_headings',
     description: 'Le sommaire détecte les titres présents dans le document',
