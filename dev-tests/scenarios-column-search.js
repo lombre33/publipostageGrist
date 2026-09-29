@@ -2,8 +2,9 @@
 // d'affichage » : « harmoniser l'ui dès que l'on propose un choix de colonne ... et proposer un champ de recherche dynamique », comme pour le choix de la clé
 // entre deux tables, groupe linkConfig). Composant : js/search-select.js, ici pour ses évolutions (intitulés de groupes de tables, ligne de saisie avancée
 // épinglée, choix « rien », état grisé, focus) et pour les fenêtres qui l'emploient : règles Colonne / Opérateur / Valeur (js/condition-fields.js : condition
-// d'affichage d'une bulle, filtre d'une boucle, macro-modèles), colonne de tri d'une boucle, colonnes de Réglages > Accès. Les gestes à la vraie souris et au
-// vrai clavier à 700x400 sont dans le script Node verify-column-search-mouse.mjs (groupe columnSearchMouse).
+// d'affichage d'une bulle, filtre d'une boucle, macro-modèles), colonne de tri d'une boucle, colonnes de Réglages > Accès, menu « Image depuis une variable »
+// de la barre (js/main-toolbar.js, le composant en mode menu : `popup`). Les gestes à la vraie souris et au vrai clavier à 700x400 sont dans le script Node
+// verify-column-search-mouse.mjs (groupe columnSearchMouse).
 (function () {
   const cases = [];
 
@@ -817,6 +818,168 @@
       dismiss(modal);
       const pass = scrollable && allVisible && !!activeText && !!firstRow && headerSeen;
       return { pass, notes: JSON.stringify({ scrollable, allVisible, activeText, headerSeen }) };
+    },
+  });
+
+  // === Menu « Image depuis une variable » de la barre (js/main-toolbar.js:openImageVariablePicker) : la liste des colonnes Pièces jointes est la même liste à
+  // recherche que tous les choix de colonne, ouverte par le code à côté de la ligne du menu (SearchSelect en mode `popup`) ; la liste simple d'avant reste pour le
+  // message « aucune colonne » et si le composant échoue. Ici les évènements sont émis par le script ; les vrais gestes sont dans verify-column-search-mouse.mjs.
+  async function seedImages(h) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables('CsPieces', { Titre: 'Text', Photo: 'Attachments', Plan: 'Attachments' });
+    stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+    await GristAPI.refreshSchema();
+    Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
+    await h.sleep(60);
+    const ed = EditorCore.getEditor();
+    document.querySelector('.tiptap').focus();
+    ed.commands.setTextSelection(9); // entre « Bonjour » et « Marie »
+    await h.sleep(30);
+    return ed;
+  }
+  const imageNodes = ed => {
+    const out = [];
+    ed.state.doc.descendants((node, pos) => { if (node.type.name === 'editorImage') out.push({ attrs: node.attrs, pos }); });
+    return out;
+  };
+  const imageHost = () => document.getElementById('v2-image-var-search');
+  const oldImageBox = () => document.getElementById('v2-image-var-picker');
+  const oldBoxShown = () => { const box = oldImageBox(); return !!box && box.style.display !== 'none'; };
+  const IMAGE_ROW = 'v2-btn-image-from-variable';
+  // Clic sur la ligne du menu, puis attente de son ouverture (la lecture du schéma précède l'affichage) : le panneau de la liste avec recherche, sinon null.
+  async function openImagePicker(h) {
+    document.getElementById(IMAGE_ROW).click();
+    for (let i = 0; i < 80; i++) {
+      await h.sleep(25);
+      const panel = document.querySelector('#v2-image-var-search .ss-panel:not([hidden])');
+      if (panel) return panel;
+    }
+    return null;
+  }
+  const KEYS = ['CsPieces.Photo', 'CsPieces.Plan', 'CsSites.Logo'];
+
+  cases.push({
+    id: 'colsearch_image_menu_lists_attachment_columns_in_a_searchable_menu_and_inserts_the_image',
+    description: 'Menu « Image depuis une variable » : la ligne ouvre une liste avec recherche des seules colonnes Pièces jointes (Table.Colonne, sans intitulés de groupe), champ de recherche au focus, la frappe filtre, Entrée insère l’image liée à la variable au curseur, ferme le menu et rend le focus à l’éditeur',
+    run: async (h) => {
+      const ed = await seedImages(h);
+      const panel = await openImagePicker(h);
+      if (!panel) return { pass: false, notes: 'panneau jamais ouvert' };
+      const host = imageHost();
+      const input = inputOf(panel);
+      const rect = panel.getBoundingClientRect();
+      const opened = {
+        rows: rowsOf(panel).slice().sort(), headers: headersOf(panel).length,
+        selectHidden: host.querySelector('select').getBoundingClientRect().width === 0, triggerHidden: getComputedStyle(host.querySelector('.ss-trigger')).display === 'none',
+        focused: document.activeElement === input, placeholder: input.placeholder === I18n.t('linkConfig.searchColumns'),
+        inside: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight, oldBox: oldBoxShown(),
+        nothingHighlighted: !panel.querySelector('.ss-option.is-active'),
+      };
+      setInput(input, 'LOGO');
+      await h.sleep(20);
+      const searched = { rows: rowsOf(panel), active: panel.querySelector('.ss-option.is-active') ? label(panel.querySelector('.ss-option.is-active')) : null };
+      press(input, 'Enter');
+      await h.sleep(120);
+      const images = imageNodes(ed);
+      const at = images.length ? images[0].pos : -1;
+      const doc = ed.state.doc;
+      const inserted = {
+        count: images.length,
+        attrs: images.length ? { table: images[0].attrs.varTable, column: images[0].attrs.varColumn, key: images[0].attrs.varKey } : null,
+        before: at >= 0 ? doc.textBetween(0, at) : null, after: at >= 0 ? doc.textBetween(at + 1, doc.content.size, '|') : null,
+        hostGone: !imageHost(), focusInEditor: !!document.activeElement.closest('.tiptap'),
+      };
+      const pass = JSON.stringify(opened.rows) === JSON.stringify(KEYS) && opened.headers === 0 && opened.selectHidden && opened.triggerHidden && opened.focused && opened.placeholder
+        && opened.inside && !opened.oldBox && opened.nothingHighlighted
+        && JSON.stringify(searched.rows) === JSON.stringify(['CsSites.Logo']) && searched.active === 'CsSites.Logo'
+        && inserted.count === 1 && JSON.stringify(inserted.attrs) === JSON.stringify({ table: 'CsSites', column: 'Logo', key: 'CsSites.Logo' })
+        && inserted.before === 'Bonjour ' && inserted.after === 'Marie|Fin' && inserted.hostGone && inserted.focusInEditor;
+      return { pass, notes: JSON.stringify({ opened, searched, inserted }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_image_menu_escape_and_click_elsewhere_close_it_without_inserting_and_it_reopens_once',
+    description: 'Menu « Image depuis une variable » : Échap le ferme (focus rendu à l’éditeur), un clic ailleurs aussi, sans rien insérer ; rouvert deux fois de suite il n’y a qu’un seul menu, et l’image est insérée par un clic sur une ligne',
+    run: async (h) => {
+      const ed = await seedImages(h);
+      const first = await openImagePicker(h);
+      if (!first) return { pass: false, notes: 'panneau jamais ouvert' };
+      const escape = press(inputOf(first), 'Escape');
+      await h.sleep(120);
+      const byEscape = { hostGone: !imageHost(), prevented: escape.defaultPrevented, focusInEditor: !!document.activeElement.closest('.tiptap') };
+      const second = await openImagePicker(h);
+      // Clic ailleurs : la zone de recherche perd le focus sans que ce soit pour une ligne du panneau.
+      inputOf(second).blur();
+      await h.sleep(120);
+      const byBlur = { hostGone: !imageHost() };
+      const third = await openImagePicker(h);
+      document.getElementById(IMAGE_ROW).click();
+      await h.sleep(300);
+      const fourth = document.querySelector('#v2-image-var-search .ss-panel:not([hidden])');
+      const hostsWhileReopened = document.querySelectorAll('#v2-image-var-search').length;
+      const noneInserted = imageNodes(ed).length === 0;
+      // Clic sur une ligne (la souris envoie mousedown puis click ; le panneau garde le focus de la zone de recherche pendant le mousedown).
+      const row = Array.from(fourth.querySelectorAll('.ss-option')).find(r => label(r) === 'CsPieces.Plan');
+      row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      row.click();
+      await h.sleep(120);
+      const images = imageNodes(ed);
+      const pass = byEscape.hostGone && byEscape.prevented && byEscape.focusInEditor && byBlur.hostGone && !!third && !!fourth && hostsWhileReopened === 1 && noneInserted
+        && images.length === 1 && images[0].attrs.varKey === 'CsPieces.Plan' && !imageHost();
+      return { pass, notes: JSON.stringify({ byEscape, byBlur, hostsWhileReopened, noneInserted, images: images.map(i => i.attrs.varKey), hostAfter: !!imageHost() }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_image_menu_without_attachment_column_keeps_the_simple_message',
+    description: 'Menu « Image depuis une variable » sans aucune colonne Pièces jointes : le message d’avant (« Aucune colonne Pièce jointe trouvée… ») s’affiche dans l’ancienne fenêtre, sans liste avec recherche',
+    run: async (h) => {
+      await seedImages(h);
+      const original = GristAPI.getAllVariables;
+      GristAPI.getAllVariables = () => [];
+      let out;
+      try {
+        document.getElementById(IMAGE_ROW).click();
+        for (let i = 0; i < 80 && !oldBoxShown(); i++) await h.sleep(25);
+        const box = oldImageBox();
+        out = { shown: oldBoxShown(), text: box ? box.textContent : null, items: box ? box.querySelectorAll('.v2-image-var-picker-item').length : -1, hostAbsent: !imageHost() };
+      } finally {
+        GristAPI.getAllVariables = original;
+        if (oldImageBox()) oldImageBox().style.display = 'none';
+      }
+      const pass = out.shown && out.text === I18n.t('imageVarPicker.empty') && out.items === 0 && out.hostAbsent;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_image_menu_falls_back_to_the_simple_list_when_the_component_fails',
+    description: 'Menu « Image depuis une variable » : si le composant de recherche lève, la liste simple d’avant s’affiche (une ligne par colonne Pièces jointes), sans reste de la liste avec recherche dans la page, et un mousedown sur une ligne insère toujours l’image',
+    run: async (h) => {
+      const ed = await seedImages(h);
+      const original = SearchSelect.attachColumns;
+      SearchSelect.attachColumns = () => { throw new Error('composant indisponible (test)'); };
+      let out;
+      try {
+        document.getElementById(IMAGE_ROW).click();
+        for (let i = 0; i < 80 && !oldBoxShown(); i++) await h.sleep(25);
+        const box = oldImageBox();
+        const items = box ? Array.from(box.querySelectorAll('.v2-image-var-picker-item')) : [];
+        const texts = items.map(item => item.textContent);
+        const hostAbsent = !imageHost();
+        const target = items.find(item => item.textContent === 'CsSites.Logo');
+        if (target) target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        await h.sleep(120);
+        const images = imageNodes(ed);
+        out = { texts, hostAbsent, boxClosed: !oldBoxShown(), images: images.map(i => i.attrs.varKey) };
+      } finally {
+        SearchSelect.attachColumns = original;
+        if (oldImageBox()) oldImageBox().style.display = 'none';
+      }
+      const pass = JSON.stringify(out.texts) === JSON.stringify(KEYS) && out.hostAbsent && out.boxClosed && JSON.stringify(out.images) === JSON.stringify(['CsSites.Logo']);
+      return { pass, notes: JSON.stringify(out) };
     },
   });
 

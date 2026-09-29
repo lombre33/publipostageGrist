@@ -3,6 +3,7 @@
 // (page.mouse / page.keyboard, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400) : les scénarios de dev-tests/scenarios-column-search.js
 // tournent DANS la page (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint le champ, ni que le panneau de la liste tient dans un panneau bas sans
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
+// Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles des macro-modèles, Réglages > Accès, menu « Image depuis une variable » de la barre.
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -505,6 +506,106 @@ const SECTIONS = {
     await page.waitForTimeout(200);
   },
 
+  // Menu « Image depuis une variable » de la barre (js/main-toolbar.js) : vrai survol du bouton Image, vrai clic sur la ligne du menu ; la liste avec recherche
+  // s'ouvre à côté, tient dans le panneau et se cherche au clavier ; un vrai clic sur une ligne (ou Entrée) insère l'image liée à la variable au curseur ;
+  // Échap et un vrai clic ailleurs la ferment sans rien insérer.
+  async imagePicker() {
+    const scope = '#v2-image-var-search';
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      const photos = {};
+      for (let i = 1; i <= 12; i++) photos['Photo_' + String(i).padStart(2, '0')] = 'Attachments';
+      stub.setVariables('CsPieces', Object.assign({ Titre: 'Text' }, photos));
+      stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      await GristAPI.refreshSchema();
+      Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
+    });
+    await page.waitForTimeout(300);
+    const inserted = () => page.evaluate(() => {
+      const ed = EditorCore.getEditor();
+      const out = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'editorImage') out.push({ key: node.attrs.varKey, before: ed.state.doc.textBetween(0, pos), after: ed.state.doc.textBetween(pos + 1, ed.state.doc.content.size, '|') });
+      });
+      return out;
+    });
+    const editorFocused = () => page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tiptap'));
+    const hostGone = () => page.evaluate(() => !document.getElementById('v2-image-var-search'));
+    // Le curseur : un vrai clic à droite de la première ligne, donc à sa fin.
+    async function putCursorAtEndOfFirstLine() {
+      const first = await hitTest('.tiptap p:nth-of-type(1)');
+      await page.mouse.click(first.right - 6, first.y);
+      await page.waitForTimeout(150);
+    }
+    // Vrai survol du bouton Image, puis d'un seul geste vers la ligne du menu (pas à pas, un point tomberait dans l'écart de 2 px entre le bouton et son menu),
+    // vrai clic ; attente de l'ouverture (la lecture du schéma précède l'affichage).
+    async function openMenu() {
+      const button = await hitTest('#v2-btn-image');
+      await page.mouse.move(button.x, button.y);
+      await page.waitForTimeout(250);
+      const row = await hitTest('#v2-btn-image-from-variable');
+      await page.mouse.move(row.left + 10, row.y);
+      await page.mouse.click(row.left + 10, row.y);
+      await page.waitForSelector(scope + ' .ss-panel:not([hidden])', { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(150);
+      return { button, row };
+    }
+
+    await putCursorAtEndOfFirstLine();
+    const { button, row } = await openMenu();
+    check('image : la ligne « Image depuis une variable » est visible et atteignable au survol du bouton Image', row.found && row.inViewport && row.onTop, { button, row });
+    const open = await panelInfo(scope);
+    const panelBox = await hitTest(scope + ' .ss-panel');
+    check('image : un vrai clic sur la ligne ouvre la liste, entière dans le panneau Grist, au premier plan, près du bouton Image, la zone de recherche a le focus',
+      !!open && open.inside && open.searchFocused && panelBox.onTop && panelBox.top >= button.top - 300 && panelBox.left <= button.right + 40, { open, panelBox, button });
+    check('image : les seules colonnes Pièces jointes, sans intitulé de groupe, sans « rien » ; la liste défile (13 colonnes)',
+      !!open && open.rows.length === 13 && open.rows[0] === 'CsPieces.Photo_01' && open.rows.includes('CsSites.Logo') && !open.rows.some(r => r.includes('Titre') || r.includes('Nom'))
+      && open.heads.length === 0 && open.scrollable, open);
+    const list = await hitTest(scope + ' .ss-panel .ss-list');
+    await page.mouse.move(list.x, list.y);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(150);
+    const wheeled = await panelInfo(scope);
+    check('image : la molette réelle sur la liste la fait défiler, sans déplacer le panneau', !!wheeled && wheeled.listScroll > 0 && wheeled.rect.top === open.rect.top, { wheeled, open });
+    await page.keyboard.type('logo');
+    await page.waitForTimeout(100);
+    const typed = await panelInfo(scope);
+    check('image : « logo » tapé au clavier réduit la liste à CsSites.Logo', !!typed && JSON.stringify(typed.rows) === JSON.stringify(['CsSites.Logo']), typed);
+    const logo = await rowCenter(scope, 'CsSites.Logo');
+    check('image : la ligne CsSites.Logo est visible et non recouverte', !!logo && logo.onTop && logo.inViewport, logo);
+    if (logo) await page.mouse.click(logo.x, logo.y);
+    await page.waitForTimeout(250);
+    let images = await inserted();
+    check('image : le clic insère l’image liée à CsSites.Logo à la fin de la première ligne, ferme la liste et rend le focus à l’éditeur',
+      images.length === 1 && images[0].key === 'CsSites.Logo' && images[0].before === 'Bonjour Marie' && images[0].after === '|Fin' && await hostGone() && await editorFocused(), { images });
+
+    // Au clavier seul : ouverture au clic, recherche puis Entrée.
+    await openMenu();
+    await page.keyboard.type('photo_12');
+    await page.waitForTimeout(100);
+    const typedPhoto = await panelInfo(scope);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    images = await inserted();
+    check('image : « photo_12 » puis Entrée insère l’image de CsPieces.Photo_12, la liste se referme',
+      !!typedPhoto && JSON.stringify(typedPhoto.rows) === JSON.stringify(['CsPieces.Photo_12']) && images.length === 2 && images[1].key === 'CsPieces.Photo_12' && await hostGone(), { typedPhoto, images });
+
+    // Échap : ferme la liste seule, rend le focus à l'éditeur, n'insère rien.
+    await openMenu();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    images = await inserted();
+    check('image : Échap referme la liste sans rien insérer, le focus revient à l’éditeur', await hostGone() && images.length === 2 && await editorFocused(), images);
+
+    // Un vrai clic ailleurs (sur le texte de l'éditeur) : ferme aussi, sans rien insérer.
+    await openMenu();
+    const elsewhere = await hitTest('.tiptap p:nth-of-type(2)');
+    await page.mouse.click(elsewhere.left + 6, elsewhere.y);
+    await page.waitForTimeout(250);
+    images = await inserted();
+    check('image : un vrai clic ailleurs referme la liste sans rien insérer', await hostGone() && images.length === 2, images);
+  },
+
   // Le composant ne se charge pas (fichier introuvable) : l'application démarre quand même et chaque choix de colonne reste la liste native d'avant, qui
   // marche. Dernière section : elle recharge la page.
   async withoutComponent() {
@@ -539,6 +640,44 @@ const SECTIONS = {
     const loopCancel = await reveal(loopScope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)', loopScope + ' .modal-content');
     if (loopCancel.found) await page.mouse.click(loopCancel.x, loopCancel.y);
     await page.waitForTimeout(200);
+    // Menu « Image depuis une variable » : la liste simple d'avant, qui insère toujours l'image.
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      await GristAPI.refreshSchema();
+      Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
+    });
+    await page.waitForTimeout(300);
+    const firstLine = await hitTest('.tiptap p:nth-of-type(1)');
+    await page.mouse.click(firstLine.right - 6, firstLine.y);
+    await page.waitForTimeout(150);
+    const imageButton = await hitTest('#v2-btn-image');
+    await page.mouse.move(imageButton.x, imageButton.y);
+    await page.waitForTimeout(250);
+    const imageRow = await hitTest('#v2-btn-image-from-variable');
+    await page.mouse.move(imageRow.left + 10, imageRow.y);
+    await page.mouse.click(imageRow.left + 10, imageRow.y);
+    await page.waitForSelector('#v2-image-var-picker .v2-image-var-picker-item', { timeout: 5000 }).catch(() => {});
+    const simpleList = await page.evaluate(() => {
+      const box = document.getElementById('v2-image-var-picker');
+      const r = box ? box.getBoundingClientRect() : null;
+      return {
+        shown: !!box && box.style.display !== 'none', items: box ? Array.from(box.querySelectorAll('.v2-image-var-picker-item')).map(i => i.textContent) : [],
+        inside: !!r && r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+        searchLeft: !!document.getElementById('v2-image-var-search') || !!document.querySelector('.ss-panel'),
+      };
+    });
+    check('sans composant : « Image depuis une variable » montre la liste simple d’avant (une ligne par colonne Pièces jointes), dans le panneau, sans reste de la recherche',
+      simpleList.shown && JSON.stringify(simpleList.items) === JSON.stringify(['CsSites.Logo']) && simpleList.inside && !simpleList.searchLeft, simpleList);
+    const simpleRow = await hitTest('#v2-image-var-picker .v2-image-var-picker-item');
+    if (simpleRow.found) await page.mouse.click(simpleRow.x, simpleRow.y);
+    await page.waitForTimeout(250);
+    const simpleInserted = await page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') out.push(node.attrs.varKey); });
+      return { images: out, boxClosed: document.getElementById('v2-image-var-picker').style.display === 'none' };
+    });
+    check('sans composant : un vrai clic sur la ligne insère l’image liée à CsSites.Logo et ferme la liste', JSON.stringify(simpleInserted.images) === JSON.stringify(['CsSites.Logo']) && simpleInserted.boxClosed, simpleInserted);
     // Réglages > Accès.
     await page.evaluate(async () => {
       const stub = window.__gristStub;

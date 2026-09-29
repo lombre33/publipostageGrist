@@ -413,7 +413,7 @@ async function popups(width, height) {
 
   // Image depuis une variable : vrai survol du bouton Image, vrai clic sur la ligne du menu.
   ({ browser, page } = await openAt(width, height));
-  // Dix colonnes Pièces jointes : une vraie liste (jusqu'à 240px, css/toolbar-v2.css), pas le seul message "aucune colonne".
+  // Dix colonnes Pièces jointes : une vraie liste qui défile dans son panneau (jusqu'à 250px, css/search-select.css), pas le seul message "aucune colonne".
   await page.evaluate(async () => {
     const cols = {};
     for (let i = 1; i <= 10; i++) cols['Photo_' + String(i).padStart(2, '0')] = 'Attachments';
@@ -430,10 +430,11 @@ async function popups(width, height) {
     await page.mouse.move(row.left + 10, (row.top + row.bottom) / 2);
     await page.mouse.click(row.left + 10, (row.top + row.bottom) / 2);
     // Ouverture asynchrone (GristAPI.refreshSchema() d'abord, cf. openImageVariablePicker) : attendre l'affichage plutôt qu'un délai fixe.
-    await page.waitForFunction(() => { const p = document.getElementById('v2-image-var-picker'); return p && getComputedStyle(p).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => !!document.querySelector('#v2-image-var-search .ss-panel:not([hidden])'), null, { timeout: 5000 }).catch(() => {});
   }
-  const picker = await boxOf(page, '#v2-image-var-picker');
-  const items = await page.evaluate(() => document.querySelectorAll('#v2-image-var-picker .v2-image-var-picker-item').length);
+  // Le menu est la liste avec recherche (js/search-select.js, mode menu) : c'est son panneau qui se mesure, son conteneur n'a pas de taille.
+  const picker = await boxOf(page, '#v2-image-var-search .ss-panel');
+  const items = await page.evaluate(() => document.querySelectorAll('#v2-image-var-search .ss-option').length);
   check(`${width}x${height} - "Image depuis une variable" (10 colonnes) -> liste entière dans la fenêtre, près du bouton Image`,
     !!row && items === 10 && insideViewport(picker, vp) && picker.top >= img.top - 300 && picker.left <= img.right + 40, { row, items, picker, img });
   await browser.close();

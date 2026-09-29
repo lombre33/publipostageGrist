@@ -19,6 +19,11 @@
 .ss-hint { margin-left: .35em; font-size: 11.5px; color: var(--text-faint); }
 .ss-chevron { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 
+/* Menu sans champ fermé (`popup: true`, « Image depuis une variable » de la barre) : seul le panneau se voit, ouvert par le code à côté de la ligne qui l'a
+   demandé, au-dessus de la barre d'outils comme l'ancienne liste simple (z-index de #v2-image-var-picker, css/toolbar-v2.css). */
+.ss-popup .ss-trigger { display: none; }
+.ss-popup .ss-panel { z-index: 1000; }
+
 /* Panneau en position fixe (placé par le script) : la liste défile dedans, la zone de recherche reste en haut. */
 .ss-panel { position: fixed; z-index: 1; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-float); font-family: var(--font-ui); }
 .ss-panel[hidden] { display: none; }

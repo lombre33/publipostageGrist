@@ -30,10 +30,72 @@ const MainToolbar = (function () {
     });
     return imageVarPickerBox;
   }
+  const insertVariableImage = v => editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
+  // Liste avec recherche (js/search-select.js) : le même champ que chaque choix de colonne de l'interface (demande d'Antoine du 2026-09-29). Le panneau
+  // s'ouvre seul à côté de la ligne « Image depuis une variable » ; un <select> caché, posé dans un conteneur à part, porte les colonnes et reçoit `change`
+  // au choix - l'insertion se fait là, comme avant elle se faisait au clic sur une ligne de l'ancienne liste.
+  let imageVarSearch = null;
+  function closeImageVariableSearch(instance) {
+    if (!imageVarSearch || (instance && instance !== imageVarSearch)) return;
+    const { host, search } = imageVarSearch;
+    imageVarSearch = null;
+    try { search.destroy(); } catch (e) { /* déjà défait */ }
+    host.remove();
+  }
+  // Rend faux si le composant n'est pas disponible (fichier introuvable, erreur) : l'appelant garde alors la liste simple d'avant.
+  function openImageVariableSearch(candidates, anchorEl) {
+    let host = null;
+    let instance = null;
+    try {
+      closeImageVariableSearch();
+      host = document.createElement('div');
+      host.id = 'v2-image-var-search';
+      const select = document.createElement('select');
+      candidates.forEach(v => {
+        const option = document.createElement('option');
+        option.value = v.key;
+        option.textContent = v.key;
+        select.appendChild(option);
+      });
+      host.appendChild(select);
+      document.body.appendChild(host);
+      select.selectedIndex = -1; // rien de choisi au départ : même la première ligne déclenche `change`
+      // Ancre = la ligne du menu Image ; si ce menu s'est déjà refermé (ligne en display:none, rectangle nul), repli sur le bouton Image lui-même plutôt que
+      // le coin haut-gauche de la fenêtre.
+      const anchorRect = () => {
+        const rect = anchorEl.getBoundingClientRect();
+        return rect.width || rect.height ? rect : document.getElementById('v2-btn-image').getBoundingClientRect();
+      };
+      const search = SearchSelect.attachColumns(select, {
+        popup: true,
+        anchor: anchorRect,
+        // Défait après la fin de l'évènement en cours (un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte). Le focus revient à
+        // l'éditeur quand la fermeture vient du clavier (Échap) ou d'un choix ; après un clic ailleurs, il est déjà là où la personne a cliqué.
+        onClose: refocus => { if (refocus) editor.commands.focus(); setTimeout(() => closeImageVariableSearch(instance), 0); },
+      });
+      instance = { host, search };
+      imageVarSearch = instance;
+      select.addEventListener('change', () => {
+        const v = candidates.find(c => c.key === select.value);
+        if (v) insertVariableImage(v);
+      });
+      search.open();
+      return true;
+    } catch (e) {
+      console.warn('[MainToolbar] recherche de colonne indisponible, liste simple conservée', e);
+      if (instance) closeImageVariableSearch(instance); else if (host) host.remove();
+      return false;
+    }
+  }
   async function openImageVariablePicker(anchorEl) {
-    const box = ensureImageVarPickerBox();
     await GristAPI.refreshSchema().catch(() => {});
     const candidates = GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments');
+    // La liste avec recherche d'abord ; la liste simple d'avant reste pour le message « aucune colonne » et quand le composant n'est pas disponible.
+    if (candidates.length) {
+      if (imageVarPickerBox) imageVarPickerBox.style.display = 'none';
+      if (openImageVariableSearch(candidates, anchorEl)) return;
+    }
+    const box = ensureImageVarPickerBox();
     box.innerHTML = '';
     if (!candidates.length) {
       const empty = document.createElement('div');
@@ -49,7 +111,7 @@ const MainToolbar = (function () {
         // que insertImage n'ait pu s'exécuter - même précaution que ac-item (variables.js:render, mousedown+preventDefault).
         item.addEventListener('mousedown', event => {
           event.preventDefault();
-          editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
+          insertVariableImage(v);
           box.style.display = 'none';
         });
         box.appendChild(item);

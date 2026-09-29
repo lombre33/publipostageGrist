@@ -19,6 +19,10 @@
 // Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
 // pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
 // ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
+// Un menu plutôt qu'un champ (« Image depuis une variable » de la barre) : `popup: true` ne montre aucun champ fermé, le panneau s'ouvre par le code
+// (controller.open()) à côté du rectangle que rend `anchor()` (relu à chaque placement), et `onClose(refocus)` prévient quand il se referme - un choix, Échap,
+// un clic ailleurs ; `refocus` vaut vrai quand la fermeture vient du clavier ou d'un choix, faux quand le focus est déjà parti ailleurs. À l'appelant de
+// défaire ensuite le <select> (destroy()), de préférence après la fin de l'évènement en cours.
 const SearchSelect = (function () {
   const MARGIN = 8;              // marge minimale entre le panneau et le bord de la fenêtre
   const GAP = 4;                 // écart entre le champ et son panneau
@@ -82,7 +86,8 @@ const SearchSelect = (function () {
     let searchPlaceholder = textOf(opts.searchPlaceholder, 'searchSelect.placeholder');
     let emptyText = textOf(opts.emptyText, 'searchSelect.empty');
 
-    const wrap = el('div', 'ss-wrap' + (opts.inline ? ' ss-inline' : ''));
+    let destroyed = false;
+    const wrap = el('div', 'ss-wrap' + (opts.inline ? ' ss-inline' : '') + (opts.popup ? ' ss-popup' : ''));
     const trigger = el('button', 'ss-trigger');
     trigger.type = 'button';
     trigger.setAttribute('aria-haspopup', 'listbox');
@@ -220,7 +225,7 @@ const SearchSelect = (function () {
     function place() {
       // Champ retiré de la page pendant que le panneau est ouvert (règles redessinées) : refermer, sinon les écouteurs de la fenêtre resteraient.
       if (!trigger.isConnected) { closePanel(false); return; }
-      const rect = trigger.getBoundingClientRect();
+      const rect = opts.anchor ? opts.anchor() : trigger.getBoundingClientRect();
       const viewWidth = window.innerWidth;
       const viewHeight = window.innerHeight;
       const width = Math.min(Math.max(rect.width, MIN_WIDTH), viewWidth - 2 * MARGIN);
@@ -272,6 +277,7 @@ const SearchSelect = (function () {
       input.value = '';
       query = '';
       if (refocus) trigger.focus({ preventScroll: true });
+      if (opts.onClose && !destroyed) opts.onClose(!!refocus);
     }
     function choose(item) {
       const changed = select.value !== item.value;
@@ -354,6 +360,7 @@ const SearchSelect = (function () {
       // À appeler après avoir changé par programme `select.value`, ses options ou son état grisé (ça ne déclenche aucun évènement).
       sync: syncTrigger,
       destroy() {
+        destroyed = true;
         closePanel(false);
         select.removeEventListener('change', syncTrigger);
         labels.forEach(label => label.removeEventListener('click', onLabelClick));
