@@ -609,6 +609,47 @@
     },
   });
 
+  // --- Fenêtre basse (29/09, Antoine : « la fenêtre se cale sur l'écran ») : à 700x400 la fenêtre faisait 568 px de haut et débordait de 84 px en haut (titre
+  // coupé) et en bas (« Fermer » hors de l'écran). Le harnais tourne à 1400x1000 : on ramène l'overlay (position: fixed) à 300 px de haut, ce qui est exactement
+  // ce que fait un panneau bas pour la fenêtre, et on mesure la géométrie réelle (getBoundingClientRect, elementFromPoint), pas un attribut CSS. ---
+  cases.push({
+    id: 'organize_modal_fits_a_short_window_title_and_close_reachable_and_new_folder_row_in_view',
+    description: 'Dans une fenêtre basse (overlay de 300 px), la fenêtre « Organiser mes modèles » tient entièrement (titre et « Fermer » atteignables au clic), seule la liste défile, et un dossier tout juste créé est ramené en vue',
+    run: async (h) => {
+      const ids = [await fileInto(h, 'Fenêtre basse - Modèle 1', 'Fenetre-Basse'), await fileInto(h, 'Fenêtre basse - Modèle 2', 'Fenetre-Basse')];
+      const overlay = modal();
+      overlay.style.bottom = 'auto';
+      overlay.style.height = '300px';
+      const restore = () => { overlay.style.bottom = ''; overlay.style.height = ''; };
+      try {
+        TemplateOrganizeModal.open();
+        await h.sleep(40);
+        const box = (el) => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; };
+        const content = box(overlay.querySelector('.template-organize-modal-content'));
+        const title = box(overlay.querySelector('h3'));
+        const closeBtn = document.getElementById('template-organize-close');
+        const cr = closeBtn.getBoundingClientRect();
+        const closeHit = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2) === closeBtn;
+        const listEl = list();
+        const listState = { client: listEl.clientHeight, scroll: listEl.scrollHeight };
+        await withPrompt('Fenetre-Basse-Nouveau', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+        const pending = list().querySelector('.tom-pending-folder');
+        const pr = pending && pending.getBoundingClientRect(), lr = list().getBoundingClientRect();
+        const pendingInView = !!pr && pr.top >= lr.top - 1 && pr.bottom <= lr.bottom + 1;
+        await clickEl(h, closeBtn);
+        const closed = !modalOpen();
+        const result = { content, title, closeHit, listState, pendingInView, closed };
+        await tidy([], ids);
+        const pass = content.top >= 0 && content.bottom <= 300 && title.top >= 0 && closeHit
+          && listState.client >= 72 && listState.scroll > listState.client && pendingInView && closed;
+        return { pass, notes: JSON.stringify(result) };
+      } finally {
+        restore();
+        TemplateOrganizeModal.close();
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateOrganize = cases;
 })();

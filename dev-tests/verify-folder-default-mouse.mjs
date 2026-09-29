@@ -4,8 +4,9 @@
 // (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint l'interrupteur (au premier plan, 20x20), ni que la liste déroulante s'ouvre réellement repliée
 // ou déplie au clic, ni que l'état survit à un rechargement de la page, ni que la colonne Replie manquante d'un document ancien est ajoutée.
 // Trois pages : (A) document neuf, (B) rechargement avec un état déjà enregistré (dont celui d'UNE AUTRE personne), (C) document créé avant la fonction.
-// À 700x400 la modale (568 px de haut) déborde la fenêtre : le bouton « Fermer » est hors d'atteinte, on la ferme par Échap (le focus doit donc rester
-// dans la modale après un clic sur l'interrupteur) ; le volet « dossier en attente » passe à 640 px de haut, sa ligne étant la dernière de la liste.
+// À 700x400 la modale doit tenir dans la fenêtre (elle faisait 568 px de haut : titre coupé, « Fermer » hors de l'écran, demande d'Antoine du 29/09) : on la ferme
+// au vrai clic sur « Fermer », le dossier « en attente » (dernière ligne de la liste, qui défile) est atteint sans agrandir la fenêtre, et Échap ferme encore la
+// modale après un clic dans la liste (le focus doit rester dans la modale malgré le redessin).
 // Lancé par run-headless.mjs (groupe Node "folderDefaultMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-folder-default-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -136,6 +137,7 @@ const folderBtn = (page, label) => page.evaluate((t) => {
 const stateOf = (page, label) => page.evaluate((t) => {
   const row = Array.from(document.querySelectorAll('#template-organize-list .tts-row-folder')).find(e => e.querySelector('.tts-row-label').textContent === t);
   if (!row) return null; const b = row.querySelector('.tom-folder-default-btn');
+  b.scrollIntoView({ block: 'nearest' }); // la liste défile maintenant à 700x400 : la personne amène d'abord la ligne dans la partie visible
   const before = getComputedStyle(b, '::before'); const r = b.getBoundingClientRect();
   return { pressed: b.getAttribute('aria-pressed'), cls: b.className, title: b.title, rowExpanded: row.getAttribute('aria-expanded'),
     top: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b, w: Math.round(r.width), h: Math.round(r.height), glyph: before.width + 'x' + before.height, mask: before.maskImage.length > 20 };
@@ -174,7 +176,7 @@ const top0 = await page.evaluate(() => document.getElementById('template-organiz
 await page.mouse.move(p.x, p.y); await page.waitForTimeout(120);
 await page.mouse.click(p.x, p.y); await page.waitForTimeout(250);
 const afterClick = await page.evaluate(() => ({ top: document.getElementById('template-organize-list').scrollTop, key: document.activeElement && document.activeElement.dataset.focusKey, inModal: document.getElementById('template-organize-modal').contains(document.activeElement) }));
-check('vrai clic : le focus reste sur l’interrupteur cliqué et la liste garde son défilement (le redessin ne les perd plus)', afterClick.key === 'folder-default:Litiges' && afterClick.inModal && afterClick.top === top0, { top0, afterClick });
+check('vrai clic : le focus reste sur l’interrupteur cliqué et la liste garde son défilement (le redessin ne les perd plus)', afterClick.key === 'folder-default:Litiges' && afterClick.inModal && afterClick.top === top0 && top0 > 0, { top0, afterClick });
 st = await stateOf(page, 'Litiges');
 check('vrai clic : l’interrupteur passe à « replié » (pressé, accent, info-bulle inversée)', st.pressed === 'true' && st.cls.includes('is-collapsed') && /replié/.test(st.title), st);
 check('vrai clic : la ligne dossier de la modale ne se replie pas (stopPropagation), modale ouverte', st.rowExpanded === 'true' && await page.evaluate(() => getComputedStyle(document.getElementById('template-organize-modal')).display !== 'none'), st);
@@ -185,9 +187,18 @@ const stCon = await stateOf(page, 'Contrats');
 check('les autres dossiers restent « déplié »', stCon.pressed === 'false', stCon);
 const lw = await page.evaluate(() => { const l = document.getElementById('template-organize-list'); return { sw: l.scrollWidth, cw: l.clientWidth }; });
 check('modale : pas de défilement horizontal dans la liste', lw.sw <= lw.cw + 1, lw);
-// À 700x400 le bouton « Fermer » est hors de la fenêtre (modale de 568 px de haut, cf. GEO) : fermeture par Échap, seule voie réelle.
-await page.keyboard.press('Escape'); await page.waitForTimeout(200);
-check('Échap ferme la modale', await page.evaluate(() => getComputedStyle(document.getElementById('template-organize-modal')).display === 'none'));
+const geo = await page.evaluate(() => {
+  const box = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; };
+  const c = document.getElementById('template-organize-close').getBoundingClientRect();
+  const l = document.getElementById('template-organize-list');
+  return { vh: innerHeight, content: box('.template-organize-modal-content'), title: box('.template-organize-modal-content h3'), close: box('#template-organize-close'),
+    closeOnTop: document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2) === document.getElementById('template-organize-close'), listClient: l.clientHeight, listScroll: l.scrollHeight };
+});
+check('700x400 : la modale tient entièrement dans la fenêtre (titre en haut, « Fermer » en bas, rien de coupé)', geo.content.top >= 0 && geo.content.bottom <= geo.vh && geo.title.top >= 0 && geo.close.bottom <= geo.vh && geo.closeOnTop, geo);
+check('700x400 : la liste garde une hauteur utile et défile', geo.listClient >= 72 && geo.listScroll > geo.listClient, geo);
+const closeAt = await center(page, '#template-organize-close');
+await page.mouse.click(closeAt.x, closeAt.y); await page.waitForTimeout(200);
+check('700x400 : un vrai clic sur « Fermer » ferme la modale', await page.evaluate(() => getComputedStyle(document.getElementById('template-organize-modal')).display === 'none'));
 // ouvrir la liste déroulante à la vraie souris
 const tb = await center(page, '.tts-trigger');
 await page.mouse.click(tb.x, tb.y); await page.waitForTimeout(250);
@@ -214,13 +225,12 @@ check('fermé puis rouvert : « Litiges » redevient replié (état par défaut)
 await page.keyboard.press('Escape'); await page.waitForTimeout(100);
 
 // dossier en attente : interrupteur local, écrit seulement quand un modèle y est rangé.
-// Fenêtre plus haute pour CE volet seulement : à 400 px la ligne « en attente », dernière de la liste, tombe sous le bord de la fenêtre.
-await page.setViewportSize({ width: WIDTH, height: 640 }); await page.waitForTimeout(150);
 await page.evaluate(() => { window.prompt = () => 'Archives'; TemplateOrganizeModal.open(); });
 await page.waitForTimeout(250);
 const nb = await center(page, '#template-organize-new-folder');
 await page.mouse.click(nb.x, nb.y); await page.waitForTimeout(250);
-const pendBtn = await page.evaluate(() => { const b = document.querySelector('#template-organize-list .tom-pending-folder .tom-folder-default-btn'); if (!b) return null; b.scrollIntoView({ block: 'nearest' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+const pendBtn = await page.evaluate(() => { const b = document.querySelector('#template-organize-list .tom-pending-folder .tom-folder-default-btn'); if (!b) return null; const r = b.getBoundingClientRect(); const l = document.getElementById('template-organize-list').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, inList: r.top >= l.top - 1 && r.bottom <= l.bottom + 1 && r.bottom <= innerHeight }; });
+check('700x400 : le dossier tout juste créé est ramené en vue dans la liste, sans agrandir la fenêtre', !!pendBtn && pendBtn.inList, pendBtn);
 check('dossier en attente : il porte lui aussi l’interrupteur', !!pendBtn);
 const nBefore = (await prefRows(page)).length;
 await page.mouse.click(pendBtn.x, pendBtn.y); await page.waitForTimeout(200);
@@ -237,6 +247,8 @@ const arch = rows.filter(r => r.m === 0 && r.d === 'Archives');
 check('« Ranger ici » : le dossier devient réel et son état « replié » est écrit (une ligne, Replie vrai)', arch.length === 1 && arch[0].r === true, rows.filter(r => r.m === 0));
 const stArch = await stateOf(page, 'Archives');
 check('le dossier réel « Archives » affiche l’interrupteur « replié »', !!stArch && stArch.pressed === 'true', stArch);
+await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+check('Échap ferme la modale après un clic sur « Ranger ici » (le focus est resté dans la fenêtre malgré le redessin)', await page.evaluate(() => getComputedStyle(document.getElementById('template-organize-modal')).display === 'none'));
 const overflowAfter = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 check('aucun débordement horizontal de page ajouté', overflowAfter <= Math.max(overflowBefore, 20), { overflowBefore, overflowAfter });
 await page.context().close();

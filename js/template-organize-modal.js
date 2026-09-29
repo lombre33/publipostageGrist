@@ -247,6 +247,7 @@ const TemplateOrganizeModal = (function () {
       pendingFolder = path;
       pendingCollapsed = false;
       render();
+      revealPendingFolder();
     });
     row.appendChild(addSubBtn);
     row.appendChild(makeFolderDefaultButton(TemplatePreferences.isFolderCollapsed(node.chemin), 'folder-default:' + node.chemin, () => toggleFolderDefault(node.chemin)));
@@ -377,6 +378,12 @@ const TemplateOrganizeModal = (function () {
     if (pendingFolder) list.appendChild(makePendingFolderRow(pendingFolder));
   }
 
+  // Le dossier "en attente" est la dernière ligne de la liste : dans une fenêtre basse la liste défile, la ramener en vue pour que la personne voie
+  // qu'il a bien été créé (et son interrupteur).
+  function revealPendingFolder() {
+    if (list.querySelector('.tom-pending-folder')) list.scrollTop = list.scrollHeight;
+  }
+
   function open() {
     if (!modal) return;
     modal.style.display = 'flex';
@@ -402,6 +409,7 @@ const TemplateOrganizeModal = (function () {
     pendingFolder = path;
     pendingCollapsed = false;
     render();
+    revealPendingFolder();
   }
 
   // Branché une seule fois à l'init (js/main.js), même patron que MacroEditor.wire(). wireModalAccessibility()

@@ -11,6 +11,12 @@
    fermeture) - tout héritait donc des défauts du navigateur/de <body>. Valeurs alignées sur les modales
    les plus proches en gabarit (#macro-editor-modal, #template-gallery-modal), cf. css/toolbar-v2.css. */
 .template-organize-modal-content { width: 480px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-ui); }
+/* Tient dans la fenêtre quelle que soit sa hauteur (29/09, Antoine : « la fenêtre se cale sur l'écran »). Avant, seule la liste était plafonnée (360 px) : à 700x400 la
+   fenêtre faisait 568 px, centrée elle débordait de 84 px en haut (titre coupé) et en bas (bouton « Fermer » hors de l'écran, sans défilement possible - l'overlay est
+   fixe). 100% = la hauteur de l'overlay (#template-organize-modal, position: fixed, inset: 0), donc celle de la fenêtre du widget ; 60px = 12 px de marge de chaque côté
+   + les 36 px de padding vertical de .modal-content (box-sizing content-box : max-height ne les compte pas). Seule la liste rétrécit et défile. */
+.template-organize-modal-content { max-height: calc(100% - 60px); }
+.template-organize-modal-content > :not(.template-organize-list) { flex: none; }
 
 .template-organize-modal-content h3 { font-size: 14.5px; font-weight: 800; margin: 0 0 12px; color: var(--text); }
 
@@ -22,7 +28,7 @@
 .tom-new-folder-btn { flex: none; height: 30px; padding: 0 10px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .tom-new-folder-btn:hover { background: var(--surface-sunken); }
 
-.template-organize-list { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px; }
+.template-organize-list { flex: 1 1 auto; min-height: 72px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 4px; }
 
 .template-organize-modal-content .modal-actions { margin-top: 14px; }
 .template-organize-modal-content .modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
