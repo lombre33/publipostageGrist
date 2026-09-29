@@ -169,6 +169,71 @@
     },
   });
 
+  // Document ancien (semaines d'historique) : plusieurs lignes EstParDefaut=true, dont un ancien modèle email. Un faux Grist neuf n'en a qu'une, ce qui a masqué
+  // ce cas - getDefaultId() renvoyait la PREMIÈRE ligne marquée, l'email, que js/main.js ignore au démarrage : le widget s'ouvrait sur « Nouveau modèle » alors que
+  // deux modèles document portaient aussi la marque.
+  function setDefaultFlags(ids) {
+    const rows = stub().state.rows.Publipostage_Modeles;
+    rows.id.forEach((rowId, i) => { rows.EstParDefaut[i] = ids.some((id) => String(id) === String(rowId)); });
+  }
+
+  // Noms en « Arbre - » : la liste est triée par nom, et tree_internal_list_scroll_does_not_close_popup suppose que ses propres lignes finissent en bas.
+  cases.push({
+    id: 'default_template_ignores_flagged_email_and_macro_and_tree_star_follows',
+    description: 'Plusieurs lignes EstParDefaut=true dont un modèle email en tête de table : getDefaultId() renvoie le premier modèle DOCUMENT marqué, jamais l’email, et l’arbre met l’étoile sur ce modèle seulement',
+    run: async (h) => {
+      const idMail = await createTemplate(h, 'email', 'Arbre - Défaut ancien email');
+      const idB = await createTemplate(h, 'document', 'Arbre - Défaut Doc B');
+      const idC = await createTemplate(h, 'document', 'Arbre - Défaut Doc C');
+      setDefaultFlags([idMail, idB, idC]);
+      await Templates.loadAll();
+      const got = Templates.getDefaultId();
+      TemplateTreeSelect.refresh();
+      await openPopup(h);
+      const label = (id) => rowFor(id) && rowFor(id).querySelector('.tts-row-label').textContent;
+      const labels = { mail: label(idMail), b: label(idB), c: label(idC) };
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      setDefaultFlags([]);
+      await Templates.loadAll();
+      const pass = String(got) === String(idB)
+        && labels.mail === 'Arbre - Défaut ancien email' && labels.b === 'Arbre - Défaut Doc B ★' && labels.c === 'Arbre - Défaut Doc C';
+      return { pass, notes: JSON.stringify({ got, idMail, idB, idC, labels }) };
+    },
+  });
+
+  // Question de suivi : l'étoile remet à faux TOUTES les autres lignes marquées (email et macro compris, que l'arbre ne montre pas comme défaut) dans le même lot.
+  cases.push({
+    id: 'default_template_star_click_clears_every_other_flag_in_one_batch',
+    description: 'Cliquer l’étoile sur un modèle document alors que d’autres lignes (dont un email) sont marquées EstParDefaut remet toutes les autres à faux, dans un seul applyUserActions',
+    run: async (h) => {
+      const idMail = await createTemplate(h, 'email', 'Arbre - Lot ancien email');
+      const idB = await createTemplate(h, 'document', 'Arbre - Lot Doc B');
+      const idC = await createTemplate(h, 'document', 'Arbre - Lot Doc C');
+      setDefaultFlags([idMail, idB]);
+      await Templates.loadAll();
+      realSelect().value = idC;
+      realSelect().dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(100);
+      stub().clearActionLog();
+      const sent = [];
+      const origApply = grist.docApi.applyUserActions;
+      grist.docApi.applyUserActions = function (actions) { sent.push(actions.length); return origApply.apply(this, arguments); };
+      try {
+        await h.clickButton('btn-set-default-template');
+        await h.sleep(150);
+      } finally { grist.docApi.applyUserActions = origApply; }
+      const rows = stub().state.rows.Publipostage_Modeles;
+      const flags = {};
+      rows.id.forEach((rowId, i) => { flags[rowId] = rows.EstParDefaut[i]; });
+      const onlyC = String(idC) in flags && flags[idC] === true && flags[idMail] === false && flags[idB] === false;
+      const otherTrue = Object.keys(flags).filter((k) => String(k) !== String(idC) && flags[k]);
+      setDefaultFlags([]);
+      await Templates.loadAll();
+      const pass = onlyC && otherTrue.length === 0 && sent.length === 1 && sent[0] === 3;
+      return { pass, notes: JSON.stringify({ flags, otherTrue, batches: sent }) };
+    },
+  });
+
   cases.push({
     id: 'tree_programmatic_value_write_without_change_event_still_syncs_trigger',
     description: 'Une écriture DIRECTE de .value (comme plusieurs endroits réels de js/main.js, ex. templateSelect.value = savedId) sans dispatch de change met quand même à jour le libellé du déclencheur - accesseur intercepté',

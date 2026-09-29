@@ -264,8 +264,11 @@ const Templates = (function () {
 
   function setCurrentId(id) { currentTemplateId = id; }
 
+  // Un modèle email ou macro n'est jamais le modèle de démarrage (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée EstParDefaut sur l'un
+  // d'eux (défaut posé avant cette règle, colonne éditée dans Grist) ne doit pas masquer un modèle document lui aussi marqué - sinon le widget s'ouvrait sur
+  // « Nouveau modèle » et l'étoile n'apparaissait sur aucun des deux. Plusieurs modèles document marqués : le premier de la table, comme avant.
   function getDefaultId() {
-    const found = templatesCache.find(t => t.estParDefaut);
+    const found = templatesCache.find(t => t.estParDefaut && t.typeModele !== 'email' && t.typeModele !== 'macro');
     return found ? found.id : null;
   }
 
