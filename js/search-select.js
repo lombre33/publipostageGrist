@@ -14,8 +14,9 @@
 //  - une <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche, pour qu'un mot sans résultat
 //    ne la rende pas inatteignable.
 //
-// Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, mêmes textes
-// partout) puis, à la fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
+// Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, attachTables pour une
+// TABLE, attachTemplates pour un MODÈLE : mêmes textes partout pour chaque sorte de liste) puis, à la fermeture de la fenêtre, .destroy() (le <select> natif
+// réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
 // Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
 // pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
 // ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas dans le champ fermé).
@@ -374,14 +375,17 @@ const SearchSelect = (function () {
     return controller;
   }
 
-  // Liste de COLONNES : mêmes textes partout (zone de recherche, « Aucune colonne ne correspond. »), pour que chaque choix de colonne de l'interface se lise
-  // et se cherche de la même façon (demande d'Antoine du 2026-09-29 : harmoniser dès qu'on propose un choix de colonne).
-  function attachColumns(select, opts) {
-    return attach(select, Object.assign({
-      searchPlaceholder: () => I18n.t('linkConfig.searchColumns'),
-      emptyText: () => I18n.t('linkConfig.noColumnMatch'),
-    }, opts));
+  // Mêmes textes partout pour une sorte de liste (zone de recherche, « Aucune … ne correspond. »), pour que chaque choix de la même sorte se lise et se cherche
+  // de la même façon (demande d'Antoine du 2026-09-29 : harmoniser dès qu'on propose un choix de colonne, puis aussi les listes de tables et de modèles).
+  function attachKind(select, opts, searchKey, emptyKey) {
+    return attach(select, Object.assign({ searchPlaceholder: () => I18n.t(searchKey), emptyText: () => I18n.t(emptyKey) }, opts));
   }
+  // Liste de COLONNES.
+  function attachColumns(select, opts) { return attachKind(select, opts, 'linkConfig.searchColumns', 'linkConfig.noColumnMatch'); }
+  // Liste de TABLES (Réglages > Accès).
+  function attachTables(select, opts) { return attachKind(select, opts, 'searchSelect.searchTables', 'searchSelect.noTableMatch'); }
+  // Liste de MODÈLES (page de garde, annexes et modèle par défaut d'un macro-modèle).
+  function attachTemplates(select, opts) { return attachKind(select, opts, 'searchSelect.searchTemplates', 'searchSelect.noTemplateMatch'); }
 
-  return { attach, attachColumns, filterItems, readItems, normalize };
+  return { attach, attachColumns, attachTables, attachTemplates, filterItems, readItems, normalize };
 })();

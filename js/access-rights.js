@@ -161,9 +161,9 @@ const AccessRights = (function () {
   // Réglage en cours d'édition dans l'onglet - distinct de `config` (normalisé, donc null tant qu'aucune case n'est choisie) : sans lui, choisir la table
   // puis la colonne email effacerait le choix de table au rendu suivant, faute de colonne de droit déjà choisie.
   let draft = null;
-  // Listes avec recherche des choix de COLONNE de l'onglet (email et les trois droits), comme partout ailleurs dans l'interface ; la liste des tables reste
-  // native. Chaque <select> est rempli à nouveau à chaque rendu : le champ visible le relit ensuite (`sync`).
-  const columnSearches = [];
+  // Listes avec recherche des choix de l'onglet (la table, puis l'email et les trois droits), comme partout ailleurs dans l'interface. Chaque <select> est rempli
+  // à nouveau à chaque rendu : le champ visible le relit ensuite (`sync`).
+  const searches = [];
 
   function el(id) { return document.getElementById(id); }
 
@@ -227,7 +227,7 @@ const AccessRights = (function () {
     // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller.
     const locked = get().readOnly && !!config;
     Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
-    columnSearches.forEach(search => search.sync());
+    searches.forEach(search => search.sync());
     const lockedHint = el('settings-access-locked');
     if (lockedHint) lockedHint.hidden = !locked;
     const statusEl = el('settings-access-status');
@@ -274,9 +274,9 @@ const AccessRights = (function () {
       const select = el(ids[k]);
       if (!select) return;
       select.addEventListener('change', () => { onPanelChange(ids[k]); });
-      if (k === 'table') return;
       // Composant indisponible : la liste native reste, inchangée.
-      try { columnSearches.push(SearchSelect.attachColumns(select)); } catch (e) { console.warn('[AccessRights] recherche de colonne indisponible, liste native conservée', e); }
+      try { searches.push(k === 'table' ? SearchSelect.attachTables(select) : SearchSelect.attachColumns(select)); }
+      catch (e) { console.warn('[AccessRights] recherche indisponible, liste native conservée', e); }
     });
     // Rempli à chaque ouverture des Réglages (schéma relu : une table ou une colonne a pu être ajoutée depuis), jamais seulement au démarrage.
     const openBtn = el('v2-btn-settings');

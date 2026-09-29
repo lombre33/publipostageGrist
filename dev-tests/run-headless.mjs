@@ -89,6 +89,7 @@ const NODE_SCRIPTS = {
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
+  tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
 };
 
 const argv = process.argv.slice(2);

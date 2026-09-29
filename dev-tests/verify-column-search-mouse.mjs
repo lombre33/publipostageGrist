@@ -3,7 +3,8 @@
 // (page.mouse / page.keyboard, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400) : les scénarios de dev-tests/scenarios-column-search.js
 // tournent DANS la page (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint le champ, ni que le panneau de la liste tient dans un panneau bas sans
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
-// Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles des macro-modèles, Réglages > Accès, menu « Image depuis une variable » de la barre.
+// Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles, Réglages > Accès (la table et les colonnes),
+// menu « Image depuis une variable » de la barre.
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -415,10 +416,20 @@ const SECTIONS = {
     await page.waitForTimeout(200);
   },
 
-  // Règles d'un macro-modèle : les colonnes de la table de la page.
+  // Macro-modèle : les colonnes de la table de la page pour les règles, puis les trois listes de modèles (page de garde, modèle d'une règle, « Si aucune règle ne
+  // correspond ») - la même liste avec recherche. Les modèles viennent de Templates.getCached(), remplacé le temps de la section.
   async macro() {
     const scope = '#macro-editor-modal';
-    await page.evaluate(() => MacroEditor.openModal(null));
+    await page.evaluate(() => {
+      window.__csRealCached = Templates.getCached;
+      Templates.getCached = () => [
+        { id: 11, nom: 'Notification_base', typeModele: 'document' },
+        { id: 12, nom: 'Notification_bureau', typeModele: 'document' },
+        { id: 13, nom: 'Notification_projet', typeModele: 'document' },
+        { id: 14, nom: 'Relance par email', typeModele: 'email' },
+      ];
+      MacroEditor.openModal(null);
+    });
     await page.waitForTimeout(200);
     await reveal('#macro-editor-add-slot', scope + ' .modal-content');
     await clickCenter('#macro-editor-add-slot');
@@ -439,10 +450,49 @@ const SECTIONS = {
       modalOpen: document.getElementById('macro-editor-modal').style.display !== 'none',
     }));
     check('macro : le clic choisit Responsable, l’indication de type s’affiche, la fenêtre reste ouverte', chosen.value === 'Responsable' && chosen.hint === 'référence' && chosen.modalOpen, chosen);
+    const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
+    const lists = [
+      { name: 'de la page de garde', trigger: '#macro-editor-cover + .ss-wrap .ss-trigger', select: '#macro-editor-cover', rows: ['-- Choisir un modèle --'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
+      { name: 'du modèle d’une règle', trigger: '.macro-rule-modele + .ss-wrap .ss-trigger', select: '.macro-rule-modele', rows: ['-- Choisir un modèle --'].concat(documents), typed: 'bu', row: 'Notification_bureau', value: '12' },
+      { name: '« Si aucune règle ne correspond »', trigger: '.macro-slot-default-select + .ss-wrap .ss-trigger', select: '.macro-slot-default-select', rows: ['Ne rien inclure'].concat(documents.map(nom => 'Utiliser « ' + nom + ' »')), typed: 'base', row: 'Utiliser « Notification_base »', value: '11' },
+    ];
+    for (const list of lists) {
+      const field = await reveal(scope + ' ' + list.trigger, scope + ' .modal-content');
+      const native = await hitTest(scope + ' ' + list.select);
+      check(`macro : la liste ${list.name} est un champ visible, dans le panneau et au premier plan, le <select> natif masqué`, field.found && field.inViewport && field.onTop && field.width > 60 && native.width === 0, { field, native });
+      await page.mouse.click(field.x, field.y);
+      await page.waitForTimeout(150);
+      const open = await panelInfo(scope);
+      check(`macro : un vrai clic ouvre la liste ${list.name} dans le panneau, zone de recherche au focus, les seuls modèles de type document`,
+        !!open && open.inside && open.searchFocused && open.heads.length === 0 && JSON.stringify(open.rows) === JSON.stringify(list.rows), open);
+      await page.keyboard.type(list.typed);
+      await page.waitForTimeout(100);
+      const row = await rowCenter(scope, list.row);
+      check(`macro : « ${list.typed} » propose ${list.row} dans la liste ${list.name}, visible et non recouvert`, !!row && row.onTop && row.inViewport, row);
+      if (row) await page.mouse.click(row.x, row.y);
+      await page.waitForTimeout(200);
+      const picked = await page.evaluate(({ select, trigger }) => ({
+        value: document.querySelector('#macro-editor-modal ' + select).value, shown: document.querySelector('#macro-editor-modal ' + trigger).textContent,
+        listOpen: !!document.querySelector('#macro-editor-modal .ss-panel:not([hidden])'), modalOpen: document.getElementById('macro-editor-modal').style.display !== 'none',
+      }), list);
+      check(`macro : le clic choisit ${list.row} dans la liste ${list.name}, la referme, la fenêtre reste ouverte`, picked.value === list.value && picked.shown.indexOf(list.row) === 0 && !picked.listOpen && picked.modalOpen, picked);
+    }
+    // Échap referme la liste seule et rend le focus au champ, la fenêtre reste ouverte.
+    const ruleField = await reveal(scope + ' .macro-rule-modele + .ss-wrap .ss-trigger', scope + ' .modal-content');
+    await page.mouse.click(ruleField.x, ruleField.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    const esc = await page.evaluate(() => ({
+      listOpen: !!document.querySelector('#macro-editor-modal .ss-panel:not([hidden])'), modalOpen: document.getElementById('macro-editor-modal').style.display !== 'none',
+      focusOnField: document.activeElement === document.querySelector('#macro-editor-modal .macro-rule-modele + .ss-wrap .ss-trigger'), value: document.querySelector('#macro-editor-modal .macro-rule-modele').value,
+    }));
+    check('macro : Échap referme la liste de modèles seule, la fenêtre reste ouverte, le champ reprend le focus et garde son choix', !esc.listOpen && esc.modalOpen && esc.focusOnField && esc.value === '12', esc);
     const cancel = await reveal('#macro-editor-cancel', scope + ' .modal-content');
     check('macro : Annuler visible et non recouvert', cancel.found && cancel.inViewport && cancel.onTop, cancel);
     if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
     await page.waitForTimeout(200);
+    await page.evaluate(() => { Templates.getCached = window.__csRealCached; });
   },
 
   // Réglages > Accès : la table des droits (liste native) et quatre choix de colonne avec recherche, dans une fenêtre qui défile à 700x400.
@@ -459,12 +509,28 @@ const SECTIONS = {
     await page.waitForTimeout(300);
     const tab = await clickCenter(scope + ' .settings-tab[data-settings-tab="access"]');
     check('accès : le clic sur l’onglet Accès ouvre les Réglages et son panneau', tab.found && await page.evaluate(() => !document.querySelector('#settings-modal [data-settings-panel="access"]').hidden), tab);
-    await page.selectOption('#settings-access-table', 'CsDroits');
+    // La table des droits : une liste avec recherche comme les colonnes, choisie à la vraie souris.
+    const tableTrigger = scope + ' #settings-access-table + .ss-wrap .ss-trigger';
+    const tableField = await reveal(tableTrigger, scope + ' .modal-content');
+    const tableNative = await hitTest(scope + ' #settings-access-table');
+    check('accès : le champ de la table est visible, dans le panneau et au premier plan, le <select> natif masqué', tableField.found && tableField.inViewport && tableField.onTop && tableField.width > 100 && tableNative.width === 0, { tableField, tableNative });
+    await page.mouse.click(tableField.x, tableField.y);
+    await page.waitForTimeout(150);
+    const tableOpen = await panelInfo(scope);
+    check('accès : un vrai clic ouvre la liste des tables dans le panneau, zone de recherche au focus, « — Aucune — » en tête puis les tables du document',
+      !!tableOpen && tableOpen.inside && tableOpen.searchFocused && tableOpen.heads.length === 0 && tableOpen.rows[0] === '— Aucune —' && ['CsDroits', 'CsAnnuaire', 'CsDossiers'].every(t => tableOpen.rows.includes(t)), tableOpen);
+    await page.keyboard.type('droit');
+    await page.waitForTimeout(100);
+    const tableRow = await rowCenter(scope, 'CsDroits');
+    check('accès : « droit » propose CsDroits, visible et non recouvert', !!tableRow && tableRow.onTop && tableRow.inViewport, tableRow);
+    if (tableRow) await page.mouse.click(tableRow.x, tableRow.y);
     await page.waitForTimeout(400);
+    const tableChosen = await page.evaluate(() => ({ value: document.getElementById('settings-access-table').value, shown: document.querySelector('#settings-access-table + .ss-wrap .ss-trigger').textContent, listOpen: !!document.querySelector('#settings-modal .ss-panel:not([hidden])') }));
+    check('accès : le clic choisit CsDroits, referme la liste, le champ montre la table', tableChosen.value === 'CsDroits' && tableChosen.shown === 'CsDroits' && !tableChosen.listOpen, tableChosen);
     const field = await reveal(scope + ' #settings-access-readonly + .ss-wrap .ss-trigger', scope + ' .modal-content');
     const native = await hitTest(scope + ' #settings-access-readonly');
-    const table = await hitTest(scope + ' #settings-access-table');
-    check('accès : le champ « Lecture seule » est visible, dans le panneau et au premier plan, le <select> natif masqué, à la hauteur de la liste des tables',
+    const table = await hitTest(tableTrigger);
+    check('accès : le champ « Lecture seule » est visible, dans le panneau et au premier plan, le <select> natif masqué, à la hauteur du champ de la table',
       field.found && field.inViewport && field.onTop && field.width > 100 && native.width === 0 && table.found && Math.abs((field.bottom - field.top) - (table.bottom - table.top)) < 1, { field, native, table });
     const emailShown = await page.evaluate(() => document.querySelector('#settings-access-email + .ss-wrap .ss-trigger').textContent);
     check('accès : choisir la table pré-choisit la colonne email, et le champ visible la montre', emailShown === 'Email', emailShown);
@@ -640,6 +706,36 @@ const SECTIONS = {
     const loopCancel = await reveal(loopScope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)', loopScope + ' .modal-content');
     if (loopCancel.found) await page.mouse.click(loopCancel.x, loopCancel.y);
     await page.waitForTimeout(200);
+    // Macro-modèle : les trois listes de modèles restent les listes natives d'avant, qui marchent.
+    const macroScope = '#macro-editor-modal';
+    await page.evaluate(() => {
+      window.__csRealCached = Templates.getCached;
+      Templates.getCached = () => [{ id: 11, nom: 'Notification_base', typeModele: 'document' }, { id: 12, nom: 'Notification_bureau', typeModele: 'document' }];
+      MacroEditor.openModal(null);
+      document.getElementById('macro-editor-add-slot').click();
+    });
+    await page.waitForTimeout(200);
+    const macroLists = { cover: '#macro-editor-cover', rule: macroScope + ' select.macro-rule-modele', dflt: macroScope + ' .macro-slot-default-select' };
+    const macroBoxes = {};
+    for (const [key, selector] of Object.entries(macroLists)) macroBoxes[key] = await reveal(selector, macroScope + ' .modal-content');
+    const macroTriggers = await page.evaluate(() => document.querySelectorAll('#macro-editor-modal .ss-trigger').length);
+    check('sans composant : les listes de modèles du macro-modèle sont les listes natives, visibles et au premier plan', Object.values(macroBoxes).every(b => b.found && b.width > 60 && b.onTop) && macroTriggers === 0, { macroBoxes, macroTriggers });
+    await page.selectOption(macroLists.cover, '11');
+    await page.selectOption(macroLists.rule, '12');
+    await page.selectOption(macroLists.dflt, '12');
+    await page.waitForTimeout(150);
+    // Une condition de plus redessine les annexes : le choix des listes natives est gardé.
+    await reveal(macroScope + ' .macro-rule-add', macroScope + ' .modal-content');
+    await clickCenter(macroScope + ' .macro-rule-add');
+    const macroPicked = await page.evaluate(() => ({
+      cover: document.getElementById('macro-editor-cover').value, rules: document.querySelectorAll('#macro-editor-modal .macro-rule-row').length,
+      rule: document.querySelector('#macro-editor-modal select.macro-rule-modele').value, dflt: document.querySelector('#macro-editor-modal .macro-slot-default-select').value,
+    }));
+    check('sans composant : choisir un modèle dans les listes natives marche, et le choix est gardé quand une condition est ajoutée', macroPicked.cover === '11' && macroPicked.rules === 2 && macroPicked.rule === '12' && macroPicked.dflt === '12', macroPicked);
+    const macroCancel = await reveal('#macro-editor-cancel', macroScope + ' .modal-content');
+    if (macroCancel.found) await page.mouse.click(macroCancel.x, macroCancel.y);
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { Templates.getCached = window.__csRealCached; });
     // Menu « Image depuis une variable » : la liste simple d'avant, qui insère toujours l'image.
     await page.evaluate(async () => {
       const stub = window.__gristStub;

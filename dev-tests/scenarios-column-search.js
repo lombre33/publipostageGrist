@@ -3,7 +3,8 @@
 // entre deux tables, groupe linkConfig). Composant : js/search-select.js, ici pour ses évolutions (intitulés de groupes de tables, ligne de saisie avancée
 // épinglée, choix « rien », état grisé, focus) et pour les fenêtres qui l'emploient : règles Colonne / Opérateur / Valeur (js/condition-fields.js : condition
 // d'affichage d'une bulle, filtre d'une boucle, macro-modèles), colonne de tri d'une boucle, colonnes de Réglages > Accès, menu « Image depuis une variable »
-// de la barre (js/main-toolbar.js, le composant en mode menu : `popup`). Les gestes à la vraie souris et au vrai clavier à 700x400 sont dans le script Node
+// de la barre (js/main-toolbar.js, le composant en mode menu : `popup`), table des droits de Réglages > Accès et listes de modèles du macro-modèle
+// (js/macro-editor.js : SearchSelect.attachTables / attachTemplates). Les gestes à la vraie souris et au vrai clavier à 700x400 sont dans le script Node
 // verify-column-search-mouse.mjs (groupe columnSearchMouse).
 (function () {
   const cases = [];
@@ -521,7 +522,7 @@
     },
   });
 
-  // Réglages > Accès : la table des droits (liste native) puis quatre choix de colonne (email, lecture seule, export, commentaires).
+  // Réglages > Accès : la table des droits, puis quatre choix de colonne (email, lecture seule, export, commentaires) - cinq listes avec recherche.
   const ACCESS = { table: 'settings-access-table', email: 'settings-access-email', readOnly: 'settings-access-readonly', exportCol: 'settings-access-export', comments: 'settings-access-comments' };
   const accessSelect = id => document.getElementById(id);
   const accessField = id => accessSelect(id).nextElementSibling.querySelector('.ss-trigger');
@@ -548,7 +549,7 @@
 
   cases.push({
     id: 'colsearch_access_settings_column_choices_are_searchable_lists',
-    description: 'Réglages > Accès : email, lecture seule, export et commentaires sont des listes avec recherche (« — Aucune — » en tête, seulement les colonnes du bon type, celle qui a disparu gardée), la liste des tables reste native ; un choix écrit l’option du widget, le champ le montre et le montre encore quand on rouvre les Réglages',
+    description: 'Réglages > Accès : la table, l’email, la lecture seule, l’export et les commentaires sont des listes avec recherche (« — Aucune — » en tête, les tables cherchées par leur nom, seulement les colonnes du bon type, celle qui a disparu gardée) ; un choix écrit l’option du widget, le champ le montre et le montre encore quand on rouvre les Réglages',
     run: async (h) => {
       await h.resetEditor();
       const stub = window.__gristStub;
@@ -561,20 +562,22 @@
       await openAccessTab(h);
       const none = I18n.t('settings.access.none');
       const tableSelect = accessSelect(ACCESS.table);
-      const tableNative = visible(tableSelect) && !accessSelect(ACCESS.table).nextElementSibling.classList.contains('ss-wrap');
+      const tableTrigger = accessField(ACCESS.table);
+      const tableField = { hidden: tableSelect.getBoundingClientRect().width === 0, width: tableTrigger.getBoundingClientRect().width, text: shownIn(tableTrigger), placeholder: tableTrigger.classList.contains('is-placeholder') };
       const fields = [ACCESS.email, ACCESS.readOnly, ACCESS.exportCol, ACCESS.comments].map(id => {
         const trigger = accessField(id);
         const rect = trigger.getBoundingClientRect();
         return { id, hidden: accessSelect(id).getBoundingClientRect().width === 0, width: rect.width, height: rect.height, text: shownIn(trigger) };
       });
-      const tableRect = tableSelect.getBoundingClientRect();
+      const tableRect = tableTrigger.getBoundingClientRect();
       const sameHeight = fields.every(f => Math.abs(f.height - tableRect.height) < 1);
       const labelFocuses = (() => { document.querySelector('label[for="' + ACCESS.email + '"]').click(); return document.activeElement === accessField(ACCESS.email); })();
       const openRows = async id => { const trigger = accessField(id); trigger.click(); await h.sleep(30); const rows = rowsOf(panelOf(trigger)); const placeholder = inputOf(panelOf(trigger)).placeholder; trigger.click(); await h.sleep(20); return { rows, placeholder }; };
       const beforeTable = await openRows(ACCESS.email);
-      tableSelect.value = 'CsDroits';
-      tableSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      await h.sleep(350);
+      // La table : liste des tables (« — Aucune — » en tête), cherchée par son nom, choisie par Entrée.
+      const tableList = await openRows(ACCESS.table);
+      await pickInAccessList(h, ACCESS.table, 'droits');
+      const tableChosen = { value: tableSelect.value, shown: shownIn(tableTrigger), placeholder: tableTrigger.classList.contains('is-placeholder') };
       const afterTable = { email: shownIn(accessField(ACCESS.email)), value: accessSelect(ACCESS.email).value };
       const emailList = await openRows(ACCESS.email);
       const boolList = await openRows(ACCESS.readOnly);
@@ -601,7 +604,10 @@
       await closeSettings(h);
       stub.setWidgetOptions(null);
       await h.sleep(200);
-      const pass = tableNative && fields.length === 4 && fields.every(f => f.hidden && f.width > 100) && sameHeight && labelFocuses
+      const pass = tableField.hidden && tableField.width > 100 && tableField.text === none && tableField.placeholder
+        && tableList.rows[0] === none && tableList.rows.includes('CsDroits') && tableList.rows.includes('CsAnnuaire') && tableList.placeholder === I18n.t('searchSelect.searchTables')
+        && tableChosen.value === 'CsDroits' && tableChosen.shown === 'CsDroits' && !tableChosen.placeholder
+        && fields.length === 4 && fields.every(f => f.hidden && f.width > 100) && sameHeight && labelFocuses
         && fields.every(f => f.text === none) && JSON.stringify(beforeTable.rows) === JSON.stringify([none])
         && afterTable.value === 'Email' && afterTable.email === 'Email'
         && JSON.stringify(emailList.rows) === JSON.stringify([none, 'Email', 'Nom'])
@@ -611,7 +617,7 @@
         && !!option && option.table === 'CsDroits' && option.emailColumn === 'Email' && option.readOnlyColumn === 'Export' && option.exportColumn === '' && option.commentsColumn === ''
         && reopened.email === 'Ancienne' && reopened.readOnly === 'LectureSeule' && reopened.exportCol === none && !reopened.emailPlaceholder && reopened.exportPlaceholder
         && JSON.stringify(keptList.rows) === JSON.stringify([none, 'Email', 'Nom', 'Ancienne']);
-      return { pass, notes: JSON.stringify({ tableNative, fields, sameHeight, labelFocuses, beforeTable, afterTable, emailList, boolList, searched, chosen, option, reopened, keptList }) };
+      return { pass, notes: JSON.stringify({ tableField, tableList: { first: tableList.rows[0], count: tableList.rows.length, placeholder: tableList.placeholder }, tableChosen, fields, sameHeight, labelFocuses, beforeTable, afterTable, emailList, boolList, searched, chosen, option, reopened, keptList }) };
     },
   });
 
@@ -980,6 +986,268 @@
       }
       const pass = JSON.stringify(out.texts) === JSON.stringify(KEYS) && out.hostAbsent && out.boxClosed && JSON.stringify(out.images) === JSON.stringify(['CsSites.Logo']);
       return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // === Listes de modèles du macro-modèle (js/macro-editor.js) : la page de garde, le modèle de chaque règle et « Si aucune règle ne correspond » sont la même
+  // liste avec recherche (SearchSelect.attachTemplates). Les modèles viennent de Templates.getCached() (seuls ceux de type document sont proposés), remplacé le
+  // temps d'un cas. L'enregistrement est saisi au passage de Templates.save, qui échoue exprès : le vrai enregistrement recharge l'application sur le nouveau
+  // macro-modèle et laisserait les cas suivants sur un autre type de modèle. Les gestes à la vraie souris sont dans verify-column-search-mouse.mjs.
+  const MACRO_TEMPLATES = [
+    { id: 11, nom: 'Notification_base', typeModele: 'document' },
+    { id: 12, nom: 'Notification_bureau', typeModele: 'document' },
+    { id: 13, nom: 'Notification_projet', typeModele: 'document' },
+    { id: 14, nom: 'Relance par email', typeModele: 'email' },
+    { id: 15, nom: 'Macro déjà composé', typeModele: 'macro' },
+  ];
+  const macroModal = () => document.getElementById('macro-editor-modal');
+  const coverList = () => document.getElementById('macro-editor-cover');
+  const ruleModelList = () => macroModal().querySelector('select.macro-rule-modele');
+  const defaultModelList = () => macroModal().querySelector('select.macro-slot-default-select');
+  const hasField = select => !!select.nextElementSibling && select.nextElementSibling.classList.contains('ss-wrap');
+  const fieldOf = select => select.nextElementSibling.querySelector('.ss-trigger');
+  async function openMacroWindow(h) {
+    MacroEditor.openModal(null);
+    document.getElementById('macro-editor-add-slot').click();
+    await h.sleep(60);
+  }
+  async function closeMacroWindow(h) {
+    document.getElementById('macro-editor-cancel').click();
+    await h.sleep(30);
+  }
+  // Ouvre la liste, lit ses lignes, puis la referme (un deuxième clic sur le champ).
+  async function readList(h, trigger) {
+    trigger.click();
+    await h.sleep(30);
+    const panel = panelOf(trigger);
+    const out = { rows: rowsOf(panel), headers: headersOf(panel).length, searchPlaceholder: inputOf(panel).placeholder };
+    trigger.click();
+    await h.sleep(20);
+    return out;
+  }
+  // Tape dans la zone de recherche : rend les lignes qui restent, puis la touche demandée (Entrée choisit la première, Échap ferme).
+  async function searchList(h, trigger, text, key) {
+    trigger.click();
+    await h.sleep(30);
+    const input = inputOf(panelOf(trigger));
+    setInput(input, text);
+    await h.sleep(10);
+    const rows = rowsOf(panelOf(trigger));
+    press(input, key);
+    await h.sleep(40);
+    return rows;
+  }
+  const changed = (select, value) => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); };
+
+  cases.push({
+    id: 'colsearch_macro_editor_template_lists_are_searchable_and_the_choice_is_saved',
+    description: 'Macro-modèle : la page de garde, le modèle d’une règle et « Si aucune règle ne correspond » sont des listes avec recherche (seuls les modèles de type document ; « Ne rien inclure » reste un vrai choix, cherchable) ; la frappe filtre, Entrée choisit, le choix survit à l’ajout d’une condition et s’enregistre',
+    run: async (h) => {
+      await seed(h);
+      const realCached = Templates.getCached;
+      const realSave = Templates.save;
+      const realAlert = window.alert;
+      const realError = console.error;
+      let out;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        await openMacroWindow(h);
+        const lists = [coverList(), ruleModelList(), defaultModelList()];
+        const fields = lists.map(select => {
+          const trigger = fieldOf(select);
+          return { hidden: select.getBoundingClientRect().width === 0, width: trigger.getBoundingClientRect().width, text: shownIn(trigger), placeholder: trigger.classList.contains('is-placeholder') };
+        });
+        const opened = [];
+        for (const select of lists) opened.push(await readList(h, fieldOf(select)));
+        // « Ne rien inclure » est un vrai choix (cherchable, pas grisé) ; le « -- Choisir un modèle -- » des deux autres listes n'est qu'un « rien » : absent d'une recherche.
+        const skipFound = await searchList(h, fieldOf(lists[2]), 'inclure', 'Escape');
+        const chooseFound = await searchList(h, fieldOf(lists[0]), 'choisir', 'Escape');
+        const searched = {
+          cover: await searchList(h, fieldOf(lists[0]), 'base', 'Enter'),
+          rule: await searchList(h, fieldOf(lists[1]), 'bu', 'Enter'),
+          dflt: await searchList(h, fieldOf(lists[2]), 'projet', 'Enter'),
+        };
+        const values = { cover: lists[0].value, rule: lists[1].value, dflt: lists[2].value, shown: lists.map(select => shownIn(fieldOf(select))) };
+        // La colonne et la valeur de la règle, pour que l'enregistrement la garde.
+        await searchList(h, triggerIn(macroModal().querySelector('.macro-rule-row')), 'stat', 'Enter');
+        setInput(macroModal().querySelector('.macro-rule-row .macro-rule-value'), 'Urgent');
+        // Une condition de plus redessine toutes les annexes : les listes redessinées montrent les choix gardés en mémoire.
+        macroModal().querySelector('.macro-rule-add').click();
+        await h.sleep(60);
+        const ruleLists = macroModal().querySelectorAll('select.macro-rule-modele');
+        const redrawn = { rules: macroModal().querySelectorAll('.macro-rule-row').length, first: shownIn(fieldOf(ruleLists[0])), firstValue: ruleLists[0].value, second: shownIn(fieldOf(ruleLists[1])), secondPlaceholder: fieldOf(ruleLists[1]).classList.contains('is-placeholder'), dflt: shownIn(fieldOf(defaultModelList())), cover: shownIn(fieldOf(coverList())) };
+        let captured = null;
+        Templates.save = async (...args) => { captured = args; throw new Error('enregistrement simulé (test)'); };
+        window.alert = () => {};
+        console.error = () => {};
+        document.getElementById('macro-editor-name').value = 'Macro de test';
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(80);
+        const slots = captured ? JSON.parse(captured[2]).slots : null;
+        const saved = slots && slots.map(s => s.type === 'fixed'
+          ? { type: s.type, modeleId: s.modeleId }
+          : { type: s.type, rules: s.rules.map(r => ({ column: r.column, operator: r.operator, value: r.value, modeleId: r.modeleId })), defaultModeleId: s.defaultModeleId });
+        out = { fields, opened, skipFound, chooseFound, searched, values, redrawn, saved };
+      } finally {
+        Templates.getCached = realCached;
+        Templates.save = realSave;
+        window.alert = realAlert;
+        console.error = realError;
+        await closeMacroWindow(h);
+      }
+      const choose = I18n.t('macro.modal.choosePlaceholder');
+      const skip = I18n.t('macro.modal.defaultSkip');
+      const use = nom => I18n.t('macro.modal.defaultUse', { name: nom });
+      const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
+      const pass = out.fields.every(f => f.hidden && f.width > 40)
+        && out.fields[0].text === choose && out.fields[0].placeholder && out.fields[1].text === choose && out.fields[1].placeholder
+        && out.fields[2].text === skip && !out.fields[2].placeholder
+        && JSON.stringify(out.opened[0].rows) === JSON.stringify([choose].concat(documents)) && JSON.stringify(out.opened[1].rows) === JSON.stringify([choose].concat(documents))
+        && JSON.stringify(out.opened[2].rows) === JSON.stringify([skip].concat(documents.map(use)))
+        && out.opened.every(o => o.headers === 0 && o.searchPlaceholder === I18n.t('searchSelect.searchTemplates'))
+        && JSON.stringify(out.skipFound) === JSON.stringify([skip]) && out.chooseFound.length === 0
+        && JSON.stringify(out.searched.cover) === JSON.stringify(['Notification_base']) && JSON.stringify(out.searched.rule) === JSON.stringify(['Notification_bureau'])
+        && JSON.stringify(out.searched.dflt) === JSON.stringify([use('Notification_projet')])
+        && out.values.cover === '11' && out.values.rule === '12' && out.values.dflt === '13'
+        && JSON.stringify(out.values.shown) === JSON.stringify(['Notification_base', 'Notification_bureau', use('Notification_projet')])
+        && out.redrawn.rules === 2 && out.redrawn.first === 'Notification_bureau' && out.redrawn.firstValue === '12' && out.redrawn.second === choose && out.redrawn.secondPlaceholder
+        && out.redrawn.dflt === use('Notification_projet') && out.redrawn.cover === 'Notification_base'
+        && JSON.stringify(out.saved) === JSON.stringify([
+          { type: 'fixed', modeleId: '11' },
+          { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'Urgent', modeleId: '12' }], defaultModeleId: '13' },
+        ]);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_macro_editor_cover_list_follows_the_macro_model_at_each_opening',
+    description: 'Macro-modèle : la liste de la page de garde, posée une seule fois dans la page, montre à chaque ouverture le modèle du macro-modèle édité (rien pour un nouveau) sans se dédoubler, comme les listes redessinées de ses annexes',
+    run: async (h) => {
+      await seed(h);
+      const realCached = Templates.getCached;
+      let out;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        const wraps = () => coverList().parentNode.querySelectorAll(':scope > .ss-wrap').length;
+        const existing = { id: 900, nom: 'Notification_classique', macroSlots: { slots: [
+          { type: 'fixed', modeleId: '11' },
+          { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'projet', modeleId: '13' }], defaultModeleId: '12' },
+        ] } };
+        MacroEditor.openModal(existing);
+        await h.sleep(60);
+        const edited = { cover: shownIn(fieldOf(coverList())), coverValue: coverList().value, coverPlaceholder: fieldOf(coverList()).classList.contains('is-placeholder'), rule: shownIn(fieldOf(ruleModelList())), dflt: shownIn(fieldOf(defaultModelList())), wraps: wraps() };
+        await closeMacroWindow(h);
+        MacroEditor.openModal(null);
+        await h.sleep(60);
+        const fresh = { cover: shownIn(fieldOf(coverList())), coverValue: coverList().value, coverPlaceholder: fieldOf(coverList()).classList.contains('is-placeholder'), cards: macroModal().querySelectorAll('.macro-slot-card').length, wraps: wraps() };
+        await closeMacroWindow(h);
+        MacroEditor.openModal(existing);
+        await h.sleep(60);
+        const again = { cover: shownIn(fieldOf(coverList())), coverValue: coverList().value, wraps: wraps() };
+        await closeMacroWindow(h);
+        out = { edited, fresh, again };
+      } finally {
+        Templates.getCached = realCached;
+        if (macroModal().style.display !== 'none') await closeMacroWindow(h);
+      }
+      const choose = I18n.t('macro.modal.choosePlaceholder');
+      const pass = out.edited.cover === 'Notification_base' && out.edited.coverValue === '11' && !out.edited.coverPlaceholder && out.edited.rule === 'Notification_projet'
+        && out.edited.dflt === I18n.t('macro.modal.defaultUse', { name: 'Notification_bureau' }) && out.edited.wraps === 1
+        && out.fresh.cover === choose && out.fresh.coverValue === '' && out.fresh.coverPlaceholder && out.fresh.cards === 0 && out.fresh.wraps === 1
+        && out.again.cover === 'Notification_base' && out.again.coverValue === '11' && out.again.wraps === 1;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_macro_editor_native_lists_stay_when_the_component_fails',
+    description: 'Macro-modèle : si le composant de recherche est indisponible, les trois listes de modèles gardent le <select> natif (visible, mêmes modèles), le choix se garde après l’ajout d’une condition ; à l’ouverture suivante, les listes avec recherche reviennent',
+    run: async (h) => {
+      await seed(h);
+      const realAttach = SearchSelect.attachTemplates;
+      const realCached = Templates.getCached;
+      const warn = console.warn;
+      let result;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        // La page de garde est équipée depuis une ouverture précédente : on la rend au <select> natif pour rejouer sa toute première ouverture sans composant.
+        SearchSelect.attach(coverList()).destroy();
+        console.warn = () => {};
+        SearchSelect.attachTemplates = () => { throw new Error('composant indisponible (test)'); };
+        await openMacroWindow(h);
+        const lists = [coverList(), ruleModelList(), defaultModelList()];
+        const native = lists.map(select => ({ visible: visible(select) && select.getBoundingClientRect().width > 40, field: hasField(select), options: select.options.length }));
+        changed(lists[0], '11');
+        changed(lists[1], '12');
+        changed(lists[2], '13');
+        macroModal().querySelector('.macro-rule-add').click();
+        await h.sleep(60);
+        const kept = { cover: coverList().value, rule: ruleModelList().value, dflt: defaultModelList().value, ruleField: hasField(ruleModelList()) };
+        await closeMacroWindow(h);
+        SearchSelect.attachTemplates = realAttach;
+        console.warn = warn;
+        await openMacroWindow(h);
+        const back = [coverList(), ruleModelList(), defaultModelList()].map(select => ({ field: hasField(select), hidden: !visible(select) }));
+        await closeMacroWindow(h);
+        result = { native, kept, back };
+      } finally {
+        SearchSelect.attachTemplates = realAttach;
+        Templates.getCached = realCached;
+        console.warn = warn;
+        if (macroModal().style.display !== 'none') await closeMacroWindow(h);
+      }
+      const pass = result.native.every(n => n.visible && !n.field && n.options === 4)
+        && result.kept.cover === '11' && result.kept.rule === '12' && result.kept.dflt === '13' && !result.kept.ruleField
+        && result.back.every(b => b.field && b.hidden);
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'searchselect_table_and_template_lists_have_their_own_texts_and_follow_the_language',
+    description: 'attachTables et attachTemplates posent leurs textes (« Rechercher une table… » / « Rechercher un modèle… », « Aucune table ne correspond. » / « Aucun modèle ne correspond. »), relus à chaque ouverture comme ceux des colonnes ; un texte passé en option l’emporte',
+    run: async () => {
+      const box = document.createElement('div');
+      const options = '<option value="">— Aucune —</option><option value="a">Alpha</option>';
+      box.innerHTML = ['tables', 'templates', 'columns', 'custom'].map(kind => `<select id="cs-kind-${kind}">${options}</select>`).join('');
+      document.body.appendChild(box);
+      const pick = kind => box.querySelector('#cs-kind-' + kind);
+      const controllers = [
+        SearchSelect.attachTables(pick('tables')),
+        SearchSelect.attachTemplates(pick('templates')),
+        SearchSelect.attachColumns(pick('columns')),
+        SearchSelect.attachTemplates(pick('custom'), { searchPlaceholder: () => 'Chercher un gabarit' }),
+      ];
+      const read = kind => {
+        const panel = pick(kind).nextElementSibling.querySelector('.ss-panel');
+        return { placeholder: panel.querySelector('.ss-input').placeholder, aria: panel.querySelector('.ss-input').getAttribute('aria-label'), empty: panel.querySelector('.ss-empty').textContent };
+      };
+      const reading = lang => {
+        I18n.setLang(lang);
+        const out = {};
+        ['tables', 'templates', 'columns', 'custom'].forEach((kind, i) => { controllers[i].open(); out[kind] = read(kind); controllers[i].close(false); });
+        return out;
+      };
+      let fr, en, back;
+      try {
+        fr = reading('fr');
+        en = reading('en');
+        back = reading('fr');
+      } finally {
+        I18n.setLang('fr');
+        controllers.forEach(controller => controller.destroy());
+        box.remove();
+      }
+      const pass = fr.tables.placeholder === 'Rechercher une table…' && fr.tables.aria === fr.tables.placeholder && fr.tables.empty === 'Aucune table ne correspond.'
+        && fr.templates.placeholder === 'Rechercher un modèle…' && fr.templates.aria === fr.templates.placeholder && fr.templates.empty === 'Aucun modèle ne correspond.'
+        && fr.columns.placeholder === 'Rechercher une colonne…' && fr.columns.empty === 'Aucune colonne ne correspond.'
+        && en.tables.placeholder === 'Search for a table…' && en.tables.empty === 'No table matches.'
+        && en.templates.placeholder === 'Search for a template…' && en.templates.empty === 'No template matches.'
+        && en.columns.placeholder === 'Search for a column…' && en.columns.empty === 'No column matches.'
+        && fr.custom.placeholder === 'Chercher un gabarit' && en.custom.placeholder === 'Chercher un gabarit' && en.custom.empty === 'No template matches.'
+        && JSON.stringify(back) === JSON.stringify(fr);
+      return { pass, notes: JSON.stringify({ fr, en, back }) };
     },
   });
 

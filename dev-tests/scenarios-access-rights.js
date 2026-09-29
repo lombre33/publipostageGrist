@@ -372,9 +372,10 @@
         select.dispatchEvent(new Event('change', { bubbles: true }));
         await sleep(300);
       };
-      // Les quatre choix de colonne sont des listes avec recherche (js/search-select.js) : le champ visible suit le <select> masqué.
+      // Les cinq choix (la table, puis quatre colonnes) sont des listes avec recherche (js/search-select.js) : le champ visible suit le <select> masqué.
       const searchField = id => document.getElementById(id).nextElementSibling.querySelector('.ss-trigger');
       await choose('settings-access-table', RIGHTS_TABLE);
+      const tableShown = searchField('settings-access-table').textContent;
       const emailPicked = document.getElementById('settings-access-email').value;
       const emailShown = searchField('settings-access-email').textContent;
       const optionsAfterTable = stub().state.options && stub().state.options.droitsAcces;
@@ -384,18 +385,18 @@
       await sleep(400);
       const selectsDisabled = ['settings-access-table', 'settings-access-email', 'settings-access-readonly', 'settings-access-export', 'settings-access-comments']
         .every(id => document.getElementById(id).disabled);
-      const searchFields = ['settings-access-email', 'settings-access-readonly', 'settings-access-export', 'settings-access-comments'].map(searchField);
+      const searchFields = ['settings-access-table', 'settings-access-email', 'settings-access-readonly', 'settings-access-export', 'settings-access-comments'].map(searchField);
       const readOnlyShown = searchField('settings-access-readonly').textContent;
       searchFields.forEach(field => field.click());
-      const fieldsDisabled = searchFields.length === 4 && searchFields.every(field => field.disabled && field.parentNode.querySelector('.ss-panel').hidden);
+      const fieldsDisabled = searchFields.length === 5 && searchFields.every(field => field.disabled && field.parentNode.querySelector('.ss-panel').hidden);
       const lockedHint = !document.getElementById('settings-access-locked').hidden;
       const statusText = document.getElementById('settings-access-status').textContent;
       document.getElementById('settings-close').click();
       await cleanup();
-      const pass = emailPicked === 'Email' && emailShown === 'Email' && readOnlyShown === 'LectureSeule' && fieldsDisabled && optionsAfterTable == null
+      const pass = tableShown === RIGHTS_TABLE && emailPicked === 'Email' && emailShown === 'Email' && readOnlyShown === 'LectureSeule' && fieldsDisabled && optionsAfterTable == null
         && !!option && option.table === RIGHTS_TABLE && option.emailColumn === 'Email' && option.readOnlyColumn === 'LectureSeule'
         && option.exportColumn === '' && option.commentsColumn === '' && selectsDisabled && lockedHint && statusText.indexOf(EMAIL) !== -1;
-      return { pass, notes: JSON.stringify({ emailPicked, emailShown, readOnlyShown, fieldsDisabled, optionsAfterTable, option, selectsDisabled, lockedHint, statusText }) };
+      return { pass, notes: JSON.stringify({ tableShown, emailPicked, emailShown, readOnlyShown, fieldsDisabled, optionsAfterTable, option, selectsDisabled, lockedHint, statusText }) };
     },
   });
 
