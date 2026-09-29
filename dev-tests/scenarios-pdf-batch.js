@@ -1,4 +1,4 @@
-// Suite "pdfBatch" - export de toutes les lignes (js/main.js:onExportPdfBatch) par les VRAIES lignes du menu « Exporter en PDF » : archive ZIP (un PDF
+// Suite "pdfBatch" - export de toutes les lignes (js/main.js:onExportBatch) par les VRAIES lignes du menu « Exporter en PDF » : archive ZIP (un PDF
 // par ligne) et PDF unique (js/pdf-merge.js, demande d'Antoine du 2026-09-28 : « toutes les lignes mais à la suite »), puis les deux téléchargements DOCX
 // (un .docx, une archive d'un .docx par ligne). Le fichier téléchargé est intercepté (URL.createObjectURL + clic du <a download>) puis ouvert pour de vrai -
 // pdf.js pour un PDF, JSZip pour une archive ou un .docx - comme le ferait l'utilisateur.
@@ -40,17 +40,23 @@
       if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
       return origClick.call(this);
     };
+    // Chaque message d'état affiché pendant l'export (confirmation, chargement, progression, fin), pas seulement le dernier.
+    const statusEl = document.getElementById('status-msg');
+    const statuses = [];
+    const statusObserver = new MutationObserver(() => { if (statuses[statuses.length - 1] !== statusEl.textContent) statuses.push(statusEl.textContent); });
+    statusObserver.observe(statusEl, { childList: true, characterData: true, subtree: true });
     try {
       document.getElementById(rowId).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       const startedAt = Date.now();
       while (!downloads.length && Date.now() - startedAt < 60000) await h.sleep(100);
       await h.sleep(50); // le statut final est posé juste après le clic du <a>
     } finally {
+      statusObserver.disconnect();
       window.confirm = origConfirm;
       URL.createObjectURL = origCreate;
       HTMLAnchorElement.prototype.click = origClick;
     }
-    return { downloads, confirms, status: document.getElementById('status-msg').textContent };
+    return { downloads, confirms, statuses, status: document.getElementById('status-msg').textContent };
   }
 
   // Texte de chaque page, dans l'ordre, lu dans les octets du PDF (pdf.js).
@@ -211,8 +217,127 @@
       const pass = res.downloads.length === 1 && dl.name === TABLE + '-export-docx.zip'
         && JSON.stringify(files) === JSON.stringify(Object.keys(expectedByFile).sort())
         && files.every(f => squash(textsByFile[f]).includes(squash(expectedByFile[f])))
-        && res.confirms.length === 1; // le libellé de confirmation/statut du lot DOCX reprend celui du lot PDF : volontairement non figé ici
+        && res.confirms.length === 1;
       return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), confirms: res.confirms, status: res.status, textsByFile }) };
+    },
+  });
+
+  // Avant le 29/09, ce lot demandait « Générer un PDF pour chacune des N lignes… », affichait « Export PDF en lot » puis « N PDF générés » alors que les fichiers
+  // sont des .docx (choix d'Antoine : corriger). Vérifié sur ce que la personne LIT - chaque message d'état de l'export, dans les deux langues - et non sur les
+  // clés i18n : aucun ne doit dire PDF, et confirmation, progression et fin doivent dire DOCX.
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'pdfbatch_docx_zip_wording_says_docx_' + lang,
+    description: 'Lot DOCX (' + lang + ') : confirmation, progression et message final parlent de DOCX, jamais de PDF',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        await seed(h, `<p>Bonjour ${badge('Nom')}.</p>`);
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        const messages = [...res.confirms, ...res.statuses];
+        const mentionsPdf = messages.filter(m => /pdf/i.test(m));
+        const progress = res.statuses.filter(m => /1\/3/.test(m));
+        const pass = res.downloads.length === 1 && res.confirms.length === 1 && /docx/i.test(res.confirms[0]) && mentionsPdf.length === 0
+          && progress.length >= 1 && progress.every(m => /docx/i.test(m)) && /docx/i.test(res.status) && res.status.includes('3');
+        return { pass, notes: JSON.stringify({ confirms: res.confirms, statuses: res.statuses, mentionsPdf }) };
+      } finally { I18n.setLang(previousLang); }
+    },
+  }));
+
+  // --- Macro-modèle : les annexes se choisissent ligne par ligne (js/main.js:onExportBatch appelle MacroTemplates.buildConcatenatedHtml pour CHAQUE ligne, pas une
+  // fois pour le lot). Un macro-modèle réel, chargé par le vrai <select> de modèles, sur trois lignes dont deux ont le même type. Placé en dernier : le macro
+  // chargé laisse l'application en mode macro, restauré à la fin par le vrai bouton « Nouveau document » (resetEditor() ne touche pas à ce mode). ---
+  const MACRO_ROWS = [
+    { Nom: 'Alpha Durand', TypeDossier: 'Particulier' },
+    { Nom: 'Bravo Martin', TypeDossier: 'Entreprise' },
+    { Nom: 'Charlie Petit', TypeDossier: 'Particulier' },
+  ];
+  const ANNEX_BY_TYPE = { Particulier: 'ANNEXEPARTICULIER', Entreprise: 'ANNEXEENTREPRISE' };
+
+  async function loadMacroForBatch(h) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, { Nom: 'Text', TypeDossier: 'Text' });
+    stub.setRows(TABLE, MACRO_ROWS.map((r, i) => Object.assign({ id: i + 1 }, r)));
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({ id: 1 }, MACRO_ROWS[0]), TABLE);
+    await h.sleep(50);
+    const cover = await Templates.save(null, 'PbMacro couverture', `<p>COUVERTURE ${badge('Nom')}</p>`, '', null, null, 'document', null);
+    const annexP = await Templates.save(null, 'PbMacro annexe particulier', '<p>ANNEXEPARTICULIER</p>', '', null, null, 'document', null);
+    const annexE = await Templates.save(null, 'PbMacro annexe entreprise', '<p>ANNEXEENTREPRISE</p>', '', null, null, 'document', null);
+    const slots = { slots: [
+      { type: 'fixed', modeleId: cover.id },
+      { type: 'conditional', rules: [
+        { column: 'TypeDossier', operator: '=', value: 'Particulier', modeleId: annexP.id },
+        { column: 'TypeDossier', operator: '=', value: 'Entreprise', modeleId: annexE.id },
+      ], defaultModeleId: null },
+    ] };
+    const macro = await Templates.save(null, 'PbMacro dossier', JSON.stringify(slots), '', null, null, 'macro', null);
+    await Templates.loadAll();
+    // Les lignes viennent d'être écrites sans passer par le bouton Enregistrer, qui referait la liste (refreshTemplateList, js/main.js) : l'option du macro
+    // est posée ici, le reste - lecture dans le cache, chargement du macro - est le vrai gestionnaire du <select>.
+    const select = document.getElementById('template-select');
+    if (!Array.from(select.options).some(o => o.value === String(macro.id))) {
+      const option = document.createElement('option');
+      option.value = String(macro.id);
+      option.textContent = 'PbMacro dossier';
+      select.appendChild(option);
+    }
+    select.value = String(macro.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await h.sleep(300);
+    return { loaded: String(Templates.getCurrentId()) === String(macro.id) };
+  }
+
+  async function restoreDocumentMode(h) {
+    await h.resetEditor();
+    h.openFlyout('#v2-new-template-group');
+    await h.clickButton('v2-btn-new-document');
+    await h.sleep(100);
+  }
+
+  cases.push({
+    id: 'pdfbatch_macro_zip_picks_annexes_row_by_row',
+    description: 'Macro-modèle, ZIP de PDF : chaque ligne reçoit sa couverture ET l’annexe qui correspond à SON type (pas celle de la 1re ligne, pas les deux)',
+    run: async (h) => {
+      try {
+        const { loaded } = await loadMacroForBatch(h);
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const dl = res.downloads[0];
+        const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+        const files = zip ? Object.keys(zip.files).sort() : [];
+        const textsByFile = {};
+        for (const f of files) textsByFile[f] = squash((await pdfPageTexts(h, await zip.file(f).async('blob'))).join(' | '));
+        const expectedFiles = ['publipostage (2).pdf', 'publipostage (3).pdf', 'publipostage.pdf'];
+        const rowOk = files.length === MACRO_ROWS.length && MACRO_ROWS.every((row, i) => {
+          const text = textsByFile[['publipostage.pdf', 'publipostage (2).pdf', 'publipostage (3).pdf'][i]] || '';
+          const other = row.TypeDossier === 'Particulier' ? ANNEX_BY_TYPE.Entreprise : ANNEX_BY_TYPE.Particulier;
+          return text.includes(squash('COUVERTURE' + row.Nom)) && text.includes(ANNEX_BY_TYPE[row.TypeDossier]) && !text.includes(other);
+        });
+        const pass = loaded && res.downloads.length === 1 && dl.name === TABLE + '-export-pdf.zip'
+          && JSON.stringify(files) === JSON.stringify(expectedFiles) && rowOk
+          && res.status === I18n.t('status.batchExportDone', { ok: MACRO_ROWS.length });
+        return { pass, notes: JSON.stringify({ loaded, downloads: res.downloads.map(d => d.name), status: res.status, textsByFile }) };
+      } finally { await restoreDocumentMode(h); }
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_macro_merged_picks_annexes_row_by_row',
+    description: 'Macro-modèle, PDF unique : les pages suivent l’ordre des lignes, chacune avec sa couverture puis l’annexe de SON type',
+    run: async (h) => {
+      try {
+        const { loaded } = await loadMacroForBatch(h);
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        const dl = res.downloads[0];
+        const texts = dl && dl.blob ? (await pdfPageTexts(h, dl.blob)).map(squash) : [];
+        // Deux pages par ligne (le saut de page du macro sépare couverture et annexe) : couverture de la ligne, puis son annexe.
+        const expected = MACRO_ROWS.flatMap(row => [squash('COUVERTURE' + row.Nom), ANNEX_BY_TYPE[row.TypeDossier]]);
+        const pass = loaded && res.downloads.length === 1 && dl.name === TABLE + '-export.pdf' && texts.length === expected.length
+          && expected.every((needle, p) => texts[p].includes(needle))
+          && res.status === I18n.t('status.mergedExportDone', { ok: MACRO_ROWS.length });
+        return { pass, notes: JSON.stringify({ loaded, downloads: res.downloads.map(d => d.name), status: res.status, texts }) };
+      } finally { await restoreDocumentMode(h); }
     },
   });
 

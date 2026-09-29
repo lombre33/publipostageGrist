@@ -32,7 +32,7 @@ window.EditorTestSuites.pageLayout = (function () {
     + '<div class="two-columns-column"><p>GAUCHE</p></div><div class="two-columns-column"><p>DROITE</p></div></div>';
 
   async function docxXml(html, marginsTwip) {
-    await PdfExport.ensurePdfLibsLoaded(); // JSZip fait partie du même lot (cf. js/main.js:onExportDocxBatch)
+    await PdfExport.ensurePdfLibsLoaded(); // JSZip fait partie du même lot (cf. js/main.js:onExportBatch)
     const res = await DocxExport.getDocxBlobForRecord(html, null, {}, '', EMPTY_HF, marginsTwip);
     const zip = await JSZip.loadAsync(await res.blob.arrayBuffer());
     return zip.file('word/document.xml').async('string');

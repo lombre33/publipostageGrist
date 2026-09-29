@@ -1,4 +1,4 @@
-// Export « toutes les lignes en un seul PDF » (cf. js/main.js:onExportPdfBatch) : chaque ligne est rendue exactement comme pour le ZIP
+// Export « toutes les lignes en un seul PDF » (cf. js/main.js:onExportBatch) : chaque ligne est rendue exactement comme pour le ZIP
 // (PdfExport.getNativePdfBlobForRecord), puis pdf-lib recopie ses pages à la suite dans un seul document. En-tête/pied de page, numéros de page ("1/2") et
 // notes restent donc ceux de CHAQUE ligne, et chaque ligne commence sur une nouvelle page par construction. Chargé à la demande, hors du lot de
 // PdfExport.ensurePdfLibsLoaded : aucun autre export n'en a besoin.

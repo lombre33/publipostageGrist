@@ -401,7 +401,7 @@ window.TestHelpers = (function () {
   // ImageRun, un `columnWidths` absent retombe sur 100 twips/colonne - deux vrais défauts corrigés
   // dans js/docx-export.js qu'une assertion sur les objets d'entrée n'aurait JAMAIS vus). On
   // dézippe donc le .docx et on lit l'OOXML réel.
-  // JSZip vient du même lot que pdfmake (PdfExport.ensurePdfLibsLoaded, cf. js/main.js:onExportDocxBatch) :
+  // JSZip vient du même lot que pdfmake (PdfExport.ensurePdfLibsLoaded, cf. js/main.js:onExportBatch) :
   // js/docx-export.js n'en déclare pas de son côté.
   async function exportDocxParts(html, headerFooterData, marginsTwip) {
     await PdfExport.ensurePdfLibsLoaded();

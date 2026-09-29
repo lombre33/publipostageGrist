@@ -850,33 +850,59 @@
     return name;
   }
 
-  // Export en lot : une ligne = un PDF, regroupés en ZIP, ou mis bout à bout dans un seul PDF si `merged` (js/pdf-merge.js : même rendu par ligne que le
-  // ZIP, chaque ligne commence sur une nouvelle page). Lit toutes les lignes via docApi (ignore un filtre de vue). Limité au vectoriel : 'Impr.
-  // navigateur' ouvrirait une boîte de dialogue par ligne, et les qualités raster n'ont pas de variante "retourne un blob".
-  async function onExportPdfBatch(merged) {
+  // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF ou DOCX), ou mis bout à bout dans un seul PDF (js/pdf-merge.js : même rendu par
+  // ligne que le ZIP, chaque ligne commence sur une nouvelle page). Lit toutes les lignes via docApi (ignore un filtre de vue). Limité au vectoriel pour le PDF :
+  // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne, et les qualités raster n'ont pas de variante "retourne un blob".
+  // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
+  // pour le DOCX) ; tout le reste (lecture des lignes, confirmation, chargement des bibliothèques, boucle, archive, téléchargement) est commun.
+  const BATCH_EXPORTS = {
+    pdfZip: {
+      label: 'PDF', confirm: 'confirm.batchExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
+      noFile: 'status.exportError', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
+      entryExt: '.pdf', fileSuffix: '-export-pdf.zip', margins: () => PageLayout.getMarginsPt(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    },
+    pdfMerged: {
+      label: 'PDF', confirm: 'confirm.mergedExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
+      noFile: 'status.exportError', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
+      merged: true, fileSuffix: '-export.pdf', margins: () => PageLayout.getMarginsPt(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    },
+    docxZip: {
+      label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
+      noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
+      entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    },
+  };
+
+  async function onExportBatch(kind) {
+    const cfg = BATCH_EXPORTS[kind];
+    const merged = !!cfg.merged;
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
     let rows;
     try { rows = await GristAPI.fetchTableRows(tableId); }
     catch (e) {
-      console.error('[main] export PDF en lot : échec de lecture de la table', e);
+      console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
       setStatus(I18n.t('status.cannotReadRows'), true);
       return;
     }
     if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
-    const proceed = window.confirm(I18n.t(merged ? 'confirm.mergedExport' : 'confirm.batchExport', { count: rows.length, table: tableId }));
+    const proceed = window.confirm(I18n.t(cfg.confirm, { count: rows.length, table: tableId }));
     if (!proceed) return;
 
     // JSZip fait partie du même lot de bibliothèques PDF chargées à la demande (cf. js/pdf-export.js:ensurePdfLibsLoaded) - plus chargé d'office au démarrage
-    // du widget, donc `JSZip` n'existe pas encore tant que ceci n'a pas été attendu au moins une fois.
-    setStatus(I18n.t('status.loadingPdfLibs'));
+    // du widget, donc `JSZip` n'existe pas encore tant que ceci n'a pas été attendu au moins une fois (le DOCX n'a pas sa propre déclaration CDN/SRI pour cette
+    // bibliothèque déjà chargée ailleurs).
+    setStatus(I18n.t(cfg.loading));
     try {
       await PdfExport.ensurePdfLibsLoaded();
       if (merged) await PdfMerge.ensureLibLoaded();
     } catch (e) {
-      console.error('[main] export PDF en lot : échec de chargement des bibliothèques PDF', e);
-      setStatus(I18n.t('status.pdfLibsLoadError'), true);
+      console.error('[main] export ' + cfg.label + ' en lot : échec de chargement des bibliothèques', e);
+      setStatus(I18n.t(cfg.loadError), true);
       return;
     }
 
@@ -889,103 +915,35 @@
     const templatesCache = isMacro ? Templates.getCached() : null;
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
-    const marginsPt = PageLayout.getMarginsPt();
+    const margins = cfg.margins();
     const zip = merged ? null : new JSZip();
     const mergedPdf = merged ? await PdfMerge.create(tableId) : null;
     const usedNames = new Set();
     let ok = 0;
     let failed = 0;
     for (let i = 0; i < rows.length; i++) {
-      setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
+      setStatus(I18n.t(cfg.progress, { current: i + 1, total: rows.length }));
       try {
         const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
-        const { blob, filename } = await PdfExport.getNativePdfBlobForRecord(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, marginsPt);
+        const { blob, filename } = await cfg.renderRow(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, margins);
         if (merged) {
           await mergedPdf.append(blob);
         } else {
           const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
-          zip.file(uniqueZipFilename(base, usedNames) + '.pdf', blob);
+          zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
         }
         ok++;
       } catch (e) {
-        console.error('[main] export PDF en lot : échec pour la ligne', rows[i].id, e);
+        console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', rows[i].id, e);
         failed++;
       }
     }
-    if (!ok) { setStatus(I18n.t('status.exportError'), true); return; }
+    if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
 
     setStatus(I18n.t(merged ? 'status.pdfMerging' : 'status.zipCompressing'));
     const outBlob = merged ? await mergedPdf.toBlob() : await zip.generateAsync({ type: 'blob' });
-    ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + (merged ? '-export.pdf' : '-export-pdf.zip'));
-    if (merged) {
-      setStatus(failed
-        ? I18n.t('status.mergedExportDoneWithFailures', { ok, failed })
-        : I18n.t('status.mergedExportDone', { ok }));
-    } else {
-      setStatus(failed
-        ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
-        : I18n.t('status.batchExportDone', { ok }));
-    }
-  }
-
-  // Même schéma que onExportPdfBatch - réutilise JSZip via PdfExport.ensurePdfLibsLoaded (docx-export.js n'embarque pas sa propre déclaration CDN/SRI
-  // pour cette lib déjà chargée ailleurs, cf. commentaire équivalent en tête de ce fichier pour le PDF).
-  async function onExportDocxBatch() {
-    Editor.exitHeaderFooterModeIfActive();
-    const tableId = currentTableId || GristAPI.getCurrentTableId();
-    if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
-    let rows;
-    try { rows = await GristAPI.fetchTableRows(tableId); }
-    catch (e) {
-      console.error('[main] export DOCX en lot : échec de lecture de la table', e);
-      setStatus(I18n.t('status.cannotReadRows'), true);
-      return;
-    }
-    if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
-    const proceed = window.confirm(I18n.t('confirm.batchExport', { count: rows.length, table: tableId }));
-    if (!proceed) return;
-
-    setStatus(I18n.t('status.loadingPdfLibs'));
-    try { await PdfExport.ensurePdfLibsLoaded(); }
-    catch (e) {
-      console.error('[main] export DOCX en lot : échec de chargement de JSZip', e);
-      setStatus(I18n.t('status.pdfLibsLoadError'), true);
-      return;
-    }
-
-    // Cf. commentaire équivalent dans onExportPdfBatch : pas de HTML unique pour tout le lot en macro-modèle, refait ligne par ligne.
-    const isMacro = currentTypeModele === 'macro';
-    const html = isMacro ? null : Editor.getHTML();
-    const macroSlots = isMacro ? getCurrentMacroSlots() : null;
-    const templatesCache = isMacro ? Templates.getCached() : null;
-    const filenameTemplate = getPdfFilenameTemplate();
-    const headerFooterData = Editor.getHeaderFooterData();
-    const marginsTwip = PageLayout.getMarginsTwip();
-    const zip = new JSZip();
-    const usedNames = new Set();
-    let ok = 0;
-    let failed = 0;
-    for (let i = 0; i < rows.length; i++) {
-      setStatus(I18n.t('status.batchExportProgress', { current: i + 1, total: rows.length }));
-      try {
-        const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
-        const { blob, filename } = await DocxExport.getDocxBlobForRecord(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, marginsTwip);
-        const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
-        zip.file(uniqueZipFilename(base, usedNames) + '.docx', blob);
-        ok++;
-      } catch (e) {
-        console.error('[main] export DOCX en lot : échec pour la ligne', rows[i].id, e);
-        failed++;
-      }
-    }
-    if (!ok) { setStatus(I18n.t('status.exportError'), true); return; }
-
-    setStatus(I18n.t('status.zipCompressing'));
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    ExportCommon.downloadBlob(zipBlob, sanitizeFilenamePart(tableId) + '-export-docx.zip');
-    setStatus(failed
-      ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
-      : I18n.t('status.batchExportDone', { ok }));
+    ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + cfg.fileSuffix);
+    setStatus(failed ? I18n.t(cfg.doneWithFailures, { ok, failed }) : I18n.t(cfg.done, { ok }));
   }
 
   async function switchMode(mode) {
@@ -1419,10 +1377,10 @@
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     // Fonctions fléchées : sans elles, l'événement click arriverait comme premier argument (`merged`) et serait lu comme vrai.
-    document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(() => onExportPdfBatch(false)));
-    document.getElementById('v2-btn-export-pdf-merged').addEventListener('click', withExportLock(() => onExportPdfBatch(true)));
+    document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(() => onExportBatch('pdfZip')));
+    document.getElementById('v2-btn-export-pdf-merged').addEventListener('click', withExportLock(() => onExportBatch('pdfMerged')));
     document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
-    document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(onExportDocxBatch));
+    document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(() => onExportBatch('docxZip')));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));

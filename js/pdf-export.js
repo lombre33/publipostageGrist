@@ -1747,7 +1747,7 @@ const PdfExport = (function () {
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
-  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
+  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch) - réutilise la même paire ReaderMode.preview/
   // ExportCommon.resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
     setPageMarginsPt(marginsPt);

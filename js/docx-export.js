@@ -4,7 +4,7 @@
 //
 // Écarts avec la V1 (cf. historique git pour le détail) : les listes utilisent maintenant la numérotation Word native (numbering.xml - une <ul>/<ol>
 // renumérote correctement après suppression/ajout d'un item, contrairement à un marqueur texte figé) ; les colonnes de tableau sont mesurées sur le rendu
-// réel (comme pdf-export.js) au lieu d'une répartition à parts égales ; export en lot (ZIP, une ligne = un .docx) ajouté, cf. js/main.js:onExportDocxBatch.
+// réel (comme pdf-export.js) au lieu d'une répartition à parts égales ; export en lot (ZIP, une ligne = un .docx) ajouté, cf. js/main.js:onExportBatch.
 //
 // Portée encore volontairement réduite, assumée :
 //  - Toute image (y compris "en calque devant/derrière" dans l'éditeur) devient une image EN LIGNE, dans l'ordre du document - aucune position absolue

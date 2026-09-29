@@ -345,7 +345,7 @@ une ligne et dépasser pour une autre.
 
 ### 4.5 Le publipostage, justement : le point le plus ouvert
 
-Côté document, « publipostage » = `onExportPdfBatch` / `onExportDocxBatch` : N lignes → N fichiers →
+Côté document, « publipostage » = `onExportBatch` (PDF ZIP, PDF unique, DOCX ZIP) : N lignes → N fichiers →
 un ZIP (`js/main.js:261` et `:325`). Côté email, **ça ne se transpose pas** : ouvrir 200 liens
 `mailto:` d'affilée est bloqué par les navigateurs et ingérable par les clients mail. Trois voies :
 
