@@ -476,8 +476,9 @@
 #v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
 /* Groupe "bouton principal + variantes au survol" (alignement/puces/numérotation) - le bouton principal reste l'action rapide par défaut ; le survol du
-   groupe révèle .v2-hover-flyout SANS écart de hitbox car il touche directement le bas du bouton (top:100%, aucune marge). */
-.v2-hover-group { position: relative; display: inline-flex; }
+   groupe révèle .v2-hover-flyout, décalé de --v2-flyout-gap sous le bouton (respiration visuelle) SANS écart de hitbox : la bande ainsi ouverte est reprise
+   par le pont de survol plus bas (.v2-hover-group:hover::after). */
+.v2-hover-group { position: relative; display: inline-flex; --v2-flyout-gap: 2px; }
 /* display:none au repos (pas juste visibility:hidden) : un flyout gardait sa boîte dans le calcul de mise
    en page même fermé, et #v2-heading-flyout (7 niveaux de titre + numérotation, le seul à dépasser une
    petite fenêtre) agrandissait alors le scrollHeight/scrollWidth de la PAGE elle-même - une simple molette
@@ -501,7 +502,17 @@
   box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 15;
   opacity: 0; transform: translateY(-4px);
 }
-.v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { display: flex; opacity: 1; transform: translateY(2px); }
+.v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { display: flex; opacity: 1; transform: translateY(var(--v2-flyout-gap)); }
+/* Pont de survol (retour d'Antoine 2026-09-28 : le menu Image se refermait quand la souris y descendait lentement) : le décalage --v2-flyout-gap laisse, entre
+   le bouton et son menu, une bande qui n'appartient à AUCUN élément du groupe. Un pointeur qui la traverse - un déplacement lent y pose au moins un point -
+   perd le :hover du groupe, le menu repasse en display:none et la souris se retrouve sur ce qu'il y a dessous, sans jamais atteindre le menu. Cette bande
+   est reprise par un pseudo-élément du GROUPE, présent tant qu'il est survolé (ce qui vaut aussi pour son menu, descendant du groupe). Pas un
+   pseudo-élément du flyout : #v2-heading-flyout (overflow-y:auto, .v2-hover-flyout-scrollable) le rognerait. 8px de marge de chaque côté pour une sortie en
+   biais par le coin du bouton (le menu, lui, commence au bord gauche du groupe) ; 1px de recouvrement sous le bord du menu contre un arrondi sous-pixel.
+   Uniquement SOUS le bouton : aucune partie du bouton n'est recouverte, aucun clic n'est volé. */
+.v2-hover-group:hover::after {
+  content: ''; position: absolute; left: -8px; right: -8px; top: 100%; height: calc(var(--v2-flyout-gap) + 1px);
+}
 .v2-hover-flyout-v { flex-direction: column; min-width: 168px; }
 /* Réservé aux flyouts dont le contenu peut dépasser une petite fenêtre (aujourd'hui : #v2-heading-flyout,
    niveaux de titre + numérotation) - AUCUNE ligne à info-bulle ([data-tip]) dedans, donc overflow-y:auto

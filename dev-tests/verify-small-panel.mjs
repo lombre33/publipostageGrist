@@ -5,7 +5,8 @@
 //    conteneurs en overflow:hidden les rognaient), page jamais décalable latéralement, et plus d'info-bulle "collée" après un clic suivi d'Échap ;
 //  - mode email + Cci à 600x400 : texte de l'éditeur visible, page sans débordement vertical ;
 //  - hauteur de la barre indépendante du message d'état (entre ~740 et 880px elle sautait de 33px à chaque auto-save) ;
-//  - popups #Variable (éditeur et champs), fil de commentaires et "Image depuis une variable" tenus dans la fenêtre.
+//  - popups #Variable (éditeur et champs), fil de commentaires et "Image depuis une variable" tenus dans la fenêtre ;
+//  - menus au survol (.v2-hover-group, dont Exporter en PDF et Image) : ils ne se referment plus quand la souris y descend lentement (29/09, css/editor-v2.css).
 // Les scénarios de dev-tests/scenarios-*.js tournent DANS la page (dispatchEvent) : ni :hover réel, ni pixels, ni le :focus-visible qu'un vrai Échap
 // déclenche. Lancé par run-headless.mjs (groupe Node "smallPanel", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-small-panel.mjs
 import { createServer } from 'node:http';
@@ -434,13 +435,81 @@ async function popups(width, height) {
   await browser.close();
 }
 
-// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups email
+// === 6. Menus au survol (.v2-hover-group) : la souris descend LENTEMENT du bouton jusqu'à son menu, puis remonte ===
+// Entre le bouton et son menu, le décalage de 2px (translateY, css/editor-v2.css) n'appartenait à aucun élément du groupe : un pointeur qui traverse cette
+// bande - un déplacement lent y pose au moins un point - perdait le :hover du groupe, le menu se refermait et la souris ne l'atteignait jamais (retour d'Antoine,
+// menu Image ; mesuré sur les 8 menus). Un geste d'un seul bond saute la bande : un pas d'un pixel ici, l'état du menu relevé après CHAQUE pas.
+async function hoverMenus(width, height) {
+  console.log(`\n=== Menus au survol à ${width}x${height} ===`);
+  const { browser, page } = await openAt(width, height);
+  // Mode en-tête/pied : ajoute la pastille et son menu "Numéro de page" (#v2-hf-pagenum-group, créé après coup) aux menus de la barre.
+  await page.evaluate(async () => {
+    HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+    await new Promise(r => setTimeout(r, 300));
+    let n = 0;
+    document.querySelectorAll('.v2-hover-group').forEach(g => g.setAttribute('data-sp-group', g.id || 'sans-id-' + (++n)));
+  });
+  const names = await page.evaluate(() => [...document.querySelectorAll('.v2-hover-group')].flatMap(g => {
+    const t = g.querySelector(':scope > button'), f = g.querySelector(':scope > .v2-hover-flyout');
+    if (!t || !f || t.disabled || getComputedStyle(t).pointerEvents === 'none') return [];
+    const r = t.getBoundingClientRect();
+    return r.width && r.height && r.bottom <= innerHeight && r.right <= innerWidth ? [g.getAttribute('data-sp-group')] : [];
+  }));
+  const isOpen = sel => page.evaluate(sel => getComputedStyle(document.querySelector(sel + ' > .v2-hover-flyout')).display !== 'none', sel);
+  // Déplacement d'un pixel par pas (la bande à franchir en fait 2) ; rend les ordonnées où le menu était fermé.
+  async function slowMove(from, to, sel) {
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y))));
+    const closedAt = [];
+    for (let i = 1; i <= n; i++) {
+      const y = from.y + (to.y - from.y) * i / n;
+      await page.mouse.move(from.x + (to.x - from.x) * i / n, y);
+      if (!(await isOpen(sel))) closedAt.push(Math.round(y * 10) / 10);
+    }
+    return closedAt;
+  }
+  const notOpened = [], descentClosed = {}, notLanded = [], ascentClosed = {}, stayedOpen = [], stolenClick = [], overflowing = [];
+  for (const name of names) {
+    const sel = `[data-sp-group="${name}"]`;
+    const trigger = await page.evaluate(sel => { const r = document.querySelector(sel + ' > button').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, bottom: r.bottom }; }, sel);
+    await page.mouse.move(trigger.x, trigger.y);
+    await page.waitForTimeout(80);
+    if (!(await isOpen(sel))) { notOpened.push(name); continue; }
+    const fl = await page.evaluate(sel => { const r = document.querySelector(sel + ' > .v2-hover-flyout').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top }; }, sel);
+    const dest = { x: Math.min(Math.max(trigger.x, fl.left + 6), fl.right - 6), y: fl.top + 14 };
+    const down = await slowMove(trigger, dest, sel);
+    if (down.length) descentClosed[name] = down;
+    const landed = await page.evaluate(([sel, x, y]) => { const el = document.elementFromPoint(x, y); return !!el && document.querySelector(sel + ' > .v2-hover-flyout').contains(el); }, [sel, dest.x, dest.y]);
+    if (!landed) notLanded.push(name);
+    const up = await slowMove(dest, trigger, sel);
+    if (up.length) ascentClosed[name] = up;
+    // Menu ouvert, pointeur sur le bouton : sa dernière rangée de pixels ENTIÈRE (bas - 1) doit encore atteindre le bouton, le pont de survol commence en dessous.
+    // (Chromium teste le pointeur comme un carré de 1px : un point à mi-pixel juste au-dessus du bord d'une boîte voisine la touche déjà - sans conséquence
+    // pour une souris à coordonnées entières, d'où la rangée entière et pas bas - 0.5.)
+    const bottomRow = await page.evaluate(([sel, x, y]) => { const t = document.querySelector(sel + ' > button'); const el = document.elementFromPoint(x, y - 1); return !!el && t.contains(el); }, [sel, trigger.x, trigger.bottom]);
+    if (!bottomRow) stolenClick.push(name);
+    const o = await pageOverflow(page);
+    if (o.scrollW > o.clientW) overflowing.push({ name, scrollW: o.scrollW, clientW: o.clientW });
+    await page.mouse.move(width - 4, height - 4);
+    await page.waitForTimeout(60);
+    if (await isOpen(sel)) stayedOpen.push(name);
+  }
+  const label = `${width}x${height} - menus au survol`;
+  check(`${label} : tous les menus s'ouvrent au survol du bouton (${names.length} menus, dont Exporter en PDF, Image et Numéro de page)`, names.length >= 8 && notOpened.length === 0, { names, notOpened });
+  check(`${label} : descente lente (1px par pas) du bouton à une ligne du menu, le menu reste ouvert de bout en bout`, Object.keys(descentClosed).length === 0 && notLanded.length === 0, { descentClosed, notLanded });
+  check(`${label} : remontée lente du menu au bouton, le menu reste ouvert de bout en bout`, Object.keys(ascentClosed).length === 0, ascentClosed);
+  check(`${label} : souris partie ailleurs, chaque menu se referme`, stayedOpen.length === 0, stayedOpen);
+  check(`${label} : menu ouvert, le bas du bouton reste cliquable et la page ne déborde pas`, stolenClick.length === 0 && overflowing.length === 0, { stolenClick, overflowing });
+  await browser.close();
+}
+
+// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups email menusSurvol
 const SECTIONS = {
   infoBulles: async () => { await tooltipSweep(600, 400); await tooltipSweep(700, 400); await tooltipSweep(800, 400); },
   infoBulleCollee: () => stuckTooltip(700, 400),
   email: async () => { await emailLayout(600, 400); await emailLayout(700, 400); },
   statut: () => statusStability(400),
   popups: () => popups(700, 400),
+  menusSurvol: () => hoverMenus(700, 400),
 };
 const only = process.argv.slice(2);
 for (const [name, run] of Object.entries(SECTIONS)) if (!only.length || only.includes(name)) await run();
