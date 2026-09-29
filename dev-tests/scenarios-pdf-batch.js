@@ -70,6 +70,27 @@
     return texts;
   }
 
+  // Le lot DOCX en ZIP n'a besoin que de JSZip pour fabriquer l'archive (choix d'Antoine, 29/09) : il ne télécharge plus le lot PDF (pdfmake, polices : ~4 Mo).
+  // Premier cas du groupe, exprès : la page est neuve, ni JSZip ni pdfmake n'y sont encore chargés - un cas qui exporterait en PDF avant celui-ci les chargerait.
+  const scriptsMatching = re => Array.from(document.scripts).filter(sc => re.test(sc.src)).length;
+  cases.push({
+    id: 'pdfbatch_docx_zip_loads_jszip_without_the_pdf_libs',
+    description: '« Exporter toutes les lignes en DOCX (ZIP)… » charge JSZip seul : ni pdfmake, ni ses polices (window.pdfMake absent, aucun de ces scripts ajouté), et l’archive contient bien un .docx par ligne',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const before = { jszip: typeof window.JSZip, pdfMake: typeof window.pdfMake, jszipScripts: scriptsMatching(/jszip/i), pdfScripts: scriptsMatching(/pdfmake|vfs_fonts|pdf-fonts/i) };
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+      const after = { jszip: typeof window.JSZip, pdfMake: typeof window.pdfMake, jszipScripts: scriptsMatching(/jszip/i), pdfScripts: scriptsMatching(/pdfmake|vfs_fonts|pdf-fonts/i) };
+      const dl = res.downloads[0];
+      const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+      const files = zip ? Object.keys(zip.files).sort() : [];
+      const pass = before.jszip === 'undefined' && before.pdfMake === 'undefined' && before.pdfScripts === 0
+        && after.jszip === 'function' && after.jszipScripts === 1 && after.pdfMake === 'undefined' && after.pdfScripts === 0
+        && res.downloads.length === 1 && dl.name === TABLE + '-export-docx.zip' && files.length === NAMES.length && files.every(f => /\.docx$/.test(f));
+      return { pass, notes: JSON.stringify({ before, after, files, status: res.status }) };
+    },
+  });
+
   // Une ligne courte par modèle : mises dans un même flux, les trois tiendraient sur une page - trois pages prouvent que chaque ligne en commence une.
   cases.push({
     id: 'pdfbatch_merged_single_pdf_rows_in_order',
@@ -180,6 +201,7 @@
 
   // Texte du corps d'un .docx, lu dans les octets (word/document.xml dézippé) : ce que Word afficherait, pas un état interne.
   async function docxBodyText(blob) {
+    await ExportCommon.ensureJsZipLoaded();
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const file = zip.file('word/document.xml');
     return file ? (await file.async('string')).replace(/<[^>]+>/g, '') : null;

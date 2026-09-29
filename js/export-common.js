@@ -14,6 +14,15 @@ const ExportCommon = (function () {
     });
   }
 
+  // JSZip fabrique l'archive des exports en lot (PDF en ZIP, DOCX en ZIP) : ~0,1 Mo, chargé seul, sans pdfmake ni ses polices (~4 Mo) que seul l'export PDF
+  // demande (js/pdf-export.js:ensurePdfLibsLoaded). SRI sha384 + crossOrigin, comme pour les autres bibliothèques CDN.
+  const JSZIP_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' };
+  let jsZipPromise = null;
+  function ensureJsZipLoaded() {
+    if (!jsZipPromise) jsZipPromise = (window.JSZip ? Promise.resolve() : loadScriptOnce(JSZIP_LIB)).catch(e => { jsZipPromise = null; throw e; });
+    return jsZipPromise;
+  }
+
   // Téléchargement d'un Blob par un <a download> synthétique (même geste que partout ailleurs : window.location.href se comporte moins bien dans l'iframe
   // sandboxée d'un widget Grist).
   function downloadBlob(blob, filename) {
@@ -81,5 +90,5 @@ const ExportCommon = (function () {
     };
   }
 
-  return { loadScriptOnce, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables };
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables };
 })();

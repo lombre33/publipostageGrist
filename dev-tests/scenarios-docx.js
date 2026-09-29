@@ -511,7 +511,6 @@
   add('docx_filename_from_template',
     'Le nom de fichier suit le modèle de nom configuré, comme pour le PDF',
     async (h) => {
-      await PdfExport.ensurePdfLibsLoaded();
       await DocxExport.ensureDocxLibLoaded();
       const { filename } = await DocxExport.getDocxBlobForRecord('<p>a</p>', null, {}, 'contrat-fixe', null, null);
       return { pass: filename === 'contrat-fixe', notes: 'filename=' + JSON.stringify(filename) };

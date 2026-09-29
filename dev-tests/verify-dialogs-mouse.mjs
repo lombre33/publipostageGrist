@@ -470,7 +470,11 @@ async function runSites(theme) {
     { name: 'PDF unique', hover: '#btn-export-pdf', row: '#v2-btn-export-pdf-merged', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?' },
     { name: 'DOCX (ZIP)', hover: '#v2-btn-quality', row: '#v2-btn-export-docx-batch', message: 'Générer un DOCX pour chacune des 2 lignes de « SiDossiers » et les regrouper dans une archive ZIP ?' },
   ];
-  await page.evaluate(() => { window.__realEnsure = PdfExport.ensurePdfLibsLoaded; PdfExport.ensurePdfLibsLoaded = async () => { throw new Error('bibliothèques non chargées par ce test'); }; });
+  // Chaque export déclare ses bibliothèques (loadLibs, js/main.js) : le lot PDF pour les deux PDF, JSZip seul pour le DOCX en ZIP - les deux échouent ici.
+  await page.evaluate(() => {
+    window.__realEnsure = PdfExport.ensurePdfLibsLoaded; PdfExport.ensurePdfLibsLoaded = async () => { throw new Error('bibliothèques non chargées par ce test'); };
+    window.__realJsZip = ExportCommon.ensureJsZipLoaded; ExportCommon.ensureJsZipLoaded = async () => { throw new Error('JSZip non chargé par ce test'); };
+  });
   for (const e of exportsCases) {
     await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
     await realHover(e.hover);
@@ -485,9 +489,9 @@ async function runSites(theme) {
     await realClick(e.row, 500);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
-    check(`${T}, export en lot ${e.name} : Générer (Entrée) lance le chargement des bibliothèques`, (await statusText()) !== '' && !(await isOpen()), await statusText());
+    check(`${T}, export en lot ${e.name} : Générer (Entrée) lance le chargement des bibliothèques (et son échec est annoncé)`, /Échec de chargement des bibliothèques/.test(await statusText()) && !(await isOpen()), await statusText());
   }
-  await page.evaluate(() => { PdfExport.ensurePdfLibsLoaded = window.__realEnsure; });
+  await page.evaluate(() => { PdfExport.ensurePdfLibsLoaded = window.__realEnsure; ExportCommon.ensureJsZipLoaded = window.__realJsZip; });
 
   // 6) Galerie : « Utiliser avec une nouvelle table de données » demande le nom de la table, par-dessus l'aperçu (fenêtre de 2000).
   await realHover('#v2-new-template-group #btn-new');

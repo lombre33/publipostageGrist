@@ -856,24 +856,28 @@
   // ligne que le ZIP, chaque ligne commence sur une nouvelle page). Lit toutes les lignes via docApi (ignore un filtre de vue). Limité au vectoriel pour le PDF :
   // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne, et les qualités raster n'ont pas de variante "retourne un blob".
   // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
-  // pour le DOCX) ; tout le reste (lecture des lignes, confirmation, chargement des bibliothèques, boucle, archive, téléchargement) est commun.
+  // pour le DOCX) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo, pas du lot PDF de ~4 Mo) ; tout le reste (lecture des
+  // lignes, confirmation, boucle, archive, téléchargement) est commun.
   const BATCH_EXPORTS = {
     pdfZip: {
       label: 'PDF', confirm: 'confirm.batchExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
       noFile: 'status.exportError', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
       entryExt: '.pdf', fileSuffix: '-export-pdf.zip', margins: () => PageLayout.getMarginsPt(),
+      loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
     pdfMerged: {
       label: 'PDF', confirm: 'confirm.mergedExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
       noFile: 'status.exportError', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
       merged: true, fileSuffix: '-export.pdf', margins: () => PageLayout.getMarginsPt(),
+      loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
     docxZip: {
       label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
       noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
       entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(),
+      loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
   };
@@ -895,13 +899,10 @@
     const proceed = await Dialogs.confirm({ title: I18n.t('dialog.batchExport.title'), message: I18n.t(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
     if (!proceed) return;
 
-    // JSZip fait partie du même lot de bibliothèques PDF chargées à la demande (cf. js/pdf-export.js:ensurePdfLibsLoaded) - plus chargé d'office au démarrage
-    // du widget, donc `JSZip` n'existe pas encore tant que ceci n'a pas été attendu au moins une fois (le DOCX n'a pas sa propre déclaration CDN/SRI pour cette
-    // bibliothèque déjà chargée ailleurs).
+    // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une fois.
     setStatus(I18n.t(cfg.loading));
     try {
-      await PdfExport.ensurePdfLibsLoaded();
-      if (merged) await PdfMerge.ensureLibLoaded();
+      await cfg.loadLibs();
     } catch (e) {
       console.error('[main] export ' + cfg.label + ' en lot : échec de chargement des bibliothèques', e);
       setStatus(I18n.t(cfg.loadError), true);
