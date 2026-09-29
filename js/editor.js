@@ -152,9 +152,21 @@ const Editor = (function () {
     await insertImageAtDefaultSize(dataUri);
   }
 
+  // Applique une correction de largeurs de colonnes lancée depuis onUpdate (les deux fonctions ci-dessous mesurent le DOM, donc ne peuvent pas passer par
+  // un appendTransaction). Rangée à part, elle formait son propre événement d'historique : Annuler ne défaisait que la correction, qu'onUpdate rejouait
+  // aussitôt (l'état rétabli redevient "à corriger"), et l'action d'origine - ajout d'une colonne, glissement d'une bordure - ne pouvait plus jamais
+  // être annulée dans un tableau qui a des largeurs. `appendedTransaction` est le contrat que ProseMirror pose lui-même sur les transactions d'un
+  // appendTransaction : prosemirror-history les range dans l'événement de la transaction racine, y compris pendant un Annuler/Rétablir. Sans transaction
+  // d'origine (chargement d'un modèle, changement de marges) la correction ne vient pas d'un geste de la personne : hors historique.
+  function dispatchColumnWidthFix(currentEditor, tr, trigger) {
+    if (trigger) tr.setMeta('appendedTransaction', trigger.getMeta('appendedTransaction') || trigger);
+    else tr.setMeta('addToHistory', false);
+    currentEditor.view.dispatch(tr);
+  }
+
   // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on gèle donc
   // la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
-  function backfillAutoColumnWidths(currentEditor) {
+  function backfillAutoColumnWidths(currentEditor, trigger) {
     const { state, view } = currentEditor;
     let tr = null;
     state.doc.descendants((node, pos) => {
@@ -178,13 +190,13 @@ const Editor = (function () {
       });
       return false;
     });
-    if (tr) currentEditor.view.dispatch(tr);
+    if (tr) dispatchColumnWidthFix(currentEditor, tr, trigger);
   }
 
   const DEFAULT_COL_PX = 25;
   // Un <col> à largeur explicite n'a pas de plafond naturel (contrairement à min-width) : rétrécit après coup les colonnes redimensionnées quand le tableau
   // dépasse la page en Aperçu A4 (léger rebond au relâcher, tolérable).
-  function clampOverflowingTables(currentEditor) {
+  function clampOverflowingTables(currentEditor, trigger) {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
     const containerWidth = EditorCore.editorContentWidthPx(currentEditor);
@@ -217,7 +229,7 @@ const Editor = (function () {
       });
       return false;
     });
-    if (tr) currentEditor.view.dispatch(tr);
+    if (tr) dispatchColumnWidthFix(currentEditor, tr, trigger);
   }
 
 
@@ -302,7 +314,7 @@ const Editor = (function () {
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
-      onUpdate: ({ editor: updatedEditor, transaction }) => { HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction); backfillAutoColumnWidths(updatedEditor); clampOverflowingTables(updatedEditor); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
+      onUpdate: ({ editor: updatedEditor, transaction }) => { HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction); backfillAutoColumnWidths(updatedEditor, transaction); clampOverflowingTables(updatedEditor, transaction); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       editorProps: {
         handlePaste(view, event) {

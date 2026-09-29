@@ -88,6 +88,7 @@ const NODE_SCRIPTS = {
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   columnSearchMouse: 'verify-column-search-mouse.mjs',
+  tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
 };
 
 const argv = process.argv.slice(2);
