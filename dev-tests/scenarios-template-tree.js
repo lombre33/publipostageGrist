@@ -177,6 +177,24 @@
     },
   });
 
+  // .tts-pin-btn est un <button> de 20 px : son padding natif (1px 6px) ne laissait que 8 px de large au ::before flex, quel que soit le width déclaré (12 px avant, 16 px
+  // maintenant) - le glyphe (étoile puis punaise) s'affichait écrasé. Mesuré sur le rendu, pas sur le CSS.
+  cases.push({
+    id: 'tree_pin_glyph_renders_at_full_size_not_squeezed_by_button_padding',
+    description: 'Le glyphe de l’épingle est rendu à sa taille réelle (16 px) dans son bouton de 20 px, sans que le padding natif du <button> ne l’écrase',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Glyphe épingle');
+      await openPopup(h);
+      const pin = rowFor(id).querySelector('.tts-pin-btn');
+      const glyph = getComputedStyle(pin, '::before');
+      const padding = getComputedStyle(pin).padding;
+      const btnRect = pin.getBoundingClientRect();
+      const pass = parseFloat(glyph.width) === 16 && parseFloat(glyph.height) === 16 && parseFloat(padding) === 0 && btnRect.width === 20 && btnRect.height === 20;
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return { pass, notes: JSON.stringify({ glyphWidth: glyph.width, glyphHeight: glyph.height, padding, btn: [btnRect.width, btnRect.height] }) };
+    },
+  });
+
   cases.push({
     id: 'tree_pin_button_tooltip_says_what_the_click_does',
     description: 'L’info-bulle du bouton épingle dit ce que fait le clic dans l’état courant (« Épingler… » puis « Retirer des épinglés »), pour ne pas le confondre avec « modèle par défaut »',
