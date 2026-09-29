@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8"><title>Publipostage Grist</title><meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
-<!-- pdfmake/vfs_fonts/html2pdf/jszip + js/pdf-fonts(-extra).js : chargés à la
+<!-- pdfmake/vfs_fonts/jszip + js/pdf-fonts(-extra).js : chargés à la
      demande au premier export PDF (cf. js/pdf-export.js:ensurePdfLibsLoaded),
+     html2pdf seulement au premier export d'une qualité raster (js/pdf-export-alt.js),
      pas ici - ~3-5 Mo au total (pdf-fonts-extra.js seul ~1.6 Mo), payés sur
      CHAQUE ouverture du widget avant ce changement, y compris quand
      l'utilisateur n'exporte jamais de PDF (signalé par l'utilisateur : 1-2s
@@ -482,8 +483,8 @@
 <script src="js/track-changes.js?v=0.2"></script>
 <script src="js/editor.js?v=1.5"></script>
 <script src="js/export-common.js?v=0.1"></script>
-<script src="js/pdf-export-alt.js?v=0.1"></script>
-<script src="js/pdf-export.js?v=0.997"></script>
+<script src="js/pdf-export-alt.js?v=0.2"></script>
+<script src="js/pdf-export.js?v=0.998"></script>
 <script src="js/pdf-merge.js?v=0.2"></script>
 <script src="js/docx-export.js?v=0.13"></script>
 <script src="js/mailto-export.js?v=0.3"></script>

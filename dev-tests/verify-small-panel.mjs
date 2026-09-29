@@ -8,6 +8,7 @@
 //  - popups #Variable (éditeur et champs), fil de commentaires et "Image depuis une variable" tenus dans la fenêtre ;
 //  - menus au survol (.v2-hover-group, dont Exporter en PDF et Image) : ils ne se referment plus quand la souris y descend lentement, et leurs boutons ne portent
 //    plus de petit point bleu (29/09, css/editor-v2.css).
+//  - premier export PDF (vrai clic sur le bouton de la barre) : un PDF sort et html2pdf.js n'est jamais demandé (29/09, js/pdf-export-alt.js).
 // Les scénarios de dev-tests/scenarios-*.js tournent DANS la page (dispatchEvent) : ni :hover réel, ni pixels, ni le :focus-visible qu'un vrai Échap
 // déclenche. Lancé par run-headless.mjs (groupe Node "smallPanel", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-small-panel.mjs
 import { createServer } from 'node:http';
@@ -662,7 +663,38 @@ async function emailPathPopup(width, height) {
   await browser.close();
 }
 
-// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups chemins email menusSurvol
+// === 6. Premier export PDF : le fichier sort, sans aucune requête vers html2pdf (qualités raster seulement, js/pdf-export-alt.js) ===
+async function firstPdfExport(width, height) {
+  const { browser, page } = await openAt(width, height);
+  await page.evaluate(async () => {
+    const stub = window.__gristStub;
+    stub.setVariables('PbClients', { Nom: 'Text' });
+    stub.setRows('PbClients', [{ id: 1, Nom: 'Alpha Durand' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: 'Alpha Durand' }, 'PbClients');
+    Editor.setHTML('<p>Bonjour Alpha Durand, voici votre courrier.</p>');
+  });
+  const btn = await boxOf(page, '#btn-export-pdf');
+  if (!btn) { check(`${width}x${height} - premier export PDF : le bouton de la barre est visible`, false, { btn }); await browser.close(); return; }
+  // Vrai clic de souris sur le bouton ; le téléchargement est celui que Chromium reçoit (événement `download`), pas un <a> intercepté dans la page.
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 60000 }).catch(() => null),
+    page.mouse.click((btn.left + btn.right) / 2, (btn.top + btn.bottom) / 2),
+  ]);
+  let magic = '', name = null;
+  if (download) { name = download.suggestedFilename(); magic = readFileSync(await download.path()).subarray(0, 5).toString('latin1'); }
+  // performance.getEntriesByType('resource') couvre TOUTES les requêtes depuis la navigation (y compris celles que le miroir hors-ligne sert lui-même).
+  const seen = await page.evaluate(() => ({
+    requests: performance.getEntriesByType('resource').map(e => e.name).filter(n => /html2pdf/i.test(n)),
+    scripts: Array.from(document.scripts).filter(sc => /html2pdf/i.test(sc.src)).length,
+    global: typeof window.html2pdf,
+  }));
+  check(`${width}x${height} - premier export PDF au vrai clic : un PDF est téléchargé`, !!download && magic === '%PDF-' && /\.pdf$/.test(name), { name, magic });
+  check(`${width}x${height} - premier export PDF : aucune requête vers html2pdf, ni balise, ni window.html2pdf`, seen.requests.length === 0 && seen.scripts === 0 && seen.global === 'undefined', seen);
+  await browser.close();
+}
+
+// Sections lançables seules : node dev-tests/verify-small-panel.mjs popups chemins email menusSurvol exportPdf
 const SECTIONS = {
   infoBulles: async () => { await tooltipSweep(600, 400); await tooltipSweep(700, 400); await tooltipSweep(800, 400); },
   infoBulleCollee: () => stuckTooltip(700, 400),
@@ -671,6 +703,7 @@ const SECTIONS = {
   popups: () => popups(700, 400),
   chemins: async () => { await emailPathPopup(600, 400); await emailPathPopup(700, 400); await emailPathPopup(800, 400); },
   menusSurvol: () => hoverMenus(700, 400),
+  exportPdf: () => firstPdfExport(700, 400),
 };
 const only = process.argv.slice(2);
 for (const [name, run] of Object.entries(SECTIONS)) if (!only.length || only.includes(name)) await run();

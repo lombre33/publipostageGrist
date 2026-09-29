@@ -78,5 +78,21 @@ const PdfExportAlt = (function () {
     return { container, opt };
   }
 
-  return { getQualityPreset, exportViaBrowserPrint, buildRasterContainerAndOptions };
+  // html2pdf.js (~0,9 Mo, html2canvas + jsPDF) n'est téléchargé que le jour où une qualité raster est réellement demandée : les qualités sont grisées dans
+  // l'interface, personne n'en a besoin à l'ouverture ni au premier export vectoriel (choix d'Antoine, 29/09). Même schéma que js/pdf-export.js:ensurePdfLibsLoaded
+  // (SRI : recalculer si la version change, cf. la commande donnée là-bas).
+  const HTML2PDF_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', integrity: 'sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc' };
+  let html2pdfPromise = null;
+  function ensureRasterLibLoaded() {
+    if (!html2pdfPromise) html2pdfPromise = ExportCommon.loadScriptOnce(HTML2PDF_LIB).catch(e => { html2pdfPromise = null; throw e; });
+    return html2pdfPromise;
+  }
+
+  async function exportViaRaster(resolvedHtml, filename, quality) {
+    await ensureRasterLibLoaded();
+    const { container, opt } = buildRasterContainerAndOptions(resolvedHtml, filename, quality);
+    try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
+  }
+
+  return { getQualityPreset, exportViaBrowserPrint, exportViaRaster, ensureRasterLibLoaded };
 })();

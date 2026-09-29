@@ -1,12 +1,11 @@
 // Export PDF — 4 qualités : vectoriel (pdfmake, moteur principal de ce fichier), impression navigateur (iframe + window.print()) et raster basse/ultra
-// (html2pdf.js sur un conteneur détaché) - ces deux derniers capturent le vrai DOM résolu, jamais le docDefinition pdfmake.
+// (html2pdf.js sur un conteneur détaché, chargé à la demande par js/pdf-export-alt.js) - ces deux derniers capturent le vrai DOM résolu, jamais le docDefinition pdfmake.
 const PdfExport = (function () {
   // Chargement paresseux au premier export (économise 1-2s d'ouverture). `integrity` (SRI sha384) : recalculer si la version change via `curl -s <url> |
   // openssl dgst -sha384 -binary | openssl base64 -A`.
   const PDF_LIB_URLS = [
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
-    { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js', integrity: 'sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc' },
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' },
     // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
     { src: 'js/pdf-fonts.js?v=0.67' },
@@ -1741,11 +1740,7 @@ const PdfExport = (function () {
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
     // Qualités non-vectorielles : cf. js/pdf-export-alt.js (isolées, actuellement désactivées dans l'UI - encore peu robustes).
     if (quality === 'browser-print') { await PdfExportAlt.exportViaBrowserPrint(resolvedHtml, filename); return; }
-    if (quality === 'low' || quality === 'ultra') {
-      const { container, opt } = PdfExportAlt.buildRasterContainerAndOptions(resolvedHtml, filename, quality);
-      try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
-      return;
-    }
+    if (quality === 'low' || quality === 'ultra') { await PdfExportAlt.exportViaRaster(resolvedHtml, filename, quality); return; }
     // En-tête/pied de page : uniquement le chemin vectoriel natif - ni l'impression navigateur ni les qualités raster n'ont de notion de header/footer natif
     // de page.
     const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
