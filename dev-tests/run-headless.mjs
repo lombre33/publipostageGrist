@@ -92,6 +92,8 @@ const NODE_SCRIPTS = {
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
+  templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
+  templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière
 };
 
 const argv = process.argv.slice(2);
