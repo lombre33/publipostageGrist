@@ -462,9 +462,12 @@ const loopPreview = await page.evaluate(() => Array.from(document.querySelectorA
 check('aperçu : les deux tâches du dossier sélectionné', loopPreview.length > 0 && /Relancer le client/.test(loopPreview[0]) && /Préparer l’audience/.test(loopPreview[0]), loopPreview);
 // « Trier par » et « Si aucune ligne » se partagent la largeur de la fenêtre : chaque liste doit montrer son choix en entier (« Ordre de la table »
 // y était coupé en « Ordre de la ta »). Largeur naturelle mesurée sur un clone réduit à l'option choisie et posé dans le même parent, donc avec la
-// même police.
+// même police. « Trier par » est un champ avec recherche : son <select> reste masqué, le champ visible coupe son texte par des points de suspension
+// (`.ss-value`) - on y compare la largeur du texte à celle du champ.
 const loopSelects = await page.evaluate(() => ['#var-loop-sort', '.var-loop-sort-row select:last-child', '#var-loop-empty'].map(sel => {
   const el = document.querySelector('#var-loop-modal ' + sel);
+  const searchField = el.style.display === 'none' && el.nextElementSibling ? el.nextElementSibling.querySelector('.ss-value') : null;
+  if (searchField) return { sel, text: el.options[el.selectedIndex].text, width: searchField.clientWidth, natural: searchField.scrollWidth };
   const clone = el.cloneNode(false);
   clone.removeAttribute('id');
   clone.appendChild(new Option(el.options[el.selectedIndex].text));

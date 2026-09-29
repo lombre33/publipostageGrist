@@ -9,7 +9,8 @@
 // Trois autres cas, tous lus dans le <select> :
 //  - un <optgroup> : son libellé devient un intitulé au-dessus de ses lignes, et disparaît avec elles quand la recherche les écarte ;
 //  - une <option> sans valeur, mais permise (« -- Choisir une colonne -- », « — Aucune — ») : le choix « rien », proposé en tête tant qu'on ne cherche pas,
-//    écarté dès qu'on tape, et affiché en grisé dans le champ fermé ;
+//    écarté dès qu'on tape, et affiché en grisé dans le champ fermé - sauf `data-placeholder="false"` : une valeur vide qui est un vrai choix (« Ordre de la
+//    table » au tri d'une boucle), proposée, cherchée, cochée et affichée comme les autres ;
 //  - une <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche, pour qu'un mot sans résultat
 //    ne la rende pas inatteignable.
 //
@@ -47,6 +48,11 @@ const SearchSelect = (function () {
     return items.filter(item => item.pinned || (!item.empty && words.every(word => item.haystack.indexOf(word) !== -1)));
   }
 
+  // Le choix « rien » : une option de valeur vide, sauf si elle se déclare vrai choix (data-placeholder="false").
+  function isNoChoice(opt) {
+    return opt.value === '' && opt.dataset.placeholder !== 'false';
+  }
+
   function readItems(select) {
     const items = [];
     Array.prototype.forEach.call(select.options, (opt) => {
@@ -58,7 +64,7 @@ const SearchSelect = (function () {
         value: opt.value, name, hint, haystack: normalize(name + ' ' + hint),
         group: parent && parent.tagName === 'OPTGROUP' ? parent.label : '',
         pinned: opt.dataset.pinned === 'true',
-        empty: opt.value === '',
+        empty: isNoChoice(opt),
       });
     });
     return items;
@@ -132,7 +138,7 @@ const SearchSelect = (function () {
     function syncTrigger() {
       const opt = select.options[select.selectedIndex];
       const chosen = opt && !opt.disabled ? opt : null;
-      trigger.classList.toggle('is-placeholder', !chosen || chosen.value === '');
+      trigger.classList.toggle('is-placeholder', !chosen || isNoChoice(chosen));
       trigger.disabled = select.disabled;
       if (chosen) {
         nameEl.textContent = chosen.dataset.name || chosen.textContent;

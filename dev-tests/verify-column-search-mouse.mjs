@@ -153,12 +153,13 @@ async function hitTest(selector) {
     };
   }, selector);
 }
-// Fait défiler la fenêtre (molette réelle, la souris posée sur elle) jusqu'à ce que l'élément soit entièrement dans le panneau : une fenêtre plus haute que
-// 400 px défile, comme pour la personne qui l'utilise.
+// Fait défiler la fenêtre (molette réelle, la souris posée sur elle) jusqu'à ce que l'élément soit entièrement dans le panneau ET au premier plan (la barre
+// Annuler / Enregistrer, collée en bas de la fenêtre, en recouvre le bas tant qu'on n'a pas défilé) : une fenêtre plus haute que 400 px défile, comme pour
+// la personne qui l'utilise.
 async function reveal(selector, scrollOver) {
   for (let i = 0; i < 8; i++) {
     const box = await hitTest(selector);
-    if (box.found && box.inViewport) return box;
+    if (box.found && box.inViewport && box.onTop) return box;
     const over = await hitTest(scrollOver);
     await page.mouse.move(over.x, over.y);
     await page.mouse.wheel(0, box.found && box.top < 0 ? -120 : 120);
@@ -339,6 +340,72 @@ const SECTIONS = {
     const save = await reveal(scope + ' .var-modal-primary', scope + ' .modal-content');
     check('boucle : Enregistrer visible et non recouvert', save.found && save.inViewport && save.onTop, save);
     const cancel = await hitTest(scope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+    if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+    await page.waitForTimeout(200);
+  },
+
+  // « Trier par » d'une boucle : le champ avec recherche à côté du sens du tri, choix enregistré puis relu à la réouverture.
+  async loopSort() {
+    const scope = '#var-loop-modal';
+    const win = await openWindowFor('Designation', 'var-loop', scope);
+    check('tri : fenêtre Boucle ouverte et entièrement dans le panneau', win.found && win.inViewport, win);
+    const field = await reveal(scope + ' .var-loop-sort-row .ss-trigger', scope + ' .modal-content');
+    const direction = await hitTest(scope + ' .var-loop-sort-row > select:last-child');
+    const native = await hitTest(scope + ' #var-loop-sort');
+    check('tri : le champ « Trier par » est visible et au premier plan, à côté du sens du tri sans le recouvrir, et le <select> natif est masqué',
+      field.found && field.inViewport && field.onTop && field.width > 60 && native.width === 0
+      && direction.found && direction.onTop && field.right <= direction.left + 0.5 && Math.abs(field.top - direction.top) < 1, { field, direction, native });
+    await page.mouse.click(field.x, field.y);
+    await page.waitForTimeout(150);
+    const open = await panelInfo(scope);
+    check('tri : un vrai clic ouvre la liste dans le panneau Grist (zone de recherche au focus) : « Ordre » en tête, les colonnes de la table parcourue avec leur type, sans intitulé de groupe',
+      !!open && open.inside && open.searchFocused && open.heads.length === 0 && open.rows[0] === 'Ordre' && open.rows.includes('Montant (nombre)') && open.rows.includes('Designation')
+      && !open.rows.some(r => r.indexOf('CsDossiers') !== -1), open);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    const esc = await page.evaluate(() => ({
+      listOpen: !!document.querySelector('#var-loop-modal .ss-panel:not([hidden])'),
+      windowOpen: document.getElementById('var-loop-modal').style.display !== 'none',
+      focusOnField: document.activeElement === document.querySelector('#var-loop-modal .var-loop-sort-row .ss-trigger'),
+    }));
+    check('tri : Échap referme la liste seule, la fenêtre reste ouverte et le champ reprend le focus', !esc.listOpen && esc.windowOpen && esc.focusOnField, esc);
+    await clickCenter(scope + ' .var-loop-sort-row .ss-trigger');
+    await page.keyboard.type('mont');
+    await page.waitForTimeout(100);
+    const row = await rowCenter(scope, 'Montant');
+    check('tri : « mont » propose Montant, visible et non recouvert', !!row && row.onTop && row.inViewport, row);
+    if (row) await page.mouse.click(row.x, row.y);
+    await page.waitForTimeout(700);
+    const chosen = await page.evaluate(() => {
+      const trigger = document.querySelector('#var-loop-modal .var-loop-sort-row .ss-trigger');
+      const directionSelect = document.querySelector('#var-loop-modal .var-loop-sort-row > select:last-child');
+      const lines = Array.from(document.querySelectorAll('#var-loop-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent);
+      return {
+        value: document.querySelector('#var-loop-modal #var-loop-sort').value, shown: trigger.textContent,
+        listOpen: !!document.querySelector('#var-loop-modal .ss-panel:not([hidden])'), windowOpen: document.getElementById('var-loop-modal').style.display !== 'none',
+        directions: Array.from(directionSelect.options).map(o => o.textContent), preview: lines[0],
+      };
+    });
+    check('tri : le clic choisit Montant, ferme la liste, propose « croissant / décroissant » (nombre), relance l’aperçu triée ; la fenêtre reste ouverte',
+      chosen.value === 'Montant' && chosen.shown === 'Montant' && !chosen.listOpen && chosen.windowOpen
+      && JSON.stringify(chosen.directions) === JSON.stringify(['croissant', 'décroissant']) && /Suivi.*Audit/.test(chosen.preview || ''), chosen);
+    const save = await reveal(scope + ' .var-modal-primary', scope + ' .modal-content');
+    check('tri : Enregistrer visible et non recouvert', save.found && save.inViewport && save.onTop, save);
+    if (save.found) await page.mouse.click(save.x, save.y);
+    await page.waitForTimeout(250);
+    const afterSave = await page.evaluate(() => {
+      let loop = null;
+      EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Designation') loop = n.attrs.loop; });
+      return { loop, windowOpen: document.getElementById('var-loop-modal').style.display !== 'none' };
+    });
+    check('tri : Enregistrer (vrai clic) pose le tri sur la bulle et ferme la fenêtre', !afterSave.windowOpen && !!afterSave.loop && !!afterSave.loop.sort && afterSave.loop.sort.column === 'Montant', afterSave);
+    const again = await openWindowFor('Designation', 'var-loop', scope);
+    const reopened = await page.evaluate(() => ({
+      shown: document.querySelector('#var-loop-modal .var-loop-sort-row .ss-trigger').textContent,
+      value: document.querySelector('#var-loop-modal #var-loop-sort').value,
+    }));
+    check('tri : la fenêtre rouverte montre la colonne de tri enregistrée dans le champ', again.found && reopened.value === 'Montant' && reopened.shown === 'Montant', reopened);
+    const cancel = await reveal(scope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)', scope + ' .modal-content');
     if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
     await page.waitForTimeout(200);
   },

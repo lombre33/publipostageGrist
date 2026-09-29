@@ -215,7 +215,7 @@ const VariableLoop = (function () {
     document.body.appendChild(modalEl);
     refs = {
       title, intro, sourceLabel, sourceText, sourceEdit, repeatLabelEl, repeatSeg, separatorRow, sepLabel, sepInput, lastLabel, lastInput, sepHint,
-      filterLabel, filterBox, sortLabel, sortColumn, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyTextLabel, emptyTextInput,
+      filterLabel, filterBox, sortLabel, sortColumn, sortSearch: null, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyTextLabel, emptyTextInput,
       currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
     };
 
@@ -359,12 +359,18 @@ const VariableLoop = (function () {
   function renderSort() {
     const { sortColumn } = refs;
     const table = state.source.table;
-    sortColumn.replaceChildren(option('', I18n.t(state.source.via ? 'varLoop.sort.listOrder' : 'varLoop.sort.tableOrder')));
-    GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => sortColumn.appendChild(option(c, c)));
+    const tableOrder = option('', I18n.t(state.source.via ? 'varLoop.sort.listOrder' : 'varLoop.sort.tableOrder'));
+    tableOrder.dataset.placeholder = 'false'; // un vrai choix de la liste avec recherche, pas un « rien » grisé
+    sortColumn.replaceChildren(tableOrder);
+    GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => ConditionFields.appendColumnOption(sortColumn, c, table, c));
     // Colonne de tri retirée de la table depuis : gardée dans la liste plutôt que remplacée en silence par l'ordre de la table.
     const current = state.working.sortColumn;
     if (current && !Array.from(sortColumn.options).some(o => o.value === current)) sortColumn.appendChild(option(current, current));
     sortColumn.value = current;
+    // Liste avec recherche, comme les colonnes du filtre (attach() ne fait rien de plus si elle est déjà posée) ; si le composant est indisponible, la liste
+    // native reste, inchangée. Le champ visible relit le <select> après chaque remplissage (`sync`) ; le type reste dans la liste, le champ étant étroit.
+    try { refs.sortSearch = SearchSelect.attachColumns(sortColumn, { inline: true, hintInTrigger: false }); } catch (e) { console.warn('[VariableLoop] recherche de colonne indisponible, liste native conservée', e); }
+    if (refs.sortSearch) refs.sortSearch.sync();
     renderSortDirection();
   }
   function renderSortDirection() {

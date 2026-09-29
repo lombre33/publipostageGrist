@@ -353,6 +353,173 @@
     },
   });
 
+  // « Trier par » de la fenêtre Boucle : une ligne [colonne | sens], la colonne étant le champ avec recherche.
+  const sortRowOf = loop => loop.querySelector('.var-loop-sort-row');
+  const previewLines = modal => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(line => (line.hidden ? '' : line.textContent));
+  // Ce que dit le champ fermé : « nom (indice) » comme dans la liste (le texte brut du bouton colle le nom et son indice).
+  const shownIn = trigger => label(trigger).trim();
+  // Une bulle à boucle « dans la phrase » (attribut data-loop, comme le pose la fenêtre à l'enregistrement).
+  function loopBadgeHtml(table, column, loop) {
+    return badgeHtml(table, column, ` data-loop="${JSON.stringify(loop).replace(/"/g, '&quot;')}" data-loop-repeat="${loop.repeat}"`);
+  }
+  const savedLoop = (ed, key) => badgeNodes(ed).find(b => b.node.attrs.key === key).node.attrs.loop;
+
+  cases.push({
+    id: 'colsearch_loop_sort_column_is_a_searchable_list_that_saves_and_reopens_on_its_choice',
+    description: 'Colonne de tri d’une boucle (« Trier par ») : le même champ avec recherche que le filtre ; « Ordre » (celui de la table) est un vrai choix (proposé, cherché, pas grisé), le type suit chaque colonne dans la liste, pas dans le champ fermé ; un choix relance l’aperçu et le sens du tri, s’enregistre, et la fenêtre rouverte sur une autre bulle repart de « Ordre »',
+    run: async (h) => {
+      await seed(h);
+      const tableOrder = I18n.t('varLoop.sort.tableOrder');
+      Editor.setHTML(`<p>Lignes : ${badgeHtml('CsLignes', 'Designation')}.</p><p>Quantités : ${badgeHtml('CsLignes', 'Qte')}.</p>`);
+      const ed = await selectBadge(h, 'CsLignes.Designation');
+      pressToolbarButton('var-loop');
+      await h.sleep(700);
+      const loop = loopModal();
+      const trigger = triggerIn(sortRowOf(loop));
+      const select = selectOf(trigger);
+      const direction = sortRowOf(loop).lastElementChild;
+      const t = trigger.getBoundingClientRect();
+      const d = direction.getBoundingClientRect();
+      const closed = {
+        text: shownIn(trigger), placeholder: trigger.classList.contains('is-placeholder'), selectId: select.id, selectWidth: select.getBoundingClientRect().width,
+        sameLine: Math.abs(t.top - d.top) < 1 && Math.abs(t.height - d.height) < 1 && t.right <= d.left + 0.5 && t.width > 60, directionIsSelect: direction.tagName === 'SELECT',
+      };
+      const orderBefore = previewLines(loop)[0];
+      loop.querySelector('label[for="var-loop-sort"]').click();
+      const labelFocuses = document.activeElement === trigger;
+      trigger.click();
+      await h.sleep(30);
+      const panel = panelOf(trigger);
+      const input = inputOf(panel);
+      const rows = rowsOf(panel);
+      const first = panel.querySelector('.ss-option');
+      const shape = { heads: headersOf(panel), firstSelected: first.getAttribute('aria-selected') === 'true', firstFaint: first.classList.contains('is-empty'), pinned: !!panel.querySelector('.is-pinned') };
+      const typed = async (text) => { setInput(input, text); await h.sleep(10); return rowsOf(panel); };
+      const steps = { mont: await typed('mont'), ordre: await typed('ordre'), nombre: await typed('nombre'), none: await typed('zzz') };
+      const emptyShown = !panel.querySelector('.ss-empty').hidden;
+      const choose = async (text) => {
+        trigger.click();
+        await h.sleep(30);
+        const box = inputOf(panelOf(trigger));
+        setInput(box, text);
+        await h.sleep(10);
+        press(box, 'Enter');
+        await h.sleep(40);
+        return { value: select.value, shown: shownIn(trigger), directions: Array.from(direction.options).map(o => o.textContent), closed: panelOf(trigger).hidden };
+      };
+      setInput(input, 'mont');
+      await h.sleep(10);
+      press(input, 'Enter');
+      await h.sleep(700);
+      const numeric = { value: select.value, shown: shownIn(trigger), directions: Array.from(direction.options).map(o => o.textContent), closed: panel.hidden };
+      const orderAfter = previewLines(loop)[0];
+      const textual = await choose('designation');
+      const back = await choose('mont');
+      saveButton(loop).click();
+      await h.sleep(100);
+      const saved = savedLoop(ed, 'CsLignes.Designation');
+      await selectBadge(h, 'CsLignes.Designation');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const reopenedTrigger = triggerIn(sortRowOf(loopModal()));
+      const reopened = { shown: shownIn(reopenedTrigger), value: selectOf(reopenedTrigger).value };
+      dismiss(loopModal());
+      await selectBadge(h, 'CsLignes.Qte');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const otherTrigger = triggerIn(sortRowOf(loopModal()));
+      const other = { shown: shownIn(otherTrigger), value: selectOf(otherTrigger).value };
+      dismiss(loopModal());
+      const asc = I18n.t('varLoop.sort.asc'), desc = I18n.t('varLoop.sort.desc'), az = I18n.t('varLoop.sort.az'), za = I18n.t('varLoop.sort.za');
+      const pass = closed.text === tableOrder && !closed.placeholder && closed.selectId === 'var-loop-sort' && closed.selectWidth === 0 && closed.sameLine && closed.directionIsSelect && labelFocuses
+        && JSON.stringify(rows) === JSON.stringify([tableOrder, 'Facture' + hintOf('macro.modal.typeRef'), 'Designation', 'Qte' + hintOf('macro.modal.typeNumeric'), 'Montant' + hintOf('macro.modal.typeNumeric'), 'Presence' + hintOf('macro.modal.typeChoice')])
+        && shape.heads.length === 0 && shape.firstSelected && !shape.firstFaint && !shape.pinned
+        && JSON.stringify(steps.mont) === JSON.stringify(['Montant' + hintOf('macro.modal.typeNumeric')]) && JSON.stringify(steps.ordre) === JSON.stringify([tableOrder])
+        && JSON.stringify(steps.nombre) === JSON.stringify(['Qte' + hintOf('macro.modal.typeNumeric'), 'Montant' + hintOf('macro.modal.typeNumeric')])
+        && steps.none.length === 0 && emptyShown
+        && numeric.value === 'Montant' && numeric.shown === 'Montant' && numeric.closed && JSON.stringify(numeric.directions) === JSON.stringify([asc, desc])
+        && /Audit.*Suivi/.test(orderBefore) && /Suivi.*Audit/.test(orderAfter)
+        && textual.value === 'Designation' && JSON.stringify(textual.directions) === JSON.stringify([az, za]) && textual.closed
+        && back.value === 'Montant' && JSON.stringify(back.directions) === JSON.stringify([asc, desc])
+        && !!saved && JSON.stringify(saved.sort) === JSON.stringify({ column: 'Montant', direction: 'asc' })
+        && reopened.value === 'Montant' && reopened.shown === 'Montant'
+        && other.value === '' && other.shown === tableOrder;
+      return { pass, notes: JSON.stringify({ closed, labelFocuses, rows, shape, steps, emptyShown, numeric, orderBefore, orderAfter, textual, back, saved, reopened, other }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_loop_sort_keeps_a_column_removed_from_the_table',
+    description: 'Une boucle triée sur une colonne qui n’existe plus dans la table : la fenêtre la garde dans la liste avec recherche (champ et liste), et Enregistrer sans y toucher ne la remplace pas par l’ordre de la table',
+    run: async (h) => {
+      await seed(h);
+      const gone = { repeat: 'inline', table: 'CsLignes', sort: { column: 'Ancienne', direction: 'desc' }, empty: 'hide', separator: ', ', lastSeparator: ' et ' };
+      Editor.setHTML(`<p>Lignes : ${loopBadgeHtml('CsLignes', 'Designation', gone)}.</p>`);
+      const ed = await selectBadge(h, 'CsLignes.Designation');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const loop = loopModal();
+      const trigger = triggerIn(sortRowOf(loop));
+      const shown = { text: shownIn(trigger), value: selectOf(trigger).value, direction: sortRowOf(loop).lastElementChild.value };
+      trigger.click();
+      await h.sleep(30);
+      const rows = rowsOf(panelOf(trigger));
+      const active = panelOf(trigger).querySelector('.ss-option.is-active');
+      const activeName = active ? label(active) : '';
+      press(inputOf(panelOf(trigger)), 'Escape');
+      await h.sleep(20);
+      saveButton(loop).click();
+      await h.sleep(100);
+      const saved = savedLoop(ed, 'CsLignes.Designation');
+      const pass = shown.text === 'Ancienne' && shown.value === 'Ancienne' && shown.direction === 'desc' && rows[rows.length - 1] === 'Ancienne' && rows[0] === I18n.t('varLoop.sort.tableOrder')
+        && activeName === 'Ancienne' && !!saved && JSON.stringify(saved.sort) === JSON.stringify({ column: 'Ancienne', direction: 'desc' });
+      return { pass, notes: JSON.stringify({ shown, rows, activeName, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_loop_sort_native_list_stays_when_the_component_fails',
+    description: 'Si le composant est indisponible à l’ouverture de la fenêtre Boucle, « Trier par » garde la liste native (visible, mêmes colonnes) et enregistre son choix ; à l’ouverture suivante, la liste avec recherche revient',
+    run: async (h) => {
+      await seed(h);
+      const realAttach = SearchSelect.attachColumns;
+      const warn = console.warn;
+      let result;
+      try {
+        // La fenêtre est construite une fois pour toutes : celle des cas précédents a déjà son champ, qu'on retire pour rejouer l'ouverture sans composant.
+        const first = await openLoopWindow(h);
+        SearchSelect.attach(first.querySelector('#var-loop-sort')).destroy();
+        dismiss(first);
+        console.warn = () => {};
+        SearchSelect.attachColumns = () => { throw new Error('composant indisponible'); };
+        const modal = await openLoopWindow(h);
+        const ed = EditorCore.getEditor();
+        const select = modal.querySelector('#var-loop-sort');
+        const nativeVisible = visible(select) && !sortRowOf(modal).querySelector('.ss-trigger') && select.getBoundingClientRect().width > 40;
+        const labels = Array.from(select.options).map(o => o.textContent);
+        select.value = 'Qte';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await h.sleep(20);
+        saveButton(modal).click();
+        await h.sleep(100);
+        const saved = savedLoop(ed, 'CsLignes.Designation');
+        SearchSelect.attachColumns = realAttach;
+        console.warn = warn;
+        const again = await openLoopWindow(h);
+        const trigger = sortRowOf(again).querySelector('.ss-trigger');
+        const searchBack = !!trigger && selectOf(trigger).id === 'var-loop-sort' && !visible(selectOf(trigger));
+        dismiss(again);
+        result = { nativeVisible, labels, saved: saved && saved.sort, searchBack };
+      } finally {
+        SearchSelect.attachColumns = realAttach;
+        console.warn = warn;
+      }
+      const pass = result.nativeVisible && result.labels.includes('Qte' + hintOf('macro.modal.typeNumeric')) && result.labels.includes(I18n.t('varLoop.sort.tableOrder'))
+        && !!result.saved && result.saved.column === 'Qte' && result.searchBack;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
   cases.push({
     id: 'colsearch_native_lists_stay_when_the_component_fails',
     description: 'Si le composant de recherche est indisponible, la règle garde le <select> natif (visible, mêmes options) et marche comme avant',

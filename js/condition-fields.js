@@ -45,7 +45,8 @@ const ConditionFields = (function () {
   }
   // Une colonne de la liste. `value` : « Colonne » (table de la page) ou « Table.Colonne », aussi son nom à l'écran ; son type Grist (celui que dit l'indication
   // sous le champ) est l'indice discret de la liste avec recherche - « Date de début (date) » - et permet de chercher « date » pour retrouver les dates. Le
-  // texte de l'<option> reste « nom (indice) » : c'est celui de la liste native, si le composant de recherche n'est pas disponible.
+  // texte de l'<option> reste « nom (indice) » : c'est celui de la liste native, si le composant de recherche n'est pas disponible. Exportée : le tri d'une
+  // boucle (js/variable-loop.js) liste ses colonnes de la même façon.
   function appendColumnOption(parent, value, table, column) {
     const o = document.createElement('option');
     const hint = friendlyTypeLabel(GristAPI.getColumnType(table, column));
@@ -312,5 +313,5 @@ const ConditionFields = (function () {
     return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint };
   }
 
-  return { friendlyTypeLabel, valuePlaceholderForType, buildColumnField, buildValueField, buildConditionFields };
+  return { friendlyTypeLabel, appendColumnOption, valuePlaceholderForType, buildColumnField, buildValueField, buildConditionFields };
 })();
