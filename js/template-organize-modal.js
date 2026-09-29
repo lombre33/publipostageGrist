@@ -140,6 +140,9 @@ const TemplateOrganizeModal = (function () {
     pinBtn.classList.toggle('is-pinned', pinned);
     pinBtn.setAttribute('aria-pressed', String(pinned));
     pinBtn.setAttribute('aria-label', I18n.t('templateTree.pin.aria'));
+    // Info-bulle native (la modale vit hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas) - dit ce que fait le clic dans l'état
+    // courant, pour ne pas le confondre avec l'étoile "modèle par défaut" de la barre.
+    pinBtn.title = I18n.t(pinned ? 'templateTree.unpin.tip' : 'templateTree.pin.tip');
     pinBtn.addEventListener('click', () => togglePin(node.id, pinned));
     row.appendChild(pinBtn);
 

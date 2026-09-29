@@ -163,6 +163,22 @@
   });
 
   cases.push({
+    id: 'organize_pin_button_tooltip_says_what_the_click_does',
+    description: 'Dans la modale aussi, l’info-bulle du bouton épingle passe de « Épingler… » à « Retirer des épinglés » une fois le modèle épinglé',
+    run: async (h) => {
+      await createTemplate(h, 'Organiser - Info-bulle épingle');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const before = rowByName('Organiser - Info-bulle épingle').querySelector('.tts-pin-btn').title;
+      await clickEl(h, rowByName('Organiser - Info-bulle épingle').querySelector('.tts-pin-btn'));
+      const afterPin = rowByName('Organiser - Info-bulle épingle').querySelector('.tts-pin-btn').title;
+      TemplateOrganizeModal.close();
+      const pass = before === I18n.t('templateTree.pin.tip') && afterPin === I18n.t('templateTree.unpin.tip') && before !== afterPin && before.length > 0;
+      return { pass, notes: JSON.stringify({ before, afterPin }) };
+    },
+  });
+
+  cases.push({
     id: 'organize_pin_toggle_syncs_back_to_toolbar_tree',
     description: 'Épingler depuis la modale fait apparaître le modèle dans la section Épinglés du panneau de l’arbre, sans le rouvrir manuellement',
     run: async (h) => {

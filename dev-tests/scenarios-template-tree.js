@@ -155,6 +155,45 @@
     },
   });
 
+  // Retour d'Antoine (2026-09-29, « la même icône ») : l'épingle d'une ligne et le bouton « modèle par défaut » de la barre partageaient le même tracé d'étoile, il
+  // épinglait en croyant définir le modèle qui s'ouvre au démarrage. On compare le masque RÉELLEMENT calculé des deux ::before, pas le texte du CSS.
+  cases.push({
+    id: 'tree_pin_icon_is_not_the_default_template_star',
+    description: 'L’épingle d’une ligne de l’arbre n’a plus le même tracé que le bouton « modèle par défaut » de la barre (Antoine, 2026-09-29 : deux étoiles identiques, confusion)',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Punaise distincte');
+      await openPopup(h);
+      const pin = rowFor(id).querySelector('.tts-pin-btn');
+      const maskOf = (el) => {
+        const cs = getComputedStyle(el, '::before');
+        return cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
+      };
+      const pinMask = maskOf(pin);
+      const starMask = maskOf(document.getElementById('btn-set-default-template'));
+      const size = getComputedStyle(pin, '::before').width;
+      const pass = !!pinMask && pinMask !== 'none' && !!starMask && starMask !== 'none' && pinMask !== starMask && parseFloat(size) > 0;
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return { pass, notes: JSON.stringify({ sameMask: pinMask === starMask, pinHasMask: !!pinMask && pinMask !== 'none', starHasMask: !!starMask && starMask !== 'none', size }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_pin_button_tooltip_says_what_the_click_does',
+    description: 'L’info-bulle du bouton épingle dit ce que fait le clic dans l’état courant (« Épingler… » puis « Retirer des épinglés »), pour ne pas le confondre avec « modèle par défaut »',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Arbre - Info-bulle épingle');
+      await openPopup(h);
+      const before = rowFor(id).querySelector('.tts-pin-btn').title;
+      await clickEl(h, rowFor(id).querySelector('.tts-pin-btn'));
+      const afterPin = rowFor(id).querySelector('.tts-pin-btn').title;
+      await clickEl(h, rowFor(id).querySelector('.tts-pin-btn'));
+      const afterUnpin = rowFor(id).querySelector('.tts-pin-btn').title;
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const pass = before === I18n.t('templateTree.pin.tip') && afterPin === I18n.t('templateTree.unpin.tip') && afterUnpin === before && before !== afterPin && before.length > 0;
+      return { pass, notes: JSON.stringify({ before, afterPin, afterUnpin }) };
+    },
+  });
+
   cases.push({
     id: 'tree_default_template_star_matches_toolbar_button',
     description: 'Marquer un modèle "par défaut" via le vrai bouton de la barre fait apparaître l’étoile dans son libellé de l’arbre, même convention que refreshTemplateList',

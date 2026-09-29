@@ -11,10 +11,12 @@ const I18n = (function () {
     'template.namePlaceholder': { fr: 'Nom du modèle', en: 'Template name' },
     'template.rename.tip': { fr: 'Renommer', en: 'Rename' },
     'template.rename.aria': { fr: 'Renommer le modèle', en: 'Rename template' },
-    'template.setDefault.tip': { fr: 'Modèle par défaut', en: 'Default template' },
+    'template.setDefault.tip': { fr: 'Modèle par défaut : s’ouvre au démarrage', en: 'Default template: opens at startup' },
     'template.setDefault.aria': { fr: 'Définir ce modèle comme modèle par défaut à l’ouverture', en: 'Set this template as the default one on open' },
     // --- Arbre de modèles (épingle + dossiers), js/template-tree-select.js ---
     'templateTree.pin.aria': { fr: 'Épingler ce modèle', en: 'Pin this template' },
+    'templateTree.pin.tip': { fr: 'Épingler en haut de la liste (favori personnel)', en: 'Pin to the top of the list (personal favorite)' },
+    'templateTree.unpin.tip': { fr: 'Retirer des épinglés', en: 'Remove from pinned' },
     'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
     'templateTree.allSection': { fr: 'Tous les modèles', en: 'All templates' },
     // --- Modale "Organiser mes modèles" (créer des dossiers, y ranger des modèles), js/template-organize-modal.js ---
