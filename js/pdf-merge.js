@@ -8,16 +8,7 @@ const PdfMerge = (function () {
   let libPromise = null;
   function ensureLibLoaded() {
     if (!libPromise) {
-      libPromise = new Promise((resolve, reject) => {
-        if (window.PDFLib) { resolve(); return; }
-        const s = document.createElement('script');
-        s.src = PDF_LIB.src;
-        s.integrity = PDF_LIB.integrity;
-        s.crossOrigin = 'anonymous';
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Échec de chargement du script : ' + PDF_LIB.src));
-        document.head.appendChild(s);
-      }).catch(e => { libPromise = null; throw e; });
+      libPromise = (window.PDFLib ? Promise.resolve() : ExportCommon.loadScriptOnce(PDF_LIB)).catch(e => { libPromise = null; throw e; });
     }
     return libPromise;
   }

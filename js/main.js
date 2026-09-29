@@ -905,14 +905,7 @@
 
     setStatus(I18n.t(merged ? 'status.pdfMerging' : 'status.zipCompressing'));
     const outBlob = merged ? await mergedPdf.toBlob() : await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(outBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = sanitizeFilenamePart(tableId) + (merged ? '-export.pdf' : '-export-pdf.zip');
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + (merged ? '-export.pdf' : '-export-pdf.zip'));
     if (merged) {
       setStatus(failed
         ? I18n.t('status.mergedExportDoneWithFailures', { ok, failed })
@@ -978,14 +971,7 @@
 
     setStatus(I18n.t('status.zipCompressing'));
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = sanitizeFilenamePart(tableId) + '-export-docx.zip';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    ExportCommon.downloadBlob(zipBlob, sanitizeFilenamePart(tableId) + '-export-docx.zip');
     setStatus(failed
       ? I18n.t('status.batchExportDoneWithFailures', { ok, failed })
       : I18n.t('status.batchExportDone', { ok }));

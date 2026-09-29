@@ -24,18 +24,8 @@ const DocxExport = (function () {
   // `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
   const DOCX_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js', integrity: 'sha384-9OH56uLhIvkZkwF0jWNlfpcK3gPuSy5DfEMNqKe156wCpkND+MDdtaRyd05kwpG0' };
   let docxLibPromise = null;
-  function loadScriptOnce(lib) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = lib.src;
-      if (lib.integrity) { s.integrity = lib.integrity; s.crossOrigin = 'anonymous'; }
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Échec de chargement du script : ' + lib.src));
-      document.head.appendChild(s);
-    });
-  }
   async function ensureDocxLibLoaded() {
-    if (!docxLibPromise) docxLibPromise = loadScriptOnce(DOCX_LIB).catch(e => { docxLibPromise = null; throw e; });
+    if (!docxLibPromise) docxLibPromise = ExportCommon.loadScriptOnce(DOCX_LIB).catch(e => { docxLibPromise = null; throw e; });
     return docxLibPromise;
   }
 
@@ -380,31 +370,6 @@ const DocxExport = (function () {
   // Repli si le tableau n'est pas dans le DOM attaché au moment de l'appel (ex. zone en-tête/pied - hors périmètre de la mesure, cf. buildDocxDocument) :
   // répartition à parts égales, exactement comme la V1.
   function equalColumnWidthsTwip(columnCount) { return new Array(columnCount).fill(Math.floor(CONTENT_WIDTH_TWIP / columnCount)); }
-  // Port de measuredColumnWidthsPx, js/pdf-export.js : largeur de CONTENU (pas la boîte entière) mesurée sur le rendu réel du 1er enfant de bloc de chaque
-  // cellule de la 1ère ligne - le <col> de @tiptap ne porte qu'un minimum px, jamais un pourcentage exploitable.
-  function measuredColumnWidthsPx(tableEl, columnCount) {
-    if (!tableEl.isConnected) return null;
-    const firstRow = tableEl.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
-    if (!firstRow) return null;
-    const cells = Array.from(firstRow.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
-    if (!cells.length) return null;
-    const widths = [];
-    cells.forEach(cell => {
-      const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
-      const contentEl = cell.querySelector(':scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol');
-      let perCol;
-      if (contentEl) {
-        perCol = contentEl.getBoundingClientRect().width / span;
-      } else {
-        const cs = getComputedStyle(cell);
-        const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
-        perCol = (cell.getBoundingClientRect().width - inset) / span;
-      }
-      for (let i = 0; i < span; i += 1) widths.push(perCol);
-    });
-    while (widths.length < columnCount) widths.push(0);
-    return widths.slice(0, columnCount);
-  }
   // Table réelle du document (pas l'émulation 2-colonnes, cf. twoColumnsBlockFrom). Largeurs mesurées sur le rendu réel (comme pdf-export.js), avec une
   // marge de cellule Word par défaut (2×108 twips, jamais incluse dans une mesure de CONTENU) rajoutée pour que la largeur totale demandée à Word colle à
   // ce qui a été mesuré.
@@ -414,7 +379,8 @@ const DocxExport = (function () {
     if (!rows.length) return null;
     const firstRowCells = Array.from(rows[0].children).filter(c => /^(TD|TH)$/i.test(c.tagName));
     const columnCount = firstRowCells.reduce((sum, c) => sum + (parseInt(c.getAttribute('colspan') || '1', 10) || 1), 0) || 1;
-    const measuredPx = measuredColumnWidthsPx(tableEl, columnCount);
+    // Repli à parts égales si le tableau n'est pas attaché au document (ex. zone en-tête/pied, hors périmètre de la mesure, cf. buildDocxDocument) : aucun rendu à mesurer.
+    const measuredPx = tableEl.isConnected ? ExportCommon.measuredColumnWidthsPx(tableEl, columnCount) : null;
     const colWidthsTwip = (measuredPx && measuredPx.every(w => w > 0))
       ? measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP))
       : equalColumnWidthsTwip(columnCount);
@@ -629,38 +595,17 @@ const DocxExport = (function () {
     return blocks;
   }
 
-  // #Variable/chips déjà résolus par ReaderMode.preview (même fonction que pdf-export.js:resolveHeaderFooterVariables) - copie volontairement locale
-  // plutôt qu'un appel à travers PdfExport (module privé, pas d'export public pour cette fonction) : ~10 lignes, ne justifie pas un couplage entre les deux
-  // exporteurs.
-  async function resolveHeaderFooterVariables(headerFooterData, tableId, record) {
-    if (!headerFooterData || !headerFooterData.enabled) return headerFooterData;
-    const resolveZone = html => (html ? ReaderMode.preview(html, tableId, record) : html);
-    const [headerDefault, headerFirst, footerDefault, footerFirst] = await Promise.all([
-      resolveZone(headerFooterData.header && headerFooterData.header.default),
-      resolveZone(headerFooterData.header && headerFooterData.header.first),
-      resolveZone(headerFooterData.footer && headerFooterData.footer.default),
-      resolveZone(headerFooterData.footer && headerFooterData.footer.first),
-    ]);
-    return { enabled: true, differentFirstPage: !!headerFooterData.differentFirstPage, header: { default: headerDefault, first: headerFirst }, footer: { default: footerDefault, first: footerFirst } };
-  }
   async function headerFooterBlocksFrom(html, ctx) {
     if (!html) return [];
     const root = document.createElement('div'); root.innerHTML = html;
     return blocksFromContainer(root, ctx, false);
   }
 
-  // Attaché hors-écran avec la classe .tiptap (comme attachMeasureHost, js/pdf-export.js) le temps du parcours : measuredColumnWidthsPx a besoin d'un
-  // rendu réel, jamais possible sur un <div> détaché du document.
-  function attachMeasureHost(root) {
-    root.classList.add('tiptap');
-    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP) + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
-    document.body.appendChild(root);
-    return () => { if (root.parentNode) root.parentNode.removeChild(root); };
-  }
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
-    const detachMeasureHost = attachMeasureHost(root);
+    // Hôte de mesure hors-écran le temps du parcours : measuredColumnWidthsPx a besoin d'un rendu réel, jamais possible sur un <div> détaché du document.
+    const detachMeasureHost = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
     let bodyBlocks;
     try {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
@@ -693,20 +638,12 @@ const DocxExport = (function () {
     return new docx.Document(doc);
   }
 
-  function downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  }
-
   async function getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
     setPageMarginsTwip(marginsTwip);
     await ensureDocxLibLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
-    const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, tableId, record);
+    const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, tableId, record);
     const doc = await buildDocxDocument(resolvedHtml, resolvedHeaderFooterData);
     const blob = await docx.Packer.toBlob(doc);
     return { blob, filename };
@@ -714,7 +651,7 @@ const DocxExport = (function () {
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     const { blob, filename } = await getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip);
-    downloadBlob(blob, (filename || 'publipostage') + '.docx');
+    ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }
 
   return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded };

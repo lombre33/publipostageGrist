@@ -1,6 +1,7 @@
 // Suite "pdfBatch" - export de toutes les lignes (js/main.js:onExportPdfBatch) par les VRAIES lignes du menu « Exporter en PDF » : archive ZIP (un PDF
-// par ligne) et PDF unique (js/pdf-merge.js, demande d'Antoine du 2026-09-28 : « toutes les lignes mais à la suite »). Le fichier téléchargé est intercepté
-// (URL.createObjectURL + clic du <a download>) puis ouvert pour de vrai - pdf.js pour un PDF, JSZip pour l'archive - comme le ferait l'utilisateur.
+// par ligne) et PDF unique (js/pdf-merge.js, demande d'Antoine du 2026-09-28 : « toutes les lignes mais à la suite »), puis les deux téléchargements DOCX
+// (un .docx, une archive d'un .docx par ligne). Le fichier téléchargé est intercepté (URL.createObjectURL + clic du <a download>) puis ouvert pour de vrai -
+// pdf.js pour un PDF, JSZip pour une archive ou un .docx - comme le ferait l'utilisateur.
 (function () {
   const cases = [];
   const TABLE = 'PbClients';
@@ -121,6 +122,49 @@
         && files.every(f => squash(textsByFile[f]).includes(squash(expectedByFile[f])))
         && res.confirms.length === 1 && res.confirms[0] === I18n.t('confirm.batchExport', { count: NAMES.length, table: TABLE })
         && res.status === I18n.t('status.batchExportDone', { ok: NAMES.length });
+      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), confirms: res.confirms, status: res.status, textsByFile }) };
+    },
+  });
+
+  // Texte du corps d'un .docx, lu dans les octets (word/document.xml dézippé) : ce que Word afficherait, pas un état interne.
+  async function docxBodyText(blob) {
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const file = zip.file('word/document.xml');
+    return file ? (await file.async('string')).replace(/<[^>]+>/g, '') : null;
+  }
+
+  // Les deux exports DOCX téléchargent par la même aide que le PDF unique et les lots ZIP (js/export-common.js:downloadBlob) : sans ces deux cas, rien ne
+  // verrait un téléchargement DOCX cassé (docx/docxImages lisent le blob sans jamais le télécharger).
+  cases.push({
+    id: 'pdfbatch_docx_single_download',
+    description: '« Exporter en DOCX » télécharge un seul .docx dont le corps contient le texte de la ligne courante',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const res = await clickExportRow(h, 'v2-btn-export-docx');
+      const dl = res.downloads[0];
+      const text = dl && dl.blob ? await docxBodyText(dl.blob) : null;
+      const pass = res.downloads.length === 1 && /\.docx$/.test(dl.name) && !!text && squash(text).includes(squash(NAMES[0]))
+        && res.status === I18n.t('status.docxGenerated');
+      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), status: res.status, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_docx_zip_one_docx_per_row',
+    description: '« Exporter toutes les lignes en DOCX (ZIP)… » télécharge une archive ZIP contenant un .docx par ligne, chacun avec le texte de sa ligne',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+      const dl = res.downloads[0];
+      const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+      const expectedByFile = { 'publipostage.docx': NAMES[0], 'publipostage (2).docx': NAMES[1], 'publipostage (3).docx': NAMES[2] };
+      const files = zip ? Object.keys(zip.files).sort() : [];
+      const textsByFile = {};
+      for (const f of files) textsByFile[f] = (await docxBodyText(await zip.file(f).async('blob'))) || '';
+      const pass = res.downloads.length === 1 && dl.name === TABLE + '-export-docx.zip'
+        && JSON.stringify(files) === JSON.stringify(Object.keys(expectedByFile).sort())
+        && files.every(f => squash(textsByFile[f]).includes(squash(expectedByFile[f])))
+        && res.confirms.length === 1; // le libellé de confirmation/statut du lot DOCX reprend celui du lot PDF : volontairement non figé ici
       return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), confirms: res.confirms, status: res.status, textsByFile }) };
     },
   });

@@ -13,21 +13,11 @@ const PdfExport = (function () {
     { src: 'js/pdf-fonts-extra.js?v=0.67' },
   ];
   let pdfLibsPromise = null;
-  function loadScriptOnce(lib) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = lib.src;
-      if (lib.integrity) { s.integrity = lib.integrity; s.crossOrigin = 'anonymous'; }
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Échec de chargement du script : ' + lib.src));
-      document.head.appendChild(s);
-    });
-  }
   // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc doivent s'exécuter après pdfmake.min.js/vfs_fonts.min.js.
   async function ensurePdfLibsLoaded() {
     if (!pdfLibsPromise) {
       pdfLibsPromise = (async () => {
-        for (const lib of PDF_LIB_URLS) await loadScriptOnce(lib);
+        for (const lib of PDF_LIB_URLS) await ExportCommon.loadScriptOnce(lib);
       })().catch(e => { pdfLibsPromise = null; throw e; });
     }
     return pdfLibsPromise;
@@ -218,15 +208,9 @@ const PdfExport = (function () {
     return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
   }
 
-  // Attache `root` hors-écran avec la classe .tiptap (scopée à la classe seule, pas #editor-container .tiptap, pour ne pas dépendre du conteneur réel).
-  function attachMeasureHost(root, widthPx) {
-    root.classList.add('pdf-measure-host', 'tiptap');
-    // min-height:0 en inline l'emporte sur .tiptap { min-height: 200px } (zone cliquable de l'éditeur vide) : sans lui, mesurer la hauteur totale de `root`
-    // plafonne à 200px quel que soit le contenu réel.
-    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + (widthPx || CONTENT_WIDTH_PX) + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
-    document.body.appendChild(root);
-    return () => { if (root.parentNode) root.parentNode.removeChild(root); };
-  }
+  // Hôte de mesure hors-écran (ExportCommon.attachMeasureHost) : la classe .pdf-measure-host permet à un nœud de retrouver son hôte (cf. closest ci-dessus),
+  // la largeur retombe sur celle du contenu de page quand l'appelant n'en donne pas.
+  const attachPdfMeasureHost = (root, widthPx) => ExportCommon.attachMeasureHost(root, widthPx || CONTENT_WIDTH_PX, 'pdf-measure-host');
 
   function pdfImageFromNode(node) {
     const widthPx = parseFloat(node.style.width) || 320;
@@ -539,30 +523,6 @@ const PdfExport = (function () {
     return result;
   }
 
-  // Largeurs mesurées sur le rendu réel (le <col> de @tiptap ne porte qu'un minimum px, pas un pourcentage exploitable), largeur de CONTENU (pas la boîte
-  // entière, tableFrom applique déjà son padding pdfmake), mesurée sur le 1er enfant de bloc - un simple soustrait padding+bordure est imprécis d'~1px.
-  function measuredColumnWidthsPx(table, columnCount) {
-    const firstRow = table.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
-    if (!firstRow) return null;
-    const cells = Array.from(firstRow.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
-    if (!cells.length) return null;
-    const widths = [];
-    cells.forEach(cell => {
-      const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
-      const contentEl = cell.querySelector(':scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol');
-      let perCol;
-      if (contentEl) {
-        perCol = contentEl.getBoundingClientRect().width / span;
-      } else {
-        const cs = getComputedStyle(cell);
-        const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
-        perCol = (cell.getBoundingClientRect().width - inset) / span;
-      }
-      for (let i = 0; i < span; i += 1) widths.push(perCol);
-    });
-    while (widths.length < columnCount) widths.push(0);
-    return widths.slice(0, columnCount);
-  }
   function tableFrom(node, pageBreakBefore, rootRect) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
@@ -585,7 +545,7 @@ const PdfExport = (function () {
     // total rendu retombe exactement sur la largeur de page.
     const cellPaddingPt = cellPadLeftPt + cellPadRightPt;
     const usableForColumnsPt = Math.max(minColWidthPt * columnCount, availableWidthPt - columnCount * cellPaddingPt);
-    const measuredPx = measuredColumnWidthsPx(node, columnCount);
+    const measuredPx = ExportCommon.measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
     const measuredSum = measuredPt ? measuredPt.reduce((sum, w) => sum + w, 0) : 0;
     // Cible de répartition : la largeur réelle du tableau si elle tient dans la page, pas systématiquement la pleine largeur - un tableau rétréci par
@@ -1368,7 +1328,7 @@ const PdfExport = (function () {
       headingMarkers = new Map(headingEls.map((el, i) => [el, markers[i]]));
     }
     const widthPx = availableWidthPt != null ? availableWidthPt / PX_TO_PT : null;
-    const detachMeasureHost = attachMeasureHost(root, widthPx);
+    const detachMeasureHost = attachPdfMeasureHost(root, widthPx);
     try {
       // Attend le décodage de chaque <img> de ce root précis avant toute mesure (getBoundingClientRect() sur une image en hauteur auto a besoin du ratio
       // intrinsèque réel) - un simple pré-chauffage du cache navigateur sur un élément séparé s'est avéré insuffisamment fiable.
@@ -1719,7 +1679,7 @@ const PdfExport = (function () {
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
       insertTrailingBreaksForEmptyBlocks(measureRoot);
-      const detach = attachMeasureHost(measureRoot, CONTENT_WIDTH_PX);
+      const detach = attachPdfMeasureHost(measureRoot, CONTENT_WIDTH_PX);
       // measureRoot est un arbre DOM séparé du root de htmlToPdfContent ci-dessus (reparsing indépendant) : son propre décodage d'image doit être attendu
       // séparément, sinon une image mesure une hauteur proche de 0 et la marge réservée devient plus petite que ce que pdfmake peint réellement.
       await Promise.all(Array.from(measureRoot.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
@@ -1748,26 +1708,6 @@ const PdfExport = (function () {
       footer: { default: footerDefault.content, first: footerFirst.content },
       topExtraPt: headerHeightPt ? headerHeightPt + HEADER_FOOTER_GAP_PT : 0,
       bottomExtraPt: footerHeightPt ? footerHeightPt + HEADER_FOOTER_GAP_PT : 0,
-    };
-  }
-
-  // #Variable des 4 fragments d'en-tête/pied résolus ici, au même niveau que le corps (pas plus bas dans la chaîne) pour que getNativePdfBlob reste appelable
-  // avec du HTML déjà résolu, sans avoir besoin d'un vrai enregistrement Grist à ce niveau.
-  async function resolveHeaderFooterVariables(headerFooterData, currentTableId, record) {
-    if (!headerFooterData || !headerFooterData.enabled) return headerFooterData;
-    const resolveZone = html => (html ? ReaderMode.preview(html, currentTableId, record) : html);
-    // Les 4 zones sont des lectures indépendantes (aucune n'écrit d'état partagé) - parallélisées comme buildHeaderFooterPdfChunks ci-dessus, même raison.
-    const [headerDefault, headerFirst, footerDefault, footerFirst] = await Promise.all([
-      resolveZone(headerFooterData.header && headerFooterData.header.default),
-      resolveZone(headerFooterData.header && headerFooterData.header.first),
-      resolveZone(headerFooterData.footer && headerFooterData.footer.default),
-      resolveZone(headerFooterData.footer && headerFooterData.footer.first),
-    ]);
-    return {
-      enabled: true,
-      differentFirstPage: !!headerFooterData.differentFirstPage,
-      header: { default: headerDefault, first: headerFirst },
-      footer: { default: footerDefault, first: footerFirst },
     };
   }
 
@@ -1814,18 +1754,18 @@ const PdfExport = (function () {
     }
     // En-tête/pied de page : uniquement le chemin vectoriel natif - ni l'impression navigateur ni les qualités raster n'ont de notion de header/footer natif
     // de page.
-    const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
+    const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, currentTableId, record);
     await exportNativePdf(resolvedHtml, filename, resolvedHeaderFooterData);
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportPdfBatch) - réutilise la même paire ReaderMode.preview/
-  // resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
+  // ExportCommon.resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
     setPageMarginsPt(marginsPt);
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
-    const resolvedHeaderFooterData = await resolveHeaderFooterVariables(headerFooterData, tableId, record);
+    const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, tableId, record);
     const blob = await getNativePdfBlob(resolvedHtml, filename, resolvedHeaderFooterData);
     return { blob, filename };
   }
