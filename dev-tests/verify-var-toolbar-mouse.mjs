@@ -300,6 +300,106 @@ const seq = await page.evaluate(() => {
   return out;
 });
 check('Insérer (vrai clic) ajoute #VcAnnuaire.Telephone juste après la variable', JSON.stringify(seq) === JSON.stringify(['Dossier suivi par ', '#VcAnnuaire.NomPrenom', ' ', '#VcAnnuaire.Telephone', ' jusqu’à la clôture.']), seq);
+// 3b) Descente de référence en référence (retour d'Antoine du 2026-09-29) : dans « Autres attributs », la flèche d'une colonne Référence ouvre les colonnes
+// de la table qu'elle désigne (fil d'Ariane pour remonter), les cases se gardent d'un niveau à l'autre, et la bulle insérée porte le chemin
+// (#VcAnnuaire.Service.Nom). Tout à la vraie souris à 700x400 : flèche visible et au premier plan, fenêtre dans le panneau, pas de débordement de page.
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  stub.setVariables('VcServices', { Nom: 'Text', Responsable: 'Text' });
+  stub.setRows('VcServices', [{ id: 3, Nom: 'Juridique', Responsable: 'Me Lefevre' }, { id: 4, Nom: 'Fiscal', Responsable: 'Me Roux' }]);
+  stub.setVariables('VcAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Service: 'Ref:VcServices', gristHelper_Display: 'Text' }, null, { Service: 'gristHelper_Display' });
+  stub.setRows('VcAnnuaire', [
+    { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Service: 3, gristHelper_Display: 'Juridique' },
+    { id: 8, NomPrenom: 'Martin Anne', Telephone: '06 55 66 77 88', Naissance: 662688000, Service: 4, gristHelper_Display: 'Fiscal' },
+  ]);
+  await GristAPI.refreshSchema();
+  const badge = col => `<span class="var-badge" data-table="VcAnnuaire" data-column="${col}" data-key="VcAnnuaire.${col}"></span>`;
+  Editor.setHTML(`<p>Suivi par ${badge('NomPrenom')} jusqu’au bout.</p><p>Service : ${badge('Service')}</p>`);
+});
+await page.waitForTimeout(300);
+async function openLinkedFor(column) {
+  const box = await hitTest(`.tiptap .var-badge[data-column="${column}"]`);
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(250);
+  const icon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-linked"]');
+  if (icon.found) await page.mouse.click(icon.x, icon.y);
+  await page.waitForTimeout(400);
+}
+const linkedState = () => page.evaluate(() => {
+  const modal = document.getElementById('var-linked-modal');
+  const nav = modal.querySelector('.var-linked-path');
+  const box = modal.querySelector('.var-modal-content').getBoundingClientRect();
+  return {
+    open: modal.style.display !== 'none', title: modal.querySelector('h3').textContent,
+    cols: Array.from(modal.querySelectorAll('.var-linked-row')).map(r => r.dataset.col),
+    arrows: Array.from(modal.querySelectorAll('.var-linked-row')).filter(r => r.querySelector('.var-linked-descend')).map(r => r.dataset.col),
+    crumbsHidden: nav.hidden, crumbs: Array.from(nav.querySelectorAll('.var-linked-crumb')).map(c => c.textContent),
+    checked: Array.from(modal.querySelectorAll('.var-linked-row input:checked')).map(i => i.value),
+    insert: modal.querySelector('.var-modal-primary').textContent, filterFocused: document.activeElement === modal.querySelector('.var-linked-filter'),
+    inViewport: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5,
+    overflow: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+const overflowBeforeDescent = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+await openLinkedFor('NomPrenom');
+const level0 = await linkedState();
+check('Autres attributs sur #VcAnnuaire.NomPrenom : la colonne Référence Service a une flèche, les autres colonnes non',
+  level0.open && level0.title.includes('VcAnnuaire') && JSON.stringify(level0.arrows) === JSON.stringify(['Service']) && level0.crumbsHidden, level0);
+const arrow = await hitTest('#var-linked-modal .var-linked-row[data-col="Service"] .var-linked-descend');
+check('la flèche de Service est visible, assez large pour la souris et au premier plan (pas recouverte par la ligne)',
+  arrow.found && arrow.inViewport && arrow.onTop && arrow.right - arrow.left >= 24, arrow);
+const telephone = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+if (telephone.found) await page.mouse.click(telephone.x, telephone.y);
+await page.waitForTimeout(80);
+if (arrow.found) await page.mouse.click(arrow.x, arrow.y);
+await page.waitForTimeout(350);
+const level1 = await linkedState();
+check('un vrai clic sur la flèche ouvre les colonnes de VcServices : fil d’Ariane VcAnnuaire › Service, focus sur le filtre, fenêtre dans le panneau, page sans débordement',
+  level1.title.includes('VcServices') && JSON.stringify(level1.cols) === JSON.stringify(['Nom', 'Responsable']) && !level1.crumbsHidden
+  && JSON.stringify(level1.crumbs) === JSON.stringify(['VcAnnuaire', 'Service']) && level1.filterFocused && level1.inViewport && level1.overflow <= overflowBeforeDescent, { level1, overflowBeforeDescent });
+check('la case Telephone cochée au niveau du dessus compte déjà, et le clic sur la flèche n’a pas coché Service',
+  level1.insert.includes('1') && !level1.checked.includes('Service'), level1);
+const crumb = await hitTest('#var-linked-modal .var-linked-path button.var-linked-crumb');
+check('le bouton VcAnnuaire du fil d’Ariane est visible et au premier plan', crumb.found && crumb.inViewport && crumb.onTop, crumb);
+const nomRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Nom"] .var-linked-pick');
+if (nomRow.found) await page.mouse.click(nomRow.x, nomRow.y);
+await page.waitForTimeout(80);
+if (crumb.found) await page.mouse.click(crumb.x, crumb.y);
+await page.waitForTimeout(350);
+const backUp = await linkedState();
+check('remonter par le fil d’Ariane (vrai clic) revient sur VcAnnuaire, Telephone toujours coché, 2 attributs comptés, fil d’Ariane caché',
+  backUp.title.includes('VcAnnuaire') && backUp.crumbsHidden && JSON.stringify(backUp.checked) === JSON.stringify(['Telephone']) && backUp.insert.includes('2'), backUp);
+const insertDescent = await hitTest('#var-linked-modal .var-modal-primary');
+check('Insérer visible, au premier plan et actif après la descente', insertDescent.found && insertDescent.inViewport && insertDescent.onTop, insertDescent);
+if (insertDescent.found) await page.mouse.click(insertDescent.x, insertDescent.y);
+await page.waitForTimeout(250);
+const seqDescent = await page.evaluate(() => {
+  const out = [];
+  EditorCore.getEditor().state.doc.firstChild.forEach(n => out.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+  return out;
+});
+check('Insérer (vrai clic) ajoute #VcAnnuaire.Telephone puis le chemin #VcAnnuaire.Service.Nom, sans lien pour VcServices',
+  JSON.stringify(seqDescent) === JSON.stringify(['Suivi par ', '#VcAnnuaire.NomPrenom', ' ', '#VcAnnuaire.Telephone', ' ', '#VcAnnuaire.Service.Nom', ' jusqu’au bout.'])
+  && await page.evaluate(() => !GristAPI.getLinkRule('VcServices')), seqDescent);
+const pathText = await page.evaluate(async () => {
+  const box = document.createElement('div');
+  box.innerHTML = await ReaderMode.preview(Editor.getHTML(), 'VcDossiers', GristAPI.getCurrentRecord());
+  return box.textContent;
+});
+check('la bulle en chemin se lit : Dupont Jean 06 11 22 33 44 Juridique', pathText.includes('Dupont Jean 06 11 22 33 44 Juridique'), pathText);
+// Variable elle-même Référence : la fenêtre s'ouvre d'emblée sur la ligne qu'elle désigne ; Échap (vrai clavier) la ferme sans rien insérer.
+await openLinkedFor('Service');
+const onReference = await linkedState();
+check('Autres attributs sur #VcAnnuaire.Service (une Référence) : ouverte sur les colonnes de VcServices, fil d’Ariane VcAnnuaire › Service',
+  onReference.open && onReference.title.includes('VcServices') && JSON.stringify(onReference.cols) === JSON.stringify(['Nom', 'Responsable'])
+  && JSON.stringify(onReference.crumbs) === JSON.stringify(['VcAnnuaire', 'Service']) && onReference.inViewport, onReference);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+const afterEscapeOnReference = await page.evaluate(() => ({
+  open: document.getElementById('var-linked-modal').style.display !== 'none',
+  badges: (() => { let n = 0; EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') n += 1; }); return n; })(),
+}));
+check('Échap (vrai clavier) ferme la fenêtre sans rien insérer', !afterEscapeOnReference.open && afterEscapeOnReference.badges === 4, afterEscapeOnReference);
 // 4) Boucle (maquette validée le 2026-09-28) : 3e icône de la barre, sur une variable d'une cellule de tableau, en aperçu A4 (réglage par défaut du
 // widget) - l'icône est atteignable, la barre ne fait pas déborder la page, la fenêtre tient dans le panneau et « Enregistrer » se clique ; l'onglet de
 // la ligne répétée reste dans la partie visible de l'éditeur ; dans cette ligne, la Boucle d'une autre variable est grisée.

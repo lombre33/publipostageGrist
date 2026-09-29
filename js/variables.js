@@ -361,9 +361,78 @@ const Variables = (function () {
     if (!rows.length) return { value: null };
     return { value: rows.map(r => cellValue(varTable, varColumn, r)), multi: true };
   }
+  // === Descendre de référence en référence ===
+  // Une colonne « Accompagnateur.Email » (GristAPI.resolveColumnPath) part de la ligne de la table de la bulle, suit la colonne Référence Accompagnateur
+  // jusqu'à la ligne de l'annuaire qu'elle désigne, et lit Email sur CETTE ligne - comme $Projet.Accompagnateur.Email dans une formule Grist. Aucune règle
+  // de liaison n'est ajoutée pour les tables traversées : le chemin lui-même dit quelle ligne, et deux références vers la même table (Accompagnateur et
+  // Porteur vers l'annuaire) donnent chacune la leur.
+  function isColumnPath(column) { return typeof column === 'string' && column.indexOf('.') !== -1; }
+  // Lignes brutes (fetchTable) de `varTable` d'où part la variable pour la ligne courante, cherchées comme resolveRawValue le fait pour une colonne simple :
+  // ligne du tour d'une zone répétée, ligne courante elle-même (relue par son identifiant : grist.onRecord ne livre que la valeur AFFICHÉE d'une colonne
+  // Référence, jamais l'id qu'il faut suivre), lignes que trouve la règle de liaison de la table, à défaut la colonne Référence de la page qui y mène.
+  // `multi` : plusieurs lignes possibles (règle « match »), à lire une par une.
+  async function baseRows(varTable, resolvedTableId, record, opts) {
+    const loopRow = opts && opts.loop && opts.loop.rows && opts.loop.rows[varTable];
+    if (loopRow) return { rows: [loopRow] };
+    if (!resolvedTableId) return { error: '[ERREUR: table courante indisponible]' };
+    if (varTable === resolvedTableId) {
+      if (GristAPI.isRawRow(record)) return { rows: [record] };
+      const row = record.id != null ? await GristAPI.fetchRowById(varTable, record.id) : null;
+      return { rows: row ? [row] : [] };
+    }
+    const rule = GristAPI.getLinkRule(varTable);
+    if (rule) return { rows: await resolveLinkedRows(varTable, rule, record, resolvedTableId, opts), multi: rule.mode !== 'singleton' };
+    const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
+    if (refCols.length === 0) return { error: `[ERREUR: aucune correspondance configurée pour ${varTable} — réinsérez la variable pour la configurer]` };
+    const refId = record[refCols[0]];
+    if (!refId) return { rows: [] };
+    const linkedRow = await GristAPI.fetchRowById(varTable, unwrapRefValue(refId));
+    if (!linkedRow) return { error: `[ERREUR: ligne introuvable dans ${varTable}]` };
+    return { rows: [linkedRow] };
+  }
+  // Un pas de plus : la ligne que désigne la colonne Référence `column` sur chacune des lignes `rows` (null quand la cellule est vide ou que la ligne
+  // référencée n'existe plus). Retourne { table, rows } - la table atteinte et une ligne (ou null) par ligne de départ.
+  async function followReference(table, column, rows, opts) {
+    const type = GristAPI.getColumnType(table, column) || '';
+    if (type.indexOf('Ref:') !== 0) return { error: `[ERREUR: ${table}.${column} n'est pas une colonne Référence]` };
+    const target = type.slice(4);
+    if (!rows.some(Boolean)) return { table: target, rows: rows.map(() => null) };
+    const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
+    const byId = new Map((await fetchRows(target)).map(r => [r.id, r]));
+    return { table: target, rows: rows.map(r => (r && byId.get(unwrapRefValue(r[column]))) || null) };
+  }
+  // Lignes de la table où mène le chemin `hops` (suite de colonnes Référence) à partir de la ligne courante de `varTable` : { table, rows, multi } (une ligne,
+  // ou null si le chemin s'arrête sur une référence vide, par ligne de départ) ou { error }. Sans `hops`, les lignes de départ elles-mêmes. Partagé avec la
+  // fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui montre les valeurs de chaque niveau du chemin.
+  async function resolveRows(varTable, hops, currentTableId, record, opts) {
+    if (!record) return { table: varTable, rows: [], multi: false };
+    const base = await baseRows(varTable, currentTableId || GristAPI.getCurrentTableId(), record, opts);
+    if (base.error) return { error: base.error };
+    let table = varTable;
+    let rows = base.rows;
+    for (let i = 0; i < hops.length; i++) {
+      const step = await followReference(table, hops[i], rows, opts);
+      if (step.error) return { error: step.error };
+      table = step.table;
+      rows = step.rows;
+    }
+    return { table, rows, multi: !!base.multi };
+  }
+  // resolveRawValue pour une colonne en chemin : même forme de retour qu'avec une colonne simple ({ value }, ou { value: [...], multi: true } quand la
+  // règle de la table trouve plusieurs lignes, ou { error }).
+  async function resolvePathValue(varTable, varColumn, currentTableId, record, opts) {
+    const hops = varColumn.split('.');
+    const column = hops.pop();
+    const found = await resolveRows(varTable, hops, currentTableId, record, opts);
+    if (found.error) return { error: found.error };
+    const values = found.rows.map(row => (row ? cellValue(found.table, column, row) : null));
+    if (!found.multi) return { value: values.length ? values[0] : null };
+    return values.length ? { value: values, multi: true } : { value: null };
+  }
   async function resolveRawValue(varTable, varColumn, currentTableId, record, opts) {
     const resolvedTableId = currentTableId || GristAPI.getCurrentTableId();
     if (!record) return { value: null };
+    if (isColumnPath(varColumn)) return resolvePathValue(varTable, varColumn, currentTableId, record, opts);
     // Élément copié par une zone répétée (js/loop-rules.js:itemBinding) : une variable de la table de la boucle lit la ligne du tour (brute, lue par
     // fetchTable), et la colonne Liste de références qui mène à ces lignes ne vaut que la valeur affichée de l'élément du tour.
     const loop = opts && opts.loop;
@@ -730,6 +799,6 @@ const Variables = (function () {
   // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable.
   return {
     createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, formatValue, cellValue,
+    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, cellValue,
   };
 })();

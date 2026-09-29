@@ -68,6 +68,7 @@ const GROUPS = {
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
   varLoop: 'scenarios-var-loop',
+  varPath: 'scenarios-var-path',
   linkConfig: 'scenarios-link-config',
   pdfBatch: 'scenarios-pdf-batch',
   accessRights: 'scenarios-access-rights',

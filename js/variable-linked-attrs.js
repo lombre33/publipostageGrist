@@ -5,10 +5,18 @@
 //  - une variable d'une autre table (liée à son insertion ; sinon la fenêtre de choix de la clé s'ouvre d'abord, comme à l'insertion) ;
 //  - une colonne Référence de la table de la page (ex. #Dossiers.Responsable) : la table référencée est liée par cette colonne si elle ne l'est pas encore.
 // Grisée dans la barre flottante ailleurs (js/floating-toolbars.js:linkedAttrsAvailable, même règle que targetFor ci-dessous).
+//
+// Descente de référence en référence (retour d'Antoine du 2026-09-29 : atteindre l'email de l'accompagnateur d'un projet, sans lier l'annuaire à toute la
+// table de la page, car Projet a aussi un porteur vers le même annuaire) : une colonne Référence de la liste a une flèche qui ouvre les colonnes de la
+// table qu'elle désigne, et sur une variable elle-même Référence la fenêtre s'ouvre d'emblée sur la ligne qu'elle désigne (l'élément le plus bas).
+// La bulle insérée porte alors un chemin, #Projet.Accompagnateur.Email (GristAPI.resolveColumnPath) : sa table reste celle de la règle de liaison, le reste
+// suit les références de cette ligne, sans nouvelle règle. Les cases cochées se gardent d'un niveau à l'autre ; un fil d'Ariane remonte.
 const VariableLinkedAttrs = (function () {
   let modalEl = null;
   let refs = null;
-  // { editor, pos, node, target, refColumn } pendant que la fenêtre est ouverte ; `opening` couvre l'éventuelle fenêtre de choix de la clé qui la précède.
+  // { editor, pos, node, base, refColumn, minHops, hops, picks } pendant que la fenêtre est ouverte. `base` : table dont partent les chemins ; `hops` : colonnes
+  // Référence suivies depuis elle jusqu'au niveau affiché (vide : les colonnes de `base` elle-même) ; `picks` : cases cochées, { hops, col }, dans l'ordre du
+  // choix. `opening` couvre l'éventuelle fenêtre de choix de la clé qui la précède.
   let state = null;
   let opening = false;
   let valuesGeneration = 0;
@@ -20,17 +28,31 @@ const VariableLinkedAttrs = (function () {
     return e;
   }
   function isOpen() { return opening || !!state; }
+  function sameHops(a, b) { return a.length === b.length && a.every((hop, i) => hop === b[i]); }
 
-  // Table dont on propose les colonnes : celle de la variable si c'est une autre table que celle de la page, sinon la table visée par une colonne
-  // Référence de la page. Null sinon (colonne ordinaire de la page, RefList - plusieurs lignes, future boucle - ou référence vers la page elle-même, dont
-  // les colonnes se résoudraient sur la ligne courante et pas sur la ligne référencée).
+  // D'où la fenêtre part, ou null si elle n'a pas de sens ici : { base, hops, refColumn, minHops }.
+  //  - variable d'une autre table que celle de la page : sa table, liée par sa règle ; sur une colonne Référence (éventuellement au bout d'un chemin), le
+  //    niveau de la ligne qu'elle désigne - « l'élément le plus bas » -, d'où l'on peut remonter à celui de la table de la variable ;
+  //  - colonne Référence de la page (ex. #Dossiers.Responsable) : la table référencée, liée par cette colonne (`refColumn`) ;
+  //  - bulle de la table de la page déjà en chemin (ex. #Projet.Accompagnateur.Email dans un widget sur Projet) : ses niveaux, sans remonter aux colonnes
+  //    ordinaires de la page (`minHops` 1), qui ne sont pas des attributs d'une autre ligne.
+  // Null pour une colonne ordinaire de la page, une liste de références (plusieurs lignes) ou une référence vers la page elle-même.
   function targetFor(attrs) {
+    if (!attrs.table || !attrs.column) return null;
     const currentTableId = GristAPI.getCurrentTableId();
-    if (attrs.table && attrs.table !== currentTableId) return { target: attrs.table, refColumn: null };
-    const type = GristAPI.getColumnType(attrs.table, attrs.column) || '';
-    if (type.indexOf('Ref:') !== 0) return null;
-    const target = type.slice(4);
-    return target && target !== currentTableId ? { target, refColumn: attrs.column } : null;
+    const parts = String(attrs.column).split('.');
+    const end = GristAPI.resolveColumnPath(attrs.table, attrs.column);
+    const endIsRef = !!end && end.type.indexOf('Ref:') === 0;
+    let found = null;
+    if (attrs.table !== currentTableId) {
+      found = { base: attrs.table, hops: endIsRef ? parts : parts.slice(0, -1), refColumn: null, minHops: 0 };
+    } else if (parts.length > 1) {
+      found = { base: attrs.table, hops: endIsRef ? parts : parts.slice(0, -1), refColumn: null, minHops: 1 };
+    } else if (endIsRef) {
+      const target = end.type.slice(4);
+      if (target && target !== currentTableId) found = { base: target, hops: [], refColumn: attrs.column, minHops: 0 };
+    }
+    return found && GristAPI.tableAtEndOf(found.base, found.hops) ? found : null;
   }
   function isAvailable(attrs) { return !!targetFor(attrs); }
 
@@ -60,6 +82,8 @@ const VariableLinkedAttrs = (function () {
     const title = el('h3');
     title.id = 'var-linked-title';
     const subtitle = el('p', 'var-modal-intro');
+    const path = el('nav', 'var-linked-path');
+    path.hidden = true;
     const filter = el('input', 'var-linked-filter');
     filter.type = 'search';
     const list = el('div', 'var-linked-list');
@@ -72,13 +96,19 @@ const VariableLinkedAttrs = (function () {
     const insertBtn = el('button', 'var-modal-primary');
     insertBtn.type = 'button';
     actions.append(spacer, cancelBtn, insertBtn);
-    box.append(title, subtitle, filter, list, note, actions);
+    box.append(title, subtitle, path, filter, list, note, actions);
     modalEl.appendChild(box);
     document.body.appendChild(modalEl);
-    refs = { title, subtitle, filter, list, note, cancelBtn, insertBtn };
+    refs = { title, subtitle, path, filter, list, note, cancelBtn, insertBtn };
 
     filter.addEventListener('input', applyFilter);
-    list.addEventListener('change', syncInsertButton);
+    list.addEventListener('change', onPickChange);
+    list.addEventListener('click', event => {
+      const button = event.target.closest && event.target.closest('.var-linked-descend');
+      if (!button) return;
+      event.preventDefault();
+      goTo(state.hops.concat(button.closest('.var-linked-row').dataset.col));
+    });
     cancelBtn.addEventListener('click', close);
     insertBtn.addEventListener('click', insert);
     modalEl.addEventListener('keydown', event => {
@@ -86,11 +116,18 @@ const VariableLinkedAttrs = (function () {
     });
   }
 
-  function checkedColumns() {
-    return Array.from(refs.list.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')).map(i => i.value);
+  // Cases cochées : gardées dans `state.picks` (et non lues dans la liste) pour survivre à un changement de niveau.
+  function pickIndex(hops, col) { return state.picks.findIndex(p => p.col === col && sameHops(p.hops, hops)); }
+  function onPickChange(event) {
+    const box = event.target;
+    if (!state || !box || box.type !== 'checkbox') return;
+    const index = pickIndex(state.hops, box.value);
+    if (box.checked && index === -1) state.picks.push({ hops: state.hops.slice(), col: box.value });
+    else if (!box.checked && index !== -1) state.picks.splice(index, 1);
+    syncInsertButton();
   }
   function syncInsertButton() {
-    const count = checkedColumns().length;
+    const count = state ? state.picks.length : 0;
     refs.insertBtn.textContent = I18n.t('varLinked.insert', { count });
     refs.insertBtn.disabled = count === 0;
   }
@@ -106,33 +143,57 @@ const VariableLinkedAttrs = (function () {
     if (emptyEl) emptyEl.hidden = visible !== 0;
   }
 
+  // Table du niveau affiché, et la variable sous la forme « #Projet.Accompagnateur » qui y mène (les niveaux de la fenêtre se nomment comme les bulles).
+  function levelTable() { return GristAPI.tableAtEndOf(state.base, state.hops) || state.base; }
+  function pathText() { return Variables.triggerChar() + [state.base].concat(state.hops).join('.'); }
+  // Table désignée par la colonne Référence `col` de `table` (celle qu'ouvre la flèche de sa ligne), null si ce n'est pas une Référence simple.
+  function referencedTable(table, col) {
+    const type = GristAPI.getColumnType(table, col) || '';
+    const target = type.indexOf('Ref:') === 0 ? type.slice(4) : '';
+    return target && GristAPI.getTables().indexOf(target) !== -1 ? target : null;
+  }
+
   // Colonnes proposées : toutes celles de la table, sauf les colonnes techniques d'affichage des références (gristHelper_*).
-  function listedColumns(target) {
-    return GristAPI.getColumns(target).filter(c => c.indexOf('gristHelper_') !== 0);
+  function listedColumns(table) {
+    return GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0);
   }
   function renderList() {
     const { list } = refs;
-    const { target, node } = state;
+    const { node, base, hops } = state;
+    const table = levelTable();
     list.replaceChildren();
-    const cols = listedColumns(target);
-    const currentCol = node.attrs.table === target ? node.attrs.column : null;
+    const cols = listedColumns(table);
+    const own = String(node.attrs.column).split('.');
+    const currentCol = node.attrs.table === base && sameHops(own.slice(0, -1), hops) ? own[own.length - 1] : null;
     if (!cols.filter(c => c !== currentCol).length) {
-      list.appendChild(el('div', 'var-linked-empty', I18n.t('varLinked.empty', { table: target })));
+      list.appendChild(el('div', 'var-linked-empty', I18n.t('varLinked.empty', { table })));
     }
     cols.forEach(col => {
-      const row = el('label', 'var-linked-row');
+      const row = el('div', 'var-linked-row');
       const isCurrent = col === currentCol;
       row.classList.toggle('is-current', isCurrent);
       row.dataset.col = col;
       row.dataset.search = col.toLowerCase();
+      const pick = el('label', 'var-linked-pick');
       const box = el('input');
       box.type = 'checkbox';
       box.value = col;
       box.disabled = isCurrent;
+      box.checked = !isCurrent && pickIndex(hops, col) !== -1;
       const name = el('span', 'var-linked-col', col);
       if (isCurrent) { name.appendChild(document.createTextNode(' ')); name.appendChild(el('small', null, I18n.t('varLinked.thisVariable'))); }
       const value = el('span', 'var-linked-value');
-      row.append(box, name, value);
+      pick.append(box, name, value);
+      row.appendChild(pick);
+      const target = referencedTable(table, col);
+      if (target) {
+        const label = I18n.t('varLinked.descend', { table: target, column: col });
+        const descend = el('button', 'var-linked-descend', '›');
+        descend.type = 'button';
+        descend.title = label;
+        descend.setAttribute('aria-label', label);
+        row.appendChild(descend);
+      }
       list.appendChild(row);
     });
     const noMatch = el('div', 'var-linked-empty', I18n.t('varLinked.noFilterMatch'));
@@ -142,31 +203,69 @@ const VariableLinkedAttrs = (function () {
     syncInsertButton();
   }
 
-  function displayValue(rows, col) {
-    if (GristAPI.getColumnType(state.target, col) === 'Attachments') return I18n.t('varLinked.attachmentValue');
-    // Même lecture que la bulle insérée (Variables.cellValue) : la valeur affichée d'une Référence, jamais son id.
-    const values = rows.map(r => Variables.cellValue(state.target, col, r));
-    return Variables.formatValue(values.length === 1 ? values[0] : values, null, state.target, col);
+  // Fil d'Ariane « Projet › Accompagnateur » : caché au niveau de la table de départ ; les niveaux au-dessus de celui affiché reviennent au clic (sauf
+  // ceux qu'interdit `minHops`, montrés en texte simple).
+  function renderPath() {
+    const { path } = refs;
+    const { base, hops, minHops } = state;
+    path.replaceChildren();
+    path.hidden = hops.length === 0;
+    if (path.hidden) return;
+    path.setAttribute('aria-label', I18n.t('varLinked.path'));
+    const crumbs = [{ hops: [], label: base }].concat(hops.map((hop, i) => ({ hops: hops.slice(0, i + 1), label: hop })));
+    crumbs.forEach((crumb, i) => {
+      if (i) {
+        const sep = el('span', 'var-linked-sep', '›');
+        sep.setAttribute('aria-hidden', 'true');
+        path.appendChild(sep);
+      }
+      const isHere = i === crumbs.length - 1;
+      if (isHere || crumb.hops.length < minHops) {
+        const text = el('span', 'var-linked-crumb' + (isHere ? ' is-here' : ''), crumb.label);
+        if (isHere) text.setAttribute('aria-current', 'location');
+        path.appendChild(text);
+        return;
+      }
+      const label = I18n.t('varLinked.upTo', { table: GristAPI.tableAtEndOf(base, crumb.hops) || base });
+      const up = el('button', 'var-linked-crumb', crumb.label);
+      up.type = 'button';
+      up.title = label;
+      up.setAttribute('aria-label', label);
+      up.addEventListener('click', () => goTo(crumb.hops));
+      path.appendChild(up);
+    });
   }
-  // Valeurs de la ligne liée à la ligne sélectionnée dans Grist - même recherche que la résolution des bulles (Variables.resolveLinkedRows), donc ce que
-  // les attributs afficheront en lecture.
+
+  function displayValue(table, rows, col) {
+    if (GristAPI.getColumnType(table, col) === 'Attachments') return I18n.t('varLinked.attachmentValue');
+    // Même lecture que la bulle insérée (Variables.cellValue) : la valeur affichée d'une Référence, jamais son id.
+    const values = rows.map(r => Variables.cellValue(table, col, r));
+    return Variables.formatValue(values.length === 1 ? values[0] : values, null, table, col);
+  }
+  // Valeurs de la ligne du niveau affiché pour la ligne sélectionnée dans Grist - même recherche que la résolution des bulles (Variables.resolveRows :
+  // règle de liaison puis références du chemin), donc ce que les attributs afficheront en lecture.
   async function loadValues() {
     const gen = ++valuesGeneration;
     const { note, list } = refs;
-    const { target } = state;
+    const { base, hops } = state;
+    const table = levelTable();
     const currentTableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
-    const rule = GristAPI.getLinkRule(target);
     const insertHint = I18n.t('varLinked.noteInsert');
-    if (!record || !currentTableId || !rule) { note.textContent = I18n.t('varLinked.noteNoRecord') + ' ' + insertHint; return; }
+    if (!record || !currentTableId) { note.textContent = I18n.t('varLinked.noteNoRecord') + ' ' + insertHint; return; }
     note.textContent = I18n.t('varCond.debug.computing');
     let rows = [];
-    try { rows = await Variables.resolveLinkedRows(target, rule, record, currentTableId); }
-    catch (e) { console.warn('[VariableLinkedAttrs] valeurs indisponibles', e); }
+    try {
+      const found = await Variables.resolveRows(base, hops, currentTableId, record);
+      rows = (found.rows || []).filter(Boolean);
+    } catch (e) { console.warn('[VariableLinkedAttrs] valeurs indisponibles', e); }
     if (gen !== valuesGeneration || !state) return;
-    if (!rows.length) { note.textContent = I18n.t('varLinked.noteNoLinkedRow', { table: target, id: record.id }) + ' ' + insertHint; return; }
+    if (!rows.length) {
+      note.textContent = (hops.length ? I18n.t('varLinked.noteNoPathRow', { path: pathText(), id: record.id }) : I18n.t('varLinked.noteNoLinkedRow', { table, id: record.id })) + ' ' + insertHint;
+      return;
+    }
     list.querySelectorAll('.var-linked-row').forEach(row => {
-      const text = displayValue(rows, row.dataset.col);
+      const text = displayValue(table, rows, row.dataset.col);
       row.querySelector('.var-linked-value').textContent = text;
       row.title = text;
       row.dataset.search = (row.dataset.col + ' ' + text).toLowerCase();
@@ -175,24 +274,54 @@ const VariableLinkedAttrs = (function () {
     note.textContent = I18n.t('varLinked.noteRow', { id: record.id }) + ' ' + insertHint;
   }
 
-  function subtitleText(attrs, target, refColumn) {
+  function subtitleText() {
+    const { node, base, hops, refColumn } = state;
+    if (hops.length) return I18n.t('varLinked.subtitlePath', { table: levelTable(), path: pathText() });
     const currentTableId = GristAPI.getCurrentTableId();
-    const badge = Variables.triggerChar() + (attrs.key || '');
-    const rule = GristAPI.getLinkRule(target);
+    const badge = Variables.triggerChar() + (node.attrs.key || '');
+    const rule = GristAPI.getLinkRule(base);
     if (!rule || !currentTableId) return I18n.t('varLinked.subtitlePlain', { badge });
-    if (rule.mode === 'singleton') return I18n.t('varLinked.subtitleSingleton', { badge, table: target });
-    const via = Variables.describeLinkVia(target, rule, currentTableId);
+    if (rule.mode === 'singleton') return I18n.t('varLinked.subtitleSingleton', { badge, table: base });
+    const via = Variables.describeLinkVia(base, rule, currentTableId);
     // Colonne Référence déjà couverte par une AUTRE règle pour la même table (une seule par document) : les bulles insérées suivront cette règle-là, le
     // dire plutôt que d'annoncer « même ligne que » à tort.
-    if (refColumn && !(rule.colonneCible === 'id' && rule.colonneSource === refColumn)) return I18n.t('varLinked.subtitleOtherLink', { table: target, via, badge });
+    if (refColumn && !(rule.colonneCible === 'id' && rule.colonneSource === refColumn)) return I18n.t('varLinked.subtitleOtherLink', { table: base, via, badge });
     return I18n.t('varLinked.subtitleVia', { badge, via });
   }
 
-  function insert() {
+  // Affiche le niveau `state.hops` : titre, fil d'Ariane, colonnes puis valeurs. `hops` neuf = un autre niveau, filtre remis à zéro et focus dessus (la
+  // flèche cliquée disparaît avec l'ancienne liste).
+  function renderLevel() {
+    const { title, subtitle, filter } = refs;
+    title.textContent = I18n.t('varLinked.title', { table: levelTable() });
+    subtitle.textContent = subtitleText();
+    filter.value = '';
+    renderPath();
+    renderList();
+    loadValues();
+  }
+  function goTo(hops) {
     if (!state) return;
-    const cols = checkedColumns();
-    if (!cols.length) return;
-    const { editor, pos, node: original, target } = state;
+    state.hops = hops.slice();
+    renderLevel();
+    refs.filter.focus();
+  }
+
+  // Niveaux dans l'ordre où on les a cochés pour la première fois, colonnes d'un niveau dans l'ordre de leur table (jamais l'ordre des clics).
+  function orderedPicks() {
+    const levels = [];
+    state.picks.forEach(p => { if (!levels.some(hops => sameHops(hops, p.hops))) levels.push(p.hops); });
+    const out = [];
+    levels.forEach(hops => {
+      const order = listedColumns(GristAPI.tableAtEndOf(state.base, hops) || state.base);
+      state.picks.filter(p => sameHops(p.hops, hops)).sort((a, b) => order.indexOf(a.col) - order.indexOf(b.col)).forEach(p => out.push(p));
+    });
+    return out;
+  }
+
+  function insert() {
+    if (!state || !state.picks.length) return;
+    const { editor, pos, node: original, base } = state;
     const node = editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge' || node.attrs.table !== original.attrs.table || node.attrs.column !== original.attrs.column) {
       console.warn('[VariableLinkedAttrs] bulle introuvable à sa position d\'origine - rien inséré.');
@@ -200,11 +329,11 @@ const VariableLinkedAttrs = (function () {
       close();
       return;
     }
-    // Ordre des colonnes de la table (celui de la liste), jamais l'ordre des clics.
     const content = [];
-    cols.forEach(col => {
+    orderedPicks().forEach(p => {
+      const column = p.hops.concat(p.col).join('.');
       content.push({ type: 'text', text: ' ' });
-      content.push({ type: 'varBadge', attrs: { table: target, column: col, key: target + '.' + col } });
+      content.push({ type: 'varBadge', attrs: { table: base, column, key: base + '.' + column } });
     });
     const insertAt = pos + node.nodeSize;
     close({ keepFocus: true });
@@ -229,23 +358,19 @@ const VariableLinkedAttrs = (function () {
     opening = true;
     EditorCore.hideFloatingContextToolbars();
     let linked = false;
-    try { linked = await ensureLink(t.target, t.refColumn); }
-    catch (e) { console.error('[VariableLinkedAttrs] échec de la liaison de « ' + t.target + ' »', e); }
+    try { linked = t.base === GristAPI.getCurrentTableId() || await ensureLink(t.base, t.refColumn); }
+    catch (e) { console.error('[VariableLinkedAttrs] échec de la liaison de « ' + t.base + ' »', e); }
     finally { opening = false; }
     if (!linked) { editor.view.focus(); return; }
     ensureModal();
-    state = { editor, pos, node, target: t.target, refColumn: t.refColumn };
-    const { title, subtitle, filter, cancelBtn } = refs;
-    title.textContent = I18n.t('varLinked.title', { table: t.target });
-    subtitle.textContent = subtitleText(node.attrs, t.target, t.refColumn);
-    filter.value = '';
+    state = { editor, pos, node, base: t.base, refColumn: t.refColumn, minHops: t.minHops, hops: t.hops.slice(), picks: [] };
+    const { filter, cancelBtn } = refs;
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
     cancelBtn.textContent = I18n.t('common.cancel');
-    renderList();
+    renderLevel();
     modalEl.style.display = 'flex';
     filter.focus();
-    loadValues();
   }
 
   return { open, close, isOpen, isAvailable };

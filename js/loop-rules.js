@@ -54,6 +54,9 @@ const LoopRules = (function () {
   function sourceFor(attrs, currentTableId) {
     if (!attrs || !attrs.table || !currentTableId) return null;
     if (attrs.table === currentTableId) {
+      // Colonne en chemin (#Projet.Accompagnateur.Membres, GristAPI.resolveColumnPath) : la boucle lit sa liste dans la ligne courante sous le nom d'une seule
+      // colonne, pas d'un chemin - grisée.
+      if (String(attrs.column).indexOf('.') !== -1) return null;
       const type = GristAPI.getColumnType(attrs.table, attrs.column) || '';
       if (type.indexOf('RefList:') !== 0) return null;
       const target = type.slice('RefList:'.length);

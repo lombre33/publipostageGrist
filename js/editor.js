@@ -410,6 +410,9 @@ const Editor = (function () {
       let reason = '';
       if (table && GristAPI.getTables().indexOf(table) === -1) {
         reason = `La table « ${table} » n'existe plus dans ce document.`;
+      } else if (table && column && column.indexOf('.') !== -1) {
+        // Bulle qui descend de référence en référence (« Accompagnateur.Email ») : chaque maillon doit exister et, sauf le dernier, être une Référence.
+        if (!GristAPI.resolveColumnPath(table, column)) reason = I18n.t('varBadge.brokenPath', { column, table });
       } else if (table && column && GristAPI.getColumns(table).indexOf(column) === -1) {
         reason = `La colonne « ${column} » n'existe plus dans la table « ${table} ».`;
       }

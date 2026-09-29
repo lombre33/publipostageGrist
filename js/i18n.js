@@ -571,6 +571,12 @@ const I18n = (function () {
     'varLinked.empty': { fr: 'Aucune autre colonne dans « {table} ».', en: 'No other column in “{table}”.' },
     'varLinked.noFilterMatch': { fr: 'Aucune colonne ne correspond au filtre.', en: 'No column matches the filter.' },
     'varLinked.attachmentValue': { fr: '(pièce jointe)', en: '(attachment)' },
+    'varLinked.subtitlePath': { fr: 'Ligne de « {table} » désignée par {path}. Les attributs insérés suivent ce chemin : aucun lien supplémentaire n’est créé.', en: 'Row of “{table}” pointed to by {path}. Inserted attributes follow this path: no extra link is created.' },
+    'varLinked.noteNoPathRow': { fr: '{path} est vide pour la ligne sélectionnée (n° {id}) : aucune valeur à afficher.', en: '{path} is empty for the selected row (#{id}): no values to show.' },
+    'varLinked.descend': { fr: 'Voir les colonnes de « {table} » (via {column})', en: 'Show the columns of “{table}” (via {column})' },
+    'varLinked.path': { fr: 'Chemin des références', en: 'Reference path' },
+    'varLinked.upTo': { fr: 'Remonter à « {table} »', en: 'Go back up to “{table}”' },
+    'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
 
     // --- Fenêtre « Boucle » d'une variable (js/variable-loop.js ; moteur js/loop-rules.js) ---
     'varLoop.title': { fr: 'Boucle sur « {table} »', en: 'Loop over “{table}”' },

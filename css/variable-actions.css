@@ -57,13 +57,28 @@
 /* === Fenêtre « Autres attributs » === */
 .var-linked-filter { display: block; width: 100%; height: 28px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 8px; margin-bottom: 8px; background: var(--surface); color: var(--text); }
 .var-linked-list { display: flex; flex-direction: column; max-height: min(220px, 38vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
-.var-linked-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; border-top: 1px solid var(--border); color: var(--text); }
+/* Une ligne : la case (avec le nom et la valeur) qui coche la colonne, puis, pour une colonne Référence, la flèche qui ouvre les colonnes de la table qu'elle
+   désigne. La ligne grisée (la variable elle-même) grise la case seulement : sa flèche reste utilisable. */
+.var-linked-row { display: flex; align-items: stretch; font-size: 12.5px; border-top: 1px solid var(--border); color: var(--text); }
 .var-linked-row:first-child { border-top: none; }
 .var-linked-row:hover { background: var(--surface-sunken); }
 .var-linked-row[hidden] { display: none; }
-.var-linked-row.is-current { opacity: .55; cursor: default; }
+.var-linked-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; }
+.var-linked-row.is-current .var-linked-pick { opacity: .55; cursor: default; }
 .var-linked-row.is-current:hover { background: transparent; }
-.var-linked-row input { flex: none; margin: 0; }
+.var-linked-pick input { flex: none; margin: 0; }
+.var-linked-descend { flex: none; width: 30px; padding: 0; border: 0; border-left: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 17px; line-height: 1; cursor: pointer; }
+.var-linked-descend:hover { background: var(--surface-sunken); color: var(--accent); }
+.var-linked-descend:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Fil d'Ariane des niveaux (« Projet › Accompagnateur ») : les niveaux du dessus sont des boutons qui y reviennent, le niveau affiché est en gras. */
+.var-linked-path { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 2px; margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
+.var-linked-path[hidden] { display: none; }
+.var-linked-crumb { padding: 2px 6px; border: 0; border-radius: 5px; background: none; font: inherit; color: var(--text-muted); overflow-wrap: anywhere; }
+button.var-linked-crumb { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+button.var-linked-crumb:hover { background: var(--surface-sunken); color: var(--text); }
+button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.var-linked-crumb.is-here { font-weight: 700; color: var(--text); }
+.var-linked-sep { color: var(--text-faint); }
 .var-linked-col { flex: none; max-width: 62%; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .var-linked-col small { font-weight: 600; color: var(--text-faint); }
 .var-linked-value { flex: 1; min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }

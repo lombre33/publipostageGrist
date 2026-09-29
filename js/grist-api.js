@@ -319,8 +319,36 @@ const GristAPI = (function () {
     }
   }
 
+  // Type d'une colonne. Un chemin « Ref.Colonne » (bulle qui descend de référence en référence, cf. resolveColumnPath) a le type de sa dernière colonne :
+  // c'est lui qui décide du format date/nombre et des images d'une variable.
   function getColumnType(tableId, colId) {
+    if (typeof colId === 'string' && colId.indexOf('.') !== -1) {
+      const end = resolveColumnPath(tableId, colId);
+      return end ? end.type : null;
+    }
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
+  }
+  // Table où mène une suite de colonnes Référence simples à partir de `tableId` (la table elle-même si la suite est vide), null si un maillon manque ou n'est
+  // pas une Référence (une liste de références désigne plusieurs lignes : on ne descend pas dedans).
+  function tableAtEndOf(tableId, hops) {
+    let table = tableId;
+    for (let i = 0; i < hops.length; i++) {
+      const type = (_columnTypesByTable[table] && _columnTypesByTable[table][hops[i]]) || '';
+      if (type.indexOf('Ref:') !== 0 || !type.slice(4)) return null;
+      table = type.slice(4);
+    }
+    return table;
+  }
+  // Une bulle #Variable peut descendre de référence en référence, comme $Projet.Accompagnateur.Email dans une formule Grist : sa colonne est alors un chemin
+  // « Accompagnateur.Email » (colonnes Référence puis colonne finale) à partir de sa table. Les identifiants de colonne de Grist ne contiennent jamais de
+  // point, il sépare donc sans ambiguïté. Retourne { table, column, type } pour la colonne où le chemin aboutit, null si un maillon manque ou n'est pas une
+  // Référence. Une colonne ordinaire (sans point) est un chemin d'un seul maillon.
+  function resolveColumnPath(tableId, path) {
+    const hops = String(path == null ? '' : path).split('.');
+    const column = hops.pop();
+    const table = tableAtEndOf(tableId, hops);
+    const type = table && _columnTypesByTable[table] && _columnTypesByTable[table][column];
+    return type ? { table, column, type } : null;
   }
 
   // Colonne qui porte la valeur AFFICHÉE d'une Référence/liste de références (ex. "gristHelper_Display2", présente dans les lignes de fetchTable), null
@@ -602,5 +630,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow };
+  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, isRawRow, resolveColumnPath, tableAtEndOf };
 })();
