@@ -42,8 +42,8 @@
 .var-modal-actions .var-modal-spacer { flex: 1; }
 .var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .var-modal-actions button:hover { background: var(--surface-sunken); }
-.var-modal-actions button.var-modal-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.var-modal-actions button.var-modal-primary:hover { background: var(--accent-hover); }
+.var-modal-actions button.var-modal-primary { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
+.var-modal-actions button.var-modal-primary:hover { background: var(--accent-solid-hover); }
 .var-modal-actions button.var-modal-primary:disabled { opacity: .45; cursor: default; }
 .var-modal-actions button.var-modal-danger { border-color: transparent; background: transparent; color: var(--danger); padding: 0 4px; }
 .var-modal-actions button.var-modal-danger:hover { background: var(--danger-soft, #fbe9e9); }

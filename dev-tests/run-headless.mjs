@@ -66,6 +66,7 @@ const GROUPS = {
   templateTree: 'scenarios-template-tree',
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
+  contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
   varLoop: 'scenarios-var-loop',

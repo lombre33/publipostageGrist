@@ -13,9 +13,13 @@
   --border-strong: #c3cad6;
   --text: #1b2430;
   --text-muted: #667085;
-  --text-faint: #98a2b3;
+  --text-faint: #667085;
   --accent: #2f6fed;
   --accent-hover: #2558c4;
+  /* Fond des boutons pleins à texte blanc : le même bleu dans les deux thèmes (blanc dessus : 4,55:1). --accent, éclairci en sombre pour se lire sur
+     le fond, ne donnerait que 3,08:1 au texte blanc. Survol : plus foncé, donc plus contrasté, dans les deux thèmes. */
+  --accent-solid: #2f6fed;
+  --accent-solid-hover: #2558c4;
   --accent-soft: #e8f0fe;
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
@@ -45,7 +49,7 @@
   --border-strong: #465166;
   --text: #e7ecf5;
   --text-muted: #9aa6bb;
-  --text-faint: #7b869c;
+  --text-faint: #9aa6bb;
   --accent: #5b91f5;
   --accent-hover: #74a3f7;
   --accent-soft: #24324b;
@@ -68,7 +72,7 @@
     --border-strong: #465166;
     --text: #e7ecf5;
     --text-muted: #9aa6bb;
-    --text-faint: #7b869c;
+    --text-faint: #9aa6bb;
     --accent: #5b91f5;
     --accent-hover: #74a3f7;
     --accent-soft: #24324b;
@@ -80,6 +84,13 @@
     --pp-page-gutter: #10141b;
     --pp-scrim: rgba(3, 6, 12, .62);
   }
+}
+
+/* Texte d'aide des champs (« Valeur », « Rechercher un modèle… ») : le gris par défaut du navigateur tombe à 3,4:1 sur les fonds sombres ; en clair il reste
+   celui du navigateur. Même couleur que le texte secondaire, sans l'atténuation d'opacité que Firefox y ajoute. */
+:root[data-theme="dark"] :is(input, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is(input, textarea)::placeholder { color: var(--text-muted); opacity: 1; }
 }
 
 /* === Typographie et mise en page de base === */
@@ -133,12 +144,12 @@ body { display:flex; flex-direction:column; }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
 /* Préfixées par #toolbar-top pour dépasser sans ambiguïté la spécificité de la règle générique #toolbar-top button ci-dessus (même compte d'ID que la règle
    générique + type "button" s'annuleraient sinon en cas d'égalité). */
-#toolbar-top #btn-save { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
-#toolbar-top #btn-save:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+#toolbar-top #btn-save { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
+#toolbar-top #btn-save:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
-#toolbar-top #btn-export-pdf { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
-#toolbar-top #btn-export-pdf:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+#toolbar-top #btn-export-pdf { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
+#toolbar-top #btn-export-pdf:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 /* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté (même comportement JS : ils gardent leurs id et leur classe .active togglée
    par main.js, seul l'agencement CSS change). */
 .mode-toggle { display:inline-flex; }

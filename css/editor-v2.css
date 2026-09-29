@@ -132,7 +132,7 @@
 .tiptap .two-columns-mm-button {
   position: absolute; top: calc(50% - 26px); left: var(--layout-left, 50%); transform: translateX(-50%);
   display: flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border: none; border-radius: 4px;
-  background: var(--accent, #2f6fed); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--accent-solid, #2f6fed); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
   cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 5;
 }
 .tiptap .two-columns-zone-outer:hover .two-columns-mm-button { opacity: 1; }
@@ -415,8 +415,8 @@
    elle : OK/Supprimer restaient blancs/gris malgré la tentative de les colorer. */
 #v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
-#v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent); border-color: var(--accent); color: #fff; }
-#v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-hover); }
+#v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
+#v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-solid-hover); }
 
 /* Carte de commentaire (js/comments.js) - même chrome/jetons que #v2-footnote-popup, en plus large (fil de discussion + réponse) - inspirée de Google Docs
    (demande explicite) : bandeau d'état en tête, messages empilés, réponse + actions en pied. Ferme UNIQUEMENT via le × (même leçon que le popup de note :
@@ -437,8 +437,8 @@
 #v2-comment-popup .v2-comment-popup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 #v2-comment-popup .v2-comment-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 #v2-comment-popup .v2-comment-popup-actions button:hover { background: var(--surface-sunken); }
-#v2-comment-popup button.v2-comment-popup-post { background: var(--accent); border-color: var(--accent); color: #fff; margin-right: auto; }
-#v2-comment-popup button.v2-comment-popup-post:hover { background: var(--accent-hover); }
+#v2-comment-popup button.v2-comment-popup-post { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; margin-right: auto; }
+#v2-comment-popup button.v2-comment-popup-post:hover { background: var(--accent-solid-hover); }
 #v2-comment-popup button.v2-comment-popup-delete { color: var(--danger); border-color: var(--danger-soft); }
 #v2-comment-popup button.v2-comment-popup-delete:hover { background: var(--danger-soft); }
 
