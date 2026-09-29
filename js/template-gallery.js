@@ -5,10 +5,17 @@ const TemplateGallery = (function () {
   // page courante, chaque chemin doit être préfixé de ce dossier.
   const BASE = 'templates-gallery/';
   // Catalogue SÉPARÉ pour les modèles de test/démo (« Test — … », « Vitrine des fonctionnalités »), qui n'ont rien à faire devant un utilisateur final mais
-  // servent au protocole de test manuel (cf. dev-tests/PROTOCOLE_TEST_MANUEL.md). Dossier à part précisément pour qu'un déploiement live puisse ne PAS le
-  // publier : son absence est un cas normal, pas une erreur (cf. loadManifest ci-dessous, qui l'ignore alors en silence).
+  // servent au protocole de test manuel (cf. dev-tests/PROTOCOLE_TEST_MANUEL.md). Dossier à part, et jamais chargé sans `?dev` dans l'adresse du widget
+  // (`https://…/publipostageGrist/?dev`) : le dossier reste publié sur Pages, mais la galerie ne le lit pas pour un utilisateur ordinaire. Un déploiement
+  // qui ne le publie pas du tout reste un cas normal, pas une erreur (cf. loadOneManifest ci-dessous, qui l'ignore alors en silence).
   const DEV_BASE = 'templates-gallery-dev/';
   let manifestCache = null;
+  let manifestCacheWithDev = false;
+
+  function devCatalogueWanted() {
+    try { return new URLSearchParams(window.location.search).has('dev'); }
+    catch (e) { return false; }
+  }
 
   // Chaque entrée porte son propre dossier de base depuis loadManifest() : les chemins d'un manifeste sont relatifs à SON dossier, et il y en a
   // maintenant deux. Repli sur BASE pour une entrée construite à la main (tests) qui n'aurait pas de __base.
@@ -34,9 +41,11 @@ const TemplateGallery = (function () {
   }
 
   async function loadManifest() {
-    if (manifestCache) return manifestCache;
-    const [prod, dev] = await Promise.all([loadOneManifest(BASE, false), loadOneManifest(DEV_BASE, true)]);
+    const withDev = devCatalogueWanted();
+    if (manifestCache && manifestCacheWithDev === withDev) return manifestCache;
+    const [prod, dev] = await Promise.all([loadOneManifest(BASE, false), withDev ? loadOneManifest(DEV_BASE, true) : []]);
     manifestCache = prod.concat(dev);
+    manifestCacheWithDev = withDev;
     return manifestCache;
   }
 

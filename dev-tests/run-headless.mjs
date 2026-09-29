@@ -65,6 +65,7 @@ const GROUPS = {
   macroModeles: 'scenarios-macro-modeles',
   templateTree: 'scenarios-template-tree',
   templateOrganize: 'scenarios-template-organize',
+  templateGallery: 'scenarios-template-gallery',
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
   varLoop: 'scenarios-var-loop',

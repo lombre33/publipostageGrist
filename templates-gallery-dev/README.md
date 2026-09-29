@@ -1,7 +1,9 @@
 # Modèles de test et de démonstration
 
 Catalogue **séparé** de `templates-gallery/`, chargé en plus de celui-ci par
-`js/template-gallery.js` quand ce dossier est présent.
+`js/template-gallery.js` **seulement quand l'adresse du widget contient `?dev`**
+(`https://lombre33.github.io/publipostageGrist/?dev`). Sans `?dev`, la galerie
+ne lit pas ce dossier, même publié : aucun utilisateur ne voit ces modèles.
 
 Il contient les modèles qui servent au développement et au protocole de test
 manuel (cf. `dev-tests/PROTOCOLE_TEST_MANUEL.md`), pas à un utilisateur final :
@@ -12,11 +14,8 @@ manuel (cf. `dev-tests/PROTOCOLE_TEST_MANUEL.md`), pas à un utilisateur final :
 
 ## Pourquoi un dossier à part
 
-Pour qu'un déploiement live puisse simplement **ne pas publier ce dossier** :
-les trois modèles disparaissent alors de la galerie sans aucune modification de
-code. `js/template-gallery.js` traite l'absence de
-`templates-gallery-dev/manifest.json` comme un cas normal (message `console.info`,
+Le dossier reste publié, mais seul `?dev` le fait lire. Un déploiement qui
+**ne publie pas ce dossier** reste aussi un cas normal :
+`js/template-gallery.js` traite l'absence de
+`templates-gallery-dev/manifest.json` comme telle (message `console.info`,
 pas d'erreur) et la galerie n'affiche que les modèles de `templates-gallery/`.
-
-Concrètement, sur le dépôt de la version live, il suffit d'exclure
-`templates-gallery-dev/` de ce qui est poussé.

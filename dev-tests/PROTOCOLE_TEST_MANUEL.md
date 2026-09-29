@@ -306,8 +306,9 @@ survols/menus déroulants/comportement de fermeture).
 ## 9. Modèles de test dédiés
 
 Trois modèles vivant dans `templates-gallery-dev/` — catalogue **séparé** de `templates-gallery/`,
-chargé en plus de celui-ci quand le dossier est présent, précisément pour qu'un déploiement live
-puisse ne pas le publier (cf. `templates-gallery-dev/README.md`). Ils servent à dérouler rapidement
+chargé en plus de celui-ci **seulement quand l'adresse du widget contient `?dev`**
+(`https://lombre33.github.io/publipostageGrist/?dev` : à saisir dans l'URL du widget Grist pour dérouler ce
+protocole ; sans `?dev` la galerie n'affiche que les vrais modèles, cf. `templates-gallery-dev/README.md`). Ils servent à dérouler rapidement
 une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois :
 
 - **`test-mise-en-page`** ("Modèle de test — Texte & mise en page") : 3 paragraphes multi-lignes

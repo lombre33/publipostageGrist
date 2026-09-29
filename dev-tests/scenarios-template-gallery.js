@@ -1,0 +1,125 @@
+// Suite "templateGallery" - galerie « Créer à partir d'un template » (js/template-gallery.js, câblée par js/main.js:wireTemplateGalleryModal).
+//
+// Les trois modèles de templates-gallery-dev/ (« Test — … », « Vitrine des fonctionnalités ») ne servent qu'au protocole de test manuel : le dossier reste
+// publié sur Pages, mais la galerie ne le lit que si l'adresse du widget contient `?dev`. Un utilisateur ordinaire ne les voit donc jamais, ni dans la
+// liste renvoyée par loadManifest, ni dans la grille de la fenêtre, et son navigateur ne demande même pas le manifeste de dev.
+//
+// L'adresse se change ici par history.replaceState (sans rechargement) ; chaque scénario la remet comme il l'a trouvée.
+(function () {
+  const cases = [];
+  const DEV_IDS = ['test-mise-en-page', 'test-images-tableaux', 'vitrine-fonctionnalites'];
+  const DEV_NAMES = ['Test — Texte & mise en page', 'Test — Images, tableaux & 2 colonnes', 'Vitrine des fonctionnalités'];
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  async function waitFor(fn, timeoutMs) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < (timeoutMs || 3000)) { if (fn()) return true; await sleep(40); }
+    return !!fn();
+  }
+
+  // Pose la partie « ? » de l'adresse et rend la fonction qui remet l'ancienne.
+  function setSearch(search) {
+    const before = window.location.search;
+    history.replaceState(null, '', window.location.pathname + search + window.location.hash);
+    return () => history.replaceState(null, '', window.location.pathname + before + window.location.hash);
+  }
+
+  // Enregistre les adresses demandées à fetch le temps d'un scénario.
+  function recordFetches() {
+    const original = window.fetch;
+    const urls = [];
+    window.fetch = function (input) {
+      urls.push(typeof input === 'string' ? input : (input && input.url) || String(input));
+      return original.apply(this, arguments);
+    };
+    return { urls, stop: () => { window.fetch = original; } };
+  }
+
+  const ids = entries => entries.map(e => e.id);
+  const asksForDev = urls => urls.some(u => u.indexOf('templates-gallery-dev/') !== -1);
+
+  cases.push({
+    id: 'gallery_dev_templates_are_not_loaded_without_dev_in_the_address',
+    description: 'Sans ?dev : loadManifest ne renvoie que les modèles de templates-gallery/ et n’interroge jamais templates-gallery-dev/',
+    run: async () => {
+      const restore = setSearch('');
+      const rec = recordFetches();
+      try {
+        const entries = await TemplateGallery.loadManifest();
+        const got = ids(entries);
+        const leaked = got.filter(id => DEV_IDS.indexOf(id) !== -1);
+        const fromDevFolder = entries.filter(e => e.__base === 'templates-gallery-dev/').length;
+        const pass = got.length >= 4 && leaked.length === 0 && fromDevFolder === 0 && !asksForDev(rec.urls);
+        return { pass, notes: JSON.stringify({ got, leaked, fromDevFolder, asked: rec.urls }) };
+      } finally { rec.stop(); restore(); }
+    },
+  });
+
+  cases.push({
+    id: 'gallery_dev_templates_load_with_dev_in_the_address_and_follow_it_when_it_changes',
+    description: '?dev (seul, avec une valeur ou au milieu d’autres paramètres) ajoute les trois modèles de test ; sans lui, ils repartent ; ?devices ne compte pas',
+    run: async () => {
+      const results = {};
+      const restoreAll = setSearch('');
+      try {
+        for (const [label, search] of [['dev', '?dev'], ['devValeur', '?dev=1'], ['milieu', '?a=1&dev&b=2']]) {
+          const restore = setSearch(search);
+          const got = ids(await TemplateGallery.loadManifest());
+          restore();
+          results[label] = { withAll: DEV_IDS.every(id => got.indexOf(id) !== -1), count: got.length };
+        }
+        // Le cache ne fige pas le réglage : après un chargement avec ?dev, l'adresse sans ?dev redonne la liste sans les modèles de test.
+        results.retour = ids(await TemplateGallery.loadManifest()).filter(id => DEV_IDS.indexOf(id) !== -1).length;
+        const restoreOther = setSearch('?devices=1');
+        results.autreNom = ids(await TemplateGallery.loadManifest()).filter(id => DEV_IDS.indexOf(id) !== -1).length;
+        restoreOther();
+        // Les modèles de test gardent leur dossier de base : ce sont leurs vignettes et leur HTML qui en dépendent.
+        const restoreDev = setSearch('?dev');
+        const entries = await TemplateGallery.loadManifest();
+        restoreDev();
+        const vitrine = entries.find(e => e.id === 'vitrine-fonctionnalites');
+        results.base = vitrine ? TemplateGallery.resolveUrl(vitrine.html, vitrine) : null;
+        const pass = results.dev.withAll && results.devValeur.withAll && results.milieu.withAll
+          && results.dev.count === results.devValeur.count && results.dev.count === results.milieu.count
+          && results.retour === 0 && results.autreNom === 0
+          && results.base === 'templates-gallery-dev/vitrine-fonctionnalites/template.html';
+        return { pass, notes: JSON.stringify(results) };
+      } finally { restoreAll(); }
+    },
+  });
+
+  cases.push({
+    id: 'gallery_window_lists_only_real_templates_without_dev_and_still_opens_a_card',
+    description: 'La fenêtre « Créer à partir d’un template », ouverte sans ?dev, ne montre aucune carte de test ; les vrais modèles y sont et s’ouvrent',
+    run: async () => {
+      const restore = setSearch('');
+      const open = document.getElementById('v2-btn-new-from-template');
+      const modal = document.getElementById('template-gallery-modal');
+      try {
+        open.click();
+        const shown = await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
+        const names = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card-name')).map(n => n.textContent.trim());
+        const leaked = names.filter(n => DEV_NAMES.indexOf(n) !== -1);
+        const tags = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).map(t => t.textContent.trim());
+        const testTag = tags.filter(t => t === 'test' || t === 'démo' || t === 'vitrine');
+        // Une vraie carte s'ouvre toujours en aperçu.
+        const firstCard = document.querySelector('#tpl-gallery-grid .tpl-gallery-card');
+        if (firstCard) firstCard.click();
+        const preview = await waitFor(() => {
+          const p = document.getElementById('template-preview-modal');
+          return p && p.style.display !== 'none' && document.getElementById('tpl-preview-tiptap').innerHTML.length > 20;
+        }, 5000);
+        const pass = shown && names.length >= 4 && leaked.length === 0 && testTag.length === 0 && preview;
+        return { pass, notes: JSON.stringify({ shown, names, leaked, tags, preview }) };
+      } finally {
+        const closePreview = document.getElementById('tpl-preview-close');
+        if (closePreview) closePreview.click();
+        if (modal) modal.style.display = 'none';
+        restore();
+      }
+    },
+  });
+
+  window.EditorTestSuites = window.EditorTestSuites || {};
+  window.EditorTestSuites.templateGallery = cases;
+})();
