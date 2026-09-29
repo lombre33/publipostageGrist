@@ -155,6 +155,68 @@
     },
   });
 
+  // Retour d'Antoine (2026-09-29) : « le nom des dossiers et sous-dossiers doit être différencié plus fortement des documents, pas juste une icône ». On mesure le RENDU
+  // (graisse, fond, trait guide du groupe), pas le texte du CSS.
+  cases.push({
+    id: 'tree_folder_rows_are_bold_on_a_band_unlike_template_rows',
+    description: 'Un dossier et un sous-dossier ont un nom en gras sur une bande de fond, un modèle une graisse normale sans fond, et chaque groupe déplié a son trait guide calé sur le caret de son dossier',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Arbre - Modèle rangé');
+      await createTemplate(h, 'document', 'Arbre - Modèle à la racine');
+      await TemplatePreferences.setFolder(idA, 'Arbre - Dossier test/Arbre - Sous-dossier test');
+      TemplateTreeSelect.refresh();
+      await openPopup(h);
+      const folderRow = (nom) => Array.from(popup().querySelectorAll('.tts-row-folder')).find((r) => r.querySelector('.tts-row-label').textContent === nom);
+      const top = folderRow('Arbre - Dossier test');
+      const sub = folderRow('Arbre - Sous-dossier test');
+      const leaf = rowFor(idA);
+      const weight = (row) => Number(getComputedStyle(row.querySelector('.tts-row-label')).fontWeight);
+      const bg = (row) => getComputedStyle(row).backgroundColor;
+      const guide = (row) => {
+        const group = row.nextElementSibling;
+        const cs = getComputedStyle(group, '::before');
+        return { isGroup: group.classList.contains('tts-group'), width: cs.width, left: cs.left, position: cs.position, depthVar: group.style.getPropertyValue('--tts-depth') };
+      };
+      const g0 = guide(top), g1 = guide(sub);
+      const pass = !!top && !!sub && !!leaf
+        && weight(top) >= 700 && weight(sub) >= 700 && weight(leaf) <= 600
+        && bg(top) !== 'rgba(0, 0, 0, 0)' && bg(sub) !== 'rgba(0, 0, 0, 0)' && bg(top) !== bg(leaf) && bg(sub) !== bg(leaf)
+        && g0.isGroup && g0.position === 'absolute' && g0.width === '1px' && g0.left === '13px' && g0.depthVar === '0'
+        && g1.isGroup && g1.left === '29px' && g1.depthVar === '1';
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await TemplatePreferences.setFolder(idA, '');
+      TemplateTreeSelect.refresh();
+      return { pass, notes: JSON.stringify({ found: [!!top, !!sub, !!leaf], weights: top && [weight(top), weight(sub), weight(leaf)], bgs: top && [bg(top), bg(sub), bg(leaf)], g0, g1 }) };
+    },
+  });
+
+  // Régression constatée le 2026-09-29 en vérifiant les dossiers en thème sombre : le panneau vit dans <body>, qui ne fixe aucune couleur de texte - son texte héritait du noir du
+  // navigateur sur son fond sombre.
+  cases.push({
+    id: 'tree_popup_text_follows_theme_text_color_in_dark_theme',
+    description: 'En thème sombre, le texte du panneau des modèles prend la couleur de texte du thème (--text), pas le noir par défaut du navigateur sur fond sombre',
+    run: async (h) => {
+      const previous = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        await createTemplate(h, 'document', 'Arbre - Texte thème sombre');
+        await openPopup(h);
+        const probe = document.createElement('div');
+        probe.style.color = 'var(--text)';
+        document.body.appendChild(probe);
+        const themeText = getComputedStyle(probe).color;
+        probe.remove();
+        const leafColor = getComputedStyle(popup().querySelector('.tts-row-leaf .tts-row-label')).color;
+        const popupBg = getComputedStyle(popup()).backgroundColor;
+        popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const pass = leafColor === themeText && leafColor !== 'rgb(0, 0, 0)' && popupBg !== 'rgb(255, 255, 255)';
+        return { pass, notes: JSON.stringify({ leafColor, themeText, popupBg }) };
+      } finally {
+        if (previous === null) document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', previous);
+      }
+    },
+  });
+
   // Retour d'Antoine (2026-09-29, « la même icône ») : l'épingle d'une ligne et le bouton « modèle par défaut » de la barre partageaient le même tracé d'étoile, il
   // épinglait en croyant définir le modèle qui s'ouvre au démarrage. On compare le masque RÉELLEMENT calculé des deux ::before, pas le texte du CSS.
   cases.push({

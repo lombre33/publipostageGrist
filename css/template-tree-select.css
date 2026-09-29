@@ -58,9 +58,11 @@
    c'est exactement ce qui, combiné à outsideScrollHandler (js/template-tree-select.js), faisait défiler la
    PAGE une fois le panneau épuisé - révélant un débordement de page latent (#v2-heading-flyout) qui
    remontait toute la barre d'outils hors de portée de la souris en petite fenêtre (2026-09-28). */
+/* color explicite, pour la même raison que font-family ci-dessous : <body> ne fixe aucune couleur de texte, le panneau (fond var(--surface), sombre en thème sombre) héritait donc du noir
+   par défaut du navigateur - texte noir sur fond sombre (constaté le 2026-09-29 en vérifiant les dossiers en thème sombre). */
 /* font-family explicite : rattaché à document.body (cf. commentaire JS positionPopup), le panneau sort de la cascade de la barre d'outils (Manrope) et
    retombait sur l'Arial par défaut du body (css/style.css) - régression relevée par le coordinateur, mesure indépendante 2026-09-28. */
-.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); }
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); color: var(--text); }
 .tts-popup.is-open { display: block; }
 
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }
@@ -75,6 +77,17 @@
 .tts-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tts-group.is-collapsed { display: none; }
+
+/* Dossiers et modèles doivent se distinguer d'un coup d'œil, pas seulement par la petite icône (Antoine, 2026-09-29) : le nom d'un dossier est en gras sur une bande de fond
+   pleine largeur, celui d'un modèle reste en graisse normale sans fond ; un trait vertical relie chaque dossier déplié à son contenu. Poids 700 : présent dans Manrope
+   (charte, planning/identite-ui-ux-grist-factory.md), aucune couleur ajoutée - --surface-sunken/--border-strong suivent le thème sombre. */
+.tts-row-folder { background: var(--surface-sunken); font-weight: 700; margin-top: 2px; }
+.tts-row-folder .tts-row-label { font-weight: 700; }
+@media (hover: hover) and (pointer: fine) {
+  .tts-row-folder:hover { background: var(--border); }
+}
+.tts-group { position: relative; }
+.tts-group::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(8px + var(--tts-depth, 0) * 16px + 5px); width: 1px; background: var(--border-strong); pointer-events: none; }
 
 .tts-folder-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E"); transition: transform .1s ease; }
 .tts-row-folder[aria-expanded="true"] .tts-folder-caret { transform: rotate(90deg); }

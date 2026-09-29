@@ -119,6 +119,34 @@
     },
   });
 
+  // Retour d'Antoine (2026-09-29) : dossiers et modèles doivent se distinguer par autre chose que l'icône. Même mesure du rendu que dans scenarios-template-tree.js, sur la liste
+  // de la modale (mêmes classes), plus la cible de glisser-déposer qui doit se détacher de la bande d'un dossier.
+  cases.push({
+    id: 'organize_folder_rows_are_bold_on_a_band_and_drop_target_stands_out',
+    description: 'Dans la modale, un dossier est en gras sur une bande de fond, un modèle en graisse normale sans fond, et la cible de glisser-déposer se détache de la bande d’un dossier ordinaire',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Organiser - Modèle rangé gras');
+      await TemplatePreferences.setFolder(id, 'Organiser - Dossier gras');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const folder = folderRowByLabel('Organiser - Dossier gras');
+      const leaf = rowFor(id);
+      const weight = (row) => Number(getComputedStyle(row.querySelector('.tts-row-label')).fontWeight);
+      const bg = (row) => getComputedStyle(row).backgroundColor;
+      const bandBg = bg(folder);
+      folder.classList.add('tom-drop-target');
+      const dropBg = bg(folder);
+      folder.classList.remove('tom-drop-target');
+      const guide = getComputedStyle(folder.nextElementSibling, '::before');
+      const pass = weight(folder) >= 700 && weight(leaf) <= 600 && bandBg !== 'rgba(0, 0, 0, 0)' && bandBg !== bg(leaf) && dropBg !== bandBg
+        && folder.nextElementSibling.classList.contains('tts-group') && guide.width === '1px' && guide.left === '13px';
+      const notes = JSON.stringify({ weights: [weight(folder), weight(leaf)], bandBg, leafBg: bg(leaf), dropBg, guideLeft: guide.left, guideWidth: guide.width });
+      await TemplatePreferences.setFolder(id, '');
+      TemplateOrganizeModal.close();
+      return { pass, notes };
+    },
+  });
+
   cases.push({
     id: 'organize_move_writes_folder_and_nests_template_under_it',
     description: 'Cliquer "Déplacer vers…" avec un chemin tapé écrit Dossier dans Publipostage_PreferencesModeles et range le modèle dans l’arborescence affichée',

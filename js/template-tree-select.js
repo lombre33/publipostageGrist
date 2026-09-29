@@ -63,6 +63,9 @@ const TemplateTreeSelect = (function () {
 
     const group = document.createElement('div');
     group.className = 'tts-group';
+    // Profondeur du dossier (pas celle de ses enfants) : css/template-tree-select.css cale le trait guide du groupe sur le caret de CE dossier. Posée explicitement, sinon le groupe
+    // hériterait de la profondeur du groupe parent.
+    group.style.setProperty('--tts-depth', String(depth));
     group.setAttribute('role', 'group');
     node.enfants.forEach((child) => group.appendChild(makeRow(child, depth + 1)));
 

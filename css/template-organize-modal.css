@@ -51,7 +51,8 @@
 /* Glisser-déposer et boutons "+" (28/09, second retour d'Antoine) - cf. commentaire d'en-tête de
    js/template-organize-modal.js sur pendingFolder. */
 .tom-dragging { opacity: 0.4; }
-.tom-drop-target { background: var(--surface-sunken); outline: 2px dashed var(--accent); outline-offset: -2px; }
+/* accent-soft (pas surface-sunken) : les lignes dossier ont désormais elles-mêmes un fond surface-sunken, la cible du glisser-déposer doit s'en détacher. */
+.tom-drop-target { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
 
 .tom-add-subfolder-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
 .tts-row-folder:hover .tom-add-subfolder-btn, .tts-row-folder:focus-within .tom-add-subfolder-btn { opacity: 1; }
@@ -63,11 +64,11 @@
 .tom-place-here-btn { flex: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; }
 .tom-place-here-btn:hover { background: var(--accent); color: var(--surface); }
 
-.tom-pending-folder { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-style: italic; color: var(--text-faint); }
+.tom-pending-folder { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-style: italic; color: var(--text-faint); background: transparent; }
 /* Pas de vrai caret d'expansion ici (rien à replier/déplier tant que le dossier n'existe pas) - masqué
    plutôt que retiré pour garder l'alignement avec l'icône/le libellé des lignes dossier réelles. */
 .tom-pending-folder .tts-folder-caret { visibility: hidden; }
-.tom-pending-folder .tts-row-label { font-style: italic; }
+.tom-pending-folder .tts-row-label { font-style: italic; font-weight: 600; }
 .tom-pending-hint { flex: 1; min-width: 0; font-size: 11px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
 .tom-cancel-pending-btn:hover { background: var(--surface-sunken); color: var(--text); }
