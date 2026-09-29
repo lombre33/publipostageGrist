@@ -4,8 +4,12 @@
 > d'interface déjà faits par Antoine sur les widgets Grist Factory — ce qui est commun à tous les widgets et ce
 > qui est propre à chacun — pour pouvoir être collé tel quel dans un autre chat/projet Claude et lui donner
 > immédiatement le bon cadre : quelle identité respecter, quoi ne pas réinventer, quoi rester au milieu de la
-> route en attendant un arbitrage d'Antoine. État au 2026-09-18, vérifié dans `publipostageGrist` (dépôt mature)
-> et `SlidesPlus` (fondation, pas encore un éditeur utilisable).
+> route en attendant un arbitrage d'Antoine. État au 2026-09-29 pour `publipostageGrist` (dépôt mature, revérifié dans le
+> code après l'audit UX/UI du 29/09 et l'harmonisation des fenêtres) ; `SlidesPlus` (fondation, pas encore un éditeur
+> utilisable) n'a pas été revu depuis le 2026-09-18.
+>
+> Ce fichier existe en deux copies identiques : `identite-ui-ux-grist-factory.md` dans les fichiers du projet, et
+> `planning/identite-ui-ux-grist-factory.md` dans le dépôt `publipostageGrist` (branche `main`).
 
 ---
 
@@ -22,11 +26,12 @@
   provisoire écrit par Claude sur Publipostage+ — **à reformuler par Antoine**, ne pas la dupliquer telle quelle
   sur un autre widget sans la lui faire valider.
 - **Logo** : chaque widget affiche discrètement le logo Grist Factory (l'avatar du Grist éponyme) dans son
-  chrome — placement de référence, choisi par Antoine sur Publipostage+ : juste à droite de l'icône Réglages.
-  Discret veut dire une taille de repère de marque, pas un élément qui capte l'attention ni qui déplace les
-  contrôles existants autour de lui (non-régression, cf. §1 « Non-régression »). L'asset lui-même n'est pas
-  vendorisable comme les autres dépendances (§1 « Pas de framework ») : c'est un fichier image à obtenir auprès
-  d'Antoine (avatar du Grist « Grist Factory »), pas à recréer ou à deviner.
+  chrome — placement de référence, choisi par Antoine sur Publipostage+ : en haut à droite, juste après l'icône
+  Réglages (`#v2-brand-logo` : rond de 20 px, opacité .85, posé en absolu à 10 px du coin). Discret veut dire une
+  taille de repère de marque, pas un élément qui capte l'attention ni qui déplace les contrôles existants autour de
+  lui (non-régression, cf. §1 « Non-régression »). L'asset lui-même n'est pas vendorisable comme les autres
+  dépendances (§1 « Pas de framework ») : c'est un fichier image à obtenir auprès d'Antoine (avatar du Grist « Grist
+  Factory »), pas à recréer ou à deviner.
 
 ### Palette : neutre + un seul accent, pas de « monochrome » au sens gris-sur-gris
 « Interface principalement monochrome » (règle d'Antoine) veut dire : une base de gris (fond/surface/bordure/texte
@@ -37,21 +42,38 @@ fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives :
   SlidesPlus) : la même intention existe déjà sur les deux widgets, avec des teintes proches mais pas encore
   unifiées en un token partagé — à harmoniser si un design system commun est créé.
 
-Palette exacte de Publipostage+ (`css/style.css`, thème clair) :
+Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes clair et sombre) :
 
-| Rôle | Valeur |
-|---|---|
-| Fond app | `#f4f6fa` |
-| Surface (cartes, barres) | `#ffffff` |
-| Surface enfoncée | `#eef1f6` |
-| Bordure | `#dde2ea` / bordure forte `#c3cad6` |
-| Texte | `#1b2430` / atténué `#667085` / très atténué `#98a2b3` |
-| **Accent** (unique) | `#2f6fed`, survol `#2558c4`, fond doux `#e8f0fe` |
-| Danger | `#d84343`, fond doux `#fbe9e9` |
-| Rayon d'angle | petit `7px`, moyen `11px` (coins arrondis partout, jamais carrés) |
-| Ombres | portée douce pour les éléments flottants/modales, très légère pour les cartes |
+| Rôle | Jeton | Clair | Sombre |
+|---|---|---|---|
+| Fond app | `--bg` | `#f4f6fa` | `#171b23` |
+| Surface (cartes, barres, fenêtres) | `--surface` | `#ffffff` | `#1e2430` |
+| Surface enfoncée | `--surface-sunken` | `#eef1f6` | `#262e3c` |
+| Bordure / bordure forte | `--border` / `--border-strong` | `#dde2ea` / `#c3cad6` | `#323b4b` / `#465166` |
+| Texte | `--text` | `#1b2430` | `#e7ecf5` |
+| Texte atténué (un seul gris de texte, cf. « Contrastes ») | `--text-muted` = `--text-faint` | `#667085` | `#9aa6bb` |
+| **Accent** (unique) : liens, états actifs, focus ; survol | `--accent`, `--accent-hover` | `#2f6fed`, `#2558c4` | `#5b91f5`, `#74a3f7` |
+| Accent plein (fond d'un bouton à texte blanc) ; survol | `--accent-solid`, `--accent-solid-hover` | `#2f6fed`, `#2558c4` | identiques au clair |
+| Accent doux : fond, bord | `--accent-soft`, `--accent-soft-border` | `#e8f0fe`, `#c7dbfd` | `#24324b`, `#35507d` |
+| Danger ; fond doux | `--danger`, `--danger-soft` | `#d84343`, `#fbe9e9` | `#f08a8a`, `#3a2426` |
+| Voile derrière les fenêtres | `--pp-scrim` | `rgba(15, 23, 42, .45)` | `rgba(3, 6, 12, .62)` |
+| Rayon d'angle | `--radius-sm` | 7 px sur les contrôles (boutons, champs, lignes de liste), 8 px sur le cadre des fenêtres, rond pour les pastilles et le logo : coins arrondis partout, jamais carrés | idem |
+| Ombres | `--shadow-float`, `--shadow-card` | portée douce pour les éléments flottants et les fenêtres, très légère pour les cartes | plus marquée |
 
 Ne pas ajouter une couleur qui n'a pas de rôle sémantique clair (pas de couleur « parce que c'est joli »).
+
+### Contrastes : 4,5:1 au moins, en clair comme en sombre
+Arbitré le 29/09 après l'audit (en ligne `c428609`) : tout texte, lien, bouton plein et anneau de focus atteint **4,5:1**
+au moins dans les deux thèmes (avant : texte discret à 2,58:1 en clair, liens des Crédits à 1,65:1 en sombre, blanc des
+boutons pleins à 3,08:1 en sombre). Règles à suivre :
+- Le gris de texte le plus pâle admis est `--text-faint` (= `--text-muted`) ; jamais un gris plus clair pour un texte.
+- Un **bouton plein à texte blanc prend `--accent-solid`** (et `--accent-solid-hover`), jamais `--accent` : celui-ci
+  s'éclaircit en sombre et le blanc dessus tomberait à 3,08:1.
+- Liens et texte d'accent : `--accent`. Anneau de focus : `outline: 2px solid var(--accent)`. Texte d'aide des champs
+  (`::placeholder`) : `--text-muted` en sombre.
+- Une règle neuve qui pose une couleur de texte, de fond de bouton ou de focus prend ces jetons. Le groupe de tests
+  `contrast` mesure la couleur calculée sur l'élément réel, fond composé, en clair puis en sombre ; un nouveau bouton
+  plein s'ajoute à sa liste.
 
 ### Deux polices, jamais mélangées : chrome vs contenu produit
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un
@@ -74,18 +96,27 @@ de SlidesPlus une fois son éditeur construit).
 
 Mécanique : 3 choix utilisateur (système / clair / sombre), mémorisés en `localStorage`, appliqués via l'attribut
 `data-theme` sur `<html>` ; la préférence système (`prefers-color-scheme`) ne joue que si l'utilisateur n'a rien
-choisi explicitement.
+choisi explicitement. Le voile derrière les fenêtres suit lui aussi le thème (`--pp-scrim`, plus foncé en sombre) : il
+n'y a plus de voile clair fixe.
 
 ### Icônes : traits monochromes, jamais de police d'icônes ni d'emoji
 Toutes les icônes de Publipostage+ sont des SVG en **contour** (`stroke`, pas de remplissage), intégrées en
 `mask-image` CSS plutôt qu'en `<img>` : l'icône hérite alors de la couleur du bouton (texte/accent selon l'état),
 donc elle s'adapte automatiquement au thème clair/sombre et à l'état survolé/actif sans doublon d'asset. Pas de
 police d'icônes (Font Awesome, etc.), pas d'emoji dans le chrome de l'app (SlidesPlus utilise encore un emoji
-`⛶` sur son unique bouton — état de fondation, cf. §3).
+`⛶` sur son unique bouton — état de fondation, cf. §4).
+
+Deux règles d'Antoine s'y ajoutent :
+- **Une icône = une fonction.** La punaise veut dire « favori » (section « Épinglés » de la liste des modèles) et rien
+  d'autre, l'étoile « modèle par défaut » : on ne réutilise jamais un tracé pour une seconde fonction (Antoine les
+  confondait quand elles partageaient le même dessin, 29/09).
+- **Aucun indice décoratif sous un bouton à menu.** Les petites puces bleues qui signalaient un menu au survol ont été
+  retirées à sa demande (29/09) ; le menu s'annonce à l'accessibilité par `aria-haspopup` / `aria-expanded`. Ne pas
+  remettre d'indice visuel sans lui demander.
 
 ### Un seul éditeur, une seule barre d'outils, partagés par tous les modes
 Publipostage+ a un seul composant d'édition et une seule barre d'outils (`#v2-toolbar`) pour tous ses modes
-(Édition, Lecture, et le futur mode Email) : `switchMode()` (`js/main.js:550`) ne masque que la zone
+(Édition, Lecture et Email) : `switchMode()` (`js/main.js`) ne masque que la zone
 éditeur/lecteur, jamais la barre d'outils elle-même. Un bouton sans effet dans un mode donné est **grisé**
 (classe `v2-hf-locked`), jamais masqué ni dupliqué dans un composant séparé. Toute nouvelle fonctionnalité de
 toolbar transposable à plusieurs modes (ex. bouton `#Variable`) est un composant partagé unique, pas une copie
@@ -96,12 +127,92 @@ explicite d'Antoine, pas seulement une observation.
 Règle d'Antoine valable sur tous les widgets : **on ajoute des éléments d'UI, on ne modifie ni ne supprime ceux
 qui existent déjà** sans son accord explicite. Une barre d'outils jugée dense ou perfectible (cf. Publipostage+,
 §3) reste telle quelle tant qu'il n'a pas validé un changement — la réponse à une UI qu'on n'ose pas retoucher
-n'est jamais de la retoucher quand même, c'est de proposer sans y toucher.
+n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux précisions :
+- Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
+  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours.
+- Un défaut qui revient se corrige **une fois pour toutes**, à sa cause commune, pas fenêtre par fenêtre ni menu par
+  menu : c'est ce qui a donné la base commune des fenêtres et le pont de survol des menus (§3).
 
 ### Bilingue fr/en systématique
 Chaque chaîne d'interface visible passe par un attribut `data-i18n` (ex. `data-i18n="settings.credits.author"`)
 résolu par un module i18n dédié (`js/i18n.js` sur Publipostage+, clé `fr`/`en` en miroir). Toute chaîne d'UI
 ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** — jamais en suivi séparé.
+
+### Vocabulaire et écriture des textes
+Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
+entre parenthèses et trois écritures du vide :
+- Le mot est **« modèle »**, jamais « template » dans un texte français (fichiers et identifiants peuvent garder
+  `template`) ; on écrit « Macro-modèle », avec majuscule et trait d'union.
+- **Pas de pluriel entre parenthèses** (« 1 ligne(s) trouvée(s) ») : les pluriels s'écrivent `{n|singulier|pluriel}` dans
+  `js/i18n.js` (« {count} {count|ligne trouvée|lignes trouvées} » ; en français 0 et 1 sont au singulier, en anglais
+  seul 1).
+- **Le vide d'une liste** s'écrit « — Choisir … — » (tirets longs) ; « — Aucune — » seulement quand « aucun » est un
+  vrai choix.
+- Le groupe de tests `codeHygiene` refuse « ligne(s) », « template » en français et « -- … -- ».
+- Une indication ou un avertissement sous un champ commence **sous ce champ**, pas sous son libellé.
+
+### Fenêtres : une seule base pour toutes
+Arbitré le 29/09 (« Les dix », en ligne `5fd9409` puis `b78d24f`). Toutes les fenêtres du widget — celles écrites dans
+`index.html` (Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser mes modèles, Galerie, Aperçu),
+celles des variables (Condition, Autres attributs, Boucle) et les saisies/confirmations — reposent sur
+`js/modal-base.js` et `css/modal-base.css`. Avant : des largeurs de 380 à 960 px sans règle, un voile clair fixe même en
+sombre pour six d'entre elles, un titre qui sortait de l'écran, un clavier qui s'échappait de la fenêtre.
+- **Trois zones** : le titre (fixe), le contenu (la seule zone qui défile), les boutons (fixes : « Fermer », « Annuler »…).
+  La fenêtre tient dans le panneau de 700×400 : le cadre est plafonné à la hauteur du panneau moins 12 px de chaque côté,
+  titre et boutons restent visibles. Le cadre porte `role="dialog"`, `aria-modal="true"` et `aria-labelledby`.
+- **Trois largeurs** : 400 px (question, tables liées, clé de correspondance, saisies), 480 px (formulaires : Réglages,
+  Macro-modèle, Organiser, fenêtres de variable), grande (Galerie, Aperçu : 960 px plafonnés au panneau). Une nouvelle
+  fenêtre choisit l'une des trois.
+- **Voile** : `--pp-scrim`, qui suit le thème. Un clic sur le voile ne ferme rien.
+- **Clavier**, tenu par une seule écoute pour la fenêtre du dessus : le focus entre dans la fenêtre à l'ouverture et
+  revient à l'élément qui l'avait à la fermeture ; Tab et Maj+Tab tournent dans la fenêtre, même quand le focus est tombé
+  sur `<body>` ; Échap la ferme (une liste avec recherche ouverte ferme d'abord son propre panneau). Pour une fenêtre
+  écrite dans `index.html`, Échap déclenche son bouton de fermeture : même sortie qu'à la souris.
+- **Empilement** : 1990 pour les fenêtres de variable, 2000 pour celles d'`index.html`, 2100 pour les saisies et
+  confirmations, qui s'ouvrent par-dessus toutes les autres.
+- **Une nouvelle fenêtre** passe par `ModalBase.create({...})` (bâtie en JS) ou `ModalBase.adopt(id, {closeId})` (déjà
+  dans `index.html`, branchée dans `wirePageModals` de `js/main.js`) ; jamais d'écouteur Tab ou Échap posé sur le voile.
+  Le réglage propre à la zone de contenu d'une fenêtre s'écrit avec deux classes (`.sa-fenetre .sa-liste`), sinon la
+  règle de la base l'emporte.
+
+### Saisies et confirmations : des fenêtres du widget, plus de boîtes du navigateur
+Arbitré le 29/09 (« Saisies et confirmations », en ligne `aafa4e0`).
+- `Dialogs.prompt({title, label, message, value, confirmLabel})` (`js/dialogs.js`) rend le texte tapé, `null` si annulé,
+  `''` si le champ est vidé puis validé (« aucun dossier » n'est pas « annulé ») ; `Dialogs.confirm({title, message,
+  confirmLabel, danger})` rend un booléen. Toujours avec `await` : oublier `await` prend une promesse pour un « oui »
+  (le groupe `codeHygiene` le vérifie et refuse tout `prompt()` / `confirm()` natif dans `js/`).
+- Le titre est la question ; les boutons sont « Annuler » puis l'action nommée (« Créer », « Supprimer », « Continuer »…).
+  Une confirmation **destructrice** (`danger`) met le focus sur Annuler, pour qu'un Entrée distrait ne supprime rien.
+- Une seule fenêtre à la fois : une demande qui en interrompt une l'annule.
+- Après Annuler ou Échap, le clavier revient sur le bouton qui a ouvert la fenêtre, **même si ce bouton était grisé par
+  le verrou d'export** (« Créer l'email » et « Email trop long » ; de même à la fin d'un export lancé au clavier) — choix
+  d'Antoine « Corriger », en ligne `7fa43b0`. À la souris, rien ne change.
+- Les `alert()` d'information restent des alertes du navigateur (choix d'Antoine).
+
+### Choisir une colonne, une table ou un modèle : la liste avec recherche
+Demande d'Antoine (29/09). Tout choix de colonne, de table ou de modèle passe par la liste avec recherche
+(`js/search-select.js` : `attachColumns`, `attachTables`, `attachTemplates`), jamais par un `<select>` natif visible. Le
+`<select>` reste la source de vérité, masqué ; une colonne s'affiche avec son type ; la valeur vide est grisée ; si le
+composant échoue, la liste native reste (`try/catch`). Le champ **Valeur** d'une règle sur une colonne à choix ou à
+référence (`attachValues`) est lui aussi une liste avec recherche des valeurs possibles, « Autre valeur… » toujours en
+bas.
+
+### Le panneau de référence : 700×400
+Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : tout doit y tenir et s'y manier à la souris.
+- Un popup (autocomplétion `#`, fil de commentaires, image depuis une variable) se place **après** son affichage, d'après
+  sa vraie hauteur (`ViewportFit.placePopup` : dessous, sinon au-dessus, avec défilement si rien ne suffit) ; les
+  info-bulles se décalent pour rester dans le panneau.
+- Un texte trop long pour sa case ne déborde pas, n'est pas coupé net et ne passe pas à la ligne : il est tronqué par
+  « … ». Pour une bulle de variable dans une case étroite ou une colonne de zone à 2 colonnes, c'est le **milieu** du nom
+  qui est coupé, début et fin gardés (« #Projets.Det…Fonctionnement »). Le message d'état de la barre du haut est coupé
+  de la même façon, son texte entier au survol.
+- Tout changement d'interface est vérifié à ce format, **à la vraie souris et au vrai clavier** (Tab, Échap), en clair et
+  en sombre, en français et en anglais.
+
+### La langue de ce que le widget écrit dans le document
+Arbitré le 29/09 (en ligne `87a2a63`). Ce que le widget écrit lui-même dans le document — le message d'une variable qui ne
+se résout pas (« [ERREUR : … ] »), le titre du sommaire — suit la **langue de l'interface** de qui lit ou exporte, en
+Lecture comme en PDF et en Word (clés `variables.error.*` et `pdf.tocTitle` de `js/i18n.js`).
 
 ### Pas de framework, pas d'étape de build, dépendances tierces encadrées
 Les deux widgets sont des pages statiques (HTML/CSS/JS vanilla, pas de React/Vue, pas de bundler) servies telles
@@ -130,15 +241,40 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 
 ## 3. Spécifique à Publipostage+
 
-- Barre d'outils V2 (`#v2-toolbar` + `.bar-row`) : environ **30 boutons icône seule** (sans libellé texte), sur
-  **5 rangées** en dessous de 420px de large, avec sous-menus révélés au survol. Constat de densité admis par
+- Barre d'outils V2 (`#v2-toolbar` + `.bar-row`) : une quarantaine de boutons, presque tous en icône seule sans libellé
+  texte (45 dont 8 avec texte, selon l'audit du 29/09), sur **deux lignes à 700×400** (38 % de la hauteur du panneau) et
+  jusqu'à **5 rangées** en dessous de 420 px de large, avec sous-menus révélés au survol. Constat de densité admis par
   Antoine mais **chantier gelé** — c'est ce qui a fait préférer un ajustement automatique de la mise en page à un
-  contrôle de zoom manuel. Ne rien ajouter dans cette barre sans son accord.
-- Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son
-  propre manifeste, chargement optionnel — le dépôt public (`grist-factory/Publipostage-Plus`) ne le publie pas.
-- Mode Email (en cours de cadrage, pas encore implémenté) : règle déjà tranchée à respecter — **strictement l'UI
-  existante**, aucun nouveau composant visuel ; en cas de doute, réutiliser un pattern déjà en place plutôt que
-  d'en inventer un.
+  contrôle de zoom manuel. Ne rien ajouter dans cette barre sans son accord. Faciliter la prise en main d'un nouvel
+  utilisateur (lien vers la galerie dans le document vide, libellés sur la barre d'une variable) lui a été proposé le
+  29/09 : il a répondu **« Laisser »**, ne pas le reproposer.
+- Menus au survol (`.v2-hover-group` / `.v2-hover-flyout`) : un menu ne se referme pas quand la souris descend lentement
+  du bouton vers lui — le pont de survol est porté par le groupe (`--v2-flyout-gap`) ; donc ni `overflow: hidden` ni
+  marge entre le bouton et son menu, et tout nouveau menu passe par ces deux classes. Un groupe de boutons à coins
+  arrondis n'a pas non plus d'`overflow: hidden` (il rognerait leurs info-bulles) : les coins sont portés par les
+  boutons d'extrémité. Après un clic à la souris, l'info-bulle de focus d'un bouton reste cachée (`pp-tip-pointer`)
+  jusqu'au prochain appui sur Tab ; celle du survol reste.
+- Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
+  (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
+  aussi (`pp-access-locked`), sans jamais masquer.
+- Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
+  favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
+  choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).
+- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
+  en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
+  une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
+  le 29/09).
+- Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
+  manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
+  publie pas.
+- Mode Email (livré le 2026-09-18) : règle tranchée — **strictement l'UI existante**, aucun nouveau composant visuel ;
+  en cas de doute, réutiliser un pattern déjà en place plutôt que d'en inventer un. Objet / À / Cc / Cci sont de simples
+  champs texte ; « Créer l'email » ouvre le logiciel de messagerie (`mailto:`) et la fenêtre « Email trop long »
+  avertit au-delà de ~2000 caractères sans bloquer ; ce qui n'a pas de sens en Email (en-tête et pied de page, modèle par
+  défaut) est grisé, pas masqué.
+- Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
+  700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
+  sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
 
 ## 4. Spécifique à SlidesPlus
 
@@ -165,10 +301,33 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Unification des teintes « ambre = attention » entre les deux widgets (proches mais pas identiques aujourd'hui).
 - Palette et typographie définitives de SlidesPlus une fois son éditeur réel construit — pour l'instant provisoires.
 - Calendrier de rattachement à l'écosystème Grist.Gouv, qui pourrait renommer les dépôts publics.
+- Cartes posées à Antoine le 29/09, sans réponse à 21 h ce jour-là : « Commenter » en mode Lecture (recommandation : le
+  griser) ; « Par personne » ou « Par ligne » pour les droits de lecture seule (fait « Par personne » en attendant) ;
+  trois contrastes restants (message vert « lignes trouvées » à 3,65:1, bleu d'accent sur fond gris à 4,02:1 — onglet
+  actif des Réglages, « Modifier le lien » —, puces de la galerie à 4,39:1) ; les boutons de colonne d'un tableau en mode
+  suivi des modifications ; « [Email indisponible] » et « (aucun titre dans ce document) », restés en français
+  (recommandation : traduire).
+- Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
+  fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi.
 
 ---
 
 *Document autonome — collez-le tel quel dans un autre chat pour lui donner le contexte d'identité visuelle des
 widgets Grist Factory. Source : exploration directe de `publipostageGrist` (`index.html`, `css/*.css`,
 `js/settings.js`, `js/i18n.js`) et de `SlidesPlus` (`README.md`, `ROADMAP.md`, `css/style.css`, `index.html`) le
-2026-09-18, plus les décisions d'Antoine déjà actées en mémoire de projet.*
+2026-09-18, plus les décisions d'Antoine déjà actées en mémoire de projet. Mise à jour du 2026-09-29 : `publipostageGrist`
+revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/modal-base.js`, `js/dialogs.js`,
+`js/search-select.js`, `js/i18n.js`, `js/main.js`) et décisions d'Antoine du 18 au 29/09.*
+
+**Mises à jour**
+- 2026-09-18 : première version.
+- 2026-09-29 : ajout des sections « Contrastes », « Vocabulaire et écriture des textes », « Fenêtres : une seule base pour
+  toutes », « Saisies et confirmations », « Choisir une colonne, une table ou un modèle », « Le panneau de référence :
+  700×400 » et « La langue de ce que le widget écrit dans le document » ; palette complétée du thème sombre et des jetons
+  `--accent-solid` et `--pp-scrim` ; règles « une icône = une fonction », « aucun indice sous un bouton à menu », « grisé,
+  jamais masqué », « un défaut qui revient se corrige une fois pour toutes » ; §3 mis à jour (menus au survol, modes et
+  droits, rangement des modèles, variables, mode Email livré, galerie `?dev`, feuille A4) ; §5 complété. Corrigé : le
+  « rayon moyen de 11 px » était un jeton (`--radius-md`) que plus aucune règle n'utilisait, retiré du CSS par le
+  nettoyage du code (restent 7 px sur les contrôles et 8 px sur le cadre des fenêtres) ; le gris « très atténué »
+  `#98a2b3` est devenu `#667085` avec les contrastes (un seul gris de texte) ; le renvoi « cf. §3 » du bouton de
+  SlidesPlus pointe §4.
