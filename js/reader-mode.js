@@ -442,28 +442,13 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
-  // Scanne chaque "#" et essaie la plus longue clé connue qui suit (pas un regex [A-Za-z0-9_]+) : une clé Grist contient elle-même des "_", ambigus avec un
-  // séparateur tapé entre deux variables.
+  // Variables d'un nom de fichier : le scan des champs Objet/À/Cc/Cci (Variables.findTextVariables - plus longue clé connue après chaque déclencheur, chemins
+  // « #Projet.Accompagnateur.Email » compris), les caractères interdits d'un nom de fichier remplacés par « _ » dans chaque valeur.
   async function resolveFilename(filenameTemplate, tableId, record) {
     if (!filenameTemplate) return 'publipostage';
-    const allVars = GristAPI.getAllVariables();
-    const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
-    // Touche de déclenchement configurable (cf. js/settings.js), lue directement en localStorage.
-    let triggerChar = '#';
-    try { const v = localStorage.getItem('pp_trigger_char'); if (v && v.length === 1) triggerChar = v; } catch (e) { /* repli '#' */ }
-    const matches = [];
-    let i = 0;
-    while (i < filenameTemplate.length) {
-      if (filenameTemplate[i] === triggerChar) {
-        const rest = filenameTemplate.slice(i + 1);
-        const key = sortedKeys.find(k => rest.startsWith(k));
-        if (key) { matches.push({ start: i, key, end: i + 1 + key.length }); i += 1 + key.length; continue; }
-      }
-      i += 1;
-    }
+    const matches = Variables.findTextVariables(filenameTemplate);
     const resolved = await Promise.all(matches.map(async m => {
-      const found = allVars.find(v => v.key === m.key);
-      try { const val = await Variables.resolveVariable(found.table, found.column, tableId, record); return String(val || '').replace(/[\\/:*?"<>|]/g, '_'); }
+      try { const val = await Variables.resolveVariable(m.table, m.column, tableId, record); return String(val || '').replace(/[\\/:*?"<>|]/g, '_'); }
       catch (e) { return ''; }
     }));
     let result = ''; let lastEnd = 0;

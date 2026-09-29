@@ -501,28 +501,60 @@ const Variables = (function () {
     }
   }
 
-  // Résout les #Variable d'un texte brut (pas de badge ProseMirror - même scan longest-match-first que ReaderMode.resolveFilename, sans sa sanitisation
-  // spécifique aux noms de fichier qui corromprait un objet d'email ou une adresse). Utilisé par les champs Objet/À/Cc/Cci du mode email (de simples
-  // <input>, cf. planning/feature-email-mode.md) au moment de "Créer l'email" (js/main.js).
-  async function resolveTextVariables(text, currentTableId, record) {
-    if (!text) return '';
+  // Variables d'un texte brut - champs Objet/À/Cc/Cci du mode email et nom du fichier PDF, de simples <input> sans badge : à chaque déclencheur, la plus longue
+  // clé « Table.Colonne » connue qui suit (pas un regex [A-Za-z0-9_]+ : une clé Grist contient elle-même des « _ », ambigus avec un séparateur tapé entre deux
+  // variables). Une clé de colonne Référence se prolonge par les colonnes de la ligne qu'elle désigne, comme la bulle d'un corps de modèle : dans
+  // « #Projet.Accompagnateur.Email », « Projet.Accompagnateur » est la clé et « .Email » une colonne de l'annuaire ; `column` vaut alors le chemin entier
+  // (« Accompagnateur.Email », cf. GristAPI.resolveColumnPath). Un point suivi de ce qui n'est pas une colonne de la table atteinte (fin de phrase, « .pdf »)
+  // reste du texte. Partagé avec ReaderMode.resolveFilename : un seul scan pour tous les champs texte.
+  // Retourne [{ start, end, table, column }] : position du déclencheur et fin de la variable dans `text`.
+  function findTextVariables(text) {
     const allVars = GristAPI.getAllVariables();
     const sortedKeys = allVars.map(v => v.key).sort((a, b) => b.length - a.length);
     const trigger = triggerChar();
-    const matches = [];
+    const found = [];
     let i = 0;
     while (i < text.length) {
       if (text[i] === trigger) {
         const rest = text.slice(i + 1);
         const key = sortedKeys.find(k => rest.startsWith(k));
-        if (key) { matches.push({ start: i, key, end: i + 1 + key.length }); i += 1 + key.length; continue; }
+        if (key) {
+          const base = allVars.find(v => v.key === key);
+          const path = extendKeyPath(base.table, base.column, rest, key.length);
+          found.push({ start: i, end: i + 1 + path.length, table: base.table, column: path.column });
+          i += 1 + path.length;
+          continue;
+        }
       }
       i += 1;
     }
+    return found;
+  }
+  // Ajoute « .Colonne » à `column` tant que le texte (`rest`, à partir de `from`) suit un chemin de colonnes Référence : la colonne la plus longue de la table
+  // atteinte l'emporte, comme pour les clés. Retourne { column, length } - le chemin entier et la longueur de texte qu'il couvre depuis le début de la clé.
+  function extendKeyPath(table, column, rest, from) {
+    let path = column;
+    let length = from;
+    for (;;) {
+      const reached = GristAPI.tableAtEndOf(table, path.split('.'));
+      if (!reached) break;
+      const next = GristAPI.getColumns(reached).filter(c => rest.startsWith('.' + c, length)).sort((a, b) => b.length - a.length)[0];
+      if (!next) break;
+      path += '.' + next;
+      length += 1 + next.length;
+    }
+    return { column: path, length };
+  }
+
+  // Résout les #Variable d'un texte brut (findTextVariables ci-dessus, sans la sanitisation propre aux noms de fichier de ReaderMode.resolveFilename, qui
+  // corromprait un objet d'email ou une adresse). Utilisé par les champs Objet/À/Cc/Cci du mode email (cf. planning/feature-email-mode.md) au moment de
+  // "Créer l'email" (js/main.js).
+  async function resolveTextVariables(text, currentTableId, record) {
+    if (!text) return '';
+    const matches = findTextVariables(text);
     if (!matches.length) return text;
     const resolved = await Promise.all(matches.map(async m => {
-      const found = allVars.find(v => v.key === m.key);
-      try { return String((await resolveVariable(found.table, found.column, currentTableId, record)) || ''); }
+      try { return String((await resolveVariable(m.table, m.column, currentTableId, record)) || ''); }
       catch (e) { return ''; }
     }));
     let result = ''; let lastEnd = 0;
@@ -821,7 +853,7 @@ const Variables = (function () {
   // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue/cellValue : fenêtres de condition et d'autres attributs d'une
   // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable.
   return {
-    createExtension, resolveVariable, resolveRawValue, resolveTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, resolveVariable, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, cellValue,
   };
 })();
