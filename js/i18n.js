@@ -322,8 +322,6 @@ const I18n = (function () {
     // cause. init().catch(...) affiche maintenant l'erreur ici plutôt que de laisser le widget muet.
     'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
-    'status.templateSaved': { fr: 'Modèle enregistré.', en: 'Template saved.' },
-    'status.autosaved': { fr: 'Enregistré automatiquement.', en: 'Auto-saved.' },
     // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
     // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe non enregistrée, brouillon jamais enregistré, conflit).
     'status.savedAt': { fr: 'Enregistré à {time}.', en: 'Saved at {time}.' },
@@ -516,7 +514,6 @@ const I18n = (function () {
     'email.to.placeholder': { fr: 'Destinataires (#Variable ou adresses séparées par des virgules)', en: 'Recipients (#Variable or comma-separated addresses)' },
     'email.cc.label': { fr: 'Cc', en: 'Cc' },
     'email.cc.placeholder': { fr: 'Copie', en: 'Cc' },
-    'email.cci.label': { fr: 'Cci', en: 'Bcc' },
     'email.cci.placeholder': { fr: 'Copie cachée', en: 'Bcc' },
     'email.cci.show': { fr: '+ Cci', en: '+ Bcc' },
     'email.subject.label': { fr: 'Objet', en: 'Subject' },

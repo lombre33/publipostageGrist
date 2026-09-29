@@ -4,10 +4,10 @@
 code : réfléchir à l'UI et à la structuration globale entre le mode éditeur classique (PDF/DOCX) et
 le mode email.
 
-Le périmètre fonctionnel et les contraintes dures du protocole `mailto:` sont déjà actés et écrits
-dans l'en-tête de [`js/mailto-export.js`](../js/mailto-export.js) — ce document ne les rejoue pas, il
-part de là. Rien n'est câblé aujourd'hui : `js/mailto-export.js` n'est référencé ni dans
-`index.html` ni dans `js/main.js`.
+Les contraintes dures du protocole `mailto:` sont écrites dans l'en-tête de
+[`js/mailto-export.js`](../js/mailto-export.js) — ce document ne les rejoue pas, il part de là.
+**État au 29/09 : implémenté** (`js/mailto-export.js` est câblé dans `index.html` et `js/main.js`,
+`onCreateEmail` et la jauge de longueur) ; ce document reste la trace de la conception.
 
 ## 0. Décisions confirmées par Antoine (2026-09-18)
 

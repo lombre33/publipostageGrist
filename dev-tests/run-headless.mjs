@@ -91,6 +91,7 @@ const NODE_SCRIPTS = {
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
+  codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
 };
 
 const argv = process.argv.slice(2);

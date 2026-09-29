@@ -20,13 +20,7 @@
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
   --danger-soft: #fbe9e9;
-  --dark-bg: #182238;
-  --dark-bg-raised: #263457;
-  --dark-border: #32406a;
-  --dark-text: #eef2ff;
-  --dark-text-muted: #97a3c4;
   --radius-sm: 7px;
-  --radius-md: 11px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
   --font-ui: 'Manrope', system-ui, sans-serif;
@@ -114,14 +108,12 @@ body { display:flex; flex-direction:column; }
   background: transparent; color: var(--text); cursor: pointer;
   transition: background .12s ease, border-color .12s ease;
 }
-#toolbar-top button:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
+#toolbar-top button:hover { background: var(--surface-sunken); }
 .a4-toggle { position:relative; display: inline-flex; align-items: center; height:28px; padding:0 7px; border:1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
-.a4-toggle:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
 .a4-toggle input { position:absolute; width:1px; height:1px; opacity:0; }
 .a4-toggle-icon { display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z'/%3E%3Cpath d='M14 2v6h6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z'/%3E%3Cpath d='M14 2v6h6'/%3E%3C/svg%3E"); }
 .a4-toggle.checked { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
 .autosave-toggle { position:relative; display: inline-flex; align-items: center; height:28px; padding:0 7px; border:1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-weight: 600; font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
-.autosave-toggle:hover { background: var(--surface-sunken); border-color: var(--text-faint); }
 .autosave-toggle input { position:absolute; width:1px; height:1px; opacity:0; }
 .autosave-toggle-icon { display:inline-block; width:14px; height:14px; flex:none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12a9 9 0 1 1-2.64-6.36'/%3E%3Cpath d='M21 3v6h-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M21 12a9 9 0 1 1-2.64-6.36'/%3E%3Cpath d='M21 3v6h-6'/%3E%3C/svg%3E"); }
 .autosave-toggle.checked { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
@@ -165,43 +157,21 @@ body { display:flex; flex-direction:column; }
   -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
 }
-#autocomplete-box { position:absolute; z-index:1000; min-width:160px; max-width:320px; max-height:240px; overflow:auto; background:#fff; border:1px solid #b7cdf2; box-shadow:0 4px 14px rgba(0,0,0,.10); border-radius:4px; font-size:.9em; }
-#autocomplete-box .ac-item { padding:4px 8px; cursor:pointer; }
-#autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background:#eaf2ff; }
 #link-config-modal { position:fixed; inset:0; background:var(--pp-scrim); display:flex; align-items:center; justify-content:center; z-index:2000; }
 .modal-content { background:var(--surface); color:var(--text); border-radius:8px; padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
-.link-config-modal-content h3 { margin:0 0 10px; font-size:14px; }
-.link-config-mode { display:flex; flex-direction:column; gap:10px; margin-bottom:10px; font-size:13px; }
-.link-config-mode label { display:flex; flex-direction:column; }
-.link-config-hint { font-weight:400; font-size:11px; color: var(--text-faint); margin:2px 0 0 20px; }
-.link-config-match-fields { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
-/* Même piège que .settings-trigger-reload-notice[hidden] (css/toolbar-v2.css) : `display:flex` a une spécificité (0,1,0) qui gagne contre la règle
-   native [hidden]{display:none} car l'origine auteur l'emporte sur l'origine UA - Variables.showLinkConfigModal (applyModeVisibility) posait `hidden` en
-   mode "ligne fixe" sans jamais masquer réellement ces champs à l'écran. Re-déclaré avec [hidden] en plus pour qu'il reprenne la main. */
-.link-config-match-fields[hidden] { display: none; }
-.link-config-match-fields select { width:100%; box-sizing:border-box; }
-.link-config-explain { margin:0; font-size:11px; color: var(--text-faint); }
-.link-config-preview { font-size:12px; background: var(--surface-sunken); border:1px solid var(--border); border-radius:4px; padding:6px 8px; margin-bottom:12px; min-height:1.2em; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; }
-.link-rules-list { display:flex; flex-direction:column; gap:4px; max-height:120px; overflow:auto; }
-.link-rule-row { display:flex; align-items:center; gap:6px; font-size:12px; padding:3px 0; border-bottom:1px solid var(--border); }
-.link-rule-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.link-rule-row { font-size:12px; }
 .link-rule-row button { font-size:11px; padding:2px 6px; }
-.link-rules-empty { font-size:12px; color: var(--text-faint); margin:0; }
 #status-msg { margin-left:auto; font-family: var(--font-ui); font-size:12px; font-weight:600; color: var(--text-muted); }
 /* Bandeau de conflit auto-save (js/main.js) - ambre plutôt que --danger : signale une action à prendre, pas une erreur. Une seule action possible
    ("Recharger") - garder ses modifications locales reste implicite (ne rien faire, ou Enregistrer manuellement). */
 .autosave-conflict-banner { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5900; font-family: var(--font-ui); font-size:13px; }
 .autosave-conflict-banner button { font-family: var(--font-ui); font-size:12px; font-weight:600; padding:4px 10px; border:1px solid #f0c36d; border-radius: var(--radius-sm); background:#fff; color:#7a5900; cursor:pointer; }
 .autosave-conflict-banner button:hover { background:#fff2d1; }
-#editor-container { flex:1; min-height:0; padding:14px; overflow:auto; background:#fff; }
-#editor-container.a4-preview { background: var(--surface-sunken); }
 /* z-index:0 (en plus de position:relative) : force #reader-container à établir son PROPRE contexte d'empilement local - sans ça son fond opaque se peint
    APRÈS (par-dessus) toute image en calque "derrière le texte" (z-index négatif), la rendant invisible et lui volant ses clics. */
 #reader-container { position:relative; z-index:0; flex:1; min-height:0; padding:18px 22px; overflow:auto; background:#fff; line-height:1.45; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
 
-#reader-container table { width:100%; border-collapse:collapse; }
-#reader-container td, #reader-container th { border:1px solid #999; padding:6px; }
 /* margin/padding volontairement réduits au minimum : cette "chrome" d'édition n'existe pas côté PDF (twoColumnsFrom pose une marge calibrée pour matcher
    CETTE valeur) - un padding plus généreux gonflait la zone dans l'éditeur sans contrepartie dans le PDF, décalant tout ce qui suit. */
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
@@ -270,7 +240,6 @@ body { display:flex; flex-direction:column; }
 
 /* === Mode lecture === */
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
-#reader-container p { margin: 6px 0; }
 
 /* === Images de l'éditeur : sélection, resize et repositionnement === */
 .editor-image { max-width: 100%; height: auto; cursor: grab; outline: 2px solid transparent; outline-offset: 2px; }
