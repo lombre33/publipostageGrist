@@ -1,6 +1,8 @@
 // Suite "chips" - notes de bas de page (ajout/édition/suppression,
 // numérotation, PDF) et chips intelligents Date/Heure (résolution locale,
-// aucun appel Grist requis - Email exclu, nécessite Grist réel).
+// aucun appel Grist requis - Email exclu, nécessite Grist réel, sauf le texte
+// « [Email indisponible] » que le chip écrit quand l'adresse ne se lit pas : il
+// suit la langue de l'interface, l'échec est alors fabriqué dans le test).
 (function () {
   const cases = [];
 
@@ -148,6 +150,46 @@
       },
     });
   });
+
+  // Le chip « Email de l'utilisateur » écrit « [Email indisponible] » quand l'adresse ne peut pas être lue (réseau, portée du jeton insuffisante) : en Lecture et dans
+  // les exports (ReaderMode.preview). Le texte suit la langue de l'interface (carte d'Antoine du 30/09, « Traduire ») ; l'échec est fabriqué ici (GristAPI.getCurrentUserEmail
+  // rejette, ou rend vide) parce que le cache d'adresse de GristAPI peut avoir été rempli par une autre suite.
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'chip_email_unavailable_follows_interface_language_' + lang,
+    description: 'Chip Email dont l\'adresse ne se lit pas (' + lang + ') : « [Email indisponible] » en français, « [Email unavailable] » en anglais, en Lecture comme dans l\'aperçu des exports ; une adresse lisible s\'affiche telle quelle',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      const realGetEmail = GristAPI.getCurrentUserEmail;
+      try {
+        I18n.setLang(lang);
+        const html = '<p>Par <span class="smart-chip" contenteditable="false" data-chip-kind="email">Email de l\'utilisateur</span>.</p>';
+        const wanted = lang === 'en' ? '[Email unavailable]' : '[Email indisponible]';
+        const shownIn = container => Array.from(container.querySelectorAll('.resolved-var')).map(el => ({ text: el.textContent, flagged: el.classList.contains('error-msg') }));
+        const got = {};
+        const failures = { rejette: async () => { throw new Error('test : jeton insuffisant'); }, vide: async () => '' };
+        for (const name of Object.keys(failures)) {
+          GristAPI.getCurrentUserEmail = failures[name];
+          const box = document.createElement('div');
+          box.innerHTML = await ReaderMode.preview(html, 'FakeTable', {});
+          await ReaderMode.render(html, 'FakeTable', {});
+          got[name] = { preview: shownIn(box), reader: shownIn(document.getElementById('reader-container')) };
+        }
+        GristAPI.getCurrentUserEmail = async () => 'lecteur@exemple.fr';
+        const okBox = document.createElement('div');
+        okBox.innerHTML = await ReaderMode.preview(html, 'FakeTable', {});
+        got.lisible = shownIn(okBox);
+        const same = list => list.length === 1 && list[0].text === wanted && list[0].flagged === true;
+        const pass = Object.keys(failures).every(name => same(got[name].preview) && same(got[name].reader))
+          && got.lisible.length === 1 && got.lisible[0].text === 'lecteur@exemple.fr' && got.lisible[0].flagged === false;
+        return { pass, notes: JSON.stringify(got) };
+      } finally {
+        GristAPI.getCurrentUserEmail = realGetEmail;
+        I18n.setLang(previousLang);
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  }));
 
   cases.push({
     id: 'chip_footnote_survives_twocolumns_zone',

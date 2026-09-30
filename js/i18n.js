@@ -320,6 +320,8 @@ const I18n = (function () {
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
     'reader.empty.hint': { fr: 'Sélectionnez une ligne dans la table Grist pour voir le document avec ses données.', en: 'Select a row in the Grist table to see the document filled with its data.' },
     'reader.unresolvedVariables': { fr: 'Attention : certaines variables n’ont pas pu être résolues.', en: 'Warning: some variables could not be resolved.' },
+    // Écrit à la place du chip « Email de l'utilisateur » quand l'adresse ne peut pas être lue (js/reader-mode.js:resolveSmartChips) : en Lecture et dans les exports.
+    'reader.emailUnavailable': { fr: '[Email indisponible]', en: '[Email unavailable]' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
@@ -551,6 +553,8 @@ const I18n = (function () {
     // Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---
     'pdf.tocTitle': { fr: 'Sommaire', en: 'Table of Contents' },
     'pdf.tocEmpty': { fr: 'Aucun titre trouvé.', en: 'No heading found.' },
+    // Sommaire d'un export DOCX sans aucun titre (js/docx-export.js:buildTocParagraphs) : sa phrase à lui, en italique entre parenthèses.
+    'docx.tocEmpty': { fr: '(aucun titre dans ce document)', en: '(no heading in this document)' },
 
     // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---
     'email.to.label': { fr: 'À', en: 'To' },

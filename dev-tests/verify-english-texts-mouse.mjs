@@ -8,10 +8,13 @@
 //     renderHTML : un modèle enregistré avec l'interface française se rouvre avec son sommaire, et le réenregistrer écrit le texte de la langue courante) ;
 //   - mode Lecture (js/reader-mode.js) : « Table of Contents », « No heading found. » et « Warning: some variables could not be resolved. » ;
 //   - le message d'une variable qui ne se résout pas, en Lecture : « [ERROR: no matching configured for Contrats — reinsert the variable to configure it] » (js/variables.js,
-//     carte d'Antoine du 29/09 « Oui, les deux »). L'avertissement ci-dessus doit rester affiché : la Lecture repère l'erreur par un drapeau, plus par les premiers mots du message.
+//     carte d'Antoine du 29/09 « Oui, les deux »). L'avertissement ci-dessus doit rester affiché : la Lecture repère l'erreur par un drapeau, plus par les premiers mots du message ;
+//   - « [Email unavailable] » : le chip « Email de l'utilisateur » quand l'adresse ne se lit pas (js/reader-mode.js, carte d'Antoine du 30/09 « Traduire ») - le faux Grist du
+//     harnais ne donne aucune adresse, c'est donc l'état normal ici.
 // Le passage en français par Réglages, sans recharger, doit tout remettre en français (zones fantômes et ligne Roboto suivent la langue, le reste au rendu suivant), avec les
 // textes d'origine : le français ne bouge pas (seule l'apostrophe de l'avertissement devient typographique, comme dans les autres textes de js/i18n.js).
-// Le titre du sommaire des exports DOCX et PDF, et les autres messages d'erreur d'une variable, sont vérifiés dans les groupes en page (docx, pageBreakToc, varPath).
+// Le titre du sommaire des exports DOCX et PDF, la phrase « aucun titre » du sommaire DOCX et les autres messages d'erreur d'une variable sont vérifiés dans les groupes en page
+// (docx, pageBreakToc, varPath, chips).
 // Lancé par run-headless.mjs (groupe Node "englishTextsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-english-texts-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -156,6 +159,7 @@ async function clickOn(selector) {
   return at;
 }
 const textOf = selector => page.evaluate(sel => { const el = document.querySelector(sel); return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }, selector);
+const textsOf = selector => page.evaluate(sel => Array.from(document.querySelectorAll(sel)).map(el => el.textContent.replace(/\s+/g, ' ').trim()), selector);
 async function loadDoc(html) {
   await page.evaluate(h => Editor.setHTML(h), html);
   await settle();
@@ -173,12 +177,14 @@ const EN = {
   toc: 'Table of contents (generated automatically from headings)',
   tocTitle: 'Table of Contents', tocEmpty: 'No heading found.', warning: 'Warning: some variables could not be resolved.',
   badgeError: '[ERROR: no matching configured for Contrats — reinsert the variable to configure it]',
+  emailChip: '[Email unavailable]',
 };
 const FR = {
   addHeader: '+ Ajouter un en-tête', addFooter: '+ Ajouter un pied de page', roboto: 'Roboto (par défaut)',
   toc: 'Sommaire (généré automatiquement à partir des titres)',
   tocTitle: 'Sommaire', tocEmpty: 'Aucun titre trouvé.', warning: 'Attention : certaines variables n’ont pas pu être résolues.',
   badgeError: '[ERREUR: aucune correspondance configurée pour Contrats — réinsérez la variable pour la configurer]',
+  emailChip: '[Email indisponible]',
 };
 
 console.log('1. L\'interface est bien en anglais, comme chez un utilisateur qui l\'a choisi');
@@ -289,6 +295,7 @@ await page.evaluate(async () => {
 });
 const BROKEN = '<span class="var-badge" data-table="Contrats" data-column="Objet" data-key="Contrats.Objet">#Contrats.Objet</span>';
 const TOC = '<div class="toc-marker"></div>';
+const EMAIL_CHIP = '<span class="smart-chip" contenteditable="false" data-chip-kind="email">Email</span>';
 // Une ligne est sélectionnée dans Grist : le mode Lecture montre le document rempli.
 await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
 await sleep(300);
@@ -301,14 +308,16 @@ async function openReader() {
 }
 async function backToEditor() { await clickOn('#btn-mode-edit'); await settle(); }
 // Document sans titre, avec un sommaire et une variable qui ne se résout pas (table sans lien avec la table de la ligne).
-await loadDoc(`<p>Hello ${BROKEN}</p>${TOC}`);
+await loadDoc(`<p>Hello ${BROKEN} ${EMAIL_CHIP}</p>${TOC}`);
 const readBtn = await openReader();
 check('le bouton du mode Lecture s\'atteint à la souris', readBtn.found && readBtn.inViewport && readBtn.onTop, readBtn);
 check('le mode Lecture affiche le document', await page.evaluate(() => !!document.querySelector('#reader-container .reader-content')));
 check('titre du sommaire : "Table of Contents"', await textOf('#reader-container .toc-title') === EN.tocTitle, await textOf('#reader-container .toc-title'));
 check('sommaire vide : "No heading found."', await textOf('#reader-container .toc-empty') === EN.tocEmpty, await textOf('#reader-container .toc-empty'));
 check('avertissement : "Warning: some variables could not be resolved."', await textOf('#reader-container > p.error-msg') === EN.warning, await textOf('#reader-container > p.error-msg'));
-check('la variable en erreur dit son message en anglais', await textOf('#reader-container .reader-content .resolved-var.error-msg') === EN.badgeError, await textOf('#reader-container .reader-content .resolved-var.error-msg'));
+const enErrors = await textsOf('#reader-container .reader-content .resolved-var.error-msg');
+check('la variable en erreur dit son message en anglais', enErrors[0] === EN.badgeError, enErrors);
+check('le chip Email sans adresse dit "[Email unavailable]"', enErrors.length === 2 && enErrors[1] === EN.emailChip, enErrors);
 await backToEditor();
 // Document avec des titres et sans variable cassée : la liste des titres, et aucun avertissement.
 await loadDoc(`<h1>Alpha</h1>${TOC}<h2>Beta</h2><p>Hello</p>`);
@@ -347,12 +356,14 @@ await settle();
 check('sommaire dans l\'éditeur : texte français d\'origine', await textOf('.tiptap .toc-marker') === FR.toc, await textOf('.tiptap .toc-marker'));
 const frHtml = await page.evaluate(() => Editor.getHTML());
 check('HTML enregistré : texte français d\'origine', (frHtml.match(/<div class="toc-marker"[^>]*>(.*?)<\/div>/) || [])[1] === FR.toc, frHtml);
-await loadDoc(`<p>Bonjour ${BROKEN}</p>${TOC}`);
+await loadDoc(`<p>Bonjour ${BROKEN} ${EMAIL_CHIP}</p>${TOC}`);
 await openReader();
 check('Lecture : "Sommaire"', await textOf('#reader-container .toc-title') === FR.tocTitle, await textOf('#reader-container .toc-title'));
 check('Lecture : "Aucun titre trouvé."', await textOf('#reader-container .toc-empty') === FR.tocEmpty, await textOf('#reader-container .toc-empty'));
 check('Lecture : "Attention : certaines variables n’ont pas pu être résolues."', await textOf('#reader-container > p.error-msg') === FR.warning, await textOf('#reader-container > p.error-msg'));
-check('Lecture : la variable en erreur redit son message en français', await textOf('#reader-container .reader-content .resolved-var.error-msg') === FR.badgeError, await textOf('#reader-container .reader-content .resolved-var.error-msg'));
+const frErrors = await textsOf('#reader-container .reader-content .resolved-var.error-msg');
+check('Lecture : la variable en erreur redit son message en français', frErrors[0] === FR.badgeError, frErrors);
+check('Lecture : le chip Email sans adresse redit "[Email indisponible]"', frErrors.length === 2 && frErrors[1] === FR.emailChip, frErrors);
 await backToEditor();
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

@@ -507,7 +507,7 @@ const DocxExport = (function () {
 
   function buildTocParagraphs(headingBlocks) {
     const title = new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('pdf.tocTitle'), bold: true, size: 32 })], spacing: { after: 160 } });
-    if (!headingBlocks.length) return [title, new docx.Paragraph({ children: [new docx.TextRun({ text: '(aucun titre dans ce document)', italics: true })] })];
+    if (!headingBlocks.length) return [title, new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
     const lines = headingBlocks.map(hb => new docx.Paragraph({
       children: [new docx.TextRun({ text: hb.text, bold: hb.level === 1 })],
       indent: { left: Math.max(0, hb.level - 1) * INDENT_STEP_TWIP },

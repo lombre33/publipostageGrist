@@ -472,6 +472,23 @@
       } finally { I18n.setLang(previousLang); }
     }));
 
+  // Sans aucun titre, le sommaire dit « (aucun titre dans ce document) » sous son titre : sa phrase suit aussi la langue de l'interface (carte d'Antoine du 30/09,
+  // « Traduire »). Le français ne change pas.
+  ['fr', 'en'].forEach(lang => add('docx_toc_empty_follows_interface_language_' + lang,
+    'Le sommaire DOCX d\'un document sans titre dit sa phrase « aucun titre » dans la langue de l\'interface (' + lang + ') : « (aucun titre dans ce document) » en français, « (no heading in this document) » en anglais',
+    async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        const parts = await h.exportDocxParts('<div class="toc-marker"></div><p>juste du texte</p>');
+        const textes = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
+        const wantedTitle = lang === 'en' ? 'Table of Contents' : 'Sommaire';
+        const wantedEmpty = lang === 'en' ? '(no heading in this document)' : '(aucun titre dans ce document)';
+        const otherEmpty = lang === 'en' ? '(aucun titre dans ce document)' : '(no heading in this document)';
+        return { pass: textes[0] === wantedTitle && textes[1] === wantedEmpty && !textes.includes(otherEmpty) && textes.includes('juste du texte'), notes: JSON.stringify(textes) };
+      } finally { I18n.setLang(previousLang); }
+    }));
+
   add('docx_toc_ignored_inside_table',
     'Un sommaire égaré dans une cellule est ignoré silencieusement plutôt que de faire planter la sérialisation',
     async (h) => {

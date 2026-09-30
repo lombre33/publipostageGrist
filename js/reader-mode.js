@@ -341,8 +341,8 @@ const ReaderMode = (function () {
         // Repli visuel identique à une #Variable cassée en cas d'échec (réseau, portée du jeton insuffisante...), jamais un blocage du reste du rendu.
         try {
           text = await GristAPI.getCurrentUserEmail();
-          if (!text) { text = '[Email indisponible]'; isError = true; }
-        } catch (e) { text = '[Email indisponible]'; isError = true; }
+          if (!text) { text = I18n.t('reader.emailUnavailable'); isError = true; }
+        } catch (e) { text = I18n.t('reader.emailUnavailable'); isError = true; }
       }
       const span = document.createElement('span');
       span.textContent = text;
