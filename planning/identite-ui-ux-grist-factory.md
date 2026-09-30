@@ -256,7 +256,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   jusqu'au prochain appui sur Tab ; celle du survol reste.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
-  aussi (`pp-access-locked`), sans jamais masquer.
+  aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la
+  Lecture, qui surligne alors les passages commentés (choix d'Antoine du 30/09) ; sans le droit de commenter, la Lecture
+  reste sans commentaires, comme l'export.
 - Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
   favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
   choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).

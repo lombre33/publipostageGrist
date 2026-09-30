@@ -15,8 +15,9 @@ const Comments = (function () {
   let currentModeleId = null;
   let threadsByCommentId = {}; // { [commentId]: [{id, auteur, texte, creeLe}, ...] } trié par creeLe croissant
 
-  // Droits par personne (js/access-rights.js), posés par js/main.js:applyAccessRights. `readerMode` = lecture seule AVEC commentaires autorisés : les
-  // commentaires deviennent visibles et utilisables sur le mode Lecture, le seul que cette personne voit (demande d'Antoine du 2026-09-28).
+  // Droits par personne (js/access-rights.js), posés par js/main.js:applyCommentsPermissions. `readerMode` = mode Lecture affiché AVEC commentaires
+  // autorisés : les commentaires deviennent visibles et utilisables dans la Lecture, imposée par la lecture seule (demande d'Antoine du 2026-09-28) ou
+  // choisie (choix d'Antoine du 2026-09-30 : Commenter y agit sur le texte sélectionné dans la Lecture, plus sur l'éditeur masqué). En Édition, false.
   let canComment = true;
   let readerMode = false;
   // Fournis par js/main.js : `save` enregistre le modèle après un changement de marque fait depuis le mode Lecture (l'auto-save n'écrit rien en lecture

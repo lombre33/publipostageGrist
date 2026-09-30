@@ -4,6 +4,9 @@
 // clics sur Tableau, Sommaire ou Citation modifiaient le modèle caché et l'auto-save l'enregistrait sans rien montrer.
 // dev-tests/scenarios-access-rights.js (access_read_mode_greys_formatting_bar_and_writes_nothing) le vérifie DANS la page (.click()) ; ici, la barre est
 // grisée aux PIXELS d'une vraie capture (pas une classe ni une opacité lue), les clics sont de vrais gestes, et ce qui doit rester actif l'est.
+// Deuxième partie (runCommentsTheme) - choix d'Antoine du 2026-09-30, « Commenter dans la Lecture » : dans ce même mode Lecture choisi, Commenter agit sur le
+// texte sélectionné DANS la Lecture (glissé à la souris), comme en lecture seule (dev-tests/verify-access-rights-mouse.mjs). Avant, il posait sa marque sur la
+// sélection de l'éditeur masqué : modèle modifié et enregistré sans rien montrer, fenêtre du commentaire dans le coin haut gauche.
 // Lancé par run-headless.mjs (groupe Node "readModeMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-read-mode-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -86,7 +89,8 @@ async function openWidget(colorScheme) {
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   // Boîtes du navigateur (alert/confirm) : acceptées et consignées, jamais bloquantes.
-  page.on('dialog', d => d.accept().catch(() => {}));
+  const dialogs = [];
+  page.on('dialog', d => { dialogs.push(d.message()); d.accept().catch(() => {}); });
   if (OFFLINE) {
     await page.route('**://esm.sh/**', async route => {
       const url = route.request().url();
@@ -127,7 +131,7 @@ async function openWidget(colorScheme) {
     const el = document.getElementById('status-msg');
     return !!el && /prêt|ready/i.test(el.textContent || '');
   }, null, { timeout: 90000 });
-  return { context, page };
+  return { context, page, dialogs };
 }
 
 // Centre d'un élément et est-il entièrement dans le panneau ?
@@ -244,8 +248,132 @@ async function runTheme(theme) {
   await context.close();
 }
 
+// Mode Lecture choisi, tous les droits, aucun réglage : l'éditeur masqué garde une sélection (« Bonjour ») qui n'a rien à voir avec ce que la personne
+// sélectionne dans la Lecture (« le contrat »). Commenter doit agir sur la seconde.
+async function runCommentsTheme(theme) {
+  const label = theme === 'dark' ? 'sombre' : 'clair';
+  console.log(`\n=== Commenter dans la Lecture à la vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  const { context, page, dialogs } = await openWidget(theme);
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await page.evaluate(() => EditorCore.getEditor().commands.setTextSelection({ from: 1, to: 8 })); // « Bonjour », dans l'éditeur qui va être masqué
+  await realClick(page, '#btn-mode-read');
+  await page.waitForFunction(() => {
+    const c = document.querySelector('#reader-container .reader-content');
+    return document.getElementById('reader-container').style.display === 'block' && !!c && (c.textContent || '').indexOf('Dupont') !== -1;
+  }, null, { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  const marksInDoc = () => page.evaluate(() => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants(n => { if (n.isText && n.marks.some(m => m.type.name === 'commentMark')) out.push(n.text); });
+    return out;
+  });
+  const popupState = () => page.evaluate(() => { const p = document.getElementById('v2-comment-popup'); return !!p && p.style.display !== 'none'; });
+
+  const lecture = await page.evaluate(() => ({
+    commentable: document.getElementById('reader-container').classList.contains('pp-reader-comments'),
+    annotated: !!document.querySelector('#reader-container [data-pp-pos]'),
+    btnLocked: document.getElementById('v2-btn-comment').classList.contains('pp-access-locked'),
+  }));
+  const commentBox = await boxOf(page, '#v2-btn-comment');
+  check(`${label} - Lecture choisie : Lecture commentable, bouton Commenter visible et actif dans le panneau`,
+    lecture.commentable && lecture.annotated && !lecture.btnLocked && !!commentBox && commentBox.inViewport, { lecture, commentBox });
+
+  // Commenter sans rien sélectionner dans la Lecture (l'éditeur masqué, lui, garde « Bonjour ») : une alerte, aucune marque, aucune fenêtre.
+  const alertsBefore = dialogs.length;
+  await realClick(page, '#v2-btn-comment');
+  await page.waitForTimeout(500);
+  const noSelection = { marks: await marksInDoc(), popup: await popupState(), alerts: dialogs.slice(alertsBefore) };
+  check(`${label} - Commenter sans texte sélectionné dans la Lecture : alerte, aucune marque, aucune fenêtre (l'éditeur masqué n'est pas marqué)`,
+    noSelection.alerts.length === 1 && /Sélectionnez du texte/.test(noSelection.alerts[0]) && noSelection.marks.length === 0 && !noSelection.popup, noSelection);
+
+  // Sélection à la souris de « le contrat » dans la Lecture (glisser d'un bout à l'autre du texte, comme verify-access-rights-mouse.mjs).
+  const textBox = await page.evaluate(() => {
+    const content = document.querySelector('#reader-container .reader-content');
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const i = node.data.indexOf('le contrat');
+      if (i === -1) continue;
+      const r = document.createRange();
+      r.setStart(node, i); r.setEnd(node, i + 1);
+      const first = r.getBoundingClientRect();
+      r.setStart(node, i + 'le contrat'.length - 1); r.setEnd(node, i + 'le contrat'.length);
+      const last = r.getBoundingClientRect();
+      r.setStart(node, i + 'le contrat'.length); r.setEnd(node, i + 'le contrat'.length + 1);
+      const next = r.getBoundingClientRect();
+      return { x1: first.left + 0.5, x2: (last.right + (next.left + next.right) / 2) / 2, y: (first.top + first.bottom) / 2, bottom: last.bottom };
+    }
+    return null;
+  });
+  if (textBox) {
+    await page.mouse.move(textBox.x1, textBox.y);
+    await page.mouse.down();
+    await page.mouse.move(textBox.x2, textBox.y, { steps: 8 });
+    await page.mouse.up();
+  }
+  await page.waitForTimeout(150);
+  const selectedText = await page.evaluate(() => String(window.getSelection()));
+  check(`${label} - « le contrat » est visible dans la Lecture et la sélection à la souris le couvre`, !!textBox && textBox.bottom <= HEIGHT && selectedText.trim() === 'le contrat', { textBox, selectedText });
+
+  // Vrai clic sur Commenter : la marque est sur « le contrat » (pas sur « Bonjour »), surlignée dans la Lecture, la fenêtre s'ouvre collée à elle.
+  await realClick(page, '#v2-btn-comment');
+  await page.waitForFunction(() => { const p = document.getElementById('v2-comment-popup'); return !!p && p.style.display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(250);
+  const composer = await page.evaluate(() => {
+    const mark = document.querySelector('#reader-container .comment-mark');
+    const pop = document.getElementById('v2-comment-popup').getBoundingClientRect();
+    const box = mark ? mark.getBoundingClientRect() : null;
+    return {
+      readerMark: mark ? mark.textContent : null,
+      highlight: mark ? getComputedStyle(mark).backgroundColor : null,
+      gap: box ? Math.min(Math.abs(pop.top - (box.bottom + 6)), Math.abs(pop.bottom - (box.top - 6))) : null,
+      popupInViewport: pop.left >= 0 && pop.top >= 0 && pop.right <= innerWidth + 0.5 && pop.bottom <= innerHeight + 0.5,
+      focused: document.activeElement && document.activeElement.className,
+    };
+  });
+  const marksAfterClick = await marksInDoc();
+  check(`${label} - vrai clic sur Commenter : marque posée exactement sur « le contrat », jamais sur « Bonjour », surlignée dans la Lecture`,
+    JSON.stringify(marksAfterClick) === '["le contrat"]' && composer.readerMark === 'le contrat' && composer.highlight !== 'rgba(0, 0, 0, 0)', { marksAfterClick, composer });
+  check(`${label} - la fenêtre du commentaire est collée au texte commenté, entièrement dans le panneau, saisie prête`,
+    composer.gap !== null && composer.gap <= 2 && composer.popupInViewport && /v2-comment-popup-reply/.test(composer.focused || ''), composer);
+
+  // Taper puis vrai clic sur Publier : le modèle enregistré porte la marque sur « le contrat », le fil est enregistré.
+  await page.keyboard.type('À reformuler');
+  await realClick(page, '#v2-comment-popup .v2-comment-popup-post');
+  await page.waitForTimeout(900);
+  const saved = await page.evaluate(() => {
+    const s = window.__gristStub;
+    const t = s.state.rows.Publipostage_Commentaires;
+    return { contenu: s.getRow('Publipostage_Modeles', 1).Contenu, thread: t ? t.Texte.slice() : [] };
+  });
+  check(`${label} - Publier : modèle enregistré avec la marque sur « le contrat » (pas « Bonjour »), fil enregistré`,
+    /class="comment-mark">le contrat<\/span>/.test(saved.contenu) && !/class="comment-mark">Bonjour/.test(saved.contenu) && saved.thread.length === 1 && saved.thread[0] === 'À reformuler', saved);
+
+  // Fermer la fenêtre puis vrai clic sur le texte surligné de la Lecture : le fil se rouvre avec son message.
+  await realClick(page, '#v2-comment-popup .v2-comment-popup-close');
+  await page.waitForTimeout(300);
+  const closed = !(await popupState());
+  await realClick(page, '#reader-container .comment-mark');
+  await page.waitForTimeout(400);
+  const reopened = await page.evaluate(() => { const p = document.getElementById('v2-comment-popup'); return !!p && p.style.display !== 'none' && (p.textContent || '').indexOf('À reformuler') !== -1; });
+  check(`${label} - fenêtre fermée, puis vrai clic sur le texte surligné : le fil se rouvre avec son message`, closed && reopened, { closed, reopened });
+
+  // Retour en Édition (vrai clic) : la marque est sur le même texte de l'éditeur, visible dans le panneau. Le fil est d'abord fermé : posé au-dessus du texte
+  // commenté, à 700x400, il recouvre la rangée des modes (le vrai clic tomberait sur lui).
+  await realClick(page, '#v2-comment-popup .v2-comment-popup-close');
+  await page.waitForTimeout(300);
+  await realClick(page, '#btn-mode-edit');
+  await page.waitForTimeout(600);
+  const edition = { popup: await popupState(), mark: await boxOf(page, '#editor-container .comment-mark'), text: await page.evaluate(() => { const m = document.querySelector('#editor-container .comment-mark'); return m ? m.textContent : null; }) };
+  check(`${label} - retour en Édition : la marque est sur « le contrat » dans l'éditeur, visible dans le panneau, aucune fenêtre ouverte`,
+    !edition.popup && edition.text === 'le contrat' && !!edition.mark && edition.mark.inViewport, edition);
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
+await runCommentsTheme('light');
+await runCommentsTheme('dark');
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

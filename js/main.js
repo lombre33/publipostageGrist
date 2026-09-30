@@ -397,13 +397,23 @@
 
   // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule ET dès que le mode Lecture est affiché, choisi ou imposé. L'éditeur y est
   // masqué mais ses commandes restaient actives : un clic sur Tableau, Sommaire ou Citation modifiait le modèle caché, et l'auto-save l'enregistrait sans
-  // rien montrer (audit du 2026-09-29, F1). Commenter suit son propre droit, jamais le mode. Modes, aperçu A4, réglages, arbre des modèles et export ne font
-  // pas partie de #v2-toolbar : ils restent actifs. Rappelée par applyAccessRights (droits) et switchMode (mode).
+  // rien montrer (audit du 2026-09-29, F1). Commenter suit son propre droit, jamais le mode : dans la Lecture il agit sur le texte sélectionné DANS la
+  // Lecture (applyCommentsPermissions). Modes, aperçu A4, réglages, arbre des modèles et export ne font pas partie de #v2-toolbar : ils restent actifs.
+  // Rappelée par applyAccessRights (droits) et switchMode (mode).
   function applyFormattingBarLock() {
     const formattingBar = document.getElementById('v2-toolbar');
     if (!formattingBar) return;
     const locked = isReadOnly() || currentMode === 'read';
     Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked); });
+  }
+
+  // Commentaires : le mode Lecture les montre et en accepte de nouveaux (js/comments.js:readerMode) dès qu'il est affiché, imposé par la lecture seule ou
+  // choisi, pour toute personne qui a le droit de commenter (choix d'Antoine du 2026-09-30, « Commenter dans la Lecture »). Avant, Commenter d'un mode
+  // Lecture choisi posait sa marque sur la sélection de l'éditeur masqué, enregistrée sans rien montrer. En Édition, Commenter agit sur l'éditeur, comme
+  // toujours. Rappelée par applyAccessRights (droits) et switchMode (mode, AVANT le dessin du mode Lecture : renderReader lit cet état).
+  function applyCommentsPermissions() {
+    const rights = AccessRights.get();
+    Comments.setPermissions({ canComment: rights.canComment, readerMode: rights.canComment && (rights.readOnly || currentMode === 'read') });
   }
 
   function applyAccessRights() {
@@ -413,7 +423,7 @@
     setAccessLocked(document.getElementById('v2-btn-comment'), !rights.canComment);
     EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport));
     READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
-    Comments.setPermissions({ canComment: rights.canComment, readerMode: rights.readOnly && rights.canComment });
+    applyCommentsPermissions();
     updateSaveStatus();
   }
 
@@ -628,13 +638,15 @@
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
-  // Lecture seule avec droit de commenter (js/comments.js:readerMode) : le mode Lecture montre les commentaires et en accepte de nouveaux, sur un HTML
-  // qui porte les positions du document. Jamais pour un macro-modèle : son contenu vient d'autres modèles, pas de l'éditeur.
+  // Mode Lecture affiché (imposé par la lecture seule ou choisi) avec droit de commenter (js/comments.js:readerMode, applyCommentsPermissions) : il
+  // montre les commentaires et en accepte de nouveaux, sur un HTML qui porte les positions du document. Jamais pour un macro-modèle : son contenu vient
+  // d'autres modèles, pas de l'éditeur.
   function readerCommentsActive() { return Comments.isReaderMode() && currentTypeModele !== 'macro'; }
 
-  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule, le modèle (sa marque de commentaire) est
-  // donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son chargement, sinon la marque écraserait ce changement (même contrôle de
-  // DateModif que autosaveTick). false = rien d'enregistré, js/comments.js annule alors son changement de marque.
+  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule (et n'a peut-être pas encore tourné quand le
+  // mode Lecture est choisi), le modèle (sa marque de commentaire) est donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son
+  // chargement, sinon la marque écraserait ce changement (même contrôle de DateModif que autosaveTick). false = rien d'enregistré, js/comments.js annule
+  // alors son changement de marque.
   async function saveReaderCommentAnchors() {
     const id = Templates.getCurrentId();
     if (!id || currentTypeModele === 'macro' || autosaveConflictActive) return false;
@@ -971,6 +983,7 @@
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
     applyFormattingBarLock();
+    applyCommentsPermissions();
     btnEdit.classList.toggle('active', mode === 'edit');
     btnRead.classList.toggle('active', mode === 'read');
     syncEditorVisibilityForMode();

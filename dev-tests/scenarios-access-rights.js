@@ -469,6 +469,108 @@
     },
   });
 
+  // Mode Lecture ordinaire (tous les droits, aucun réglage) - choix d'Antoine du 2026-09-30, « Commenter dans la Lecture ». Avant, Commenter y agissait sur la
+  // sélection de l'ÉDITEUR masqué : marque posée sur un texte qu'on ne voit pas, enregistrée par l'auto-save, fenêtre dans le coin haut gauche. Il agit
+  // maintenant sur le texte sélectionné DANS la Lecture, comme en lecture seule (mêmes fonctions : Comments.readerMode, positions data-pp-pos).
+  cases.push({
+    id: 'access_read_mode_comment_lands_on_the_reader_selection',
+    description: 'Mode Lecture choisi (tous les droits) : Commenter pose la marque sur le texte sélectionné DANS la Lecture (pas sur la sélection de l’éditeur masqué), la surligne en Lecture, colle la fenêtre à elle, enregistre modèle et fil ; en Édition, Commenter reprend l’éditeur',
+    run: async (h) => {
+      const modeleId = await savedTemplate(h, 'Commentaire en Lecture choisie');
+      // Sélection de l'éditeur différente de celle qui sera faite dans la Lecture : l'ancien Commenter la marquait, alors qu'elle est masquée.
+      EditorCore.getEditor().commands.setTextSelection({ from: 1, to: 8 });
+      await sleep(60);
+      document.getElementById('btn-mode-read').click();
+      await sleep(600);
+      const inRead = inReadMode();
+      const readerClass = document.getElementById('reader-container').classList.contains('pp-reader-comments');
+      const readerMode = Comments.isReaderMode();
+      const selected = selectInReader('le contrat');
+      await h.clickButton('v2-btn-comment');
+      await waitFor(popupVisible, 3000);
+      const marks = markedTextInEditorDoc();
+      const readerMark = document.querySelector('#reader-container .comment-mark');
+      const readerMarkText = readerMark ? readerMark.textContent : null;
+      const highlight = readerMark ? getComputedStyle(readerMark).backgroundColor : null;
+      const pop = popup().getBoundingClientRect();
+      const markBox = readerMark ? readerMark.getBoundingClientRect() : null;
+      const nearMark = !!markBox && Math.min(Math.abs(pop.top - markBox.bottom), Math.abs(markBox.top - pop.bottom)) <= 12;
+      popup().querySelector('.v2-comment-popup-reply').value = 'À reformuler';
+      await pressPopupButton('.v2-comment-popup-post');
+      await sleep(400);
+      const commentId = marks.length ? marks[0].id : null;
+      const row = stub().getRow('Publipostage_Modeles', modeleId);
+      const savedHasMark = !!row && row.Contenu.indexOf('data-comment-id="' + commentId + '"') !== -1 && /class="comment-mark">le contrat<\/span>/.test(row.Contenu)
+        && !/class="comment-mark">Bonjour/.test(row.Contenu);
+      const thread = commentRows().filter(r => r.commentId === commentId);
+      await pressPopupButton('.v2-comment-popup-close');
+      // Clic sur le texte commenté de la Lecture : le fil se rouvre avec son message.
+      const again = document.querySelector('#reader-container .comment-mark');
+      if (again) again.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(300);
+      const reopened = popupVisible() && (popup().textContent || '').indexOf('À reformuler') !== -1;
+      if (popupVisible()) await pressPopupButton('.v2-comment-popup-close');
+      // De retour en Édition : la marque est sur le même texte, et Commenter y reprend l'éditeur (plus de Lecture commentable).
+      document.getElementById('btn-mode-edit').click();
+      await sleep(400);
+      const editorMark = document.querySelector('#editor-container .comment-mark');
+      const backInEdit = !Comments.isReaderMode() && !!editorMark && editorMark.textContent === 'le contrat';
+      await cleanup();
+      const pass = inRead && readerClass && readerMode && selected && marks.length === 1 && marks[0].text === 'le contrat' && readerMarkText === 'le contrat'
+        && highlight !== 'rgba(0, 0, 0, 0)' && nearMark && savedHasMark && thread.length === 1 && thread[0].texte === 'À reformuler' && reopened && backInEdit;
+      return { pass, notes: JSON.stringify({ inRead, readerClass, readerMode, selected, marks, readerMarkText, highlight, nearMark, popupRect: [pop.top, pop.bottom], markRect: markBox && [markBox.top, markBox.bottom], savedHasMark, thread, reopened, backInEdit }) };
+    },
+  });
+
+  cases.push({
+    id: 'access_read_mode_comment_without_reader_selection_alerts_and_writes_nothing',
+    description: 'Mode Lecture choisi : Commenter sans texte sélectionné dans la Lecture demande d’en sélectionner, même quand l’éditeur masqué garde une sélection - aucune marque, aucune fenêtre, aucune écriture',
+    run: async (h) => {
+      await savedTemplate(h, 'Commentaire en Lecture sans sélection');
+      EditorCore.getEditor().commands.setTextSelection({ from: 1, to: 8 });
+      await sleep(60);
+      document.getElementById('btn-mode-read').click();
+      await sleep(600);
+      window.getSelection().removeAllRanges();
+      const alerts = [];
+      const origAlert = window.alert;
+      window.alert = msg => { alerts.push(msg); };
+      const updatesBefore = stub().countActions('UpdateRecord', 'Publipostage_Modeles');
+      let marks, popupShown, updatesAfter;
+      try {
+        await h.clickButton('v2-btn-comment');
+        await sleep(3500); // plus qu'un tick d'auto-save (2,5 s) : une marque posée en silence serait déjà enregistrée
+        marks = markedTextInEditorDoc();
+        popupShown = popupVisible();
+        updatesAfter = stub().countActions('UpdateRecord', 'Publipostage_Modeles');
+      } finally {
+        window.alert = origAlert;
+      }
+      await cleanup();
+      const pass = alerts.length === 1 && alerts[0] === I18n.t('comments.selectTextFirst') && marks.length === 0 && !popupShown && updatesAfter === updatesBefore;
+      return { pass, notes: JSON.stringify({ alerts, marks, popupShown, updatesBefore, updatesAfter }) };
+    },
+  });
+
+  cases.push({
+    id: 'access_read_mode_without_comment_right_shows_no_comments',
+    description: 'Mode Lecture choisi sans le droit de commenter : Commenter grisé, Lecture sans commentaires surlignés (comme l’export), et le droit de commenter rend la Lecture commentable sans recharger',
+    run: async (h) => {
+      await savedTemplate(h, 'Lecture sans droit de commenter', '<p>Bonjour, voici le contrat de location.</p>');
+      const applied = await applyRights({ readOnly: false, export: true, comments: false });
+      document.getElementById('btn-mode-read').click();
+      await sleep(600);
+      const readerClass = document.getElementById('reader-container').classList.contains('pp-reader-comments');
+      const off = { readerMode: Comments.isReaderMode(), readerClass, greyed: locked('v2-btn-comment') };
+      const granted = await applyRights({ readOnly: false, export: true, comments: true });
+      await sleep(300);
+      const on = { readerMode: Comments.isReaderMode(), readerClass: document.getElementById('reader-container').classList.contains('pp-reader-comments'), greyed: locked('v2-btn-comment') };
+      await cleanup();
+      const pass = applied && granted && !off.readerMode && !off.readerClass && off.greyed && on.readerMode && on.readerClass && !on.greyed;
+      return { pass, notes: JSON.stringify({ applied, granted, off, on }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();

@@ -5,9 +5,9 @@
    bouton de #toolbar-top porte déjà ses propres règles d'opacité, plus spécifiques, qui l'emporteraient sinon. */
 .pp-access-locked { pointer-events: none !important; opacity: .35 !important; cursor: default; }
 
-/* Commentaires en mode Lecture - seulement pour une personne en lecture seule qui a le droit de commenter (js/comments.js:readerMode, classe posée par
-   js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap .comment-mark) ; partout ailleurs, le mode Lecture reste sans
-   commentaires, comme l'export. */
+/* Commentaires en mode Lecture - pour toute personne qui a le droit de commenter, en lecture seule ou en Lecture choisie (js/comments.js:readerMode, classe
+   posée par js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap .comment-mark) ; sans le droit de commenter (et pour
+   un macro-modèle), le mode Lecture reste sans commentaires, comme l'export. */
 #reader-container.pp-reader-comments .comment-mark { background: #fff3cf; border-bottom: 2px solid #f0c36d; cursor: pointer; }
 #reader-container.pp-reader-comments .comment-mark-resolved { background: transparent; border-bottom: 2px solid var(--text-faint); }
 
