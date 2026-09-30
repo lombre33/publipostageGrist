@@ -309,13 +309,18 @@ const Variables = (function () {
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }
 
+  // Option « Si la valeur vaut zéro : Ne rien afficher » d'une bulle nombre (`zero: 'hide'`, barre flottante) : un zéro ne s'écrit pas du tout - ni le nombre, ni sa
+  // devise, ni « zéro » en toutes lettres. Choisie seule, elle n'a pas de `type` : le reste des valeurs garde le rendu historique (String(val)), les autres
+  // réglages nombre posant le `type` quand on les touche.
+  function hidesZero(format) { return !!format && format.zero === 'hide' && (!format.type || format.type === 'number'); }
   // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans format
   // reste en revanche `String(val)` brut.
   // Un tableau (une valeur par ligne liée d'une règle "match", ou une liste) est formaté élément par élément : un simple join laissait une date d'une autre
-  // table en secondes brutes et ignorait le format nombre/date de la bulle.
+  // table en secondes brutes et ignorait le format nombre/date de la bulle. Un zéro masqué en est retiré : il ne laisse pas de trou entre deux virgules.
   function formatValue(val, format, varTable, varColumn) {
     if (val === null || val === undefined) return '';
-    if (Array.isArray(val)) return val.map(v => formatValue(v, format, varTable, varColumn)).join(', ');
+    if (Array.isArray(val)) return (hidesZero(format) ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn)).join(', ');
+    if (hidesZero(format) && VariableFormat.isZero(val)) return '';
     let effectiveFormat = format;
     if (!effectiveFormat && varTable && varColumn) {
       const colType = GristAPI.getColumnType(varTable, varColumn);

@@ -392,8 +392,11 @@
 /* === Barre flottante de formatage nombre/date d'une bulle #Variable === Réutilise le chrome .v2-floating-toolbar ; ce qui suit ne couvre que le CONTENU
    propre (segmenté FR/US/aucun, décimales, devise, bascule lettres, préréglages de date) - ses boutons ont besoin d'une largeur variable (libellés texte),
    contrairement aux boutons icône-seule des autres barres flottantes. */
-.v2-varfmt-toolbar { align-items: center; }
-.v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; }
+/* Largeur = son contenu, jamais plus que la fenêtre (moins la marge de 8px du positionnement) : dans un panneau étroit les réglages passent à la ligne au lieu de
+   déborder (avec « Si la valeur vaut zéro » la barre nombre fait ~530px). `width: max-content` : la largeur ne dépend pas de la position `left` que lui donne le
+   positionnement, sans quoi la mesure et le placement se répondraient l'un à l'autre. */
+.v2-varfmt-toolbar { align-items: center; flex-wrap: wrap; width: max-content; max-width: calc(100vw - 16px); }
+.v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
 .v2-varfmt-seg { display: inline-flex; border: 1px solid var(--border, #d7dde3); border-radius: 4px; overflow: hidden; }
 .v2-varfmt-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }

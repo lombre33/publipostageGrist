@@ -741,6 +741,82 @@ const inheritNone = await inheritState();
 check('variable sans condition : la ligne « Reprendre la condition d’affichage » n’est pas montrée', inheritNone.missing || !inheritNone.shown, inheritNone);
 await cancelLinkedWindow();
 
+// Nombres : « Si la valeur vaut zéro » (demande d'Antoine 2026-09-30). La barre d'une bulle Numérique gagne un menu : à la vraie souris et à 700x400 il est
+// atteignable et non recouvert, un vrai choix au clavier pose {zero:'hide'} SANS activer la mise en forme des nombres, les autres réglages le gardent, la barre
+// reste ouverte, et dans une fenêtre étroite la barre passe à la ligne au lieu de déborder du panneau.
+const NUM_BADGE = '.tiptap .var-badge[data-column="Montant"]';
+async function openNumberBar() {
+  await page.evaluate(() => {
+    document.querySelector('.tiptap').blur();
+    Editor.setHTML('<p>Montant dû : <span class="var-badge" data-table="VcDossiers" data-column="Montant" data-key="VcDossiers.Montant"></span> TTC.</p>');
+    document.querySelector('.tiptap .var-badge[data-column="Montant"]').scrollIntoView({ block: 'center' });
+  });
+  await page.waitForTimeout(500);
+  const box = await hitTest(NUM_BADGE);
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(600);
+}
+const numberFormat = () => page.evaluate(() => {
+  let format = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') format = n.attrs.format || null; });
+  return format;
+});
+const numberBar = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  if (!bar) return null;
+  const r = bar.getBoundingClientRect();
+  const panel = bar.querySelector('[data-var-panel="number"]');
+  const zero = bar.querySelector('select[data-role="num-zero"]');
+  return { left: r.left, right: r.right, height: r.height, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, panelShown: !!panel && !panel.hidden, zero: zero ? zero.value : null };
+});
+// Choix dans le menu comme une personne : clic sur le menu, touche fléchée, Entrée (la liste native n'est pas dans le DOM).
+async function chooseZero(arrow) {
+  const menu = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
+  if (!menu.found) return;
+  await page.mouse.click(menu.x, menu.y);
+  await page.waitForTimeout(150);
+  await page.keyboard.press(arrow);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+}
+
+await openNumberBar();
+const zeroMenu = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
+const zeroOptions = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-varfmt-toolbar select[data-role="num-zero"] option')).map(o => o.textContent));
+const barAt700 = await numberBar();
+check('clic sur une bulle Numérique : le menu « Si la valeur vaut zéro » est dans la barre, visible et non recouvert à 700x400', zeroMenu.found && zeroMenu.inViewport && zeroMenu.onTop, zeroMenu);
+check('... avec les deux choix « Afficher 0 » (par défaut) et « Ne rien afficher »', JSON.stringify(zeroOptions) === JSON.stringify(['Afficher 0', 'Ne rien afficher']) && barAt700 && barAt700.zero === 'show', { zeroOptions, barAt700 });
+check('... et la barre reste sur une seule ligne, dans le panneau', !!barAt700 && barAt700.height < 50 && barAt700.left >= 0 && barAt700.right <= barAt700.viewport + 0.5 && barAt700.docOverflowX <= 0, barAt700);
+check('bulle sans mise en forme : le menu n\'en crée pas (format encore vide)', (await numberFormat()) === null);
+
+await chooseZero('ArrowDown');
+const hidden = await numberFormat();
+const barHidden = await numberBar();
+check('vrai choix « Ne rien afficher » : la bulle porte {zero:"hide"} seul, sans activer la mise en forme des nombres', !!hidden && JSON.stringify(hidden) === '{"zero":"hide"}', hidden);
+check('... la barre reste ouverte sur le panneau des nombres et le menu affiche « Ne rien afficher »', !!barHidden && barHidden.panelShown && barHidden.zero === 'hide', barHidden);
+
+const styleFr = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-style:fr"]');
+check('le bouton FR voisin est atteignable', styleFr.found && styleFr.inViewport && styleFr.onTop, styleFr);
+if (styleFr.found) await page.mouse.click(styleFr.x, styleFr.y);
+await page.waitForTimeout(250);
+const frHidden = await numberFormat();
+check('vrai clic sur FR : le style est posé et le réglage zéro est gardé', !!frHidden && frHidden.type === 'number' && frHidden.style === 'fr' && frHidden.zero === 'hide', frHidden);
+
+await chooseZero('ArrowUp');
+const shownAgain = await numberFormat();
+check('vrai choix « Afficher 0 » : le réglage zéro disparaît, FR reste', !!shownAgain && shownAgain.type === 'number' && shownAgain.style === 'fr' && !('zero' in shownAgain), shownAgain);
+
+// Panneau étroit : la barre nombre (~530 px avec le menu) passe à la ligne, ne dépasse pas la fenêtre, le menu reste atteignable.
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(300);
+await openNumberBar();
+const barNarrow = await numberBar();
+const zeroNarrow = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
+check('fenêtre de 360 px : la barre nombre reste dans la fenêtre et ne fait pas défiler la page', !!barNarrow && barNarrow.left >= 0 && barNarrow.right <= barNarrow.viewport + 0.5 && barNarrow.docOverflowX <= 0, barNarrow);
+check('... et le menu « Si la valeur vaut zéro » y reste atteignable', zeroNarrow.found && zeroNarrow.inViewport && zeroNarrow.onTop, zeroNarrow);
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(300);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

@@ -231,7 +231,14 @@ const VariableFormat = (function () {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
   }
 
-  // opts = { style: 'fr'|'us'|'none', decimals: 0-3|null, currency: ''|'€'|'$'|texte, words: bool }
+  // Vrai pour une valeur qui EST zéro : le nombre 0, ou un texte qui ne s'écrit que 0 (« 0 », « 0,00 », « 0.0 »). Une valeur que l'arrondi seul fait afficher 0
+  // (0,004 à 2 décimales) n'est pas nulle. C'est ce que lit l'option « Si la valeur vaut zéro » d'une bulle nombre (`zero: 'hide'`, Variables.formatValue).
+  function isZero(val) {
+    if (typeof val === 'number') return val === 0;
+    return typeof val === 'string' && /^\s*[-+]?0+(?:[.,]0*)?\s*$/.test(val);
+  }
+
+  // opts = { style: 'fr'|'us'|'none', decimals: 0-3|null, currency: ''|'€'|'$'|texte, words: bool } - l'option `zero` est traitée avant cet appel, par Variables.formatValue.
   function formatNumber(val, opts) {
     if (val == null || val === '') return '';
     const n = typeof val === 'number' ? val : parseFloat(val);
@@ -251,5 +258,5 @@ const VariableFormat = (function () {
     return formatted;
   }
 
-  return { DATE_PRESETS, presetLabel, formatDate, formatNumber, numberToWordsFr, numberToWordsEn };
+  return { DATE_PRESETS, presetLabel, formatDate, formatNumber, isZero, numberToWordsFr, numberToWordsEn };
 })();

@@ -345,6 +345,8 @@ const FloatingToolbars = (function () {
       `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
       '<span class="v2-floating-sep"></span>',
       `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<select data-role="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}"><option value="show">${I18n.t('varFmt.zeroShow')}</option><option value="hide">${I18n.t('varFmt.zeroHide')}</option></select>`,
       '</div>',
       '<div data-var-panel="date" hidden>',
       '<span class="v2-varfmt-seg">',
@@ -364,11 +366,15 @@ const FloatingToolbars = (function () {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'varBadge') ? node : null;
     }
+    function setSelectedBadgeFormat(format) {
+      const node = selectedVarBadgeNode();
+      if (!node) return;
+      EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
+    }
     function updateSelectedBadge(patch) {
       const node = selectedVarBadgeNode();
       if (!node) return;
-      const format = Object.assign({}, node.attrs.format, patch);
-      EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, { format }));
+      setSelectedBadgeFormat(Object.assign({}, node.attrs.format, patch));
     }
     // « Autres attributs » n'a de sens que si la variable désigne une ligne d'une AUTRE table : variable d'une autre table (déjà liée à l'insertion), ou
     // colonne Référence de la table de la page (la ligne référencée). Grisé sinon (pas retiré) ; une RefList désigne plusieurs lignes (future boucle).
@@ -416,6 +422,14 @@ const FloatingToolbars = (function () {
       if (!node) return;
       if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
       if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
+      // « Si la valeur vaut zéro » : SANS `type: 'number'`, pour que choisir seulement cela ne change pas l'écriture des autres valeurs (1200 resterait 1 200 sinon) ;
+      // revenir à « Afficher 0 » retire la clé, et une bulle sans autre réglage retrouve un format vide (rendu historique, comme avant d'y toucher).
+      if (role === 'num-zero') {
+        const next = Object.assign({}, node.attrs.format);
+        if (value === 'hide') next.zero = 'hide'; else delete next.zero;
+        setSelectedBadgeFormat(Object.keys(next).length ? next : null);
+        return;
+      }
       if (role === 'date-preset') { updateSelectedBadge({ type: 'date', preset: value }); return; }
     }
 
@@ -454,6 +468,8 @@ const FloatingToolbars = (function () {
       if (decimalsSelect && document.activeElement !== decimalsSelect) decimalsSelect.value = (format.type === 'number' && format.decimals != null) ? String(format.decimals) : '';
       const currencyInput = panel.el.querySelector('input[data-role="num-currency"]');
       if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
+      const zeroSelect = panel.el.querySelector('select[data-role="num-zero"]');
+      if (zeroSelect && document.activeElement !== zeroSelect) zeroSelect.value = format.zero === 'hide' ? 'hide' : 'show';
       const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
       if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
       const isDate = format.type === 'date';
