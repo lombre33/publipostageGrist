@@ -30,6 +30,15 @@ const PdfExport = (function () {
   const PDFMAKE_DEFAULT_LINE_RATIO = 1.171875;
   const LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / PDFMAKE_DEFAULT_LINE_RATIO;
   const HEADING_SIZES = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 };
+  // Lien : #0563C1 (bleu de lien de Word) et soulignement, comme `.tiptap a` (css/editor-v2.css). Bloc de code : Cousine (métrique de Courier New, déjà embarquée), 9,5pt comme
+  // `.tiptap pre`, interligne de 1.42 - rapporté au rapport naturel de Cousine (≈1.1328, comme LINE_HEIGHT_RATIO l'est à celui de Roboto) pour que la ligne mesure la même hauteur.
+  const LINK_COLOR = '#0563c1';
+  const CODE_FONT = 'Cousine';
+  const CODE_FONT_SIZE = 9.5;
+  const CODE_LINE_HEIGHT_RATIO = EDITOR_LINE_HEIGHT_RATIO / 1.1328;
+  const CODE_BOX_COLOR = '#d0d7de';
+  const CODE_FILL_COLOR = '#f6f8fa';
+  const CODE_TEXT_COLOR = '#1b2430';
   // Marges de page (pt) - variables de module plutôt que des constantes : réglées par setPageMarginsPt() une fois par export (même schéma que
   // footnoteCounter/footnoteEntries ci-dessous, réinitialisés une fois par passage racine). 28pt sur les 4 côtés = comportement d'avant PageLayout, repli
   // si l'appelant ne fournit aucune marge (compatibilité ascendante totale).
@@ -127,6 +136,15 @@ const PdfExport = (function () {
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') addDecoration(out, 'underline');
+    // Lien : le clic part du run lui-même (`link`, annotation pdfmake), hérité par tout ce qui est dans le <a>. La couleur du lien l'emporte sur celle d'un parent mais
+    // pas sur celle d'un <span> posé DEDANS (css('color') plus bas), comme `.tiptap a` face à un texte coloré.
+    const linkHref = tag === 'A' ? HtmlSanitize.safeLinkHref(node.getAttribute('href')) : null;
+    if (linkHref) {
+      out.link = linkHref;
+      out.color = LINK_COLOR;
+      addDecoration(out, 'underline');
+    }
+    if (tag === 'PRE') { out.font = CODE_FONT; out.fontSize = CODE_FONT_SIZE; out.color = CODE_TEXT_COLOR; out.preserveLeadingSpaces = true; }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough');
     if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true;
     if (css('font-style') === 'italic') out.italics = true;
@@ -296,7 +314,7 @@ const PdfExport = (function () {
     let runs = [];
     let sawLineBlock = false;
     node.childNodes.forEach(child => {
-      const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6])$/.test(child.tagName);
+      const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style });
       if (isLineBlock) sawLineBlock = true;
       runs = runs.concat(inlineRuns(child, style, images));
@@ -308,8 +326,13 @@ const PdfExport = (function () {
   function inlineRunsExcludingNestedLists(node, parentStyle, images) {
     const style = inheritedStyle(node, parentStyle);
     let runs = [];
+    let sawLineBlock = false;
     node.childNodes.forEach(child => {
       if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) return;
+      // Un bloc de code posé après le texte de l'item (ou un paragraphe après lui) commence sa propre ligne, comme dans inlineRuns.
+      const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
+      if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style });
+      if (isLineBlock) sawLineBlock = true;
       runs = runs.concat(inlineRuns(child, style, images));
     });
     return runs;
@@ -407,7 +430,7 @@ const PdfExport = (function () {
     Array.from(container.childNodes).forEach(node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue) pending.push(node); return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (/^(P|DIV|H[1-6])$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
+      if (/^(P|DIV|H[1-6]|PRE)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) {
         flushPending();
         Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
@@ -461,6 +484,8 @@ const PdfExport = (function () {
       return obj;
     }
     const node = line;
+    // Bloc de code dans une cellule de tableau : le même cadre gris que dans le flux principal, en tableau imbriqué à la largeur de la cellule.
+    if (node.tagName === 'PRE') return codeBlockFrom(node, false, true);
     // Même chemin d'habillage que le flux principal (floatedImageParagraphFrom), avec la largeur RÉELLE de la cellule (cf. tableFrom) au lieu de la pleine
     // page.
     if (/^(P|DIV)$/.test(node.tagName)) {
@@ -1024,10 +1049,35 @@ const PdfExport = (function () {
 
   // Retourne toujours un TABLEAU de blocs (jamais un bloc unique) : un paragraphe contenant une image produit un bloc de texte ET un bloc image séparés
   // (pdfmake ne supporte pas d'image réellement "en ligne").
+  // Bloc de code (flux principal) : un tableau pdfmake à une colonne, UNE LIGNE DE TABLEAU PAR LIGNE DE CODE. Le fond gris et le cadre se dessinent par la mise en page du tableau
+  // (fillColor, filets) et une ligne de tableau est insécable : un long bloc se coupe donc proprement entre deux lignes de code, d'une page à l'autre, sans en couper une en deux.
+  // Espaces de tête gardés (preserveLeadingSpaces), ligne vide = une ligne d'un espace. 6pt de haut/bas, 7.5pt de côté et 0.75pt de filet reprennent le padding 8px/10px et la
+  // bordure 1px de `.tiptap pre` ; marge de 3pt = `margin: 4px 0`.
+  function codeBlockFrom(node, pageBreakBefore, inCell) {
+    const body = ExportCommon.codeLinesOf(node).map(line => [{ text: line === '' ? ' ' : line, font: CODE_FONT, fontSize: CODE_FONT_SIZE, color: CODE_TEXT_COLOR, lineHeight: CODE_LINE_HEIGHT_RATIO, preserveLeadingSpaces: true }]);
+    const last = body.length - 1;
+    const block = {
+      table: { widths: ['*'], body },
+      layout: {
+        hLineWidth: i => (i === 0 || i === body.length ? 0.75 : 0),
+        vLineWidth: () => 0.75,
+        hLineColor: () => CODE_BOX_COLOR,
+        vLineColor: () => CODE_BOX_COLOR,
+        fillColor: () => CODE_FILL_COLOR,
+        paddingLeft: () => 7.5, paddingRight: () => 7.5,
+        paddingTop: i => (i === 0 ? 6 : 0), paddingBottom: i => (i === last ? 6 : 0),
+      },
+      margin: [inCell ? 0 : measureIndentPt(node, 'box'), 3, 0, 3],
+    };
+    if (pageBreakBefore) block.pageBreak = 'before';
+    return block;
+  }
+
   function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
     const tag = node.tagName.toUpperCase();
     if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
+    if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     if (tag === 'P' || tag === 'DIV') {
       const floatImgEl = findFloatImageIn(node);
       if (floatImgEl) {

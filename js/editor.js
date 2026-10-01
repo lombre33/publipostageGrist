@@ -335,7 +335,8 @@ const Editor = (function () {
         },
       },
       extensions: [
-        StarterKit.configure({ document: false }),
+        // Liens (js/link-dialog.js) : un clic place le curseur (Ctrl/⌘+clic ouvre le lien) ; une adresse tapée sans schéma prend https, plus http.
+        StarterKit.configure({ document: false, link: { openOnClick: false, defaultProtocol: 'https' } }),
         TrackedDocument,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         TextStyle,
@@ -365,6 +366,7 @@ const Editor = (function () {
         trackChangesApi.ModificationMark,
         trackChangesApi.SuggestChangesBridge,
         Variables.createExtension(Extension, Suggestion),
+        LinkDialog.createExtension(Extension),
         TrackedTable.configure({ resizable: true }),
         TableRow,
         TrackedTableHeaderWithBg,
@@ -393,6 +395,7 @@ const Editor = (function () {
     FloatingToolbars.setEditor(editor);
     MainToolbar.setEditor(editor);
     MainToolbar.wireToolbar();
+    LinkDialog.wireEditor(editor);
     FloatingToolbars.wireColorPickers();
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();

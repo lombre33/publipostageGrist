@@ -170,6 +170,8 @@ const Variables = (function () {
             // Redéfinissable dans le panneau Réglages ; un changement n'a effet qu'après rechargement de la page (ce `char` est un littéral capturé une seule
             // fois ici, à la construction de l'éditeur - cf. triggerChar() ci-dessus).
             char: triggerChar(),
+            // Jamais dans un bloc de code : un « # » de commentaire ou de couleur (#fff) y ouvrirait la liste, et une bulle ne peut pas vivre dans du texte brut.
+            allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
             // GristAPI, const racine chargée avant ce script, visible par identifiant nu - jamais window.GristAPI (ne s'y attache pas).
             items: ({ query, editor }) => computeItems(query, editor),
             // Async : une variable d'une autre table peut exiger de configurer une règle de correspondance avant insertion (ensureLinkConfigured plus bas).

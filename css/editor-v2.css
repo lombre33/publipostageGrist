@@ -90,6 +90,10 @@
 #reader-container .reader-content h3 { font-size: 16pt; } #reader-container .reader-content h4 { font-size: 14pt; }
 #reader-container .reader-content h5 { font-size: 13pt; } #reader-container .reader-content h6 { font-size: 12pt; }
 #reader-container .reader-content blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
+/* Lien et bloc de code (menu « Lien, citation, bloc de code », js/link-dialog.js) : mêmes valeurs EXACTES que .tiptap plus bas. */
+#reader-container .reader-content a[href] { color: #0563c1; text-decoration: underline; cursor: pointer; }
+#reader-container .reader-content pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+#reader-container .reader-content pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
 #reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 #reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* La zone 2 colonnes en lecture héritait des règles génériques .two-columns-zone/.two-columns-column de ../css/style.css (pensées pour l'éditeur V1 - bordure
@@ -103,6 +107,13 @@
    `none` retire 1px à la boîte, assez pour décaler la coupure de ligne. Jamais survolable en lecture, mais la largeur réservée doit rester identique. */
 #reader-container .two-columns-column { min-width: 0; padding: 4px; border: 1px dashed transparent; }
 .tiptap blockquote { margin: 4px 0 4px 0; padding-left: 12px; border-left: 3px solid #d0d7de; font-style: italic; color: #444; }
+/* Lien : bleu de lien de Word (#0563C1, 5,9:1 sur blanc) et soulignement, les mêmes dans la Lecture, le PDF et le Word. La page reste blanche en thème sombre, d'où une couleur
+   écrite en dur comme celle de la citation. Le curseur reste celui du texte : un clic place le curseur, Ctrl/⌘+clic ouvre (js/link-dialog.js). */
+.tiptap a { color: #0563c1; text-decoration: underline; cursor: text; }
+/* Bloc de code : du texte brut sur fond gris clair, police à chasse fixe (Cousine au PDF, métrique de Courier New), lignes qui passent à la ligne comme à l'export. 9,5pt : un
+   peu sous le texte courant (10,5pt). Aucune marque n'y est permise (schéma de TipTap), donc ni gras ni couleur ni lien. */
+.tiptap pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.tiptap pre code { font: inherit; color: inherit; background: none; padding: 0; white-space: inherit; }
 .tiptap hr { border: none; border-top: 1px solid #d0d7de; margin: 10px 0; }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 /* Pas de style particulier pour <th> (gras/fond coloré) : les tableaux insérés depuis la toolbar n'ont pas de ligne d'en-tête (cf. js/editor.js:insertTable,
@@ -537,6 +548,13 @@
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-hover-row-disabled { color: var(--text-muted, #9aa3b2); cursor: not-allowed; }
 .v2-hover-row-disabled:hover { background: none; }
+/* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les .v2-hover-row sont des <span>), avec l'icône de la
+   fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30×28, centré), qui vise tout bouton de la barre. */
+#v2-toolbar .v2-hover-flyout .v2-menu-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; min-height: 28px; padding: 5px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #3a4452); }
+#v2-toolbar .v2-hover-flyout .v2-menu-row:hover, #v2-toolbar .v2-hover-flyout .v2-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); border-color: transparent; }
+#v2-toolbar .v2-hover-flyout .v2-menu-row.is-active { background: transparent; border-color: transparent; color: var(--accent, #2f6fed); font-weight: 700; }
+.v2-menu-row-icon { display: inline-flex; flex: none; }
+.v2-menu-row-kbd { margin-left: auto; padding-left: 18px; font-size: 11px; font-weight: 400; color: var(--text-faint, #98a2b3); }
 /* Bloc "Numérotation des titres" fusionné dans le flyout Titre - même .v2-segmented/.v2-segmented-btn que la pastille en-tête/pied, pour ne pas réinventer
    un 2ᵉ style de segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }

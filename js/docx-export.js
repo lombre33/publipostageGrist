@@ -61,6 +61,15 @@ const DocxExport = (function () {
   // wrap correspondent à l'éditeur, au lieu de l'interligne par défaut du style Word "Normal".
   const EDITOR_LINE_HEIGHT_RATIO = 1.42;
   const LINE_SPACING_240THS = Math.round(240 * EDITOR_LINE_HEIGHT_RATIO);
+  // Lien : #0563C1 (bleu de lien de Word) et soulignement, comme `.tiptap a` (css/editor-v2.css). Bloc de code : Courier New 9,5pt (Cousine, de même métrique, dans le PDF), fond gris et filet
+  // fin comme `.tiptap pre` ; interligne de 1.42 rapporté au rapport naturel de la police (≈1.1328), Word multipliant la hauteur propre de la police et non la taille du corps.
+  const LINK_COLOR_HEX = '0563C1';
+  const CODE_FONT = 'Courier New';
+  const CODE_HALF_PT = 19;
+  const CODE_TEXT_HEX = '1B2430';
+  const CODE_FILL_HEX = 'F6F8FA';
+  const CODE_BOX_HEX = 'D0D7DE';
+  const CODE_LINE_240THS = Math.round(240 * EDITOR_LINE_HEIGHT_RATIO / 1.1328);
 
   function cssColorHex(value) {
     if (!value) return null;
@@ -91,6 +100,9 @@ const DocxExport = (function () {
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') out.underline = { type: 'single' };
+    // Lien : couleur et soulignement de lien ; la couleur d'un <span> posé DEDANS (css('color') plus bas) l'emporte, comme `.tiptap a` face à un texte coloré.
+    if (tag === 'A' && HtmlSanitize.safeLinkHref(node.getAttribute('href'))) { out.color = LINK_COLOR_HEX; out.underline = { type: 'single' }; }
+    if (tag === 'PRE') { out.font = CODE_FONT; out.size = CODE_HALF_PT; out.color = CODE_TEXT_HEX; }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') out.strike = true;
     if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true;
     if (css('font-style') === 'italic') out.italics = true;
@@ -286,8 +298,29 @@ const DocxExport = (function () {
       return [imgRun];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
+    // Bloc de code au milieu d'un autre bloc (dans une citation, un item de liste) : ses lignes se suivent par des sauts de ligne ; le cadre gris n'existe que pour un bloc de code
+    // posé directement dans le document, une cellule, une colonne ou un en-tête (codeBlockFrom).
+    if (node.tagName === 'PRE') return ExportCommon.codeLinesOf(node).map((line, i) => new docx.TextRun(Object.assign({ text: line }, runOpts(style), i ? { break: 1 } : {})));
     let out = [];
-    for (const child of Array.from(node.childNodes)) out = out.concat(await inlineNodesFrom(child, style, ctx));
+    let sawLineBlock = false;
+    for (const child of Array.from(node.childNodes)) {
+      // Comme inlineRuns (js/pdf-export.js) : un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux paragraphes, item de liste suivi d'un
+      // bloc de code) commence sa propre ligne.
+      const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
+      if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
+      if (isLineBlock) sawLineBlock = true;
+      out = out.concat(await inlineNodesFrom(child, style, ctx));
+    }
+    const linkHref = node.tagName === 'A' ? HtmlSanitize.safeLinkHref(node.getAttribute('href')) : null;
+    return linkHref ? hyperlinkRuns(out, linkHref) : out;
+  }
+  // Un lien Word (w:hyperlink) n'enveloppe que du texte : un autre run dans le lien (image, note de bas de page) reste à côté, hors du lien.
+  function hyperlinkRuns(runs, href) {
+    const out = [];
+    let textRuns = [];
+    const flush = () => { if (textRuns.length) out.push(new docx.ExternalHyperlink({ children: textRuns, link: href })); textRuns = []; };
+    runs.forEach(run => { if (run instanceof docx.TextRun) textRuns.push(run); else { flush(); out.push(run); } });
+    flush();
     return out;
   }
   // Comme inlineNodesFrom, mais ignore les <ul>/<ol> DIRECTS - une sous-liste doit produire SES PROPRES paragraphes (cf. listBlocksFrom), pas être aplatie
@@ -295,8 +328,12 @@ const DocxExport = (function () {
   async function inlineNodesExcludingNestedLists(node, parentStyle, ctx) {
     const style = inheritedRunStyle(node, parentStyle);
     let out = [];
+    let sawLineBlock = false;
     for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) continue;
+      const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
+      if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
+      if (isLineBlock) sawLineBlock = true;
       out = out.concat(await inlineNodesFrom(child, style, ctx));
     }
     return out;
@@ -505,6 +542,23 @@ const DocxExport = (function () {
     });
   }
 
+  // Bloc de code posé directement dans le document, une cellule, une colonne ou un en-tête : UN paragraphe par ligne de code, tous avec les MÊMES fond, bordures et retraits - Word et
+  // LibreOffice les fusionnent alors en un seul cadre gris, sans filet entre deux lignes. Retraits de 7.5pt (150 twips) + filet à 7pt du texte : le cadre s'aligne sur la marge, le
+  // texte est en retrait comme dans l'éditeur. Les espaces de tête sont gardés (docx.js écrit xml:space="preserve"), une ligne vide devient une ligne d'un espace.
+  function codeBlockFrom(node, pageBreakBefore) {
+    const lines = ExportCommon.codeLinesOf(node);
+    const edge = { style: 'single', size: 6, color: CODE_BOX_HEX, space: 7 };
+    return lines.map((line, i) => new docx.Paragraph({
+      children: [new docx.TextRun({ text: line === '' ? ' ' : line, font: CODE_FONT, size: CODE_HALF_PT, color: CODE_TEXT_HEX })],
+      shading: { type: docx.ShadingType.CLEAR, fill: CODE_FILL_HEX },
+      border: { top: edge, bottom: edge, left: edge, right: edge },
+      indent: { left: 150, right: 150 },
+      // 3pt (60 twips) avant et après le bloc = `margin: 4px 0` de `.tiptap pre`, hors du cadre.
+      spacing: { before: i === 0 ? 60 : 0, after: i === lines.length - 1 ? 60 : 0, line: CODE_LINE_240THS, lineRule: 'auto' },
+      pageBreakBefore: !!(i === 0 && pageBreakBefore),
+    }));
+  }
+
   function buildTocParagraphs(headingBlocks) {
     const title = new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('pdf.tocTitle'), bold: true, size: 32 })], spacing: { after: 160 } });
     if (!headingBlocks.length) return [title, new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
@@ -557,6 +611,11 @@ const DocxExport = (function () {
       if (/^(UL|OL)$/.test(node.tagName)) {
         const items = await listBlocksFrom(node, 0, ctx, pendingPageBreak);
         blocks.push(...items);
+        pendingPageBreak = false;
+        continue;
+      }
+      if (node.tagName === 'PRE') {
+        blocks.push(...codeBlockFrom(node, pendingPageBreak));
         pendingPageBreak = false;
         continue;
       }

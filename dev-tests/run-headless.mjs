@@ -79,6 +79,7 @@ const GROUPS = {
   columnSearch: 'scenarios-column-search',
   pdfBatch: 'scenarios-pdf-batch',
   accessRights: 'scenarios-access-rights',
+  linksBlocks: 'scenarios-links-blocks',
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -94,6 +95,7 @@ const NODE_SCRIPTS = {
   dialogsMouse: 'verify-dialogs-mouse.mjs', // saisies et confirmations (js/dialogs.js) à la place de prompt/confirm : au-dessus des autres fenêtres, Tab, Échap, focus rendu
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
+  linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
   settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : six onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
   columnSearchMouse: 'verify-column-search-mouse.mjs',

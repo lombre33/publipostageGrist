@@ -152,6 +152,25 @@ const I18n = (function () {
     'insert.citation.aria': { fr: 'Insérer une citation', en: 'Insert a quote' },
     'insert.variable.tip': { fr: 'Insérer une variable', en: 'Insert a variable' },
     'insert.variable.aria': { fr: 'Insérer une variable (#Variable ou chip)', en: 'Insert a variable (#Variable or chip)' },
+    // Une seule icône de la barre pour le lien, la citation et le bloc de code (demande d'Antoine, 2026-10-01) : le bouton principal ouvre la fenêtre du lien,
+    // le menu au survol porte les trois lignes. Le raccourci (Ctrl+K ou ⌘K selon la plateforme) s'ajoute à l'aria-label par js/link-dialog.js.
+    'insert.blocks.tip': { fr: 'Lien, citation, bloc de code', en: 'Link, quote, code block' },
+    'insert.link.aria': { fr: 'Insérer un lien', en: 'Insert a link' },
+    'insert.link.row': { fr: 'Lien…', en: 'Link…' },
+    'insert.codeBlock.tip': { fr: 'Bloc de code', en: 'Code block' },
+    'insert.codeBlock.aria': { fr: 'Insérer un bloc de code', en: 'Insert a code block' },
+    // --- Fenêtre du lien (js/link-dialog.js) : « hyperlink » et pas « link », préfixe déjà pris par les tables liées (linkRules, linkConfig) ---
+    'hyperlink.title.new': { fr: 'Insérer un lien', en: 'Insert a link' },
+    'hyperlink.title.edit': { fr: 'Modifier le lien', en: 'Edit the link' },
+    'hyperlink.url.label': { fr: 'Adresse du lien', en: 'Link address' },
+    'hyperlink.url.placeholder': { fr: 'https://exemple.fr', en: 'https://example.com' },
+    'hyperlink.url.hint': { fr: 'Une adresse web, une adresse e-mail ou un numéro de téléphone.', en: 'A web address, an e-mail address or a phone number.' },
+    'hyperlink.text.label': { fr: 'Texte à afficher', en: 'Text to display' },
+    'hyperlink.text.placeholder': { fr: 'Vide : l’adresse elle-même s’affiche', en: 'Empty: the address itself is shown' },
+    'hyperlink.error.empty': { fr: 'Saisissez l’adresse du lien.', en: 'Enter the link address.' },
+    'hyperlink.error.invalid': { fr: 'Cette adresse n’est pas reconnue. Exemples : https://exemple.fr, nom@exemple.fr, 01 23 45 67 89.', en: 'This address is not recognized. Examples: https://example.com, name@example.com, +1 555 123 4567.' },
+    'hyperlink.remove': { fr: 'Retirer le lien', en: 'Remove link' },
+    'hyperlink.openHint': { fr: '{key}+clic pour ouvrir', en: '{key}+click to open' },
 
     // --- Commentaires (js/comments.js) ---
     'comments.selectTextFirst': { fr: 'Sélectionnez du texte avant d’ajouter un commentaire.', en: 'Select some text before adding a comment.' },

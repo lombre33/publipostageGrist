@@ -176,7 +176,7 @@ async function ink(page, selector) {
   }, png.toString('base64'));
 }
 
-const INSERT_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-citation'];
+const INSERT_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link']; // « v2-btn-link » : le bouton du menu Lien, citation, bloc de code (la citation est une de ses lignes)
 const stateOf = page => page.evaluate(() => {
   const s = window.__gristStub;
   return { doc: EditorCore.getEditor().getHTML(), stored: s.getRow('Publipostage_Modeles', 1).Contenu, writes: s.countActions('UpdateRecord', 'Publipostage_Modeles') };

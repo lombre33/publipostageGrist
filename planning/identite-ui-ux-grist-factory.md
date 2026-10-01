@@ -259,6 +259,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   arrondis n'a pas non plus d'`overflow: hidden` (il rognerait leurs info-bulles) : les coins sont portés par les
   boutons d'extrémité. Après un clic à la souris, l'info-bulle de focus d'un bouton reste cachée (`pp-tip-pointer`)
   jusqu'au prochain appui sur Tab ; celle du survol reste.
+- Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
+  (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
+  est écrit sur la ligne), « Citation », « Bloc de code » ; les blocs suivants (encadré, signature) s'y ajoutent comme
+  lignes, jamais comme nouvelles icônes. Une ligne qui n'a pas de sens à cet endroit est grisée, jamais masquée : « Lien… »
+  dans un bloc de code, « Bloc de code » quand il effacerait une bulle `#Variable` ou une image, tout le menu en mode
+  macro et en Lecture. Fenêtre du lien (base commune des fenêtres) : « Adresse du lien » (http, https, mailto, tel ; sans
+  protocole, `https://` est ajouté, une adresse e-mail devient `mailto:`, un numéro `tel:` ; `javascript:` et le reste sont
+  refusés), « Texte à afficher » seulement quand rien n'est sélectionné, « Retirer le lien » seulement sur un lien
+  existant (bouton cerclé de rouge, texte `--text` : `--danger` seul ne fait que 4,37:1 sur le fond de la fenêtre) ;
+  l'erreur s'affiche sous le champ (barre rouge à gauche, texte normal) ; Ctrl+K ouvre la fenêtre, y compris au clavier
+  seul, Entrée valide, Échap annule et rend le clavier à l'éditeur. Dans l'éditeur, un clic simple sur un lien place le
+  curseur et n'ouvre rien ; Ctrl/⌘+clic l'ouvre dans un nouvel onglet ; le survol affiche l'adresse et « Ctrl+clic pour
+  ouvrir » dans une info-bulle. Un lien est bleu `#0563C1` souligné (papier blanc : 5,9:1, comme dans Word), cliquable en
+  Lecture, en PDF et en Word, écrit « texte (adresse) » dans un e-mail. Un bloc de code est en chasse fixe (Cousine ; Courier
+  New en Word) sur fond gris, sans variables, et un PDF ne le coupe qu'entre deux lignes.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la

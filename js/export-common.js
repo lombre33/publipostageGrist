@@ -90,5 +90,11 @@ const ExportCommon = (function () {
     };
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables };
+  // Lignes d'un bloc de code (<pre>) pour le PDF et le Word : retours chariot normalisés, tabulation = 4 espaces (`tab-size: 4` de `.tiptap pre`, css/editor-v2.css). Une ligne
+  // vide reste une entrée vide : c'est à l'exporteur d'en faire une ligne de hauteur normale.
+  function codeLinesOf(node) {
+    return (node.textContent || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/\t/g, '    '));
+  }
+
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables, codeLinesOf };
 })();

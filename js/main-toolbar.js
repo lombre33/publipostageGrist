@@ -166,7 +166,10 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    set('v2-btn-citation', 'blockquote');
+    // Menu « Lien, citation, bloc de code » (js/link-dialog.js) : l'icône du bouton est celle du lien, chaque ligne du menu garde la sienne devant son texte.
+    set('v2-btn-link', 'link');
+    const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
+    setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-track-changes', 'trackChanges');
@@ -212,6 +215,10 @@ const MainToolbar = (function () {
     // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
     // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
     setActive('v2-btn-citation', editor.isActive('blockquote'));
+    setActive('v2-btn-code-block', editor.isActive('codeBlock'));
+    const inLink = editor.isActive('link');
+    setActive('v2-btn-link', inLink);
+    setActive('v2-row-link', inLink);
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
@@ -251,6 +258,13 @@ const MainToolbar = (function () {
     setLocked('v2-btn-undo', inMacroMode);
     setLocked('v2-btn-redo', inMacroMode);
     setLocked('v2-btn-track-changes', inMacroMode);
+    // Menu « Lien, citation, bloc de code » : grisé en entier pour un macro-modèle (comme le reste de la barre) ; en édition, deux lignes se grisent selon la
+    // sélection au lieu de disparaître - pas de lien dans un bloc de code ni sur une image seule, pas de bloc de code qui effacerait une variable ou une image.
+    setLocked('v2-blocks-group', inMacroMode);
+    const linkImpossible = !LinkDialog.canLinkHere(editor);
+    setLocked('v2-btn-link', linkImpossible);
+    setLocked('v2-row-link', linkImpossible);
+    setLocked('v2-btn-code-block', !editor.isActive('codeBlock') && codeBlockWouldDropContent());
     setLocked('v2-btn-accept-all', inMacroMode);
     setLocked('v2-btn-reject-all', inMacroMode);
     const headerSelect = document.getElementById('v2-header-select');
@@ -276,6 +290,59 @@ const MainToolbar = (function () {
     if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
     const sizeChipVal = document.getElementById('v2-size-chip-val');
     if (sizeChipVal) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeChipVal.textContent !== value) sizeChipVal.textContent = value; }
+  }
+  // Bloc de code : du texte brut, sans marque ni bulle. Convertir un paragraphe qui porte une variable, une pastille ou une image l'effacerait en silence (ProseMirror
+  // retire ce que le nouveau type n'accepte pas) : la ligne se grise dans ce cas (syncToolbarState). Gras, couleur ou lien, eux, sont simplement perdus, comme dans
+  // tout bloc de code.
+  function codeBlockWouldDropContent() {
+    const { doc, selection } = editor.state;
+    let drops = false;
+    doc.nodesBetween(selection.from, selection.to, node => {
+      if (drops) return false;
+      if (!node.isTextblock) return true;
+      node.forEach(child => { if (child.isInline && !child.isText && child.type.name !== 'hardBreak') drops = true; });
+      return false;
+    });
+    return drops;
+  }
+  // Plusieurs paragraphes sélectionnés, côte à côte et sans rien d'autre entre eux, deviennent UN bloc de code d'une ligne par paragraphe (la commande de TipTap en ferait un
+  // bloc par paragraphe, empilés avec leurs marges). Vrai quand c'est fait ; faux laisse la main à la commande de TipTap (curseur seul, un paragraphe, liste ou tableau).
+  function mergeSelectionIntoCodeBlock() {
+    const { doc, selection, schema } = editor.state;
+    const blocks = [];
+    doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+      if (!node.isTextblock) return true;
+      blocks.push({ node, pos });
+      return false;
+    });
+    if (blocks.length < 2 || codeBlockWouldDropContent()) return false;
+    const parent = doc.resolve(blocks[0].pos).parent;
+    const sideBySide = blocks.every((b, i) => doc.resolve(b.pos).parent === parent && (i === 0 || blocks[i - 1].pos + blocks[i - 1].node.nodeSize === b.pos));
+    if (!sideBySide) return false;
+    const text = blocks.map(b => b.node.textBetween(0, b.node.content.size, '\n', '\n')).join('\n');
+    const start = blocks[0].pos;
+    const end = blocks[blocks.length - 1].pos + blocks[blocks.length - 1].node.nodeSize;
+    const TextSelection = EditorCore.getTextSelectionClass();
+    return editor.chain().focus().command(({ tr }) => {
+      tr.replaceWith(start, end, schema.nodes.codeBlock.create(null, text ? schema.text(text) : null));
+      tr.setSelection(TextSelection.near(tr.doc.resolve(start + 1 + text.length)));
+      return true;
+    }).run();
+  }
+  function toggleCodeBlock() {
+    // La ligne grisée ne se clique pas à la souris, mais le clavier (Tab, Entrée) et les .click() d'autres modules l'atteignent : le refus vit donc ici aussi.
+    if (!editor.isActive('codeBlock') && codeBlockWouldDropContent()) return;
+    if (!editor.isActive('codeBlock') && mergeSelectionIntoCodeBlock()) return;
+    editor.chain().focus().toggleCodeBlock().run();
+  }
+  // Le raccourci du lien dépend de la plateforme (Ctrl+K ou ⌘K) : posé sur l'aria-label du bouton et dans la ligne « Lien… » du menu, et réécrit à chaque
+  // changement de langue (applyTranslations remet sinon l'aria-label sans lui) - même schéma que decorateSaveButtonShortcut dans js/main.js.
+  function decorateLinkShortcut() {
+    const label = LinkDialog.shortcutLabel();
+    const button = document.getElementById('v2-btn-link');
+    if (button) button.setAttribute('aria-label', I18n.t('insert.link.aria') + ' (' + label + ')');
+    const kbd = document.getElementById('v2-row-link-kbd');
+    if (kbd) kbd.textContent = label;
   }
   // Une seule instance, une seule toolbar : chaque bouton appelle directement une commande TipTap sur la sélection réelle, jamais besoin de savoir "suis-je
   // dans une cellule/colonne" avant d'agir.
@@ -335,8 +402,14 @@ const MainToolbar = (function () {
     bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
+    // Une icône pour trois fonctions (js/link-dialog.js) : le bouton et sa première ligne ouvrent la fenêtre du lien, les deux autres lignes mettent en forme.
+    bind('v2-btn-link', () => LinkDialog.open());
+    bind('v2-row-link', () => LinkDialog.open());
     // Nœud blockquote de StarterKit, déjà géré en PDF/DOCX/mode Lecture - seul un point d'entrée manquait.
     bind('v2-btn-citation', () => editor.chain().focus().toggleBlockquote().run());
+    bind('v2-btn-code-block', toggleCodeBlock);
+    decorateLinkShortcut();
+    I18n.onChange(decorateLinkShortcut);
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
     bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());

@@ -441,7 +441,8 @@
       const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && !el.hasAttribute('aria-disabled'));
       const stored = () => stub().getRow('Publipostage_Modeles', templateId).Contenu;
       const modelWrites = () => stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
-      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-citation'];
+      // Le menu « Lien, citation, bloc de code » : son bouton et ses trois lignes (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
+      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link', 'v2-row-link', 'v2-btn-citation', 'v2-btn-code-block'];
       const freeBefore = barFree();
       document.getElementById('btn-mode-read').click();
       await sleep(400);

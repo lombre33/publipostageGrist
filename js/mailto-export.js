@@ -40,12 +40,31 @@ const MailtoExport = (function () {
 
     // Concatène le texte d'un nœud inline en ne gérant que <br> comme retour à la ligne dur - toute
     // mise en forme est délibérément ignorée (aucune ne peut survivre en texte brut).
+    // Lien : en texte brut il n'y a plus de cible cliquable, l'adresse s'écrit donc à la suite du texte, entre parenthèses (« le site (https://exemple.fr) ») - sauf si le texte EST déjà
+    // l'adresse (avec ou sans « https:// »), qui n'est alors écrite qu'une fois. Un lien sans texte donne son adresse seule.
+    function linkAsText(text, href) {
+      const target = href.replace(/^(?:mailto|tel):/i, '');
+      const shown = text.trim();
+      if (!shown) return target;
+      const bare = value => value.replace(/^https?:\/\//i, '').replace(/\/$/, '').toLowerCase();
+      return bare(shown) === bare(target) ? text : `${text} (${target})`;
+    }
+
+    // Un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux paragraphes, item de liste suivi d'un bloc de code) commence sa propre ligne.
+    const isLineBlock = node => node.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(node.tagName);
+
     function inlineText(node) {
       let out = '';
+      let sawLineBlock = false;
       node.childNodes.forEach(child => {
         if (child.nodeType === Node.TEXT_NODE) { out += child.textContent; return; }
         if (child.nodeType !== Node.ELEMENT_NODE) return;
+        if (isLineBlock(child)) { if (sawLineBlock) out += '\n'; sawLineBlock = true; }
         if (child.tagName === 'BR') { out += '\n'; return; }
+        if (child.tagName === 'A') {
+          const href = HtmlSanitize.safeLinkHref(child.getAttribute('href'));
+          if (href) { out += linkAsText(inlineText(child), href); return; }
+        }
         // Note de bas de page : pas de page/pied de page en texte brut, la note est réinjectée
         // inline entre parenthèses plutôt que silencieusement perdue.
         if (child.classList && child.classList.contains('footnote-ref-marker')) {
@@ -75,9 +94,14 @@ const MailtoExport = (function () {
         if (isTaskList) prefix = (li.getAttribute('data-checked') === 'true') ? '[x] ' : '[ ] ';
         else if (ordered) prefix = index + '. ';
         else prefix = '- ';
+        let sawLineBlock = false;
         const directText = Array.from(li.childNodes)
           .filter(n => !(n.nodeType === Node.ELEMENT_NODE && (n.tagName === 'UL' || n.tagName === 'OL')))
-          .map(n => n.nodeType === Node.ELEMENT_NODE ? inlineText(n) : n.textContent)
+          .map(n => {
+            const separator = isLineBlock(n) && sawLineBlock ? '\n' : '';
+            if (isLineBlock(n)) sawLineBlock = true;
+            return separator + (n.nodeType === Node.ELEMENT_NODE ? inlineText(n) : n.textContent);
+          })
           .join('').trim();
         lines.push(indent + prefix + directText);
         li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub => { lines.push(...listItemsText(sub, depth + 1)); });
@@ -96,6 +120,8 @@ const MailtoExport = (function () {
       const tag = node.tagName;
       if (tag === 'UL' || tag === 'OL') { blocks.push(listItemsText(node, 0).join('\n')); return; }
       if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'BLOCKQUOTE') { blocks.push(inlineText(node).trim()); return; }
+      // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais l'indentation de la première ligne).
+      if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
       if (tag === 'HR') { blocks.push('---'); return; }
       if (tag === 'IMG') return;
       // Balise jamais destinée à l'utilisateur (ex. <style> injecté par l'aperçu A4 paginé de

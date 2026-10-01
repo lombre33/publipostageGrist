@@ -233,6 +233,8 @@ const ReaderMode = (function () {
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
     // <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
+    // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y être affichés).
+    wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     // Rafraîchit le schéma avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments

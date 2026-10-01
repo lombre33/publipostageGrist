@@ -241,6 +241,57 @@
     },
   });
 
+  cases.push({
+    id: 'contrast_links_blocks_menu_link_window_and_link_text_reach_4_5_in_light_and_dark',
+    description: 'Menu Lien, citation, bloc de code (lignes, raccourci Ctrl+K, ligne active), fenêtre de lien (aide, erreur, Retirer le lien), info-bulle d’un lien et lien du document : 4,5:1 au moins, en clair et en sombre',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>Voir <a href="https://exemple.fr">ce site</a></p>');
+      await new Promise(r => setTimeout(r, 100));
+      // La fenêtre de lien, ouverte sur le lien (« Retirer le lien » visible), avec une erreur affichée.
+      const range = document.createRange();
+      const textNode = document.querySelector('.tiptap a').firstChild;
+      range.setStart(textNode, 2); range.collapse(true);
+      document.querySelector('.tiptap').focus();
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+      await new Promise(r => setTimeout(r, 120));
+      LinkDialog.open();
+      const url = document.getElementById('pp-link-url');
+      url.value = 'nope';
+      document.querySelector('#pp-link-modal .var-modal-primary').click();
+      const flyout = h.openFlyout('#v2-blocks-group');
+      const activeRow = document.getElementById('v2-btn-citation');
+      activeRow.classList.add('is-active');
+      let byTheme;
+      try {
+        byTheme = inBothThemes(() => {
+          const out = {};
+          out['lien du document (sur la page)'] = round2(textRatio(document.querySelector('.tiptap a')));
+          out['ligne Lien du menu'] = round2(textRatio(document.querySelector('#v2-row-link > span:nth-child(2)')));
+          out['raccourci Ctrl+K du menu'] = round2(textRatio(document.getElementById('v2-row-link-kbd')));
+          out['ligne Bloc de code du menu'] = round2(textRatio(document.querySelector('#v2-btn-code-block > span:nth-child(2)')));
+          out['ligne active du menu'] = round2(textRatio(activeRow));
+          out['titre du volet du menu'] = round2(textRatio(flyout.querySelector('.v2-hover-flyout-label')));
+          out['aide sous le champ adresse'] = round2(textRatio(document.getElementById('pp-link-hint')));
+          out['erreur sous le champ adresse'] = round2(textRatio(document.getElementById('pp-link-error')));
+          const remove = document.querySelector('#pp-link-modal .var-modal-danger');
+          out['Retirer le lien'] = round2(textRatio(remove));
+          withProbe('<div class="pp-link-tip"><span class="pp-link-tip-url">https://exemple.fr</span><span class="pp-link-tip-hint">Ctrl+clic pour ouvrir</span></div>', tip => {
+            out['info-bulle : adresse'] = round2(textRatio(tip.querySelector('.pp-link-tip-url')));
+            out['info-bulle : indication'] = round2(textRatio(tip.querySelector('.pp-link-tip-hint')));
+          });
+          return out;
+        });
+      } finally {
+        activeRow.classList.remove('is-active');
+        flyout.style.display = ''; flyout.style.opacity = ''; flyout.style.visibility = ''; flyout.style.pointerEvents = '';
+        document.querySelector('#pp-link-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click();
+      }
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();
