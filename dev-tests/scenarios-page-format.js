@@ -502,7 +502,7 @@ window.EditorTestSuites.pageFormat = (function () {
     },
     {
       id: 'fmt_saved_with_template_and_restored_on_load',
-      description: 'Le format s\'enregistre avec le modèle (clé `format` de la colonne Margins) et revient à son chargement, avec le sens ; un modèle A4, un nouveau modèle, un modèle d\'avant ce réglage, un format inconnu et un macro-modèle retombent sur l\'A4',
+      description: 'Le format s\'enregistre avec le modèle (clé `format` de la colonne Margins) et revient à son chargement, avec le sens ; un modèle A4, un nouveau modèle, un modèle d\'avant ce réglage, un format inconnu et un macro-modèle sans réglage retombent sur l\'A4',
       async run(h) {
         const problems = [];
         const a5Id = await savedTemplate(h, 'Format A5 paysage', '<p>Petit</p>', 'landscape', 'A5');
@@ -549,7 +549,7 @@ window.EditorTestSuites.pageFormat = (function () {
         await selectTemplate(h, a4Id);
         const unknown = state();
         if (unknown.format !== 'A4' || unknown.css !== '793.71px' || !near(PageLayout.getMarginsMm().top, 15, .001)) problems.push('format inconnu : ' + JSON.stringify(unknown));
-        // Un macro-modèle ne suit pas le format du modèle précédent : A4, bouton grisé.
+        // Un macro-modèle sans réglage de page ne suit pas le format du modèle précédent : A4 portrait. Son bouton est actif (il a sa propre page : dev-tests/scenarios-macro-modeles.js).
         await selectTemplate(h, a5Id);
         const macro = await Templates.save(null, 'Format macro', JSON.stringify({ slots: [] }), '', null, null, 'macro', null);
         await Templates.loadAll();
@@ -559,7 +559,7 @@ window.EditorTestSuites.pageFormat = (function () {
         }
         await selectTemplate(h, macro.id);
         const macroState = state();
-        if (macroState.format !== 'A4' || macroState.landscape || macroState.css !== '793.71px' || !document.getElementById('btn-page-orientation').disabled) problems.push('macro-modèle : ' + JSON.stringify(macroState));
+        if (macroState.format !== 'A4' || macroState.landscape || macroState.css !== '793.71px' || macroState.checked !== 'portrait,A4' || document.getElementById('btn-page-orientation').disabled) problems.push('macro-modèle : ' + JSON.stringify(macroState));
         await selectTemplate(h, a4Id);
         return { pass: problems.length === 0, notes: JSON.stringify({ problems, a5Saved, a3Saved }) };
       },

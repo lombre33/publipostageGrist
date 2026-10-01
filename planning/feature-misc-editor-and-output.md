@@ -93,13 +93,15 @@ rendu (éditeur/lecture/PDF) dépendent tous indépendamment de la même hypoth�
 portrait) et reste la seule source des dimensions de la page (`getPageSize*`, `pageSizePtFor`, `pageSizeTwipFor`) ; la feuille et la pagination de l'éditeur
 et de la Lecture, le PDF (aussi en lot), le Word et l'impression navigateur les lisent. Le A4 portrait n'est plus écrit en dur que dans `js/page-layout.js`, dans les
 valeurs initiales de `js/pdf-export.js` et `js/docx-export.js` (remplacées à chaque export), dans le repli CSS du portrait (`--pp-page-width`) et dans l'aperçu
-de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles classiques ; un email et un macro-modèle restent en portrait.
+de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles classiques et, depuis le second envoi du 01/10, sur les macro-modèles ; un email et une grille restent en portrait.
 **Formats A3, A4, A5 et A6 livrés le 01/10** (suite du même fil) : `PageLayout.FORMATS` est la seule table des dimensions (mm, pt de pdfmake, twips de Word, nom pdfmake / jsPDF) ; le
 format s'enregistre avec le sens et les marges (clé `format` de la colonne `Margins`, absente ou inconnue = A4) et se choisit dans le menu au survol du bouton Portrait / Paysage
 (`js/orientation-toggle.js`, aucune icône de plus dans la barre). Les trois fonctions de dimensions prennent le format comme le sens, les consommateurs (éditeur, Lecture, facteur
 d'ajustement, PDF, PDF en lot, Word, impression navigateur, qualités raster, plafonds de Réglages) n'ont rien d'autre appris. Un format de plus est une ligne de `FORMATS`.
 **Reste ouvert** : d'autres formats (Lettre US, Légal US, A2, A1, ISO B...) sur carte à Antoine, rien de codé avant son choix ; l'aperçu de la galerie et de l'arbre des modèles
-(toujours une feuille A4 portrait) ; l'orientation et le format d'un macro-modèle (qui impose ses propres marges à tout ce qu'il assemble ; Antoine a répondu « Oui » le 01/10, à faire).
+(toujours une feuille A4 portrait) ; (l'orientation et le format d'un macro-modèle sont livrés : voir ci-dessous).
+
+**Page d'un macro-modèle livrée le 01/10** (carte « Autoriser le paysage pour les macro-modèles ? » : Oui) : `OrientationToggle.TYPES` contient `macro`. Le sens, le format et les marges du macro-modèle sont dans la colonne `Margins` de sa propre ligne (écriture de l'enregistrement automatique, de la fenêtre de composition et d'« Enregistrer sous… » : voir `planning/feature-macro-modeles.md`) ; la Lecture, le PDF (aussi en lot et en un seul fichier) et le Word lisent `PageLayout`, chargé avec le macro-modèle. L'assemblage (`MacroTemplates.buildConcatenatedHtml`) ne reprend que le contenu des modèles : leur page n'a aucune prise sur le macro-modèle, qui l'impose à tout ce qu'il assemble, et ils gardent la leur. Un tableau aux colonnes réglées écrit pour une page plus large tient dans la page du macro-modèle (Lecture, PDF et Word, sondé le 01/10). Limite annoncée à Antoine : enregistrement automatique coupé, la page d'un macro-modèle n'est gardée que par « Enregistrer » de sa fenêtre et la question avant de le quitter ne s'ouvre pas (comme pour ses marges).
 
 ## Fin de document sans contenu
 

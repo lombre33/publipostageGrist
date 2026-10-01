@@ -452,8 +452,8 @@ Node `orientationMouse` (vrai clic, Entrée et Espace à 700×400, clair et somb
 4. Repasser en portrait : la feuille, les sauts de page et les exports sont exactement ceux d'avant ; une colonne réglée à 200 mm en paysage ne laisse pas la colonne
    droite à zéro en portrait (dix millimètres au moins) et retrouve ses 200 mm en repassant en paysage.
 5. Enregistrer, recharger la page du document Grist : le modèle revient en paysage ; un modèle enregistré avant ce réglage reste en portrait.
-6. Un email et un macro-modèle : le bouton est visible et grisé (info-bulle « pas disponible pour ce modèle »), un clic ne change rien ; le PDF d'un macro-modèle
-   est en portrait même si un modèle qu'il assemble est en paysage.
+6. Un email : le bouton est visible et grisé (info-bulle « pas disponible pour ce modèle »), un clic ne change rien. Un macro-modèle a son propre bouton (voir le point suivant) :
+   la page d'un modèle qu'il assemble n'a aucune prise sur lui.
 7. À 700 px de panneau, la feuille paysage est réduite à la largeur du panneau (facteur 0,60 contre 0,85 en portrait) : le texte est plus petit à l'écran, pas dans
    le PDF ni le Word.
 8. Suivi des modifications activé, changer d'orientation sur un modèle qui a une image en calque : aucune suggestion (ni suppression ni insertion) n'apparaît, l'image
@@ -481,7 +481,11 @@ impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur l
 4. Repasser en A4 : la feuille et les sauts de page sont exactement ceux d'avant. Les marges d'un petit format ont pu être réduites (elles ne reviennent pas toutes seules) et un
    tableau trop large pour A5 a été réduit pour de bon : à vérifier et à noter.
 5. Enregistrer, recharger la page du document Grist : le modèle revient dans son format et son sens ; un modèle enregistré avant ce réglage reste en A4 portrait.
-6. Un email et un macro-modèle : le bouton et son menu sont visibles et grisés (titre « Page (pas disponible pour ce modèle) »), un clic sur une ligne ne change rien.
+6. Un email : le bouton et son menu sont visibles et grisés (titre « Page (pas disponible pour ce modèle) »), un clic sur une ligne ne change rien.
+   Un macro-modèle : le bouton et son menu sont actifs ; choisir Paysage puis A5 allume le bouton et coche les deux lignes ; la Lecture, « Exporter en PDF », « Exporter en un seul PDF » et
+   « Exporter en DOCX » sont en A5 paysage (le lecteur PDF annonce 210 × 148 mm, Word : Mise en page > Taille A5, Orientation Paysage), même si sa page de garde ou une annexe est en A4
+   portrait ou en A3 ; rouvrir cette page de garde seule la montre toujours dans son propre format. Recharger la page du document Grist : le macro-modèle revient en A5 paysage.
+   Enregistrement automatique coupé : la page n'est gardée que par « Enregistrer » dans la fenêtre du macro-modèle (et « Enregistrer sous… » en fait une copie qui la garde).
 7. À 700 px de panneau : A5 portrait tient sans réduction, A3 portrait est réduit (facteur 0,60), A3 paysage tombe au plancher de 0,5 et la zone d'édition défile horizontalement.
 8. Au clavier : Tab depuis Aperçu A4 arrive sur le bouton Page et ouvre son menu, passe par ses six lignes (trait de focus visible), Entrée ou Espace pose le format, Tab suivant
    referme le menu et arrive sur Qualité PDF.

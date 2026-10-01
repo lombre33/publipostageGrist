@@ -501,8 +501,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
 - Orientation de la page (demande d'Antoine du 01/10, « une bascule paysage et portrait… également pour les modèles
   classiques ») : le bouton Portrait / Paysage de la barre, juste après Aperçu A4, montre la page telle qu'elle est (haute en
-  portrait, large en paysage) et s'allume en paysage. Il n'est actif que pour les modèles classiques ; pour un email et un
-  macro-modèle il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
+  portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques et les macro-modèles ; pour un email et une
+  grille il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
   `orientation` de la colonne `Margins`, absente = portrait) ; changer d'orientation garde les quatre marges en millimètres.
   La feuille paysage (297 × 210 mm, 1 122,52 px de mise en page) est ramenée à la largeur du panneau par le même `zoom` : à
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
@@ -513,9 +513,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   gris discret, au moins 4,5:1) ; la coche dit le sens et le format courants. Le bouton garde son icône (la page telle qu'elle est) et son clic (tourner la page) ; il n'a pas
   d'info-bulle, que l'ouverture du menu retirerait : son nom accessible dit « Page A5 en portrait (passer en paysage) ». La case « Aperçu A4 » devient « Aperçu A5 » (« A5 preview »). Un modèle
   a un seul format, enregistré avec lui (clé `format` de la colonne `Margins`, absente ou inconnue = A4) ; changer de format garde le sens, re-borne les marges pour que la zone de texte garde
-  20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Email, macro-modèle et grille gardent le menu visible et grisé, titre
+  20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Email et grille gardent le menu visible et grisé, titre
   « Page (pas disponible pour ce modèle) ». À 700 px de panneau, A5 tient sans réduction, A3 portrait passe à 0,60 et A3 paysage tombe au plancher de 0,5 (la zone d'édition défile à
   l'horizontale). La galerie et l'arbre des modèles montrent encore une feuille A4 portrait. D'autres formats (Lettre US...) ne s'ajoutent qu'après le choix d'Antoine.
+- Page d'un macro-modèle (carte d'Antoine du 01/10, « Autoriser le paysage pour les macro-modèles ? » : Oui) : le bouton Page et son menu sont actifs sur un macro-modèle comme sur un modèle classique,
+  au même endroit et du même aspect ; la coche dit le sens et le format de ce macro-modèle (« Page A3 en paysage (passer en portrait) »). Sa page est dans sa propre ligne (colonne `Margins`, avec ses marges)
+  et il l'impose aux modèles qu'il assemble : la Lecture, le PDF (unique, en lot, en un seul fichier) et le Word suivent la page du macro-modèle, jamais celle de sa page de garde ou d'une annexe, qui gardent la
+  leur quand on les ouvre seules. Son résumé ne montre pas de feuille : la page se lit sur le bouton (allumé en paysage), dans le menu et à la Lecture. Un macro-modèle sans réglage reste en A4 portrait.
 - Fin de document (demande d'Antoine du 01/10, « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide, un saut de
   page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur ; l'éditeur garde sa ligne finale (il faut pouvoir écrire à la suite).

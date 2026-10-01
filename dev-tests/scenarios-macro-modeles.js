@@ -1179,6 +1179,264 @@
     },
   });
 
+  // --- La page d'un macro-modèle : sens et format (01/10, carte « Autoriser le paysage pour les macro-modèles ? » d'Antoine : Oui) ---------------------------------------------------
+  // Le bouton Page de la barre (js/orientation-toggle.js) est actif pour un macro-modèle : son menu pose le sens et le format dans PageLayout, l'enregistrement automatique les écrit dans la colonne
+  // Margins de SA ligne (comme ses marges), et la Lecture, le PDF et le Word du macro-modèle suivent cette page. Il l'impose aux modèles qu'il assemble : l'assemblage ne reprend que leur contenu,
+  // jamais leur page. Les gestes sont ceux de la personne (les vraies lignes du menu, les vrais boutons d'export), la ligne Grist est relue après le vrai minuteur d'enregistrement automatique.
+  const PAGE_DATA = 'MacroPageClients';
+  const pageButton = () => document.getElementById('btn-page-orientation');
+  const pageRow = key => document.querySelector('#v2-page-flyout [data-page-orientation="' + key + '"], #v2-page-flyout [data-page-format="' + key + '"]');
+  const pageChecked = () => Array.from(document.querySelectorAll('#v2-page-flyout .v2-hover-row-check')).filter(r => r.getAttribute('aria-checked') === 'true')
+    .map(r => r.getAttribute('data-page-orientation') || r.getAttribute('data-page-format')).join();
+  const pageState = () => ({
+    disabled: pageButton().disabled, pressed: pageButton().getAttribute('aria-pressed'), label: pageButton().getAttribute('aria-label'),
+    title: document.getElementById('v2-page-flyout-label').textContent, checked: pageChecked(),
+    grey: document.querySelectorAll('#v2-page-flyout .v2-hover-row-disabled').length, css: document.documentElement.style.getPropertyValue('--pp-page-width'),
+  });
+  async function pickPage(h, ...keys) { for (const key of keys) { pageRow(key).click(); await h.sleep(250); } }
+  const storedMargins = (page) => JSON.stringify(Object.assign({ top: 20, right: 20, bottom: 20, left: 20 }, page));
+  // Recharge la ligne d'un modèle (macro-modèle ou classique) par la liste, comme une personne qui y revient.
+  async function reopen(h, id) {
+    await Templates.loadAll();
+    const select = document.getElementById('template-select');
+    select.value = String(id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await h.sleep(800);
+  }
+  async function feedRecord(h) {
+    const stub = window.__gristStub;
+    stub.setVariables(PAGE_DATA, { Nom: 'Text' });
+    stub.setRows(PAGE_DATA, [{ id: 1, Nom: 'Alpha Durand' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: 'Alpha Durand' }, PAGE_DATA);
+    await h.sleep(100);
+  }
+  // Le blob PDF que pdfmake fait télécharger pendant `action` (repéré à sa création, comme dev-tests/scenarios-pdf-batch.js).
+  async function pdfDownloaded(h, action) {
+    const blobs = [];
+    const origCreate = URL.createObjectURL;
+    URL.createObjectURL = obj => { blobs.push(obj); return origCreate.call(URL, obj); };
+    try {
+      await action();
+      const startedAt = Date.now();
+      while (!blobs.some(b => b && b.size > 0 && /pdf/i.test(b.type || '')) && Date.now() - startedAt < 30000) await h.sleep(100);
+    } finally { URL.createObjectURL = origCreate; }
+    return blobs.find(b => b && b.size > 0 && /pdf/i.test(b.type || '')) || null;
+  }
+  // Le fichier que la ligne d'export fait télécharger (le clic du <a download> est intercepté) ; `confirmAnswer` répond à la confirmation d'un export en lot.
+  async function fileDownloaded(h, rowId) {
+    const downloads = [];
+    const blobsByUrl = new Map();
+    const origCreate = URL.createObjectURL;
+    const origClick = HTMLAnchorElement.prototype.click;
+    const dialogs = h.stubDialogs({ confirm: () => true });
+    URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
+      return origClick.call(this);
+    };
+    try {
+      document.getElementById(rowId).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const startedAt = Date.now();
+      while (!downloads.length && Date.now() - startedAt < 60000) await h.sleep(100);
+      await h.sleep(50);
+    } finally {
+      dialogs.restore();
+      URL.createObjectURL = origCreate;
+      HTMLAnchorElement.prototype.click = origClick;
+    }
+    return downloads[0] || null;
+  }
+  // Pages d'un PDF lues dans ses octets (pdf.js) : taille en points et texte.
+  async function pdfPages(h, blob) {
+    await h.ensurePdfJsLoaded();
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const pages = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const view = page.getViewport({ scale: 1 });
+      pages.push({ width: +view.width.toFixed(2), height: +view.height.toFixed(2), text: (await page.getTextContent()).items.map(it => it.str).join(' ') });
+    }
+    return pages;
+  }
+  // Page déclarée par un .docx (w:pgSz de word/document.xml) : ce que Word applique.
+  async function docxPage(blob) {
+    await ExportCommon.ensureJsZipLoaded();
+    const xml = await (await JSZip.loadAsync(await blob.arrayBuffer())).file('word/document.xml').async('string');
+    const tag = (xml.match(/<w:pgSz[^>]*>/) || [''])[0];
+    const attr = name => { const m = tag.match(new RegExp('w:' + name + '="([^"]*)"')); return m ? m[1] : null; };
+    return { width: Number(attr('w')), height: Number(attr('h')), orient: attr('orient') };
+  }
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+  const sheetLayoutWidth = () => {
+    const el = document.querySelector('#reader-container .reader-content');
+    if (!el) return null;
+    const zoom = parseFloat(getComputedStyle(el).zoom);
+    return el.getBoundingClientRect().width / (isFinite(zoom) && zoom > 0 ? zoom : 1);
+  };
+
+  cases.push({
+    id: 'macro_page_menu_is_active_and_shows_the_page_of_the_macro',
+    description: 'Le bouton Page est actif pour un macro-modèle et son menu coche sa page (colonne Margins de sa ligne) : A4 portrait par défaut, A5 paysage une fois écrit ; revenir d\'un modèle classique la retrouve',
+    run: async (h) => {
+      try {
+        const { id, coverId } = await loadedMacro(h, 'Macro page menu');
+        const problems = [];
+        const first = pageState();
+        if (first.disabled || first.pressed !== 'false' || first.checked !== 'portrait,A4' || first.title !== 'Page' || first.grey !== 0 || first.label !== 'Page A4 en portrait (passer en paysage)') problems.push('macro sans réglage : ' + JSON.stringify(first));
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, { Margins: storedMargins({ orientation: 'landscape', format: 'A5' }) });
+        await reopen(h, id);
+        const stored = pageState();
+        if (stored.disabled || stored.pressed !== 'true' || stored.checked !== 'landscape,A5' || stored.label !== 'Page A5 en paysage (passer en portrait)' || stored.css !== '793.7px') problems.push('macro A5 paysage : ' + JSON.stringify(stored));
+        await reopen(h, coverId);
+        const classic = pageState();
+        if (classic.pressed !== 'false' || classic.checked !== 'portrait,A4' || classic.disabled) problems.push('modèle classique après le macro-modèle : ' + JSON.stringify(classic));
+        await reopen(h, id);
+        const again = pageState();
+        if (again.checked !== 'landscape,A5' || again.pressed !== 'true') problems.push('macro-modèle retrouvé : ' + JSON.stringify(again));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, first, stored }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_page_chosen_in_the_menu_is_saved_in_its_row_with_the_composition_untouched',
+    description: 'Choisir Paysage puis A3 dans le menu Page d\'un macro-modèle chargé écrit cette page dans sa ligne (colonne Margins, quatre marges gardées) par l\'enregistrement automatique, composition et nom de PDF intacts',
+    run: async (h) => {
+      const events = [];
+      const onEvent = event => events.push(event.type);
+      try {
+        const { id } = await loadedMacro(h, 'Macro page enregistrée');
+        const before = macroRow(id);
+        const marginsBefore = Object.assign({}, PageLayout.getMarginsMm());
+        document.addEventListener('pp:marginsChanged', onEvent);
+        document.addEventListener('pp:pageLayoutChanged', onEvent);
+        await pickPage(h, 'landscape', 'A3');
+        document.removeEventListener('pp:marginsChanged', onEvent);
+        document.removeEventListener('pp:pageLayoutChanged', onEvent);
+        const onScreen = pageState();
+        await waitTicks(h, 2);
+        const row = macroRow(id);
+        const saved = JSON.parse(row.Margins || '{}');
+        const problems = [];
+        if (onScreen.checked !== 'landscape,A3' || onScreen.pressed !== 'true' || onScreen.css !== '1587.4px') problems.push('écran : ' + JSON.stringify(onScreen));
+        if (events.filter(e => e === 'pp:marginsChanged').length !== 2 || events.filter(e => e === 'pp:pageLayoutChanged').length !== 2) problems.push('évènements : ' + events.join());
+        if (saved.orientation !== 'landscape' || saved.format !== 'A3') problems.push('page écrite : ' + row.Margins);
+        if (!['top', 'right', 'bottom', 'left'].every(k => near(saved[k], marginsBefore[k], .001))) problems.push('marges changées : ' + row.Margins + ' pour ' + JSON.stringify(marginsBefore));
+        if (row.Contenu !== before.Contenu || composition(row).length !== 1) problems.push('composition changée : ' + row.Contenu);
+        if (row.NomFichierPDF !== before.NomFichierPDF) problems.push('nom du PDF changé : ' + row.NomFichierPDF);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, margins: row.Margins }) };
+      } finally {
+        document.removeEventListener('pp:marginsChanged', onEvent);
+        document.removeEventListener('pp:pageLayoutChanged', onEvent);
+        await leaveMacro(h);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'macro_page_reaches_reading_pdf_merged_pdf_and_word_and_replaces_the_page_of_its_cover',
+    description: 'Un macro-modèle en A3 paysage donne une Lecture, un PDF, un PDF unique et un Word en A3 paysage, alors que sa page de garde est en A5 portrait : il impose sa page aux modèles qu\'il assemble, qui gardent la leur',
+    run: async (h) => {
+      try {
+        const { id, coverId } = await loadedMacro(h, 'Macro page rendus');
+        await feedRecord(h);
+        h.setA4Preview(true); // sans l'Aperçu A4, la Lecture n'a pas de feuille : le contenu prend la largeur du panneau
+        await h.sleep(300);
+        // La page de garde a SA page, très différente de celle du macro-modèle.
+        window.__gristStub.remoteWrite(MACRO_TABLE, coverId, { Margins: storedMargins({ orientation: 'portrait', format: 'A5' }) });
+        await reopen(h, id);
+        await pickPage(h, 'landscape', 'A3');
+        const problems = [];
+        document.getElementById('btn-mode-read').click();
+        await h.sleep(900);
+        const sheet = sheetLayoutWidth();
+        if (sheet === null || !near(sheet, 1587.4, 2)) problems.push('feuille de la Lecture : ' + sheet + ' (1587.4 attendu)');
+        const pdf = await pdfDownloaded(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+        const pages = pdf ? await pdfPages(h, pdf) : [];
+        if (pages.length !== 1 || !near(pages[0].width, 1190.55, .5) || !near(pages[0].height, 841.89, .5) || !/Page\s*de\s*garde/.test(pages[0].text)) problems.push('PDF : ' + JSON.stringify(pages));
+        const merged = await fileDownloaded(h, 'v2-btn-export-pdf-merged');
+        const mergedPages = merged && merged.blob ? await pdfPages(h, merged.blob) : [];
+        if (mergedPages.length !== 1 || !near(mergedPages[0].width, 1190.55, .5) || !near(mergedPages[0].height, 841.89, .5)) problems.push('PDF unique : ' + JSON.stringify(mergedPages));
+        const word = await fileDownloaded(h, 'v2-btn-export-docx');
+        const wordPage = word && word.blob ? await docxPage(word.blob) : null;
+        if (!wordPage || wordPage.width !== 23811 || wordPage.height !== 16838 || wordPage.orient !== 'landscape') problems.push('Word : ' + JSON.stringify(wordPage));
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(500);
+        // La page de garde, ouverte seule, a gardé sa page.
+        await reopen(h, coverId);
+        const cover = pageState();
+        if (cover.checked !== 'portrait,A5' || cover.pressed !== 'false') problems.push('page de garde ouverte seule : ' + JSON.stringify(cover));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, sheet, pages, mergedPages, wordPage }) };
+      } finally {
+        const edit = document.getElementById('btn-mode-edit'); if (edit) edit.click();
+        await leaveMacro(h);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'macro_without_page_settings_keeps_a4_portrait_whatever_the_page_of_its_cover',
+    description: 'Un macro-modèle sans réglage de page reste en A4 portrait (Lecture, PDF, Word) même si sa page de garde est en A3 paysage : la page de garde n\'a aucune prise sur lui',
+    run: async (h) => {
+      try {
+        const { id, coverId } = await loadedMacro(h, 'Macro page défaut');
+        await feedRecord(h);
+        window.__gristStub.remoteWrite(MACRO_TABLE, coverId, { Margins: storedMargins({ orientation: 'landscape', format: 'A3' }) });
+        await reopen(h, id);
+        const problems = [];
+        const state = pageState();
+        if (state.checked !== 'portrait,A4' || state.css !== '793.71px') problems.push('écran : ' + JSON.stringify(state));
+        const pdf = await pdfDownloaded(h, async () => { document.getElementById('btn-export-pdf').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+        const pages = pdf ? await pdfPages(h, pdf) : [];
+        if (pages.length !== 1 || !near(pages[0].width, 595.28, .5) || !near(pages[0].height, 841.89, .5)) problems.push('PDF : ' + JSON.stringify(pages));
+        const word = await fileDownloaded(h, 'v2-btn-export-docx');
+        const wordPage = word && word.blob ? await docxPage(word.blob) : null;
+        if (!wordPage || wordPage.width !== 11906 || wordPage.height !== 16838 || wordPage.orient === 'landscape') problems.push('Word : ' + JSON.stringify(wordPage));
+        const row = macroRow(id);
+        if (JSON.parse(row.Margins || '{}').orientation === 'landscape') problems.push('la ligne du macro-modèle a pris la page de sa page de garde : ' + row.Margins);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, pages, wordPage }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_page_is_kept_by_the_window_save_and_by_save_as',
+    description: 'Enregistrement automatique coupé : la page réglée à l\'écran pour un macro-modèle (A6 paysage) part avec « Enregistrer » de sa fenêtre, composition comprise, et « Enregistrer sous… » en fait une copie qui la garde',
+    run: async (h) => {
+      const dialogs = h.stubDialogs({ prompt: 'Copie A6 paysage' });
+      try {
+        const { id, otherId } = await loadedMacro(h, 'Macro page fenêtre');
+        setAutosave(false);
+        await pickPage(h, 'landscape', 'A6');
+        await waitTicks(h, 2);
+        const untouched = JSON.parse(macroRow(id).Margins || '{}');
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(200);
+        const cover = document.getElementById('macro-editor-cover');
+        cover.value = String(otherId);
+        cover.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(700);
+        const row = macroRow(id);
+        const saved = JSON.parse(row.Margins || '{}');
+        const slots = composition(row);
+        const problems = [];
+        if (untouched.orientation === 'landscape' || untouched.format === 'A6') problems.push('écrit sans enregistrement automatique : ' + JSON.stringify(untouched));
+        if (saved.orientation !== 'landscape' || saved.format !== 'A6') problems.push('fenêtre : ' + row.Margins);
+        if (!slots || slots.length !== 1 || String(slots[0].modeleId) !== String(otherId)) problems.push('composition : ' + row.Contenu);
+        const rowsBefore = window.__gristStub.state.rows[MACRO_TABLE].id.slice();
+        document.getElementById('v2-btn-save-as').click();
+        await h.sleep(900);
+        const copyId = window.__gristStub.state.rows[MACRO_TABLE].id.find(x => !rowsBefore.includes(x));
+        const copy = copyId != null ? macroRow(copyId) : null;
+        const copyMargins = copy ? JSON.parse(copy.Margins || '{}') : {};
+        if (!copy || copy.Nom !== 'Copie A6 paysage' || copy.Contenu !== row.Contenu || copyMargins.orientation !== 'landscape' || copyMargins.format !== 'A6') problems.push('copie : ' + JSON.stringify(copy && { nom: copy.Nom, margins: copy.Margins }));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, margins: row.Margins }) };
+      } finally { dialogs.restore(); await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();

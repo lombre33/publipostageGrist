@@ -11,8 +11,9 @@ const OrientationToggle = (function () {
   const A4_TOGGLE_ID = 'v2-a4-toggle';
   // Types de modèle (colonne TypeModele) dont les moteurs suivent le sens et le format de PageLayout. Le bouton et son menu sont grisés pour tous les autres : un
   // réglage qui ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ICI, quand ses moteurs suivent - sans toucher
-  // js/main.js.
-  const TYPES = ['document'];
+  // js/main.js. Un macro-modèle porte sa propre page (colonne Margins de sa ligne, comme ses marges) et l'impose aux modèles qu'il assemble : l'assemblage ne reprend que le
+  // contenu de ces modèles (js/macro-templates.js), jamais leur page, donc la Lecture, le PDF et le Word d'un macro-modèle suivent la sienne.
+  const TYPES = ['document', 'macro'];
   let currentType = 'document';
   let isReadOnly = () => false;
   let busy = false;

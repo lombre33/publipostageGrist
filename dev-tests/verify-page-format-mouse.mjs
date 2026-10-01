@@ -3,7 +3,8 @@
 // d'Antoine (~700x400), en thème clair puis sombre : le survol du bouton Portrait / Paysage ouvre son menu (deux sens, quatre formats avec leurs dimensions) tout entier dans le
 // panneau et sous la souris, un vrai clic sur une ligne change la page (feuille de la largeur du format, mesurée aux PIXELS d'une vraie capture, ramenée dans le panneau par le facteur
 // d'ajustement, pagination et Lecture qui suivent, enregistrement automatique en une seule écriture avec la clé `format`), le menu se referme souris partie sans garder le focus ni
-// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les six lignes, et sur un email le menu est grisé et dit pourquoi.
+// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les six lignes, sur un email le menu est grisé et dit pourquoi, et sur un macro-modèle (résumé affiché, éditeur masqué)
+// il est actif : un vrai clic y pose A5 paysage, la Lecture suit et l'enregistrement automatique l'écrit dans la ligne du macro-modèle, composition intacte.
 // dev-tests/scenarios-page-format.js vérifie le reste DANS la page (PDF, Word, enregistrement, images en calque...) ; ici, chaque geste est un vrai geste.
 // Lancé par run-headless.mjs (groupe Node "pageFormatMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-page-format-mouse.mjs
 import { createServer } from 'node:http';
@@ -477,6 +478,59 @@ async function runTheme(theme) {
   check(`${label} - en anglais : « ${englishMenu.title} », Portrait / Landscape, le menu tient dans le panneau`, englishMenu.title === 'Page (not available for this template)' && englishMenu.rows.slice(0, 2).map(r => r.name).join('|') === 'Portrait|Landscape' && englishMenu.inside, englishMenu);
   await away(page);
   await page.evaluate(() => I18n.setLang('fr'));
+
+  // 11) Un macro-modèle a son bouton Page : le menu est actif, un vrai clic y pose le sens et le format (Paysage puis A5), la Lecture suit, et l'enregistrement automatique les écrit dans SA ligne,
+  // composition intacte. Le macro-modèle est posé par la page (rien à tester dans sa création : sa fenêtre est couverte par macroModeles) puis ouvert par la liste ; chaque geste qui suit est réel.
+  const macroId = await page.evaluate(async () => {
+    const cover = Templates.getCached().find(t => t.nom === 'Contrat');
+    const saved = await Templates.save(null, 'Dossier', JSON.stringify({ slots: [{ type: 'fixed', modeleId: cover.id }] }), '', null, null, 'macro', null);
+    await Templates.loadAll();
+    const select = document.getElementById('template-select');
+    const option = document.createElement('option'); option.value = String(saved.id); option.textContent = 'Dossier'; select.appendChild(option);
+    select.value = String(saved.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return saved.id;
+  });
+  await page.waitForTimeout(1000);
+  const macroRowNow = () => page.evaluate((id) => { const r = window.__gristStub.getRow('Publipostage_Modeles', id); return { margins: r.Margins, contenu: r.Contenu }; }, macroId);
+  const macroBefore = await macroRowNow();
+  const onMacro = await page.evaluate(() => ({ disabled: document.getElementById('btn-page-orientation').disabled, summary: getComputedStyle(document.getElementById('macro-summary-container')).display,
+    editor: getComputedStyle(document.getElementById('editor-container')).display }));
+  const macroBtn = await boxOf(page, '#btn-page-orientation');
+  await page.mouse.move(macroBtn.x - 8, macroBtn.y - 4, { steps: 2 }); await page.mouse.move(macroBtn.x, macroBtn.y, { steps: 3 }); await page.waitForTimeout(300);
+  const macroMenu = await pageMenu(page);
+  check(`${label} - sur un macro-modèle (résumé affiché, éditeur masqué) : le bouton est actif, le menu s'ouvre au survol, dit « ${macroMenu.title} », ses six lignes sont actives, atteignables et tiennent dans le panneau ; Portrait et A4 cochés`,
+    !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 6
+      && macroMenu.rows.every(r => r.disabled === 'false' && r.tab === 0 && r.hit && r.h >= 24) && macroMenu.inside && macroMenu.rows.filter(r => r.checked === 'true').map(r => r.key).join() === 'portrait,A4', { onMacro, macroMenu });
+  await away(page);
+  const macroWrites0 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
+  await pickRow(page, 'landscape');
+  await pickRow(page, 'A5');
+  await away(page);
+  const macroChosen = await page.evaluate(() => ({ landscape: PageLayout.isLandscape(), format: PageLayout.getFormat(), pressed: document.getElementById('btn-page-orientation').getAttribute('aria-pressed'),
+    label: document.getElementById('btn-page-orientation').getAttribute('aria-label'), checked: Array.from(document.querySelectorAll('#v2-page-flyout .v2-hover-row-check')).filter(r => r.getAttribute('aria-checked') === 'true')
+      .map(r => r.getAttribute('data-page-orientation') || r.getAttribute('data-page-format')).join() }));
+  check(`${label} - macro-modèle : un vrai clic sur Paysage puis sur A5 pose A5 paysage (bouton allumé, « ${macroChosen.label} »), sans ouvrir l'éditeur`,
+    macroChosen.landscape && macroChosen.format === 'A5' && macroChosen.pressed === 'true' && macroChosen.checked === 'landscape,A5' && macroChosen.label === 'Page A5 en paysage (passer en portrait)'
+      && (await page.evaluate(() => getComputedStyle(document.getElementById('editor-container')).display)) === 'none', macroChosen);
+  await page.waitForTimeout(4200);
+  const macroAfter = await macroRowNow();
+  const macroSavedMargins = (() => { try { return JSON.parse(macroAfter.margins || '{}'); } catch (e) { return null; } })();
+  const macroWrites1 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
+  check(`${label} - macro-modèle : l'enregistrement automatique écrit A5 paysage dans sa ligne, en une écriture, et sa composition reste exactement la même`,
+    !!macroSavedMargins && macroSavedMargins.orientation === 'landscape' && macroSavedMargins.format === 'A5' && macroAfter.contenu === macroBefore.contenu && macroWrites1 === macroWrites0 + 1, { macroAfter, macroBefore: macroBefore.margins, macroWrites0, macroWrites1 });
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await realClick(page, '#btn-mode-read');
+  await page.waitForFunction(() => document.getElementById('reader-container').style.display === 'block' && !!document.querySelector('#reader-container .reader-content'), null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(900);
+  const macroReader = await sheetOf(page, 'reader');
+  check(`${label} - Lecture du macro-modèle en A5 paysage : feuille de 793.7px de mise en page, dans le panneau (facteur ${macroReader && macroReader.zoom.toFixed(3)}), page sans défilement horizontal`,
+    !!macroReader && within(macroReader.layoutWidth, 793.7, 1.5) && macroReader.left >= macroReader.container.left - 1 && macroReader.right <= macroReader.container.right + 1 && macroReader.pageOverflowX <= 0, macroReader);
+  await realClick(page, '#btn-mode-edit');
+  await page.waitForTimeout(700);
+  const macroBack = await page.evaluate(() => ({ summary: getComputedStyle(document.getElementById('macro-summary-container')).display, editor: getComputedStyle(document.getElementById('editor-container')).display,
+    pressed: document.getElementById('btn-page-orientation').getAttribute('aria-pressed') }));
+  check(`${label} - retour en Édition : le résumé du macro-modèle est affiché (pas l'éditeur) et le bouton Page reste allumé`, macroBack.summary !== 'none' && macroBack.editor === 'none' && macroBack.pressed === 'true', macroBack);
   await context.close();
 }
 

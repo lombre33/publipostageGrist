@@ -111,7 +111,8 @@ window.EditorTestSuites.orientation = (function () {
         document.addEventListener('pp:marginsChanged', onMargins);
         try {
           if (OrientationToggle.TYPES.indexOf('document') === -1) problems.push('« document » n\'est pas dans OrientationToggle.TYPES : ' + JSON.stringify(OrientationToggle.TYPES));
-          if (OrientationToggle.TYPES.indexOf('email') !== -1 || OrientationToggle.TYPES.indexOf('macro') !== -1) problems.push('email / macro ne suivent pas l\'orientation : ' + JSON.stringify(OrientationToggle.TYPES));
+          if (OrientationToggle.TYPES.indexOf('macro') === -1) problems.push('« macro » n\'est pas dans OrientationToggle.TYPES (un macro-modèle a sa propre page) : ' + JSON.stringify(OrientationToggle.TYPES));
+          if (OrientationToggle.TYPES.indexOf('email') !== -1) problems.push('un email ne suit pas l\'orientation : ' + JSON.stringify(OrientationToggle.TYPES));
           h.openFlyout('#v2-new-template-group');
           await h.clickButton('v2-btn-new-document');
           await h.sleep(300);
@@ -303,7 +304,7 @@ window.EditorTestSuites.orientation = (function () {
     },
     {
       id: 'orient_saved_with_template_and_restored_on_load',
-      description: 'L\'orientation s\'enregistre avec le modèle (colonne Margins) et revient à son chargement ; un modèle portrait, un nouveau modèle et un macro-modèle restent en portrait',
+      description: 'L\'orientation s\'enregistre avec le modèle (colonne Margins) et revient à son chargement ; un modèle portrait, un nouveau modèle et un macro-modèle sans réglage restent en portrait (le bouton du macro-modèle est actif)',
       async run(h) {
         const landscapeId = await savedTemplate(h, 'Orient paysage', '<p>Paysage</p>', 'landscape');
         const row = window.__gristStub.getRow(TABLE, landscapeId);
@@ -320,7 +321,7 @@ window.EditorTestSuites.orientation = (function () {
         await h.clickButton('btn-new');
         await h.sleep(400);
         const fresh = PageLayout.isLandscape();
-        // Un macro-modèle : l'orientation du modèle précédent ne le suit pas (il garde la page par défaut, portrait).
+        // Un macro-modèle sans réglage de page : l'orientation du modèle précédent ne le suit pas (il garde la page par défaut, portrait), son bouton est actif.
         await selectTemplate(h, landscapeId);
         const macro = await Templates.save(null, 'Orient macro', JSON.stringify({ slots: [] }), '', null, null, 'macro', null);
         await Templates.loadAll();
@@ -336,7 +337,7 @@ window.EditorTestSuites.orientation = (function () {
         const ok = saved.orientation === 'landscape'
           && loadedLandscape.landscape && loadedLandscape.cssVar === '1122.52px'
           && !loadedPortrait.landscape && loadedPortrait.cssVar === '793.71px' && loadedPortrait.sheet !== null && near(loadedPortrait.sheet, 793.71, 1)
-          && !fresh && !macroLandscape && macroSheet === '793.71px' && macroButton.disabled === true && landscapeButton.disabled === false && landscapeButton.pressed === 'true';
+          && !fresh && !macroLandscape && macroSheet === '793.71px' && macroButton.disabled === false && macroButton.pressed === 'false' && landscapeButton.disabled === false && landscapeButton.pressed === 'true';
         return { pass: ok, notes: 'colonne=' + row.Margins + ' charge paysage=' + JSON.stringify(loadedLandscape) + ' charge portrait=' + JSON.stringify(loadedPortrait) + ' nouveau paysage=' + fresh + ' macro paysage=' + macroLandscape + ' bouton paysage=' + JSON.stringify(landscapeButton) + ' bouton macro=' + JSON.stringify(macroButton) };
       },
     },

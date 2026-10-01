@@ -153,6 +153,12 @@ pour le mode email avec `TypeModele`) :
   document fusionné**, porté par le macro-modèle lui-même (colonnes `HeaderFooter`/`Margins` déjà
   existantes sur `Publipostage_Modeles`), appliqué à la page de garde ET à toutes les annexes. Pas de
   config par modèle assemblé à prévoir.
+- **Sens et format de la page (01/10, carte d'Antoine « Autoriser le paysage pour les macro-modèles ? » : Oui)** : même jeu, même
+  colonne. Le bouton Page de la barre est actif pour un macro-modèle ; son sens et son format (clés `orientation` et `format` de
+  `Margins`, avec les marges) sont ceux du macro-modèle pour la Lecture, le PDF et le Word, jamais ceux des modèles qu'il assemble.
+  Comme les marges, ils sont écrits dans la ligne du macro-modèle par l'enregistrement automatique (qui réécrit sa composition telle
+  que Grist la rend, `Editor.getHTML()` étant vide pour ce type), par « Enregistrer » de sa fenêtre et par « Enregistrer sous… »
+  (réglages de l'écran : `macroSettingsOnScreen` dans `js/main.js`).
 
 Questions plus mineures, tranchées ici par défaut raisonnable (à corriger si Antoine n'est pas
 d'accord) :
