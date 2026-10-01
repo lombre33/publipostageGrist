@@ -1,0 +1,32 @@
+/* Fenêtre « Insérer / Modifier le QR code » (js/qr-code.js) et cadre d'un QR code dont le texte contient une colonne, dans l'éditeur. Le cadre, le libellé et le champ de la
+   fenêtre viennent de css/modal-base.css (.pp-dialog-label, .pp-dialog-input), ses boutons de css/variable-actions.css. Chargé après css/editor-v2.css : le cadre reprend celui
+   d'une image de variable (.editor-image-var-placeholder) et n'en change que l'icône et le libellé. */
+
+/* === La fenêtre === Le champ et son aide à gauche, l'aperçu à droite : tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. */
+.pp-qr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 150px; column-gap: 16px; align-items: start; padding-bottom: 2px; }
+.pp-qr-form, .pp-qr-side { min-width: 0; }
+.pp-qr-column { display: inline-flex; align-items: center; margin-top: 8px; height: 28px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.pp-qr-column:hover { background: var(--surface-sunken); }
+.pp-qr-column:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-qr-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-qr-error { padding-left: 8px; border-left: 3px solid var(--danger); font-weight: 600; color: var(--text); }
+.pp-qr-note[hidden] { display: none; }
+.pp-qr-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }
+/* L'aperçu est une petite feuille blanche, comme le papier du document : le QR code y garde son noir sur blanc dans le thème sombre, et le texte y prend la couleur du papier. */
+.pp-qr-paper { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 150px; height: 150px; padding: 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: #fff; }
+.pp-qr-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pp-qr-image[hidden], .pp-qr-message[hidden] { display: none; }
+.pp-qr-message { margin: 0; font-size: 11.5px; line-height: 1.4; text-align: center; color: #4b5563; overflow-wrap: anywhere; }
+.pp-qr-caption { margin-top: 4px; text-align: center; }
+/* Le <select> caché qui porte la liste des colonnes : rien à voir, seul son panneau (position fixe) s'affiche. */
+.pp-qr-column-host { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* === Dans l'éditeur === Un QR code dont le texte contient une colonne n'a pas d'image avant la Lecture : le cadre carré d'une image de variable, avec l'icône d'un QR code et son texte. */
+/* Le texte du cadre est en --text : le gris des images de variable (--text-muted, #667085) n'y fait que 4,39:1 sur le fond du cadre en clair (< 4,5:1) ; l'icône, un tracé et non
+   du texte, garde le gris (≥ 3:1). */
+.editor-image-qr-placeholder .editor-image-var-label { font-size: 10.5px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
+.editor-image-qr-placeholder .editor-image-var-label::before {
+  width: 28px; height: 28px; color: var(--text-muted);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E%3Cpath d='M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E%3Cpath d='M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3'/%3E%3C/svg%3E");
+}

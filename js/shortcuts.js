@@ -242,6 +242,7 @@ const Shortcuts = (function () {
     { id: 'codeBlock', group: 'insert', label: 'insert.codeBlock.tip', key: 'Mod+Alt+c', native: true, scope: 'editor', hint: tip('v2-btn-code-block'), run: click('v2-btn-code-block') },
     { id: 'callout', group: 'insert', label: 'insert.callout.row', key: '', scope: 'editor', hint: tip('v2-btn-callout'), run: click('v2-btn-callout') },
     { id: 'signature', group: 'insert', label: 'insert.signature.tip', key: '', scope: 'editor', hint: tip('v2-btn-signature'), run: click('v2-btn-signature') },
+    { id: 'qrCode', group: 'insert', label: 'insert.qr.row', key: '', scope: 'editor', hint: tip('v2-btn-qr'), run: click('v2-btn-qr') },
     { id: 'variable', group: 'insert', label: 'insert.variable.tip', key: '', scope: 'editor', hint: tip('v2-btn-insert-variable'), run: click('v2-btn-insert-variable') },
     { id: 'today', group: 'insert', label: 'chips.date', key: 'Alt+Shift+d', scope: 'editor', run: () => insertTodayChip() },
     // Historique et suivi

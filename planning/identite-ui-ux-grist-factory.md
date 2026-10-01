@@ -299,10 +299,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ouverts) ; la règle est commune (`editor-core.js`), un menu neuf n'a rien à coder ; au clavier, Tab ouvre toujours le menu.
 - Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
   (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
-  est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… » et « Bloc de signature » (titre du volet « Lien et
+  est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… », « Bloc de signature » et « QR code… » (titre du volet « Lien et
   blocs de contenu ») ; les blocs suivants s'y ajoutent comme lignes, jamais comme nouvelles icônes. Une ligne qui n'a pas
   de sens à cet endroit est grisée, jamais masquée : « Lien… » dans un bloc de code, « Bloc de code » quand il effacerait
-  une bulle `#Variable` ou une image, « Encadré… » et « Bloc de signature » en mode Email et dans un en-tête ou un pied de
+  une bulle `#Variable` ou une image, « Encadré… », « Bloc de signature » et « QR code… » en mode Email et dans un en-tête ou un pied de
   page, tout le menu en mode macro et en Lecture. Fenêtre du lien (base commune des fenêtres) : « Adresse du lien » (http, https, mailto, tel ; sans
   protocole, `https://` est ajouté, une adresse e-mail devient `mailto:`, un numéro `tel:` ; `javascript:` et le reste sont
   refusés), « Texte à afficher » seulement quand rien n'est sélectionné, « Retirer le lien » seulement sur un lien
@@ -344,6 +344,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sur le modèle même quand le clavier est resté sur un bouton de la barre (dans un champ, Ctrl+Z reste celui du champ). Le nouveau texte garde la mise en forme du texte remplacé (gras,
   couleur, lien) ; avec le suivi des modifications allumé, le remplacement devient une suppression et une insertion suggérées, comme une frappe. Échap ferme depuis n'importe quel contrôle
   de la barre, rend le clavier au texte et laisse le dernier résultat sélectionné ; la barre se ferme aussi quand l'éditeur disparaît (Mode lecture, macro-modèle).
+- QR code (demande d'Antoine du 01/10, « un lien présent dans une cellule Grist (variable) ou un lien externe qui peut être rentré » ; sa réponse à la carte de placement : « Menu chaîne ») : une ligne
+  « QR code… » dans le menu de l'icône chaîne « Lien et blocs de contenu », la dernière, sous « Bloc de signature », jamais une nouvelle icône ; sur un QR code sélectionné elle devient « Modifier le QR code… »
+  (son nom accessible aussi). Elle est grisée, jamais masquée, en mode Email et dans un en-tête ou un pied de page (pas de QR code à cet endroit pour l'instant), et avec tout le menu en macro-modèle ;
+  dans une grille elle reste active (l'image se pose sur sa case, résolue comme à la Lecture dans l'Excel). La
+  fenêtre est de la base commune et tient dans 700×400 sans défiler : « Adresse ou texte » (le champ a le focus), « Insérer une colonne… » (la liste avec recherche des colonnes, rangée
+  par-dessus la fenêtre ; taper « # » dans le champ ouvre la même liste, elle aussi par-dessus), l'indication « Une colonne donne un QR code propre à chaque ligne. », et à droite un
+  aperçu sur une petite feuille blanche (un QR code se lit noir sur blanc, aussi en sombre) : celui de la ligne en cours quand le texte contient une colonne, avec la légende « Pour la
+  ligne en cours. ». Un message dit pourquoi il n'y en a pas (champ vide, colonne vide, texte trop long, aucune ligne en cours) ; « Insérer » ne se grise que pour un champ vide ou un
+  texte trop long. Entrée valide, Échap ferme sans rien insérer. Un texte seul donne tout de suite une image carrée de 120 px ; un texte avec une colonne donne un cadre carré
+  pointillé, comme une image de variable, avec l'icône d'un QR code et le texte : le vrai QR code est dessiné à la Lecture et à l'export, un par ligne (dans une zone répétée, comme
+  une bulle). Une colonne vide pour la ligne retire le QR code ; une cellule du widget Lien de Grist (« titre adresse ») donne l'adresse seule quand elle est tout le texte ; un nombre
+  s'écrit brut ; un texte trop long ou une bibliothèque qui ne charge pas laisse « [QR code : texte trop long] » ou « [QR code indisponible] » dans la langue de l'interface, jamais
+  une image cassée. Le texte du cadre est en `--text` (le gris des images de variable ne fait que 4,39:1 sur son fond en clair). Elle a son action dans Réglages > Raccourcis
+  (« QR code… », sans touche d'origine), comme les autres lignes du menu.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la
@@ -490,7 +504,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   pas sous la hauteur de son texte. Un clic sur une lettre, un numéro ou le coin sélectionne la colonne, la ligne ou toute la grille ;
   Ctrl+A prend les cases, Suppr les vide, les flèches et Tab ne sortent jamais du tableau. Ce qui n'a pas de sens dans un tableau unique est
   grisé, jamais retiré : Tableau, Deux colonnes, Sommaire, Citation, Bloc de code, Encadré, Bloc de signature, les trois
-  boutons du suivi des modifications et l'aperçu A4 ; « Lien », la mise en forme, l'image, les variables et Annuler restent actifs. Le
+  boutons du suivi des modifications et l'aperçu A4 ; « Lien », la mise en forme, l'image, le QR code, les variables et Annuler restent actifs. Le
   garde-fou de l'éditeur tient aussi pour le clavier et le collage : la grille reste UN tableau — ni second tableau, ni deux colonnes, ni
   sommaire, ni citation, ni encadré, ni bloc de code, ni image en calque, et on ne supprime ni le tableau, ni sa dernière ligne ou colonne.
   Le texte d'une case est au milieu de sa hauteur (alignement vertical enregistré case par case avec le modèle ; haut et bas viendront avec la
@@ -626,7 +640,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
-  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (50, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
+  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (51, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
   n'est coupé à 700 px), la touche dans un bouton de 112 px au moins (« Aucune » en italique quand il n'y en a pas), « Par défaut » à droite, grisé tant que la touche est celle d'origine
   ; « Tout remettre par défaut » en haut à droite demande confirmation. Un clic sur la touche l'écoute (« Tapez la touche… », fond `--accent-soft`) : la combinaison tapée est prise,
   Échap abandonne sans fermer la fenêtre, Retour arrière retire la touche. Une combinaison refusée dit pourquoi dans un message sous la touche, dans sa colonne et jamais sous le nom de

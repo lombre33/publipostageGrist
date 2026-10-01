@@ -17,7 +17,7 @@ const MainToolbar = (function () {
   // Mode grille (planning/feature-mode-grille-excel.md) : même patron, posé par js/main.js quand le modèle courant est de type 'grille' - un tableau unique, sans
   // feuille. GRID_LOCKED_IDS = ce qui n'a aucun sens dans un tableau unique, grisé et jamais retiré (règle d'Antoine) ; « Lien » reste actif (un lien dans une case a
   // un sens). Les boutons qui ouvrent sur un autre type de bloc (citation, bloc de code, encadré, signature du menu Lien) en font partie ; un fil qui ajoute un bouton de ce menu
-  // l'ajoute ici. Le saut de page n'y est pas : il se pose avant la ligne sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncToolbarState).
+  // l'ajoute ici, sauf une image : le QR code reste actif, il se pose sur sa case (comme le groupe Image) et l'Excel le dessine. Le saut de page n'y est pas : il se pose avant la ligne sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncToolbarState).
   let inGridMode = false;
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
@@ -180,11 +180,11 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js) : l'icône du bouton est celle du lien, chaque ligne du menu garde la sienne devant son texte.
+    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js) : l'icône du bouton est celle du lien, chaque ligne du menu garde la sienne devant son texte.
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
-    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature');
+    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-find', 'search');
@@ -239,6 +239,10 @@ const MainToolbar = (function () {
     const inCallout = Callout.isInside(editor);
     setActive('v2-btn-callout', inCallout);
     relabelCallout(inCallout);
+    // Un QR code sélectionné : la ligne « QR code… » du menu devient « Modifier le QR code… » (la même fenêtre change son texte).
+    const qrSelected = QrCode.isSelected(editor);
+    setActive('v2-btn-qr', qrSelected);
+    relabelQr(qrSelected);
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
@@ -303,6 +307,9 @@ const MainToolbar = (function () {
     // Encadré et signature : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page ; la signature est une zone 2 colonnes, verrouillée là aussi.
     setLocked('v2-btn-callout', inEmailMode || inHfMode);
     setLocked('v2-btn-signature', inEmailMode || inHfMode);
+    // QR code : une image, donc pas dans un e-mail (texte brut, le groupe Image y est grisé aussi) ; ni dans un en-tête ou un pied de page pour l'instant, la Lecture n'y résout pas
+    // les colonnes (ReaderMode.resolveHeaderFooterZone). Dans une grille, la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
+    setLocked('v2-btn-qr', inEmailMode || inHfMode);
     setLocked('v2-btn-accept-all', inMacroMode);
     setLocked('v2-btn-reject-all', inMacroMode);
     // Mode grille : appliqué APRÈS tous les verrouillages ci-dessus (le dernier appel gagne). En quittant la grille, un bouton que l'une des lignes ci-dessus gère
@@ -388,6 +395,18 @@ const MainToolbar = (function () {
   function relabelCallout(inside) {
     const label = document.getElementById('v2-btn-callout-label');
     if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
+  }
+  // Libellé de la ligne « QR code… » (menu « Lien et blocs de contenu ») : « Modifier le QR code… » quand un QR code est sélectionné. Réécrit à chaque changement d'état et de langue.
+  function relabelQr(selected) {
+    const label = document.getElementById('v2-btn-qr-label');
+    if (label) label.textContent = I18n.t(selected ? 'insert.qr.rowEdit' : 'insert.qr.row');
+    // Le nom accessible porte le même verbe que le libellé vu (« Modifier … » / « Insérer … ») ; data-i18n-aria le garde juste au changement de langue.
+    const row = document.getElementById('v2-btn-qr');
+    if (row) {
+      const key = selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria';
+      row.setAttribute('data-i18n-aria', key);
+      row.setAttribute('aria-label', I18n.t(key));
+    }
   }
   // La loupe (js/find-replace.js) : sa touche (Ctrl+F, ⌘F selon la plateforme, ou celle qu'on a choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
   // réécrits à chaque changement de langue ou de touche ; sans touche, sans parenthèses.
@@ -477,6 +496,8 @@ const MainToolbar = (function () {
     // Encadré : une fenêtre (couleur, icône) pour l'insérer autour de la sélection ou, dans un encadré, pour le modifier ; signature : un morceau de document tout fait.
     bind('v2-btn-callout', () => Callout.open());
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
+    // QR code : une fenêtre (adresse ou texte, colonnes comprises) pour l'insérer ou, quand il est sélectionné, le modifier.
+    bind('v2-btn-qr', () => QrCode.open());
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
     Shortcuts.onChange(decorateLinkShortcut);
@@ -485,6 +506,7 @@ const MainToolbar = (function () {
     Shortcuts.onChange(decorateFindShortcut);
     bind('v2-btn-find', () => FindReplace.toggle());
     I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
+    I18n.onChange(() => relabelQr(QrCode.isSelected(editor)));
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
     // Du texte sélectionné n'est pas remplacé par le « # » : la liste s'ouvre devant lui, sur l'onglet Chips, pour entourer ce texte d'un bloc « Texte conditionnel »

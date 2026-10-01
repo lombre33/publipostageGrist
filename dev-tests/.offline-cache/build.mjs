@@ -60,6 +60,9 @@ const umd = [
   ['node_modules/html2pdf.js/dist/html2pdf.bundle.min.js', 'umd/html2pdf.bundle.min.js'],
   ['node_modules/docx/dist/index.iife.js', 'umd/docx.iife.js'],
   ['node_modules/exceljs/dist/exceljs.min.js', 'umd/exceljs.min.js'],
+  // QR code (js/qr-code.js) : le générateur que charge l'app, et jsQR (tests seulement : relit le QR code dessiné, dev-tests/scenarios-qr-code.js).
+  ['node_modules/qrcode-generator/qrcode.js', 'umd/qrcode.min.js'],
+  ['node_modules/jsqr/dist/jsQR.js', 'umd/jsqr.js'],
 ];
 for (const [from, to] of umd) {
   try { copyFileSync(from, to); }

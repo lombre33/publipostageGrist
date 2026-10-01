@@ -143,6 +143,21 @@ l'absence de SRI qui existe déjà pour `esm.sh`). Conception :
   existante — insertion, positionnement, export PDF) plutôt que d'inventer un nouveau mécanisme de
   rendu pour ce cas précis.
 
+**Livré le 01/10 (le QR code ; les codes-barres restent à faire)** — demande d'Antoine : « intégration d'un lien présent dans une cellule Grist (variable) ou d'un lien externe qui
+peut être rentré ». Bibliothèque `qrcode-generator` 1.4.4 de cdnjs avec SRI (`LIB` de `js/qr-code.js`), chargée à la demande par `ExportCommon.loadScriptOnce`, texte en UTF-8, correction
+d'erreur M. Un QR code est une image de l'éditeur (`editorImage`) qui garde en plus son texte (`data-qr-text`, attribut `qrText`) : sans colonne, l'image PNG (noir sur blanc, 640 px
+de côté environ, quatre modules de marge, modules en pixels entiers) est dessinée à l'insertion et suivie telle quelle par la Lecture, le PDF et le Word ; avec une colonne
+(`#Table.Colonne`, la détection de l'objet d'un e-mail, `Variables.findTextVariables`), le modèle ne stocke pas d'image : un cadre carré la remplace dans l'éditeur et
+`QrCode.resolveImage` la dessine pour chaque ligne à la Lecture et à l'export (`ReaderMode.render` et `ReaderMode.preview`, donc PDF, Word et lots), y compris dans une zone répétée
+(`LoopRules.BOUND_SELECTOR`). Une colonne vide pour la ligne retire le QR code ; un texte trop long (2 331 octets au plus) ou une bibliothèque absente laisse une note dans la langue de
+l'interface. Les nombres s'écrivent bruts (`rawNumbers`). Une cellule du widget Lien de Grist (« titre adresse ») donne l'adresse seule quand la colonne est tout le texte : l'option
+du widget n'est pas lue (`js/grist-api.js` n'a pas été touché), l'adresse est le dernier mot s'il commence par http(s)://. Entrée : la ligne « QR code… » du menu « Lien et blocs de contenu »
+(icône chaîne, `#v2-btn-qr` ; Antoine a choisi ce menu sur la carte de placement, devant le menu Image), fenêtre de la base commune (`js/qr-code.js`, `css/qr-code.css`). Dans une grille la ligne reste
+active : `XlsxExport` passe par `ReaderMode.preview`, l'image se pose sur sa case. Tests : groupe `qrCode` (le QR code est relu par un décodeur, jsQR, en page, dans les pixels du PDF, dans le .docx
+et dans le .xlsx) et script Node `qrMouse` (vraie souris, 700×400).
+**Reste ouvert** : pas de QR code dans un en-tête ni un pied de page (la ligne est grisée là) ; les codes-barres (`jsbarcode`) ; un QR code logo au centre ou une autre couleur ; la
+correction d'erreur est fixe (M).
+
 ## Fusion de plusieurs modèles
 
 Concaténer plusieurs modèles en un seul export PDF (ex. lettre de couverture + CGV + facture). Deux

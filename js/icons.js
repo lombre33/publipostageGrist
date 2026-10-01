@@ -121,6 +121,8 @@ const Icons = (function () {
     matchCase: '<path d="M2.5 18 7 6l4.5 12M4.2 14h5.6"/><circle cx="17" cy="15" r="3"/><path d="M20 12v6"/>',
     wholeWord: '<circle cx="7.5" cy="10" r="2.8"/><path d="M10.3 7.2V13"/><path d="M13.7 4v9"/><circle cx="16.7" cy="10" r="2.8"/><path d="M3.5 17v3.5h17V17"/>',
     closeFind: '<path d="M7 7l10 10M17 7 7 17"/>',
+    // QR code (js/qr-code.js) : ligne du même menu - trois repères d'angle et quelques modules, la même figure que le cadre d'un QR code dont le texte contient une colonne (css/qr-code.css).
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Encadré et bloc de signature (js/callout.js, js/main-toolbar.js, css/callout.css) : le panneau de 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (flèches, Tab,
 // Entrée, Échap, frappe, Ctrl+Z), en clair et en sombre. Ce que scenarios-callout-signature.js ne peut pas voir depuis la page :
-//  - le survol de l'icône ouvre le menu, ses cinq lignes tiennent dans le panneau et sont au premier plan (aucun autre volet ne les recouvre) ;
+//  - le survol de l'icône ouvre le menu, ses six lignes tiennent dans le panneau et sont au premier plan (aucun autre volet ne les recouvre) ;
 //  - un clic sur « Encadré… » ouvre la fenêtre ; elle tient dans 700x400 sans défiler, titre, trois groupes de choix, aperçu et boutons visibles, l'aperçu reste une feuille blanche en sombre ;
 //  - un clic sur un type, une couleur et une icône change l'aperçu ; « Insérer » écrit l'encadré, ferme la fenêtre et rend le clavier à l'éditeur ;
 //  - au clavier : les flèches changent le choix, Tab ne sort pas de la fenêtre, Échap annule sans toucher au texte, Entrée valide ;
@@ -126,7 +126,7 @@ const nativeDialogs = [];
 page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
 
 const MAIN = '#v2-btn-link';
-const ROWS = ['#v2-row-link', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature'];
+const ROWS = ['#v2-row-link', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr'];
 const WIN = '#pp-callout-modal';
 const BOX = `${WIN} .modal-content`;
 const OK = `${WIN} .var-modal-primary`;
@@ -221,17 +221,17 @@ async function run(theme) {
   const T = theme;
   await setDoc('<p>Bonjour le monde entier</p><p>Deuxième ligne</p>');
 
-  // 1) Le menu : un survol réel de l'icône ouvre le volet, ses cinq lignes sont dans le panneau et au premier plan.
+  // 1) Le menu : un survol réel de l'icône ouvre le volet, ses six lignes sont dans le panneau et au premier plan.
   const mainBox = await hit(MAIN);
   check(`${T}, menu : l'icône est visible dans le panneau ${WIDTH}x${HEIGHT} et sous la souris`, seen(mainBox), mainBox);
   await openMenu();
   const flyout = await hit('#v2-blocks-flyout');
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
-  check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses cinq lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
+  check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses six lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   const labels = await rowLabels();
   const flyoutTitle = await page.evaluate(() => document.querySelector('#v2-blocks-flyout .v2-hover-flyout-label').textContent);
-  check(`${T}, menu : « Lien… » (avec son raccourci), « Citation », « Bloc de code », « Encadré… » et « Bloc de signature »`, labels.length === 5 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Citation' && labels[2] === 'Bloc de code' && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && flyoutTitle === 'Lien et blocs de contenu', { labels, flyoutTitle });
+  check(`${T}, menu : « Lien… » (avec son raccourci), « Citation », « Bloc de code », « Encadré… », « Bloc de signature » et « QR code… »`, labels.length === 6 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Citation' && labels[2] === 'Bloc de code' && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && labels[5] === 'QR code…' && flyoutTitle === 'Lien et blocs de contenu', { labels, flyoutTitle });
   await snap(`${T}-1-menu`);
   await closeMenu();
   const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-blocks-flyout')).display === 'none');
@@ -379,7 +379,7 @@ async function runEnglish() {
   await openMenu();
   const labels = await rowLabels();
   const flyoutTitle = await page.evaluate(() => document.querySelector('#v2-blocks-flyout .v2-hover-flyout-label').textContent);
-  check('anglais, menu : « Link… Ctrl+K », « Quote », « Code block », « Callout… », « Signature block », titre « Link and content blocks »', labels.length === 5 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Quote' && labels[2] === 'Code block' && labels[3] === 'Callout…' && labels[4] === 'Signature block' && flyoutTitle === 'Link and content blocks', { labels, flyoutTitle });
+  check('anglais, menu : « Link… Ctrl+K », « Quote », « Code block », « Callout… », « Signature block », « QR code… », titre « Link and content blocks »', labels.length === 6 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Quote' && labels[2] === 'Code block' && labels[3] === 'Callout…' && labels[4] === 'Signature block' && labels[5] === 'QR code…' && flyoutTitle === 'Link and content blocks', { labels, flyoutTitle });
   await snap('en-1-menu');
   await clickRow('#v2-btn-callout');
   const en = await page.evaluate(() => {

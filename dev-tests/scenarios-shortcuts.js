@@ -395,7 +395,7 @@
     sizeUp: '#v2-size-plus', sizeDown: '#v2-size-minus', textColor: '#v2-btn-text-color', highlight: '#v2-btn-highlight',
     heading1: '#v2-heading-flyout .v2-hover-row[data-level="1"]', heading2: '#v2-heading-flyout .v2-hover-row[data-level="2"]', heading3: '#v2-heading-flyout .v2-hover-row[data-level="3"]',
     pageBreak: '#v2-btn-page-break', toc: '#v2-btn-toc', twoColumns: '#v2-btn-two-columns', citation: '#v2-btn-citation', codeBlock: '#v2-btn-code-block', callout: '#v2-btn-callout',
-    signature: '#v2-btn-signature', table: '#v2-btn-table', link: '#v2-btn-link', comment: '#v2-btn-comment', variable: '#v2-btn-insert-variable',
+    signature: '#v2-btn-signature', qrCode: '#v2-btn-qr', table: '#v2-btn-table', link: '#v2-btn-link', comment: '#v2-btn-comment', variable: '#v2-btn-insert-variable',
     undo: '#v2-btn-undo', redo: '#v2-btn-redo', trackChanges: '#v2-btn-track-changes', find: '#v2-btn-find',
   };
   // Le document de départ de chaque action : { markup, sel: 'all' (tout sélectionné) | 'end' | 'inB' (curseur à la fin de « b »), pre (ce qu'il faut avoir fait avant) }.
@@ -404,7 +404,7 @@
     indent: { markup: '<ul><li><p>a</p></li><li><p>b</p></li></ul>', sel: 'inB' },
     outdent: { markup: '<ul><li><p>a</p><ul><li><p>b</p></li></ul></li></ul>', sel: 'inB' },
     bulletList: { sel: 'end' }, orderedList: { sel: 'end' }, heading1: { sel: 'end' }, heading2: { sel: 'end' }, heading3: { sel: 'end' },
-    pageBreak: { sel: 'end' }, toc: { sel: 'end' }, twoColumns: { sel: 'end' }, citation: { sel: 'end' }, codeBlock: { sel: 'end' }, callout: { sel: 'end' }, signature: { sel: 'end' },
+    pageBreak: { sel: 'end' }, toc: { sel: 'end' }, twoColumns: { sel: 'end' }, citation: { sel: 'end' }, codeBlock: { sel: 'end' }, callout: { sel: 'end' }, signature: { sel: 'end' }, qrCode: { sel: 'end' },
     table: { sel: 'end' }, variable: { sel: 'end' }, trackChanges: { sel: 'end' },
     undo: { sel: 'all', pre: editor => editor.chain().focus().toggleBold().run() },
     redo: { sel: 'all', pre: editor => { editor.chain().focus().toggleBold().run(); editor.commands.undo(); } },

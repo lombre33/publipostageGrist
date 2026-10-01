@@ -485,6 +485,7 @@ const ReaderMode = (function () {
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
+    await resolveQrCodes(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     trimTrailingBlankBlocks(wrapper);
     keepBlankLines(wrapper);
@@ -557,6 +558,12 @@ const ReaderMode = (function () {
       img.dataset.attachmentId = String(ids[0]);
       img.style.objectFit = 'contain';
     }));
+  }
+  // QR codes dont le texte contient une colonne (js/qr-code.js) : dessinés ici pour la ligne affichée, avec la ligne du tour dans une zone répétée ; sans valeur, le QR code
+  // disparaît comme une image sans pièce jointe. Celui d'un texte seul est déjà une image du modèle.
+  async function resolveQrCodes(wrapper, tableId, record) {
+    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-qr-text]')).filter(QrCode.needsImage);
+    await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
   }
   // Chips intelligents - date du jour/heure actuelle/email utilisateur, valeurs calculées (jamais liées à une colonne Grist) donc résolues à chaque rendu
   // sans recherche de ligne/table liée. `.footnote-ref-marker` n'a pas besoin d'être résolu ici : son numéro vient du compteur CSS, déjà correct à l'écran.
@@ -721,6 +728,7 @@ const ReaderMode = (function () {
     }));
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
+    await resolveQrCodes(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;

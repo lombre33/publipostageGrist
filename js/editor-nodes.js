@@ -1013,6 +1013,8 @@ const EditorNodes = (function () {
       const parts = [];
       if (a.width) parts.push(`width: ${a.width}`);
       if (a.varTable && a.height) parts.push(`height: ${a.height}`);
+      // QR code sans image (une colonne dans son texte, js/qr-code.js) : un cadre carré, quelle que soit la largeur.
+      if (a.qrText && !a.src) parts.push('aspect-ratio: 1 / 1');
       if (a.layer !== 'normal') {
         parts.push('position: absolute', `left: ${a.left || 0}px`, `top: ${a.top || 0}px`, `z-index: ${a.layer === 'front' ? 5 : -1}`);
       }
@@ -1050,6 +1052,9 @@ const EditorNodes = (function () {
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
           varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
+          // QR code (js/qr-code.js) : le texte à encoder, « #Table.Colonne » compris. Posé avec un `src`, l'image est le QR code déjà dessiné ; sans `src`, le texte contient une
+          // colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée (reader-mode.js:resolveQrCodes).
+          qrText: { default: null, parseHTML: el => el.getAttribute('data-qr-text') || null, renderHTML: noBareRender },
         };
       },
       parseHTML() { return [{ tag: 'img.editor-image' }]; },
@@ -1067,6 +1072,7 @@ const EditorNodes = (function () {
           attrs['data-var-column'] = a.varColumn;
           attrs['data-var-key'] = a.varKey;
         }
+        if (a.qrText) attrs['data-qr-text'] = a.qrText;
         return ['img', attrs];
       },
       addCommands() {
@@ -1111,16 +1117,20 @@ const EditorNodes = (function () {
           // entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
           function applyAttrs(attrs) {
             const isVarBox = !!attrs.varTable;
+            // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
+            const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
             img.src = isVarBox ? '' : (attrs.src || '');
             img.alt = attrs.alt || '';
             const imgStyle = [];
             if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
             if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
+            if (isQrBox) imgStyle.push('aspect-ratio: 1 / 1');
             if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
             if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
             img.setAttribute('style', imgStyle.join('; '));
-            wrap.classList.toggle('editor-image-var-placeholder', isVarBox);
-            varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : '';
+            wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox);
+            wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
+            varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : '');
             const layered = attrs.layer !== 'normal';
             wrap.classList.toggle('editor-image-layered', layered);
             wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));

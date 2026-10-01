@@ -44,6 +44,8 @@
     "docx": "9.7.1",
     "exceljs": "4.4.0",
     "html2pdf.js": "0.10.1",
-    "esbuild": "0.25.10"
+    "esbuild": "0.25.10",
+    "qrcode-generator": "1.4.4",
+    "jsqr": "1.4.0"
   }
 }

@@ -101,8 +101,8 @@
   // === 1) Le menu de la barre ===============================================================================================================================
 
   cases.push({
-    id: 'co_menu_has_five_rows_with_callout_and_signature_after_the_code_block',
-    description: 'Le volet de l\'icône unique porte cinq lignes (lien, citation, bloc de code, encadré, bloc de signature), chacune avec son icône ; aucune n\'est dans la barre elle-même ; l\'encadré ouvre une fenêtre (points de suspension), la signature agit tout de suite',
+    id: 'co_menu_has_callout_and_signature_rows_after_the_code_block_and_before_the_qr_code',
+    description: 'Le volet de l\'icône unique porte six lignes (lien, citation, bloc de code, encadré, bloc de signature, QR code), chacune avec son icône ; aucune n\'est dans la barre elle-même ; l\'encadré ouvre une fenêtre (points de suspension), la signature agit tout de suite',
     run: async (h) => {
       await h.resetEditor();
       const flyout = document.getElementById('v2-blocks-flyout');
@@ -113,7 +113,7 @@
       const aria = [calloutRow().getAttribute('aria-label'), signatureRow().getAttribute('aria-label')];
       const flyoutLabel = flyout.querySelector('.v2-hover-flyout-label').textContent;
       return {
-        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature']) && iconOk && toolbarLevel.length === 0
+        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr']) && iconOk && toolbarLevel.length === 0
           && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && aria[0] === 'Insérer un encadré' && aria[1] === 'Insérer un bloc de signature' && flyoutLabel === 'Lien et blocs de contenu',
         notes: JSON.stringify({ rows, labels, iconOk, toolbarLevel, aria, flyoutLabel }),
       };
