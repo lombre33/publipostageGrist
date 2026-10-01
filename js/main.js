@@ -150,6 +150,7 @@
     syncEditorVisibilityForMode();
     if (currentMode === 'read') renderReader();
     syncDefaultTemplateButton();
+    OrientationToggle.sync(currentTypeModele);
     resetAutosaveState(tpl);
   }
 
@@ -233,6 +234,7 @@
     if (currentMode === 'read') updateEmailFieldsDisplay();
     updateEmailLengthGauge();
     syncDefaultTemplateButton();
+    OrientationToggle.sync(currentTypeModele);
     // DERNIÈRE ligne de cette fonction (pas avant) : Editor.setHTML()/setHeaderFooterData() juste au-dessus déclenchent leurs propres transactions
     // ProseMirror, donc leur propre `editor.on('update')` - sans ça, charger un modèle se marquerait lui-même "modifié" aux yeux de l'auto-save.
     resetAutosaveState(tpl);
@@ -399,7 +401,7 @@
   const ACCESS_LOCK_CLASS = 'pp-access-locked';
   // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre droit).
   const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'btn-save', 'btn-save-as', 'btn-delete', 'btn-link-rules',
-    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-autosave-toggle', 'v2-pdf-filename-cluster'];
+    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-autosave-toggle', 'v2-pdf-filename-cluster', 'btn-page-orientation'];
   // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
@@ -794,6 +796,7 @@
       const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
       const btnEmail = document.getElementById('btn-create-email');
       const keyboardFocus = keyboardFocusedElement();
+      OrientationToggle.setBusy(true);
       setExportControlLocked(btnSingle, true);
       setExportControlLocked(btnBatch, true);
       setExportControlLocked(btnMerged, true);
@@ -804,6 +807,7 @@
         await fn(...args);
       } finally {
         exportOperationInProgress = false;
+        OrientationToggle.setBusy(false);
         setExportControlLocked(btnSingle, false);
         setExportControlLocked(btnBatch, false);
         setExportControlLocked(btnMerged, false);
@@ -1409,6 +1413,7 @@
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
     wireA4PreviewToggle();
+    OrientationToggle.wire({ isReadOnly });
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();

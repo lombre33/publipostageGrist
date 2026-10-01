@@ -173,6 +173,37 @@
   });
 
   cases.push({
+    id: 'autosave_saves_an_orientation_change_alone',
+    description: "Basculer seulement l'orientation de la page (rien d'autre ne change) marque le brouillon modifié : l'auto-save l'enregistre, avec les marges intactes",
+    // Même piège que les marges de l'onglet Réglages : sans le signal pp:marginsChanged, le brouillon ne se marque pas « modifié » et l'auto-save n'écrit jamais.
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const typesBefore = OrientationToggle.TYPES.slice();
+      OrientationToggle.TYPES.splice(0, OrientationToggle.TYPES.length, 'document');
+      try {
+        const id = await saveTemplate(h, 'AutoSave orientation', '<p>Page en paysage</p>');
+        if (!id) return { pass: false, notes: 'aucun modèle créé' };
+        PageLayout.setMarginsMm({ top: 14, right: 16, bottom: 18, left: 20 });
+        await h.clickButton('btn-save');
+        await h.sleep(400);
+        const afterManual = JSON.parse(stub().getRow(TABLE, id).Margins || '{}');
+        stub().clearActionLog();
+        await h.clickButton('btn-page-orientation');
+        await waitTicks(h, 1);
+        const afterAuto = JSON.parse(stub().getRow(TABLE, id).Margins || '{}');
+        const writes = stub().countActions('UpdateRecord', TABLE);
+        const pass = afterManual.orientation === 'portrait' && afterAuto.orientation === 'landscape' && writes === 1
+          && afterAuto.top === 14 && afterAuto.right === 16 && afterAuto.bottom === 18 && afterAuto.left === 20;
+        return { pass, notes: 'après Enregistrer=' + JSON.stringify(afterManual) + ', après auto-save=' + JSON.stringify(afterAuto) + ', écritures=' + writes };
+      } finally {
+        OrientationToggle.TYPES.splice(0, OrientationToggle.TYPES.length, ...typesBefore);
+        PageLayout.setOrientation('portrait');
+        OrientationToggle.sync();
+      }
+    },
+  });
+
+  cases.push({
     id: 'autosave_conflict_detected_and_frozen',
     description: "Un enregistrement fait par quelqu'un d'autre gèle l'auto-save et affiche le bandeau, au lieu d'écraser en silence",
     run: async (h) => {
