@@ -270,7 +270,7 @@ const PdfExport = (function () {
         const pageLeftPt = parseFloat(node.getAttribute('data-page-left-pt'));
         const pageTopPt = parseFloat(node.getAttribute('data-page-top-pt'));
         if (Number.isFinite(pageIndex) && Number.isFinite(pageLeftPt) && Number.isFinite(pageTopPt)) {
-          image._pageGrid = { pageIndex, pageLeftPt, pageTopPt };
+          image._pageGrid = { pageIndex, pageLeftPt, pageTopPt, macroSlot: node.getAttribute('data-macro-slot') };
         }
       }
     } else {
@@ -1314,11 +1314,24 @@ const PdfExport = (function () {
     // Habillage d'une image flottante qui déborde encore verticalement une fois son paragraphe hôte terminé - transmis au(x) frère(s) suivant(s) via
     // blockFrom tant qu'ils restent des <p>/<div> simples ; remis à null dès qu'arrive une structure plus complexe (tableau, titre, liste...).
     let floatCarry = null;
-    const push = (block, node) => { blocks.push(block); sourceNodes.push(node); };
+    // Macro-modèle : rang du slot que le dernier saut de page ouvre tant que son premier bloc n'est pas posé, puis rang -> indice de ce bloc dans `blocks`.
+    let pendingSlotStart = null;
+    let currentSlot = null;
+    const slotStarts = {};
+    // Parallèle à `blocks` : le slot de chaque bloc (null hors macro-modèle) - une image sans position de page n'est encadrée que par les blocs de son slot.
+    const blockSlots = [];
+    const push = (block, node) => {
+      if (pendingSlotStart != null) { slotStarts[pendingSlotStart] = blocks.length; pendingSlotStart = null; }
+      blocks.push(block); sourceNodes.push(node); blockSlots.push(currentSlot);
+    };
     const visit = async node => {
       if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (node.classList.contains('page-break-marker')) { pendingPageBreak = true; floatCarry = null; return; }
+      if (node.classList.contains('page-break-marker')) {
+        pendingPageBreak = true; floatCarry = null;
+        if (isTopLevel && node.hasAttribute('data-macro-slot')) { currentSlot = pendingSlotStart = node.getAttribute('data-macro-slot'); }
+        return;
+      }
       if (node.classList.contains('heading-numbering-config')) return;
       if (node.classList.contains('toc-marker')) {
         const tocBlock = { stack: [{ text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16 }], ...(pendingPageBreak ? { pageBreak: 'before' } : {}) };
@@ -1384,20 +1397,21 @@ const PdfExport = (function () {
     content._headingBlocks = headingBlocks;
     content._tocBlocks = tocBlocks;
     content._footnoteBlocks = footnoteBlocks;
+    content._slotStarts = slotStarts;
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
-    try { content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes).concat(nestedPendingAll); }
+    try { content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes, blockSlots).concat(nestedPendingAll); }
     catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = nestedPendingAll; }
     return content;
   }
 
   // Une image en calque est positionnée par glisser n'importe où dans l'éditeur, sans lien avec l'endroit où son <img> vit dans le HTML - ancrer sur le bloc
   // précédent/suivant ne suffit donc pas. On cherche plutôt, parmi tous les blocs top-level mesurables, ceux qui encadrent le plus étroitement l'image.
-  function resolvePendingImageAnchors(rootRect, blocks, sourceNodes) {
+  function resolvePendingImageAnchors(rootRect, blocks, sourceNodes, blockSlots) {
     const pending = [];
     // Un paragraphe ne contenant QUE l'image produit un bloc-texte compagnon fantôme à hauteur quasi nulle, qui pouvait par coïncidence qualifier comme ancre
     // - exclu de `measurable`, comme le bloc image lui-même.
     const pendingHostNodes = new Set(blocks.map((b, i) => (b && b._pendingImgNode) ? sourceNodes[i] : null).filter(Boolean));
-    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !pendingHostNodes.has(node));
+    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i], slot: blockSlots[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !pendingHostNodes.has(node));
     // Une image nichée avec du texte réel autour a une meilleure référence que le bracketing générique : le début de son propre paragraphe. Prioritaire sur
     // le bracketing générique quand disponible.
     const hostToOwnTextBlock = new Map();
@@ -1429,8 +1443,10 @@ const PdfExport = (function () {
       const containerLeftPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().left - rootRect.left) : null;
       let above = null, aboveTopPx = -Infinity, aboveLeftPx = null;
       let below = null, belowTopPx = Infinity, belowLeftPx = null;
-      measurable.forEach(({ block: other, node }) => {
+      measurable.forEach(({ block: other, node, slot }) => {
         if (!node || !node.getBoundingClientRect) return;
+        // Macro-modèle : un bloc d'un autre slot n'est jamais une ancre (le haut du slot d'une image n'a pas de bloc « au-dessus » : celui du slot précédent est sur une autre page).
+        if (slot !== blockSlots[idx]) return;
         const r = node.getBoundingClientRect();
         const top = r.top - rootRect.top;
         const bottom = r.bottom - rootRect.top;
@@ -1465,6 +1481,31 @@ const PdfExport = (function () {
       }
     });
   }
+  // Image en calque (flottante) : celles que l'éditeur pose en position:absolute (même définition que pdfImageFromNode).
+  const LAYER_IMAGE_SELECTOR = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
+  // Macro-modèle (js/macro-templates.js:buildConcatenatedHtml) : chaque slot garde les positions d'image de SON modèle, comptées depuis le haut de SA première page,
+  // alors que les slots suivants commencent plus bas, après le saut de page qui les ouvre (data-macro-slot). Deux choses sont posées sur les images en calque du
+  // slot : (1) leur `top` descend du décalage du slot dans l'hôte de mesure, pour le repli par ancrage textuel des images sans position de page (encadrées alors par
+  // les blocs de leur slot, plus par ceux du premier) ; (2) `data-macro-slot` porte leur slot jusqu'à leur position de page, qui ajoute la page où le slot commence
+  // (resolveNativePdfContent). Appelée sur l'hôte attaché, avant la conversion : les copies imbriquées (cellule, colonne) héritent de l'attribut.
+  function rebaseMacroSlotImages(root) {
+    if (!root.querySelector(':scope > .page-break-marker[data-macro-slot]')) return;
+    let slot = null;
+    let shiftPx = 0;
+    Array.from(root.children).forEach(child => {
+      if (child.matches('.page-break-marker[data-macro-slot]')) {
+        slot = child.getAttribute('data-macro-slot');
+        shiftPx = child.offsetTop + child.offsetHeight + (parseFloat(getComputedStyle(child).marginBottom) || 0);
+        return;
+      }
+      if (slot == null) return;
+      const layered = child.matches(LAYER_IMAGE_SELECTOR) ? [child] : Array.from(child.querySelectorAll(LAYER_IMAGE_SELECTOR));
+      layered.forEach(img => {
+        img.setAttribute('data-macro-slot', slot);
+        if (img.style.position === 'absolute' && img.offsetParent === root) img.style.top = ((parseFloat(img.style.top) || 0) + shiftPx) + 'px';
+      });
+    });
+  }
   async function htmlToPdfContent(html, isTopLevel, availableWidthPt) {
     const root = document.createElement('div'); root.innerHTML = html || '';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche (Antoine, 2026-10-01).
@@ -1485,6 +1526,7 @@ const PdfExport = (function () {
       // Attend le décodage de chaque <img> de ce root précis avant toute mesure (getBoundingClientRect() sur une image en hauteur auto a besoin du ratio
       // intrinsèque réel) - un simple pré-chauffage du cache navigateur sur un élément séparé s'est avéré insuffisamment fiable.
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      if (isTopLevel) rebaseMacroSlotImages(root);
       return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel);
     } finally {
       detachMeasureHost();
@@ -1557,6 +1599,9 @@ const PdfExport = (function () {
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
+    // Images « derrière » à position de page, au-delà de la 1re page (resolveNativePdfContent) : pdfmake appelle `background` page par page, 1-based.
+    const behindByPage = content._backgroundByPage;
+    if (behindByPage && Object.keys(behindByPage).length) doc.background = currentPage => behindByPage[currentPage] || null;
     // pdfmake appelle header/footer par page au moment de peindre - "première page différente" se résout ici (currentPage === 1), pas dans
     // buildHeaderFooterPdfChunks qui se contente de préparer les 2 variantes.
     if (hf.enabled && (hf.header.default || hf.header.first)) {
@@ -1697,6 +1742,17 @@ const PdfExport = (function () {
       const pendingImageObjs = new Set((content._pendingImages || []).map(p => p.image));
       const blockPageNumbers = content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; });
       content = await htmlToPdfContent(inlinedHtml, true);
+      // Les blocs d'origine, dans l'ordre de `blockPageNumbers` : chaque image insérée plus bas décale les indices de `content`, un indice relu après coup désignerait un
+      // autre bloc (une image de la page 2 se retrouvait ancrée en page 1 dès qu'une image de la page 1 avait été insérée avant elle).
+      const originalBlocks = content.slice();
+      // Macro-modèle : page (0 pour le premier slot) où commence chaque slot, celle de son premier bloc mesurable - le premier bloc peut être une image en attente,
+      // sans page. Lue AVANT que les images ne soient insérées dans `content` : les indices de `_slotStarts` sont ceux de la liste d'origine.
+      const slotStartPages = {};
+      Object.keys(content._slotStarts || {}).forEach(slot => {
+        for (let j = content._slotStarts[slot]; j < blockPageNumbers.length; j++) {
+          if (blockPageNumbers[j] != null) { slotStartPages[slot] = blockPageNumbers[j] - 1; break; }
+        }
+      });
       (content._tocBlocks || []).forEach(tocBlock => {
         (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
       });
@@ -1709,6 +1765,8 @@ const PdfExport = (function () {
         (footnoteByPage[pageNum] = footnoteByPage[pageNum] || []).push({ number: fb.number, text: fb.text });
       });
       content._footnoteByPage = footnoteByPage;
+      const behindByPage = {};
+      content._backgroundByPage = behindByPage;
       (content._pendingImages || []).forEach((p, i) => {
         const layer = p.image._pendingLayer;
         const pageGrid = p.image._pageGrid;
@@ -1720,7 +1778,7 @@ const PdfExport = (function () {
           // l'éditeur. Seule inconnue restante : sur QUELLE page ce document (peut-être modifié depuis) place réellement ce contenu aujourd'hui - trouvée
           // via blockPageNumbers, jamais en reconstruisant une position depuis un ancrage textuel.
           p.image.absolutePosition = { x: marginLeftPt + pageGrid.pageLeftPt, y: topMarginPt + pageGrid.pageTopPt };
-          const targetPage = pageGrid.pageIndex + 1;
+          const targetPage = pageGrid.pageIndex + 1 + (slotStartPages[pageGrid.macroSlot] || 0);
           const candidateIdxs = blockPageNumbers.reduce((acc, pn, j) => { if (pn === targetPage) acc.push(j); return acc; }, []);
           // Page introuvable (document raccourci depuis le dernier positionnement de cette image, ex.) : repli sur la DERNIÈRE page connue plutôt que de
           // laisser l'image bloquée sur son tableau/colonne d'origine (pourrait ne plus exister au même endroit après une réédition du contenu).
@@ -1728,7 +1786,7 @@ const PdfExport = (function () {
           if (!fallbackIdxs.length) return;
           // "devant" peint APRÈS tout le reste de sa page (recouvre), "derrière" AVANT (recouvert) - même intention que le bracketing historique
           // ci-dessous, réduite à "en dernier/en premier sur la page" puisqu'il n'y a plus de bloc-ancre précis à respecter.
-          const anchorBlock = content[layer === 'front' ? fallbackIdxs[fallbackIdxs.length - 1] : fallbackIdxs[0]];
+          const anchorBlock = originalBlocks[layer === 'front' ? fallbackIdxs[fallbackIdxs.length - 1] : fallbackIdxs[0]];
           const insertAfter = layer === 'front';
           // Toujours au niveau racine (jamais p.parentArray) : une image grille-page est volontairement indépendante de son tableau/colonne d'origine -
           // elle "s'évade" vers le contenu top-level, ce qui ne change rien visuellement (absolutePosition ignore la profondeur d'imbrication). Retirée de
@@ -1736,6 +1794,12 @@ const PdfExport = (function () {
           const sourceArr = p.parentArray || content;
           const sourceIdx = sourceArr.indexOf(p.image);
           if (sourceIdx !== -1) sourceArr.splice(sourceIdx, 1);
+          // Page réellement retenue : la page visée, ou la dernière connue quand elle n'existe plus.
+          const placedPage = candidateIdxs.length ? targetPage : blockPageNumbers[fallbackIdxs[fallbackIdxs.length - 1]];
+          // pdfmake pose une image à position absolue sur la page où il en est de son contenu : « derrière » est insérée AVANT le premier bloc de sa page, ce qui,
+          // dès la 2e page, la fait tomber sur la page précédente (le saut de page n'a lieu qu'avec ce bloc). Le fond de page (`background`, appelé page par
+          // page et peint avant le texte, ce que « derrière » veut dire) la met sur la bonne page : buildNativeDocDefinition le lit dans _backgroundByPage.
+          if (layer !== 'front' && placedPage > 1) { (behindByPage[placedPage] = behindByPage[placedPage] || []).push(p.image); return; }
           const anchorIdx = content.indexOf(anchorBlock);
           if (anchorIdx === -1) return;
           content.splice(insertAfter ? anchorIdx + 1 : anchorIdx, 0, p.image);
@@ -1760,6 +1824,12 @@ const PdfExport = (function () {
         const arr = p.parentArray || content;
         const imgIdx = arr.indexOf(p.image);
         if (imgIdx === -1) return;
+        // « Derrière », au niveau racine, ancrée à un bloc de la 2e page ou d'une suivante : insérée avant ce bloc, elle tombe sur la page précédente quand c'est le
+        // premier de sa page (même défaut que l'image à position de page ci-dessus, même remède : le fond de sa page).
+        if (arr === content && layer !== 'front' && (anchorBlock === p.above || anchorBlock === p.below)) {
+          const behindPage = anchorBlock === p.above ? a.abovePage : a.belowPage;
+          if (behindPage > 1) { arr.splice(imgIdx, 1); (behindByPage[behindPage] = behindByPage[behindPage] || []).push(p.image); return; }
+        }
         // anchorBlock peut vivre hors de `arr` (ancre de zone) - vérifier sa présence AVANT de retirer l'image, sinon elle est perdue silencieusement.
         const anchorIdx = arr.indexOf(anchorBlock);
         if (anchorIdx === -1) return;

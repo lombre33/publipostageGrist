@@ -7,6 +7,10 @@ const MacroTemplates = (function () {
   // Même marqueur que le nœud TipTap "Saut de page" (js/editor-nodes.js:899) - en réutilisant EXACTEMENT ce HTML, la pagination (reader-mode.js) et les
   // exports (pdf-export.js/docx-export.js) traitent une frontière de slot comme un saut de page manuel ordinaire, sans code spécifique aux macro modèles.
   const PAGE_BREAK_HTML = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+  // Le saut de page qui OUVRE le slot de rang `rank` (le 2e, le 3e... du document assemblé) : le même HTML, plus data-macro-slot. Les `top` des images en calque d'un
+  // modèle se comptent depuis le haut de SA première page ; une fois les slots mis bout à bout, la Lecture (ReaderMode.render) et l'export PDF (js/pdf-export.js) s'en
+  // servent pour retrouver où chaque slot commence et y rebaser ses images, sans quoi elles s'empilaient toutes en haut du premier slot.
+  function slotBreakHtml(rank) { return PAGE_BREAK_HTML.replace('<div ', '<div data-macro-slot="' + rank + '" '); }
 
   // Évaluation d'une règle { column, operator, value } contre la ligne courante (compareValues, Bool/Date/fuseau de colonne, avertissement "colonne
   // absente de la ligne") : js/condition-rules.js, partagé avec les variables conditionnelles - jamais recopié ici.
@@ -39,9 +43,9 @@ const MacroTemplates = (function () {
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
       fragments.push(tpl.contenu || '');
     }
-    return fragments.join(PAGE_BREAK_HTML);
+    return fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank) : '') + fragment, '');
   }
 
   // compareValues/parseColumnRef restent exposés ici (même API qu'avant le déplacement, utilisée par dev-tests/scenarios-macro-modeles.js).
-  return { compareValues: ConditionRules.compareValues, parseColumnRef: ConditionRules.parseColumnRef, pickModeleId, buildConcatenatedHtml, PAGE_BREAK_HTML };
+  return { compareValues: ConditionRules.compareValues, parseColumnRef: ConditionRules.parseColumnRef, pickModeleId, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml };
 })();

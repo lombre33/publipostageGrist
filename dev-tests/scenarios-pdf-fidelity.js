@@ -242,6 +242,38 @@
   });
 
   cases.push({
+    id: 'pdffid_layered_images_on_page_two_stay_on_page_two',
+    // Trouvé en corrigeant les images en macro-modèle (01/10), mais il touche aussi un modèle seul de plusieurs pages. Deux défauts de js/pdf-export.js
+    // (resolveNativePdfContent) : (1) l'index d'un bloc ancre (`content[idx]`) glissait d'un cran à chaque image déjà insérée avant lui, si bien qu'une
+    // image de la page 2 posée après une image de la page 1 s'accrochait au mauvais bloc ; (2) une image « derrière » de la page 2 était insérée avant le
+    // premier bloc de cette page, que pdfmake peint à la fin de la page PRÉCÉDENTE (le saut de page n'a lieu qu'au bloc suivant) : l'image sortait sur la
+    // page 1, à l'ordonnée prévue pour la page 2.
+    description: 'Un modèle de deux pages garde une image en calque (derrière ou devant) sur la page 2 quand une autre image est déjà sur la page 1, chacune à sa position de page',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const logo = (layer, pageIndex, topPx, pageTopPt) => '<img class="editor-image" src="' + PIXEL + '" alt="" style="width: 71px; position: absolute; left: 674px; top: ' + topPx + 'px;" data-layer="' + layer
+        + '" data-wrap="inline" data-page-index="' + pageIndex + '" data-page-left-pt="477.5" data-page-top-pt="' + pageTopPt + '">';
+      const filler = Array.from({ length: 80 }, (_, i) => '<p>Ligne ' + i + '</p>').join('');
+      const PAGE_MARGIN_PT = 28.35;
+      const near = (im, y) => Math.abs(im.y - y) < 1.5;
+      const seen = {};
+      let pass = true;
+      for (const layerOnPageTwo of ['behind', 'front']) {
+        const html = '<p>DEBUT' + logo('behind', 0, 134, 100) + logo(layerOnPageTwo, 1, 1250, 220) + '</p>' + filler;
+        const pdf = await h.exportPdfContent(html, null);
+        const truth = await h.extractPdfGroundTruth(pdf.base64);
+        const onPage = (n, y) => truth.pages[n - 1] ? truth.pages[n - 1].images.filter(im => near(im, PAGE_MARGIN_PT + y)).length : 0;
+        const result = { pages: truth.pages.length, page1: { at100: onPage(1, 100), at220: onPage(1, 220) }, page2: { at100: onPage(2, 100), at220: onPage(2, 220) }, total: truth.pages.reduce((n, p) => n + p.images.length, 0) };
+        seen[layerOnPageTwo] = result;
+        if (!(result.pages >= 2 && result.page1.at100 === 1 && result.page1.at220 === 0 && result.page2.at220 === 1 && result.page2.at100 === 0 && result.total === 2)) pass = false;
+      }
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_layered_image_near_page_break_stays_within_page',
     // Bug réel : une image en calque loin de tout texte proche (ex. glissée
     // en bas de page) peut voir le bracketing par proximité de pixels

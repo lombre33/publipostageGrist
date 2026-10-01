@@ -639,7 +639,13 @@ window.TestHelpers = (function () {
   function findTextBlocks(content, predicate) {
     return flattenPdfContent(content).filter(b => b && (typeof b.text === 'string' || Array.isArray(b.text)) && (!predicate || predicate(b)));
   }
-  function findImages(content) { return flattenPdfContent(content).filter(b => b && b.image); }
+  // Toutes les images du document, où que pdfmake les peigne : celles de `content` puis les images « derrière » des pages suivantes, que js/pdf-export.js met dans le fond
+  // de page (`doc.background`, par page : content._backgroundByPage) parce qu'insérées dans `content` elles tomberaient sur la page précédente.
+  function findImages(content) {
+    const inContent = flattenPdfContent(content).filter(b => b && b.image);
+    const background = content && content._backgroundByPage ? [].concat(...Object.values(content._backgroundByPage)) : [];
+    return inContent.concat(background);
+  }
 
   // Concatène tous les runs texte d'un bloc (b.text peut être une simple
   // chaîne OU un tableau de runs {text,...}) en une seule chaîne, pour une

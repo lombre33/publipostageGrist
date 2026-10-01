@@ -243,6 +243,33 @@ const ReaderMode = (function () {
     });
   }
 
+  // Image en calque (flottante) : celles que l'éditeur pose en position:absolute, à `left`/`top` du bloc de contenu (js/pdf-export.js:pdfImageFromNode, même définition).
+  const LAYER_IMAGE_SELECTOR = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
+  // Macro-modèle (js/macro-templates.js:buildConcatenatedHtml) : chaque slot garde les `top` de SON modèle, comptés depuis le haut de SA première page, alors que les
+  // slots suivants commencent plus bas, après le saut de page qui les ouvre (data-macro-slot) : sans ce décalage toutes les images en calque s'empilaient en haut du
+  // premier slot. Le décalage est la distance entre le haut de la première page (le padding de la feuille) et l'endroit où le slot commence, saut de page et réserve de
+  // pagination compris : à calculer une fois la pagination posée. Une image dans un conteneur positionné (cellule...) suit ce conteneur, elle n'est pas touchée.
+  function rebaseLayerImagesBySlot(wrapper) {
+    if (!wrapper.isConnected || !wrapper.querySelector(':scope > .page-break-marker[data-macro-slot]')) return;
+    const zoom = layoutZoom(wrapper);
+    const wrapperTop = wrapper.getBoundingClientRect().top;
+    const firstPageTopPx = parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
+    let shiftPx = 0;
+    Array.from(wrapper.children).forEach(child => {
+      if (child.matches('.page-break-marker[data-macro-slot]')) {
+        const markerBottomPx = (child.getBoundingClientRect().bottom - wrapperTop) / zoom - wrapper.clientTop;
+        shiftPx = markerBottomPx + (parseFloat(getComputedStyle(child).marginBottom) || 0) - firstPageTopPx;
+        return;
+      }
+      if (!shiftPx) return;
+      const layered = child.matches(LAYER_IMAGE_SELECTOR) ? [child] : Array.from(child.querySelectorAll(LAYER_IMAGE_SELECTOR));
+      layered.forEach(img => {
+        if (img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
+        img.style.top = ((parseFloat(img.style.top) || 0) + shiftPx) + 'px';
+      });
+    });
+  }
+
   let renderGeneration = 0;
   async function render(htmlContent, tableId, record, headerFooterData) {
     const renderId = ++renderGeneration;
@@ -293,6 +320,7 @@ const ReaderMode = (function () {
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
     await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
+    rebaseLayerImagesBySlot(wrapper);
   }
   // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Marqueur recalculé en JS, jamais lu via
   // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas le texte peint - counter() n'est résolu qu'à la peinture).

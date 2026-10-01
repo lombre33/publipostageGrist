@@ -256,7 +256,7 @@
       };
       const record = { id: 1, TypeDossier: 'Entreprise' };
       const html = await MacroTemplates.buildConcatenatedHtml(macroSlots, 'Dossiers', record, templates);
-      const expected = '<p>PAGE DE GARDE</p>' + MacroTemplates.PAGE_BREAK_HTML + '<p>ANNEXE B</p>';
+      const expected = '<p>PAGE DE GARDE</p>' + MacroTemplates.slotBreakHtml(1) + '<p>ANNEXE B</p>';
       return { pass: html === expected, notes: html };
     },
   });
@@ -1031,6 +1031,151 @@
           && copyHf.enabled === true && String(copyHf.header && copyHf.header.default).includes('ENTETE COPIE') && copyMargins.top === 23 && copyMargins.left === 17;
         return { pass, notes: JSON.stringify({ copy: copy && { nom: copy.Nom, pdf: copy.NomFichierPDF, margins: copyMargins, hf: copyHf }, sameContent: copy && copy.Contenu === original.Contenu }) };
       } finally { dialogs.restore(); await leaveMacro(h); }
+    },
+  });
+
+
+  // --- Chaque saut de page entre deux slots porte le rang du slot qu'il ouvre (data-macro-slot) : c'est par lui que la Lecture et l'export PDF retrouvent où chaque
+  // slot commence pour y rebaser ses images en calque (cas suivants). ---
+  cases.push({
+    id: 'macro_build_concatenated_html_marks_slot_starts',
+    description: 'Le saut de page qui ouvre un slot porte son rang dans data-macro-slot (aucun avant le premier) ; un slot absent ne laisse ni séparateur ni trou dans les rangs',
+    run: async () => {
+      const templates = [
+        { id: 'a', contenu: '<p>A</p>' },
+        { id: 'b', contenu: '<p>B</p>' },
+        { id: 'c', contenu: '<p>C</p>' },
+        { id: 'd', contenu: '<p>D</p>' },
+      ];
+      const slots = { slots: [
+        { type: 'fixed', modeleId: 'a' },
+        { type: 'conditional', rules: [{ column: 'TypeDossier', operator: '=', value: 'Jamais', modeleId: 'b' }], defaultModeleId: null },
+        { type: 'fixed', modeleId: 'c' },
+        { type: 'fixed', modeleId: 'd' },
+      ] };
+      const html = await MacroTemplates.buildConcatenatedHtml(slots, 'Dossiers', { id: 1, TypeDossier: 'Autre' }, templates);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const markers = Array.from(doc.body.querySelectorAll(':scope > .page-break-marker'));
+      const ranks = markers.map(m => m.getAttribute('data-macro-slot'));
+      const order = Array.from(doc.body.children).map(el => el.matches('.page-break-marker') ? '|' + el.getAttribute('data-macro-slot') : el.textContent).join(' ');
+      const pass = ranks.join(',') === '1,2' && order === 'A |1 C |2 D' && markers.every(m => m.textContent === 'Saut de page')
+        && (await MacroTemplates.buildConcatenatedHtml({ slots: [{ type: 'fixed', modeleId: 'a' }] }, 'Dossiers', { id: 1 }, templates)) === '<p>A</p>';
+      return { pass, notes: JSON.stringify({ ranks, order }) };
+    },
+  });
+
+  // --- Images en calque (flottantes) : chaque slot garde les siennes (Antoine, 01/10 : « les images flottantes se stackent tout en haut du document plutôt que de rester à
+  // leur place dans leur document respectif »). Le `top` et la page d'une image se comptent depuis le haut de la première page de SON modèle ; mis bout à bout, les slots
+  // suivants commencent plus bas et sur d'autres pages. Trois courriers, le premier sur deux pages : ALPHA (image derrière), BRAVO (devant), CHARLIE (derrière). ---
+  const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const layerImage = (layer, topPx, pageTopPt) => '<img class="editor-image" src="' + PIXEL + '" alt="" style="width: 71px; position: absolute; left: 674px; top: ' + topPx + 'px;" data-layer="' + layer + '" data-wrap="inline"'
+    + (pageTopPt == null ? '' : ' data-page-index="0" data-page-left-pt="477.5" data-page-top-pt="' + pageTopPt + '"') + '>';
+  const letter = (word, image) => '<p>' + word + image + '</p>' + [0, 1, 2, 3, 4].map(i => '<p>Ligne ' + i + ' du courrier</p>').join('');
+  const fillerLines = n => Array.from({ length: n }, (_, i) => '<p>Remplissage ' + i + '</p>').join('');
+  // Avec `grid`, chaque image a sa position de page (pageTopPt 20, 90, 160 : de quoi les reconnaître dans le PDF) ; sans, c'est un ancien modèle (left/top seulement).
+  const threeLetters = grid => [
+    { id: 'a', contenu: letter('ALPHA', layerImage('behind', 34, grid ? 20 : null)) + fillerLines(60) },
+    { id: 'b', contenu: letter('BRAVO', layerImage('front', 34, grid ? 90 : null)) },
+    { id: 'c', contenu: letter('CHARLIE', layerImage('behind', 120, grid ? 160 : null)) },
+  ];
+  const threeSlots = { slots: [{ type: 'fixed', modeleId: 'a' }, { type: 'fixed', modeleId: 'b' }, { type: 'fixed', modeleId: 'c' }] };
+  const WORDS = ['ALPHA', 'BRAVO', 'CHARLIE'];
+  const PDF_MARGIN_PT = 28.35;
+
+  cases.push({
+    id: 'macro_layer_images_keep_their_place_in_their_own_slot_in_reader_mode',
+    description: 'Macro-modèle en Lecture : l\'image en calque de chaque modèle reste à la même distance du début de SON modèle que dans ce modèle seul, au lieu de s\'empiler en haut du document',
+    run: async (h) => {
+      for (const grid of [true, false]) {
+        h.setA4Preview(true);
+        const html = await MacroTemplates.buildConcatenatedHtml(threeSlots, 'Dossiers', { id: 1 }, threeLetters(grid));
+        const content = await h.renderReaderMode(html);
+        await h.sleep(250);
+        const zoom = content.getBoundingClientRect().width / content.offsetWidth || 1;
+        const padTop = parseFloat(getComputedStyle(content).paddingTop) || 0;
+        const imgs = Array.from(content.querySelectorAll('img.editor-image'));
+        const titles = WORDS.map(w => Array.from(content.querySelectorAll('p')).find(p => p.firstChild && p.firstChild.nodeType === 3 && p.firstChild.nodeValue === w));
+        if (imgs.length !== 3 || titles.some(t => !t)) return { pass: false, notes: JSON.stringify({ grid, images: imgs.length, titles: titles.map(t => !!t) }) };
+        // Seul, chaque modèle met son image à (top CSS - padding de la feuille) sous son premier bloc.
+        const cssTops = [34, 34, 120];
+        const distances = imgs.map((img, i) => (img.getBoundingClientRect().top - titles[i].getBoundingClientRect().top) / zoom);
+        const tops = imgs.map(img => img.getBoundingClientRect().top);
+        const close = distances.every((d, i) => Math.abs(d - (cssTops[i] - padTop)) < 2);
+        if (!close || !(tops[0] < tops[1] && tops[1] < tops[2])) return { pass: false, notes: JSON.stringify({ grid, distances, expected: cssTops.map(t => t - padTop), tops }) };
+      }
+      return { pass: true, notes: '' };
+    },
+  });
+
+  // La page de chaque courrier se lit dans le texte du PDF ; l'image d'un courrier doit être sur cette page et sur aucune autre (grille : à l'ordonnée de sa position de page).
+  const pdfPagesOf = async (h, html) => {
+    const pdf = await h.exportPdfContent(html, null);
+    const truth = await h.extractPdfGroundTruth(pdf.base64);
+    const pageOf = word => truth.pages.findIndex(p => p.textItems.some(t => t.str.includes(word))) + 1;
+    return { truth, pages: WORDS.map(pageOf) };
+  };
+  cases.push({
+    id: 'macro_layer_images_land_on_their_own_slot_page_in_pdf',
+    description: 'Macro-modèle en PDF : chaque image en calque à position de page sort sur la page où son courrier commence, à sa position (derrière ou devant, courrier précédent sur deux pages)',
+    run: async (h) => {
+      const html = await MacroTemplates.buildConcatenatedHtml(threeSlots, 'Dossiers', { id: 1 }, threeLetters(true));
+      const { truth, pages } = await pdfPagesOf(h, html);
+      const expectedY = [20, 90, 160].map(pt => PDF_MARGIN_PT + pt);
+      const near = (im, y) => Math.abs(im.y - y) < 1.5;
+      const checks = expectedY.map((y, i) => ({
+        word: WORDS[i], page: pages[i],
+        onOwnPage: pages[i] > 0 && truth.pages[pages[i] - 1].images.some(im => near(im, y)),
+        elsewhere: truth.pages.some((p, j) => j + 1 !== pages[i] && p.images.some(im => near(im, y))),
+      }));
+      const pass = pages[0] === 1 && pages[1] > 2 && pages[2] > pages[1] && checks.every(c => c.onOwnPage && !c.elsewhere);
+      return { pass, notes: JSON.stringify({ pages, checks, imagesPerPage: truth.pages.map(p => p.images.length) }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_legacy_layer_images_land_on_their_own_slot_page_in_pdf',
+    description: 'Macro-modèle en PDF, anciens modèles (images sans position de page) : chaque image en calque sort sur la page de son courrier, une seule par courrier, à la distance de son titre qu\'elle a quand le courrier est exporté seul',
+    run: async (h) => {
+      const letters = threeLetters(false);
+      const html = await MacroTemplates.buildConcatenatedHtml(threeSlots, 'Dossiers', { id: 1 }, letters);
+      const { truth, pages } = await pdfPagesOf(h, html);
+      const perPage = truth.pages.map(p => p.images.length);
+      // Un ancien modèle n'a pas de position de page : son image est ancrée au texte voisin. Sa distance au titre de son courrier est celle qu'elle a quand ce courrier
+      // est exporté seul (même mise en page, premier courrier de l'export).
+      const gapOf = (t, word) => {
+        const pageNo = t.pages.findIndex(p => p.textItems.some(it => it.str.includes(word))) + 1;
+        if (!pageNo || !t.pages[pageNo - 1].images.length) return null;
+        return t.pages[pageNo - 1].images[0].y - t.pages[pageNo - 1].textItems.find(it => it.str.includes(word)).y;
+      };
+      const gapsInMacro = WORDS.map(w => gapOf(truth, w));
+      const gapsAlone = [];
+      for (let i = 0; i < letters.length; i++) gapsAlone.push(gapOf((await pdfPagesOf(h, letters[i].contenu)).truth, WORDS[i]));
+      const sameGaps = gapsInMacro.every((g, i) => g != null && gapsAlone[i] != null && Math.abs(g - gapsAlone[i]) < 3);
+      const pass = pages[0] === 1 && pages[1] > 2 && pages[2] > pages[1]
+        && perPage[pages[0] - 1] === 1 && perPage[pages[1] - 1] === 1 && perPage[pages[2] - 1] === 1 && perPage.reduce((a, b) => a + b, 0) === 3 && sameGaps;
+      return { pass, notes: JSON.stringify({ pages, perPage, gapsInMacro, gapsAlone }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_layer_images_stay_with_their_slot_in_docx',
+    description: 'Macro-modèle en DOCX : chaque image flottante reste ancrée dans le paragraphe de SON courrier, après le saut de page qui ouvre ce courrier',
+    run: async (h) => {
+      const html = await MacroTemplates.buildConcatenatedHtml(threeSlots, 'Dossiers', { id: 1 }, threeLetters(true));
+      const parts = await h.exportDocxParts(html, null);
+      // L'ordre des événements de word/document.xml : titre d'un courrier, image (w:drawing), saut de page avant un paragraphe.
+      const events = [];
+      const walk = node => {
+        if (node.nodeType !== 1) return;
+        if (node.nodeName === 'w:drawing') events.push('image');
+        else if (node.nodeName === 'w:pageBreakBefore' || (node.nodeName === 'w:br' && node.getAttribute('w:type') === 'page')) events.push('saut');
+        else if (node.nodeName === 'w:t' && WORDS.includes(node.textContent.trim())) events.push(node.textContent.trim());
+        Array.from(node.childNodes).forEach(walk);
+      };
+      walk(parts.doc.documentElement);
+      const sequence = events.join(' ');
+      const pass = /^ALPHA image (?:saut )?BRAVO image (?:saut )?CHARLIE image$/.test(sequence) && (sequence.match(/saut/g) || []).length >= 2;
+      return { pass, notes: sequence };
     },
   });
 
