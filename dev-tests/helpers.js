@@ -304,7 +304,8 @@ window.TestHelpers = (function () {
   // bord déjà exploité par js/pdf-export.js:resolveNativePdfContent pour son ancrage d'image/TOC.
   // `marginsPt` (optionnel) : les marges du modèle courant, telles que js/main.js les passe en usage réel (PageLayout.getMarginsPt()). Omis, l'export
   // retombe sur 28pt partout - c'est ce que font tous les scénarios qui ne testent pas les marges, et ça doit le rester.
-  async function exportPdfContent(html, headerFooterData, marginsPt) {
+  // `source` (optionnel) : { tableId, record } pour résoudre les #Variable avec un vrai enregistrement ; omis, l'enregistrement est vide et les bulles restent telles quelles.
+  async function exportPdfContent(html, headerFooterData, marginsPt, source) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;
     const gens = [];
@@ -319,7 +320,7 @@ window.TestHelpers = (function () {
     let error = null;
     let blob = null;
     try {
-      const result = await PdfExport.getNativePdfBlobForRecord(html, null, {}, '', headerFooterData || null, marginsPt || undefined);
+      const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined);
       blob = result.blob;
     } catch (e) {
       error = e;

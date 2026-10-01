@@ -354,7 +354,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   grisé, jamais retiré : Tableau, Deux colonnes, Sommaire, Saut de page (le temps que la grille ait le sien), Citation, Bloc de code, Encadré, Bloc de signature, les trois
   boutons du suivi des modifications et l'aperçu A4 ; « Lien », la mise en forme, l'image, les variables et Annuler restent actifs. Le
   garde-fou de l'éditeur tient aussi pour le clavier et le collage : la grille reste UN tableau — ni second tableau, ni deux colonnes, ni
-  sommaire, ni citation, ni encadré, ni bloc de code, ni image en calque, et on ne supprime ni le tableau, ni sa dernière ligne ou colonne. La barre
+  sommaire, ni citation, ni encadré, ni bloc de code, ni image en calque, et on ne supprime ni le tableau, ni sa dernière ligne ou colonne.
+  Le texte d'une case est au milieu de sa hauteur (alignement vertical enregistré case par case avec le modèle ; haut et bas viendront avec la
+  barre de la case), à l'identique dans l'éditeur, en Lecture et dans le PDF : une ligne plus haute que son texte reste haute, une grille
+  large garde ses colonnes et défile à l'horizontale en Lecture au lieu d'être écrasée, aucune ligne vide ne la suit, et dans le PDF une
+  grille plus large que la page est ramenée à sa largeur. La barre
   flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Tant que
   l'export Excel n'est pas livré, « Nouvelle grille » reste cachée du menu « + » sans `?dev` dans l'adresse du widget.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à

@@ -18,7 +18,7 @@
 #editor-container.v2-grid-mode .tiptap table col { min-width: 0 !important; }
 /* Hauteur de départ d'une ligne (28 px = une ligne de texte + les marges de case) ; la hauteur réglée par la personne (`rowHeight` -> style inline) la remplace. */
 #editor-container.v2-grid-mode .tiptap table tr { height: var(--grid-row-default); }
-#editor-container.v2-grid-mode .tiptap table td, #editor-container.v2-grid-mode .tiptap table th { vertical-align: middle; }
+/* L'alignement vertical d'une case est le sien (`verticalAlign`, style en ligne posé par GridEditor) : la Lecture, le PDF et l'Excel le lisent au même endroit. */
 /* Case courante (curseur dans une case) : un cadre plein, comme dans un tableur. Une sélection de cases garde le fond bleu de prosemirror-tables (.selectedCell). */
 #editor-container.v2-grid-mode .tiptap table td.v2-grid-cur, #editor-container.v2-grid-mode .tiptap table th.v2-grid-cur { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est pas une case : caché, et la sélection n'y entre jamais (GridEditor). */

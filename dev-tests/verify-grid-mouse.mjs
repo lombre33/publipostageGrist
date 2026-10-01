@@ -447,6 +447,61 @@ async function runTheme(theme) {
   check(`${label} - contrastes : lettres et numéros >= 4,5:1, bandeau sélectionné >= 4,5:1, cadre de la case >= 3:1`,
     contrast.label >= 4.5 && contrast.rowLabel >= 4.5 && contrast.selectedLabel >= 4.5 && contrast.frame >= 3, contrast);
 
+  // 10) Lecture d'une grille (lot A2) au vrai bouton « Lecture » : la grille garde ses tailles (colonnes de 100 px, ligne de 60 px, texte au milieu de sa case), déborde du
+  //     panneau au lieu d'être écrasée (défilement horizontal à la molette) et n'a ni bandeaux ni ligne vide sous elle ; « Édition » la rend avec ses bandeaux.
+  await freshGrid(page);
+  await page.evaluate(async () => {
+    const T = 'GrilleSouris'; const stub = window.__gristStub;
+    stub.setVariables(T, { Nom: 'Text' });
+    stub.setRows(T, [{ id: 1, Nom: 'Alpha' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: 'Alpha' }, T);
+    const badge = `<span class="var-badge" data-table="${T}" data-column="Nom" data-key="${T}.Nom"></span>`;
+    const heights = [28, 60, 28];
+    const cells = [Array.from({ length: 12 }, (_, c) => 'L1C' + (c + 1)), ['Centré', badge, ...Array(10).fill('')], ['fin', ...Array(11).fill('')]];
+    const html = `<table style="width: 1200px;"><colgroup>${'<col style="width: 100px;">'.repeat(12)}</colgroup><tbody>`
+      + cells.map((row, r) => `<tr data-row-height="${heights[r]}" style="height: ${heights[r]}px">${row.map(c => `<td colwidth="100"><p>${c}</p></td>`).join('')}</tr>`).join('') + '</tbody></table>';
+    GridEditor.setActive(false); Editor.setHTML(html); GridEditor.setActive(true);
+  });
+  await page.waitForTimeout(300);
+  await realClick(page, '#btn-mode-read');
+  await page.waitForFunction(() => { const t = document.querySelector('#reader-container table'); return !!t && t.textContent.includes('Alpha'); }, null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const reading = await page.evaluate(() => {
+    const reader = document.getElementById('reader-container');
+    const table = reader.querySelector('table');
+    const rows = Array.from(table.rows);
+    const box = table.getBoundingClientRect();
+    const centre = (td, tr) => { const range = document.createRange(); range.selectNodeContents(td); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2 - tr.getBoundingClientRect().top; };
+    const opaque = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
+    const td = rows[1].cells[0];
+    return {
+      readerShown: getComputedStyle(reader).display !== 'none', editorHidden: getComputedStyle(document.getElementById('editor-container')).display === 'none',
+      width: box.width, cols: Array.from(rows[0].cells).map(c => c.getBoundingClientRect().width), rows: rows.map(r => r.getBoundingClientRect().height),
+      centre: centre(td, rows[1]), rowHeight: rows[1].getBoundingClientRect().height, align: getComputedStyle(td).verticalAlign,
+      resolved: rows[1].cells[1].textContent.trim(), lastBlock: reader.querySelector('.reader-content').lastElementChild.tagName, a4: reader.classList.contains('a4-preview'),
+      scrollW: reader.scrollWidth, clientW: reader.clientWidth,
+      text: getComputedStyle(td).color, background: opaque(td),
+    };
+  });
+  check(`${label} - Lecture d'une grille (vrai clic sur Lecture) : le tableau garde ses 12 colonnes de 100 px (1 201 px, plus large que le panneau) et ses lignes de 28, 60 et 28 px, sans feuille A4`,
+    reading.readerShown && reading.editorHidden && Math.abs(reading.width - 1201) <= 1 && reading.cols.every(w => Math.abs(w - 100) <= 0.6) && Math.abs(reading.rows[1] - 60) <= 1 && Math.abs(reading.rows[0] - 28.9) <= 1.5 && !reading.a4, reading);
+  check(`${label} - Lecture d'une grille : le texte est au milieu de sa case (ligne de 60 px), la bulle est remplacée par sa valeur « Alpha », aucune ligne vide sous le tableau`,
+    reading.align === 'middle' && Math.abs(reading.centre - reading.rowHeight / 2) <= 1.5 && reading.resolved === 'Alpha' && reading.lastBlock === 'TABLE', reading);
+  const readerContrast = await page.evaluate(`(() => { const ratio = ${CONTRAST_FN}; return ratio(${JSON.stringify(reading.text)}, ${JSON.stringify(reading.background)}); })()`);
+  check(`${label} - Lecture d'une grille : texte des cases >= 4,5:1 sur le fond`, readerContrast >= 4.5, { text: reading.text, background: reading.background, readerContrast });
+  const readerBox = await boxOf(page, '#reader-container');
+  await page.mouse.move(readerBox.x, readerBox.y + 40);
+  await page.mouse.wheel(300, 0);
+  await page.waitForTimeout(250);
+  const scrolledReading = await page.evaluate(() => { const r = document.getElementById('reader-container'); const t = r.querySelector('table').getBoundingClientRect(); return { scrollLeft: r.scrollLeft, tableLeft: t.left, tableWidth: t.width }; });
+  check(`${label} - Lecture d'une grille large : la molette la fait défiler à l'horizontale (le tableau garde sa largeur, il n'est pas écrasé dans le panneau)`,
+    reading.scrollW > reading.clientW + 400 && scrolledReading.scrollLeft >= 250 && Math.abs(scrolledReading.tableWidth - 1201) <= 1, { scrollW: reading.scrollW, clientW: reading.clientW, scrolledReading });
+  await realClick(page, '#btn-mode-edit');
+  await page.waitForTimeout(500);
+  const backInEdit = await page.evaluate(() => ({ active: GridEditor.isActive(), cols: document.querySelectorAll('.v2-grid-colhead').length, rows: document.querySelectorAll('.v2-grid-rowhead').length, readerHidden: getComputedStyle(document.getElementById('reader-container')).display === 'none' }));
+  check(`${label} - retour à l'édition (vrai clic) : la grille est là avec ses 12 lettres et ses 3 numéros`, backInEdit.active && backInEdit.cols === 12 && backInEdit.rows === 3 && backInEdit.readerHidden, backInEdit);
+
   await context.close();
 }
 

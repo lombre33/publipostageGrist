@@ -32,6 +32,15 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   grisés : Tableau, Deux colonnes, Sommaire, Saut de page (temporaire), Citation, Bloc de code, Encadré, Bloc de signature, suivi ×3, aperçu A4. Le garde-fou d'un clic sur un bouton grisé
   (`wireLockedClickGuard`) tient aussi pour Entrée et Espace.
 - Barre flottante de la case : ancrée sur la case courante (`GridEditor.currentCellDom`), « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés.
+- Alignement vertical : attribut `verticalAlign` de `tableCell` et `tableHeader` (`GridEditor.withCellAttributes`), `null` hors grille, « au milieu » par défaut dans une grille
+  (`fixDimensions` le pose sur toute case qui n'en a pas ou qui a une valeur inconnue). Enregistré dans `data-valign` + `style="vertical-align: …"` ; lu dans `data-valign` seulement,
+  jamais dans le `vertical-align` d'un tableau collé d'Excel (l'export n'applique l'alignement que dans une grille).
+- Le HTML enregistré d'une grille est son tableau, sans la ligne vide cachée de TipTap : `GridEditor.serialize`, appelée par `Editor.getHTML()` et par `Comments.buildReaderHtml()`
+  (le chemin de la Lecture quand on a le droit de commenter). Les exports n'ont donc jamais à la deviner.
+- Lecture : le HTML enregistré se rend tel quel (largeur du tableau, `<col>`, hauteur des `<tr>`, alignement des `<td>` en ligne) ; une grille plus large que le panneau défile à l'horizontale.
+- PDF : une grille se reconnaît dans `tableFrom` (`js/pdf-export.js`) à `data-row-height` sur ses lignes. Chaque ligne reçoit `heights` (hauteur de l'éditeur moins les marges de case et le trait,
+  un minimum) et pdfmake ne centre jamais verticalement : le décalage « au milieu » ou « en bas » est mesuré dans le DOM (`Range` sur le contenu de la case) et posé en `margin` haute de la case.
+  Une grille plus large que la page est ramenée à sa largeur par la logique des colonnes de tout tableau.
 - Pas dans la première version : boucles sur une ligne de grille, formules, volets figés, images en calque, en-tête/pied/numéros de page, conversion document ⇄ grille.
 
 ## Lots
@@ -39,8 +48,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | Lot | Contenu | État |
 |---|---|---|
 | 0, 0b | Orientation dans `PageLayout` (clé `orientation` de la colonne `Margins`) et bouton portrait / paysage (`js/orientation-toggle.js`) | en ligne (01/10) |
-| A1 | La grille dans l'éditeur : type, garde-fou, bandeaux et poignées, barre grisée, barre de la case, enregistrement | en cours |
-| A2 | Lecture et PDF d'une grille (sans feuille A4, `rowHeight` et `colwidth` respectés, grille plus large que la page ramenée à la largeur) | à faire |
+| A1 | La grille dans l'éditeur : type, garde-fou, bandeaux et poignées, barre grisée, barre de la case, enregistrement | en ligne (01/10, `654f926`) |
+| A2 | Lecture et PDF d'une grille (sans feuille A4, `rowHeight` et `colwidth` respectés, texte au milieu de sa case, grille plus large que la page ramenée à la largeur) | en cours |
 | B | Barre de la case : fusion et scission, bordures, alignement vertical | à faire |
 | C | Saut de page porté par la ligne ; bascule portrait / paysage active pour `grille` (`OrientationToggle.TYPES`) | à faire |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) et lignes Excel du menu Qualité | à faire |
@@ -58,5 +67,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 
 - `dev-tests/scenarios-grid.js` (groupe `grid`) : forme de départ, pas de feuille A4, barre grisée et rendue, garde-fou avec un témoin sans garde-fou pour chaque commande, sélection, Ctrl+A et Suppr,
   collage d'un tableau, Annuler, tailles des lignes et colonnes ajoutées, bandeaux alignés, tirer un trait (une transaction, un Annuler, minimum, Échap), clic sur un bandeau, barre de la case, suivi coupé,
-  contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour.
-- `dev-tests/verify-grid-mouse.mjs` (script Node `gridMouse`) : les mêmes gestes à la vraie souris et au vrai clavier à 700×400, clair et sombre, avec la molette et les contrastes.
+  contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour ; lot A2 : alignement vertical enregistré (ancien modèle, valeur inconnue, `vertical-align` collé hors grille),
+  Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
+- `dev-tests/verify-grid-mouse.mjs` (script Node `gridMouse`) : les mêmes gestes à la vraie souris et au vrai clavier à 700×400, clair et sombre, avec la molette et les contrastes ;
+  la Lecture d'une grille large au vrai bouton « Lecture » (colonnes gardées, défilement horizontal, texte au milieu, bulle résolue, pas de ligne vide, contraste du texte).

@@ -437,7 +437,8 @@ const Comments = (function () {
     serializer.takeTag = node => { const list = positions.get(node); return list && list.length ? version + ':' + list.shift() : null; };
     const host = document.createElement('div');
     host.appendChild(serializer.serializeFragment(doc.content, { document }));
-    return host.innerHTML;
+    // Même retouche que Editor.getHTML() : la grille n'a pas la ligne vide cachée qui suit son tableau dans l'éditeur, sinon la Lecture lui ajoutait une ligne de blanc.
+    return GridEditor.serialize(host.innerHTML);
   }
 
   function parseReaderTag(value) {

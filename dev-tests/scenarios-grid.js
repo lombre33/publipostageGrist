@@ -683,6 +683,189 @@
     }),
   });
 
+  // === 8) Lot A2 : alignement vertical des cases, Lecture et PDF d'une grille ========================================================================================
+
+  // Un enregistrement de test et des bulles pour le lire : la Lecture et le PDF remplacent les bulles par les valeurs, l'éditeur les montre en pastilles.
+  const READ_TABLE = 'GrilleLecture';
+  const READ_RECORD = { id: 1, Nom: 'Alpha Durand', Montant: 1234.5 };
+  const badge = col => `<span class="var-badge" data-table="${READ_TABLE}" data-column="${col}" data-key="${READ_TABLE}.${col}"></span>`;
+  async function useReadRecord() {
+    const stub = window.__gristStub;
+    stub.setVariables(READ_TABLE, { Nom: 'Text', Montant: 'Numeric' });
+    stub.setRows(READ_TABLE, [READ_RECORD]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(READ_RECORD, READ_TABLE);
+    await sleep(100);
+  }
+  // Une grille aux dimensions connues, chargée comme un modèle enregistré : `widths` (px, par colonne), `heights` (px, par ligne), `cells` = le HTML de chaque case ligne
+  // par ligne, ou { html, valign } pour une case alignée en haut, au milieu ou en bas.
+  function gridHtml(widths, heights, cells) {
+    const total = widths.reduce((sum, w) => sum + w, 0);
+    const cellHtml = (cell, k) => { const c = typeof cell === 'string' ? { html: cell } : cell; return `<td colwidth="${widths[k]}"${c.valign ? ` data-valign="${c.valign}"` : ''}><p>${c.html}</p></td>`; };
+    return `<table style="width: ${total}px;"><colgroup>${widths.map(w => `<col style="width: ${w}px;">`).join('')}</colgroup><tbody>`
+      + cells.map((row, r) => `<tr data-row-height="${heights[r]}" style="height: ${heights[r]}px">${row.map(cellHtml).join('')}</tr>`).join('') + '</tbody></table>';
+  }
+  async function loadGrid(html) {
+    GridEditor.setActive(false);
+    Editor.setHTML(html);
+    GridEditor.setActive(true);
+    await sleep(250);
+  }
+  const SAMPLE_WIDTHS = [120, 80, 200];
+  const SAMPLE_HEIGHTS = [40, 28, 60, 28, 70];
+  const SAMPLE_CELLS = [
+    ['Nom', 'Montant', 'Remarque'],
+    [badge('Nom'), badge('Montant'), 'Un texte assez long pour passer sur plusieurs lignes dans cette case étroite'],
+    ['milieu', '', ''],
+    ['fin', '', ''],
+    [{ html: 'haut', valign: 'top' }, { html: 'centre', valign: 'middle' }, { html: 'bas', valign: 'bottom' }],
+  ];
+  // Ce que voit une personne d'un tableau rendu (éditeur ou Lecture) : sa largeur, celle des colonnes, la hauteur et le haut de chaque ligne, le centre du texte de chaque
+  // case dans sa ligne, son alignement vertical et son texte.
+  function measureTable(root) {
+    const table = root.querySelector('table');
+    const box = table.getBoundingClientRect();
+    const rows = Array.from(table.rows);
+    const center = (td, tr) => { const range = document.createRange(); range.selectNodeContents(td); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2 - tr.top; };
+    return {
+      width: box.width,
+      cols: Array.from(rows[0].cells).map(td => td.getBoundingClientRect().width),
+      rows: rows.map(tr => tr.getBoundingClientRect().height),
+      tops: rows.map(tr => tr.getBoundingClientRect().top - box.top),
+      centers: rows.map(tr => Array.from(tr.cells).map(td => center(td, tr.getBoundingClientRect()))),
+      aligns: rows.map(tr => Array.from(tr.cells).map(td => getComputedStyle(td).verticalAlign)),
+      texts: rows.map(tr => Array.from(tr.cells).map(td => td.textContent.trim())),
+    };
+  }
+  const allNear = (xs, ys, tolerance) => xs.length === ys.length && xs.every((x, i) => near(x, ys[i], tolerance));
+
+  cases.push({
+    id: 'grid_cells_keep_a_vertical_alignment_saved_with_the_model',
+    description: 'Chaque case d\'une grille porte son alignement vertical (au milieu au départ) : enregistré avec le modèle (data-valign), relu au rechargement ; un ancien modèle de grille (cases sans alignement, ligne vide finale) est lu « au milieu » et enregistré sans ligne vide ; une valeur inconnue devient « au milieu »',
+    run: async (h) => inGrid(h, async () => {
+      const cells = () => { const list = []; tableNode().descendants(node => { if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') list.push(node); return true; }); return list; };
+      const aligns = () => cells().map(c => c.attrs.verticalAlign);
+      const count = (text, re) => (text.match(re) || []).length;
+      const freshAligns = aligns();
+      const fresh = freshAligns.length === 90 && freshAligns.every(v => v === 'middle');
+      const savedFresh = Editor.getHTML();
+      const marked = count(savedFresh, /<td\b[^>]*data-valign="middle"[^>]*style="[^"]*vertical-align: middle/g);
+      // Une case en haut : enregistrée, puis relue ; les autres restent au milieu.
+      const topPos = cellPos(1, 2);
+      ed().view.dispatch(ed().state.tr.setNodeMarkup(topPos, null, Object.assign({}, doc().nodeAt(topPos).attrs, { verticalAlign: 'top' })));
+      await sleep(80);
+      const savedTop = Editor.getHTML();
+      await loadGrid(savedTop);
+      const reloaded = aligns();
+      const topCells = count(savedTop, /data-valign="top"/g);
+      // Un modèle de grille enregistré avant ce lot, et une valeur inconnue.
+      const oldHtml = '<table style="width: 200px;"><colgroup><col style="width: 100px;"><col style="width: 100px;"></colgroup><tbody><tr data-row-height="28" style="height: 28px"><td colwidth="100"><p>a</p></td><td colwidth="100" data-valign="diagonal"><p>b</p></td></tr></tbody></table><p></p>';
+      await loadGrid(oldHtml);
+      const oldAligns = aligns();
+      const oldSaved = Editor.getHTML();
+      // Un tableau de document : ni alignement ajouté, ni ligne vide retirée, même collé d'Excel avec un vertical-align.
+      GridEditor.setActive(false);
+      Editor.setHTML('<table><tbody><tr><td style="vertical-align: bottom"><p>x</p></td><td><p>y</p></td></tr></tbody></table><p></p>');
+      await sleep(150);
+      const classicSaved = Editor.getHTML();
+      const pass = fresh && marked === 90 && !/<\/table><p>/.test(savedFresh) && savedFresh.endsWith('</table>')
+        && topCells === 1 && reloaded.indexOf('top') === 8 && reloaded.filter(v => v === 'middle').length === 89 && savedTop.endsWith('</table>')
+        && oldAligns.join() === 'middle,middle' && oldSaved.endsWith('</table>') && !/data-valign="diagonal"/.test(oldSaved)
+        && !/data-valign|vertical-align/.test(classicSaved) && classicSaved.endsWith('</table><p></p>');
+      return { pass, notes: JSON.stringify({ fresh, marked, savedFreshTail: savedFresh.slice(-30), topCells, topAt: reloaded.indexOf('top'), middles: reloaded.filter(v => v === 'middle').length, oldAligns, oldSavedTail: oldSaved.slice(-30), classicSaved }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_reading_mode_shows_the_grid_as_the_editor_does',
+    description: 'Lecture d\'une grille (vrai bouton Lecture) : même largeur de tableau, mêmes colonnes et mêmes lignes que dans l\'éditeur, texte à la même hauteur dans sa case (au milieu, en haut, en bas), bulles remplacées par leur valeur, aucune ligne vide sous le tableau',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await loadGrid(gridHtml(SAMPLE_WIDTHS, SAMPLE_HEIGHTS, SAMPLE_CELLS));
+      const inEditor = measureTable(document.querySelector('.tiptap'));
+      let inReader = null; let lastBlock = ''; let badgesLeft = -1;
+      await h.clickButton('btn-mode-read');
+      try {
+        await sleep(600);
+        const reader = document.getElementById('reader-container');
+        inReader = measureTable(reader);
+        const content = reader.querySelector('.reader-content');
+        lastBlock = content.lastElementChild.tagName;
+        badgesLeft = content.querySelectorAll('.var-badge').length;
+      } finally {
+        await h.clickButton('btn-mode-edit');
+        await sleep(300);
+      }
+      const centersFirst = rows => rows.map(r => r[0]);
+      const pass = !!inReader && near(inReader.width, inEditor.width, 1) && allNear(inReader.cols, inEditor.cols, 1) && allNear(inReader.rows, inEditor.rows, 1)
+        && allNear(centersFirst(inReader.centers), centersFirst(inEditor.centers), 1.5) && allNear(inReader.centers[4], inEditor.centers[4], 1.5)
+        && inReader.aligns.every((row, r) => row.every((a, k) => a === (r === 4 ? ['top', 'middle', 'bottom'][k] : 'middle')))
+        && inReader.texts[1][0] === 'Alpha Durand' && inReader.texts[1][1].includes('234,5') && badgesLeft === 0 && lastBlock === 'TABLE';
+      return { pass, notes: JSON.stringify({ inEditor, inReader, lastBlock, badgesLeft }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_keeps_row_heights_and_centers_the_text_like_the_editor',
+    description: 'PDF d\'une grille : chaque ligne garde sa hauteur de l\'éditeur (une ligne plus haute que son texte reste haute) et le texte de chaque case est à la même hauteur que dans l\'éditeur (au milieu, en haut, en bas), le tout sur une seule page',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await loadGrid(gridHtml(SAMPLE_WIDTHS, SAMPLE_HEIGHTS, SAMPLE_CELLS));
+      const inEditor = measureTable(document.querySelector('.tiptap'));
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined, { tableId: READ_TABLE, record: READ_RECORD });
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const items = truth.pages[0].textItems;
+      const yOf = str => { const item = items.find(i => i.str === str); return item ? item.y : null; };
+      const tableBlock = pdf.content.find(b => b.table);
+      // Le baseline du texte de la 1re case de chaque ligne, depuis celui de la 1re ligne : ce que l'éditeur donne, en pt (1 px = 0,75 pt).
+      const firstTexts = ['Nom', 'Alpha', 'milieu', 'fin', 'haut']; // pdfmake peint chaque mot à part : « Alpha » et « Durand » sont deux éléments de texte
+      const ys = firstTexts.map(yOf);
+      const wanted = firstTexts.map((_, i) => ((inEditor.tops[i] + inEditor.centers[i][0]) - (inEditor.tops[0] + inEditor.centers[0][0])) * 0.75);
+      const rowGaps = ys.map((y, i) => (y === null || ys[0] === null) ? null : Math.round(((y - ys[0]) - wanted[i]) * 100) / 100);
+      // La dernière ligne : haut, centre, bas.
+      const zs = ['haut', 'centre', 'bas'].map(yOf);
+      const wantedZ = [0, 1, 2].map(k => (inEditor.centers[4][k] - inEditor.centers[4][0]) * 0.75);
+      const alignGaps = zs.map((y, k) => (y === null || zs[0] === null) ? null : Math.round(((y - zs[0]) - wantedZ[k]) * 100) / 100);
+      const text = items.map(i => i.str).join(' ');
+      const pass = truth.pages.length === 1 && !!tableBlock && Array.isArray(tableBlock.table.heights) && tableBlock.table.heights.length === SAMPLE_HEIGHTS.length
+        && rowGaps.every(g => g !== null && Math.abs(g) <= 1) && alignGaps.every(g => g !== null && Math.abs(g) <= 1) && wantedZ[2] > wantedZ[1] && wantedZ[1] > 0
+        && text.includes('Alpha Durand') && text.includes('234,5');
+      return { pass, notes: JSON.stringify({ pages: truth.pages.length, heights: tableBlock && tableBlock.table.heights, rowGaps, alignGaps, wanted, wantedZ, ys, zs }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_fits_a_wide_grid_on_the_page',
+    description: 'PDF d\'une grille plus large que la page (12 colonnes de 100 px) : réduite à la largeur de la page, sans déborder à droite ni passer sur une deuxième page',
+    run: async (h) => inGrid(h, async () => {
+      const widths = Array(12).fill(100);
+      await loadGrid(gridHtml(widths, [28, 28, 28], [0, 1, 2].map(r => widths.map((_, c) => 'r' + r + 'c' + c))));
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const page = truth.pages[0];
+      const right = Math.max.apply(null, page.textItems.map(i => i.x + i.width));
+      const first = page.textItems.find(i => i.str === 'r0c0');
+      const pass = truth.pages.length === 1 && right <= page.width - 28 + 1 && right > page.width / 2 && !!first && first.x >= 28 - 1;
+      return { pass, notes: JSON.stringify({ pages: truth.pages.length, right, pageWidth: page.width, firstX: first && first.x }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_leaves_a_document_table_as_before',
+    description: 'Un tableau de document (hors grille) n\'a pas de hauteur de ligne imposée dans le PDF ni de centrage vertical : seul un tableau de grille, aux lignes réglées une à une, en a',
+    run: async (h) => {
+      await h.resetEditor();
+      GridEditor.setActive(false);
+      Editor.setHTML('<table><tbody><tr><td><p>un</p></td><td><p>deux</p></td></tr><tr><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table><p>après</p>');
+      await sleep(200);
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+      const tableBlock = pdf.content.find(b => b.table);
+      const cellMargins = tableBlock ? tableBlock.table.body.map(row => row.map(cell => (cell.margin || []).join(','))) : null;
+      const pass = !!tableBlock && tableBlock.table.heights === undefined && cellMargins.every(row => row.every(m => m === '' || m === '0,0,0,0'));
+      return { pass, notes: JSON.stringify({ heights: tableBlock && tableBlock.table.heights, cellMargins }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.grid = cases;
 })();

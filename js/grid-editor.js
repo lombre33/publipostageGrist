@@ -26,6 +26,10 @@ const GridEditor = (function () {
   const FORBIDDEN_NODES = new Set(['table', 'twoColumnsZone', 'twoColumnsColumn', 'toc', 'headingNumberingConfig', 'pageBreak', 'blockquote', 'callout', 'codeBlock',
     'horizontalRule', 'footnoteRef', 'pageNumberBadge']);
   const CELL_NODES = new Set(['tableCell', 'tableHeader']);
+  // Alignement vertical d'une case (`verticalAlign`, inline `vertical-align`) : au milieu par défaut, comme les en-têtes d'un tableur mis en forme ; le haut et le bas se choisiront
+  // dans la barre de la case (lot « fusion, bordures, alignement vertical »). Posé sur CHAQUE case de la grille : l'éditeur, la Lecture, le PDF et l'Excel le lisent au même endroit.
+  const VALIGNS = new Set(['top', 'middle', 'bottom']);
+  const DEFAULT_VALIGN = 'middle';
 
   let libs = null;
   let editor = null;
@@ -69,6 +73,31 @@ const GridEditor = (function () {
     });
   }
 
+  // `verticalAlign` : null pour toute case d'un tableau de document (aucun changement de rendu ni de HTML hors grille) ; 'top', 'middle' ou 'bottom' dans une grille.
+  // Lu dans `data-valign` seulement, la marque de l'enregistrement : le `vertical-align` d'un tableau collé d'Excel ou du web ne doit rien changer à un tableau de
+  // document (l'export PDF ne l'applique que dans une grille, l'éditeur et la Lecture le montreraient seuls).
+  function withCellAttributes(CellExtension) {
+    return CellExtension.extend({
+      addAttributes() {
+        const parent = this.parent ? this.parent() : {};
+        return Object.assign({}, parent, {
+          verticalAlign: {
+            default: null,
+            parseHTML: el => { const v = String(el.getAttribute('data-valign') || '').toLowerCase(); return VALIGNS.has(v) ? v : null; },
+            renderHTML: attrs => (VALIGNS.has(attrs.verticalAlign) ? { 'data-valign': attrs.verticalAlign, style: 'vertical-align: ' + attrs.verticalAlign } : {}),
+          },
+        });
+      },
+    });
+  }
+
+  // Le HTML d'une grille enregistrée est son tableau, rien d'autre : le paragraphe vide que TipTap range sous un tableau final (TrailingNode) n'est pas du contenu - TipTap
+  // le remet tout seul au chargement. Les exports (Lecture, PDF, Excel) n'ont ainsi jamais à le deviner : une ligne vide sous la grille, voire une page de plus.
+  function serialize(html) {
+    const tail = '</table><p></p>';
+    return active && typeof html === 'string' && html.endsWith(tail) ? html.slice(0, html.length - '<p></p>'.length) : html;
+  }
+
   // --- Document -------------------------------------------------------------------------------------------------------------------------------------------------
   function tableInfo(doc) {
     const first = doc.firstChild;
@@ -100,7 +129,7 @@ const GridEditor = (function () {
     const rows = [];
     for (let r = 0; r < DEFAULT_ROWS; r++) {
       const cells = [];
-      for (let c = 0; c < DEFAULT_COLS; c++) cells.push(tableCell.createAndFill({ colwidth: [DEFAULT_COL_WIDTH_PX] }));
+      for (let c = 0; c < DEFAULT_COLS; c++) cells.push(tableCell.createAndFill({ colwidth: [DEFAULT_COL_WIDTH_PX], verticalAlign: DEFAULT_VALIGN }));
       rows.push(tableRow.create({ rowHeight: DEFAULT_ROW_HEIGHT_PX }, cells));
     }
     return table.create(null, rows);
@@ -144,9 +173,12 @@ const GridEditor = (function () {
       const col = i % map.width;
       const want = widths.slice(col, col + (cell.attrs.colspan || 1));
       const have = cell.attrs.colwidth;
-      if (have && have.length === want.length && have.every((w, k) => w === want[k])) continue;
+      const widthOk = !!have && have.length === want.length && have.every((w, k) => w === want[k]);
+      // Seule une case dont le type porte l'attribut peut le recevoir : sinon le « correctif » ne corrigerait jamais rien et appendTransaction tournerait sans fin.
+      const alignOk = VALIGNS.has(cell.attrs.verticalAlign) || !cell.type.spec.attrs || !('verticalAlign' in cell.type.spec.attrs);
+      if (widthOk && alignOk) continue;
       if (!out) out = state.tr;
-      out.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, cell.attrs, { colwidth: want }));
+      out.setNodeMarkup(info.pos + 1 + pos, undefined, Object.assign({}, cell.attrs, { colwidth: want }, alignOk ? {} : { verticalAlign: DEFAULT_VALIGN }));
       changed = true;
     }
     const heights = [];
@@ -660,8 +692,8 @@ const GridEditor = (function () {
   function refresh() { if (active) { lastKey = ''; scheduleSync(); } }
 
   return {
-    TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX,
-    configure, attach, createExtension, withRowAttributes, setActive, isActive, isGridType, isDevEnabled, syncEntryVisibility, refresh,
+    TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
+    configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, isDevEnabled, syncEntryVisibility, refresh,
     currentCellDom, columnWidths, colName, floatingOptions,
   };
 })();

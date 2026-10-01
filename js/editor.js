@@ -300,8 +300,8 @@ const Editor = (function () {
     const BulletStyle = EditorNodes.createBulletStyleExtension(Extension);
     const OrderedListStyle = EditorNodes.createOrderedListStyleExtension(Extension);
     const TaskListStyle = EditorNodes.createTaskListStyleExtension(Extension);
-    const TableHeaderWithBg = EditorNodes.withCellBackground(TableHeader);
-    const TableCellWithBg = EditorNodes.withCellBackground(TableCell);
+    const TableHeaderWithBg = EditorNodes.withCellBackground(GridEditor.withCellAttributes(TableHeader));
+    const TableCellWithBg = EditorNodes.withCellBackground(GridEditor.withCellAttributes(TableCell));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     const EditorImage = EditorNodes.createEditorImageNode(Node);
     const PageBreak = EditorNodes.createPageBreakNode(Node);
@@ -422,7 +422,8 @@ const Editor = (function () {
     return editor;
   }
 
-  function getHTML() { return editor ? editor.getHTML() : ''; }
+  // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize).
+  function getHTML() { return editor ? GridEditor.serialize(editor.getHTML()) : ''; }
 
   function getHeadingNumberingStyle() {
     if (!editor) return 'none';

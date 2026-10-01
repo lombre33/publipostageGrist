@@ -594,7 +594,24 @@ const PdfExport = (function () {
     // Images en calque imbriquées dans une cellule, portées sur `table._nestedPending`, remontées jusqu'à buildPdfContentFromRoot (même résolution que le
     // top-level).
     const tableNestedPending = [];
-    const body = rawRows.map(row => {
+    // Grille (js/grid-editor.js) : chaque ligne porte sa hauteur en px (`data-row-height`, un MINIMUM : un texte plus haut agrandit la ligne) et chaque case son alignement vertical.
+    // `heights` de pdfmake est la hauteur du CONTENU de la ligne - sans les marges intérieures ni le trait - et un minimum lui aussi ; la hauteur mesurée dans l'hôte (qui compte
+    // la croissance due au texte) la complète. pdfmake ne centre rien dans une case : le centrage est une marge haute, calculée sur la hauteur du texte mesurée dans l'hôte.
+    const isGrid = rawRows.some(row => row.hasAttribute('data-row-height'));
+    const GRID_BORDER_PT = 0.5; // hLineWidth du layout plus bas
+    const gridRowAreaPt = isGrid ? rawRows.map(row => {
+      const px = Math.max(parseFloat(row.getAttribute('data-row-height')) || 0, row.getBoundingClientRect().height);
+      return Math.max(0, px * PX_TO_PT - cellPadTopPt - cellPadBottomPt - GRID_BORDER_PT);
+    }) : null;
+    const gridCellOffsetPt = (cell, rowIndex) => {
+      const valign = cell.style.verticalAlign;
+      if (valign !== 'middle' && valign !== 'bottom') return 0;
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const free = Math.max(0, gridRowAreaPt[rowIndex] - range.getBoundingClientRect().height * PX_TO_PT);
+      return valign === 'bottom' ? free : free / 2;
+    };
+    const body = rawRows.map((row, rowIndex) => {
       const output = [];
       cellsOf(row).forEach(cell => {
         const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
@@ -607,6 +624,10 @@ const PdfExport = (function () {
         const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
+        if (isGrid) {
+          const offsetPt = gridCellOffsetPt(cell, rowIndex);
+          if (offsetPt > 0.25) pdfCell.margin = [0, (pdfCell.margin ? pdfCell.margin[1] : 0) + offsetPt, 0, 0];
+        }
         if (colSpan > 1) pdfCell.colSpan = colSpan;
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});
@@ -615,7 +636,7 @@ const PdfExport = (function () {
       return output.slice(0, columnCount);
     });
     const table = {
-      table: { headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] },
+      table: Object.assign({ headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}),
       layout: {
         hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777',
         paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
