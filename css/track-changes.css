@@ -45,3 +45,24 @@
   background-color: #fbe9e9 !important;
   text-decoration: line-through;
 }
+
+/* Ligne ajoutée ou supprimée avec le suivi (« Ligne avant / après », « Supprimer la ligne ») : même défaut et même remède que les colonnes ci-dessus. La marque est posée sur la
+   LIGNE, que ProseMirror dessine en <ins>/<del> (ou <span data-type="modification">) autour du <tr>, donc enfant direct du <tbody> : sans règle, cet élément en ligne
+   sortait la ligne du tableau (une bande de 22 à 49 px de large). Il ne produit plus de boîte (`display: contents`) : la ligne reste une vraie ligne du tableau, ses cases
+   portent la teinte (les mêmes que celles d'une colonne suivie, fixes dans les deux thèmes). */
+.tiptap tbody > ins[data-id],
+.tiptap tbody > del[data-id],
+.tiptap tbody > span[data-type="modification"] {
+  display: contents;
+}
+.tiptap tbody > ins[data-id] > tr > td,
+.tiptap tbody > ins[data-id] > tr > th {
+  color: #146c48;
+  background-color: #e5f6ee !important;
+}
+.tiptap tbody > del[data-id] > tr > td,
+.tiptap tbody > del[data-id] > tr > th {
+  color: #b42318;
+  background-color: #fbe9e9 !important;
+  text-decoration: line-through;
+}

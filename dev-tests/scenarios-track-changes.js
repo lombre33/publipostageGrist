@@ -492,6 +492,221 @@
     },
   });
 
+  // === Lignes d'un tableau avec le suivi (demande d'Antoine du 01/10, carte « Faire marcher aussi Ligne avant / après et Supprimer la ligne avec le suivi ? », « Corriger ») ===
+  // Même défaut que les colonnes avant leur correction : la marque que le suivi pose sur la LIGNE est dessinée par ProseMirror en <ins> / <del> autour du <tr>, donc enfant direct du
+  // <tbody>. Sans règle, cet élément en ligne sortait la ligne du tableau (une bande de 22 à 49 px de large, au lieu de la ligne pleine largeur), et le HTML enregistré
+  // (`<tbody><ins><tr>`) ne survivait pas à l'analyseur HTML du navigateur, qui écarte l'élément étranger : à la réouverture la ligne ajoutée n'était plus refusable, la ligne
+  // supprimée revenait comme si de rien n'était. La marque s'écrit maintenant en attribut de la ligne (<tr data-tc-insertion="3">), les enveloppes vivantes sont mises en page
+  // par `display: contents` et les cases de la ligne portent la teinte des cases d'une colonne suivie.
+  const TABLE_ROWS = '<table><tbody><tr><td><p>a1</p></td><td><p>b1</p></td></tr><tr><td><p>a2</p></td><td><p>b2</p></td></tr><tr><td><p>a3</p></td><td><p>b3</p></td></tr></tbody></table><p>fin</p>';
+  const TABLE_ROWSPAN = '<table><tbody><tr><td rowspan="2"><p>ab</p></td><td><p>c1</p></td></tr><tr><td><p>c2</p></td></tr><tr><td><p>a3</p></td><td><p>b3</p></td></tr></tbody></table><p>fin</p>';
+  const tableRowEls = () => Array.from(document.querySelectorAll('.tiptap tr'));
+  const isInsertedRow = tr => tr.parentElement.tagName === 'INS';
+  const isDeletedRow = tr => tr.parentElement.tagName === 'DEL';
+  const rowTexts = () => tableRowEls().map(tr => tr.textContent).join('|');
+  // Chaque ligne a la largeur de la première (le tableau), à 2 px près : une ligne sortie du tableau (ancien rendu : une bande étroite) fait échouer ce test.
+  function rowsAreFullWidth(rows) {
+    const widths = rows.map(tr => tr.getBoundingClientRect().width);
+    return widths.length > 0 && widths[0] > 100 && widths.every(w => Math.abs(w - widths[0]) < 2) && rows.every(tr => tr.getBoundingClientRect().height > 10);
+  }
+  const tintOf = tr => Array.from(tr.querySelectorAll('td, th')).map(td => getComputedStyle(td).backgroundColor + ' ' + getComputedStyle(td).color);
+  const GREEN_TINT = 'rgb(229, 246, 238) rgb(20, 108, 72)';
+  const RED_TINT = 'rgb(251, 233, 233) rgb(180, 35, 24)';
+
+  cases.push({
+    id: 'trackchanges_row_buttons_add_a_marked_row_laid_out_full_width',
+    description: 'Suivi actif : « Ligne avant » et « Ligne après » ajoutent une ligne marquée comme insertion (attribut de la ligne, pas d\'enveloppe dans le tableau), au bon rang, pleine largeur comme les autres et teintée de vert',
+    run: async (h) => {
+      try {
+        const out = [];
+        for (const [action, expectedIndex] of [['row-before', 1], ['row-after', 2]]) {
+          await loadTable(h, TABLE_ROWS, 'a2', true);
+          const btn = await pressTableButton(h, action);
+          const html = Editor.getHTML();
+          const rows = tableRowEls();
+          const index = rows.findIndex(isInsertedRow);
+          out.push({
+            action,
+            found: !!btn,
+            marked: (html.match(/<tr[^>]* data-tc-insertion="\d+"/g) || []).length === 1,
+            noWrapperInBody: !/<tbody><ins|<\/tr><ins|<\/tr><del/.test(html),
+            index: index === expectedIndex,
+            fourRows: rows.length === 4,
+            fullWidth: rowsAreFullWidth(rows),
+            tinted: index >= 0 && tintOf(rows[index]).every(t => t === GREEN_TINT),
+            othersPlain: rows.filter((tr, i) => i !== index).every(tr => tintOf(tr).every(t => t !== GREEN_TINT)),
+            pending: Editor.hasPendingTrackedChanges(),
+            widths: rows.map(tr => Math.round(tr.getBoundingClientRect().width)).join(),
+          });
+        }
+        return { pass: out.every(o => Object.keys(o).every(k => k === 'action' || k === 'widths' || o[k] === true)), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_delete_button_marks_a_struck_tinted_row_and_keeps_it',
+    description: 'Suivi actif : « Supprimer la ligne » garde la ligne dans le tableau, marquée supprimée (attribut de la ligne), barrée et teintée de rouge, pleine largeur comme les autres',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_ROWS, 'a2', true);
+        const btn = await pressTableButton(h, 'row-del');
+        const html = Editor.getHTML();
+        const rows = tableRowEls();
+        const index = rows.findIndex(isDeletedRow);
+        const struck = index >= 0 && Array.from(rows[index].querySelectorAll('td')).every(td => getComputedStyle(td).textDecorationLine.indexOf('line-through') !== -1);
+        const checks = {
+          found: !!btn,
+          marked: (html.match(/<tr[^>]* data-tc-deletion="\d+"/g) || []).length === 1,
+          noWrapperInBody: !/<tbody><ins|<\/tr><ins|<\/tr><del/.test(html),
+          threeRows: rows.length === 3,
+          index: index === 1,
+          fullWidth: rowsAreFullWidth(rows),
+          tinted: index >= 0 && tintOf(rows[index]).every(t => t === RED_TINT),
+          struck,
+          textKept: rowTexts() === 'a1b1|a2b2|a3b3',
+          pending: Editor.hasPendingTrackedChanges(),
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_accept_all_applies_and_reject_all_restores',
+    description: '« Tout accepter » rend réelle la ligne ajoutée et retire la ligne supprimée ; « Tout refuser » retire la ligne ajoutée et rend la ligne supprimée : plus aucune marque, tableau rectangulaire',
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const [name, action, resolveId, expectedRows] of [
+          ['addAccept', 'row-after', 'v2-btn-accept-all', 4], ['addReject', 'row-after', 'v2-btn-reject-all', 3],
+          ['delAccept', 'row-del', 'v2-btn-accept-all', 2], ['delReject', 'row-del', 'v2-btn-reject-all', 3],
+        ]) {
+          await loadTable(h, TABLE_ROWS, 'a2', true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          await h.clickButton(resolveId);
+          await h.sleep(250);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1 && html.indexOf('<ins') === -1 && html.indexOf('<del') === -1;
+          const rectangular = tableRowEls().length === expectedRows && cellRows().every(cells => cells.length === 2);
+          const restored = expectedRows === 3 ? plainHtml(html) === before : true;
+          const kept = name === 'delAccept' ? rowTexts() === 'a1b1|a3b3' : true;
+          out[name] = clean && rectangular && restored && kept;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_undo_and_redo',
+    description: 'Annuler défait une ligne ajoutée ou supprimée avec le suivi d\'un seul coup (tableau et marques tels qu\'avant), Rétablir la remet',
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const action of ['row-after', 'row-del']) {
+          await loadTable(h, TABLE_ROWS, 'a2', true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          const pending = plainHtml(Editor.getHTML());
+          const ed = EditorCore.getEditor();
+          ed.commands.undo();
+          await h.sleep(150);
+          const undone = plainHtml(Editor.getHTML()) === before && !Editor.hasPendingTrackedChanges();
+          ed.commands.redo();
+          await h.sleep(150);
+          const redone = plainHtml(Editor.getHTML()) === pending && Editor.hasPendingTrackedChanges();
+          out[action] = undone && redone;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_suggestions_survive_the_html_round_trip',
+    description: 'Une ligne ajoutée et une ligne supprimée en attente se retrouvent à l\'identique, teintées, après Editor.getHTML() puis Editor.setHTML() (le chemin de l\'enregistrement), et « Tout refuser » rend alors le tableau d\'origine',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_ROWS, 'a2', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'row-after');
+        await placeInCell(h, 'a3');
+        await pressTableButton(h, 'row-del');
+        const html1 = Editor.getHTML();
+        const both = /<tr[^>]* data-tc-insertion/.test(html1) && /<tr[^>]* data-tc-deletion/.test(html1);
+        Editor.setHTML(html1);
+        await h.sleep(250);
+        const html2 = Editor.getHTML();
+        const same = html2 === html1;
+        const pending = Editor.hasPendingTrackedChanges();
+        const rows = tableRowEls();
+        const tinted = rows.filter(isInsertedRow).length === 1 && rows.filter(isDeletedRow).length === 1 && rowsAreFullWidth(rows);
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(250);
+        const restored = plainHtml(Editor.getHTML()) === original;
+        return { pass: both && same && pending && tinted && restored, notes: JSON.stringify({ both, same, pending, tinted, restored, html1, html2 }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_through_a_merged_cell_add_resolves_delete_is_greyed',
+    description: 'Une ligne ajoutée à travers une case fusionnée en hauteur s\'accepte et se refuse proprement (rowspan rendu à l\'identique au refus) ; « Supprimer la ligne » est grisé avec une info-bulle dans ce cas (aria-disabled) et ne fait rien, actif ailleurs et suivi coupé',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_ROWSPAN, 'c2', true);
+        const before = plainHtml(Editor.getHTML());
+        const delBtn = () => document.querySelector('.v2-floating-toolbar button[data-action="row-del"]');
+        const isGreyed = () => !!delBtn() && delBtn().getAttribute('aria-disabled') === 'true' && delBtn().classList.contains('is-disabled') && delBtn().title.indexOf('fusionn') !== -1;
+        const greyedBelow = isGreyed();
+        await pressTableButton(h, 'row-del');
+        const untouched = plainHtml(Editor.getHTML()) === before && !Editor.hasPendingTrackedChanges();
+        await placeInCell(h, 'c1');
+        const greyedFirst = isGreyed();
+        // Hors de la case fusionnée (ligne 3) : actif.
+        await placeInCell(h, 'a3');
+        const freeRow = delBtn().getAttribute('aria-disabled') === 'false' && delBtn().title === 'Supprimer la ligne';
+        // Suivi coupé : actif aussi sous la case fusionnée.
+        Editor.setTrackChanges(false);
+        await placeInCell(h, 'c2');
+        const enabledUntracked = delBtn().getAttribute('aria-disabled') === 'false';
+        Editor.setTrackChanges(true);
+        await h.sleep(100);
+        // Ajout à travers la case fusionnée : accepté puis refusé.
+        const out = {};
+        for (const [name, resolveId] of [['accept', 'v2-btn-accept-all'], ['reject', 'v2-btn-reject-all']]) {
+          await loadTable(h, TABLE_ROWSPAN, 'c1', true);
+          await pressTableButton(h, 'row-after');
+          await h.clickButton(resolveId);
+          await h.sleep(250);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1;
+          out[name] = clean && (name === 'accept' ? tableRowEls().length === 4 && /rowspan="3"/.test(html) : plainHtml(html) === before);
+        }
+        return { pass: greyedBelow && untouched && greyedFirst && freeRow && enabledUntracked && out.accept && out.reject, notes: JSON.stringify({ greyedBelow, untouched, greyedFirst, freeRow, enabledUntracked, out }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_row_commands_without_suivi_leave_no_trace',
+    description: 'Suivi coupé : les trois boutons de ligne agissent tout de suite, sans aucune marque ni attribut data-tc-* dans le HTML enregistré',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_ROWS, 'a2', false);
+        await pressTableButton(h, 'row-after');
+        const afterAdd = tableRowEls().length;
+        await pressTableButton(h, 'row-del');
+        const afterDel = tableRowEls().length;
+        const html = Editor.getHTML();
+        const clean = html.indexOf('data-tc-') === -1 && html.indexOf('<ins') === -1 && html.indexOf('<del') === -1 && !Editor.hasPendingTrackedChanges();
+        return { pass: afterAdd === 4 && afterDel === 3 && clean, notes: JSON.stringify({ afterAdd, afterDel, clean }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",

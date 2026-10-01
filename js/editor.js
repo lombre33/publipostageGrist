@@ -552,6 +552,22 @@ const Editor = (function () {
     return false;
   }
 
+  // Même question pour la ou les LIGNES de la sélection, traversées par une case fusionnée en hauteur (rowspan). Supprimer une ligne réduit la hauteur de cette case ET retire
+  // les autres cases de la ligne ; avec le suivi, le premier changement s'applique tout de suite et le second seulement à l'acceptation. Mesuré : « Tout refuser » rendait un
+  // tableau d'une colonne de trop (prosemirror-tables « répare » le tableau devenu non rectangulaire en ajoutant des cases vides), « Tout accepter » des cases décalées. La barre
+  // du tableau grise donc « Supprimer la ligne » dans ce cas (js/floating-toolbars.js). Ajouter une ligne à travers une case fusionnée, lui, se résout proprement.
+  function selectedRowsCrossMergedCell() {
+    if (!editor || !tableTools || !tableTools.isInTable(editor.state)) return false;
+    const { map, top, bottom } = tableTools.selectedRect(editor.state);
+    for (let col = 0; col < map.width; col++) {
+      for (let row = top; row < bottom; row++) {
+        const cell = map.findCell(map.map[row * map.width + col]);
+        if (cell.top < top || cell.bottom > bottom) return true;
+      }
+    }
+    return false;
+  }
+
   function hasPendingTrackedChanges() {
     return !!editor && TrackChanges.hasPendingSuggestions(editor.state);
   }
@@ -584,6 +600,7 @@ const Editor = (function () {
     setTrackChanges,
     hasPendingTrackedChanges,
     selectedColumnsCrossMergedCell,
+    selectedRowsCrossMergedCell,
     getSuiviModificationsForSave,
   };
 })();

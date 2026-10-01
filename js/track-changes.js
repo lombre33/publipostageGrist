@@ -8,12 +8,13 @@
 const TrackChanges = (function () {
   const MARK_NAMES = ['insertion', 'deletion', 'modification'];
 
-  // Une marque de suivi posée sur une CASE de tableau (« Colonne avant / après », « Supprimer la colonne ») : ProseMirror l'écrit en <ins>/<del> autour du <td>,
-  // donc directement dans le <tr>. Le HTML enregistré ne peut pas garder cette forme : l'analyseur HTML du navigateur sort de la ligne tout élément étranger
-  // (« foster parenting »), la marque disparaissait à la réouverture et la colonne supprimée revenait comme si de rien n'était. Elle s'écrit donc en attribut de
-  // la case elle-même (data-tc-insertion="3"), relu par les règles parseHTML des marques plus bas. La marque `modification` (changement d'attribut : la largeur d'une
-  // case fusionnée qui gagne une colonne) y garde ses cinq valeurs, en JSON.
-  const CELL_NODE_TYPES = ['tableCell', 'tableHeader'];
+  // Une marque de suivi posée sur une CASE de tableau (« Colonne avant / après », « Supprimer la colonne ») ou sur une LIGNE (« Ligne avant / après », « Supprimer la ligne ») :
+  // ProseMirror l'écrit en <ins>/<del> autour du <td> (donc directement dans le <tr>) ou autour du <tr> (donc directement dans le <tbody>). Le HTML enregistré ne peut pas
+  // garder cette forme : l'analyseur HTML du navigateur sort de la ligne ou du corps du tableau tout élément étranger (« foster parenting »), la marque disparaissait à la
+  // réouverture et la colonne ou la ligne supprimée revenait comme si de rien n'était. Elle s'écrit donc en attribut de la case ou de la ligne elle-même
+  // (data-tc-insertion="3"), relu par les règles parseHTML des marques plus bas. La marque `modification` (changement d'attribut : la largeur d'une case fusionnée qui
+  // gagne une colonne, la hauteur d'une case fusionnée qui gagne une ligne) y garde ses cinq valeurs, en JSON.
+  const CELL_NODE_TYPES = ['tableCell', 'tableHeader', 'tableRow'];
   const cellMarkAttribute = markName => 'data-tc-' + markName;
   const cellMarkValue = mark => JSON.stringify(mark.type.name === 'modification' ? mark.attrs : mark.attrs.id);
 
@@ -111,8 +112,8 @@ const TrackChanges = (function () {
       parseHTML() {
         return [
           { tag: 'ins', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
-          // `consuming: false` : la règle de la case (td/th) s'applique ensuite, la marque se posant sur le nœud (cf. CELL_NODE_TYPES).
-          { tag: 'td[data-tc-insertion], th[data-tc-insertion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-insertion')) }) },
+          // `consuming: false` : la règle de la case ou de la ligne (td/th/tr) s'applique ensuite, la marque se posant sur le nœud (cf. CELL_NODE_TYPES).
+          { tag: 'td[data-tc-insertion], th[data-tc-insertion], tr[data-tc-insertion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-insertion')) }) },
         ];
       },
       renderHTML({ HTMLAttributes }) { return ['ins', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
@@ -126,7 +127,7 @@ const TrackChanges = (function () {
       parseHTML() {
         return [
           { tag: 'del', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
-          { tag: 'td[data-tc-deletion], th[data-tc-deletion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-deletion')) }) },
+          { tag: 'td[data-tc-deletion], th[data-tc-deletion], tr[data-tc-deletion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-deletion')) }) },
         ];
       },
       renderHTML({ HTMLAttributes }) { return ['del', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
@@ -144,14 +145,14 @@ const TrackChanges = (function () {
       parseHTML() {
         return [
           { tag: "span[data-type='modification']" },
-          { tag: 'td[data-tc-modification], th[data-tc-modification]', consuming: false, getAttrs: el => JSON.parse(el.getAttribute('data-tc-modification')) },
+          { tag: 'td[data-tc-modification], th[data-tc-modification], tr[data-tc-modification]', consuming: false, getAttrs: el => JSON.parse(el.getAttribute('data-tc-modification')) },
         ];
       },
       renderHTML({ HTMLAttributes }) { return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'modification', 'data-id': JSON.stringify(HTMLAttributes.id) }), 0]; },
     });
 
-    // Sérialiseur du schéma (celui de editor.getHTML(), du presse-papiers, des brouillons d'en-tête) : une case qui porte une marque de suivi s'écrit avec la
-    // marque en attribut de la case au lieu d'un <ins>/<del> autour d'elle (cf. CELL_NODE_TYPES). Tout autre fragment passe tel quel par le sérialiseur d'origine.
+    // Sérialiseur du schéma (celui de editor.getHTML(), du presse-papiers, des brouillons d'en-tête) : une case ou une ligne qui porte une marque de suivi s'écrit avec la
+    // marque en attribut de l'élément au lieu d'un <ins>/<del> autour de lui (cf. CELL_NODE_TYPES). Tout autre fragment passe tel quel par le sérialiseur d'origine.
     class TrackingDOMSerializer extends PMDOMSerializer {
       serializeFragment(fragment, options, target) {
         const isTrackedCell = node => CELL_NODE_TYPES.includes(node.type.name) && node.marks.some(m => MARK_NAMES.includes(m.type.name));
@@ -161,7 +162,7 @@ const TrackChanges = (function () {
         const bare = [];
         fragment.forEach(node => bare.push(isTrackedCell(node) ? node.mark(node.marks.filter(m => !MARK_NAMES.includes(m.type.name))) : node));
         const out = super.serializeFragment(PMFragment.fromArray(bare), options);
-        // Une case sérialisée = un élément : repli sur la forme d'origine si le compte n'y est pas, plutôt que d'écrire la marque sur le mauvais élément.
+        // Une case ou une ligne sérialisée = un élément : repli sur la forme d'origine si le compte n'y est pas, plutôt que d'écrire la marque sur le mauvais élément.
         if (out.childNodes.length !== fragment.childCount) return super.serializeFragment(fragment, options, target);
         let index = 0;
         fragment.forEach(node => {

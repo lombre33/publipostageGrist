@@ -79,6 +79,10 @@ const FloatingToolbars = (function () {
   function columnDeleteBlocked() {
     return Editor.isTrackChangesOn() && Editor.selectedColumnsCrossMergedCell();
   }
+  // Idem pour « Supprimer la ligne » à travers une case fusionnée en hauteur (cf. Editor.selectedRowsCrossMergedCell).
+  function rowDeleteBlocked() {
+    return Editor.isTrackChangesOn() && Editor.selectedRowsCrossMergedCell();
+  }
 
   // Toolbar de gestion de tableau : panneau flottant, visible seulement curseur dans une cellule, ancré sur le <table> réel.
   function wireTableFloatingToolbar() {
@@ -110,7 +114,7 @@ const FloatingToolbars = (function () {
       const commands = {
         'row-before': () => editor.chain().focus().addRowBefore().run(),
         'row-after': () => editor.chain().focus().addRowAfter().run(),
-        'row-del': () => editor.chain().focus().deleteRow().run(),
+        'row-del': () => { if (!rowDeleteBlocked()) editor.chain().focus().deleteRow().run(); },
         'col-before': () => editor.chain().focus().addColumnBefore().run(),
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
         'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
@@ -196,6 +200,13 @@ const FloatingToolbars = (function () {
         colDelBtn.classList.toggle('is-disabled', blocked);
         colDelBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
         colDelBtn.title = I18n.t(blocked ? 'table.colDelMerged' : 'table.colDel');
+      }
+      const rowDelBtn = panel.el.querySelector('button[data-action="row-del"]');
+      if (rowDelBtn) {
+        const blocked = rowDeleteBlocked();
+        rowDelBtn.classList.toggle('is-disabled', blocked);
+        rowDelBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+        rowDelBtn.title = I18n.t(blocked ? 'table.rowDelMerged' : 'table.rowDel');
       }
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
       EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);

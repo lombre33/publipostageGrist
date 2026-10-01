@@ -503,6 +503,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   `data-tc-modification`), jamais en `<ins>` ou `<del>` entre deux cases, que le navigateur écarterait du tableau à la relecture. Au-dessus d'une cellule fusionnée, « Supprimer la colonne » est grisé,
   jamais retiré (`aria-disabled`, explication au survol) : la supprimer à travers une cellule fusionnée casserait le tableau ; « Colonne avant / après » reste actif et élargit la cellule.
   Les largeurs que le widget règle tout seul (colonnes automatiques figées, tableau ramené dans la page) s'écrivent hors suivi : jamais une suggestion que personne n'a écrite.
+- Lignes d'un tableau avec le suivi des modifications (choix « Corriger » d'Antoine, 01/10) : « Ligne avant », « Ligne après » et « Supprimer la ligne » de la barre du tableau agissent comme une frappe
+  suggérée, comme les colonnes. Une ligne ajoutée reste dans le tableau, pleine largeur, teintée de vert pâle (mêmes teintes que les colonnes : `#146c48` sur `#e5f6ee`) ; une ligne supprimée reste, barrée et
+  teintée de rouge pâle (`#b42318` sur `#fbe9e9`) : jamais une bande de quelques millimètres sortie du tableau. « Tout accepter » et « Tout refuser » les résolvent, Ctrl+Z défait l'action en un seul geste, et
+  l'enregistrement les garde : la marque s'écrit en attribut de la ligne (`data-tc-insertion`, `data-tc-deletion`, `data-tc-modification` sur le `<tr>`), jamais en `<ins>` ou `<del>` autour d'un `<tr>`, que le
+  navigateur écarterait du tableau à la relecture. Au-dessus ou au-dessous d'une cellule fusionnée en hauteur, « Supprimer la ligne » est grisé, jamais retiré (`aria-disabled`, explication au survol) : la supprimer
+  à travers elle ajouterait des cases vides au tableau ; « Ligne avant / après » reste actif et allonge la cellule.
 - Texte inséré et texte supprimé du suivi des modifications (choix « Aligner » d'Antoine, 01/10) : le texte suggéré prend les teintes des cases d'une colonne suivie, constantes dans les deux thèmes. Inséré :
   `#146c48` sur `#e5f6ee` (5,7:1), avec son filet vert au bas. Supprimé : barré, `#b42318` sur `#fbe9e9` (5,6:1). Jamais les jetons du thème (`--danger`, `--danger-soft`) : en sombre ils posaient
   une pastille foncée sur la page, qui reste blanche, et le rouge d'avant n'avait que 3,7:1 en clair.

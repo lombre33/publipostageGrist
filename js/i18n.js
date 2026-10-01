@@ -703,6 +703,7 @@ const I18n = (function () {
     'table.rowBefore': { fr: 'Ligne avant', en: 'Row before' },
     'table.rowAfter': { fr: 'Ligne après', en: 'Row after' },
     'table.rowDel': { fr: 'Supprimer la ligne', en: 'Delete row' },
+    'table.rowDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette ligne', en: 'Unavailable with track changes on: a merged cell runs across this row' },
     'table.colBefore': { fr: 'Colonne avant', en: 'Column before' },
     'table.colAfter': { fr: 'Colonne après', en: 'Column after' },
     'table.colDel': { fr: 'Supprimer la colonne', en: 'Delete column' },

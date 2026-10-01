@@ -706,9 +706,26 @@ Ils marchent maintenant, comme une frappe suggérée :
   accepter et refuser donnent le tableau voulu). « Supprimer la colonne » à travers elle abîmerait le tableau (`fixTables` de prosemirror-tables ajoute des cases de remplissage) :
   le bouton est grisé avec le suivi allumé quand les colonnes sélectionnées croisent une cellule fusionnée (`Editor.selectedColumnsCrossMergedCell`, `aria-disabled` +
   `table.colDelMerged`), jamais retiré.
-- **Pas corrigé ici (proposé à Antoine)** : une LIGNE ajoutée ou supprimée avec le suivi garde la même enveloppe entre `<tbody>` et `<tr>` (`tbody > ins > tr`) : elle s'affiche
-  en bande étroite et disparaît à la relecture, comme le faisaient les cases.
+- **Les lignes** : même défaut, corrigé à part (section suivante, choix « Corriger » d'Antoine).
 - Tests : groupe `trackChanges` (`trackchanges_column_*`, 8 cas) et script Node `trackColumnsMouse` (`dev-tests/verify-track-columns-mouse.mjs`, 44 vérifications).
+
+## Lignes d'un tableau avec le suivi (2026-10-01, choix « Corriger » d'Antoine)
+
+« Ligne avant », « Ligne après » et « Supprimer la ligne » avaient le défaut des colonnes avant leur correction, un cran plus haut : la marque posée sur la LIGNE est dessinée
+par ProseMirror en `<ins>` / `<del>` / `<span data-type="modification">` autour du `<tr>`, donc directement dans le `<tbody>`. Mesuré : sans règle d'affichage, la ligne sortait du
+tableau (une bande de 22 à 49 px de large au lieu de 608), et à la réouverture le navigateur sortait l'enveloppe du tableau (la ligne supprimée revenait comme si de rien n'était,
+la ligne ajoutée n'était plus refusable). Corrigé comme les colonnes :
+
+- **Affichage** (`css/track-changes.css`) : `display: contents` sur `tbody > ins[data-id]`, `tbody > del[data-id]`, `tbody > span[data-type="modification"]` (la ligne reste une vraie ligne du
+  tableau), et les cases de la ligne portent la teinte (vert pâle `#146c48` sur `#e5f6ee`, rouge pâle barré `#b42318` sur `#fbe9e9`, les mêmes que pour les colonnes et fixes dans les deux thèmes).
+- **Persistance** (`js/track-changes.js`) : `CELL_NODE_TYPES` contient aussi `tableRow`. Une ligne s'écrit avec ses marques en attributs du `<tr>` (`data-tc-insertion="3"`, …) par
+  `TrackingDOMSerializer`, et les trois marques relisent `tr[data-tc-…]` à `consuming: false`. La ligne accepte déjà les marques (`TrackedTableRow`, section précédente).
+- **Cellule fusionnée en hauteur** : « Ligne avant / après » à travers elle marche (la case s'allonge, `rowspan` devient une modification ; accepter et refuser donnent le tableau voulu).
+  « Supprimer la ligne » à travers elle abîmerait le tableau (`fixTables` de prosemirror-tables ajoute des cases vides pour le rendre rectangulaire) : le bouton est grisé avec le suivi allumé
+  quand les lignes sélectionnées croisent une cellule fusionnée (`Editor.selectedRowsCrossMergedCell`, `rowDeleteBlocked` de `js/floating-toolbars.js`, `aria-disabled` + `table.rowDelMerged`), jamais retiré.
+- Tests : groupe `trackChanges` (`trackchanges_row_*`, 7 cas, dont 4 échouent sur l'ancien code) et script Node `trackRowsMouse` (`dev-tests/verify-track-rows-mouse.mjs`, 40 vérifications).
+- Lien avec le saut de page d'un tableau (`js/table-page-cut.js`) : une ligne enveloppée dans un `<ins>` / `<del>` n'est pas un `<tr>` direct du `<tbody>`, `rowsOf` rend alors `null` et le
+  tableau garde l'ancien comportement de coupure tant que des lignes sont en suggestion.
 
 ## Couleurs du texte inséré et supprimé (2026-10-01, choix « Aligner » d'Antoine)
 
