@@ -221,6 +221,16 @@ const HeaderFooterPreview = (function () {
   function isBlankParagraph(el) {
     return el.tagName === 'P' && !el.textContent.trim() && !el.querySelector(':scope > :not(br)');
   }
+  // Fin de document sans contenu (carte d'Antoine du 01/10 : « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » - Oui ; même règle que
+  // ReaderMode.trimTrailingBlankBlocks pour la Lecture et les exports : « s'il n'y a pas de contenu, on ne crée pas de nouvelle page »). L'éditeur garde ces
+  // lignes vides, il faut pouvoir écrire à la suite, mais elles n'ouvrent pas de page : elles dépassent simplement la dernière. Retourne l'index du premier bloc de
+  // la suite de lignes vides qui termine le document (children.length s'il n'y en a pas). Des lignes vides seulement : un saut de page est un geste de la personne,
+  // il garde son repère « Page 2 » même sans rien derrière.
+  function trailingBlankStart(children) {
+    let start = children.length;
+    while (start > 0 && isBlankParagraph(children[start - 1])) start--;
+    return start;
+  }
 
   // Accumule la hauteur des blocs de haut niveau de .tiptap, respecte .page-break-marker comme coupure forcée. Grain du bloc (jamais coupé en deux), pas du
   // pixel comme pdfmake. Retourne le bloc après lequel insérer la coupure (afterEl), pour poser un margin-bottom réel dessus.
@@ -229,7 +239,8 @@ const HeaderFooterPreview = (function () {
   //  - un bloc que l'export coupe (isSplittableByExport) reste sur la page où sa plus grande partie tient, et le repère tombe derrière lui. Le déplacer en
   //    entier revient à se tromper de tout ce qui tenait dans la page (deux images en haut d'une lettre, une zone 2 colonnes de ~940 px pour ~910 px de place :
   //    « Page 2 » juste sous les images, page 1 vide) au lieu de se tromper de ce qui déborde (~30 px) ;
-  //  - le paragraphe vide qui termine le document (celui que l'éditeur ajoute derrière ce bloc) ne compte pas : seul, il ouvrait une page vide.
+  //  - les lignes vides qui terminent le document (dont le paragraphe que l'éditeur ajoute derrière un tableau ou une zone) ne comptent pas : elles ouvraient une
+  //    page pour elles seules (trailingBlankStart).
   // Un tableau de premier niveau est l'exception de la première : il se coupe ENTRE deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) qui
   // ne coupent plus une ligne en deux. Les lignes qui ne tiennent pas ouvrent la page suivante ; la coupure porte alors `rowIndex` (rang de la première ligne de la page qui
   // commence) et `afterEl` est l'enveloppe du tableau. Un tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes, grille...)
@@ -245,6 +256,7 @@ const HeaderFooterPreview = (function () {
     let consumed = 0;
     let lastBlock = null;
     const children = Array.from(tiptapEl.children);
+    const blankTailStart = trailingBlankStart(children);
     children.forEach((child, index) => {
       const height = child.getBoundingClientRect().height / zoom;
       if (child.classList.contains('page-break-marker')) {
@@ -253,7 +265,7 @@ const HeaderFooterPreview = (function () {
         lastBlock = child;
         return;
       }
-      if (index === children.length - 1 && isBlankParagraph(child)) return;
+      if (index >= blankTailStart) return;
       const cuttable = cuttableTable(child, pageContentHeightPx, zoom);
       if (cuttable) {
         const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);

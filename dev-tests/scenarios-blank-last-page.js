@@ -9,6 +9,10 @@
 //
 // Pour que le test ne dépende pas des polices de la machine, la capacité d'une page est MESURÉE : `lines(n)` est le plus long texte qui tient encore sur une
 // seule page (« ras la marge »), à chaque moteur - PDF (pdfmake, vérité terrain pdf.js) et Lecture (pagination du mode Lecture) mesurent chacun la leur.
+//
+// L'ÉDITEUR (repère « Page 2 » de l'Aperçu A4, carte d'Antoine du 01/10 : « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » - Oui) :
+// il garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la FIN n'ouvrent plus de page, comme dans la Lecture et les exports ; un saut de page
+// posé par la personne garde, lui, son repère.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.blankLastPage = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -49,6 +53,17 @@ window.EditorTestSuites.blankLastPage = (function () {
     await h.renderReaderMode(html, headerFooter || null);
     await h.sleep(250);
     return document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam').length + 1;
+  }
+  const NO_HEADER_FOOTER = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  // Pages de l'ÉDITEUR (Aperçu A4) : une bande « Page N » (sans en-tête ni pied) ou une couture (avec) par changement de page, posée par
+  // HeaderFooterPreview.renderPaginationOverlay. Le dessin est refait tout de suite plutôt que d'attendre le minuteur de la frappe.
+  async function editorPages(h, html, headerFooter) {
+    Editor.setHeaderFooterData(headerFooter || NO_HEADER_FOOTER);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.refreshPaginationPreview();
+    await h.sleep(60);
+    return document.querySelectorAll('#editor-container .v2-pagination-overlay .v2-page-break-line, #editor-container .v2-pagination-overlay .v2-page-seam').length + 1;
   }
   // Plus grand nombre de lignes qui tient sur UNE page : recherche par dichotomie, chaque essai est un vrai rendu.
   async function fullPage(measure) {
@@ -316,6 +331,105 @@ window.EditorTestSuites.blankLastPage = (function () {
         const probe = document.createElement('div'); probe.innerHTML = resolved;
         const count = probe.querySelectorAll(':scope > p').length;
         return { pass: count === 2, notes: 'html=' + resolved };
+      },
+    },
+    {
+      id: 'blank_page_editor_empty_lines_after_text_flush_with_the_bottom_margin',
+      description: 'Éditeur, avec et sans en-tête et pied : le texte arrive à la marge du bas, une ou plusieurs lignes vides tapées derrière n\'ouvrent pas de « Page 2 », comme dans la Lecture et les exports',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        for (const [label, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
+          const n = await fullPage(html => editorPages(h, html, hf));
+          const seen = { lignesParPage: n };
+          const bare = await editorPages(h, lines(n), hf);
+          const over = await editorPages(h, lines(n + 1), hf);
+          if (bare !== 1 || over !== 2) problems.push(label + ', capacité mal mesurée : ' + n + ' lignes -> ' + bare + ' page(s), ' + (n + 1) + ' lignes -> ' + over);
+          const cases = flushCases(n).concat([
+            ['deux lignes vides', lines(n) + blankLines(2)],
+            ['plus d\'une page de lignes vides', lines(n) + blankLines(n + 10)],
+            ['lignes vides, espaces et saut de ligne mêlés', lines(n) + '<p></p><p>&nbsp;</p><p><br></p><p> </p>'],
+          ]);
+          for (const [name, html] of cases) {
+            const pages = await editorPages(h, html, hf);
+            seen[name] = pages + ' page(s)';
+            if (pages !== 1) problems.push(label + ', ' + name + ' : ' + pages + ' pages (1 attendue)');
+          }
+          // Une ligne de plus que la page n'en contient reste sur deux pages : seul le vide de fin disparaît.
+          const overWithBlanks = await editorPages(h, lines(n + 1) + blankLines(3), hf);
+          if (overWithBlanks !== 2) problems.push(label + ', une ligne de trop + trois lignes vides : ' + overWithBlanks + ' pages (2 attendues)');
+          summary[label] = seen;
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_editor_blank_lines_before_text_keep_their_room',
+      description: 'Éditeur : seules les lignes vides de la FIN sont ignorées ; celles qui précèdent du texte gardent leur place, et dès que du texte est tapé derrière elles la « Page 2 » apparaît',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        for (const [label, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
+          const n = await fullPage(html => editorPages(h, html, hf));
+          // Sans les trois lignes vides le texte final tient sur la page ; avec elles (au milieu, donc comptées) il passe en page 2.
+          const without = await editorPages(h, lines(n - 2) + '<p>Suite</p>', hf);
+          const withBlank = await editorPages(h, lines(n - 2) + blankLines(3) + '<p>Suite</p>', hf);
+          // Le texte tapé sur la dernière des lignes vides : elle n'est plus vide, la page où elle tombe apparaît.
+          const typedOnLast = await editorPages(h, lines(n) + blankLines(2) + '<p>Fin</p>', hf);
+          const stillBlank = await editorPages(h, lines(n) + blankLines(3), hf);
+          summary[label] = { sansLesVides: without, avecLesVides: withBlank, texteTapeSurLaDerniere: typedOnLast, toujoursVides: stillBlank };
+          if (without !== 1) problems.push(label + ', texte sans lignes vides : ' + without + ' page(s) (1 attendue)');
+          if (withBlank !== 2) problems.push(label + ', lignes vides du milieu : ' + withBlank + ' page(s) (2 attendues : elles gardent leur place)');
+          if (typedOnLast !== 2) problems.push(label + ', texte tapé derrière deux lignes vides : ' + typedOnLast + ' page(s) (2 attendues)');
+          if (stillBlank !== 1) problems.push(label + ', trois lignes vides : ' + stillBlank + ' page(s) (1 attendue)');
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_editor_a_page_break_keeps_its_page_and_blank_lines_after_it_open_no_other',
+      description: 'Éditeur : un saut de page posé par la personne garde son repère « Page 2 » ; les lignes vides tapées derrière lui n\'ouvrent pas de « Page 3 »',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const summary = {};
+        const marker = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+        for (const [label, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
+          const n = await fullPage(html => editorPages(h, html, hf));
+          const alone = await editorPages(h, lines(3) + marker + '<p></p>', hf);
+          const followedByText = await editorPages(h, lines(3) + marker + lines(5), hf);
+          const blankPage = await editorPages(h, lines(3) + marker + blankLines(n + 10), hf);
+          const twoBreaks = await editorPages(h, lines(3) + marker + lines(3) + marker + '<p>Fin</p>', hf);
+          summary[label] = { sautSeul: alone, sautPuisTexte: followedByText, sautPuisUnePageDeVides: blankPage, deuxSauts: twoBreaks };
+          if (alone !== 2) problems.push(label + ', saut de page + une ligne vide : ' + alone + ' page(s) (2 attendues : le saut garde son repère)');
+          if (followedByText !== 2) problems.push(label + ', saut de page + texte : ' + followedByText + ' page(s) (2 attendues)');
+          if (blankPage !== 2) problems.push(label + ', saut de page + plus d\'une page de lignes vides : ' + blankPage + ' page(s) (2 attendues)');
+          if (twoBreaks !== 3) problems.push(label + ', deux sauts de page et du texte derrière : ' + twoBreaks + ' page(s) (3 attendues)');
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_editor_footer_page_total_ignores_the_trailing_blank_lines',
+      description: 'Éditeur : le « n/total » du pied de page ne compte pas la page que n\'occupent que des lignes vides de fin',
+      async run(h) {
+        await setup(h);
+        const footer = { enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '<p><span class="page-number-badge" contenteditable="false" data-format="n-slash-total">#</span></p>', first: '' } };
+        const problems = [];
+        const read = async html => {
+          await editorPages(h, html, footer);
+          const zone = document.querySelector('#editor-container .v2-page-edge-bottom');
+          return zone ? zone.textContent.replace(/\s+/g, '') : null;
+        };
+        const n = await fullPage(html => editorPages(h, html, footer));
+        const expected = total => PageLayout.pageNumberText('n-slash-total', total, total).replace(/\s+/g, '');
+        const flush = await read(lines(n) + blankLines(3));
+        const over = await read(lines(n + 1) + blankLines(3));
+        if (flush !== expected(1)) problems.push('texte ras la marge + 3 lignes vides : pied « ' + flush + ' » (« ' + expected(1) + ' » attendu)');
+        if (over !== expected(2)) problems.push('une ligne de trop + 3 lignes vides : pied « ' + over + ' » (« ' + expected(2) + ' » attendu)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, flush, over, problems }) };
       },
     },
   ];

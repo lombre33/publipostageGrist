@@ -88,7 +88,7 @@ const GROUPS = {
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
-  blankLastPage: 'scenarios-blank-last-page',
+  blankLastPage: 'scenarios-blank-last-page', // page blanche en fin de document : Lecture, PDF, Word, et le repère « Page 2 » de l'éditeur (js/header-footer-preview.js:trailingBlankStart)
   tablePageCut: 'scenarios-table-page-cut', // un tableau se coupe entre deux lignes au saut de page (js/table-page-cut.js) : règle, couture de l'éditeur et de la Lecture, PDF relu par pdf.js, Word
   findReplace: 'scenarios-find-replace', // Rechercher / Remplacer (js/find-replace.js) : moteur, panneau, loupe, remplacement en une étape d'annulation, mode suivi, textes FR / EN, contrastes
   layers: 'scenarios-layers', // ordre d'empilement des couches flottantes (js/layers.js, jetons --z-* ) : barres flottantes < menus < info-bulles < fenêtres, le dernier ouvert au-dessus, menu # sous la barre du tableau
@@ -148,6 +148,7 @@ const NODE_SCRIPTS = {
   fullPagesMouse: 'verify-full-pages-mouse.mjs', // « Pages entières » à la vraie souris à 700x400 puis 1400x1000 : la couture (pied, gouttière, en-tête) ne vole aucun clic, le pied et l'en-tête ouvrent leur édition, l'image d'une page 2 se sélectionne et se déplace, une copie de « Sur toutes les pages » ne prend jamais la souris
   imageArrowsKeyboard: 'verify-image-arrows-keyboard.mjs', // flèches du clavier sur une image en calque sélectionnée (1 px, 10 px avec Maj), vrai clavier à 700x400 puis 1400x1000 ; le curseur qui arrive sur son ancre la traverse encore
   imageCornerMouse: 'verify-image-corner-mouse.mjs', // une image tirée dans un coin de la feuille avec un en-tête et un pied remplis, vraie souris à 700x400 : elle s'arrête dans le coin, garde son clic sous la zone, la marge à vide ouvre l'en-tête et le pied ; témoin à 1400x1000
+  editorBlankTailMouse: 'verify-editor-blank-tail-mouse.mjs', // repère « Page 2 » de l'éditeur et lignes vides de fin (js/header-footer-preview.js:trailingBlankStart) : au vrai clavier à 700x400, Entrées de trop au bas d'une page, texte tapé puis effacé, saut de page au bouton de la barre
   headerFooterMouse: 'verify-header-footer-mouse.mjs', // en-tête et pied de page vides (js/header-footer-preview.js) : clic dans la marge puis « Terminer » sans rien écrire, texte tapé, tout effacé, modèle déjà enregistré activé vide, 700x400
   tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',

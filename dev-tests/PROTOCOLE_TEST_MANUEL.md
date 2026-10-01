@@ -512,6 +512,24 @@ La référence est la largeur que l'éditeur donne à l'image (`max-width: 100%`
 
 ---
 
+## 17. Lignes vides de fin de document et repère « Page 2 » de l'éditeur
+
+**Couverture automatisée** : groupe `blankLastPage` (`scenarios-blank-last-page.js`, 15 cas : Lecture, PDF, Word et, pour l'éditeur, les quatre cas `blank_page_editor_*`), script Node `editorBlankTailMouse`
+(vrai clavier à 700×400 : Entrées de trop au bas d'une page, texte tapé puis effacé, saut de page au bouton de la barre). La capacité d'une page est mesurée, jamais écrite en dur.
+**Non couvert** : le rendu réel dans Word, l'impression du navigateur et les qualités raster du PDF (ils ne rognent pas les lignes vides de fin), une zone à deux colonnes encore vide en fin de document (l'éditeur la compte).
+
+### Protocole
+1. Dans un modèle A4 portrait (Aperçu A4 activé), taper du texte jusqu'à la marge du bas de la page 1 (la dernière ligne touche la marge), puis appuyer cinq fois sur Entrée : aucune bande « Page 2 »
+   n'apparaît, le curseur descend sur les lignes vides (la feuille s'allonge), le pied de page de l'éditeur dit toujours « 1/1 » si le modèle porte un numéro de page « n/total ».
+2. Taper une lettre sur la dernière ligne vide : la bande « Page 2 » apparaît juste au-dessus d'elle, le pied dit « 2/2 ». L'effacer : la bande disparaît, le pied redit « 1/1 ».
+3. Mettre du texte APRÈS trois lignes vides qui tombent en bas de page : la bande « Page 2 » est là, les lignes vides ont gardé leur place (seules celles de la FIN sont ignorées).
+4. Passer en Lecture, puis « Exporter en PDF » et « Exporter en DOCX » avec les cinq lignes vides de l'étape 1 : une seule page, aucune page blanche (même chose qu'à l'étape 1).
+5. Poser un saut de page tout à la fin du modèle (bouton de la barre) : la bande « Page 2 » apparaît tout de suite dans l'éditeur (c'est un geste de la personne) ; taper plus d'une page d'Entrées derrière lui n'ouvre pas de
+   « Page 3 ». La Lecture et les exports ne font pas de page vide de ce saut final : l'éditeur montre la page où l'on va écrire.
+6. Avec un en-tête et un pied de page : refaire les étapes 1 à 3 (la capacité d'une page est plus petite, la page 1 se remplit plus tôt).
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

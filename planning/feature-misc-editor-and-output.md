@@ -111,8 +111,13 @@ d'ajustement, PDF, PDF en lot, Word, impression navigateur, qualités raster, pl
 ligne, et quand le texte arrive à la marge du bas elle ouvrait une page entière pour elle seule. `ReaderMode.trimTrailingBlankBlocks` (`js/reader-mode.js`) retire de la FIN du document les
 paragraphes, zones à deux colonnes et sauts de page sans rien à montrer (texte, image, tableau, liste, citation, encadré, note, numéro de page) et les lignes vides au bas des colonnes d'une
 dernière zone ; la Lecture (`render`), le PDF (`htmlToPdfContent`, flux principal) et le Word (`buildDocxDocument`, qui garde un paragraphe de 1 pt derrière un dernier tableau) l'appellent.
-**Reste ouvert** : le repère « Page 2 » de l'éditeur ne suit pas (il montre encore des lignes vides saisies au bas d'une page), et l'impression navigateur et les qualités raster
-(`js/pdf-export-alt.js`, désactivées dans l'interface) ne rognent pas.
+**Repère « Page 2 » de l'éditeur** (carte d'Antoine du 01/10, « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » : Oui) : `computePageBreaks`
+(`js/header-footer-preview.js`) ignorait déjà le tout dernier paragraphe vide ; `trailingBlankStart` étend la règle à TOUTE la suite de lignes vides qui termine le document. L'éditeur les
+garde (il faut pouvoir écrire à la suite), mais deux Entrées de trop au bas d'une page ne font plus apparaître « Page 2 », ni un « 2/2 » dans le pied : les lignes dépassent simplement
+la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde son repère même sans rien derrière (Lecture et exports, eux, ne font
+pas de page vide de lui) ; les lignes vides tapées derrière lui n'ouvrent pas de « Page 3 ». Les lignes vides du milieu gardent leur place.
+**Reste ouvert** : l'impression navigateur et les qualités raster (`js/pdf-export-alt.js`, désactivées dans l'interface) ne rognent pas ; une zone à deux colonnes vide en fin de document
+compte encore dans l'éditeur (elle n'est pas une « ligne vide »).
 
 ## QR code / code-barres
 
