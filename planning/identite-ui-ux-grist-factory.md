@@ -393,6 +393,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sa place, un seul Annuler rend le bloc ; son texte garde la couleur du texte (le rouge de « Retirer la condition » ne fait que 4,4:1 sur blanc). Les quatre boutons de la fenêtre
   d'un bloc à condition passent sur deux lignes - les retraits au-dessus, Annuler et Enregistrer dessous, à droite - quand ils ne tiennent pas côte à côte (le français dans les
   480 px) : jamais un bouton hors de la fenêtre.
+- Calcul (demande d'Antoine du 01/10, « variables calculées ») : une ligne « Calcul » (« Calculation ») de l'onglet Chips du menu des variables, jamais une nouvelle icône ; elle remplace le « # » tapé et
+  ouvre la fenêtre « Insérer un calcul » (base commune, 480 px, sans défilement dans 700×400) : le champ « Formule » (le focus y est ; « # » y ouvre la liste des colonnes par-dessus la fenêtre, Entrée y
+  choisit une colonne sans valider), l'indication de la syntaxe sous le champ, une rangée « Fonctions » (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI ; SUM, AVERAGE, MIN, MAX, COUNT, ROUND en anglais : un clic écrit
+  « SOMME() » au curseur ou autour du texte sélectionné, le focus reste dans le champ) et, dessous, le résultat pour la ligne courante, mis à jour à la frappe (gris atténué tant que la formule se construit,
+  texte plein et liseré d'accent quand elle aboutit, liseré rouge après une validation refusée avec la raison dite en clair : le texte garde sa couleur, le rouge ne fait que 4,4:1 sur blanc). La bulle n'entre
+  qu'à « Insérer » (Annuler et Échap ne laissent rien, un seul Annuler la retire). Elle est verte comme les chips et le numéro de page (une valeur calculée, pas une colonne Grist : jamais bleue comme une
+  variable), se lit « = #Facture.HT × 0,2 » dans la langue et avec la touche du moment, est coupée au milieu par « … » dans une case ou une colonne, et devient rouge avec son message en info-bulle quand sa
+  formule ou une colonne ne se lit plus. Sa barre flottante est celle des variables : « Modifier le calcul » (le double-clic et Entrée aussi), les réglages nombre (FR / US, décimales, devise, Lettres, bouton Ø) ;
+  condition d'affichage, autres attributs et boucle y sont GRISÉS avec leur raison (« Disponible pour une variable, pas pour un calcul »), jamais retirés. Le résultat s'écrit comme une colonne nombre : FR par
+  défaut (espace insécable des milliers), US en anglais, zéro caché par défaut ; une erreur s'écrit dans le document dans la langue de l'interface (« [ERREUR: Division par zéro.] »), jamais un total faux.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »

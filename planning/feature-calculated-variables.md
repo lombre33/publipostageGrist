@@ -4,6 +4,27 @@
 `#Variable`, sans passer par une formule Grist — ex. `sous-total + TVA = total` directement dans le
 modèle de document.
 
+## Réalisé (2026-10-01, demande d'Antoine « variables calculées », tâche de fond)
+
+La conception ci-dessous a servi de base ; les boucles (lignes liées répétées) existant entre-temps, le calcul d'agrégation est livré dès cette version.
+
+- **La bulle** : nœud `calcBadge` (`js/editor-nodes.js`, attributs `formula` et `format`), posée par la ligne « Calcul » de l'onglet Chips du panneau « # ». La fenêtre « Insérer / Modifier le calcul »
+  (`js/variable-calc.js`, base `ModalBase`, styles `css/variable-calc.css`) a un champ où « # » complète les colonnes (`Variables.initFilenameInput`), six boutons de fonction et le résultat de la ligne
+  courante à la frappe. La bulle n'est insérée qu'à la validation (Annuler ne laisse rien, un seul Ctrl+Z la retire). Bulle verte comme les chips, étiquette « = #Facture.HT × 0,2 », coupée au milieu par « … »
+  dans une case étroite, rouge avec son message en info-bulle quand la formule ou une colonne ne se lit plus.
+- **Le moteur** : `js/formula.js`, pur, jamais d'`eval` ni de `Function` (vérifié par `unit-formula.mjs`). `+ - * /`, `%`, parenthèses ; `SOMME`, `MOYENNE`, `MIN`, `MAX`, `NB`, `ARRONDI` (`SUM`, `AVERAGE`, `COUNT`,
+  `ROUND` en anglais). Une variable d'une table liée par une règle « match » est une LISTE (une valeur par ligne liée) : `SOMME(#Lignes.Prix * #Lignes.Quantite)` est le total des lignes ; seules les fonctions
+  ramènent une liste à un nombre. Vide = 0 dans une opération, ignoré par une fonction ; une colonne supprimée est une erreur écrite, jamais un 0. La formule ENREGISTRÉE est neutre (`{Table.Colonne}`, décimales au
+  point, `;` entre les valeurs, noms anglais) ; la saisie et l'étiquette sont dans la langue et avec la touche de déclenchement du moment (virgule décimale en français seulement : en anglais « 1,000 » est refusé).
+- **La résolution** : `Variables.resolveCalcResult` (même chemin que `resolveRawValue`, donc mêmes lignes liées et mêmes erreurs) ; un seul branchement pour la Lecture, le PDF, le Word et l'e-mail
+  (`ReaderMode.resolveBadgeNode`, `resolveHeaderFooterZone`). `.calc-badge` est dans `BOUND_SELECTOR` (`js/loop-rules.js`) : dans une ligne de tableau répétée, `Prix × Quantite` donne le total de CETTE ligne ;
+  hors zone, `SOMME(...)` additionne toutes les lignes liées (pas le filtre de la boucle). Une table citée qui n'est pas celle de la page demande sa clé de correspondance à la validation, une fois par table.
+- **L'écriture du résultat** : comme une colonne Numérique (`Variables.formatValue`), FR par défaut (espace insécable des milliers), US en interface anglaise, zéro caché par défaut ; la barre flottante de la bulle
+  (partagée avec les variables) règle US / décimales / devise / « Lettres » / Ø et ajoute « Modifier le calcul » ; condition d'affichage, autres attributs et boucle y sont grisés (sans objet).
+- **Pas fait, dit à Antoine** : pas de calcul dans Objet / À / Cc / Cci ni dans le nom du PDF ; un calcul ne peut pas en citer un autre (pas de dépendances circulaires) ; une colonne Liste de références de la page
+  n'est pas sommable ; pas de calcul sur une date.
+- **Tests** : `varCalc` (20 cas), `formulaUnit` (104 contrôles), `calcMouse` (vraie souris à 700×400, clair, sombre, anglais) - cf. `dev-tests/README.md` et `PROTOCOLE_TEST_MANUEL.md` §15.
+
 ## Pourquoi pas "juste ajouter une colonne formule dans Grist" ?
 
 C'est la question à se poser en premier avec l'utilisateur si ce n'est pas déjà tranché : Grist sait

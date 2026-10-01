@@ -556,6 +556,29 @@ captures avec `WATERMARK_SHOTS=<dossier>`). Le texte, l'angle, la couleur et l'o
 
 ---
 
+## 19. Variables calculées (bulle « Calcul »)
+
+**Couverture automatisée** : groupe `varCalc` (`scenarios-var-calc.js`, 20 cas : nœud et étiquette, case de tableau étroite, bulle rouge, résultat à la Lecture / à l'aperçu commun du PDF et du Word /
+en lot / en-tête et pied, anglais, total sans ligne liée, erreurs écrites dans la langue de l'interface, ligne de tableau répétée, vrais PDF et Word, fenêtre ouverte depuis le panneau « # », annulation, calcul refusé,
+boutons de fonction, liste des colonnes devant la fenêtre, virgule décimale refusée en anglais, clé de correspondance demandée une fois par table, aperçu, barre flottante, réglages nombre, copier-coller), script Node
+`formulaUnit` (le moteur, 104 contrôles) et script Node `calcMouse` (vraie souris et vrai clavier à 700×400, clair, sombre et anglais).
+**Non couvert** : un vrai Word (le fichier est relu dans `docx`, pas ouvert dans Word), un document Grist réel (jeu de données de test), un calcul sur plusieurs milliers de lignes liées.
+
+### Protocole
+1. Dans un modèle dont la table de la page a une colonne Nombre (ex. `HT`) : taper `#`, onglet Chips, ligne « Calcul » : la fenêtre « Insérer un calcul » s'ouvre, rien n'est encore dans le texte.
+   Écrire `#Facture.HT * 0,2` (le `#` ouvre la liste des colonnes devant la fenêtre ; Entrée y choisit sans valider) : le résultat de la ligne courante s'affiche sous le champ. « Insérer » pose une bulle verte
+   « = #Facture.HT × 0,2 » ; Annuler ou Échap ne laissent rien dans le modèle.
+2. Cliquer la bulle : la barre flottante montre « Modifier le calcul » et les réglages nombre (FR / US / décimales / devise / Lettres / Ø) ; condition, autres attributs et boucle sont grisés. « Modifier le calcul »,
+   le double-clic et Entrée rouvrent la fenêtre sur la formule ; « Valider » change la bulle en place (un seul Ctrl+Z la rend).
+3. Lecture, PDF, Word et e-mail : la bulle devient son résultat, écrit comme une colonne nombre (FR : « 1 200,50 », US en interface anglaise) ; un résultat nul n'écrit rien tant que le bouton Ø est enfoncé.
+4. Une facture avec une table de lignes liée (clé de correspondance : une règle par table) : `SOMME(#Lignes.Prix * #Lignes.Quantite)` donne le total des lignes ; sans fonction la fenêtre ou la Lecture dit « donne N valeurs ».
+   Dans un tableau dont la ligne est répétée par ligne liée, `#Lignes.Prix * #Lignes.Quantite` donne le total de CHAQUE ligne et la ligne « Total » sous le tableau (avec `SOMME`) celui de toutes les lignes.
+5. Une table pas encore liée : le résultat dit « pas encore liée », « Insérer » ouvre la fenêtre de la clé de correspondance ; Annuler la laisse ouverte. Supprimer ensuite la colonne dans Grist : la bulle devient rouge
+   avec son message en info-bulle et la Lecture écrit une erreur, jamais un total faux.
+6. Panneau de 700 × 400 : la fenêtre tient sans défiler, boutons « Insérer » / « Annuler » visibles ; dans une case de tableau étroite la formule est coupée par « … ».
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
