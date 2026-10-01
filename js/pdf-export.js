@@ -752,6 +752,65 @@ const PdfExport = (function () {
     return block;
   }
 
+  // Encadré (js/callout.js) : un tableau pdfmake à une ligne et deux colonnes - l'icône (PNG tracé d'après les mêmes dessins que le CSS) à gauche, les blocs de l'encadré à droite,
+  // mis en page comme ceux d'une colonne (htmlToPdfContent sur leur HTML, à la largeur de texte mesurée). Le fond teinté et la barre de couleur viennent de la mise en page du
+  // tableau (fillColor, filet gauche) ; aucun autre trait. Toutes les mesures sont prises sur le CSS réel (css/callout.css), pas recopiées. La ligne du tableau se coupe d'une
+  // page à l'autre comme un long paragraphe.
+  async function calloutFrom(node, pageBreakBefore, rootRect) {
+    const m = ExportCommon.calloutMetricsPx(node);
+    const barPt = m.barPx * PX_TO_PT, padLeftPt = m.padLeftPx * PX_TO_PT, padRightPt = m.padRightPx * PX_TO_PT;
+    const padTopPt = m.padTopPx * PX_TO_PT, padBottomPt = m.padBottomPx * PX_TO_PT;
+    const marginTopPt = m.marginTopPx * PX_TO_PT, marginBottomPt = m.marginBottomPx * PX_TO_PT;
+    const iconSizePt = m.iconSizePx * PX_TO_PT, iconLeftPt = m.iconLeftPx * PX_TO_PT, iconTopPt = m.iconTopPx * PX_TO_PT;
+    const innerWidthPt = Math.max(30, node.getBoundingClientRect().width * PX_TO_PT - barPt - padLeftPt - padRightPt);
+    let blocks;
+    try { blocks = await htmlToPdfContent(node.innerHTML, false, innerWidthPt); }
+    catch (e) { console.warn('[PdfExport] contenu d\'encadré ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(node, false)]; }
+    const color = Callout.colorOf(node.getAttribute('data-color'));
+    const iconKey = node.getAttribute('data-icon');
+    const block = {
+      table: {
+        widths: [iconSizePt, '*'],
+        body: [[
+          { image: Callout.iconPng(iconKey, color.accent, 96), width: iconSizePt, height: iconSizePt, margin: [0, Math.max(0, iconTopPt - padTopPt), 0, 0] },
+          { stack: blocks },
+        ]],
+      },
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: i => (i === 0 ? barPt : 0),
+        vLineColor: () => color.accent,
+        fillColor: () => color.tint,
+        paddingLeft: i => (i === 0 ? iconLeftPt : 0),
+        paddingRight: i => (i === 0 ? Math.max(0, padLeftPt - iconLeftPt - iconSizePt) : padRightPt),
+        paddingTop: () => padTopPt,
+        paddingBottom: () => padBottomPt,
+      },
+      margin: [0, marginTopPt, 0, marginBottomPt],
+    };
+    if (pageBreakBefore) block.pageBreak = 'before';
+    // Images en calque dans l'encadré : même ramenée au référentiel de la page que pour une colonne (l'encadré est, comme la zone 2 colonnes, le parent positionné de ses images -
+    // css/callout.css : position: relative -, et ses ancres locales partent du début de son contenu).
+    const pending = blocks._pendingImages || [];
+    if (pending.length) {
+      const rect = node.getBoundingClientRect();
+      const contentTop = rect.top + m.padTopPx;
+      const contentLeft = rect.left + m.padLeftPx + m.barPx;
+      pending.forEach(p => {
+        if (p.container || p.above || p.below) {
+          p.imgTopPx += A4_PREVIEW_PADDING_TOP_PX + (rect.top - contentTop);
+          p.imgLeftPx += A4_PREVIEW_PADDING_LEFT_PX + (rect.left - contentLeft);
+        } else {
+          p.imgTopPx += rect.top - rootRect.top;
+          p.imgLeftPx += rect.left - rootRect.left;
+        }
+      });
+      block._nestedPending = pending.slice();
+    }
+    delete blocks._pendingImages;
+    return block;
+  }
+
   // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.
   function nodePathTo(root, target) {
     const path = [];
@@ -1246,6 +1305,17 @@ const PdfExport = (function () {
         // la note.
         if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: zoneBlock, number: fe.number, text: fe.text })));
         push(zoneBlock, node);
+        pendingPageBreak = false; floatCarry = null;
+        return;
+      }
+      if (node.classList.contains('callout')) {
+        const footnoteCheckpoint = footnoteEntries.length;
+        let calloutBlock;
+        try { calloutBlock = await calloutFrom(node, pendingPageBreak, rootRect); }
+        catch (e) { console.warn('[PdfExport] encadré ignoré (structure inattendue), repli en texte brut :', e); calloutBlock = fallbackTextBlock(node, pendingPageBreak); }
+        if (calloutBlock && calloutBlock._nestedPending) { nestedPendingAll.push(...calloutBlock._nestedPending); delete calloutBlock._nestedPending; }
+        if (footnoteEntries.length > footnoteCheckpoint) footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: calloutBlock, number: fe.number, text: fe.text })));
+        push(calloutBlock, node);
         pendingPageBreak = false; floatCarry = null;
         return;
       }

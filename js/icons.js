@@ -73,10 +73,13 @@ const Icons = (function () {
     // Un 0 (ovale) barré d'un trait (Ø) : bouton « Ne rien afficher si la valeur vaut zéro » de la barre d'un nombre. Le trait (l'unique <path>) est caché par l'attribut
     // `display` quand la bulle affiche le zéro : on ne remplace pas le SVG, la cible d'un clic en train de se produire doit rester dans la barre (cf. wireVariableFloatingToolbar).
     zeroToggle: '<ellipse cx="12" cy="12" rx="5.5" ry="8"/><path d="M5 21 19 3"/>',
-    // Menu « Lien, citation, bloc de code » de la barre (une seule icône, js/link-dialog.js) : maillon HORIZONTAL pour le lien - le maillon en diagonale
+    // Menu « Lien et blocs de contenu » de la barre (une seule icône, js/link-dialog.js) : maillon HORIZONTAL pour le lien - le maillon en diagonale
     // (varLinked) est déjà pris par « autres attributs » de la barre d'une bulle, une icône ne porte qu'une fonction - et chevrons pour le bloc de code.
     link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
     codeBlock: '<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>',
+    // Encadré (une boîte avec sa barre de couleur à gauche et deux lignes de texte) et bloc de signature (un paraphe au-dessus de sa ligne), lignes du même menu.
+    callout: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14"/><path d="M11.5 10h5M11.5 14h3"/>',
+    signature: '<path d="M3 20h18"/><path d="M5 15.5c1.5-3.8 2.8-8 4-8 1.3 0-.5 6.4.9 6.4 1.4 0 2.2-3.8 3.4-3.8 1 0 .9 2.4 2 2.4.6 0 1.2-.7 1.7-1.5"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();

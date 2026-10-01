@@ -96,5 +96,20 @@ const ExportCommon = (function () {
     return (node.textContent || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/\t/g, '    '));
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables, codeLinesOf };
+  // Mesures d'un encadré (js/callout.js) en pixels, prises sur son CSS réel (css/callout.css) quand il est dans le document : barre de gauche, marges intérieures et extérieures, icône
+  // (le ::before). Les valeurs de css/callout.css servent de repli pour un nœud détaché de la page. Partagé par le PDF et le Word, pour qu'ils dessinent la même boîte.
+  function calloutMetricsPx(node) {
+    const live = !!node && node.isConnected;
+    const cs = live ? getComputedStyle(node) : null;
+    const before = live ? getComputedStyle(node, '::before') : null;
+    const num = (style, name, fallback) => { const n = style ? parseFloat(style[name]) : NaN; return Number.isFinite(n) ? n : fallback; };
+    return {
+      barPx: num(cs, 'borderLeftWidth', 4),
+      padLeftPx: num(cs, 'paddingLeft', 40), padRightPx: num(cs, 'paddingRight', 12), padTopPx: num(cs, 'paddingTop', 8), padBottomPx: num(cs, 'paddingBottom', 8),
+      marginTopPx: num(cs, 'marginTop', 6), marginBottomPx: num(cs, 'marginBottom', 6),
+      iconSizePx: num(before, 'width', 20), iconLeftPx: num(before, 'left', 12), iconTopPx: num(before, 'top', 10),
+    };
+  }
+
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
 })();

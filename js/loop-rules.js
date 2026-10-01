@@ -206,7 +206,8 @@ const LoopRules = (function () {
     }
     return null;
   }
-  // Retire un élément, puis la liste ou le tableau qu'il laisse vide (un <ul> ou un <table> sans ligne ne s'affiche pas, et n'a rien à exporter).
+  // Retire un élément, puis la liste, le tableau ou l'encadré qu'il laisse vide (un <ul> ou un <table> sans ligne ne s'affiche pas, et n'a rien à exporter ; un encadré (js/callout.js)
+  // sans contenu se verrait encore : sa barre et son fond).
   function removeAndPrune(el) {
     let parent = el.parentElement;
     el.remove();
@@ -216,6 +217,7 @@ const LoopRules = (function () {
       else if (parent.matches('tbody, thead, tfoot') && !parent.querySelector(':scope > tr')) parent.remove();
       else if (parent.matches('table') && !parent.querySelector('tr')) parent.remove();
       else if (parent.matches('li') && !parent.children.length && !parent.textContent.trim()) parent.remove();
+      else if (parent.matches('.callout') && !parent.children.length && !parent.textContent.trim()) parent.remove();
       else break;
       parent = next;
     }

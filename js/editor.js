@@ -317,6 +317,8 @@ const Editor = (function () {
     const TrackedTableCellWithBg = TrackChanges.extendForTracking(TableCellWithBg);
     const TrackedTwoColumnsColumn = TrackChanges.extendForTracking(TwoColumnsColumn);
     const TrackedTwoColumnsZone = TrackChanges.extendForTracking(TwoColumnsZone);
+    // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur ses enfants.
+    const TrackedCallout = TrackChanges.extendForTracking(Callout.createNode(Node, mergeAttributes));
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
@@ -373,6 +375,7 @@ const Editor = (function () {
         TrackedTableCellWithBg,
         TrackedTwoColumnsColumn,
         TrackedTwoColumnsZone,
+        TrackedCallout,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,

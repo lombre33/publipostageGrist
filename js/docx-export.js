@@ -431,7 +431,7 @@ const DocxExport = (function () {
         const rowSpan = parseInt(cell.getAttribute('rowspan') || '1', 10) || 1;
         const width = colWidthsTwip.slice(colIndex, colIndex + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
         colIndex += span;
-        const children = await blocksFromContainer(cell, ctx);
+        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP));
         tableCells.push(new docx.TableCell({
           children: children.length ? children : [new docx.Paragraph('')],
           width: { size: width, type: docx.WidthType.DXA },
@@ -472,7 +472,7 @@ const DocxExport = (function () {
     const widths = [leftTwip, gapTwip, rightTwip];
     const cells = [];
     for (let i = 0; i < 2; i += 1) {
-      const children = await blocksFromContainer(cols[i], ctx);
+      const children = await blocksFromContainer(cols[i], ctx, false, i === 0 ? leftTwip : rightTwip);
       const cell = new docx.TableCell({
         children: children.length ? children : [new docx.Paragraph('')],
         width: { size: i === 0 ? leftTwip : rightTwip, type: docx.WidthType.DXA },
@@ -486,6 +486,58 @@ const DocxExport = (function () {
     }
     // Même correctif que tableBlockFrom : columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs réelles des cellules.
     return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
+  }
+
+  // Encadré (js/callout.js) : un tableau Word à une ligne et deux cellules - l'icône (PNG tracé d'après les mêmes dessins que le CSS) à gauche, les blocs de l'encadré à droite - avec le
+  // fond teinté sur toute la ligne et, pour seul filet, une barre épaisse de la couleur d'accent à gauche. Mêmes mesures que css/callout.css (ExportCommon.calloutMetricsPx). Un paragraphe
+  // de la hauteur de la marge (`margin: 6px 0`) avant et après : sans paragraphe entre eux Word fusionne deux tableaux qui se suivent, et une cellule ne peut pas se terminer par un
+  // tableau. `widthTwip` : la largeur de la colonne ou de la cellule qui contient l'encadré, la page entière pour le corps du document.
+  function dataUrlBytes(dataUrl) {
+    const bin = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  async function calloutBlocksFrom(node, ctx, widthTwip, pageBreakBefore) {
+    const m = ExportCommon.calloutMetricsPx(node);
+    const color = Callout.colorOf(node.getAttribute('data-color'));
+    const iconKey = node.getAttribute('data-icon');
+    const hex = css => css.replace('#', '').toUpperCase();
+    const totalTwip = widthTwip || CONTENT_WIDTH_TWIP;
+    const leftTwip = Math.round(m.padLeftPx * PX_TO_TWIP);
+    const rightTwip = Math.max(400, totalTwip - leftTwip);
+    const marginTwip = px => Math.round(px * PX_TO_TWIP);
+    const iconPx = Math.round(m.iconSizePx);
+    ctx.imageIdCounter += 1;
+    const icon = new docx.ImageRun({
+      type: 'png', data: dataUrlBytes(Callout.iconPng(iconKey, color.accent, 96)), transformation: { width: iconPx, height: iconPx },
+      altText: { id: ctx.imageIdCounter, name: '', description: I18n.t('callout.icon.' + iconKey), title: '' },
+    });
+    const shading = { type: docx.ShadingType.CLEAR, fill: hex(color.tint), color: 'auto' };
+    // La barre : huitièmes de point (24 = 3pt = les 4px du CSS).
+    const bar = { style: 'single', size: Math.max(2, Math.round(m.barPx * 0.75 * 8)), color: hex(color.accent), space: 0 };
+    const iconCell = new docx.TableCell({
+      children: [new docx.Paragraph({ children: [icon], spacing: { before: marginTwip(Math.max(0, m.iconTopPx - m.padTopPx)), after: 0 } })],
+      width: { size: leftTwip, type: docx.WidthType.DXA },
+      shading,
+      borders: { top: NO_BORDER, bottom: NO_BORDER, right: NO_BORDER, left: bar },
+      margins: { top: marginTwip(m.padTopPx), bottom: marginTwip(m.padBottomPx), left: marginTwip(m.iconLeftPx), right: 0 },
+    });
+    let children = await blocksFromContainer(node, ctx, false, Math.max(200, rightTwip - marginTwip(m.padRightPx)));
+    if (!children.length || children[children.length - 1] instanceof docx.Table) children = children.concat([new docx.Paragraph('')]);
+    const textCell = new docx.TableCell({
+      children,
+      width: { size: rightTwip, type: docx.WidthType.DXA },
+      shading,
+      borders: { top: NO_BORDER, bottom: NO_BORDER, right: NO_BORDER, left: NO_BORDER },
+      margins: { top: marginTwip(m.padTopPx), bottom: marginTwip(m.padBottomPx), left: 0, right: marginTwip(m.padRightPx) },
+    });
+    const table = new docx.Table({
+      rows: [new docx.TableRow({ children: [iconCell, textCell] })],
+      width: { size: totalTwip, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: [leftTwip, rightTwip], layout: docx.TableLayoutType.FIXED,
+    });
+    const spacer = breakBefore => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: marginTwip(m.marginTopPx), lineRule: 'exact' }, pageBreakBefore: !!breakBefore });
+    return [spacer(pageBreakBefore), table, spacer(false)];
   }
 
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
@@ -573,7 +625,7 @@ const DocxExport = (function () {
   // Coeur du module : parcourt les enfants directs d'un conteneur (corps du document, cellule de tableau, colonne 2-colonnes, zone en-tête/pied - les
   // quatre partagent la MÊME logique ici, contrairement à pdf-export.js qui doit distinguer "flux pdfmake" et "cellule" à cause des contraintes de
   // pdfmake) et renvoie un tableau de Paragraph/Table, prêt à poser tel quel dans `children` (Document/TableCell/Header/Footer acceptent tous la même forme).
-  async function blocksFromContainer(container, ctx, isTopLevel) {
+  async function blocksFromContainer(container, ctx, isTopLevel, widthTwip) {
     let headingMarkers = null;
     if (isTopLevel) {
       const config = container.querySelector(':scope > .heading-numbering-config');
@@ -599,6 +651,11 @@ const DocxExport = (function () {
       if (node.classList.contains('two-columns-zone')) {
         const block = await twoColumnsBlockFrom(node, ctx);
         if (block) blocks.push(block);
+        pendingPageBreak = false;
+        continue;
+      }
+      if (node.classList.contains('callout')) {
+        blocks.push(...await calloutBlocksFrom(node, ctx, widthTwip, pendingPageBreak));
         pendingPageBreak = false;
         continue;
       }

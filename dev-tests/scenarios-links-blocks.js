@@ -116,8 +116,8 @@
   // === 2) Le menu de la barre ===============================================================================================================================
 
   cases.push({
-    id: 'lb_menu_is_one_icon_with_link_quote_and_code_rows',
-    description: 'Un seul bouton dans la barre pour lien + citation + bloc de code (le groupe à survol), trois lignes dans son volet ; la ligne Lien annonce Ctrl+K ; le bouton porte le raccourci dans son nom',
+    id: 'lb_menu_is_one_icon_with_link_quote_code_callout_and_signature_rows',
+    description: 'Un seul bouton dans la barre pour lien + citation + bloc de code + encadré + signature (le groupe à survol), cinq lignes dans son volet ; la ligne Lien annonce Ctrl+K ; le bouton porte le raccourci dans son nom (l\'encadré et la signature ont leurs propres scénarios : calloutSignature)',
     run: async (h) => {
       await h.resetEditor();
       const group = document.getElementById('v2-blocks-group');
@@ -125,17 +125,17 @@
       const main = document.getElementById('v2-btn-link');
       const rows = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.id);
       const topLevelButtons = Array.from(group.children).filter(c => c.tagName === 'BUTTON').map(b => b.id);
-      const toolbarLevel = ['v2-btn-citation', 'v2-btn-code-block', 'v2-row-link'].filter(id => document.getElementById(id).parentElement === document.getElementById('v2-toolbar'));
+      const toolbarLevel = ['v2-btn-citation', 'v2-btn-code-block', 'v2-row-link', 'v2-btn-callout', 'v2-btn-signature'].filter(id => document.getElementById(id).parentElement === document.getElementById('v2-toolbar'));
       const kbd = document.getElementById('v2-row-link-kbd').textContent;
       const shortcut = LinkDialog.shortcutLabel();
       const labels = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.textContent.trim());
-      const iconOk = ['v2-btn-link', 'v2-row-link', 'v2-btn-citation', 'v2-btn-code-block'].every(id => document.getElementById(id).querySelector('svg'));
+      const iconOk = ['v2-btn-link', 'v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature'].every(id => document.getElementById(id).querySelector('svg'));
       const aria = main.getAttribute('aria-label');
       const flyoutLabel = flyout.querySelector('.v2-hover-flyout-label').textContent;
       return {
-        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block']) && JSON.stringify(topLevelButtons) === JSON.stringify(['v2-btn-link'])
-          && toolbarLevel.length === 0 && /^(Ctrl\+K|⌘K)$/.test(kbd) && kbd === shortcut && iconOk && aria.includes(shortcut) && flyoutLabel === 'Lien, citation, bloc de code'
-          && labels[0].startsWith('Lien') && labels[1] === 'Citation' && labels[2].startsWith('Bloc de code'),
+        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature']) && JSON.stringify(topLevelButtons) === JSON.stringify(['v2-btn-link'])
+          && toolbarLevel.length === 0 && /^(Ctrl\+K|⌘K)$/.test(kbd) && kbd === shortcut && iconOk && aria.includes(shortcut) && flyoutLabel === 'Lien et blocs de contenu'
+          && labels[0].startsWith('Lien') && labels[1] === 'Citation' && labels[2].startsWith('Bloc de code') && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature',
         notes: JSON.stringify({ rows, topLevelButtons, toolbarLevel, kbd, iconOk, aria, flyoutLabel, labels }),
       };
     },
@@ -173,7 +173,7 @@
       }
       const frTitle = (await (async () => { await selectText('world'); await h.clickButton('v2-btn-link'); const t = document.getElementById('pp-link-title').textContent; await closeWindowIfOpen(); return t; })());
       return {
-        pass: JSON.stringify(en.labels) === JSON.stringify(['Link…', 'Quote', 'Code block']) && en.flyoutLabel === 'Link, quote, code block' && /Insert a link/.test(en.aria)
+        pass: JSON.stringify(en.labels) === JSON.stringify(['Link…', 'Quote', 'Code block', 'Callout…', 'Signature block']) && en.flyoutLabel === 'Link and content blocks' && /Insert a link/.test(en.aria)
           && en.title === 'Insert a link' && /address|valid/i.test(en.error) && !/[éèà]/.test(en.error) && en.urlLabel !== 'Adresse' && frTitle === 'Insérer un lien',
         notes: JSON.stringify({ en, frTitle }),
       };

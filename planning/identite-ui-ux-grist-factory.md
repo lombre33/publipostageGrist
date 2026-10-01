@@ -261,10 +261,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   jusqu'au prochain appui sur Tab ; celle du survol reste.
 - Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
   (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
-  est écrit sur la ligne), « Citation », « Bloc de code » ; les blocs suivants (encadré, signature) s'y ajoutent comme
-  lignes, jamais comme nouvelles icônes. Une ligne qui n'a pas de sens à cet endroit est grisée, jamais masquée : « Lien… »
-  dans un bloc de code, « Bloc de code » quand il effacerait une bulle `#Variable` ou une image, tout le menu en mode
-  macro et en Lecture. Fenêtre du lien (base commune des fenêtres) : « Adresse du lien » (http, https, mailto, tel ; sans
+  est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… » et « Bloc de signature » (titre du volet « Lien et
+  blocs de contenu ») ; les blocs suivants s'y ajoutent comme lignes, jamais comme nouvelles icônes. Une ligne qui n'a pas
+  de sens à cet endroit est grisée, jamais masquée : « Lien… » dans un bloc de code, « Bloc de code » quand il effacerait
+  une bulle `#Variable` ou une image, « Encadré… » et « Bloc de signature » en mode Email et dans un en-tête ou un pied de
+  page, tout le menu en mode macro et en Lecture. Fenêtre du lien (base commune des fenêtres) : « Adresse du lien » (http, https, mailto, tel ; sans
   protocole, `https://` est ajouté, une adresse e-mail devient `mailto:`, un numéro `tel:` ; `javascript:` et le reste sont
   refusés), « Texte à afficher » seulement quand rien n'est sélectionné, « Retirer le lien » seulement sur un lien
   existant (bouton cerclé de rouge, texte `--text` : `--danger` seul ne fait que 4,37:1 sur le fond de la fenêtre) ;
@@ -274,6 +275,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ouvrir » dans une info-bulle. Un lien est bleu `#0563C1` souligné (papier blanc : 5,9:1, comme dans Word), cliquable en
   Lecture, en PDF et en Word, écrit « texte (adresse) » dans un e-mail. Un bloc de code est en chasse fixe (Cousine ; Courier
   New en Word) sur fond gris, sans variables, et un PDF ne le coupe qu'entre deux lignes.
+  Encadré (réponse d'Antoine du 01/10 : « encadré Note, Attention ou Important, couleur et icône au choix ») : « Encadré… »
+  ouvre une fenêtre de la base commune, qui tient dans 700×400 sans défiler — Type (« Note » bleu, « Attention » orange,
+  « Important » rouge : un point de départ qui pose couleur et icône ensemble), Couleur (six ronds : bleu, vert, orange,
+  rouge, violet, gris), Icône (information, triangle, point d'exclamation, coche, ampoule, étoile) et un aperçu sur une
+  feuille blanche (le papier reste blanc en sombre). Les flèches et Début/Fin changent le choix, un seul arrêt de Tab par
+  groupe, Entrée valide, Échap annule. Dans un encadré la ligne devient « Modifier l'encadré… » et la même fenêtre offre
+  « Retirer l'encadré » (même bouton cerclé de rouge que « Retirer le lien »). L'encadré est un fond teinté, une barre de
+  4 px de la couleur d'accent à gauche et l'icône dans la marge, le texte garde la couleur du document ; palette unique
+  (`js/callout.js`) lue par l'éditeur, la Lecture, le PDF et le Word, texte ≥ 4,5:1 sur les six teintes, barre et icône
+  ≥ 3:1. Pas de titre écrit tout seul ; seuls la couleur et l'icône sont gardées (le type n'est pas stocké). Entrée deux
+  fois en sort, comme d'une citation ; sur un élément de liste, l'encadré prend la liste entière. En e-mail (texte brut) il
+  s'écrit sans fond ni mot ajouté. Bloc de signature : une zone 2 colonnes toute faite (trois lignes vides pour signer, une
+  ligne de tirets bas, puis « Nom et signature » à gauche et « Date » à droite) posée sous le bloc du curseur, jamais dedans ;
+  c'est du texte ordinaire, qu'on modifie (une variable à la place du nom, une autre légende).
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la

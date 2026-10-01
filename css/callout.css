@@ -1,0 +1,39 @@
+/* Encadré du document et fenêtre « Insérer / Modifier l'encadré » (js/callout.js). Les couleurs et l'icône de l'encadré (variables --callout-accent, --callout-tint et
+   --callout-icon, portées par ses attributs data-color et data-icon) sont générées par le script, d'après sa palette : ne reste ici que la mise en page. Mêmes valeurs
+   EXACTES dans l'éditeur, la Lecture et l'aperçu de la fenêtre (une différence d'un pixel déplace une coupure de ligne, cf. css/editor-v2.css). Chargé après
+   css/modal-base.css et css/variable-actions.css (le cadre, le libellé et les boutons de la fenêtre en viennent). */
+
+/* === L'encadré dans le document === Fond teinté, barre de couleur à gauche, icône de 20 px dans la marge de gauche (le contenu commence à 44 px du bord : 4 de barre
+   et 40 de retrait). Le papier est blanc dans les deux thèmes : le texte garde la couleur du texte du document. */
+.tiptap .callout, #reader-container .reader-content .callout, .pp-callout-paper .callout {
+  position: relative; box-sizing: border-box; margin: 6px 0; padding: 8px 12px 8px 40px;
+  background: var(--callout-tint); border-left: 4px solid var(--callout-accent); border-radius: 0 6px 6px 0;
+  color: #1b2430; font-style: normal;
+}
+.tiptap .callout::before, #reader-container .reader-content .callout::before, .pp-callout-paper .callout::before {
+  content: ''; position: absolute; left: 12px; top: 10px; width: 20px; height: 20px;
+  background-color: var(--callout-accent);
+  -webkit-mask: var(--callout-icon) center / contain no-repeat; mask: var(--callout-icon) center / contain no-repeat;
+}
+
+/* === La fenêtre === Libellé à gauche, choix à droite : trois lignes et l'aperçu tiennent dans les 376 px du panneau de 700x400, sans défiler. */
+.pp-callout-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 12px; row-gap: 12px; align-items: center; padding-bottom: 2px; }
+.pp-callout-label { font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-callout-options { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pp-callout-type, .pp-callout-icon-option, .pp-callout-swatch { box-sizing: border-box; padding: 0; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.pp-callout-type { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 8px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; }
+.pp-callout-type-icon { display: inline-flex; flex: none; }
+.pp-callout-type-icon svg, .pp-callout-icon-option svg { display: block; width: 18px; height: 18px; }
+.pp-callout-icon-option { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); }
+.pp-callout-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface); background: var(--swatch); box-shadow: 0 0 0 1px var(--border-strong); }
+.pp-callout-type:hover, .pp-callout-icon-option:hover { background: var(--accent-soft); }
+.pp-callout-type[aria-checked="true"], .pp-callout-icon-option[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+/* Le rond de couleur choisi : un anneau qui se lit sur les deux fonds (le texte, 4,5:1 sur la fenêtre, et pas la couleur du rond, qui peut lui ressembler). */
+.pp-callout-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--text); }
+.pp-callout-type:focus-visible, .pp-callout-icon-option:focus-visible, .pp-callout-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* L'aperçu est une petite feuille blanche, comme le papier du document : l'encadré y garde ses vraies couleurs dans le thème sombre. */
+.pp-callout-paper { padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: #fff; min-width: 0; }
+.pp-callout-paper .callout { margin: 4px 0; font-size: 13px; line-height: 1.42; font-family: 'Roboto', Helvetica, Arial, sans-serif; }
+.pp-callout-paper .callout p { margin: 0; }
+/* « Retirer l'encadré » : même règle que « Retirer le lien » (le rouge de --danger ne fait que 4,4:1 sur blanc : le texte garde sa couleur, le contour dit « destructif »). */
+.pp-callout-box .var-modal-actions button.var-modal-danger { color: var(--text); border-color: var(--danger); padding: 0 12px; }

@@ -166,10 +166,11 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    // Menu « Lien, citation, bloc de code » (js/link-dialog.js) : l'icône du bouton est celle du lien, chaque ligne du menu garde la sienne devant son texte.
+    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js) : l'icône du bouton est celle du lien, chaque ligne du menu garde la sienne devant son texte.
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
+    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-track-changes', 'trackChanges');
@@ -219,6 +220,10 @@ const MainToolbar = (function () {
     const inLink = editor.isActive('link');
     setActive('v2-btn-link', inLink);
     setActive('v2-row-link', inLink);
+    // Dans un encadré, la ligne « Encadré… » devient « Modifier l'encadré… » (la même fenêtre change sa couleur et son icône, ou le retire).
+    const inCallout = Callout.isInside(editor);
+    setActive('v2-btn-callout', inCallout);
+    relabelCallout(inCallout);
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
@@ -258,13 +263,16 @@ const MainToolbar = (function () {
     setLocked('v2-btn-undo', inMacroMode);
     setLocked('v2-btn-redo', inMacroMode);
     setLocked('v2-btn-track-changes', inMacroMode);
-    // Menu « Lien, citation, bloc de code » : grisé en entier pour un macro-modèle (comme le reste de la barre) ; en édition, deux lignes se grisent selon la
+    // Menu « Lien et blocs de contenu » : grisé en entier pour un macro-modèle (comme le reste de la barre) ; en édition, deux lignes se grisent selon la
     // sélection au lieu de disparaître - pas de lien dans un bloc de code ni sur une image seule, pas de bloc de code qui effacerait une variable ou une image.
     setLocked('v2-blocks-group', inMacroMode);
     const linkImpossible = !LinkDialog.canLinkHere(editor);
     setLocked('v2-btn-link', linkImpossible);
     setLocked('v2-row-link', linkImpossible);
     setLocked('v2-btn-code-block', !editor.isActive('codeBlock') && codeBlockWouldDropContent());
+    // Encadré et signature : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page ; la signature est une zone 2 colonnes, verrouillée là aussi.
+    setLocked('v2-btn-callout', inEmailMode || inHfMode);
+    setLocked('v2-btn-signature', inEmailMode || inHfMode);
     setLocked('v2-btn-accept-all', inMacroMode);
     setLocked('v2-btn-reject-all', inMacroMode);
     const headerSelect = document.getElementById('v2-header-select');
@@ -337,6 +345,12 @@ const MainToolbar = (function () {
   }
   // Le raccourci du lien dépend de la plateforme (Ctrl+K ou ⌘K) : posé sur l'aria-label du bouton et dans la ligne « Lien… » du menu, et réécrit à chaque
   // changement de langue (applyTranslations remet sinon l'aria-label sans lui) - même schéma que decorateSaveButtonShortcut dans js/main.js.
+  // Libellé de la ligne « Encadré… » : « Modifier l'encadré… » quand le curseur est dans un encadré. Réécrit à chaque changement d'état et de langue (data-i18n ne porte que
+  // la version « insérer »).
+  function relabelCallout(inside) {
+    const label = document.getElementById('v2-btn-callout-label');
+    if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
+  }
   function decorateLinkShortcut() {
     const label = LinkDialog.shortcutLabel();
     const button = document.getElementById('v2-btn-link');
@@ -408,8 +422,12 @@ const MainToolbar = (function () {
     // Nœud blockquote de StarterKit, déjà géré en PDF/DOCX/mode Lecture - seul un point d'entrée manquait.
     bind('v2-btn-citation', () => editor.chain().focus().toggleBlockquote().run());
     bind('v2-btn-code-block', toggleCodeBlock);
+    // Encadré : une fenêtre (couleur, icône) pour l'insérer autour de la sélection ou, dans un encadré, pour le modifier ; signature : un morceau de document tout fait.
+    bind('v2-btn-callout', () => Callout.open());
+    bind('v2-btn-signature', () => Callout.insertSignature(editor));
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
+    I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
     bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());

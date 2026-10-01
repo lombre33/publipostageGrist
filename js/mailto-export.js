@@ -110,37 +110,43 @@ const MailtoExport = (function () {
     }
 
     const blocks = [];
-    root.childNodes.forEach(node => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent.trim();
+    // Les blocs d'un conteneur, dans l'ordre : le corps du document, et l'intérieur d'un encadré (js/callout.js), qui n'a ni fond ni barre en texte brut - ses blocs s'écrivent
+    // comme ceux du corps, listes comprises.
+    function collectBlocks(container) {
+      container.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent.trim();
+          if (text) blocks.push(text);
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName;
+        if (tag === 'UL' || tag === 'OL') { blocks.push(listItemsText(node, 0).join('\n')); return; }
+        if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'BLOCKQUOTE') { blocks.push(inlineText(node).trim()); return; }
+        // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais l'indentation de la première ligne).
+        if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
+        if (node.classList.contains('callout')) { collectBlocks(node); return; }
+        if (tag === 'HR') { blocks.push('---'); return; }
+        if (tag === 'IMG') return;
+        // Balise jamais destinée à l'utilisateur (ex. <style> injecté par l'aperçu A4 paginé de
+        // ReaderMode dans .reader-content) - à ignorer, jamais à extraire comme texte.
+        if (tag === 'STYLE' || tag === 'SCRIPT') return;
+        if (tag === 'TABLE') {
+          // Dégradation minimale (le bouton Tableau est grisé en mode email - ce cas ne devrait
+          // survenir qu'après un collage) : une ligne par ligne de tableau, cellules séparées par " | ".
+          const rows = Array.from(node.querySelectorAll('tr')).map(tr =>
+            Array.from(tr.querySelectorAll('td, th')).map(cell => inlineText(cell).trim()).join(' | ')
+          );
+          blocks.push(rows.join('\n'));
+          return;
+        }
+        // Repli générique (zone 2-colonnes, autre bloc non prévu ci-dessus) : extrait le texte plutôt
+        // que de le perdre silencieusement.
+        const text = inlineText(node).trim();
         if (text) blocks.push(text);
-        return;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      const tag = node.tagName;
-      if (tag === 'UL' || tag === 'OL') { blocks.push(listItemsText(node, 0).join('\n')); return; }
-      if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'BLOCKQUOTE') { blocks.push(inlineText(node).trim()); return; }
-      // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais l'indentation de la première ligne).
-      if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
-      if (tag === 'HR') { blocks.push('---'); return; }
-      if (tag === 'IMG') return;
-      // Balise jamais destinée à l'utilisateur (ex. <style> injecté par l'aperçu A4 paginé de
-      // ReaderMode dans .reader-content) - à ignorer, jamais à extraire comme texte.
-      if (tag === 'STYLE' || tag === 'SCRIPT') return;
-      if (tag === 'TABLE') {
-        // Dégradation minimale (le bouton Tableau est grisé en mode email - ce cas ne devrait
-        // survenir qu'après un collage) : une ligne par ligne de tableau, cellules séparées par " | ".
-        const rows = Array.from(node.querySelectorAll('tr')).map(tr =>
-          Array.from(tr.querySelectorAll('td, th')).map(cell => inlineText(cell).trim()).join(' | ')
-        );
-        blocks.push(rows.join('\n'));
-        return;
-      }
-      // Repli générique (zone 2-colonnes, autre bloc non prévu ci-dessus) : extrait le texte plutôt
-      // que de le perdre silencieusement.
-      const text = inlineText(node).trim();
-      if (text) blocks.push(text);
-    });
+      });
+    }
+    collectBlocks(root);
 
     return blocks.filter(b => b.length > 0).join('\n\n');
   }
