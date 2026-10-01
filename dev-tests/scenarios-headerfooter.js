@@ -213,6 +213,171 @@
     },
   });
 
+  // --- Un en-tête ou un pied de page sans contenu n'est pas « activé » (Antoine, 01/10) ---
+  // Un clic dans la marge, même par erreur, puis « Terminer » sans rien écrire laissait un en-tête activé : exitHeaderFooterMode gardait le « <p></p> » de
+  // l'éditeur et l'état activé posé à l'entrée. En Lecture, ce fragment vide ouvrait une bande blanche de 26 px au-dessus (et au-dessous) de la feuille.
+  const EMPTY_DATA = () => ({ enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+  const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const hfZone = pos => document.querySelector('#editor-container .v2-page-edge-' + pos);
+  async function openZone(h, pos) {
+    const zone = hfZone(pos);
+    if (!zone) return false;
+    zone.click();
+    await h.sleep(100);
+    return Editor.isEditingHeaderFooter();
+  }
+  async function clickDone(h) {
+    const doneBtn = document.getElementById('v2-hf-btn-done');
+    if (doneBtn) doneBtn.click();
+    await h.sleep(100);
+    return !Editor.isEditingHeaderFooter();
+  }
+  // Ce que la Lecture ouvre au-dessus et au-dessous de la feuille pour ces données (une bande par zone qui a quelque chose à montrer).
+  async function readerEdges(h, hf) {
+    await h.renderReaderMode('<p>Corps</p>', JSON.parse(JSON.stringify(hf)));
+    await h.sleep(200);
+    const container = document.getElementById('reader-container');
+    const edges = { top: container.querySelectorAll('.v2-page-edge-top').length, bottom: container.querySelectorAll('.v2-page-edge-bottom').length };
+    // renderReaderMode montre les deux conteneurs à la fois (jamais le cas en usage réel) : retour au Mode édition pour les scénarios suivants.
+    container.style.display = '';
+    document.getElementById('editor-container').style.display = '';
+    document.getElementById('btn-mode-edit').click();
+    await h.sleep(60);
+    return edges;
+  }
+
+  cases.push({
+    id: 'hf_click_then_done_without_typing_leaves_nothing_enabled',
+    description: 'Un clic dans la zone d\'en-tête puis « Terminer » sans rien écrire ne laisse aucun en-tête ni pied de page activé (pas de « <p></p> » gardé)',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHeaderFooterData(EMPTY_DATA());
+      await h.sleep(80);
+      const entered = await openZone(h, 'top');
+      const closed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const clean = !data.enabled && !data.differentFirstPage && !data.header.default && !data.header.first && !data.footer.default && !data.footer.first;
+      const edges = await readerEdges(h, data);
+      return { pass: entered && closed && clean && edges.top === 0 && edges.bottom === 0, notes: JSON.stringify({ entered, closed, data, edges }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_empty_header_done_keeps_the_filled_footer',
+    description: 'Un clic par erreur dans l\'en-tête, « Terminer » : le pied de page rempli reste activé, l\'en-tête n\'est pas gardé vide (pas de bande blanche en Lecture)',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHeaderFooterData(Object.assign(EMPTY_DATA(), { enabled: true, footer: { default: '<p>Pied du modèle</p>', first: '' } }));
+      await h.sleep(80);
+      const entered = await openZone(h, 'top');
+      const closed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const edges = await readerEdges(h, data);
+      const pass = entered && closed && data.enabled && data.header.default === '' && data.footer.default.includes('Pied du modèle') && edges.top === 0 && edges.bottom === 1;
+      return { pass, notes: JSON.stringify({ entered, closed, data, edges }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_emptied_header_done_is_removed',
+    description: 'Un en-tête rempli puis entièrement effacé, « Terminer » : il est retiré, rien ne reste activé',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHeaderFooterData(Object.assign(EMPTY_DATA(), { enabled: true, header: { default: '<p>À effacer</p>', first: '' } }));
+      await h.sleep(80);
+      const entered = await openZone(h, 'top');
+      await h.focusAtEnd();
+      await h.selectAllInEditor();
+      document.execCommand('delete');
+      await h.sleep(60);
+      const closed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const pass = entered && closed && !data.enabled && !data.header.default && !data.footer.default;
+      return { pass, notes: JSON.stringify({ entered, closed, data }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_with_content_stays_enabled_after_done',
+    description: 'Un texte tapé dans l\'en-tête reste après « Terminer », avec l\'en-tête activé (non-régression de la suppression automatique)',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHeaderFooterData(EMPTY_DATA());
+      await h.sleep(80);
+      const entered = await openZone(h, 'top');
+      await h.focusAtEnd();
+      await h.typeText('Courrier officiel');
+      await h.sleep(60);
+      const closed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const edges = await readerEdges(h, data);
+      const pass = entered && closed && data.enabled && data.header.default.includes('Courrier officiel') && !data.footer.default && edges.top === 1 && edges.bottom === 0;
+      return { pass, notes: JSON.stringify({ entered, closed, data, edges }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_image_only_and_page_number_only_zones_are_content',
+    description: 'Un en-tête qui ne contient qu\'une image et un pied qui ne contient qu\'un numéro de page ne sont pas vides : rouverts puis « Terminer », ils restent',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      const badge = '<span class="page-number-badge" contenteditable="false" data-format="n">#</span>';
+      Editor.setHeaderFooterData(Object.assign(EMPTY_DATA(), {
+        enabled: true,
+        header: { default: '<p><img class="editor-image" src="' + PIXEL + '" alt="" style="width: 40px;"></p>', first: '' },
+        footer: { default: '<p>' + badge + '</p>', first: '' },
+      }));
+      await h.sleep(80);
+      const topOpened = await openZone(h, 'top');
+      const topClosed = await clickDone(h);
+      const bottomOpened = await openZone(h, 'bottom');
+      const bottomClosed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const pass = topOpened && topClosed && bottomOpened && bottomClosed && data.enabled && /<img/.test(data.header.default) && /page-number-badge/.test(data.footer.default);
+      return { pass, notes: JSON.stringify({ topOpened, topClosed, bottomOpened, bottomClosed, data }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_first_page_only_header_is_kept',
+    description: 'Un en-tête présent seulement sur la première page (variante « première page » remplie, l\'autre vide) reste activé, avec sa case cochée, après « Terminer »',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      Editor.setHeaderFooterData(Object.assign(EMPTY_DATA(), { enabled: true, differentFirstPage: true, header: { default: '', first: '<p>Première page seulement</p>' } }));
+      await h.sleep(80);
+      const entered = await openZone(h, 'top');
+      const closed = await clickDone(h);
+      const data = Editor.getHeaderFooterData();
+      const pass = entered && closed && data.enabled && data.differentFirstPage && data.header.first.includes('Première page seulement') && data.header.default === '';
+      return { pass, notes: JSON.stringify({ entered, closed, data }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_loading_an_empty_activated_header_cleans_it',
+    description: 'Un modèle déjà enregistré avec un en-tête « activé » mais vide est remis à plat à l\'ouverture ; un modèle qui a un pied rempli garde son état',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: true, header: { default: '<p></p>', first: '<p></p>' }, footer: { default: '<p></p>', first: '' } });
+      const emptied = Editor.getHeaderFooterData();
+      const emptiedOk = !emptied.enabled && !emptied.differentFirstPage && !emptied.header.default && !emptied.header.first && !emptied.footer.default;
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p></p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } });
+      const kept = Editor.getHeaderFooterData();
+      const keptOk = kept.enabled && kept.header.default === '' && kept.footer.default === '<p>Pied</p>';
+      // Une variante « première page » laissée dans les données alors que la case est décochée ne garde rien d'activé à elle seule.
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '<p>Oubliée</p>' }, footer: { default: '', first: '' } });
+      const orphan = Editor.getHeaderFooterData();
+      const orphanOk = !orphan.enabled && orphan.header.first === '<p>Oubliée</p>';
+      return { pass: emptiedOk && keptOk && orphanOk, notes: JSON.stringify({ emptied, kept, orphan }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

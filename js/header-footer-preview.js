@@ -65,9 +65,27 @@ const HeaderFooterPreview = (function () {
     renderPaginationOverlay();
   }
 
+  // Fragment d'en-tête/pied qui montre quelque chose : du texte (le numéro de page, une variable, une puce intelligente en portent un) ou une image. Même règle
+  // que measureHtmlHeightPx, updateHfZone et pdf-export.js:resolveZone - ce que l'écran et l'export ignorent est aussi ce qu'on ne garde pas.
+  function hasZoneContent(html) {
+    return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
+  }
+  // Un en-tête ou un pied de page sans contenu n'existe pas : un clic dans la marge puis « Terminer » sans rien écrire (ou après avoir tout effacé) ne doit rien
+  // laisser « activé ». Un fragment vide (« <p></p> », ce que l'éditeur rend d'un fragment sans texte) devient une chaîne vide - en Lecture, il ouvrait sinon une bande
+  // blanche de 26 px au-dessus ou au-dessous de la feuille - et sans aucun contenu dans les deux zones, ni en-tête ni pied ne reste activé, ni la première page
+  // différente. Ne touche jamais à un fragment qui a du contenu, ni à une variante « première page » qui n'est pas utilisée (case décochée).
+  function dropEmptyZones(data) {
+    const zones = ['header', 'footer'];
+    const variants = ['default', 'first'];
+    zones.forEach(zone => variants.forEach(variant => { if (!hasZoneContent(data[zone][variant])) data[zone][variant] = ''; }));
+    const used = data.differentFirstPage ? variants : ['default'];
+    if (!zones.some(zone => used.some(variant => data[zone][variant]))) { data.enabled = false; data.differentFirstPage = false; }
+  }
+
   function exitHeaderFooterMode() {
     if (!hfMode || !editor) return;
     headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
+    dropEmptyZones(headerFooterDraft);
     hfMode = null;
     editor.commands.setContent(mainDocSnapshot || '');
     mainDocSnapshot = null;
@@ -107,6 +125,9 @@ const HeaderFooterPreview = (function () {
     headerFooterDraft.header.first = HtmlSanitize.clean(headerFooterDraft.header.first);
     headerFooterDraft.footer.default = HtmlSanitize.clean(headerFooterDraft.footer.default);
     headerFooterDraft.footer.first = HtmlSanitize.clean(headerFooterDraft.footer.first);
+    // Un modèle enregistré avant ce nettoyage peut déjà porter un en-tête « activé » sans rien dedans (clic dans la marge puis « Terminer ») : remis à plat à
+    // l'ouverture, il est enregistré ainsi à la prochaine sauvegarde.
+    dropEmptyZones(headerFooterDraft);
     renderPaginationOverlay();
   }
 
@@ -194,7 +215,7 @@ const HeaderFooterPreview = (function () {
 
   function measureHtmlHeightPx(html) {
     // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
-    if (!html || (!html.replace(/<[^>]*>/g, '').trim() && !/<img[\s>]/i.test(html))) return 0;
+    if (!hasZoneContent(html)) return 0;
     const host = document.createElement('div');
     host.className = 'tiptap';
     host.innerHTML = html;
