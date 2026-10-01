@@ -165,5 +165,22 @@ const ExportCommon = (function () {
     return new Map(cells.map((cell, i) => [cell.el, sides[i]]));
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
+  // Les tranches d'une grille que ses sauts de page découpent (`data-page-break-before` sur une ligne : js/grid-editor.js) : une liste de [première ligne, ligne suivante la dernière[,
+  // une tranche par page du PDF et par feuille de l'Excel (`rows` : les lignes du tableau, dans l'ordre). Sans saut, une seule tranche : toutes les lignes. Un saut avant la première ligne
+  // n'ouvre rien (pas de page vide) et un saut qu'une case fusionnée sur plusieurs lignes traverse n'est pas suivi : l'éditeur ne laisse pas le poser, un HTML venu d'ailleurs le peut, et
+  // aucune case n'est jamais coupée en deux.
+  function gridRowSegments(rows) {
+    const starts = [0];
+    let reach = 0; // la première ligne que les cases des lignes déjà vues ne recouvrent plus
+    rows.forEach((tr, r) => {
+      if (r > 0 && tr.hasAttribute('data-page-break-before') && reach <= r) starts.push(r);
+      Array.from(tr.children).forEach((cell) => {
+        if (!/^(TD|TH)$/i.test(cell.tagName)) return;
+        reach = Math.max(reach, r + Math.min(rows.length - r, Math.max(1, parseInt(cell.getAttribute('rowspan') || '1', 10) || 1)));
+      });
+    });
+    return starts.map((from, i) => [from, i + 1 < starts.length ? starts[i + 1] : rows.length]);
+  }
+
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
 })();

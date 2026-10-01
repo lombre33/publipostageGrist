@@ -728,7 +728,26 @@ const PdfExport = (function () {
     };
     if (pageBreakBefore) table.pageBreak = 'before';
     if (tableNestedPending.length) table._nestedPending = tableNestedPending;
+    // Les sauts de page d'une grille (`data-page-break-before` sur une ligne) : les tranches de lignes que tableBlocksFrom en fera.
+    if (isGrid && body.length) {
+      const segments = ExportCommon.gridRowSegments(rawRows);
+      if (segments.length > 1) table._rowSegments = segments;
+    }
     return table;
+  }
+
+  // Un tableau en un ou plusieurs blocs : une grille dont des lignes portent un saut de page (js/grid-editor.js) est coupée avant chacune, et chaque morceau ouvre une page (le premier
+  // garde le saut que le tableau avait déjà). Les colonnes, le trait et les hauteurs sont ceux du tableau entier : tous les morceaux se lisent à la même largeur.
+  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow) {
+    const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow);
+    const segments = table._rowSegments;
+    delete table._rowSegments;
+    if (!segments) return [table];
+    return segments.map(([from, to], i) => {
+      const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: table.table.body.slice(from, to), heights: table.table.heights.slice(from, to) }) });
+      if (i > 0) { piece.pageBreak = 'before'; delete piece._nestedPending; }
+      return piece;
+    });
   }
 
   // Zone 2 colonnes : mesure la chrome CSS réelle (padding/bordure/largeur) en clonant la zone dans un hôte hors-écran, plutôt que de deviner ces valeurs.
@@ -1266,7 +1285,7 @@ const PdfExport = (function () {
 
   function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
     const tag = node.tagName.toUpperCase();
-    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect, availableWidthPt == null)];
+    if (tag === 'TABLE') return tableBlocksFrom(node, pageBreakBefore, rootRect, availableWidthPt == null);
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     if (tag === 'P' || tag === 'DIV') {

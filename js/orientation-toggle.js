@@ -14,8 +14,9 @@ const OrientationToggle = (function () {
   // Types de modèle (colonne TypeModele) dont les moteurs suivent le sens et le format de PageLayout. Le bouton et son menu sont grisés pour tous les autres : un
   // réglage qui ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ICI, quand ses moteurs suivent - sans toucher
   // js/main.js. Un macro-modèle porte sa propre page (colonne Margins de sa ligne, comme ses marges) et l'impose aux modèles qu'il assemble : l'assemblage ne reprend que le
-  // contenu de ces modèles (js/macro-templates.js), jamais leur page, donc la Lecture, le PDF et le Word d'un macro-modèle suivent la sienne.
-  const TYPES = ['document', 'macro'];
+  // contenu de ces modèles (js/macro-templates.js), jamais leur page, donc la Lecture, le PDF et le Word d'un macro-modèle suivent la sienne. Une grille n'a pas de page à
+  // l'écran : le sens et le format règlent la page de son PDF et la feuille de son Excel (js/xlsx-export.js:pageOptionsFromLayout).
+  const TYPES = ['document', 'macro', 'grille'];
   let currentType = 'document';
   let isReadOnly = () => false;
   let busy = false;

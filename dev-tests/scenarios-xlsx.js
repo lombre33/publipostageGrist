@@ -154,12 +154,13 @@
   }
   // Une grille aux dimensions connues : `rows` = le HTML de chaque ligne de cases (des <td> déjà écrits ou du texte), chargée comme un modèle enregistré.
   const td = (html, attrs) => `<td${attrs || ''}><p>${html}</p></td>`;
-  function gridHtml(widths, heights, rows) {
+  // `breaks` : les rangs des lignes qui portent un saut de page (`data-page-break-before`).
+  function gridHtml(widths, heights, rows, breaks) {
     const total = widths.reduce((sum, w) => sum + w, 0);
     let k = 0;
     const fix = cell => (cell.startsWith('<td') ? cell.replace('<td', `<td colwidth="${widths[k++ % widths.length]}"`) : `<td colwidth="${widths[k++ % widths.length]}"><p>${cell}</p></td>`);
     return `<table style="width: ${total}px;"><colgroup>${widths.map(w => `<col style="width: ${w}px;">`).join('')}</colgroup><tbody>`
-      + rows.map((row, r) => { k = 0; return `<tr data-row-height="${heights[r]}" style="height: ${heights[r]}px">${row.map(fix).join('')}</tr>`; }).join('') + '</tbody></table>';
+      + rows.map((row, r) => { k = 0; return `<tr data-row-height="${heights[r]}" style="height: ${heights[r]}px"${breaks && breaks.includes(r) ? ' data-page-break-before="true"' : ''}>${row.map(fix).join('')}</tr>`; }).join('') + '</tbody></table>';
   }
   async function loadGrid(html) {
     GridEditor.setActive(false);
@@ -170,7 +171,7 @@
   // Charge la grille, l'enregistre comme le modèle le serait (Editor.getHTML), l'exporte et ouvre le fichier.
   async function exportGrid(widths, heights, rows, options) {
     const o = options || {};
-    await loadGrid(gridHtml(widths, heights, rows));
+    await loadGrid(gridHtml(widths, heights, rows, o.breaks));
     const { blob, filename } = await XlsxExport.getXlsxBlobForRecord(Editor.getHTML(), o.tableId || TABLE, o.record || RECORD, o.template || '', o.options);
     return Object.assign(await openXlsx(blob), { filename, blob });
   }
@@ -1023,6 +1024,144 @@
       const bad = Object.keys(want).filter(ref => sidesOf(s, ref) !== want[ref]).map(ref => `${ref} = ${sidesOf(s, ref)} (attendu ${want[ref]})`);
       if (JSON.stringify(s.merges) !== JSON.stringify(['A1:B2'])) bad.push('fusions=' + s.merges);
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  // --- 14) Lot C : un saut de page ouvre une feuille ; la page de la feuille suit le sens et le format du modèle ----------------------------------------------------------------
+  const BREAK_ROWS = [
+    ['Titre', 'a', 'b'],
+    ['Client', 'c', 'd'],
+    ['x1', 'x2', 'x3'],
+    ['Observations', 'o2', 'o3'],
+    [td('fusionnée', ' rowspan="2"'), 'y2', 'y3'],
+    ['z2', 'z3'],
+  ];
+  const BREAK_HEIGHTS = [40, 30, 36, 50, 36, 32]; // toutes au-dessus de la hauteur d'une ligne de texte (29 px)
+
+  cases.push({
+    id: 'xlsx_a_page_break_starts_a_new_sheet_with_the_same_columns_and_its_own_row_numbers',
+    description: 'Une grille dont une ligne porte un saut de page donne deux feuilles, « nom » puis « nom (2) » : les mêmes colonnes (largeur), les lignes recomptées depuis 1 avec leur hauteur, les cases fusionnées à leur place dans la nouvelle feuille, la même mise en page (A4, une page de large) et le trait de départ sur chaque case ; sans saut, une seule feuille',
+    run: async (h) => {
+      await seed(h);
+      const widths = [120, 90, 160];
+      const x = await exportGrid(widths, BREAK_HEIGHTS, BREAK_ROWS, { breaks: [3] });
+      const [first, second] = x.sheets;
+      const bad = [];
+      if (x.sheets.length !== 2) bad.push('feuilles=' + x.sheets.length);
+      else {
+        if (first.name !== 'publipostage' || second.name !== 'publipostage (2)') bad.push('noms=' + [first.name, second.name]);
+        const expectedWidths = widths.map(px => (px - 5) / 7);
+        [first, second].forEach((sheet, i) => { if (![1, 2, 3].every(n => near(sheet.colWidth(n), expectedWidths[n - 1], 0.01))) bad.push('largeurs feuille ' + (i + 1) + '=' + [1, 2, 3].map(n => sheet.colWidth(n))); });
+        if (first.cell('A1').value !== 'Titre' || first.cell('A3').value !== 'x1' || first.cell('A4').kind !== 'empty') bad.push('feuille 1 : A1=' + first.cell('A1').value + ' A3=' + first.cell('A3').value + ' A4=' + first.cell('A4').value);
+        if (second.cell('A1').value !== 'Observations' || second.cell('C1').value !== 'o3') bad.push('feuille 2 : A1=' + second.cell('A1').value + ' C1=' + second.cell('C1').value);
+        if (second.cell('A2').value !== 'fusionnée' || second.cell('B2').value !== 'y2' || second.cell('B3').value !== 'z2' || second.cell('C3').value !== 'z3') bad.push('feuille 2 : ' + second.text());
+        if (JSON.stringify(first.merges) !== '[]' || JSON.stringify(second.merges) !== JSON.stringify(['A2:A3'])) bad.push('fusions=' + JSON.stringify([first.merges, second.merges]));
+        const firstHeights = [1, 2, 3].map(r => first.rowHeight(r));
+        const secondHeights = [1, 2, 3].map(r => second.rowHeight(r));
+        const want = BREAK_HEIGHTS.map(px => px * 0.75);
+        if (!firstHeights.every((v, i) => near(v, want[i], 0.3)) || !secondHeights.every((v, i) => near(v, want[i + 3], 0.3))) bad.push('hauteurs=' + JSON.stringify([firstHeights, secondHeights]));
+        [first, second].forEach((sheet, i) => {
+          const p = sheet.pageSetup;
+          if (!p || p.paperSize !== '9' || p.orientation !== 'portrait' || p.fitToWidth !== '1' || !sheet.fitToPage || sheet.gridLines) bad.push('page feuille ' + (i + 1) + '=' + JSON.stringify([p, sheet.fitToPage, sheet.gridLines]));
+        });
+        const grey = ref => sidesOf(second, ref) === `${GREY},${GREY},${GREY},${GREY}`;
+        if (!grey('A1') || !grey('C1') || !grey('B3')) bad.push('traits de la feuille 2=' + [sidesOf(second, 'A1'), sidesOf(second, 'C1'), sidesOf(second, 'B3')]);
+      }
+      const flat = await exportGrid(widths, BREAK_HEIGHTS, BREAK_ROWS);
+      if (flat.sheets.length !== 1) bad.push('sans saut : feuilles=' + flat.sheets.length);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ names: x.sheets.map(sh => sh.name), merges: [first.merges, second.merges] }) };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_page_break_at_a_row_that_a_merged_cell_crosses_or_at_the_first_row_opens_no_sheet',
+    description: 'Un HTML qui n\'est pas passé par l\'éditeur : un saut avant la première ligne n\'ouvre pas de feuille vide, un saut au milieu d\'une case fusionnée sur plusieurs lignes n\'est pas suivi (la case reste entière dans sa feuille) ; un saut valable, lui, coupe',
+    run: async (h) => {
+      await seed(h);
+      const html = (rows, breaks) => gridHtml([100, 100], [30, 30, 30, 30], rows, breaks);
+      const sheetsOf = async (markup) => (await openXlsx((await XlsxExport.getXlsxBlobForRecord(markup, TABLE, RECORD, '')).blob)).sheets;
+      const onFirst = await sheetsOf(html([['a', 'b'], ['c', 'd']], [0]));
+      const across = await sheetsOf(html([['a', 'b'], [td('fusionnée', ' rowspan="2"'), 'c'], ['d'], ['e', 'f']], [2]));
+      const valid = await sheetsOf(html([['a', 'b'], [td('fusionnée', ' rowspan="2"'), 'c'], ['d'], ['e', 'f']], [3]));
+      const bad = [];
+      if (onFirst.length !== 1) bad.push('saut avant la première ligne : feuilles=' + onFirst.length);
+      if (across.length !== 1 || JSON.stringify(across[0].merges) !== JSON.stringify(['A2:A3'])) bad.push('saut dans la case fusionnée : feuilles=' + across.length + ' fusions=' + (across[0] && across[0].merges));
+      if (valid.length !== 2 || JSON.stringify(valid[0].merges) !== JSON.stringify(['A2:A3']) || valid[1].cell('A1').value !== 'e') bad.push('saut valable : feuilles=' + valid.length + ' ' + valid.map(sh => sh.merges));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_single_workbook_names_the_page_break_sheets_after_each_value',
+    description: 'Dans le classeur unique, chaque valeur de la table a sa feuille puis une feuille de plus par saut de page : « Fiche Alpha Durand », « Fiche Alpha Durand (2) », « Fiche Bravo Martin »... dans l\'ordre des valeurs, chaque feuille avec les valeurs de SA ligne de la table ; sans « (2) » de trop ni nom répété',
+    run: async (h) => {
+      await seed(h);
+      await loadGrid(gridHtml([140, 100], [30, 30, 30], [[td('Nom', ' colspan="2"')], [badge('Nom'), 'x'], [badge('Montant'), 'y']], [2]));
+      const html = Editor.getHTML();
+      const book = await XlsxExport.createSingleWorkbook();
+      for (const v of VALUES) await book.appendRecord(html, TABLE, v, FILE_TEMPLATE);
+      const sheets = (await openXlsx(await book.toBlob())).sheets;
+      const names = sheets.map(sh => sh.name);
+      const want = ['Fiche Alpha Durand', 'Fiche Alpha Durand (2)', 'Fiche Bravo Martin', 'Fiche Bravo Martin (2)', 'Fiche Charlie Petit', 'Fiche Charlie Petit (2)'];
+      const bad = [];
+      if (JSON.stringify(names) !== JSON.stringify(want)) bad.push('feuilles=' + JSON.stringify(names));
+      else VALUES.forEach((v, i) => {
+        if (sheets[2 * i].cell('A2').value !== v.Nom || sheets[2 * i + 1].cell('A1').value !== v.Montant) bad.push('valeurs de ' + v.Nom + ' : ' + sheets[2 * i].cell('A2').value + ' / ' + sheets[2 * i + 1].cell('A1').value);
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(names) };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_single_workbook_takes_back_every_sheet_of_a_value_that_fails_midway',
+    description: 'Dans le classeur unique, une valeur dont la deuxième feuille (celle du saut de page) échoue ne laisse AUCUNE de ses feuilles ni aucun de ses noms : les autres valeurs sont là, et la même valeur reprise après reprend « nom » puis « nom (2) »',
+    run: async (h) => {
+      await seed(h);
+      await loadGrid(gridHtml([140, 100], [30, 30, 30], [['a', 'b'], [td('fusion', ' rowspan="2"'), 'c'], ['d']], [1]));
+      const html = Editor.getHTML();
+      const book = await XlsxExport.createSingleWorkbook();
+      const origAdd = ExcelJS.Workbook.prototype.addWorksheet;
+      let created = 0;
+      ExcelJS.Workbook.prototype.addWorksheet = function (...args) {
+        const sheet = origAdd.apply(this, args);
+        if (++created === 2) sheet.getCell = () => { throw new Error('échec voulu'); }; // la feuille du saut de la 1re valeur échoue en cours d'écriture
+        return sheet;
+      };
+      const bad = [];
+      try {
+        const outcomes = [];
+        for (const v of [VALUES[0], VALUES[1], VALUES[0]]) {
+          try { await book.appendRecord(html, TABLE, v, FILE_TEMPLATE); outcomes.push('ok'); } catch (e) { outcomes.push('échec'); }
+        }
+        if (outcomes.join() !== 'échec,ok,ok') bad.push('résultats=' + outcomes.join());
+        const names = (await openXlsx(await book.toBlob())).sheets.map(sh => sh.name);
+        const want = ['Fiche Bravo Martin', 'Fiche Bravo Martin (2)', 'Fiche Alpha Durand', 'Fiche Alpha Durand (2)'];
+        if (JSON.stringify(names) !== JSON.stringify(want)) bad.push('feuilles=' + JSON.stringify(names));
+      } finally {
+        ExcelJS.Workbook.prototype.addWorksheet = origAdd;
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_page_follows_the_orientation_and_the_format_of_the_model_on_every_sheet',
+    description: 'Le sens et le format de la page du modèle (A3, A4, A5, A6 ; portrait, paysage) sont ceux de CHAQUE feuille de la grille : le papier d\'Excel (8, 9, 11 et 70), le sens, et une page de large ; le format du modèle revient à l\'A4 ensuite',
+    run: async (h) => {
+      await seed(h);
+      const beforeOrientation = PageLayout.getOrientation();
+      const beforeFormat = PageLayout.getFormat();
+      const got = {};
+      try {
+        for (const format of ['A3', 'A4', 'A5', 'A6']) {
+          PageLayout.setFormat(format);
+          PageLayout.setOrientation(format === 'A5' ? 'landscape' : 'portrait');
+          const x = await exportGrid([100, 100], [30, 30], [['a', 'b'], ['c', 'd']], { breaks: [1] });
+          got[format] = x.sheets.map(sh => (sh.pageSetup ? sh.pageSetup.paperSize + ':' + sh.pageSetup.orientation + ':' + sh.pageSetup.fitToWidth : null));
+        }
+      } finally { PageLayout.setFormat(beforeFormat); PageLayout.setOrientation(beforeOrientation); }
+      const want = { A3: ['8:portrait:1', '8:portrait:1'], A4: ['9:portrait:1', '9:portrait:1'], A5: ['11:landscape:1', '11:landscape:1'], A6: ['70:portrait:1', '70:portrait:1'] };
+      return { pass: JSON.stringify(got) === JSON.stringify(want), notes: JSON.stringify(got) };
     },
   });
 

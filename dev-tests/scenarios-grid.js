@@ -195,13 +195,13 @@
 
   // === 2) La barre d'outils : grisé, jamais retiré ====================================================================================================================
 
-  const GREYED_IN_GRID = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-page-break', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'];
+  const GREYED_IN_GRID = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'];
   const STILL_ACTIVE_IN_GRID = ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip', 'v2-text-color-split', 'v2-highlight-split',
     'v2-image-group', 'v2-heading-group', 'v2-blocks-group', 'v2-btn-link', 'v2-row-link', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo'];
 
   cases.push({
     id: 'grid_toolbar_greys_what_has_no_meaning_in_a_table_and_gives_it_back',
-    description: 'En grille : Tableau, Deux colonnes, Sommaire, Saut de page, Citation, Bloc de code, Encadré, Bloc de signature et le suivi des modifications (x3) sont grisés (jamais retirés), l\'aperçu A4 aussi ; Lien, mise en forme, image, variable, annuler restent actifs ; hors grille tout est rendu',
+    description: 'En grille : Tableau, Deux colonnes, Sommaire, Citation, Bloc de code, Encadré, Bloc de signature et le suivi des modifications (x3) sont grisés (jamais retirés), l\'aperçu A4 aussi ; Lien, mise en forme, image, variable, annuler restent actifs ; hors grille tout est rendu',
     run: async (h) => {
       await h.resetEditor();
       let during = null;
@@ -241,7 +241,7 @@
         return got;
       };
       const before = doc();
-      const stopped = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-page-break', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-track-changes'].filter(id => reached(id));
+      const stopped = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-track-changes'].filter(id => reached(id));
       await sleep(40);
       const control = reached('v2-btn-bold'); // témoin : un bouton actif reçoit bien son clic
       return { pass: stopped.length === 0 && control && doc().eq(before), notes: JSON.stringify({ reachedDespiteGrey: stopped, control }) };
@@ -1389,6 +1389,331 @@
         && got.inside === 0 && Math.abs(got.redTotal - (2 * w + 2 * hgt)) <= 6 && got.greyAround > 20;
       return { pass, notes: JSON.stringify({ got, w, hgt, xs: view.xs.slice(0, 4), ys: view.ys.slice(0, 4) }) };
     }),
+  });
+
+  // === 11) Lot C : saut de page porté par une ligne (éditeur, enregistrement, PDF), bascule portrait / paysage ===================================================================
+  // Les gestes à la vraie souris (le bouton Saut de page de la barre du haut, la pastille du numéro, le trait en tirets, à 700x400 en clair et en sombre) : dev-tests/verify-grid-pagebreak-mouse.mjs.
+  // L'Excel (une feuille par morceau) est dans le groupe `xlsx`.
+
+  const breakRows = () => { const out = []; tableNode().forEach((row, _o, r) => { if (row.attrs.pageBreakBefore) out.push(r); }); return out; };
+  const breakBtn = () => document.getElementById('v2-btn-page-break');
+  const breakState = () => {
+    const btn = breakBtn();
+    return { locked: btn.classList.contains('v2-hf-locked'), active: btn.classList.contains('is-active'), pressed: btn.getAttribute('aria-pressed'), tip: btn.getAttribute('data-tip') };
+  };
+  // Les lignes dont l'élément du DOM porte la marque, et le nombre de lignes qui la portent dans le HTML enregistré.
+  const breakDom = () => rowEls().map((tr, r) => (tr.getAttribute('data-page-break-before') === 'true' ? r : -1)).filter(r => r >= 0);
+  const savedBreaks = () => (Editor.getHTML().match(/<tr[^>]*data-page-break-before="true"/g) || []).length;
+  // Une grille écrite à la main : `rows` = [{ cells: [...], brk }], une case est un texte ou { html, rowspan, colspan }.
+  function breakGrid(widths, rows) {
+    const total = widths.reduce((sum, w) => sum + w, 0);
+    const cell = (c, k) => {
+      const o = typeof c === 'string' ? { html: c } : c;
+      const span = (o.colspan ? ` colspan="${o.colspan}"` : '') + (o.rowspan ? ` rowspan="${o.rowspan}"` : '');
+      return `<td${o.colspan ? '' : ` colwidth="${widths[k]}"`}${span}><p>${o.html}</p></td>`;
+    };
+    return `<table style="width: ${total}px;"><colgroup>${widths.map(w => `<col style="width: ${w}px;">`).join('')}</colgroup><tbody>`
+      + rows.map(r => `<tr data-row-height="28" style="height: 28px"${r.brk ? ' data-page-break-before="true"' : ''}>${r.cells.map(cell).join('')}</tr>`).join('') + '</tbody></table>';
+  }
+  const labelled = n => Array.from({ length: n }, (_, i) => ({ cells: ['L' + (i + 1), 'T' + (i + 1)] }));
+  const breaksBefore = (rows, at) => rows.map((r, i) => (at.includes(i) ? Object.assign({}, r, { brk: true }) : r));
+
+  cases.push({
+    id: 'grid_page_break_button_sets_and_removes_the_break_before_the_selected_row',
+    description: 'En grille, le bouton Saut de page de la barre pose un saut AVANT la ligne du curseur : la ligne en porte la marque (enregistrée avec le modèle, relue à son ouverture), le bouton s\'enfonce, la pastille du numéro apparaît ; un second clic le retire ; un seul Annuler défait chaque geste ; sur la première ligne le bouton est grisé et ne fait rien',
+    run: async (h) => inGrid(h, async () => {
+      await placeCursor(0, 0);
+      const first = Object.assign({ can: GridEditor.canTogglePageBreak(ed()) }, breakState());
+      const untouched = Editor.getHTML();
+      await h.clickButton('v2-btn-page-break');
+      await sleep(100);
+      const firstClickDidNothing = Editor.getHTML() === untouched && savedBreaks() === 0;
+      await placeCursor(4, 2);
+      const idle = Object.assign({ can: GridEditor.canTogglePageBreak(ed()) }, breakState());
+      await sleep(650);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(150);
+      const set = { rows: breakRows(), dom: breakDom(), saved: savedBreaks(), state: breakState(), head: rowHeads().findIndex(r => r.classList.contains('has-break')), badges: document.querySelectorAll('.v2-grid-break').length };
+      const html = Editor.getHTML();
+      await loadGrid(html);
+      const reloaded = { rows: breakRows(), dom: breakDom() };
+      await placeCursor(4, 2);
+      await sleep(650);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(150);
+      const removed = { rows: breakRows(), dom: breakDom(), saved: savedBreaks(), state: breakState(), badges: document.querySelectorAll('.v2-grid-break').length };
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(120);
+      const undone = breakRows();
+      ed().commands.redo();
+      await sleep(120);
+      const redone = breakRows();
+      const pass = first.locked && !first.active && !first.can && firstClickDidNothing
+        && !idle.locked && !idle.active && idle.can && idle.pressed === 'false'
+        && set.rows.join() === '4' && set.dom.join() === '4' && set.saved === 1 && set.state.active && set.state.pressed === 'true' && !set.state.locked && set.head === 4 && set.badges === 1
+        && reloaded.rows.join() === '4' && reloaded.dom.join() === '4'
+        && removed.rows.length === 0 && removed.dom.length === 0 && removed.saved === 0 && !removed.state.active && removed.state.pressed === 'false' && removed.badges === 0
+        && undone.join() === '4' && redone.length === 0;
+      return { pass, notes: JSON.stringify({ first, firstClickDidNothing, idle, set, reloaded, removed, undone, redone }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_page_break_is_greyed_where_it_has_no_meaning_and_a_merge_never_crosses_one',
+    description: 'Le saut de page est grisé (jamais retiré, un clic dessus ne fait rien) sur la première ligne et quand la limite au-dessus de la ligne du curseur coupe une case fusionnée sur plusieurs lignes ; libre sous cette case et à son bord haut ; « Fusionner » est grisé quand un saut tomberait au milieu des cases choisies (et la commande refuse), actif quand le saut est au bord haut de la sélection',
+    run: async (h) => inGrid(h, async () => {
+      await selectCells(3, 2, 4, 2);
+      const merged = GridEditor.mergeCells(ed());
+      await sleep(650);
+      const snapshot = (row, col) => ({ can: (placeCursorSync(row, col), GridEditor.canTogglePageBreak(ed())), locked: breakState().locked });
+      function placeCursorSync(row, col) { ed().chain().focus().setTextSelection(cellPos(row, col) + 2).run(); }
+      const states = {};
+      for (const [name, row, col] of [['first', 0, 3], ['above', 2, 0], ['top', 3, 0], ['inside', 4, 0], ['below', 5, 0]]) {
+        placeCursorSync(row, col);
+        await sleep(60);
+        states[name] = { can: GridEditor.canTogglePageBreak(ed()), locked: breakState().locked };
+      }
+      placeCursorSync(4, 0);
+      await sleep(60);
+      const before = doc();
+      await h.clickButton('v2-btn-page-break');
+      await sleep(100);
+      const insideDidNothing = doc().eq(before) && breakRows().length === 0;
+      // un saut sous la case fusionnée, puis une sélection qui le traverse : « Fusionner » grisé et refusé
+      placeCursorSync(5, 0);
+      await sleep(60);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(650);
+      const placed = breakRows();
+      await selectCells(4, 0, 5, 1);
+      const across = { can: GridEditor.canMerge(ed()), locked: barLocked('cell-merge') };
+      const docBefore = doc();
+      const refused = GridEditor.mergeCells(ed()) === false && doc().eq(docBefore);
+      await selectCells(5, 0, 6, 1);
+      const atTop = { can: GridEditor.canMerge(ed()), locked: barLocked('cell-merge') };
+      const pass = merged && states.first.locked && !states.first.can && !states.above.locked && states.above.can
+        && !states.top.locked && states.top.can && states.inside.locked && !states.inside.can && !states.below.locked && states.below.can
+        && insideDidNothing && placed.join() === '5' && !across.can && across.locked && refused && atTop.can && !atTop.locked;
+      return { pass, notes: JSON.stringify({ merged, states, insideDidNothing, placed, across, refused, atTop }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_page_break_that_cannot_stand_is_removed_by_the_document',
+    description: 'Un saut de page que rien ne peut suivre est retiré par le document : avant la première ligne et au milieu d\'une case fusionnée sur plusieurs lignes (HTML venu d\'ailleurs), ou sur la ligne qui devient la première quand celle du dessus est supprimée - dans le même Annuler que la suppression, qui rend la ligne ET son saut ; un saut valable reste',
+    run: async (h) => inGrid(h, async () => {
+      const impossible = () => breakGrid([100, 100], [
+        { cells: ['a', 'b'], brk: true },
+        { cells: [{ html: 'c', rowspan: 2 }, 'd'] },
+        { cells: ['e'], brk: true },
+        { cells: ['f', 'g'], brk: true },
+        { cells: ['h', 'i'] },
+      ]);
+      await loadGrid(impossible());
+      const loaded = breakRows();
+      // Un HTML que rien d'autre ne corrige (alignement vertical déjà posé sur toutes les cases) : c'est le chargement lui-même qui retire les sauts impossibles.
+      await loadGrid(impossible().replace(/<td /g, '<td data-valign="middle" '));
+      const loadedQuiet = breakRows();
+      // une grille neuve : un saut avant la 2e ligne, puis la première ligne supprimée
+      await enterGrid(h);
+      await placeCursor(1, 0);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(650);
+      const placed = breakRows();
+      const rowsBefore = tableNode().childCount;
+      ed().chain().focus().setTextSelection(cellPos(0, 0) + 2).deleteRow().run();
+      await sleep(150);
+      const afterDelete = { rows: tableNode().childCount, breaks: breakRows(), saved: savedBreaks() };
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(150);
+      const undone = { rows: tableNode().childCount, breaks: breakRows() };
+      const pass = loaded.join() === '3' && loadedQuiet.join() === '3' && placed.join() === '1' && afterDelete.rows === rowsBefore - 1 && afterDelete.breaks.length === 0 && afterDelete.saved === 0
+        && undone.rows === rowsBefore && undone.breaks.join() === '1';
+      return { pass, notes: JSON.stringify({ loaded, loadedQuiet, placed, rowsBefore, afterDelete, undone }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_page_break_marker_is_a_dashed_line_on_the_row_and_a_badge_in_its_number_and_nothing_in_reading',
+    description: 'La ligne qui porte un saut a un trait en tirets de la couleur d\'accent sur son bord haut (les autres lignes aucun), et la pastille du numéro est à cheval sur ce bord, ne répond pas au pointeur (la poignée de la ligne du dessus reste atteignable) et dit en deux langues « nouvelle page du PDF, nouvelle feuille de l\'Excel » ; en Lecture, rien ne se voit',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await placeCursor(3, 1);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(250);
+      const rows = rowEls();
+      const dashed = (tr) => { const cs = getComputedStyle(tr.cells[1]); return { image: cs.backgroundImage, size: cs.backgroundSize }; };
+      const line = dashed(rows[3]);
+      const others = [0, 2, 4].map(i => dashed(rows[i]).image);
+      const head = rowHeads()[3];
+      const badge = head.querySelector('.v2-grid-break');
+      const badgeBox = badge && badge.getBoundingClientRect();
+      const headBox = head.getBoundingClientRect();
+      const previousHandle = rowHeads()[2].querySelector('.v2-grid-handle');
+      const hit = previousHandle && (() => { const r = previousHandle.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); })();
+      const tips = {};
+      for (const lang of ['fr', 'en']) { I18n.setLang(lang); await sleep(60); tips[lang] = head.title; }
+      I18n.setLang('fr');
+      let inReader = null;
+      await h.clickButton('btn-mode-read');
+      try {
+        for (let waited = 0; waited < 8000 && document.querySelectorAll('#reader-container table > tbody > tr').length < 15; waited += 100) await sleep(100);
+        await sleep(200);
+        const readRows = Array.from(document.querySelectorAll('#reader-container table > tbody > tr'));
+        inReader = { marked: readRows.filter(tr => tr.getAttribute('data-page-break-before') === 'true').length, image: readRows.map(tr => getComputedStyle(tr.cells[1]).backgroundImage), badges: document.querySelectorAll('#reader-container .v2-grid-break').length };
+      } finally { await h.clickButton('btn-mode-edit'); await sleep(300); }
+      const pass = /gradient/.test(line.image) && line.size.startsWith('100%') && line.size.includes('2px') && others.every(i => i === 'none')
+        && !!badge && getComputedStyle(badge).pointerEvents === 'none' && badgeBox.width > 0 && Math.abs((badgeBox.top + badgeBox.height / 2) - headBox.top) <= 1.5 && badge.querySelector('svg')
+        && !!hit && hit.classList.contains('v2-grid-handle')
+        && /nouvelle page du PDF/.test(tips.fr) && /nouvelle feuille de l.Excel/.test(tips.fr) && /new page in the PDF/.test(tips.en) && /new sheet in the Excel/.test(tips.en)
+        && !!inReader && inReader.marked === 1 && inReader.image.every(i => i === 'none') && inReader.badges === 0;
+      return { pass, notes: JSON.stringify({ line, others, badge: badgeBox && { top: badgeBox.top, h: badgeBox.height }, headTop: headBox.top, hit: hit && hit.className, tips, inReader }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_page_break_wording_follows_the_mode_and_the_language',
+    description: 'Le bouton Saut de page dit, en grille, « Saut de page avant la ligne » (et « Page break before the row » en anglais), avec une description qui annonce nouvelle page du PDF et nouvelle feuille de l\'Excel ; hors grille il reprend son texte d\'avant, enfoncé ni grisé',
+    run: async (h) => {
+      await h.resetEditor();
+      const read = () => ({ tip: breakBtn().getAttribute('data-tip'), aria: breakBtn().getAttribute('aria-label'), pressed: breakBtn().getAttribute('aria-pressed') });
+      const outside = read();
+      let inGridFr = null; let inGridEn = null;
+      try {
+        await enterGrid(h);
+        await placeCursor(2, 0);
+        inGridFr = read();
+        I18n.setLang('en');
+        await sleep(80);
+        inGridEn = read();
+      } finally { I18n.setLang('fr'); await leaveGrid(h); }
+      await h.resetEditor();
+      MainToolbar.syncToolbarState();
+      const back = read();
+      const stuck = isLocked('v2-btn-page-break') || breakBtn().classList.contains('is-active');
+      const pass = outside.tip === 'Saut de page' && outside.pressed === null
+        && inGridFr.tip === 'Saut de page avant la ligne' && /nouvelle page du PDF, nouvelle feuille de l.Excel/.test(inGridFr.aria) && inGridFr.pressed === 'false'
+        && inGridEn.tip === 'Page break before the row' && /new page in the PDF, new sheet in the Excel file/.test(inGridEn.aria)
+        && back.tip === 'Saut de page' && back.aria === outside.aria && back.pressed === null && !stuck;
+      return { pass, notes: JSON.stringify({ outside, inGridFr, inGridEn, back, stuck }) };
+    },
+  });
+
+  cases.push({
+    id: 'grid_pdf_starts_a_new_page_at_each_page_break_and_every_page_keeps_the_same_columns',
+    description: 'PDF d\'une grille de 12 lignes avec un saut avant les lignes 5 et 9 : trois pages (lignes 1 à 4, 5 à 8, 9 à 12) lues sur le PDF lui-même, les colonnes et le haut du tableau au même endroit d\'une page à l\'autre ; un morceau plus haut qu\'une page continue sur la page suivante (50 lignes avant un saut : 3 pages au lieu de 2) ; sans saut, tout reste sur la page d\'avant',
+    run: async (h) => inGrid(h, async () => {
+      await loadGrid(breakGrid([100, 140], breaksBefore(labelled(12), [4, 8])));
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const tables = pdf.content.filter(b => b.table);
+      const texts = truth.pages.map(page => page.textItems.map(t => t.str.trim()));
+      const expected = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]].map(list => list.flatMap(n => ['L' + n, 'T' + n]));
+      const samePages = texts.length === 3 && texts.every((list, i) => JSON.stringify(list.slice().sort()) === JSON.stringify(expected[i].slice().sort()));
+      const firstX = truth.pages.map(page => Math.min(...page.textItems.map(t => t.x)));
+      const topY = truth.pages.map(page => Math.min(...page.textItems.map(t => t.y)));
+      const aligned = firstX.every(x => near(x, firstX[0], 0.6)) && topY.every(y => near(y, topY[0], 0.6));
+      const blocks = { count: tables.length, breaks: tables.map(t => t.pageBreak || null), rows: tables.map(t => t.table.body.length), heights: tables.map(t => t.table.heights.length), sameWidths: tables.every(t => JSON.stringify(t.table.widths) === JSON.stringify(tables[0].table.widths)) };
+      await loadGrid(breakGrid([100, 140], breaksBefore(labelled(60), [49])));
+      const tallPages = (await h.extractPdfGroundTruth((await h.exportPdfContent(Editor.getHTML(), null, undefined)).base64)).pages.length;
+      await loadGrid(breakGrid([100, 140], labelled(60)));
+      const flatPages = (await h.extractPdfGroundTruth((await h.exportPdfContent(Editor.getHTML(), null, undefined)).base64)).pages.length;
+      const pass = samePages && aligned && blocks.count === 3 && blocks.breaks.join() === ',before,before' && blocks.rows.join() === '4,4,4' && blocks.heights.join() === '4,4,4' && blocks.sameWidths
+        && tallPages === 3 && flatPages === 2;
+      return { pass, notes: JSON.stringify({ blocks, texts: texts.map(t => t.length), firstX, topY, tallPages, flatPages }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_ignores_a_page_break_that_would_leave_an_empty_page_or_cut_a_merged_cell',
+    description: 'PDF d\'un HTML qui n\'est pas passé par l\'éditeur : un saut avant la première ligne n\'ouvre pas de page vide (une seule page), un saut au milieu d\'une case fusionnée sur plusieurs lignes n\'est pas suivi (la case reste entière, une seule page)',
+    run: async (h) => inGrid(h, async () => {
+      const pagesOf = async (html) => {
+        const pdf = await h.exportPdfContent(html, null, undefined);
+        return { tables: pdf.content.filter(b => b.table).length, pages: (await h.extractPdfGroundTruth(pdf.base64)).pages.length };
+      };
+      const onFirstRow = await pagesOf(breakGrid([100, 140], [{ cells: ['a', 'b'], brk: true }, { cells: ['c', 'd'] }]));
+      const acrossMerged = await pagesOf(breakGrid([100, 140], [{ cells: ['a', 'b'] }, { cells: [{ html: 'fusionnée', rowspan: 2 }, 'c'] }, { cells: ['d'], brk: true }, { cells: ['e', 'f'] }]));
+      const control = await pagesOf(breakGrid([100, 140], [{ cells: ['a', 'b'] }, { cells: ['c', 'd'], brk: true }]));
+      const pass = onFirstRow.tables === 1 && onFirstRow.pages === 1 && acrossMerged.tables === 1 && acrossMerged.pages === 1 && control.tables === 2 && control.pages === 2;
+      return { pass, notes: JSON.stringify({ onFirstRow, acrossMerged, control }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_orientation_button_turns_the_pdf_page_of_a_grid_and_a_wide_grid_gets_its_width_back',
+    description: 'Le bouton portrait / paysage est actif en grille (le type « grille » est dans la liste d\'OrientationToggle) : un clic passe la page du PDF en paysage (page plus large que haute, lue sur le PDF) et une grille plus large que la page portrait, réduite à sa largeur, retrouve la sienne ; le format A3 du menu change la page du PDF aussi ; le sens revient au portrait',
+    run: async (h) => inGrid(h, async () => {
+      const btn = () => document.getElementById('btn-page-orientation');
+      const wide = breakGrid([150, 150, 150, 150, 150, 150], [{ cells: ['a', 'b', 'c', 'd', 'e', 'f'] }, { cells: ['g', 'h', 'i', 'j', 'k', 'l'] }]);
+      await loadGrid(wide);
+      const widthOf = async (page) => { const lines = (await h.extractPdfLines(page)).pages[0].lines; return Math.max(...lines.map(l => Math.max(l.x1, l.x2))) - Math.min(...lines.map(l => Math.min(l.x1, l.x2))); };
+      const exportNow = async () => { const pdf = await h.exportPdfContent(Editor.getHTML(), null, PageLayout.getMarginsPt()); const truth = await h.extractPdfGroundTruth(pdf.base64); return { base64: pdf.base64, page: truth.pages[0], orientation: pdf.docDefinition.pageOrientation, size: pdf.docDefinition.pageSize }; };
+      const start = { types: OrientationToggle.TYPES.slice(), disabled: btn().disabled, landscape: PageLayout.isLandscape() };
+      const portrait = await exportNow();
+      const portraitWidth = await widthOf(portrait.base64);
+      await h.clickButton('btn-page-orientation');
+      await sleep(200);
+      const turned = { landscape: PageLayout.isLandscape(), pressed: btn().getAttribute('aria-pressed'), disabled: btn().disabled, rowsLeft: rowEls().length, strips: colHeads().length };
+      let landscape = null; let landscapeWidth = 0; let a3 = null;
+      try {
+        landscape = await exportNow();
+        landscapeWidth = await widthOf(landscape.base64);
+        OrientationToggle.selectFormat('A3');
+        await sleep(100);
+        a3 = await exportNow();
+      } finally {
+        OrientationToggle.selectFormat('A4');
+        await h.clickButton('btn-page-orientation');
+        await sleep(150);
+      }
+      const back = { landscape: PageLayout.isLandscape(), format: PageLayout.getFormat() };
+      const pass = start.types.includes('grille') && start.types.includes('document') && !start.disabled && !start.landscape
+        && portrait.page.width < portrait.page.height && portrait.orientation === 'portrait'
+        && turned.landscape && turned.pressed === 'true' && !turned.disabled && turned.rowsLeft === 2 && turned.strips === 6
+        && landscape.page.width > landscape.page.height && landscape.orientation === 'landscape'
+        && landscapeWidth > portraitWidth + 100 && landscapeWidth <= landscape.page.width
+        && a3.size === 'A3' && a3.page.width > 1100 && a3.page.width > landscape.page.width + 200
+        && !back.landscape && back.format === 'A4';
+      return { pass, notes: JSON.stringify({ start, portrait: { w: portrait.page.width, h: portrait.page.height, table: portraitWidth }, turned, landscape: landscape && { w: landscape.page.width, h: landscape.page.height, table: landscapeWidth }, a3: a3 && { w: a3.page.width, size: a3.size }, back }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_orientation_and_format_are_saved_with_the_grid_and_come_back_when_it_is_reopened',
+    description: 'Le sens et le format de la page d\'une grille (colonne Margins, comme tout modèle) sont enregistrés avec elle et reviennent à sa réouverture, le bouton portrait / paysage actif et enfoncé ; un document, ouvert ensuite, reste en portrait A4 ; un saut de page porté par une ligne revient lui aussi',
+    run: async (h) => {
+      await h.resetEditor();
+      let saved = null; let margins = null;
+      try {
+        await enterGrid(h);
+        await loadGrid(breakGrid([100, 100], [{ cells: ['a', 'b'] }, { cells: ['c', 'd'], brk: true }]));
+        await h.clickButton('btn-page-orientation');
+        OrientationToggle.selectFormat('A3');
+        await sleep(150);
+        document.getElementById('template-name').value = 'Grille paysage A3';
+        await h.clickButton('btn-save');
+        await sleep(500);
+        saved = Templates.getCurrentId();
+        margins = JSON.parse((window.__gristStub.getRow('Publipostage_Modeles', saved) || {}).Margins || '{}');
+      } finally { await leaveGrid(h); }
+      const afterLeave = { landscape: PageLayout.isLandscape(), format: PageLayout.getFormat() };
+      let reopened = null;
+      try {
+        const select = document.getElementById('template-select');
+        select.value = String(saved);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(600);
+        const btn = document.getElementById('btn-page-orientation');
+        reopened = { active: GridEditor.isActive(), landscape: PageLayout.isLandscape(), format: PageLayout.getFormat(), pressed: btn.getAttribute('aria-pressed'), disabled: btn.disabled, breaks: breakDom().join() };
+      } finally { await leaveGrid(h); PageLayout.setMarginsMm(null); OrientationToggle.sync(); }
+      const pass = !!saved && margins.orientation === 'landscape' && margins.format === 'A3'
+        && !afterLeave.landscape && afterLeave.format === 'A4'
+        && reopened.active && reopened.landscape && reopened.format === 'A3' && reopened.pressed === 'true' && !reopened.disabled && reopened.breaks === '1';
+      return { pass, notes: JSON.stringify({ margins, afterLeave, reopened }) };
+    },
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

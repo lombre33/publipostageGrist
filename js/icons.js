@@ -33,6 +33,8 @@ const Icons = (function () {
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>',
     // Page + ligne de coupe pointillée : l'ancienne icône (carré divisé en 4) ne voulait rien dire de précis.
     pageBreak: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16" stroke-dasharray="2 2"/><path d="M2.5 12h1.5M20 12h1.5"/>',
+    // Pastille du numéro d'une ligne de grille qui porte un saut de page : deux pages face à face, la coupure en tirets entre elles.
+    gridBreak: '<rect x="5" y="3" width="14" height="7" rx="1"/><rect x="5" y="14" width="14" height="7" rx="1"/><path d="M2 12h20" stroke-dasharray="2 2"/>',
     // Pointillés + folios, évoque le sommaire imprimé classique - l'ancienne icône (lignes puces + texte) était trop proche visuellement du bouton "Liste"
     // juste à côté. Les "points de suite" sont des tracés de longueur nulle (h.01) : avec stroke-linecap="round" ça se peint comme un simple point.
     toc: '<path d="M4 6h5M4 12h5M4 18h5"/><path d="M11.5 6h.01M14 6h.01M16.5 6h.01M11.5 12h.01M14 12h.01M11.5 18h.01"/><text x="18.5" y="7.7" font-size="6.2" fill="currentColor" stroke="none">1</text><text x="18.5" y="13.7" font-size="6.2" fill="currentColor" stroke="none">2</text><text x="18.5" y="19.7" font-size="6.2" fill="currentColor" stroke="none">3</text>',

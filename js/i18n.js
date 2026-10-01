@@ -93,6 +93,7 @@ const I18n = (function () {
     'grid.resizeColumn': { fr: 'Tirer pour régler la largeur de la colonne', en: 'Drag to set the column width' },
     'grid.resizeRow': { fr: 'Tirer pour régler la hauteur de la ligne', en: 'Drag to set the row height' },
     'grid.cellBar': { fr: 'Barre de la case', en: 'Cell toolbar' },
+    'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },
@@ -184,6 +185,9 @@ const I18n = (function () {
     'insert.imageFromVariable': { fr: 'Image depuis une variable (colonne PJ)…', en: 'Image from a variable (attachment column)…' },
     'insert.pageBreak.tip': { fr: 'Saut de page', en: 'Page break' },
     'insert.pageBreak.aria': { fr: 'Insérer un saut de page (forcé à l’export PDF)', en: 'Insert a page break (forced on PDF export)' },
+    // Le même bouton dans une grille : le saut se pose avant la ligne sélectionnée, et un second clic le retire.
+    'insert.pageBreak.gridTip': { fr: 'Saut de page avant la ligne', en: 'Page break before the row' },
+    'insert.pageBreak.gridAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF, nouvelle feuille de l’Excel (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF, new sheet in the Excel file (click again to remove it)' },
     'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },

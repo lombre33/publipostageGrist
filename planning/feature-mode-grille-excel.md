@@ -29,8 +29,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
     une colonne ou une ligne ajoutée par la barre de la case prend la taille de sa voisine.
 - Pas de feuille : `js/main.js` retire `a4-preview` des deux conteneurs pour une grille (`syncA4PreviewForModelType`) et grise la case ; ni zone d'en-tête/pied, ni pagination.
 - Suivi des modifications coupé et grisé. Barre d'outils : `GRID_LOCKED_IDS` dans `js/main-toolbar.js`, appliqué APRÈS tous les autres verrouillages (le dernier gagne) ;
-  grisés : Tableau, Deux colonnes, Sommaire, Saut de page (temporaire), Citation, Bloc de code, Encadré, Bloc de signature, suivi ×3, aperçu A4. Le garde-fou d'un clic sur un bouton grisé
-  (`wireLockedClickGuard`) tient aussi pour Entrée et Espace.
+  grisés : Tableau, Deux colonnes, Sommaire, Citation, Bloc de code, Encadré, Bloc de signature, suivi ×3, aperçu A4. Le garde-fou d'un clic sur un bouton grisé
+  (`wireLockedClickGuard`) tient aussi pour Entrée et Espace. « Saut de page » n'y est plus : il a le sien dans une grille (lot C, plus bas), grisé seulement là où il n'a pas de sens.
 - Barre de la case : fixée dans une bande (`#v2-cell-bar-dock`, `GridEditor.barSlot`) entre la barre d'outils et le plan de travail, jamais posée sur une case (01/10, glissé de souris : la barre flottante
   recouvrait les cases voisines de la case courante ; `createFloatingPanel` a `dock` / `undock`, la branche « grille » de `wireTableFloatingToolbar` l'y range) ; masquée avec l'éditeur (`pp-editor-hidden` posé par
   `syncEditorVisibilityForMode`) ; hors d'une grille elle flotte comme avant. « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés.
@@ -44,7 +44,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   Rendu : l'éditeur et la Lecture montrent `colspan` / `rowspan` tels quels ; l'Excel les fusionnait déjà (`placeCells`) ; le PDF (`tableFrom`) sait maintenant `rowSpan` (une case fusionnée sur plusieurs lignes
   laisse un emplacement vide `{}` dans chaque colonne qu'elle couvre, aux lignes d'après ; le centrage vertical se calcule sur la hauteur de toutes les lignes couvertes) et `ExportCommon.measuredColumnWidthsPx`
   mesure chaque colonne sur la première case d'UNE seule colonne (une ligne de titre fusionnée sur toute la largeur rendait toutes les colonnes égales dans le PDF et le Word, grille ou document).
-  Limite : une case fusionnée qui chevauche un saut de page du PDF (lot C) ne sera pas coupée par pdfmake. L'export Word (`js/docx-export.js`) ne traite pas encore `rowspan` dans le calcul des largeurs
+  Un saut de page ne passe jamais au milieu d'une case fusionnée (lot C : bouton grisé, saut retiré par le document, ignoré par les exports). L'export Word (`js/docx-export.js`) ne traite pas encore `rowspan` dans le calcul des largeurs
   (une grille ne s'y exporte pas ; tableau de document : roadmap A21).
 - Barre de la case, lot B2 (01/10) : le bouton « Bordures » (`borders-open`, `v2-grid-only`) entre Fond et Alignement vertical ouvre un menu SOUS la bande (`show(btn, { placement: 'bottom-start' })`, nouvelle option de
   `createFloatingPanel` : au-dessus il recouvrirait la barre d'outils ; le menu de fond s'ouvre lui aussi dessous dans une grille) : huit réglages en icônes (Toutes, Extérieures, Intérieures, Haut, Bas, Gauche, Droite,
@@ -60,8 +60,20 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   suit). PDF (`tableFrom`) : `border: [gauche, haut, droite, bas]` et `borderColor` sur chaque case, lus par `ExportCommon.cellBorderSides` (la même règle, sur les `data-border-*`) - pdfmake dessine un trait dès que
   l'UNE ou l'autre des deux cases voisines le demande et une case fusionnée tient son pourtour de sa seule case d'origine (les emplacements vides `{}` ne portent rien) ; Excel : les quatre côtés de la case, un côté sans
   trait n'est pas écrit, toutes les cases d'une plage fusionnée portent le même pourtour. Limites : un trait fin et plein seulement (ni épaisseur, ni pointillé : pdfmake n'a que des épaisseurs de trait par ligne) ;
-  le côté d'une case fusionnée est un seul trait (celui des cases d'en face le suit : « bavure » assumée) ; fusionner perd les traits intérieurs, scinder rend le trait de départ à l'intérieur ; une case fusionnée qui
-  chevauche un saut de page du PDF reste au lot C.
+  le côté d'une case fusionnée est un seul trait (celui des cases d'en face le suit : « bavure » assumée) ; fusionner perd les traits intérieurs, scinder rend le trait de départ à l'intérieur ; une case fusionnée ne
+  chevauche jamais un saut de page (lot C).
+- Saut de page, lot C (01/10) : attribut `pageBreakBefore` de `tableRow` (`data-page-break-before="true"` sur le `<tr>`, faux par défaut et hors grille). Le bouton « Saut de page » de la barre d'outils le pose AVANT la
+  première ligne de la sélection (`GridEditor.togglePageBreak` : un `setNodeMarkup` sur la ligne, un seul Annuler) et s'enfonce quand cette ligne en porte un ; son info-bulle et son nom accessible changent avec le mode
+  (`insert.pageBreak.gridTip` / `gridAria`, relus par `I18n.applyTranslations`). Il est grisé sur la première ligne et là où une case fusionnée couvre la limite (`boundaryCrossed` : la même case sur les lignes r - 1
+  et r) ; `fixPageBreaks` (au chargement et dans `appendTransaction`) retire un saut devenu impossible (ligne du dessus supprimée, HTML collé) ; `canMerge` refuse de fusionner à travers un saut (un saut sur le bord
+  haut de la sélection ne gêne pas). Marqueur : un trait en tirets en `background-image` des cases de la ligne (`css/grid.css`, `--accent-solid`, sous le texte et la voile de sélection) et une pastille
+  `.v2-grid-break` à cheval sur le bord haut du numéro de ligne (`pointer-events: none` : la poignée de la ligne du dessus reste atteignable) ; rien en Lecture. Exports : `ExportCommon.gridRowSegments(rows)` rend les
+  tranches `[de, à[` (un saut avant la première ligne ou au milieu d'une case fusionnée est ignoré, même dans un HTML qui n'est pas passé par l'éditeur) ; PDF : `tableBlocksFrom` coupe le tableau en morceaux qui
+  partagent colonnes et largeurs, chacun après le premier avec `pageBreak: 'before'` ; Excel : `addTableSheet` écrit une feuille par tranche (`fillTableSheet` : lignes recomptées depuis 1, fusions relatives à la
+  feuille, mêmes largeurs et même mise en page ; noms « nom », « nom (2) » par `sheetNameFrom`) et `createSingleWorkbook.appendRecord` retire TOUTES les feuilles d'une valeur qui échoue. Portrait / paysage : `'grille'`
+  rejoint `OrientationToggle.TYPES` ; le sens et le format (`getMarginsPt`, `pageOptionsFromLayout`) règlent la page du PDF et la feuille Excel (`PAPER_SIZES` : A3 8, A4 9, A5 11, A6 70) et s'enregistrent avec la
+  grille (colonne `Margins`). Limites : les moteurs de PDF alternatifs (`js/pdf-export-alt.js`, désactivés dans l'interface) ne suivent pas les sauts ; le saut se pose avant la PREMIÈRE ligne d'une sélection de
+  plusieurs lignes ; un saut disparaît quand sa ligne devient la première ; le code de papier de l'A6 (70) n'a pas été ouvert dans Excel ; la Lecture ne montre aucun marqueur.
 - Sélection de cases à la souris (01/10) : `js/table-select.js` fait défiler le plan de travail quand le pointeur, bouton appuyé dans une case, est près d'un bord (ou au-delà) et prolonge la sélection de cases
   (`CellSelection`) jusqu'à la case qui arrive sous le bord ; le voile `.selectedCell::after` (`css/editor-v2.css`) rend la sélection visible sur une case colorée. Tableau de document et grille. Limite : le défilement
   horizontal d'un `.tableWrapper` d'un document classique n'est pas suivi (seul `#editor-container` défile ; un tableau de document est ramené à la largeur de la page).
@@ -91,7 +103,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | A2 | Lecture et PDF d'une grille (sans feuille A4, `rowHeight` et `colwidth` respectés, texte au milieu de sa case, grille plus large que la page ramenée à la largeur) | en ligne (01/10, `418e609`) |
 | B1 | Barre de la case : fusion et scission, alignement vertical ; cases fusionnées dans le PDF (`rowSpan`) et colonnes mesurées sur une case simple | prêt (01/10) |
 | B2 | Barre de la case : bordures (menu, règle commune `js/table-borders.js`, éditeur, Lecture, PDF, Excel) | prêt (01/10) |
-| C | Saut de page porté par la ligne ; bascule portrait / paysage active pour `grille` (`OrientationToggle.TYPES`) | à faire |
+| C | Saut de page porté par la ligne (bouton, marqueur, PDF : nouvelle page, Excel : nouvelle feuille) ; bascule portrait / paysage et format active pour `grille` (`OrientationToggle.TYPES`) | prêt (01/10) |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) : ligne « Exporter en Excel… » du menu Qualité PDF, grisée hors grille ; les deux lignes Word grisées dans une grille | en ligne (01/10) |
 | E | « Exporter toutes les valeurs de la table » : une archive ZIP d'un classeur par valeur et un classeur unique d'une feuille par valeur ; dans une grille, « lignes » devient « valeurs de la table » (lot PDF compris) ; « Nouvelle grille » visible sans `?dev` (second commit, séparé) | en ligne (01/10) |
 
@@ -101,7 +113,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 - Texte riche : une suite de segments (gras, italique, souligné, barré, couleur, taille, police) ; surlignage et fond seulement quand ils couvrent toute la case ; titres → gras + taille ;
   listes écrites « • », « 1. », « ☐ » ; image posée sur la case, à sa taille.
 - Nombres et dates : valeur typée seulement si la case ne contient que cela (format d'affichage de la bulle conservé), sinon texte.
-- Saut de page : ligne portant le saut → nouvelle feuille, nommée « <nom> (2) » (31 caractères au plus).
+- Saut de page : ligne portant le saut (`data-page-break-before`) → nouvelle feuille, nommée « <nom> (2) », « <nom> (3) »… (31 caractères au plus) ; mêmes largeurs, même mise en page, lignes recomptées depuis 1 ;
+  dans le classeur unique à la suite de la feuille de la même valeur. Papier de la feuille : A3 8, A4 9, A5 11, A6 70 (codes `paperSize` d'OOXML), sens du modèle.
 - Précisions du lot E : l'archive « <table>-export-xlsx.zip » contient un classeur par valeur (nom : modèle de nom de fichier, comme les PDF) ; le classeur « <table>-export.xlsx » une feuille par valeur,
   nommée comme son fichier (caractères `\ / ? * [ ] :` ôtés, 31 caractères au plus, « nom (2) » si le nom est déjà pris, sans tenir compte de la casse) ; une valeur qui échoue est comptée dans la fin du message et retire
   sa feuille à moitié écrite (le nom est rendu) ; ce sont les mêmes confirmation, progression et ligne de fin que le lot PDF, en mots d'Excel ; `exportText` (`js/main.js`) remplace « lignes » par « valeurs de la table » dans une grille
@@ -117,7 +130,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   collage d'un tableau, Annuler, tailles des lignes et colonnes ajoutées, bandeaux alignés, tirer un trait (une transaction, un Annuler, minimum, Échap), clic sur un bandeau, barre de la case, suivi coupé,
   contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour ; lot A2 : alignement vertical enregistré (ancien modèle, valeur inconnue, `vertical-align` collé hors grille),
   Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
-- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 26 cas, lots D, E et B2) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
+- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 31 cas, lots D, E, B2 et C) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
   un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D
   (LibreOffice n'a pas de module Calc dans ce bac à sable).
@@ -128,4 +141,10 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 - `dev-tests/verify-table-select-mouse.mjs` (script Node `tableSelectMouse`, 67 mesures) : glisser pour sélectionner des cases à la vraie souris à 700×400, clair et sombre, tableau de document puis grille : rectangle exact dans six sens, sur du contenu réel (bulles, zone répétée,
   condition, liens, images, cases fusionnées, suivi allumé, barre ouverte), voile visible sur une case colorée et texte lisible, défilement tenu au bord du panneau (document, grille de 15 lignes, grille de 12 colonnes), barre de la case dans sa bande qui ne recouvre aucune case (48 glissés), un clic sur
   la barre agit une fois, Entrée et Espace aussi, Lecture, hors grille la barre flotte comme avant. 40 de ces 67 mesures échouent sur le code d'avant (`0dc5e4c`).
-- Lot B2 : le groupe `grid` (section 10 de `scenarios-grid.js`, 8 cas) - la règle des bords, un réglage écrit les deux cases d'un trait partagé en un Annuler, un côté de case fusionnée = un groupe, fusion et scission, ligne et colonne ajoutées en bout et au milieu, enregistrement et relecture dans l'éditeur et la Lecture, et deux cas PDF lus sur les traits peints (`h.extractPdfLines`) ; trois cas du groupe `xlsx` (couleur et « pas de trait », HTML en désaccord, bloc fusionné) ; `dev-tests/verify-grid-borders-mouse.mjs` (script Node `gridBordersMouse`, 53 mesures) : le menu à la vraie souris à 700×400, clair et sombre. Chaque correction retirée seule fait échouer un de ces cas (preuves sur l'ancien code faites à l'écriture du lot).
+- Lot B2 : le groupe `grid` (section 10 de `scenarios-grid.js`, 8 cas) - la règle des bords, un réglage écrit les deux cases d'un trait partagé en un Annuler, un côté de case fusionnée = un groupe, fusion et scission, ligne et colonne ajoutées en bout et au milieu, enregistrement et relecture dans l'éditeur et la Lecture, et deux cas PDF lus sur les traits peints (`h.extractPdfLines`) ; trois cas du groupe `xlsx` (couleur et « pas de trait », HTML en désaccord, bloc fusionné) ; `dev-tests/verify-grid-borders-mouse.mjs` (script Node `gridBordersMouse`, 57 mesures) : le menu à la vraie souris à 700×400, clair et sombre. Chaque correction retirée seule fait échouer un de ces cas (preuves sur l'ancien code faites à l'écriture du lot).
+- Lot C : le groupe `grid` (section 11 de `scenarios-grid.js`, 9 cas, et un cas d'enregistrement du sens et du format) - le bouton pose et retire le saut avant la ligne visée (Annuler, enregistrement, relecture, libellé), grisé sur la première
+  ligne et au milieu d'une case fusionnée, un saut devenu impossible retiré par le document, le marqueur (trait en tirets, pastille, rien en Lecture), les mots dans les deux langues, le PDF (une page par saut, mêmes colonnes sur
+  chaque page, un saut qui laisserait une page vide ou couperait une case fusionnée ignoré, le sens et le format de la page d'une grille) ; cinq cas du groupe `xlsx` (feuille « nom (2) », saut ignoré, classeur unique, retour arrière de toutes les
+  feuilles d'une valeur, papier et sens) ; `dev-tests/verify-grid-pagebreak-mouse.mjs` (script Node `gridPageBreakMouse`, 65 mesures) : le bouton, le trait en tirets lu sur les pixels, la pastille et la poignée, « Fusionner » grisé,
+  le bouton portrait / paysage dans une grille, à la vraie souris à 700×400, clair et sombre. Sur 19 corrections retirées une à une du code, 18 font échouer un de ces cas (preuves sur l'ancien code faites à l'écriture du lot) ; la dernière, un objet de réglages neuf pour chaque feuille de l'Excel
+  par prudence (ExcelJS peut garder une référence à ceux qu'on lui donne), n'a aucun effet que l'on puisse observer : elle n'a pas de preuve et le code le dit.

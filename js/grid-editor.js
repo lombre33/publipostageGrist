@@ -6,7 +6,8 @@
 //   - la sélection toujours DANS une case (jamais le paragraphe vide que TipTap range sous un tableau final, jamais le curseur « gap » après lui) ;
 //   - les bandeaux A, B, C / 1, 2, 3 autour du tableau, collants au défilement, avec les poignées qui règlent la largeur d'une colonne et la hauteur d'une ligne
 //     (aperçu en direct pendant le geste, UNE seule transaction au relâcher : un seul Annuler) ;
-//   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées.
+//   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées ;
+//   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent.
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
 // fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
@@ -21,7 +22,7 @@ const GridEditor = (function () {
 
   // Ce qu'une grille ne sait pas porter (ni à l'écran, ni dans l'Excel) : un second tableau, des colonnes de texte (le bloc de signature en est une), un sommaire,
   // une citation, un encadré, un bloc de code, un trait horizontal, une note de bas de page, un numéro de page (en-tête/pied : pas dans une grille), le saut de page
-  // de document (celui d'une grille est porté par la ligne - lot « saut de page »). Jamais une liste, un titre, une image : ceux-là s'écrivent dans l'Excel (puces
+  // de document (celui d'une grille est porté par une ligne : `pageBreakBefore`). Jamais une liste, un titre, une image : ceux-là s'écrivent dans l'Excel (puces
   // « • », gras et taille, image posée sur la case).
   const FORBIDDEN_NODES = new Set(['table', 'twoColumnsZone', 'twoColumnsColumn', 'toc', 'headingNumberingConfig', 'pageBreak', 'blockquote', 'callout', 'codeBlock',
     'horizontalRule', 'footnoteRef', 'pageNumberBadge']);
@@ -58,6 +59,13 @@ const GridEditor = (function () {
             default: null,
             parseHTML: el => { const px = parseInt(el.getAttribute('data-row-height'), 10); return px > 0 ? px : null; },
             renderHTML: attrs => (attrs.rowHeight ? { 'data-row-height': String(attrs.rowHeight), style: 'height: ' + attrs.rowHeight + 'px' } : {}),
+          },
+          // Saut de page AVANT cette ligne : la grille n'a pas de page, mais son PDF et son Excel en ont (une nouvelle page, une nouvelle feuille : js/export-common.js:gridRowSegments).
+          // Faux pour toute ligne d'un tableau de document ; `data-page-break-before` est la marque de l'enregistrement, lue par les exports et par le CSS qui trace le trait.
+          pageBreakBefore: {
+            default: false,
+            parseHTML: el => el.getAttribute('data-page-break-before') === 'true',
+            renderHTML: attrs => (attrs.pageBreakBefore ? { 'data-page-break-before': 'true' } : {}),
           },
         });
       },
@@ -316,6 +324,23 @@ const GridEditor = (function () {
     return writeBorders(state, tr, info, spec, TableBorders.resolve(spec)) || null;
   }
 
+  // Retire le saut de page que rien ne peut suivre : avant la première ligne (une page vide) ou au milieu d'une case fusionnée sur plusieurs lignes. L'éditeur n'en pose pas de tel, mais
+  // la première ligne peut le devenir (la ligne du dessus a été supprimée) et un HTML collé ou chargé peut en porter. Rien à faire - et aucune transaction - sinon.
+  function fixPageBreaks(state, tr) {
+    const info = tableInfo(tr ? tr.doc : state.doc);
+    if (!info) return null;
+    const map = libs.TableMap.get(info.node);
+    let out = tr;
+    let changed = false;
+    info.node.forEach((row, offset, index) => {
+      if (!row.attrs.pageBreakBefore || (index > 0 && !boundaryCrossed(map, index))) return;
+      if (!out) out = state.tr;
+      out.setNodeMarkup(info.pos + 1 + offset, undefined, Object.assign({}, row.attrs, { pageBreakBefore: false }));
+      changed = true;
+    });
+    return changed ? out : null;
+  }
+
   // Le document est déjà « une grille » ? Sinon (modèle vide, contenu abîmé) on garde le premier tableau trouvé s'il est valable, sinon la grille de départ.
   // Hors historique et sans signal « modifié » : ouvrir un modèle n'est pas une modification de la personne.
   function normalizeDocument() {
@@ -335,6 +360,8 @@ const GridEditor = (function () {
     if (fixed) tr = fixed;
     const bordered = fixBorders(state, tr);
     if (bordered) tr = bordered;
+    const broken = fixPageBreaks(state, tr);
+    if (broken) tr = broken;
     if (tr) view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
     selectFirstCell();
   }
@@ -445,7 +472,14 @@ const GridEditor = (function () {
     return true;
   }
 
-  function canMerge(ed) { return active && ed.can().mergeCells(); }
+  // Fusionner n'a de sens que pour des cases d'une même page : une case ne s'étend jamais de part et d'autre d'un saut de page (le PDF et l'Excel la couperaient en deux).
+  function canMerge(ed) {
+    if (!active || !ed.can().mergeCells()) return false;
+    const info = tableInfo(ed.state.doc);
+    const rect = info && selectionRect(ed.state, info);
+    for (let row = rect ? rect.top + 1 : 0; rect && row < rect.bottom; row++) if (info.node.child(row).attrs.pageBreakBefore) return false;
+    return true;
+  }
   function canSplit(ed) { return active && ed.can().splitCell(); }
 
   // Le rectangle (emplacements de la grille, `right` et `bottom` exclus) que couvrent les cases visées : toujours un rectangle, une sélection de cases n'en connaît pas d'autre.
@@ -535,6 +569,53 @@ const GridEditor = (function () {
     return !!rect && TableBorders.usableEdges(borderSpec(info.node), TableBorders.presetEdges(preset, rect)).length > 0;
   }
 
+  // --- Saut de page : porté par une ligne -----------------------------------------------------------------------------------------------------------------------------
+  // Une case couvre-t-elle la limite entre la ligne `row - 1` et la ligne `row` ? (la même case dans les deux, dans l'une des colonnes)
+  function boundaryCrossed(map, row) {
+    for (let col = 0; col < map.width; col++) if (map.map[(row - 1) * map.width + col] === map.map[row * map.width + col]) return true;
+    return false;
+  }
+
+  // La ligne que le bouton vise : la première de la sélection (le saut se pose AVANT elle).
+  function pageBreakRow(state) {
+    const info = tableInfo(state.doc);
+    const rect = info && selectionRect(state, info);
+    return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
+  }
+
+  // Pas avant la première ligne (une page vide), pas au milieu d'une case fusionnée sur plusieurs lignes (aucune case n'est coupée en deux) : le bouton se grise.
+  function canTogglePageBreak(ed) {
+    if (!active) return false;
+    const target = pageBreakRow(ed.state);
+    return !!target && target.row > 0 && !boundaryCrossed(target.map, target.row);
+  }
+
+  // La ligne visée porte-t-elle un saut ? (le bouton est alors enfoncé : un second clic le retire)
+  function hasPageBreak(ed) {
+    if (!active) return false;
+    const target = pageBreakRow(ed.state);
+    return !!target && !!target.info.node.child(target.row).attrs.pageBreakBefore;
+  }
+
+  // Pose le saut avant la ligne visée, ou le retire s'il y est déjà : une transaction, un Annuler.
+  function togglePageBreak(ed) {
+    if (!canTogglePageBreak(ed)) return false;
+    const { info, row } = pageBreakRow(ed.state);
+    let pos = info.pos + 1;
+    for (let i = 0; i < row; i++) pos += info.node.child(i).nodeSize;
+    const node = info.node.child(row);
+    ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { pageBreakBefore: !node.attrs.pageBreakBefore })));
+    return true;
+  }
+
+  // Les lignes qui portent un saut, par rang : ce que montrent les bandeaux.
+  function pageBreakRows() {
+    const info = editor && tableInfo(editor.state.doc);
+    const rows = [];
+    if (info) info.node.forEach(row => rows.push(!!row.attrs.pageBreakBefore));
+    return rows;
+  }
+
   // --- Extension TipTap : garde-fou, sélection, touches ----------------------------------------------------------------------------------------------------------
   function createExtension(Extension) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
@@ -566,6 +647,8 @@ const GridEditor = (function () {
               tr = fixDimensions(newState, null);
               const bordered = fixBorders(newState, tr);
               if (bordered) tr = bordered;
+              const broken = fixPageBreaks(newState, tr);
+              if (broken) tr = broken;
             }
             const sel = tr ? tr.selection : newState.selection;
             if (!selectionInsideTable(sel)) {
@@ -689,6 +772,7 @@ const GridEditor = (function () {
     strips.corner.title = I18n.t('grid.selectAll');
     strips.cols.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeColumn'); });
     strips.rows.querySelectorAll('.v2-grid-handle').forEach(h => { h.title = I18n.t('grid.resizeRow'); });
+    strips.rows.querySelectorAll('.v2-grid-rowhead.has-break').forEach(h => { h.title = I18n.t('grid.pageBreak'); });
   }
 
   function scheduleSync() {
@@ -710,13 +794,24 @@ const GridEditor = (function () {
     return head;
   }
 
+  // Le numéro d'une ligne qui porte un saut de page : une pastille à cheval sur son bord haut (le trait en tirets sur la ligne, c'est css/grid.css), et l'info-bulle du saut. La pastille ne répond pas au
+  // pointeur : la poignée qui règle la ligne du dessus, juste dessous, reste atteignable.
+  function markPageBreak(head, on) {
+    head.classList.toggle('has-break', on);
+    let badge = head.querySelector(':scope > .v2-grid-break');
+    if (!on) { if (badge) badge.remove(); head.removeAttribute('title'); return; }
+    if (!badge) { badge = el('span', 'v2-grid-break'); badge.innerHTML = Icons.svg('gridBreak'); head.appendChild(badge); }
+    head.title = I18n.t('grid.pageBreak');
+  }
+
   function syncStrips(force) {
     if (!active || !strips || !editor) return;
     const m = measure();
     if (!m) return;
     const table = m.table;
     if (resizeObserver && !table.__gridObserved) { resizeObserver.disconnect(); resizeObserver.observe(table); table.__gridObserved = true; }
-    const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',');
+    const breaks = pageBreakRows();
+    const key = m.widths.map(w => w.toFixed(2)).join(',') + '|' + m.heights.map(h => h.toFixed(2)).join(',') + '|' + breaks.map(on => (on ? 1 : 0)).join('');
     if (force || key !== lastKey) {
       lastKey = key;
       fillHeads(strips.cols, m.widths.length, 'v2-grid-colhead', buildHead);
@@ -732,6 +827,7 @@ const GridEditor = (function () {
         head.style.height = h + 'px';
         head.firstChild.textContent = String(i + 1);
         head.dataset.index = String(i);
+        markPageBreak(head, !!breaks[i]);
       });
       refreshLabels();
     }
@@ -947,6 +1043,6 @@ const GridEditor = (function () {
     TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
     configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
     currentCellDom, columnWidths, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders,
+    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, canTogglePageBreak, hasPageBreak, togglePageBreak,
   };
 })();

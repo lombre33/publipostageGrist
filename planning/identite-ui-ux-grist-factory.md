@@ -474,7 +474,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   affichée près du pointeur, une seule transaction (un seul Annuler), Échap annule ; une colonne ne passe pas sous 24 px, une ligne ne passe
   pas sous la hauteur de son texte. Un clic sur une lettre, un numéro ou le coin sélectionne la colonne, la ligne ou toute la grille ;
   Ctrl+A prend les cases, Suppr les vide, les flèches et Tab ne sortent jamais du tableau. Ce qui n'a pas de sens dans un tableau unique est
-  grisé, jamais retiré : Tableau, Deux colonnes, Sommaire, Saut de page (le temps que la grille ait le sien), Citation, Bloc de code, Encadré, Bloc de signature, les trois
+  grisé, jamais retiré : Tableau, Deux colonnes, Sommaire, Citation, Bloc de code, Encadré, Bloc de signature, les trois
   boutons du suivi des modifications et l'aperçu A4 ; « Lien », la mise en forme, l'image, les variables et Annuler restent actifs. Le
   garde-fou de l'éditeur tient aussi pour le clavier et le collage : la grille reste UN tableau — ni second tableau, ni deux colonnes, ni
   sommaire, ni citation, ni encadré, ni bloc de code, ni image en calque, et on ne supprime ni le tableau, ni sa dernière ligne ou colonne.
@@ -507,6 +507,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (fusion, ligne ou colonne supprimée, HTML d'ailleurs), « pas de trait » l'emporte, puis la première couleur dans l'ordre de lecture ; une case fusionnée n'a qu'une valeur par côté : fusionner garde son pourtour, scinder le
   rend, une ligne ou une colonne ajoutée prolonge les traits intérieurs (le cadre reste dehors). L'éditeur, la Lecture, le PDF et l'Excel dessinent les mêmes traits — un trait fin et plein, de sa couleur, ou aucun —, sans
   épaisseur ni style au choix. Le texte du menu suit les contrastes de la charte (≥ 4,5:1, clair et sombre).
+- Saut de page d'une grille (demande d'Antoine du 01/10 : « saut de page gardé : marqueur sur la ligne, nouvelle page du PDF, nouvelle feuille de l'Excel »). Dans une grille, le bouton « Saut de page » de la barre
+  d'outils pose le saut AVANT la ligne de la case courante (avant la première ligne d'une sélection de cases) ; son info-bulle dit « Saut de page avant la ligne » (au lieu de « Saut de page ») et le bouton est enfoncé
+  sur une ligne qui en porte un : un second clic le retire, un seul Annuler défait le geste. Il est grisé, jamais retiré, sur la première ligne (la page serait vide) et au milieu d'une case fusionnée sur plusieurs
+  lignes (elle serait coupée en deux) ; « Fusionner » est grisé quand la sélection enjambe un saut, et un saut devenu impossible (la ligne du dessus a été supprimée) est retiré par le document. Le saut est une marque
+  de la ligne (`data-page-break-before`, enregistrée avec le modèle) : il suit sa ligne quand on en ajoute ou supprime d'autres. Il se voit dans l'éditeur par un trait en tirets de la couleur d'accent sur le bord
+  haut de la ligne (sous le texte et la sélection, le fond choisi n'est pas touché) et par une pastille à cheval sur le bord haut de son numéro (info-bulle « Saut de page : nouvelle page du PDF, nouvelle feuille de
+  l'Excel ») qui laisse la poignée de la ligne du dessus atteignable ; la Lecture n'en montre rien. Le PDF commence une nouvelle page à chaque saut, avec les mêmes colonnes à la même largeur ; l'Excel une nouvelle
+  feuille (« nom », « nom (2) », 31 caractères au plus ; dans le classeur unique, à la suite de la feuille de la même valeur), avec la même mise en page sur chacune. Le bouton portrait / paysage et son menu (A3 à A6)
+  sont actifs dans une grille : le sens et le format règlent la page du PDF et le papier de la feuille Excel, et s'enregistrent avec la grille.
 - Colonnes d'un tableau avec le suivi des modifications (choix « Faire marcher » d'Antoine, 01/10) : « Colonne avant », « Colonne après » et « Supprimer la colonne » de la barre du tableau agissent comme
   une frappe suggérée. Une colonne ajoutée reste dans le tableau, alignée case par case, teintée de vert pâle (texte `#146c48` sur `#e5f6ee`) ; une colonne supprimée reste, barrée et teintée de rouge pâle
   (texte `#b42318` sur `#fbe9e9`) ; ces teintes sont des constantes, pas des jetons du thème : la page du document reste blanche en clair comme en sombre, et le texte y atteint 4,5:1 au moins. « Tout accepter »
@@ -541,8 +550,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
 - Orientation de la page (demande d'Antoine du 01/10, « une bascule paysage et portrait… également pour les modèles
   classiques ») : le bouton Portrait / Paysage de la barre, juste après Aperçu A4, montre la page telle qu'elle est (haute en
-  portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques et les macro-modèles ; pour un email et une
-  grille il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
+  portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques, les macro-modèles et les grilles (une grille n'a pas de page à l'écran : le sens règle la page de son PDF et la feuille de son Excel) ; pour un email
+  il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
   `orientation` de la colonne `Margins`, absente = portrait) ; changer d'orientation garde les quatre marges en millimètres.
   La feuille paysage (297 × 210 mm, 1 122,52 px de mise en page) est ramenée à la largeur du panneau par le même `zoom` : à
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
@@ -553,8 +562,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   gris discret, au moins 4,5:1) ; la coche dit le sens et le format courants. Le bouton garde son icône (la page telle qu'elle est) et son clic (tourner la page) ; il n'a pas
   d'info-bulle, que l'ouverture du menu retirerait : son nom accessible dit « Page A5 en portrait (passer en paysage) ». La case « Aperçu A4 » devient « Aperçu A5 » (« A5 preview »). Un modèle
   a un seul format, enregistré avec lui (clé `format` de la colonne `Margins`, absente ou inconnue = A4) ; changer de format garde le sens, re-borne les marges pour que la zone de texte garde
-  20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Email et grille gardent le menu visible et grisé, titre
-  « Page (pas disponible pour ce modèle) ». À 700 px de panneau, A5 tient sans réduction, A3 portrait passe à 0,60 et A3 paysage tombe au plancher de 0,5 (la zone d'édition défile à
+  20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Un email garde le menu visible et grisé, titre
+  « Page (pas disponible pour ce modèle) » ; une grille a le même menu, actif (le format règle la page du PDF et le papier de l'Excel). À 700 px de panneau, A5 tient sans réduction, A3 portrait passe à 0,60 et A3 paysage tombe au plancher de 0,5 (la zone d'édition défile à
   l'horizontale). La galerie et l'arbre des modèles montrent encore une feuille A4 portrait. D'autres formats (Lettre US...) ne s'ajoutent qu'après le choix d'Antoine.
 - Page d'un macro-modèle (carte d'Antoine du 01/10, « Autoriser le paysage pour les macro-modèles ? » : Oui) : le bouton Page et son menu sont actifs sur un macro-modèle comme sur un modèle classique,
   au même endroit et du même aspect ; la coche dit le sens et le format de ce macro-modèle (« Page A3 en paysage (passer en portrait) »). Sa page est dans sa propre ligne (colonne `Margins`, avec ses marges)

@@ -17,11 +17,11 @@ const MainToolbar = (function () {
   // Mode grille (planning/feature-mode-grille-excel.md) : même patron, posé par js/main.js quand le modèle courant est de type 'grille' - un tableau unique, sans
   // feuille. GRID_LOCKED_IDS = ce qui n'a aucun sens dans un tableau unique, grisé et jamais retiré (règle d'Antoine) ; « Lien » reste actif (un lien dans une case a
   // un sens). Les boutons qui ouvrent sur un autre type de bloc (citation, bloc de code, encadré, signature du menu Lien) en font partie ; un fil qui ajoute un bouton de ce menu
-  // l'ajoute ici. Le saut de page y entre tant qu'il n'est pas porté par une ligne du tableau (il redevient actif avec la bascule portrait / paysage de la grille).
+  // l'ajoute ici. Le saut de page n'y est pas : il se pose avant la ligne sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncToolbarState).
   let inGridMode = false;
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
-    'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-page-break',
+    'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
     'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature',
     'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all',
   ];
@@ -270,7 +270,20 @@ const MainToolbar = (function () {
     setLocked('v2-btn-table', inEmailMode || inMacroMode);
     setLocked('v2-btn-two-columns', inEmailMode || inMacroMode);
     setLocked('v2-image-group', inEmailMode || inMacroMode);
-    setLocked('v2-btn-page-break', inEmailMode || inMacroMode);
+    // Dans une grille le bouton pose (ou retire) le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée sur plusieurs lignes, enfoncé sur une ligne qui
+    // en porte un ; son libellé le dit (un autre texte pour la même icône, dans les deux langues : les clés suivent le mode, I18n.applyTranslations les relit au changement de langue).
+    setLocked('v2-btn-page-break', inEmailMode || inMacroMode || (inGridMode && !GridEditor.canTogglePageBreak(editor)));
+    const pageBreakBtn = document.getElementById('v2-btn-page-break');
+    if (pageBreakBtn) {
+      const keys = inGridMode ? ['insert.pageBreak.gridTip', 'insert.pageBreak.gridAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
+      if (pageBreakBtn.getAttribute('data-i18n-tip') !== keys[0]) {
+        pageBreakBtn.setAttribute('data-i18n-tip', keys[0]); pageBreakBtn.setAttribute('data-i18n-aria', keys[1]);
+        pageBreakBtn.setAttribute('data-tip', I18n.t(keys[0])); pageBreakBtn.setAttribute('aria-label', I18n.t(keys[1]));
+      }
+      const onBreak = inGridMode && GridEditor.hasPageBreak(editor);
+      setActive('v2-btn-page-break', onBreak);
+      if (inGridMode) pageBreakBtn.setAttribute('aria-pressed', onBreak ? 'true' : 'false'); else pageBreakBtn.removeAttribute('aria-pressed');
+    }
     setLocked('v2-btn-toc', inEmailMode || inMacroMode);
     // Un macro-modèle n'a aucun corps propre à mettre en forme (contrairement au mode email) : verrouille aussi ce que le mode email laisse actif.
     setLocked('v2-heading-group', inMacroMode);
@@ -448,7 +461,11 @@ const MainToolbar = (function () {
       await Editor.insertImageAtDefaultSize(src);
     });
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(document.getElementById('v2-btn-image-from-variable')));
-    bind('v2-btn-page-break', () => editor.chain().focus().insertPageBreak().run());
+    // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.
+    bind('v2-btn-page-break', () => {
+      if (GridEditor.isActive()) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
+      editor.chain().focus().insertPageBreak().run();
+    });
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
     // Une icône pour trois fonctions (js/link-dialog.js) : le bouton et sa première ligne ouvrent la fenêtre du lien, les deux autres lignes mettent en forme.

@@ -55,6 +55,19 @@ body.pp-grid-resizing-col, body.pp-grid-resizing-col * { cursor: col-resize !imp
 body.pp-grid-resizing-row, body.pp-grid-resizing-row * { cursor: row-resize !important; user-select: none !important; }
 body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-grid-handle::after { opacity: 0; }
 
+/* --- Saut de page --- Une ligne qui en porte un (`data-page-break-before`, js/grid-editor.js) : le PDF y commence une page, l'Excel une feuille. Un trait en tirets sur son bord haut, tracé dans le fond de
+   ses cases (`background-image` : il reste sous le texte et la sélection, et ne touche pas au fond choisi), et une pastille à cheval sur le bord haut de son numéro, qui ne répond pas au pointeur
+   (la poignée de la ligne du dessus, juste dessous, reste atteignable). Rien en Lecture : le saut ne se voit que là où on le pose. Le bleu des boutons pleins : le même dans les deux thèmes (F5). */
+#editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > td,
+#editor-container.v2-grid-mode .tiptap table tr[data-page-break-before] > th {
+  background-image: repeating-linear-gradient(90deg, var(--accent-solid) 0 6px, transparent 6px 10px); background-size: 100% 2px; background-repeat: no-repeat; background-position: top left;
+}
+.v2-grid-break {
+  position: absolute; left: 9px; top: -9px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 26px; height: 18px;
+  border-radius: 5px; background: var(--accent-solid); color: #fff; pointer-events: none;
+}
+.v2-grid-break svg { width: 14px; height: 14px; }
+
 /* Taille affichée près du pointeur pendant le glissé. */
 .v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }
 

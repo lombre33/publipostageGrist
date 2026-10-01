@@ -435,33 +435,49 @@ const XlsxExport = (function () {
     return { placed, columnCount };
   }
 
+  // Les feuilles d'un enregistrement : une seule, ou une par tranche de lignes que les sauts de page de la grille délimitent (« nom », « nom (2) »... : le nom de la suivante est pris comme
+  // celui d'un enregistrement de même nom). Elles ont toutes les mêmes colonnes et chacune recompte ses lignes depuis 1 ; la première est rendue.
   async function addTableSheet(workbook, name, root, options) {
     const table = root.querySelector('table');
-    const sheetOptions = {
+    // Un objet de réglages neuf pour chaque feuille, par prudence : ExcelJS peut garder une référence à ceux qu'on lui donne (aucun test ne voit la différence aujourd'hui).
+    const sheetOptions = () => ({
       views: [{ showGridLines: false }],
       pageSetup: {
-        paperSize: 9, orientation: options.landscape ? 'landscape' : 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        paperSize: options.paperSize || 9, orientation: options.landscape ? 'landscape' : 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
         margins: Object.assign({ left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 }, options.marginsInch || {}),
       },
-    };
-    const sheet = workbook.addWorksheet(sheetNameFrom(name, options.usedNames), sheetOptions);
+    });
+    const used = options.usedNames || new Set();
+    const newSheet = () => workbook.addWorksheet(sheetNameFrom(name, used), sheetOptions());
     if (!table) {
+      const sheet = newSheet();
       sheet.getColumn(1).width = 80;
       const cell = sheet.getCell(1, 1);
       cell.value = (root.textContent || '').trim().slice(0, MAX_CELL_CHARS);
       cell.font = fontOf({}); cell.alignment = { vertical: 'top', wrapText: true };
       return sheet;
     }
-    const rows = Array.from(table.rows);
-    const { placed, columnCount } = placeCells(rows);
-    const widthsPx = columnWidthsPx(table, columnCount);
+    const allRows = Array.from(table.rows);
+    const widthsPx = columnWidthsPx(table, placeCells(allRows).columnCount);
+    const borderSides = ExportCommon.cellBorderSides(table);
+    let first = null;
+    for (const [from, to] of ExportCommon.gridRowSegments(allRows)) {
+      const sheet = newSheet();
+      await fillTableSheet(workbook, sheet, allRows.slice(from, to), widthsPx, borderSides);
+      first = first || sheet;
+    }
+    return first;
+  }
+
+  // Une feuille pour `rows` (les lignes de sa tranche) : largeur des colonnes, hauteur des lignes, fusions, puis chaque case.
+  async function fillTableSheet(workbook, sheet, rows, widthsPx, borderSides) {
+    const { placed } = placeCells(rows);
     widthsPx.forEach((px, i) => { sheet.getColumn(i + 1).width = columnWidthFromPx(px); });
     rows.forEach((tr, r) => { sheet.getRow(r + 1).height = rowHeightFromPx(tr.getBoundingClientRect().height); });
 
     // Les fusions d'abord : ExcelJS copie le style de la case maîtresse sur les autres au moment de fusionner, on style ensuite chaque case une à une.
     placed.forEach(p => { if (p.rowSpan > 1 || p.colSpan > 1) sheet.mergeCells(p.row + 1, p.col + 1, p.row + p.rowSpan, p.col + p.colSpan); });
 
-    const borderSides = ExportCommon.cellBorderSides(table);
     const pendingImages = [];
     for (const p of placed) {
       const { td } = p;
@@ -518,10 +534,9 @@ const XlsxExport = (function () {
       const id = workbook.addImage({ base64: data.base64, extension: data.extension });
       sheet.addImage(id, { tl: { col: entry.col, row: entry.row }, ext: { width: Math.round(size.width), height: Math.round(size.height) }, editAs: 'oneCell' });
     }
-    return sheet;
   }
 
-  // Ajoute au classeur la feuille d'un enregistrement : `resolvedHtml` est le HTML du modèle dont les bulles ont déjà pris leur valeur (ReaderMode.preview avec
+  // Ajoute au classeur la feuille d'un enregistrement (une de plus à chaque saut de page de la grille) : `resolvedHtml` est le HTML du modèle dont les bulles ont déjà pris leur valeur (ReaderMode.preview avec
   // typedCellHook, qui laisse sur les cases à nombre ou date leurs marques data-xl-*). Le tableau est rendu hors écran le temps de la mesure (largeur des colonnes et
   // hauteur des lignes telles que l'éditeur les affiche).
   async function addRecordSheet(workbook, name, resolvedHtml, options) {
@@ -543,11 +558,14 @@ const XlsxExport = (function () {
     workbook.modified = workbook.created;
     return workbook;
   }
-  // Les réglages de page d'un modèle (js/page-layout.js) pour la feuille : orientation et marges en pouces.
+  // Le code du papier d'Excel (`paperSize` de la mise en page) de chacun des formats de js/page-layout.js : ceux d'Excel pour A3, A4 et A5, celui du pilote d'impression Windows pour A6
+  // (DMPAPER_A6) ; tout autre format est l'A4.
+  const PAPER_SIZES = { A3: 8, A4: 9, A5: 11, A6: 70 };
+  // Les réglages de page d'un modèle (js/page-layout.js) pour la feuille : orientation, format du papier et marges en pouces.
   function pageOptionsFromLayout() {
     const m = PageLayout.getMarginsMm();
     const inch = mm => Math.round(mm / 25.4 * 100) / 100;
-    return { landscape: PageLayout.isLandscape(), marginsInch: { left: inch(m.left), right: inch(m.right), top: inch(m.top), bottom: inch(m.bottom) } };
+    return { landscape: PageLayout.isLandscape(), paperSize: PAPER_SIZES[PageLayout.getFormat()] || PAPER_SIZES.A4, marginsInch: { left: inch(m.left), right: inch(m.right), top: inch(m.top), bottom: inch(m.bottom) } };
   }
 
   // Le HTML d'un enregistrement dont les bulles ont pris leur valeur (typedCellHook marque les cases à nombre ou date) et le nom de son fichier.
@@ -577,8 +595,8 @@ const XlsxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.xlsx');
   }
 
-  // Un classeur unique pour toute la table : une feuille par enregistrement, nommée comme le fichier qu'il aurait eu dans l'archive ZIP (31 caractères au plus, « nom (2) »
-  // quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
+  // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le fichier qu'il aurait eu dans l'archive ZIP
+  // (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
   async function createSingleWorkbook(options) {
     await ensureExcelLibLoaded();
     const workbook = newWorkbook();
