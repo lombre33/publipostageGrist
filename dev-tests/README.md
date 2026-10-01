@@ -607,6 +607,14 @@ sortait collée à gauche dans le `.docx` alors que l'éditeur, le mode Lecture 
 les trois. Cause : `alignment` est une propriété de **paragraphe** en OOXML (`w:jc`), jamais de run —
 l'image doit donc occuper son propre `<w:p>` centré (cf. `splitRunsAtFloatedImages`, `js/docx-export.js`).
 
+**« Erreur génération DOCX. » sur la Fiche mission (2026-10-01)** : un modèle collé de Word garde des couleurs
+**nommées** (`color: black`, `color: red`) que le navigateur ne réécrit pas en `rgb()` ; `docx.js` n'accepte qu'un
+`RRGGBB` pour `w:color` et `w:shd` et levait « Invalid hex value 'BLACK' », ce qui faisait échouer l'export entier. La
+couleur est maintenant lue par le navigateur (`cssColorHex`, `js/docx-export.js`). `docx_run_color_forms` couvre toutes
+les formes (nom, `#f00`, `rgb()` en %, `hsl()`, `rgba()`, transparent, illisible) ; `docx_fiche_mission_named_colors_and_reference_paths`
+rejoue le modèle d'Antoine avec des bulles à chemin de références sur trois niveaux et une date (dernier du groupe : il
+fixe la ligne courante de la page).
+
 ## Vérification transversale — marges de page et largeur de colonne mm (`scenarios-pagelayout.js`)
 
 Les marges de page (onglet Réglages, `js/page-layout.js`) et la largeur de colonne en mm d'une zone
