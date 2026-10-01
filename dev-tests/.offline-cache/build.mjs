@@ -59,6 +59,7 @@ const umd = [
   ['node_modules/pdf-lib/dist/pdf-lib.min.js', 'umd/pdf-lib.min.js'],
   ['node_modules/html2pdf.js/dist/html2pdf.bundle.min.js', 'umd/html2pdf.bundle.min.js'],
   ['node_modules/docx/dist/index.iife.js', 'umd/docx.iife.js'],
+  ['node_modules/exceljs/dist/exceljs.min.js', 'umd/exceljs.min.js'],
 ];
 for (const [from, to] of umd) {
   try { copyFileSync(from, to); }

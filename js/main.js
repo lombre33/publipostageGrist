@@ -143,6 +143,7 @@
     MainToolbar.setEmailMode(false);
     MainToolbar.setMacroMode(true);
     MainToolbar.setGridMode(false);
+    syncExportRowsForModelType();
     HeaderFooterPreview.setEmailMode(false);
     syncA4PreviewForModelType();
     Editor.refreshPaginationPreview();
@@ -226,6 +227,7 @@
     MainToolbar.setEmailMode(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
+    syncExportRowsForModelType();
     HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');
     // Une grille n'a pas de feuille A4 : la classe a4-preview sort des conteneurs AVANT que la mise en page (syncEditorVisibilityForMode) et la pagination ne
     // mesurent quoi que ce soit.
@@ -860,6 +862,7 @@
       const btnMerged = document.getElementById('v2-btn-export-pdf-merged');
       const btnDocx = document.getElementById('v2-btn-export-docx');
       const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
+      const btnXlsx = document.getElementById('v2-btn-export-xlsx');
       const btnEmail = document.getElementById('btn-create-email');
       const keyboardFocus = keyboardFocusedElement();
       OrientationToggle.setBusy(true);
@@ -868,6 +871,7 @@
       setExportControlLocked(btnMerged, true);
       setExportControlLocked(btnDocx, true);
       setExportControlLocked(btnDocxBatch, true);
+      setExportControlLocked(btnXlsx, true);
       setExportControlLocked(btnEmail, true);
       try {
         await fn(...args);
@@ -879,6 +883,7 @@
         setExportControlLocked(btnMerged, false);
         setExportControlLocked(btnDocx, false);
         setExportControlLocked(btnDocxBatch, false);
+        setExportControlLocked(btnXlsx, false);
         setExportControlLocked(btnEmail, false);
         restoreKeyboardFocus(keyboardFocus);
       }
@@ -953,6 +958,36 @@
       console.error(e);
       setStatus(I18n.t('status.docxGenerationError'), true);
     }
+  }
+
+  // Export Excel d'une grille (js/xlsx-export.js) : le tableau du modèle, enregistrement résolu, dans un classeur d'une feuille. Mêmes gestes que l'export DOCX ; sans
+  // en-tête ni pied de page ni marges du document (une grille n'a pas de feuille A4 : la feuille Excel reprend l'orientation et les marges de PageLayout).
+  async function onExportXlsx() {
+    Editor.exitHeaderFooterModeIfActive();
+    const record = GristAPI.getCurrentRecord();
+    if (!record) { alert(I18n.t('alert.noRecordForExportXlsx')); return; }
+    setStatus(I18n.t('status.xlsxGenerating'));
+    try {
+      const tableId = currentTableId || GristAPI.getCurrentTableId();
+      const html = await currentDocumentHtml(tableId, record);
+      await XlsxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate());
+      setStatus(I18n.t('status.xlsxGenerated'));
+    } catch (e) {
+      console.error(e);
+      setStatus(I18n.t('status.xlsxGenerationError'), true);
+    }
+  }
+
+  // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste dans le menu, grisée
+  // (« rien ne disparaît, on grise », demande d'Antoine du 2026-10-01) ; le clic d'une ligne grisée ne fait rien (cf. onExportRow, au câblage des boutons).
+  function syncExportRowsForModelType() {
+    const grid = GridEditor.isGridType(currentTypeModele);
+    [['v2-btn-export-docx', grid], ['v2-btn-export-docx-batch', grid], ['v2-btn-export-xlsx', !grid]].forEach(([id, off]) => {
+      const row = document.getElementById(id);
+      if (!row) return;
+      row.classList.toggle('v2-hover-row-disabled', off);
+      if (off) row.setAttribute('aria-disabled', 'true'); else row.removeAttribute('aria-disabled');
+    });
   }
 
   // Caractères invalides dans un nom de fichier ZIP/Windows - une valeur de cellule Grist du type "Dupont/Fils" casserait silencieusement l'arborescence du
@@ -1524,8 +1559,11 @@
     // Fonctions fléchées : sans elles, l'événement click arriverait comme premier argument (`merged`) et serait lu comme vrai.
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(() => onExportBatch('pdfZip')));
     document.getElementById('v2-btn-export-pdf-merged').addEventListener('click', withExportLock(() => onExportBatch('pdfMerged')));
-    document.getElementById('v2-btn-export-docx').addEventListener('click', withExportLock(onExportDocx));
-    document.getElementById('v2-btn-export-docx-batch').addEventListener('click', withExportLock(() => onExportBatch('docxZip')));
+    // Une ligne grisée du menu (syncExportRowsForModelType) ne lance rien : la classe ne bloque pas le clic à elle seule.
+    const onExportRow = (id, handler) => document.getElementById(id).addEventListener('click', e => { if (!e.currentTarget.classList.contains('v2-hover-row-disabled')) handler(); });
+    onExportRow('v2-btn-export-docx', withExportLock(onExportDocx));
+    onExportRow('v2-btn-export-docx-batch', withExportLock(() => onExportBatch('docxZip')));
+    onExportRow('v2-btn-export-xlsx', withExportLock(onExportXlsx));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));

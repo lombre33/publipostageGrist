@@ -457,7 +457,10 @@ const ReaderMode = (function () {
       return { node: span, isError: true };
     }
   }
-  async function preview(htmlContent, tableId, record) {
+  // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle APRÈS le déroulé des zones répétées et AVANT qu'elle soit remplacée par sa
+  // valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un nombre ou qu'une date. Il s'exécute
+  // d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors encore en place.
+  async function preview(htmlContent, tableId, record, onBadge) {
     const wrapper = document.createElement('div'); wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
@@ -468,6 +471,7 @@ const ReaderMode = (function () {
     const badges = wrapper.querySelectorAll('.var-badge');
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
+      if (onBadge) await onBadge(badge, LoopRules.bindingOf(badge));
       const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format, loopCtx);
       badge.replaceWith(node);
     }));

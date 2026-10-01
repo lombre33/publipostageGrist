@@ -85,6 +85,7 @@ const GROUPS = {
   calloutSignature: 'scenarios-callout-signature',
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
   blankLastPage: 'scenarios-blank-last-page',
+  xlsx: 'scenarios-xlsx', // export Excel d'une grille (js/xlsx-export.js) : le .xlsx est dézippé et son OOXML lu (valeurs, formats, largeurs, fusions, liens, images, menu)
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -206,7 +207,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/html2pdf\.bundle\.min\.js$/, 'umd/html2pdf.bundle.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
-] : [];
+  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
+].filter(([, rel]) => rel !== 'umd/exceljs.min.js' || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);

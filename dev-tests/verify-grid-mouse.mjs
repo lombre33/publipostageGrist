@@ -66,7 +66,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/html2pdf\.bundle\.min\.js$/, 'umd/html2pdf.bundle.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
-] : [];
+  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
+].filter(([, rel]) => rel !== 'umd/exceljs.min.js' || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[verify-grid-mouse] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);
@@ -501,6 +502,81 @@ async function runTheme(theme) {
   await page.waitForTimeout(500);
   const backInEdit = await page.evaluate(() => ({ active: GridEditor.isActive(), cols: document.querySelectorAll('.v2-grid-colhead').length, rows: document.querySelectorAll('.v2-grid-rowhead').length, readerHidden: getComputedStyle(document.getElementById('reader-container')).display === 'none' }));
   check(`${label} - retour à l'édition (vrai clic) : la grille est là avec ses 12 lettres et ses 3 numéros`, backInEdit.active && backInEdit.cols === 12 && backInEdit.rows === 3 && backInEdit.readerHidden, backInEdit);
+
+  // 11) Export Excel (lot D) à la vraie souris : le menu « Qualité PDF » (au survol) garde ses trois lignes d'export, grisées selon le type de modèle ; dans une grille « Exporter en
+  //     Excel… » télécharge le classeur de la ligne courante, et une ligne Word grisée ne lance rien.
+  await freshGrid(page);
+  await page.evaluate(() => {
+    const badge = `<span class="var-badge" data-table="GrilleSouris" data-column="Nom" data-key="GrilleSouris.Nom"></span>`;
+    const html = `<table style="width: 300px;"><colgroup><col style="width: 150px;"><col style="width: 150px;"></colgroup><tbody><tr data-row-height="30" style="height: 30px"><td colwidth="150"><p>Nom</p></td><td colwidth="150"><p>${badge}</p></td></tr></tbody></table>`;
+    GridEditor.setActive(false); Editor.setHTML(html); GridEditor.setActive(true);
+  });
+  await page.waitForTimeout(300);
+  const openExportMenu = async () => {
+    const trigger = await boxOf(page, '#v2-btn-quality');
+    await page.mouse.move(trigger.x - 20, trigger.y + 40, { steps: 2 });
+    await page.mouse.move(trigger.x, trigger.y, { steps: 3 });
+    await page.waitForTimeout(450);
+  };
+  const exportRows = () => page.evaluate(`(() => {
+    const ratio = ${CONTRAST_FN};
+    const opaque = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
+    const out = {};
+    for (const id of ['v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx']) {
+      const el = document.getElementById(id);
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      out[id] = { greyed: el.classList.contains('v2-hover-row-disabled'), aria: el.getAttribute('aria-disabled'), shown: r.width > 0 && r.height > 0, inPanel: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, reachable: !!top && el.contains(top),
+        contrast: Math.round(ratio(getComputedStyle(el).color, opaque(el)) * 100) / 100, text: el.textContent.trim() };
+    }
+    return out;
+  })()`);
+  await openExportMenu();
+  const inGridRows = await exportRows();
+  const g = inGridRows;
+  check(`${label} - menu d'export dans une grille : les trois lignes sont là, visibles dans le panneau et atteignables ; Excel active, les deux lignes Word grisées`,
+    Object.values(g).every(r => r.shown && r.inPanel && r.reachable) && !g['v2-btn-export-xlsx'].greyed && g['v2-btn-export-docx'].greyed && g['v2-btn-export-docx-batch'].greyed
+    && g['v2-btn-export-docx'].aria === 'true' && g['v2-btn-export-xlsx'].aria === null, g);
+  check(`${label} - menu d'export : le texte des lignes (grisées comprises) reste lisible, >= 4,5:1`, Object.values(g).every(r => r.contrast >= 4.5), Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.contrast])));
+  // Une ligne grisée ne lance rien : vrai clic sur « Exporter en DOCX », aucun téléchargement.
+  let wordDownload = null;
+  page.once('download', d => { wordDownload = d.suggestedFilename(); });
+  await realClick(page, '#v2-btn-export-docx');
+  await page.waitForTimeout(1500);
+  check(`${label} - vrai clic sur la ligne Word grisée d'une grille : aucun téléchargement`, wordDownload === null, { wordDownload });
+  await openExportMenu();
+  const downloadPromise = page.waitForEvent('download', { timeout: 20000 }).catch(() => null);
+  await realClick(page, '#v2-btn-export-xlsx');
+  const download = await downloadPromise;
+  let xlsxInfo = null;
+  if (download) {
+    const stream = await download.createReadStream();
+    const chunks = []; for await (const chunk of stream) chunks.push(chunk);
+    const bytes = Buffer.concat(chunks);
+    xlsxInfo = { name: download.suggestedFilename(), size: bytes.length, zip: bytes.slice(0, 2).toString() === 'PK', hasSheet: bytes.includes(Buffer.from('xl/worksheets/sheet1.xml')) };
+  }
+  await page.waitForTimeout(300);
+  const statusAfter = await page.evaluate(() => document.getElementById('status-msg').textContent);
+  check(`${label} - vrai clic sur « Exporter en Excel… » : un fichier .xlsx est téléchargé (archive avec sa feuille), et le coin d'état annonce « Fichier Excel généré. »`,
+    !!xlsxInfo && /\.xlsx$/.test(xlsxInfo.name) && xlsxInfo.zip && xlsxInfo.size > 2000 && xlsxInfo.hasSheet && /Excel/.test(statusAfter), { xlsxInfo, statusAfter });
+  // Dans un document : l'inverse - Excel grisée, Word active.
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  const newBtn2 = await boxOf(page, '#btn-new');
+  await page.mouse.move(newBtn2.x, newBtn2.y, { steps: 3 });
+  await page.waitForTimeout(350);
+  await clickInPanel(page, '#v2-btn-new-document', `${label} - Nouveau document`);
+  await page.waitForTimeout(500);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  await openExportMenu();
+  const inDocRows = await exportRows();
+  const d = inDocRows;
+  check(`${label} - menu d'export dans un document : « Exporter en Excel… » est grisée (elle reste dans le menu), les deux lignes Word sont actives`,
+    Object.values(d).every(r => r.shown && r.inPanel && r.reachable) && d['v2-btn-export-xlsx'].greyed && d['v2-btn-export-xlsx'].aria === 'true' && !d['v2-btn-export-docx'].greyed && !d['v2-btn-export-docx-batch'].greyed && Object.values(d).every(r => r.contrast >= 4.5), d);
+  let excelDownload = null;
+  page.once('download', x => { excelDownload = x.suggestedFilename(); });
+  await realClick(page, '#v2-btn-export-xlsx');
+  await page.waitForTimeout(1500);
+  check(`${label} - vrai clic sur la ligne Excel grisée d'un document : aucun téléchargement`, excelDownload === null, { excelDownload });
 
   await context.close();
 }

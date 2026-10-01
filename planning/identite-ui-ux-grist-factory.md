@@ -370,7 +370,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   large garde ses colonnes et défile à l'horizontale en Lecture au lieu d'être écrasée, aucune ligne vide ne la suit, et dans le PDF une
   grille plus large que la page est ramenée à sa largeur. La barre
   flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Tant que
-  l'export Excel n'est pas livré, « Nouvelle grille » reste cachée du menu « + » sans `?dev` dans l'adresse du widget.
+  l'export Excel complet (une ligne, puis toutes les valeurs de la table) n'est pas livré, « Nouvelle grille » reste cachée du menu « + » sans `?dev` dans l'adresse du widget.
+- Export Excel d'une grille (demande d'Antoine du 01/10) : « Exporter en Excel… » est la troisième ligne d'export du menu « Qualité PDF », sous les deux lignes Word. Elle est active
+  dans une grille et grisée ailleurs ; à l'inverse les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien. Elle
+  télécharge un classeur d'une feuille pour la ligne affichée, nommé comme le PDF avec l'extension .xlsx, et le coin d'état dit « Fichier Excel généré. ». La feuille reprend la
+  grille : largeur des colonnes et hauteur des lignes, texte au milieu de sa case, cases fusionnées, gras, italique, souligné, barré, couleur et taille, fond de case, listes,
+  liens, images, un filet gris fin sur chaque case, page A4 d'une page de large dans son orientation. L'Excel n'est qu'un affichage, sans formule : une case n'est un vrai nombre
+  ou une vraie date (au format de la bulle) que si elle ne contient que cette bulle, sinon c'est du texte ; un zéro masqué reste vide ; aucune couleur n'est inventée (une case
+  sans format n'a ni couleur de texte ni fond, thème sombre compris).
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
