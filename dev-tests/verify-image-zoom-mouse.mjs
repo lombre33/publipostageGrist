@@ -6,6 +6,9 @@
 // déplaçait que de 85, « à droite » la faisait déborder de 42 px sur la marge, « devant le texte » la décalait en haut à gauche au premier clic. Aucun test ne le voyait :
 // les scénarios de dev-tests/ tournent à 1400x1000, feuille à sa taille réelle (facteur 1), et dispatchEvent ne passe pas par la vraie souris.
 // Même parcours rejoué à 1400x1000 (facteur 1) en témoin : rien ne doit y changer.
+// Suivi des modifications actif (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement ») : glisser l'image laisse l'original barré
+// à sa place et pose la copie à la nouvelle position (suppression + insertion suggérées), resélectionnée ; un simple clic sur l'image sélectionnée ne laisse rien ; glisser la copie la
+// déplace en place ; l'original barré ne se glisse pas ; accepter garde la copie, refuser rend l'original (même parcours aux flèches : dev-tests/verify-image-arrows-keyboard.mjs).
 // Lancé par run-headless.mjs (groupe Node "imageZoomMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-image-zoom-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -169,6 +172,29 @@ async function selectImage() {
   return page.evaluate(() => { const n = EditorCore.getEditor().state.selection.node; return !!n && n.type.name === 'editorImage'; });
 }
 
+// Nombre de transactions qui changent le document (un simple clic sur l'image ne doit en produire aucune).
+await page.evaluate(() => {
+  window.__docTx = 0;
+  EditorCore.getEditor().on('transaction', ({ transaction }) => { if (transaction.docChanged) window.__docTx++; });
+});
+// Toutes les images du document (l'original barré et sa copie en suivi), avec ce que la trace en dit.
+const traceState = () => page.evaluate(() => {
+  const ed = EditorCore.getEditor();
+  const images = [];
+  let deletions = 0, insertions = 0;
+  ed.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'editorImage') return;
+    const marks = node.marks.map(m => m.type.name);
+    if (marks.includes('deletion')) deletions++;
+    if (marks.includes('insertion')) insertions++;
+    const dom = ed.view.nodeDOM(pos);
+    images.push({ pos, left: node.attrs.left, top: node.attrs.top, deleted: marks.includes('deletion'), inserted: marks.includes('insertion'), domLeft: dom && parseFloat(dom.style.left), domTop: dom && parseFloat(dom.style.top) });
+  });
+  const s = ed.state.selection;
+  return { images, deletions, insertions, selFrom: s.from, selImage: !!(s.node && s.node.type.name === 'editorImage'), pending: TrackChanges.hasPendingSuggestions(ed.state), tx: window.__docTx };
+});
+const toolbarOpen = () => page.evaluate(() => { const b = document.querySelector('.v2-floating-toolbar button[data-action="zoom-in"]'); return !!b && b.closest('.v2-floating-toolbar').classList.contains('visible'); });
+
 // Document neuf : un paragraphe, l'image (320 px de large, ratio 2:1) dans le texte, des lignes en dessous pour que la page ne soit pas vide.
 async function freshDocument() {
   await page.evaluate(() => {
@@ -249,12 +275,76 @@ async function gestures(label, expectZoomBelowOne) {
   check(label + ' : « à gauche » colle l\'image au bord gauche du texte', near(left.left, left.textLeft), { image: r2(left.left), texte: r2(left.textLeft) });
 }
 
+// Le même glisser, suivi des modifications actif.
+async function suiviGestures(label) {
+  await freshDocument();
+  check(label + ' : (suivi) un clic sur l\'image la sélectionne', await selectImage());
+  check(label + ' : (suivi) « devant le texte » met l\'image en calque', await clickToolbar('layer-front'));
+  await page.evaluate(() => Editor.setTrackChanges(true));
+  await sleep(700);
+  const g0 = await geometry();
+  const s0 = await traceState();
+  const a0 = s0.images[0];
+
+  // Un simple clic sur l'image déjà sélectionnée n'est pas un déplacement : aucune écriture, aucune trace.
+  await selectImage();
+  const s1 = await traceState();
+  check(label + ' : (suivi) un simple clic sur l\'image sélectionnée ne laisse aucune trace (une image sans marque, aucune étape, rien en attente)', s1.images.length === 1 && !s1.images[0].deleted && !s1.images[0].inserted && s1.tx === s0.tx && !s1.pending && s1.images[0].left === a0.left && s1.images[0].top === a0.top, { avant: s0, apres: s1 });
+
+  // Glisser la poignée de déplacement de 100 px vers la droite et 20 px vers le haut (pixels écran).
+  const handle = await centerOf('.tiptap .editor-image-view .editor-image-move-handle');
+  await dragBy(handle, 100, -20);
+  const s2 = await traceState();
+  const orig = s2.images.find(i => i.deleted);
+  const copy = s2.images.find(i => i.inserted);
+  check(label + ' : (suivi) glisser laisse deux images, l\'original en suppression suggérée et la copie en insertion suggérée', s2.images.length === 2 && !!orig && !!copy && s2.deletions === 1 && s2.insertions === 1 && s2.pending, s2);
+  check(label + ' : (suivi) l\'original reste barré à sa place, DOM compris', !!orig && orig.left === a0.left && orig.top === a0.top && orig.domLeft === a0.left && orig.domTop === a0.top, { original: orig, avant: [a0.left, a0.top] });
+  check(label + ' : (suivi) la copie suit le pointeur de (100, -20) px écran, soit (100, -20) / facteur px de mise en page', !!copy && near(copy.left - a0.left, 100 / g0.zoom, 1.5) && near(copy.top - a0.top, -20 / g0.zoom, 1.5) && copy.domLeft === copy.left && copy.domTop === copy.top, { copie: copy, avant: [a0.left, a0.top], zoom: r2(g0.zoom) });
+  check(label + ' : (suivi) la copie est resélectionnée, la barre flottante de l\'image est ouverte', !!copy && s2.selImage && s2.selFrom === copy.pos && await toolbarOpen(), { selFrom: s2.selFrom, copie: copy && copy.pos });
+
+  // Glisser la copie : elle se déplace en place, sans empiler une seconde trace.
+  const handle2 = await centerOf('.tiptap ins .editor-image-view .editor-image-move-handle');
+  check(label + ' : (suivi) la poignée de la copie est là, sous la souris', !!handle2 && await hit(handle2, '.editor-image-move-handle'), handle2);
+  await dragBy(handle2, -40, 30);
+  const s3 = await traceState();
+  const copy3 = s3.images.find(i => i.inserted);
+  check(label + ' : (suivi) glisser la copie la déplace en place : toujours une seule trace (une suppression, une insertion)', s3.images.length === 2 && s3.deletions === 1 && s3.insertions === 1 && !!copy3 && near(copy3.left - copy.left, -40 / g0.zoom, 1.5) && near(copy3.top - copy.top, 30 / g0.zoom, 1.5) && s3.selImage && s3.selFrom === copy3.pos, { avant: copy, apres: copy3, s3 });
+
+  // L'original barré ne se glisse pas : le geste ne change rien.
+  const originalHandle = await centerOf('.tiptap del .editor-image-view .editor-image-move-handle');
+  const reachable = !!originalHandle && await hit(originalHandle, '.editor-image-move-handle');
+  check(label + ' : (suivi) la poignée de l\'original barré est atteignable à la souris', reachable, originalHandle);
+  const txBefore = await page.evaluate(() => window.__docTx);
+  if (reachable) await dragBy(originalHandle, 30, 30);
+  const s4 = await traceState();
+  const orig4 = s4.images.find(i => i.deleted);
+  check(label + ' : (suivi) glisser l\'original barré ne le déplace pas et n\'écrit rien', !!orig4 && orig4.left === a0.left && orig4.top === a0.top && orig4.domLeft === a0.left && orig4.domTop === a0.top && s4.images.length === 2 && s4.deletions === 1 && s4.insertions === 1 && s4.tx === txBefore, { original: orig4, avant: [a0.left, a0.top], tx: [txBefore, s4.tx] });
+
+  // Accepter garde la copie, refuser rend l'original (vrais clics sur « Tout refuser » puis « Tout accepter »).
+  await page.click('#v2-btn-reject-all');
+  await sleep(350);
+  const s5 = await traceState();
+  check(label + ' : (suivi) « Tout refuser » rend l\'original seul, à sa position d\'avant le glisser', s5.images.length === 1 && !s5.images[0].deleted && !s5.images[0].inserted && s5.images[0].left === a0.left && s5.images[0].top === a0.top && !s5.pending, s5);
+  check(label + ' : (suivi) un clic sur l\'image la sélectionne de nouveau', await selectImage());
+  const handle3 = await centerOf('.tiptap .editor-image-view .editor-image-move-handle');
+  await dragBy(handle3, 60, 10);
+  const s6 = await traceState();
+  const copy6 = s6.images.find(i => i.inserted);
+  await page.click('#v2-btn-accept-all');
+  await sleep(350);
+  const s7 = await traceState();
+  check(label + ' : (suivi) « Tout accepter » garde la copie seule, à la nouvelle position', !!copy6 && s7.images.length === 1 && !s7.images[0].deleted && !s7.images[0].inserted && s7.images[0].left === copy6.left && s7.images[0].top === copy6.top && !s7.pending, { copie: copy6, apres: s7 });
+  await page.evaluate(() => Editor.setTrackChanges(false));
+}
+
 await gestures('700x400', true);
+await suiviGestures('700x400');
 
 // Témoin : panneau large, facteur 1. Le ResizeObserver de js/main.js recalcule --pp-fit-zoom au changement de taille.
 await page.setViewportSize({ width: 1400, height: 1000 });
 await sleep(900);
 await gestures('1400x1000', false);
+await suiviGestures('1400x1000');
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

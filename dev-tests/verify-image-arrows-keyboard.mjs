@@ -3,8 +3,10 @@
 // ~0,85), puis en témoin à 1400x1000 (facteur 1). Chaque appui vaut 1 px de MISE EN PAGE (10 avec Maj), la grille page (PDF et Word) suit, un Ctrl+Z défait une rafale d'un coup,
 // la touche tenue appuyée répète, contre le bord de la page rien ne s'écrit de plus. Les flèches ne changent rien ailleurs : image dans le texte, curseur dans le texte, et - garde-fou
 // - le curseur qui ARRIVE sur l'ancre d'une image en calque la traverse encore à la flèche suivante au lieu de la faire glisser (sinon on ne passerait plus au clavier ce premier
-// paragraphe, et la touche tenue ferait filer l'image sur la page). Un clic sur l'image, une action de sa barre flottante rendent les flèches à l'image. Suivi des modifications actif : le
-// déplacement ne laisse pas de suggestion (une position est de la mise en page, pas du contenu) et la sélection reste sur l'image.
+// paragraphe, et la touche tenue ferait filer l'image sur la page). Un clic sur l'image, une action de sa barre flottante rendent les flèches à l'image. Suivi des modifications actif
+// (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement ») : le premier appui d'une rafale laisse l'image d'origine barrée à sa place
+// et pose la copie à la nouvelle position (suppression + insertion suggérées), resélectionnée ; les appuis suivants déplacent cette copie sans empiler d'autres traces ; Ctrl+Z défait
+// la rafale et sa trace d'un coup ; accepter garde la copie, refuser rend l'original ; l'original barré ne bouge pas ; contre le bord de la page, rien ne s'écrit de plus.
 // Fonctionnalité du 01/10 (« déplacer une image aux flèches ») : js/floating-toolbars.js (wireImageFloatingToolbar), infobulle de la poignée dans js/i18n.js (image.moveHandle).
 // Lancé par run-headless.mjs (groupe Node "imageArrowsKeyboard", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-image-arrows-keyboard.mjs
 import { createServer } from 'node:http';
@@ -138,6 +140,24 @@ const imageInfo = () => page.evaluate(() => {
   });
   return info;
 });
+// Toutes les images du document (l'original barré et sa copie en suivi), avec ce que la trace en dit.
+const traceState = () => page.evaluate(() => {
+  const ed = EditorCore.getEditor();
+  const images = [];
+  let deletions = 0, insertions = 0;
+  ed.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'editorImage') return;
+    const marks = node.marks.map(m => m.type.name);
+    if (marks.includes('deletion')) deletions++;
+    if (marks.includes('insertion')) insertions++;
+    const dom = ed.view.nodeDOM(pos);
+    images.push({ pos, left: node.attrs.left, top: node.attrs.top, pageLeftPt: node.attrs.pageLeftPt, pageTopPt: node.attrs.pageTopPt, deleted: marks.includes('deletion'), inserted: marks.includes('insertion'), domLeft: dom && parseFloat(dom.style.left) });
+  });
+  const s = ed.state.selection;
+  return { images, deletions, insertions, selFrom: s.from, selImage: !!(s.node && s.node.type.name === 'editorImage'), pending: TrackChanges.hasPendingSuggestions(ed.state) };
+});
+// La barre flottante de l'image est ouverte (visible), pas seulement présente dans le DOM.
+const toolbarOpen = () => page.evaluate(() => { const b = document.querySelector('.v2-floating-toolbar button[data-action="zoom-in"]'); return !!b && b.closest('.v2-floating-toolbar').classList.contains('visible'); });
 const selection = () => page.evaluate(() => { const s = EditorCore.getEditor().state.selection; return { image: !!(s.node && s.node.type.name === 'editorImage'), from: s.from, to: s.to }; });
 // Grille page relue sur le rendu à cet instant.
 const freshGrid = () => page.evaluate(() => {
@@ -167,11 +187,18 @@ async function selectImage() {
   return (await selection()).image;
 }
 const ensureSelected = async () => { if (!(await selection()).image) await selectImage(); };
+// Clic sur un bouton de la barre qui peut rester grisé (« Tout accepter » sans rien en attente) : le constat qui suit échoue proprement, le script ne s'arrête pas sur une attente.
+const clickBar = async sel => { try { await page.click(sel, { timeout: 2500 }); } catch (e) { /* bouton grisé : les vérifications suivantes le diront */ } };
 
 // Vrai clavier : une pression, ou la touche tenue (Playwright marque `repeat` quand la touche est déjà enfoncée).
 async function press(key, times = 1) {
   for (let i = 0; i < times; i++) await page.keyboard.press(key);
   await sleep(150);
+}
+// Appuis rapprochés (bien en deçà du délai de groupement de l'historique) : une rafale, que Ctrl+Z défait d'un coup.
+async function burst(keys) {
+  for (const key of keys) await page.keyboard.press(key);
+  await sleep(250);
 }
 async function hold(key, times) {
   for (let i = 0; i < times; i++) await page.keyboard.down(key);
@@ -373,27 +400,87 @@ async function run(label, expectZoomBelowOne) {
   const f1 = await imageInfo();
   check(label + ' : après une action de la barre flottante, les flèches déplacent l\'image', f1.left === f0.left + 1 && f1.top === f0.top && f1.width === f0.width, { avant: [f0.left, f0.top], apres: [f1.left, f1.top] });
 
-  // Suivi des modifications actif : une position est de la mise en page, pas du contenu. Ni suggestion (pas de copie de l'image, pas d'original barré), ni sélection perdue :
-  // la flèche suivante déplace encore l'image au lieu de faire avancer le curseur.
+  // Suivi des modifications actif (choix d'Antoine, 01/10) : le déplacement laisse sa trace, aux flèches comme à la souris. Le premier appui laisse l'original barré à sa place et pose la
+  // copie à la nouvelle position, resélectionnée ; les appuis suivants déplacent cette copie ; une rafale (appuis rapprochés, un seul groupe d'historique) se défait d'un coup, trace comprise.
   await ensureSelected();
   await page.evaluate(() => Editor.setTrackChanges(true));
   await sleep(700);
-  const m0 = await imageInfo();
-  await press('ArrowRight', 3);
-  const m1 = await imageInfo();
-  const m1sel = await selection();
-  const pending = await page.evaluate(() => {
-    const ed = EditorCore.getEditor();
-    let images = 0, marked = 0;
-    ed.state.doc.descendants(node => { if (node.type.name === 'editorImage') { images++; if (node.marks.length) marked++; } });
-    return { images, marked, pending: TrackChanges.hasPendingSuggestions(ed.state) };
+  const tm0 = (await traceState()).images[0];
+  await burst(['ArrowRight', 'ArrowRight', 'ArrowRight']);
+  const tr1 = await traceState();
+  const orig1 = tr1.images.find(i => i.deleted);
+  const copy1 = tr1.images.find(i => i.inserted);
+  check(label + ' : suivi actif : trois flèches laissent deux images, l\'original en suppression suggérée et la copie en insertion suggérée', tr1.images.length === 2 && !!orig1 && !!copy1 && tr1.deletions === 1 && tr1.insertions === 1 && tr1.pending, tr1);
+  check(label + ' : suivi actif : l\'original reste barré à sa place (position et DOM inchangés)', !!orig1 && orig1.left === tm0.left && orig1.top === tm0.top && orig1.domLeft === tm0.left, { original: orig1, avant: [tm0.left, tm0.top] });
+  check(label + ' : suivi actif : la copie est à 3 px à droite, son DOM d\'accord avec le modèle', !!copy1 && copy1.left === tm0.left + 3 && copy1.top === tm0.top && copy1.domLeft === copy1.left, { copie: copy1, avant: [tm0.left, tm0.top] });
+  check(label + ' : suivi actif : la copie est resélectionnée (image sélectionnée, barre flottante ouverte)', !!copy1 && tr1.selImage && tr1.selFrom === copy1.pos && await toolbarOpen(), { selFrom: tr1.selFrom, copie: copy1 && copy1.pos });
+  const cues = await page.evaluate(() => {
+    const del = document.querySelector('.tiptap del img.editor-image');
+    const ins = document.querySelector('.tiptap ins img.editor-image');
+    const cs = el => el ? getComputedStyle(el) : null;
+    return { delOutline: cs(del) && cs(del).outlineStyle, delOpacity: cs(del) && cs(del).opacity, insOutline: cs(ins) && cs(ins).outlineStyle, insOpacity: cs(ins) && cs(ins).opacity };
   });
-  check(label + ' : suivi des modifications actif : trois flèches déplacent l\'image de 3 px et elle reste sélectionnée', m1.left === m0.left + 3 && m1.top === m0.top && m1sel.image, { avant: [m0.left, m0.top], apres: [m1.left, m1.top], selection: m1sel });
-  check(label + ' : suivi actif : aucune suggestion (une seule image, sans marque, rien en attente)', pending.images === 1 && pending.marked === 0 && pending.pending === false, pending);
+  check(label + ' : suivi actif : la trace se voit (original estompé au cadre rouge en tirets, copie au cadre vert plein)', cues.delOutline === 'dashed' && Number(cues.delOpacity) < 0.6 && cues.insOutline === 'solid' && Number(cues.insOpacity) === 1, cues);
+  await burst(['Shift+ArrowDown', 'ArrowRight', 'ArrowRight']);
+  const tr2 = await traceState();
+  const orig2 = tr2.images.find(i => i.deleted);
+  const copy2 = tr2.images.find(i => i.inserted);
+  check(label + ' : suivi actif : les appuis suivants déplacent la copie (5 px à droite, 10 px plus bas) sans empiler d\'autres traces', tr2.images.length === 2 && !!copy2 && copy2.left === tm0.left + 5 && copy2.top === tm0.top + 10 && copy2.domLeft === copy2.left && tr2.deletions === 1 && tr2.insertions === 1 && !!orig2 && orig2.left === tm0.left && orig2.top === tm0.top, tr2);
+  check(label + ' : suivi actif : la copie reste sélectionnée, la barre flottante ouverte', tr2.selImage && !!copy2 && tr2.selFrom === copy2.pos && await toolbarOpen(), { selFrom: tr2.selFrom });
+  check(label + ' : suivi actif : la grille page de la copie suit (PDF et Word) ; celle de l\'original ne bouge pas', !!copy2 && !!orig2 && near(copy2.pageLeftPt - tm0.pageLeftPt, 5 * 0.75, 0.05) && near(copy2.pageTopPt - tm0.pageTopPt, 7.5, 0.05) && near(orig2.pageLeftPt, tm0.pageLeftPt, 0.02) && near(orig2.pageTopPt, tm0.pageTopPt, 0.02), { copie: copy2 && [copy2.pageLeftPt, copy2.pageTopPt], original: orig2 && [orig2.pageLeftPt, orig2.pageTopPt], avant: [tm0.pageLeftPt, tm0.pageTopPt] });
+  await sleep(700);
   await page.keyboard.press('Control+z');
-  await sleep(250);
-  const m2 = await imageInfo();
-  check(label + ' : suivi actif : Ctrl+Z défait les trois flèches d\'un coup', !!m2 && m2.left === m0.left, { avant: m0.left, apres: m2 && m2.left });
+  await sleep(300);
+  const tr3 = await traceState();
+  check(label + ' : suivi actif : Ctrl+Z défait la rafale et sa trace d\'un coup (une seule image, sans marque, à sa place, rien en attente)', tr3.images.length === 1 && !tr3.images[0].deleted && !tr3.images[0].inserted && tr3.images[0].left === tm0.left && tr3.images[0].top === tm0.top && !tr3.pending, tr3);
+
+  // Accepter garde la copie, refuser rend l'original (vrais clics sur « Tout accepter » et « Tout refuser »).
+  await ensureSelected();
+  await burst(['ArrowRight', 'ArrowRight', 'ArrowDown']);
+  await clickBar('#v2-btn-accept-all');
+  await sleep(350);
+  const tr4 = await traceState();
+  check(label + ' : suivi actif : « Tout accepter » garde la copie seule, à la nouvelle position', tr4.images.length === 1 && !tr4.images[0].inserted && !tr4.images[0].deleted && tr4.images[0].left === tm0.left + 2 && tr4.images[0].top === tm0.top + 1 && !tr4.pending, tr4);
+  await ensureSelected();
+  await burst(['ArrowLeft', 'ArrowLeft', 'ArrowLeft']);
+  const tr5 = await traceState();
+  check(label + ' : suivi actif : une nouvelle rafale laisse sa trace, l\'image d\'avant devient l\'original', tr5.images.length === 2 && tr5.deletions === 1 && tr5.insertions === 1 && (tr5.images.find(i => i.inserted) || {}).left === tm0.left - 1, tr5);
+  await clickBar('#v2-btn-reject-all');
+  await sleep(350);
+  const tr6 = await traceState();
+  check(label + ' : suivi actif : « Tout refuser » rend l\'original seul, à sa position d\'avant la rafale', tr6.images.length === 1 && !tr6.images[0].inserted && !tr6.images[0].deleted && tr6.images[0].left === tm0.left + 2 && tr6.images[0].top === tm0.top + 1 && !tr6.pending, tr6);
+
+  // L'original barré ne bouge pas : sélectionné, la flèche garde son sens ordinaire (elle n'écrit rien).
+  await ensureSelected();
+  await burst(['ArrowRight', 'ArrowRight']);
+  const sv0 = await traceState();
+  const origin0 = sv0.images.find(i => i.deleted);
+  if (origin0) await page.evaluate(pos => { const ed = EditorCore.getEditor(); ed.chain().focus().setNodeSelection(pos).run(); }, origin0.pos);
+  await sleep(200);
+  const txBefore = await page.evaluate(() => window.__docTx);
+  await burst(['ArrowRight', 'ArrowDown']);
+  const sv1 = await traceState();
+  const txAfter = await page.evaluate(() => window.__docTx);
+  check(label + ' : suivi actif : une flèche sur l\'original barré sélectionné ne déplace rien et n\'écrit rien', txAfter === txBefore && JSON.stringify(sv1.images.map(i => [i.left, i.top, i.deleted, i.inserted])) === JSON.stringify(sv0.images.map(i => [i.left, i.top, i.deleted, i.inserted])), { avant: sv0.images, apres: sv1.images, txBefore, txAfter });
+  await clickBar('#v2-btn-reject-all');
+  await sleep(350);
+
+  // Contre le bord de la page, en suivi : la flèche est consommée mais rien ne s'écrit (ni suggestion de plus, ni étape d'historique).
+  await ensureSelected();
+  for (let i = 0; i < 30; i++) {
+    const before = await page.evaluate(() => window.__docTx);
+    await page.keyboard.press('Shift+ArrowUp');
+    await sleep(60);
+    if ((await page.evaluate(() => window.__docTx)) === before) break;
+  }
+  const edge0 = await traceState();
+  const edgeTx0 = await page.evaluate(() => window.__docTx);
+  await burst(['ArrowUp', 'ArrowUp']);
+  const edge1 = await traceState();
+  const edgeTx1 = await page.evaluate(() => window.__docTx);
+  check(label + ' : suivi actif : contre le bord haut de la page, rien ne s\'écrit de plus (une seule trace, aucune étape de plus)', edge0.images.length === 2 && edge1.images.length === 2 && edge1.deletions === 1 && edge1.insertions === 1 && edgeTx1 === edgeTx0 && (edge0.images.find(i => i.inserted) || {}).top === (edge1.images.find(i => i.inserted) || {}).top && edge1.selImage, { avant: edge0.images, apres: edge1.images, edgeTx0, edgeTx1 });
+  await clickBar('#v2-btn-reject-all');
+  await sleep(350);
   await page.evaluate(() => Editor.setTrackChanges(false));
 
   // Image en calque dans une cellule de tableau : `left` et `top` se comptent depuis la cellule (son offsetParent), la grille page depuis le coin de la page.

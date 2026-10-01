@@ -24,6 +24,18 @@
   text-underline-offset: 2px;
 }
 
+/* Image suggérée, insérée ou supprimée (js/editor-nodes.js, moveImageNode : un déplacement suivi laisse l'original à sa place en suppression et la copie à la nouvelle en insertion ;
+   accepter garde la copie, refuser rend l'original). Le <ins>/<del> qui la porte n'a pas de boîte quand l'image est en calque (elle sort du flux) : sa teinte ne se voit pas, le cadre
+   est donc posé sur l'image elle-même - plein vert pour l'insertion, rouge en tirets et image estompée pour la suppression. Mêmes verts et rouges que le texte suggéré, 6,4:1 et 6,6:1
+   sur la page blanche (elle reste blanche en sombre). `opacity` en !important : celle d'une image translucide s'écrit en ligne sur l'<img>. */
+.tiptap ins[data-id] img.editor-image {
+  outline: 2px solid #146c48;
+}
+.tiptap del[data-id] img.editor-image {
+  outline: 2px dashed #b42318;
+  opacity: 0.45 !important;
+}
+
 /* Colonne ajoutée ou supprimée avec le suivi (« Colonne avant / après », « Supprimer la colonne ») : la marque est posée sur chaque CASE, que ProseMirror dessine en
    <ins>/<del> (ou <span data-type="modification">, la largeur d'une case fusionnée qui gagne une colonne) autour du <td>, donc enfant direct du <tr>. Sans règle, cet
    élément en ligne sortait la case du tableau (une bande de 11 px). Il ne produit plus de boîte (`display: contents`) : la case reste une vraie case du tableau et

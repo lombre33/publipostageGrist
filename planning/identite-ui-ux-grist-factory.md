@@ -447,7 +447,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   d'un coup, l'image s'arrête au bord de la page, l'infobulle de sa poignée de déplacement le dit. Une image dans le texte, le
   curseur et Maj + flèche dans le texte gardent leurs flèches ; le curseur qui ARRIVE sur l'ancre d'une image en calque la traverse
   encore à la flèche suivante, sans la faire glisser (un clic sur l'image ou une action de sa barre flottante rendent les flèches à
-  l'image). Le suivi des modifications n'y voit pas une suggestion : une position est de la mise en page, pas du contenu.
+  l'image). Avec le suivi des modifications allumé, un déplacement laisse une trace, au glissé de la poignée comme aux flèches (choix d'Antoine du 01/10) : l'image d'origine
+  reste à sa place, estompée dans un cadre rouge en tirets, et sa copie à la nouvelle place porte un cadre vert plein ; « Tout accepter » garde la copie, « Tout refuser » rend l'original ; une
+  rafale de flèches n'écrit qu'une trace et un Ctrl+Z la défait d'un coup ; un clic sans déplacement n'écrit rien ; l'original barré ne se déplace pas (ses flèches gardent leur sens ordinaire).
+  Le cadre se pose sur l'image (en calque elle sort du flux : la teinte du texte suggéré n'y aurait pas de boîte), mêmes vert et rouge que le texte suggéré (6,4:1 et 6,6:1 sur la page blanche).
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
   la Lecture, le PDF (fond de page) et le Word (ancre derrière le texte dans l'en-tête de chaque page, première page comprise ; un en-tête est créé quand il n'y en a pas). La place est celle de la

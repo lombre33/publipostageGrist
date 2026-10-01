@@ -707,6 +707,162 @@
     },
   });
 
+  // Déplacement d'une image en calque (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement ») : EditorNodes.moveImageNode est la
+  // voie commune du glisser de la NodeView et des flèches du clavier (leurs parcours à la vraie souris et au vrai clavier : imageZoomMouse, imageArrowsKeyboard). Le suivi s'active APRÈS
+  // la pose de l'image : l'insérer suivi en ferait déjà une insertion suggérée.
+  const IMG_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  async function layeredImageDocument(h, trackOn) {
+    await h.resetEditor();
+    await disableTrackChangesIfOn(h);
+    Editor.setHTML('<p>Texte </p><p>Une deuxième ligne.</p>');
+    const ed = EditorCore.getEditor();
+    ed.commands.setTextSelection(6);
+    ed.commands.insertContent({ type: 'editorImage', attrs: { src: IMG_PNG, alt: '', width: '120px', layer: 'front', left: 50, top: 40, pageIndex: 0, pageLeftPt: 37.5, pageTopPt: 30 } });
+    await h.sleep(150);
+    if (trackOn) await enableTrackChanges(h);
+    return ed;
+  }
+  function imagesState() {
+    const ed = EditorCore.getEditor();
+    const images = [];
+    ed.state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'editorImage') return;
+      const marks = node.marks.map(m => m.type.name);
+      images.push({ pos, left: node.attrs.left, top: node.attrs.top, pageLeftPt: node.attrs.pageLeftPt, deleted: marks.includes('deletion'), inserted: marks.includes('insertion'), marks });
+    });
+    const sel = ed.state.selection;
+    return { images, selImage: !!(sel.node && sel.node.type.name === 'editorImage'), selFrom: sel.from };
+  }
+  const firstImagePos = () => imagesState().images[0].pos;
+
+  cases.push({
+    id: 'trackchanges_image_move_leaves_a_struck_original_and_an_inserted_copy',
+    description: "Suivi actif : déplacer une image en calque laisse l'original en suppression suggérée à sa place et la copie en insertion suggérée à la nouvelle position, resélectionnée ; l'une barrée et estompée au cadre rouge en tirets, l'autre au cadre vert plein ; « Tout accepter » garde la copie seule",
+    run: async (h) => {
+      try {
+        const ed = await layeredImageDocument(h, true);
+        const wrote = EditorNodes.moveImageNode(ed, firstImagePos(), { left: 80, top: 60, pageLeftPt: 60 });
+        await h.sleep(120);
+        const st = imagesState();
+        const orig = st.images.find(i => i.deleted);
+        const copy = st.images.find(i => i.inserted);
+        const structure = wrote === true && st.images.length === 2 && !!orig && !!copy && orig.left === 50 && orig.top === 40 && copy.left === 80 && copy.top === 60 && copy.pageLeftPt === 60;
+        const selectedCopy = !!copy && st.selImage && st.selFrom === copy.pos;
+        const del = document.querySelector('.tiptap del img.editor-image');
+        const ins = document.querySelector('.tiptap ins img.editor-image');
+        const cs = el => (el ? getComputedStyle(el) : null);
+        const cues = !!del && !!ins && cs(del).outlineStyle === 'dashed' && cs(del).outlineColor === 'rgb(180, 35, 24)' && Number(cs(del).opacity) < 0.6 && cs(ins).outlineStyle === 'solid' && cs(ins).outlineColor === 'rgb(20, 108, 72)' && Number(cs(ins).opacity) === 1;
+        const pending = Editor.hasPendingTrackedChanges();
+        await h.clickButton('v2-btn-accept-all');
+        await h.sleep(120);
+        const after = imagesState();
+        const accepted = after.images.length === 1 && after.images[0].marks.length === 0 && after.images[0].left === 80 && after.images[0].top === 60 && !Editor.hasPendingTrackedChanges();
+        return { pass: structure && selectedCopy && cues && pending && accepted, notes: JSON.stringify({ wrote, structure, selectedCopy, cues, pending, accepted, st, after }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_image_move_reject_all_restores_the_original_position',
+    description: "Suivi actif : « Tout refuser » après un déplacement d'image rend l'original seul, à sa position d'avant, sans marque",
+    run: async (h) => {
+      try {
+        const ed = await layeredImageDocument(h, true);
+        EditorNodes.moveImageNode(ed, firstImagePos(), { left: 130, top: 90, pageLeftPt: 97.5 });
+        await h.sleep(120);
+        const moved = imagesState().images.length === 2;
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(120);
+        const st = imagesState();
+        const restored = st.images.length === 1 && st.images[0].marks.length === 0 && st.images[0].left === 50 && st.images[0].top === 40 && st.images[0].pageLeftPt === 37.5 && !Editor.hasPendingTrackedChanges();
+        return { pass: moved && restored, notes: JSON.stringify({ moved, st }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_image_move_survives_save_and_reopen',
+    description: "Suivi actif : la trace d'un déplacement d'image est enregistrée dans le HTML du modèle (<del> puis <ins> autour de l'image, avec son calque, sa position et sa grille page) et retrouvée à l'identique à la réouverture ; « Tout refuser » rend alors l'original",
+    run: async (h) => {
+      try {
+        const ed = await layeredImageDocument(h, true);
+        EditorNodes.moveImageNode(ed, firstImagePos(), { left: 80, top: 60, pageLeftPt: 60 });
+        await h.sleep(120);
+        const summary = st => JSON.stringify(st.images.map(i => [i.left, i.top, i.pageLeftPt, i.deleted, i.inserted]));
+        const before = imagesState();
+        const html = Editor.getHTML();
+        const written = /<del data-id="[^"]+"><img[^>]*data-layer="front"[^>]*><\/del><ins data-id="[^"]+"><img[^>]*data-layer="front"[^>]*><\/ins>/.test(html);
+        Editor.setHTML(html);
+        await h.sleep(250);
+        const after = imagesState();
+        const identical = before.images.length === 2 && summary(after) === summary(before);
+        const pending = Editor.hasPendingTrackedChanges();
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(120);
+        const rejected = imagesState();
+        const restored = rejected.images.length === 1 && rejected.images[0].marks.length === 0 && rejected.images[0].left === 50 && rejected.images[0].top === 40 && rejected.images[0].pageLeftPt === 37.5 && !Editor.hasPendingTrackedChanges();
+        return { pass: written && identical && pending && restored, notes: JSON.stringify({ written, identical, pending, restored, before, after, rejected }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_image_move_of_an_inserted_copy_stays_in_place',
+    description: "Suivi actif : déplacer une seconde fois l'image (la copie déjà insérée) la déplace en place, sans empiler une autre trace ; l'original barré ne bouge pas, même si on essaie",
+    run: async (h) => {
+      try {
+        const ed = await layeredImageDocument(h, true);
+        EditorNodes.moveImageNode(ed, firstImagePos(), { left: 60, top: 40 });
+        let st = imagesState();
+        const copyPos = st.images.find(i => i.inserted).pos;
+        const second = EditorNodes.moveImageNode(ed, copyPos, { left: 75, top: 55 });
+        const third = EditorNodes.moveImageNode(ed, copyPos, { left: 90, top: 55 });
+        st = imagesState();
+        const orig = st.images.find(i => i.deleted);
+        const copy = st.images.find(i => i.inserted);
+        const onePair = st.images.length === 2 && !!orig && !!copy && st.images.filter(i => i.deleted).length === 1 && st.images.filter(i => i.inserted).length === 1;
+        const inPlace = !!copy && copy.left === 90 && copy.top === 55 && !!orig && orig.left === 50 && orig.top === 40;
+        const selected = !!copy && st.selImage && st.selFrom === copy.pos;
+        const txBefore = EditorCore.getEditor().state.doc;
+        const moveOriginal = EditorNodes.moveImageNode(ed, orig.pos, { left: 10, top: 10 });
+        const originalUntouched = moveOriginal === false && EditorCore.getEditor().state.doc === txBefore;
+        return { pass: second === true && third === true && onePair && inPlace && selected && originalUntouched, notes: JSON.stringify({ second, third, onePair, inPlace, selected, moveOriginal, originalUntouched, st }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_image_move_writes_nothing_when_no_value_changes',
+    description: "Un déplacement qui ne change aucune valeur (un simple clic sur l'image déjà sélectionnée, une flèche contre le bord de la page) n'écrit rien : même document, suivi actif ou non, aucune suggestion",
+    run: async (h) => {
+      try {
+        let ed = await layeredImageDocument(h, false);
+        const docOff = ed.state.doc;
+        const sameOff = EditorNodes.moveImageNode(ed, firstImagePos(), { left: 50, top: 40, pageIndex: 0, pageLeftPt: 37.5, pageTopPt: 30 });
+        const untouchedOff = sameOff === false && ed.state.doc === docOff;
+        await enableTrackChanges(h);
+        const docOn = ed.state.doc;
+        const sameOn = EditorNodes.moveImageNode(ed, firstImagePos(), { left: 50, top: 40, pageIndex: 0, pageLeftPt: 37.5, pageTopPt: 30 });
+        const untouchedOn = sameOn === false && ed.state.doc === docOn && !Editor.hasPendingTrackedChanges() && imagesState().images.length === 1;
+        return { pass: untouchedOff && untouchedOn, notes: JSON.stringify({ sameOff, untouchedOff, sameOn, untouchedOn }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_image_move_without_suivi_leaves_no_trace',
+    description: "Suivi coupé : déplacer une image la déplace tout simplement (une image, sans marque, rien en attente), toujours sélectionnée",
+    run: async (h) => {
+      await h.resetEditor();
+      const ed = await layeredImageDocument(h, false);
+      const wrote = EditorNodes.moveImageNode(ed, firstImagePos(), { left: 80, top: 60, pageLeftPt: 60 });
+      await h.sleep(120);
+      const st = imagesState();
+      const one = st.images.length === 1 && st.images[0].marks.length === 0 && st.images[0].left === 80 && st.images[0].top === 60 && st.images[0].pageLeftPt === 60;
+      return { pass: wrote === true && one && st.selImage && !Editor.hasPendingTrackedChanges() && Editor.getHTML().indexOf('<ins') === -1 && Editor.getHTML().indexOf('<del') === -1, notes: JSON.stringify({ wrote, st }) };
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",

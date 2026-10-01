@@ -895,6 +895,40 @@ const EditorNodes = (function () {
     });
   }
 
+  // Écrit la nouvelle position d'une image en calque que la personne vient de DÉPLACER : une seule voie pour le glisser de la NodeView (`onMoveUp`) et les flèches du clavier
+  // (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt, pageTopPt). Rend true si le document a changé.
+  // Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une flèche contre le bord de la page) : ni étape d'historique, ni suggestion.
+  // Suivi des modifications actif (choix d'Antoine, 01/10 : « le déplacement d'une image laisse une trace, quel que soit le mode de déplacement »), l'écriture est SUIVIE : la
+  // bibliothèque laisse l'image d'origine à sa place en suppression suggérée et pose la copie à la nouvelle position en insertion suggérée (accepter garde la copie, refuser rend
+  // l'original). Elle ne garde pas la sélection : la copie est resélectionnée, sinon la flèche suivante ferait avancer le curseur et la barre de l'image se fermerait. Une image DÉJÀ
+  // insérée par une suggestion (la copie du premier appui d'une rafale, d'un déplacement précédent) se déplace en place, hors suivi : sa suggestion couvre déjà sa position, et une
+  // trace par appui empilerait les copies. Une image en suppression suggérée ne bouge pas : elle attend d'être acceptée ou refusée.
+  function moveImageNode(editor, pos, patch) {
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== 'editorImage') return false;
+    const before = node.attrs;
+    const changed = Object.keys(patch).some(key => (patch[key] == null || before[key] == null) ? patch[key] !== before[key] : Math.abs(patch[key] - before[key]) > 0.005);
+    if (!changed) return false;
+    const marked = (n, name) => !!n && n.marks.some(m => m.type.name === name);
+    if (marked(node, 'deletion')) return false;
+    const attrs = Object.assign({}, before, patch);
+    if (Editor.isTrackChangesOn() && !marked(node, 'insertion')) {
+      editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, attrs));
+      const doc = editor.state.doc;
+      const first = doc.nodeAt(pos);
+      const copyPos = marked(first, 'insertion') ? pos : (first && marked(doc.nodeAt(pos + first.nodeSize), 'insertion') ? pos + first.nodeSize : -1);
+      if (copyPos >= 0) editor.commands.setNodeSelection(copyPos);
+      return true;
+    }
+    // Sans suivi, ou sur une image déjà insérée : le nœud est remplacé (setNodeMarkup) et la NodeSelection recréée dessus dans la MÊME transaction (cf. EditorCore.patchNodeAndReselect),
+    // avec la classe de la sélection courante - d'abord posée sur l'image si ce n'était pas elle (glisser par la poignée d'une image non sélectionnée).
+    if (!editor.state.selection.node) editor.commands.setNodeSelection(pos);
+    const tr = editor.state.tr.setNodeMarkup(pos, undefined, attrs);
+    tr.setSelection(editor.state.selection.constructor.create(tr.doc, pos));
+    editor.view.dispatch(TrackChanges.skipTracking(tr));
+    return true;
+  }
+
   // Image - nœud atome en ligne : `layer` (normal/devant/derrière), `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({}) - le nœud
   // construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
@@ -1093,10 +1127,12 @@ const EditorNodes = (function () {
 
           let moveState = null;
           function startMove(event) {
-            event.preventDefault(); event.stopPropagation();
             // Attributs courants via getPos()/nodeAt, pas `node` (figé au 1er rendu).
             const pos = getPos();
             const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
+            // Une image en suppression suggérée (l'original d'un déplacement suivi) attend d'être acceptée ou refusée : elle ne se glisse pas, le clic reste un clic.
+            if (current.marks.some(m => m.type.name === 'deletion')) return;
+            event.preventDefault(); event.stopPropagation();
             // Déplacement de la souris en pixels écran, `left`/`top` en pixels de mise en page (cf. startResize) : sans la division, l'image traînait derrière le pointeur.
             moveState = { startX: event.clientX, startY: event.clientY, zoom: EditorCore.layoutZoom(wrap), startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
             document.addEventListener('mousemove', onMoveMove);
@@ -1117,7 +1153,11 @@ const EditorNodes = (function () {
               // physique (cf. son propre commentaire) - offsetLeft/offsetTop reflètent alors la position CORRIGÉE, jamais désynchronisée de la grille.
               const patch = { left: Math.round(wrap.offsetLeft), top: Math.round(wrap.offsetTop) };
               if (grid) Object.assign(patch, grid);
-              updateAttrs(patch);
+              // Même voie que les flèches du clavier : en suivi, le déplacement laisse sa trace (l'original barré, la copie à la nouvelle place). Rien ne s'écrit sans changement (un simple
+              // clic sur l'image déjà sélectionnée) ni sur une image en suppression suggérée : le DOM, que le glisser a déplacé en direct, retrouve alors la position du document.
+              const pos = getPos();
+              const current = typeof pos === 'number' ? nodeEditor.state.doc.nodeAt(pos) : null;
+              if (current && !moveImageNode(nodeEditor, pos, patch)) applyAttrs(current.attrs);
             }
             moveState = null;
           }
@@ -1236,7 +1276,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createEditorImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();

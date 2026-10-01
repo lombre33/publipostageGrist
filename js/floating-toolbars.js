@@ -335,6 +335,8 @@ const FloatingToolbars = (function () {
 
     // Flèches du clavier sur une image en calque (devant ou derrière le texte) SÉLECTIONNÉE : 1 px de mise en page par appui, 10 px avec Maj, répété quand la touche reste appuyée.
     // Même chemin que le glisser de la NodeView (onMoveUp, js/editor-nodes.js) : `left`/`top` s'écrivent, puis la grille page est relue sur le rendu pour que le PDF et le Word suivent.
+    // Suivi des modifications actif, le déplacement laisse sa trace comme le glisser (EditorNodes.moveImageNode) : le premier appui d'une rafale laisse l'original barré et pose la copie
+    // à sa nouvelle place, resélectionnée ; les appuis suivants déplacent cette copie, sans empiler d'autres traces.
     // Une image dans le texte et toute autre sélection gardent les flèches de ProseMirror. Une image que le curseur vient de sélectionner EN ARRIVANT dessus (ProseMirror sélectionne un
     // atome au lieu de le traverser) n'est pas visée non plus : la flèche suivante la traverse comme avant ; sinon, depuis l'ancre d'une image en calque (souvent le premier paragraphe),
     // on ne pourrait plus avancer dans le texte au clavier, et la touche tenue appuyée ferait glisser l'image sur la page. Un clic, une action de cette barre ou un glissé sont un choix :
@@ -345,9 +347,10 @@ const FloatingToolbars = (function () {
     let arrivedAtPos = null;
     let arrowInFlight = false;
 
+    // Une image en suppression suggérée (l'original d'un déplacement suivi) n'est pas visée : elle ne bouge pas, la flèche garde son sens ordinaire.
     function selectedLayeredImage() {
       const node = selectedImageNode();
-      return node && node.attrs.layer !== 'normal' ? { node, pos: editor.state.selection.from } : null;
+      return node && node.attrs.layer !== 'normal' && !node.marks.some(m => m.type.name === 'deletion') ? { node, pos: editor.state.selection.from } : null;
     }
 
     function nudgeSelectedImage(target, dx, dy) {
@@ -363,19 +366,11 @@ const FloatingToolbars = (function () {
       const grid = HeaderFooterPreview.computePageGridPosition(dom);
       const patch = { left: Math.round(parseFloat(dom.style.left) || 0), top: Math.round(parseFloat(dom.style.top) || 0) };
       if (grid) Object.assign(patch, grid);
-      const changed = Object.keys(patch).some(key => (patch[key] == null || before[key] == null) ? patch[key] !== before[key] : Math.abs(patch[key] - before[key]) > 0.005);
-      if (!changed) {
-        // Contre le bord de la page : la flèche est consommée mais rien ne s'écrit (ni modification du document, ni étape d'historique de plus).
+      if (!EditorNodes.moveImageNode(editor, target.pos, patch)) {
+        // Contre le bord de la page : la flèche est consommée mais rien ne s'écrit (ni modification du document, ni étape d'historique de plus, ni trace en suivi).
         dom.style.left = left0 + 'px';
         dom.style.top = top0 + 'px';
-        return;
       }
-      // Même écriture que EditorCore.patchNodeAndReselect (le nœud est remplacé, la NodeSelection recréée dessus), mais hors suivi : une position est de la mise en page, pas du contenu.
-      // Suivi des modifications actif, la bibliothèque transformerait chaque appui en une suppression + une insertion de l'image, et perdrait la sélection : la flèche suivante
-      // ferait avancer le curseur au lieu de déplacer l'image.
-      const tr = editor.state.tr.setNodeMarkup(target.pos, undefined, Object.assign({}, before, patch));
-      tr.setSelection(editor.state.selection.constructor.create(tr.doc, target.pos));
-      editor.view.dispatch(TrackChanges.skipTracking(tr));
     }
 
     // Phase de capture : avant ProseMirror et ses raccourcis (curseur de passerelle, tableaux), qui prennent aussi les flèches ; un événement dont preventDefault a été appelé n'est plus traité par
