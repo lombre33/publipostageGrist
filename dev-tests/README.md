@@ -320,7 +320,7 @@ Deux options utiles :
   `page.evaluate()` ne peut donc le voir. Pour « + », « Enregistrer », « Qualité PDF » et « Titre » : le survol ouvre le menu sous la souris, puis après un vrai clic et la souris
   partie le menu est refermé (`aria-expanded="false"`) et le bouton n'a pas gardé le focus ; après un clic sur « Qualité PDF » ou « Titre », le curseur est resté dans le texte et
   la frappe suivante y arrive ; renommer un modèle puis cliquer « Qualité PDF » referme le champ, affiche le nom tapé et laisse le focus ailleurs que sur le bouton ; au clavier,
-  Tab depuis « Aperçu A4 » arrive sur « Qualité PDF » dont le menu s'ouvre, puis se referme au Tab suivant, et Entrée sur Enregistrer écrit une seule fois ; une ligne de menu
+  Tab depuis « Portrait / Paysage » (le dernier bouton avant lui) arrive sur « Qualité PDF » dont le menu s'ouvre, puis se referme au Tab suivant, et Entrée sur Enregistrer écrit une seule fois ; une ligne de menu
   ordinaire (« Nouvel email ») se clique toujours et son menu se referme. Contre l'ancien code (`55292d6`) il échoue sur six constats (les trois menus restés ouverts, le focus resté
   sur « Qualité PDF » et sur « Titre », le focus resté après le renommage) et passe sur « Enregistrer », réglé avant.
 - `leaveUnsavedMouse` (`dev-tests/verify-leave-unsaved-mouse.mjs`, 38 vérifications) clique et tape pour de vrai, à 700×400, la question « Enregistrer / Abandonner / Annuler » posée avant

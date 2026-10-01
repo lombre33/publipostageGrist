@@ -210,11 +210,11 @@ const ren = await page.evaluate(() => ({ hidden: document.getElementById('templa
 check('renommer puis cliquer Qualité PDF : le champ se referme, le nom tapé est affiché dans la liste, le bouton n’a pas gardé le focus', ren.hidden && /renommé en route/.test(ren.label) && ren.focus !== 'v2-btn-quality', { ren });
 await away(page);
 
-// 4) le clavier est intact
-await page.focus('#v2-toggle-a4-preview');
+// 4) le clavier est intact (le bouton Portrait / Paysage, ajouté entre Aperçu A4 et Qualité PDF, est le dernier avant lui dans l'ordre de Tab)
+await page.focus('#btn-page-orientation');
 await page.keyboard.press('Tab');
 const kq = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-quality-flyout')).display, expanded: document.getElementById('v2-btn-quality').getAttribute('aria-expanded') }));
-check('Tab depuis Aperçu A4 : on arrive sur Qualité PDF, son menu s’ouvre (focus clavier)', kq.active === 'v2-btn-quality' && kq.open === 'flex' && kq.expanded === 'true', kq);
+check('Tab depuis Portrait / Paysage : on arrive sur Qualité PDF, son menu s’ouvre (focus clavier)', kq.active === 'v2-btn-quality' && kq.open === 'flex' && kq.expanded === 'true', kq);
 await page.keyboard.press('Tab');
 const kq2 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-quality-flyout')).display, expanded: document.getElementById('v2-btn-quality').getAttribute('aria-expanded') }));
 check('Tab suivant : le menu de Qualité PDF se referme', kq2.open === 'none' && kq2.expanded === 'false' && kq2.active !== 'v2-btn-quality', kq2);
