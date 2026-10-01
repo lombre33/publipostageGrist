@@ -2077,9 +2077,10 @@
   const BOOL_NO = () => I18n.t('macro.modal.valueBoolNo');
   const BOOL_UNKNOWN = () => I18n.t('macro.modal.valueUnrecognized');
   const optionValues = select => Array.from(select.options).map(o => o.value);
-  // Fenêtre de condition ouverte sur une bulle dont la condition « Actif = valeur » est déjà enregistrée (une valeur écrite avant la liste, ou à la main).
-  async function openBoolWindow(h, value) {
-    const condition = { mode: 'all', rules: [{ column: 'Actif', operator: '=', value }] };
+  // Fenêtre de condition ouverte sur une bulle dont la condition « Actif = valeur » est déjà enregistrée (une valeur écrite avant la liste, ou à la main) ;
+  // `operator` : un autre opérateur que « = » (une règle écrite avant que les opérateurs sans sens soient grisés).
+  async function openBoolWindow(h, value, operator) {
+    const condition = { mode: 'all', rules: [{ column: 'Actif', operator: operator || '=', value }] };
     Editor.setHTML(`<p>Objet : ${badgeHtml('CsDossiers', 'Titre', ` data-condition="${JSON.stringify(condition).replace(/"/g, '&quot;')}"`)}</p>`);
     await selectBadge(h, 'CsDossiers.Titre');
     pressToolbarButton('var-condition');
@@ -2358,6 +2359,146 @@
         && native.field.native && !native.field.list && JSON.stringify(native.field.options) === JSON.stringify(['', 'Oui', 'Non'])
         && !!native.saved && native.saved.rules[0].column === 'Actif' && native.saved.rules[0].value === 'Non';
       return { pass, notes: JSON.stringify({ fr, en, back, french, native }) };
+    },
+  });
+
+  // === Opérateurs d'une colonne Oui / Non (Antoine, 2026-10-01, carte « Griser les opérateurs sans sens d'une colonne Oui / Non ? » : « Griser ») -
+  // js/condition-fields.js:syncOperatorOptions. « > » et « ≥ » retiennent TOUTES les lignes, « < », « ≤ » et « contient » aucune : ils sont grisés, jamais retirés. ===
+  const OPERATORS_ALL = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
+  const OPERATORS_WITHOUT_MEANING = ['>', '<', '≥', '≤', 'contient'];
+  const OPERATORS_WITH_MEANING = ['=', '≠', 'vide', 'non vide'];
+  // Le <select> des opérateurs d'une fenêtre : le seul sans classe qui propose « contient » (la fenêtre a aussi son choix « toutes / au moins une »).
+  const operatorSelectOf = root => Array.from(root.querySelectorAll('select')).find(s => !s.className && Array.from(s.options).some(o => o.value === 'contient'));
+  const operatorState = select => ({
+    all: Array.from(select.options).map(o => o.value),
+    greyed: Array.from(select.options).filter(o => o.disabled).map(o => o.value),
+    value: select.value,
+    shownGreyed: !!select.selectedOptions[0] && select.selectedOptions[0].disabled,
+  });
+  const sameList = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const operatorsAsExpected = (state, greyed) => sameList(state.all, OPERATORS_ALL) && sameList(state.greyed, greyed);
+
+  cases.push({
+    id: 'colsearch_value_bool_operators_without_meaning_are_greyed_never_removed_and_a_chosen_or_saved_one_stays',
+    description: 'Colonne Oui / Non : « > », « < », « ≥ », « ≤ » et « contient » sont grisés dans la liste des opérateurs (jamais retirés : mêmes neuf lignes, même ordre), « = », « ≠ », « vide » et « non vide » restent actifs ; une autre colonne les rend tous, y compris quand on y revient ; un opérateur choisi avant de passer à une colonne Oui / Non, ou déjà enregistré, reste affiché et choisi, jamais réécrit (Enregistrer le garde) ; choisir « = » le remplace et le reste demeure grisé',
+    run: async (h) => {
+      await seed(h);
+      const ed = EditorCore.getEditor();
+      const savedRule = () => badgeNodes(ed)[0].node.attrs.condition.rules[0];
+      let modal = await openConditionWindow(h);
+      const operator = () => operatorSelectOf(modal);
+      // 1. Colonnes : aucune, Oui / Non, texte, numérique, puis retour sur Oui / Non.
+      const none = operatorState(operator());
+      await chooseColumn(h, modal, 'Actif');
+      const bool = operatorState(operator());
+      await chooseColumn(h, modal, 'Titre');
+      const text = operatorState(operator());
+      await chooseColumn(h, modal, 'Montant');
+      const numeric = operatorState(operator());
+      await chooseColumn(h, modal, 'Actif');
+      const backToBool = operatorState(operator());
+      // 2. « > » choisi sur une colonne numérique reste choisi sur Oui / Non, affiché grisé ; Enregistrer le garde tel quel.
+      await chooseColumn(h, modal, 'Montant');
+      changed(operator(), '>');
+      await h.sleep(20);
+      await chooseColumn(h, modal, 'Actif');
+      const kept = operatorState(operator());
+      await pickValue(h, valueParts(modal), BOOL_YES());
+      saveButton(modal).click();
+      await h.sleep(80);
+      const savedKept = savedRule();
+      // 3. Une règle « Actif > Oui » enregistrée avant : la fenêtre la montre telle quelle, Enregistrer sans y toucher la garde.
+      modal = await openBoolWindow(h, 'Oui', '>');
+      const reopened = operatorState(operator());
+      saveButton(modal).click();
+      await h.sleep(80);
+      const untouched = savedRule();
+      // 4. « = » à la place : la règle le prend, et les cinq restent grisés.
+      modal = await openBoolWindow(h, 'Oui', '>');
+      changed(operator(), '=');
+      await h.sleep(20);
+      const replaced = operatorState(operator());
+      saveButton(modal).click();
+      await h.sleep(80);
+      const savedReplaced = savedRule();
+      // 5. Les opérateurs enregistrés qui ont un sens ne bougent pas : « ≠ » et « vide » restent choisis, jamais grisés.
+      modal = await openBoolWindow(h, 'Non', '≠');
+      const notEqual = operatorState(operator());
+      dismiss(modal);
+      modal = await openBoolWindow(h, '', 'vide');
+      const empty = operatorState(operator());
+      const emptyGreyedValue = modal.querySelector('.macro-rule-value-slot').classList.contains('is-disabled');
+      dismiss(modal);
+      const pass = operatorsAsExpected(none, []) && none.value === '='
+        && operatorsAsExpected(bool, OPERATORS_WITHOUT_MEANING) && bool.value === '=' && !bool.shownGreyed && sameList(bool.all.filter(op => !bool.greyed.includes(op)), OPERATORS_WITH_MEANING)
+        && operatorsAsExpected(text, []) && operatorsAsExpected(numeric, []) && operatorsAsExpected(backToBool, OPERATORS_WITHOUT_MEANING)
+        && operatorsAsExpected(kept, OPERATORS_WITHOUT_MEANING) && kept.value === '>' && kept.shownGreyed
+        && !!savedKept && savedKept.column === 'Actif' && savedKept.operator === '>' && savedKept.value === BOOL_YES()
+        && operatorsAsExpected(reopened, OPERATORS_WITHOUT_MEANING) && reopened.value === '>' && reopened.shownGreyed
+        && !!untouched && untouched.operator === '>' && untouched.value === 'Oui'
+        && operatorsAsExpected(replaced, OPERATORS_WITHOUT_MEANING) && replaced.value === '=' && !replaced.shownGreyed
+        && !!savedReplaced && savedReplaced.operator === '=' && savedReplaced.value === 'Oui'
+        && operatorsAsExpected(notEqual, OPERATORS_WITHOUT_MEANING) && notEqual.value === '≠' && !notEqual.shownGreyed
+        && operatorsAsExpected(empty, OPERATORS_WITHOUT_MEANING) && empty.value === 'vide' && !empty.shownGreyed && emptyGreyedValue;
+      return { pass, notes: JSON.stringify({ none, bool, text, numeric, backToBool, kept, savedKept, reopened, untouched, replaced, savedReplaced, notEqual, empty, emptyGreyedValue }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_bool_operators_are_greyed_the_same_way_in_the_loop_filter_and_the_macro_model',
+    description: 'Le filtre d’une boucle et la règle d’un macro-modèle (même champ que la condition d’une bulle) grisent aussi « > », « < », « ≥ », « ≤ » et « contient » sur une colonne Oui / Non, sans rien retirer ; l’opérateur déjà enregistré d’un filtre de boucle reste affiché et choisi, les autres colonnes les rendent tous',
+    run: async (h) => {
+      await seed(h);
+      // Une colonne Oui / Non sur la table parcourue par la boucle (le seed d'un cas suivant la remet comme avant) : les colonnes d'une table viennent de ses lignes.
+      window.__gristStub.setVariables('CsLignes', { Facture: 'Ref:CsFactures', Designation: 'Text', Qte: 'Numeric', Montant: 'Numeric', Presence: 'Choice', Paye: 'Bool' }, { Presence: ['Présent', 'Absent'] });
+      window.__gristStub.setRows('CsLignes', [
+        { id: 1, Facture: 1, Designation: 'Audit', Qte: 1, Montant: 800, Presence: 'Présent', Paye: true },
+        { id: 2, Facture: 1, Designation: 'Suivi', Qte: 2, Montant: 90, Presence: 'Absent', Paye: false },
+      ]);
+      await GristAPI.refreshSchema();
+      const loopAttrs = { repeat: 'inline', table: 'CsLignes', filter: { mode: 'all', rules: [{ column: 'Paye', operator: '>', value: 'Oui' }] }, empty: 'hide', separator: ', ', lastSeparator: ' et ' };
+      Editor.setHTML(`<p>Lignes : ${loopBadgeHtml('CsLignes', 'Designation', loopAttrs)}.</p>`);
+      const ed = await selectBadge(h, 'CsLignes.Designation');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const loop = loopModal();
+      const loopOperator = () => operatorSelectOf(loop);
+      const loopSaved = operatorState(loopOperator());
+      await chooseColumn(h, loop, 'Qte');
+      const loopNumeric = operatorState(loopOperator());
+      await chooseColumn(h, loop, 'Paye');
+      const loopBack = operatorState(loopOperator());
+      saveButton(loop).click();
+      await h.sleep(100);
+      const loopSavedAttrs = savedLoop(ed, 'CsLignes.Designation');
+      const loopRule = loopSavedAttrs && loopSavedAttrs.filter && loopSavedAttrs.filter.rules[0];
+
+      const realCached = Templates.getCached;
+      let macro;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        await openMacroWindow(h);
+        const macroOperator = () => operatorSelectOf(macroModal());
+        const macroColumn = macroModal().querySelector('select.macro-rule-column');
+        const macroNone = operatorState(macroOperator());
+        changed(macroColumn, 'Actif');
+        await h.sleep(40);
+        const macroBool = operatorState(macroOperator());
+        changed(macroColumn, 'Titre');
+        await h.sleep(40);
+        const macroText = operatorState(macroOperator());
+        macro = { macroNone, macroBool, macroText };
+      } finally {
+        Templates.getCached = realCached;
+        await closeMacroWindow(h);
+      }
+      const pass = operatorsAsExpected(loopSaved, OPERATORS_WITHOUT_MEANING) && loopSaved.value === '>' && loopSaved.shownGreyed
+        && operatorsAsExpected(loopNumeric, []) && loopNumeric.value === '>'
+        && operatorsAsExpected(loopBack, OPERATORS_WITHOUT_MEANING) && loopBack.value === '>' && loopBack.shownGreyed
+        && !!loopRule && loopRule.column === 'Paye' && loopRule.operator === '>'
+        && operatorsAsExpected(macro.macroNone, []) && operatorsAsExpected(macro.macroBool, OPERATORS_WITHOUT_MEANING) && macro.macroBool.value === '='
+        && operatorsAsExpected(macro.macroText, []);
+      return { pass, notes: JSON.stringify({ loopSaved, loopNumeric, loopBack, loopRule, macro }) };
     },
   });
 

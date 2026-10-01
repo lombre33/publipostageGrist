@@ -398,13 +398,26 @@ const ConditionFields = (function () {
     });
   }
 
+  // Sur une colonne Oui / Non, seuls « = », « ≠ », « vide » et « non vide » ont un sens : la comparaison (js/condition-rules.js:compareValues) lit « > » et « ≥ » en
+  // texte (« true » contre « Oui »), donc « > » et « ≥ » retiennent TOUTES les lignes, « < », « ≤ » et « contient » aucune, sans message (choix « Griser »
+  // d'Antoine, 2026-10-01). Ces cinq lignes sont GRISÉES, jamais retirées : la liste garde ses neuf lignes dans le même ordre. L'opérateur déjà enregistré - ou
+  // choisi avant de passer à une colonne Oui / Non - reste affiché et choisi, même grisé : une règle n'est jamais réécrite à la place de l'utilisateur.
+  const BOOL_MEANINGLESS_OPERATORS = ['>', '<', '≥', '≤', 'contient'];
+  function syncOperatorOptions(operatorSelect, columnType) {
+    const bool = String(columnType || '') === 'Bool';
+    Array.from(operatorSelect.options).forEach(option => { option.disabled = bool && BOOL_MEANINGLESS_OPERATORS.indexOf(option.value) !== -1; });
+  }
+
   // `options` : transmis à buildColumnField (fenêtre de condition d'une variable : { allTables, onColumnChosen }), plus { onColumnResolved(table, colonne,
   // type) } appelé à la construction puis à chaque colonne adoptée (indication du lien sous la règle) - sans effet pour les macro-modèles.
   function buildConditionFields(rule, options) {
     const valueSlot = document.createElement('span');
     valueSlot.className = 'macro-rule-value-slot';
     const operatorSelect = document.createElement('select');
+    let columnType = null;
     function renderValue(type, colId, table) {
+      columnType = type;
+      syncOperatorOptions(operatorSelect, type);
       valueSlot.replaceChildren(buildValueField(rule, type, colId, table));
       syncValueDisabled(valueSlot, operatorSelect.value || rule.operator || '=');
       if (options && options.onColumnResolved) options.onColumnResolved(table, colId, type);
@@ -414,6 +427,8 @@ const ConditionFields = (function () {
 
     ConditionRules.OPERATORS.forEach(op => { const o = document.createElement('option'); o.value = op; o.textContent = op; operatorSelect.appendChild(o); });
     operatorSelect.value = rule.operator || '=';
+    // La 1re colonne a été rendue avant que les options existent : on grise maintenant, une fois l'opérateur enregistré choisi.
+    syncOperatorOptions(operatorSelect, columnType);
     syncValueDisabled(valueSlot, operatorSelect.value);
     operatorSelect.addEventListener('change', () => { rule.operator = operatorSelect.value; syncValueDisabled(valueSlot, operatorSelect.value); });
 

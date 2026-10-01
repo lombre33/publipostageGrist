@@ -200,7 +200,9 @@ bas. Sur une colonne **Oui / Non** (case à cocher), c'est la liste « Oui » / 
 « Autre valeur… » ni saisie libre (demande d'Antoine du 01/10 : limiter les entrées à la main, source d'erreurs) : ce sont
 les mots que la comparaison lit ; une valeur déjà enregistrée dans une autre graphie (« vrai », « 1 ») s'affiche
 « Oui » / « Non », une valeur que la comparaison ne lit pas reste visible avec « valeur non reconnue » jusqu'à ce qu'on
-choisisse. La colonne d'une règle de **macro-modèle** et celle de la **condition d'une bulle** (demande d'Antoine du 01/10, puis
+choisisse. Sur cette colonne, les opérateurs sans sens (« > » et « ≥ » retiennent toutes les lignes, « < », « ≤ » et
+« contient » aucune) sont **grisés** dans la liste des opérateurs, jamais retirés ; l'opérateur déjà enregistré reste
+affiché et choisi (choix « Griser » d'Antoine, 01/10). La colonne d'une règle de **macro-modèle** et celle de la **condition d'une bulle** (demande d'Antoine du 01/10, puis
 son choix « À plat » du même jour pour la condition) sont UNE seule liste qui réunit celles de toutes les tables, sans
 intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une table pas encore
 liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente), et le lien d'une table liée se lit

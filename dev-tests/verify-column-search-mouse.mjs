@@ -1159,7 +1159,9 @@ const SECTIONS = {
   // Champ Valeur d'une colonne Oui / Non (Antoine, 2026-10-01 : « si la colonne est une boolean, proposer la liste déroulante oui/non avec les mots qui vont
   // exactement correspondre à la valeur stockée sur Grist (ou traduite) ; limiter les entrées manuelles ») : la liste de deux mots, sans « Autre valeur… » ni champ
   // libre, au vrai clic et au vrai clavier à 700x400, dans la fenêtre de condition et le macro-modèle, en clair et en sombre ; une valeur enregistrée que la
-  // comparaison ne lit pas reste visible avec sa mention ; les mots suivent la langue.
+  // comparaison ne lit pas reste visible avec sa mention ; les mots suivent la langue. Les opérateurs sans sens sur une colonne Oui / Non (« > », « < », « ≥ »,
+  // « ≤ » et « contient », carte « Griser » d'Antoine, 2026-10-01) sont grisés dans la liste native des opérateurs, jamais retirés : le vrai clavier les saute,
+  // un opérateur déjà enregistré reste affiché et choisi, le macro-modèle les grise aussi.
   async boolValues() {
     const macro = '#macro-editor-modal';
     const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
@@ -1169,9 +1171,9 @@ const SECTIONS = {
       // Lecture d'une propriété d'un élément qui peut manquer : null, pas d'exception.
       window.__csQ = (selector, property) => { const el = document.querySelector(selector); return el ? el[property] : null; };
     });
-    // Une bulle sur CsDossiers.Titre, sans condition ou avec « Actif = valeur » déjà enregistrée (écrite avant la liste, ou à la main).
-    const freshDocument = async value => {
-      const condition = value === undefined ? '' : ' data-condition="' + JSON.stringify({ mode: 'all', rules: [{ column: 'Actif', operator: '=', value }] }).replace(/"/g, '&quot;') + '"';
+    // Une bulle sur CsDossiers.Titre, sans condition ou avec « Actif = valeur » déjà enregistrée (écrite avant la liste, ou à la main) ; `operator` : un autre que « = ».
+    const freshDocument = async (value, operator = '=') => {
+      const condition = value === undefined ? '' : ' data-condition="' + JSON.stringify({ mode: 'all', rules: [{ column: 'Actif', operator, value }] }).replace(/"/g, '&quot;') + '"';
       await page.evaluate(html => Editor.setHTML(html), `<p>Objet : <span class="var-badge" data-table="CsDossiers" data-column="Titre" data-key="CsDossiers.Titre"${condition}></span></p>`);
       await page.waitForTimeout(250);
     };
@@ -1214,6 +1216,29 @@ const SECTIONS = {
         windowOpen: document.querySelector(sel).style.display !== 'none',
       };
     }, scope);
+    // La liste des opérateurs de la première règle (le <select> sans classe de la ligne) : ses lignes, celles qui sont grisées, celle qui est choisie et si elle l'est.
+    const operatorList = scope => page.evaluate(sel => {
+      const row = document.querySelector(sel + ' .macro-rule-row');
+      const select = row && Array.from(row.querySelectorAll('select')).find(s => !s.matches('.macro-rule-column, .macro-rule-modele, .macro-rule-value'));
+      if (!select) return null;
+      return {
+        all: Array.from(select.options).map(o => o.value), greyed: Array.from(select.options).filter(o => o.disabled).map(o => o.value),
+        value: select.value, shownGreyed: !!select.selectedOptions[0] && select.selectedOptions[0].disabled,
+      };
+    }, scope);
+    const operatorValue = scope => page.evaluate(sel => {
+      const row = document.querySelector(sel + ' .macro-rule-row');
+      const select = row && Array.from(row.querySelectorAll('select')).find(s => !s.matches('.macro-rule-column, .macro-rule-modele, .macro-rule-value'));
+      return select ? select.value : null;
+    }, scope);
+    const focusOperator = scope => page.evaluate(sel => {
+      const row = document.querySelector(sel + ' .macro-rule-row');
+      const select = row && Array.from(row.querySelectorAll('select')).find(s => !s.matches('.macro-rule-column, .macro-rule-modele, .macro-rule-value'));
+      if (select) select.focus();
+      return !!select && document.activeElement === select;
+    }, scope);
+    const ALL_OPERATORS = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
+    const GREYED_OPERATORS = ['>', '<', '≥', '≤', 'contient'];
     const CHOOSE = '— Choisir une valeur —';
     for (const theme of ['light', 'dark']) {
       const label = theme === 'dark' ? 'sombre' : 'clair';
@@ -1269,6 +1294,56 @@ const SECTIONS = {
       check(`oui/non (${label}) : condition : Enregistrer garde la règle « Actif = Oui »`,
         !!saved[0] && saved[0].rules.length === 1 && saved[0].rules[0].column === 'Actif' && saved[0].rules[0].operator === '=' && saved[0].rules[0].value === 'Oui', saved);
 
+      // Opérateurs : les cinq sans sens sont grisés (la liste garde ses neuf lignes), le vrai clavier les saute, et le choix d'un autre opérateur reste libre.
+      await freshDocument();
+      await openWindowFor('Titre', 'var-condition', cond);
+      await pickColumn(cond, 'acti', 'Actif');
+      const operatorBox = await reveal(cond + ' .macro-rule-row > select', cond + ' .modal-content');
+      const operators = await operatorList(cond);
+      check(`oui/non (${label}) : condition, colonne Oui / Non : le choix de l'opérateur est visible et au premier plan, ses neuf lignes sont gardées dans le même ordre et « > », « < », « ≥ », « ≤ », « contient » sont grisés (jamais retirés)`,
+        operatorBox.found && operatorBox.inViewport && operatorBox.onTop && !!operators && JSON.stringify(operators.all) === JSON.stringify(ALL_OPERATORS)
+        && JSON.stringify(operators.greyed) === JSON.stringify(GREYED_OPERATORS) && operators.value === '=' && !operators.shownGreyed, { operatorBox, operators });
+      const focused = await focusOperator(cond);
+      const stepsDown = [];
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(60);
+        stepsDown.push(await operatorValue(cond));
+      }
+      const slotAfterEmpty = await dimming(cond);
+      const stepsUp = [];
+      for (let i = 0; i < 3; i++) {
+        await page.keyboard.press('ArrowUp');
+        await page.waitForTimeout(60);
+        stepsUp.push(await operatorValue(cond));
+      }
+      check(`oui/non (${label}) : condition : au vrai clavier, les flèches de la liste des opérateurs sautent les lignes grisées (= ≠ vide, non vide, et retour) et n'en prennent aucune`,
+        focused && JSON.stringify(stepsDown) === JSON.stringify(['≠', 'vide', 'non vide', 'non vide']) && JSON.stringify(stepsUp) === JSON.stringify(['vide', '≠', '=']), { focused, stepsDown, stepsUp });
+      check(`oui/non (${label}) : condition : « vide » choisi au clavier grise la liste Oui / Non (l'évènement a bien lu l'opérateur)`,
+        !!slotAfterEmpty && slotAfterEmpty.slot === '0.45' && slotAfterEmpty.disabled, slotAfterEmpty);
+      const typedOperators = [];
+      for (const key of ['c', '>', '<']) {
+        await page.keyboard.type(key);
+        await page.waitForTimeout(60);
+        typedOperators.push(await operatorValue(cond));
+      }
+      check(`oui/non (${label}) : condition : taper « c », « > » ou « < » sur la liste des opérateurs ne prend aucune des lignes grisées`,
+        JSON.stringify(typedOperators) === JSON.stringify(['=', '=', '=']), typedOperators);
+      await closeWith(cond, cancelOf(cond));
+
+      // Une règle « Actif > Oui » écrite avant : l'opérateur reste affiché et choisi (grisé), Enregistrer le garde tel quel.
+      await freshDocument('Oui', '>');
+      await openWindowFor('Titre', 'var-condition', cond);
+      const keptOperator = await operatorList(cond);
+      const keptField = await reveal(cond + ' .macro-rule-row > select', cond + ' .modal-content');
+      check(`oui/non (${label}) : condition, règle « Actif > Oui » enregistrée avant : « > » reste affiché et choisi (grisé dans la liste), les neuf lignes sont là`,
+        keptField.found && keptField.onTop && !!keptOperator && keptOperator.value === '>' && keptOperator.shownGreyed && JSON.stringify(keptOperator.all) === JSON.stringify(ALL_OPERATORS)
+        && JSON.stringify(keptOperator.greyed) === JSON.stringify(GREYED_OPERATORS), { keptField, keptOperator });
+      await closeWith(cond, saveOf(cond));
+      const keptSaved = await savedConditions();
+      check(`oui/non (${label}) : condition : Enregistrer garde « Actif > Oui » tel quel, rien n'est réécrit à la place de la personne`,
+        !!keptSaved[0] && keptSaved[0].rules.length === 1 && keptSaved[0].rules[0].operator === '>' && keptSaved[0].rules[0].value === 'Oui', keptSaved);
+
       // Une valeur enregistrée que la comparaison ne lit pas : visible avec sa mention, jamais effacée ; Oui ou Non la remplace et elle quitte la liste.
       await freshDocument('x');
       await openWindowFor('Titre', 'var-condition', cond);
@@ -1314,6 +1389,10 @@ const SECTIONS = {
       await page.waitForTimeout(150);
       const macroChosen = await valueState(macro);
       check(`oui/non (${label}) : macro-modèle : un vrai clic sur Oui choisit Oui et ferme la liste`, !!macroOui && macroOui.onTop && macroChosen.value === 'Oui' && macroChosen.name === 'Oui' && !macroChosen.listOpen, { macroOui, macroChosen });
+      const macroOperators = await operatorList(macro);
+      check(`oui/non (${label}) : macro-modèle : mêmes neuf opérateurs, les cinq sans sens grisés (jamais retirés), « = » choisi`,
+        !!macroOperators && JSON.stringify(macroOperators.all) === JSON.stringify(ALL_OPERATORS) && JSON.stringify(macroOperators.greyed) === JSON.stringify(GREYED_OPERATORS)
+        && macroOperators.value === '=' && !macroOperators.shownGreyed, macroOperators);
       await closeWith(macro, '#macro-editor-cancel');
     }
 
