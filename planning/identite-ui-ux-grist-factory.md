@@ -403,6 +403,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   formule ou une colonne ne se lit plus. Sa barre flottante est celle des variables : « Modifier le calcul » (le double-clic et Entrée aussi), les réglages nombre (FR / US, décimales, devise, Lettres, bouton Ø) ;
   condition d'affichage, autres attributs et boucle y sont GRISÉS avec leur raison (« Disponible pour une variable, pas pour un calcul »), jamais retirés. Le résultat s'écrit comme une colonne nombre : FR par
   défaut (espace insécable des milliers), US en anglais, zéro caché par défaut ; une erreur s'écrit dans le document dans la langue de l'interface (« [ERREUR: Division par zéro.] »), jamais un total faux.
+- Bulle choisie (demande d'Antoine du 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier ») : un clic sur une bulle de variable ou
+  de calcul change légèrement son FOND, tant qu'elle est sélectionnée, sans autre effet (ni cadre, ni ombre, ni animation) : bleu `#b9d2f8` pour une variable (texte 6,9:1), vert `#b9e3cb` avec le
+  texte `#0f5a37` pour un calcul (5,9:1), rouge `#f3cccc` pour une bulle cassée (5,1:1), soit 1,25 à 1,4:1 du fond d'une bulle ordinaire. Le liseré, les pointillés d'une condition, le repère de
+  boucle et le point du format ne bougent pas (`background-color` seulement) ; la teinte est la même en clair et en sombre, la page du document restant blanche. Règles
+  `.tiptap .var-badge.ProseMirror-selectednode` et `.tiptap .calc-badge.ProseMirror-selectednode` ; les chips verts (date, heure, e-mail, note, numéro de page) n'ont pas ce retour.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »

@@ -7,6 +7,14 @@
 /* Bulle conditionnelle dans l'éditeur : bordure en pointillés. En lecture et à l'export, la bulle est remplacée par sa valeur ou retirée. */
 .tiptap .var-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 
+/* Bulle choisie par un clic (Antoine, 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier »). ProseMirror pose
+   `ProseMirror-selectednode` sur une bulle sélectionnée mais masque alors la sélection du navigateur (`ProseMirror-hideselection`) : rien ne la montrait. Le fond passe à un bleu plus
+   soutenu, le liseré et le texte ne changent pas (texte 6,9:1, fond 1,4:1 de celui d'une bulle ordinaire) ; même teinte en sombre, la page du document restant blanche comme les autres couleurs
+   de bulle. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une bulle cassée garde son rouge, un cran plus soutenu. Même retour pour
+   la bulle « Calcul » (css/variable-calc.css). */
+.tiptap .var-badge.ProseMirror-selectednode { background-color: #b9d2f8; }
+.tiptap .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
+
 /* Bulle dans une case de tableau (Antoine, 29/09) ou dans une colonne de zone 2 colonnes (Antoine, 29/09, « oui, les deux colonnes ») : un nom plus long que la
    case la traversait et recouvrait la case voisine ; dans une colonne, `overflow-wrap: anywhere` (css/style.css) le faisait passer sur 2 ou 3 lignes, si bien que
    la zone était plus haute dans l'éditeur qu'en lecture et à l'export. Le nom y est coupé au MILIEU par « … » (début tronqué, fin gardée) plutôt que rendu à la

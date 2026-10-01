@@ -399,6 +399,10 @@ exerce le VRAI clic natif.
    devient cet attribut sans rien perdre de son gras ni de sa condition, reste sélectionnée et sa barre revient à côté
    d'elle ; un seul Ctrl+Z rend l'ancienne. « Insérer » ajoute toujours les attributs juste après la bulle. Avec le suivi
    des modifications actif : l'ancienne bulle est barrée, la nouvelle soulignée, « Tout refuser » rend l'ancienne.
+8. Bulle choisie (demande d'Antoine du 01/10 : un mini retour visuel pour confirmer qu'on peut copier) : cliquer une bulle bleue, son fond passe à un bleu plus
+   soutenu tant qu'elle est sélectionnée (texte, liseré et pointillés d'une condition inchangés) ; Ctrl+C, un clic plus loin dans le texte puis Ctrl+V posent une seconde
+   bulle, au fond ordinaire ; le clic dans le texte a rendu à la première son fond d'origine. Même retour sur une bulle « Calcul » (vert plus soutenu, texte plus sombre) et
+   sur une variable dont la colonne a disparu (rouge plus soutenu). En thème sombre la couleur est la même : la page du document y reste blanche.
 
 ---
 

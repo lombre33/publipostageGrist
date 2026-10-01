@@ -15,6 +15,9 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
 }
+/* Bulle choisie par un clic : même retour que la bulle d'une variable (css/variable-actions.css), un fond vert plus soutenu avec un texte plus sombre pour garder 4,5:1 (F5). */
+.tiptap .calc-badge.ProseMirror-selectednode { background-color: #b9e3cb; color: #0f5a37; }
+.tiptap .calc-badge.calc-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; color: #a4231c; }
 /* Dans une case de tableau ou une colonne de zone 2 colonnes : la formule est coupée au MILIEU par « … », comme le nom d'une variable (css/variable-actions.css, mêmes règles) -
    la bulle ne traverse pas la case voisine et ne passe pas sur plusieurs lignes. */
 .tiptap :where(td, th, .two-columns-column) .calc-badge { display: inline-flex; max-width: 100%; box-sizing: border-box; }

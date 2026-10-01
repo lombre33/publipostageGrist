@@ -8,6 +8,8 @@
 //  - la bulle posée se clique, sa barre flottante montre « Modifier le calcul » et ses trois boutons sans objet sont GRISÉS AUX PIXELS (un clic dessus n'ouvre rien) ;
 //  - « Modifier le calcul » (bouton), le double-clic et Entrée rouvrent la fenêtre sur la formule ; Échap ferme et rend le clavier à l'éditeur ;
 //  - dans une case étroite la formule est coupée par « … » sans déborder sur la case voisine ; en Lecture, la bulle devient son résultat ;
+//  - le retour visuel d'une bulle CHOISIE (variable, calcul, variable cassée ; demande d'Antoine du 01/10) : un vrai clic change le fond PEINT sur une vraie capture, un clic dans le texte le
+//    rend, Ctrl+C sur la bulle choisie puis Ctrl+V plus bas en posent une seconde ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "calcMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-calc-mouse.mjs
 // CALC_SHOTS=<dossier> : enregistre aussi des captures aux moments clés (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -280,6 +282,61 @@ async function endOfLastParagraph(page) {
   await realClick(page, spot);
 }
 
+// Le fond d'une bulle tel qu'il est PEINT : un pixel d'une vraie capture d'écran, dans sa marge gauche (bordure d'un pixel passée, texte pas encore commencé). Ce que l'utilisateur voit,
+// pas ce que le CSS déclare ; null si la bulle n'est pas entièrement visible au premier plan (la barre flottante la recouvrirait).
+async function backgroundSeen(page, selector) {
+  const b = await hitTest(page, selector);
+  if (!seen(b)) return null;
+  const png = await page.screenshot({ clip: { x: Math.floor(b.left) + 3, y: Math.floor(b.top + b.h / 2), width: 1, height: 1 } });
+  return page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = 1; c.height = 1;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    return Array.from(ctx.getImageData(0, 0, 1, 1).data).slice(0, 3);
+  }, png.toString('base64'));
+}
+const colourGap = (a, b) => (a && b) ? Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) : null;
+
+// Retour visuel d'une bulle choisie (Antoine, 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier ») : un vrai clic change le fond
+// PEINT de la bulle d'une variable, d'un calcul et d'une variable cassée ; un clic dans le texte lui rend son fond ; Ctrl+C sur la bulle choisie puis Ctrl+V plus bas en posent une seconde.
+async function checkChosenFeedback(page, label) {
+  const broken = '<span class="var-badge" data-table="CxLignes" data-column="Disparue" data-key="CxLignes.Disparue"></span>';
+  await page.evaluate(({ variable, calc, broken }) => {
+    Editor.setHTML(`<p>Variable : ${variable}</p><p>Calcul : ${calc}</p><p>Cassée : ${broken}</p><p>Copie : </p>`);
+  }, { variable: VAR_BADGE, calc: stored('SUM({CxLignes.Prix} * {CxLignes.Qte})'), broken });
+  await page.waitForTimeout(500);
+  // La souris quitte le coin (0, 0), au-dessus de la barre d'outils : ses menus au survol s'y ouvriraient et recevraient le clic à la place de la bulle.
+  await page.mouse.move(450, 330, { steps: 4 });
+  await page.waitForTimeout(500);
+  for (const [name, selector] of [['d\'une variable', '.tiptap .var-badge:not(.var-badge-broken)'], ['d\'un calcul', '.tiptap .calc-badge'], ['d\'une variable cassée', '.tiptap .var-badge-broken']]) {
+    const plain = await backgroundSeen(page, selector);
+    if (!plain) { check(`${label} - la bulle ${name} est visible, entière et au premier plan avant le clic`, false, { selector }); continue; }
+    await realClick(page, await hitTest(page, selector));
+    await page.waitForTimeout(350);
+    const chosen = await backgroundSeen(page, selector);
+    const marked = await page.evaluate(sel => document.querySelector(sel).classList.contains('ProseMirror-selectednode'), selector);
+    await clickAway(page);
+    const released = await backgroundSeen(page, selector);
+    check(`${label} - un vrai clic sur la bulle ${name} change son fond à l'écran (écart de 40 au moins sur les trois canaux) ; un clic dans le texte lui rend son fond`,
+      marked && colourGap(plain, chosen) >= 40 && colourGap(plain, released) <= 4, { plain, chosen, released, marked });
+  }
+  await realClick(page, await hitTest(page, '.tiptap .var-badge:not(.var-badge-broken)'));
+  await page.waitForTimeout(350);
+  await page.keyboard.press('Control+c');
+  await page.waitForTimeout(250);
+  await clickAway(page);
+  await page.keyboard.press('End');
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(500);
+  const pasted = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .var-badge:not(.var-badge-broken)')).map(e => e.dataset.key + '|' + e.className));
+  check(`${label} - Ctrl+C sur la bulle choisie puis Ctrl+V plus bas donnent une seconde bulle identique, sans la marque « choisie »`,
+    pasted.length === 2 && pasted.every(p => p === 'CxLignes.Facture|var-badge'), pasted);
+}
+
 async function runTheme(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
   console.log(`\n=== Bulle « Calcul » à la vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
@@ -410,6 +467,9 @@ async function runTheme(theme) {
   if (viaEnter) await clickSel(page, `${MODAL} .var-modal-actions button:not(.var-modal-primary)`);
   await page.waitForTimeout(250);
   check(`${label} - Entrée sur la bulle sélectionnée rouvre la fenêtre ; « Annuler » à la souris la ferme et garde la formule`, viaEnter && !(await windowOpen(page)) && (await calcNodes(page))[0] === '{CxFactures.HT} * 0.2', { viaEnter });
+
+  // 6b) Retour visuel d'une bulle choisie : fond PEINT avant / après un vrai clic, retour au fond d'origine, copier-coller.
+  await checkChosenFeedback(page, label);
 
   // 7) Dans une case étroite la formule est coupée par « … », sans déborder ni passer à la ligne ; la case voisine reste en place.
   await page.evaluate(({ long }) => {

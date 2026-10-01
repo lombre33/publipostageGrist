@@ -47,6 +47,7 @@ const LIBRARY_CLASSES = new Set([
   'selectedCell',        // prosemirror-tables : cellule sélectionnée
   'column-resize-handle', // prosemirror-tables : poignée de largeur de colonne
   'resize-cursor',       // prosemirror-tables : curseur pendant le survol d'une bordure
+  'ProseMirror-selectednode', // prosemirror-view : nœud « atome » sélectionné (la bulle choisie d'une variable ou d'un calcul)
 ]);
 
 const jsFiles = listFiles('js', /\.js$/);
