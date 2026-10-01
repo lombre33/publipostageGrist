@@ -496,6 +496,9 @@ const Editor = (function () {
     if (!editor) return;
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
+    // Les images en calque d'un ancien modèle chargé masqué n'ont pas pu recevoir leur position de page (cf. HeaderFooterPreview.migrateLegacyImagePositions) :
+    // mesurées ici, une fois les largeurs de colonnes réglées, avec la mise en page que l'éditeur vient de retrouver.
+    HeaderFooterPreview.migrateLegacyImagePositions();
     HeaderFooterPreview.schedulePaginationRecompute();
     GridEditor.refresh();
   }

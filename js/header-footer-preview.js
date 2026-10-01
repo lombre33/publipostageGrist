@@ -355,6 +355,9 @@ const HeaderFooterPreview = (function () {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl || !el || !container.classList.contains('a4-preview')) return null;
+    // Éditeur masqué (Lecture, résumé d'un macro-modèle : display:none) : aucune mise en page, tous les rectangles valent 0 et la mesure ne dit que « coin de la
+    // page » (-marge/-marge). Pas de position plutôt qu'une fausse.
+    if (!tiptapEl.getClientRects().length) return null;
     const topLevelEl = topLevelAncestorIn(tiptapEl, el);
     if (!topLevelEl) return null;
     // Resynchronise D'ABORD les marges de coupure réelles (renderPaginationOverlay les efface puis les repose à jour) : sans ça, une règle de marge
@@ -423,8 +426,13 @@ const HeaderFooterPreview = (function () {
   // des résultats aberrants (confirmé : une image glissée loin de son paragraphe pouvait ressortir collée en haut de page). Rattrapée ici en capturant la
   // grille page de toute image déjà en calque dès qu'un document est chargé (Aperçu A4 actif) - aucune action de l'utilisateur nécessaire, un ancien
   // document se met à niveau tout seul à la prochaine ouverture.
+  // Un modèle chargé pendant que l'éditeur est masqué (Lecture, après un macro-modèle) n'a rien de mesurable : il garde ses images sans grille, et cette passe est
+  // rejouée quand l'éditeur redevient visible (Editor.refreshLayout). Mesurée masquée, l'image recevait -marge/-marge (le coin de la page), et cette position
+  // s'enregistrait à la première frappe ou au premier Enregistrer, sans jamais être recalculée (pageIndex n'est plus nul).
   function migrateLegacyImagePositions() {
     if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return;
+    // En édition d'en-tête/pied, le document affiché est le fragment, pas le corps du modèle dont les images sont à migrer.
+    if (hfMode || !editor.view.dom.getClientRects().length) return;
     const toPatch = [];
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && node.attrs.pageIndex == null && node.attrs.left != null) {

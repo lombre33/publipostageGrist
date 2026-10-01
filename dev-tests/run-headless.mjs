@@ -108,6 +108,7 @@ const NODE_SCRIPTS = {
   saveMenuMouse: 'verify-save-menu-mouse.mjs', // menu du bouton Enregistrer (Enregistrer sous…, enregistrement automatique coché), souris et clavier, 700x400 clair et sombre
   menuClickMouse: 'verify-menu-click-mouse.mjs', // un clic de souris sur « + », Enregistrer, Qualité PDF ou Titre ne les laisse plus ouverts ni ne prend le curseur du texte, 700x400
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
+  layerImagesMouse: 'verify-layer-images-mouse.mjs', // images en calque d'un ancien modèle chargées éditeur masqué (macro-modèle, Mode lecture) : leur position de page se mesure au retour de l'éditeur, 700x400
   tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
   englishTextsMouse: 'verify-english-texts-mouse.mjs', // vraie souris à 700x400, interface en anglais : les sept textes de l'audit F7, puis retour au français par Réglages

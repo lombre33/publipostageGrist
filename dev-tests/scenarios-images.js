@@ -472,6 +472,100 @@
     },
   });
 
+  // --- Ancien modèle (image en calque sans position de page) chargé pendant que l'éditeur est masqué (Antoine, 01/10, carte « Corriger ») ---
+  // HeaderFooterPreview.migrateLegacyImagePositions donne leur grille page (pageIndex, pageLeftPt, pageTopPt) aux images en calque qui n'en ont pas, en mesurant le DOM.
+  // Éditeur en display:none (Lecture, résumé d'un macro-modèle), tous les rectangles valent 0 : l'image recevait -marge/-marge (le coin de la page, -28/-28 pt à 10 mm),
+  // et cette position s'enregistrait à la première frappe ou au premier Enregistrer, sans jamais être recalculée (pageIndex n'est plus nul).
+  const legacyLayerHtml = '<p>Avant</p><p>Texte <img class="editor-image" src="' + DATA_PNG + '" alt="" style="width: 100px; height: 100px; left: 123px; top: 210px; position: absolute;" data-layer="front" data-wrap="inline"> fin</p><p>Suite</p>';
+  const gridOfFirstImage = () => {
+    const img = new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelector('img.editor-image');
+    const num = name => (img && img.hasAttribute(name)) ? parseFloat(img.getAttribute(name)) : null;
+    return img ? { pageIndex: num('data-page-index'), pageLeftPt: num('data-page-left-pt'), pageTopPt: num('data-page-top-pt'), left: img.style.left, top: img.style.top } : null;
+  };
+  const near = (a, b) => a != null && b != null && Math.abs(a - b) < 0.6;
+
+  cases.push({
+    id: 'image_legacy_layer_hidden_load_is_migrated_when_the_editor_is_shown',
+    description: 'Un ancien modèle chargé éditeur masqué garde ses images sans position de page (pas de -marge/-marge), puis les reçoit, les mêmes que chargé éditeur visible, quand l\'éditeur revient',
+    run: async (h) => {
+      const container = document.getElementById('editor-container');
+      try {
+        await h.resetEditor();
+        h.setA4Preview(true);
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(300);
+        const visible = gridOfFirstImage();
+        container.style.display = 'none';
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(300);
+        const hidden = gridOfFirstImage();
+        container.style.display = 'block';
+        Editor.refreshLayout();
+        await h.sleep(300);
+        const shown = gridOfFirstImage();
+        const visibleOk = !!visible && visible.pageIndex === 0 && visible.pageLeftPt > 0 && visible.pageTopPt > 0;
+        const hiddenOk = !!hidden && hidden.pageIndex === null && hidden.pageLeftPt === null && hidden.left === '123px' && hidden.top === '210px';
+        const shownOk = !!shown && shown.pageIndex === 0 && near(shown.pageLeftPt, visible.pageLeftPt) && near(shown.pageTopPt, visible.pageTopPt);
+        return { pass: visibleOk && hiddenOk && shownOk, notes: JSON.stringify({ visible, hidden, shown }) };
+      } finally { container.style.display = 'block'; }
+    },
+  });
+
+  cases.push({
+    id: 'image_legacy_layer_hidden_load_never_writes_the_corner_position',
+    description: 'Éditeur masqué puis tapé après son retour : le HTML qui s\'enregistre porte la position mesurée éditeur visible, jamais -marge/-marge',
+    run: async (h) => {
+      const container = document.getElementById('editor-container');
+      try {
+        await h.resetEditor();
+        h.setA4Preview(true);
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(300);
+        const visible = gridOfFirstImage();
+        container.style.display = 'none';
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(300);
+        container.style.display = 'block';
+        Editor.refreshLayout();
+        await h.sleep(300);
+        // Une frappe réelle après le retour de l'éditeur : c'est elle qui déclenche l'enregistrement automatique.
+        await h.focusAtEnd();
+        await h.typeText('!');
+        await h.sleep(100);
+        const saved = gridOfFirstImage();
+        const margin = PageLayout.getMarginsPt();
+        const atCorner = !!saved && near(saved.pageLeftPt, -margin.left) && near(saved.pageTopPt, -margin.top);
+        return { pass: !atCorner && !!saved && near(saved.pageLeftPt, visible.pageLeftPt) && near(saved.pageTopPt, visible.pageTopPt), notes: JSON.stringify({ visible, saved, margin }) };
+      } finally { container.style.display = 'block'; }
+    },
+  });
+
+  cases.push({
+    id: 'image_layer_with_page_grid_is_untouched_by_hidden_load_and_refresh',
+    description: 'Une image en calque qui a déjà sa position de page la garde à l\'identique : chargée éditeur masqué, puis au retour de l\'éditeur (refreshLayout rejoué deux fois)',
+    run: async (h) => {
+      const container = document.getElementById('editor-container');
+      try {
+        await h.resetEditor();
+        h.setA4Preview(true);
+        const modern = '<p>Texte <img class="editor-image" src="' + DATA_PNG + '" alt="" style="width: 100px; height: 100px; left: 123px; top: 210px; position: absolute;" data-layer="front" data-wrap="inline" data-page-index="0" data-page-left-pt="477.5" data-page-top-pt="-2.5"> fin</p>';
+        container.style.display = 'none';
+        Editor.setHTML(modern);
+        await h.sleep(300);
+        const hidden = gridOfFirstImage();
+        container.style.display = 'block';
+        Editor.refreshLayout();
+        await h.sleep(200);
+        Editor.refreshLayout();
+        await h.sleep(200);
+        const shown = gridOfFirstImage();
+        const expected = { pageIndex: 0, pageLeftPt: 477.5, pageTopPt: -2.5 };
+        const same = g => !!g && g.pageIndex === expected.pageIndex && g.pageLeftPt === expected.pageLeftPt && g.pageTopPt === expected.pageTopPt;
+        return { pass: same(hidden) && same(shown), notes: JSON.stringify({ hidden, shown }) };
+      } finally { container.style.display = 'block'; }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();
