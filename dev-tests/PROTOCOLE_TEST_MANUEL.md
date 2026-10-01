@@ -357,7 +357,8 @@ une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois
 
 ## 11. Barre flottante de formatage nombre/date d'une bulle `#Variable`
 
-**Couverture automatisée** : `dev-tests/scenarios-varformat.js` (groupe `varFormat`, 4 cas) - cf.
+**Couverture automatisée** : `dev-tests/scenarios-var-number-default.js` (groupe `varNumber`, 6 cas : un nombre sans réglage s'écrit FR - US en
+interface anglaise - comme le bouton que la barre montre allumé) et `dev-tests/scenarios-varformat.js` (groupe `varFormat`, 4 cas) - cf.
 `dev-tests/BUGS.md` Bug 5 (bloquant, corrigé le 2026-09-14 : le panneau se refermait dès qu'on
 touchait un de ses `<select>`/`<input>`, un premier correctif s'étant révélé insuffisant). La suite
 automatisée reproduit la CONDITION du bug (focus qui quitte l'éditeur) de façon fiable, mais PAS le
@@ -368,6 +369,10 @@ exerce le VRAI clic natif.
 ### Protocole (à rejouer après tout changement dans `js/floating-toolbars.js` ou `js/editor-core.js`)
 1. Insérer une `#Variable` sur une colonne Nombre, la sélectionner (clic dessus) — la barre
    flottante FR/US/—/décimales/devise/lettres/« Si la valeur vaut zéro » doit apparaître au-dessus.
+   Sans toucher à la barre, passer en Lecture : le nombre doit déjà s'écrire avec les espaces des
+   milliers (« 1 234,5 ») - le FR allumé dans la barre est le réglage réellement appliqué, il ne
+   faut pas avoir à recliquer dessus. Le même nombre exporté en PDF s'écrit pareil, sans case vide
+   à la place de l'espace.
 2. Cliquer le sélecteur "nb décimales" et choisir une valeur (ex. "2") — le menu déroulant doit
    rester ouvert le temps du choix (pas de fermeture "flash"), la barre doit rester affichée
    ENSUITE, et le nombre de décimales doit bien s'appliquer (vérifiable en rebasculant en mode

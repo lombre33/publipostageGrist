@@ -449,7 +449,7 @@ const ReaderMode = (function () {
     if (!filenameTemplate) return 'publipostage';
     const matches = Variables.findTextVariables(filenameTemplate);
     const resolved = await Promise.all(matches.map(async m => {
-      try { const val = await Variables.resolveVariable(m.table, m.column, tableId, record); return String(val || '').replace(/[\\/:*?"<>|]/g, '_'); }
+      try { const val = await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true }); return String(val || '').replace(/[\\/:*?"<>|]/g, '_'); }
       catch (e) { return ''; }
     }));
     let result = ''; let lastEnd = 0;

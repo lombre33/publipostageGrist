@@ -2,7 +2,8 @@
 // nombre, Grist stocke 0 et l'affiche, je ne peux pas avoir une case vide - mais dans le mode lecture et l'export j'aimerais pouvoir ne rien afficher si 0 »).
 // Le réglage est `zero: 'hide'` dans le format de la bulle (js/floating-toolbars.js, `data-format`) ; js/variables.js:formatValue le lit pour TOUS les chemins
 // de rendu (Lecture, en-têtes et pieds, aperçu commun au PDF, au DOCX et à l'email, lignes d'un export en lot, boucles). Défaut « Afficher 0 » : un modèle
-// enregistré avant cette option se rend à l'identique. Le zéro est la valeur exacte 0, pas un nombre que l'arrondi fait afficher 0.
+// enregistré avant cette option se rend à l'identique. Le zéro est la valeur exacte 0, pas un nombre que l'arrondi fait afficher 0. Les autres valeurs
+// s'écrivent comme tout nombre sans réglage : FR par défaut (1200 → « 1 200 »), comme la barre le montre (dev-tests/scenarios-varformat.js).
 (function () {
   const cases = [];
 
@@ -78,7 +79,7 @@
   // --- Variables.formatValue : ce que l'option change, et tout ce qu'elle ne change pas ---
   cases.push({
     id: 'varzero_format_value_hides_only_the_zero_and_keeps_everything_else_as_before',
-    description: 'formatValue : « Ne rien afficher » vide un 0 (nombre, devise, décimales, toutes lettres) et le retire d’une liste sans virgule en trop ; choisie seule elle laisse les autres valeurs à l’écriture historique (1200 reste 1200) ; sans l’option, ou avec « Afficher 0 », un 0 s’écrit comme avant',
+    description: 'formatValue : « Ne rien afficher » vide un 0 (nombre, devise, décimales, toutes lettres) et le retire d’une liste sans virgule en trop ; choisie seule elle laisse les autres valeurs à l’écriture par défaut d’un nombre (1200 → « 1 200 ») ; sans l’option, ou avec « Afficher 0 », un 0 s’écrit comme avant',
     run: async (h) => {
       await seed(h);
       const fv = (v, f) => Variables.formatValue(v, f, PAGE, 'Montant');
@@ -92,10 +93,10 @@
         wordsZero: fv(0, { type: 'number', words: true }), listShown: fv([10, 0, 5], MONEY),
       };
       const expected = {
-        zeroAlone: '', otherAlone: '1200', fractionAlone: '0.5', negativeAlone: '-3',
+        zeroAlone: '', otherAlone: '1\u00a0200', fractionAlone: '0,5', negativeAlone: '-3',
         zeroMoney: '', otherMoney: VariableFormat.formatNumber(1200, MONEY), fractionMoney: VariableFormat.formatNumber(0.004, MONEY),
         zeroWords: '', otherWords: 'vingt et un', zeroText: '', list: '10, 5', allZeros: '', listMoney: VariableFormat.formatNumber(10, MONEY), empty: '',
-        noFormat: '0', noFormatOther: '1200', moneyZero: VariableFormat.formatNumber(0, MONEY), zeroShown: '0', zeroNull: '0',
+        noFormat: '0', noFormatOther: '1\u00a0200', moneyZero: VariableFormat.formatNumber(0, MONEY), zeroShown: '0', zeroNull: '0',
         wordsZero: 'zéro', listShown: [10, 0, 5].map(v => VariableFormat.formatNumber(v, MONEY)).join(', '),
       };
       // Une date dont l'ancien réglage nombre traîne : la valeur 0 (1er janvier 1970) reste une date.
@@ -181,14 +182,14 @@
   // --- Lecture : corps et pied de page ---
   cases.push({
     id: 'varzero_reading_mode_body_and_footer',
-    description: 'Mode Lecture : la bulle « Ne rien afficher » est vide pour un 0 (nombre, devise comprise) et se rend comme avant pour une autre valeur ; une bulle sans l’option affiche toujours 0 ; même règle dans le pied de page',
+    description: 'Mode Lecture : la bulle « Ne rien afficher » est vide pour un 0 (nombre, devise comprise) et s’écrit comme d’habitude pour une autre valeur ; une bulle sans l’option affiche toujours 0 ; même règle dans le pied de page',
     run: async (h) => {
       await seed(h);
       const html = `<p>${badge('Montant', HIDE)}|${badge('Montant')}|${badge('Quantite', MONEY_HIDE)}|${badge('Quantite', MONEY)}|${badge('Ref')}</p>`;
       const first = resolvedTexts(await renderReader(html, RECORD_1));
       const second = resolvedTexts(await renderReader(html, RECORD_2));
       const expectedFirst = ['', '0', VariableFormat.formatNumber(3, MONEY), VariableFormat.formatNumber(3, MONEY), 'F-001'];
-      const expectedSecond = ['1200', '1200', '', VariableFormat.formatNumber(0, MONEY), 'F-002'];
+      const expectedSecond = ['1\u00a0200', '1\u00a0200', '', VariableFormat.formatNumber(0, MONEY), 'F-002'];
       const hf = { enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: `<p>Reste dû : ${badge('Montant', HIDE)} €</p>`, first: '' } };
       h.setA4Preview(true);
       await h.sleep(60);
@@ -200,7 +201,7 @@
       const footers = [await footerOf(RECORD_1), await footerOf(RECORD_2)];
       h.setA4Preview(false);
       const pass = JSON.stringify(first) === JSON.stringify(expectedFirst) && JSON.stringify(second) === JSON.stringify(expectedSecond)
-        && footers[0] === 'Reste dû : €' && footers[1] === 'Reste dû : 1200 €';
+        && footers[0] === 'Reste dû : €' && footers[1] === 'Reste dû : 1 200 €';
       return { pass, notes: JSON.stringify({ first, second, footers }) };
     },
   });

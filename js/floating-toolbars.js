@@ -422,8 +422,8 @@ const FloatingToolbars = (function () {
       if (!node) return;
       if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
       if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
-      // « Si la valeur vaut zéro » : SANS `type: 'number'`, pour que choisir seulement cela ne change pas l'écriture des autres valeurs (1200 resterait 1 200 sinon) ;
-      // revenir à « Afficher 0 » retire la clé, et une bulle sans autre réglage retrouve un format vide (rendu historique, comme avant d'y toucher).
+      // « Si la valeur vaut zéro » : SANS `type: 'number'`, pour que choisir seulement cela ne pose pas de style à la place de celui que la barre annonce déjà (FR, ou US
+      // en interface anglaise) ; revenir à « Afficher 0 » retire la clé, et une bulle sans autre réglage retrouve un format vide.
       if (role === 'num-zero') {
         const next = Object.assign({}, node.attrs.format);
         if (value === 'hide') next.zero = 'hide'; else delete next.zero;

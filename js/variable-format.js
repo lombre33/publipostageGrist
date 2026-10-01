@@ -253,7 +253,9 @@ const VariableFormat = (function () {
     const intlOpts = {};
     if (opts.decimals != null) { intlOpts.minimumFractionDigits = opts.decimals; intlOpts.maximumFractionDigits = opts.decimals; }
     if (opts.style === 'none') intlOpts.useGrouping = false;
-    let formatted = new Intl.NumberFormat(locale, intlOpts).format(n);
+    // L'espace fine insécable (U+202F) qu'Intl met entre les milliers en français n'existe pas dans la police des PDF (pdfmake, Roboto) : elle s'y peignait en
+    // case vide (« 1▯ 234 ») et la suite de la ligne se décalait. L'espace insécable (U+00A0) y est, et se lit pareil partout ailleurs (Lecture, Word, email).
+    let formatted = new Intl.NumberFormat(locale, intlOpts).format(n).replace(/\u202f/g, '\u00a0');
     if (opts.currency) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : `${opts.currency}${formatted}`;
     return formatted;
   }

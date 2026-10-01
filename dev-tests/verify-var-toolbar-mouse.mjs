@@ -789,6 +789,36 @@ check('... avec les deux choix « Afficher 0 » (par défaut) et « Ne rien affi
 check('... et la barre reste sur une seule ligne, dans le panneau', !!barAt700 && barAt700.height < 50 && barAt700.left >= 0 && barAt700.right <= barAt700.viewport + 0.5 && barAt700.docOverflowX <= 0, barAt700);
 check('bulle sans mise en forme : le menu n\'en crée pas (format encore vide)', (await numberFormat()) === null);
 
+// Retour d'Antoine du 2026-10-01 : pour un nombre sans réglage la barre montre FR allumé, et la Lecture doit déjà écrire les espaces des milliers - sans qu'il
+// ait à recliquer sur FR. La valeur de la page est 1200 (VcDossiers, ligne 1).
+const litAtStart = await page.evaluate(() => {
+  const lit = a => { const b = document.querySelector(`.v2-varfmt-toolbar.visible button[data-action="num-style:${a}"]`); return !!b && b.classList.contains('is-active'); };
+  return { fr: lit('fr'), us: lit('us'), none: lit('none') };
+});
+check('bulle sans mise en forme : la barre montre FR allumé (US et « — » éteints)', litAtStart.fr && !litAtStart.us && !litAtStart.none, litAtStart);
+// Un clic dans le texte referme la barre avant de passer en Lecture (sinon elle reste affichée par-dessus les boutons du mode : défaut déjà là, hors de ce test).
+const paragraph = await page.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; });
+await page.mouse.click(paragraph.x, paragraph.y);
+await page.waitForTimeout(300);
+const readButton = await hitTest('#btn-mode-read');
+if (readButton.found) await page.mouse.click(readButton.x, readButton.y);
+await page.waitForFunction(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return !!e && e.textContent.trim() !== ''; }, null, { timeout: 5000 }).catch(() => {});
+const readText = await page.evaluate(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return e ? e.textContent : null; });
+check('Lecture, bouton cliqué à la vraie souris : ce nombre s\'écrit « 1 200 » (espace insécable) sans avoir recliqué sur FR', readButton.found && readText === '1\u00a0200', { readButton, readText });
+// Retour à l'édition : la souris glisse d'abord vers le bouton (l'info-bulle du bouton Lecture, encore sous le pointeur, couvrirait sinon son voisin).
+let editButton = await hitTest('#btn-mode-edit');
+if (editButton.found) {
+  await page.mouse.move(editButton.x - 6, editButton.y, { steps: 2 });
+  await page.mouse.move(editButton.x, editButton.y, { steps: 3 });
+  await page.waitForTimeout(200);
+  editButton = await hitTest('#btn-mode-edit');
+  await page.mouse.click(editButton.x, editButton.y);
+}
+await page.waitForTimeout(500);
+const backToEdit = await page.evaluate(() => getComputedStyle(document.getElementById('editor-container')).display !== 'none');
+check('... et le bouton Édition, à la vraie souris, ramène l\'éditeur', backToEdit, editButton);
+await openNumberBar();
+
 await chooseZero('ArrowDown');
 const hidden = await numberFormat();
 const barHidden = await numberBar();

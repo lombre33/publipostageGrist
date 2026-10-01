@@ -266,6 +266,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
+- Écriture d'un nombre : tant qu'aucun réglage n'est posé, la barre d'une bulle nombre montre FR allumé (US en interface
+  anglaise) et le document écrit déjà ainsi — espace insécable entre les milliers, virgule (choix d'Antoine du 01/10) ;
+  ce que la barre annonce est ce qui s'applique, sans avoir à recliquer. « — » écrit sans séparateur de milliers. Les
+  champs texte (Objet, À, Cc, Cci, nom du PDF) gardent le nombre tel que Grist le stocke.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

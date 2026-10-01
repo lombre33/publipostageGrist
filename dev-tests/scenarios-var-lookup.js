@@ -76,7 +76,7 @@
       const reading = await readerText(html, record);
       const rows = await GristAPI.fetchTableRows(PAGE);
       const batch = await batchText(html, rows[0]);
-      const expected = `V=Lyon|C=P-01|B=1500.5|D=${DATE_1990()}|R=Dupont Jean|T=Dossier A`;
+      const expected = `V=Lyon|C=P-01|B=1\u00a0500,5|D=${DATE_1990()}|R=Dupont Jean|T=Dossier A`;
       const pass = absent.length === 0 && reading === expected && batch === expected;
       return { pass, notes: JSON.stringify({ absent, reading, batch, expected }) };
     },
@@ -133,7 +133,7 @@
       // Le rendu du mode Lecture : cinq champs rapportés coûtent UNE lecture de plus que la même page sans aucun (le reste, la relecture du schéma, est le même).
       const withoutLookups = await tablesRead(async () => { await readerText(`<p>${badge('Titre')}</p>`, delivered()); });
       const withLookups = await tablesRead(async () => { await readerText(`<p>${columns.map(c => badge(c)).join('|')}</p>`, delivered()); });
-      const pass = JSON.stringify(together) === JSON.stringify(['Lyon', 'P-01', '1500.5', DATE_1990(), 'Dupont Jean']) && readsOfPage(read) === 1 && again.length === 0
+      const pass = JSON.stringify(together) === JSON.stringify(['Lyon', 'P-01', '1\u00a0500,5', DATE_1990(), 'Dupont Jean']) && readsOfPage(read) === 1 && again.length === 0
         && readsOfPage(withLookups) === readsOfPage(withoutLookups) + 1;
       return { pass, notes: JSON.stringify({ together, read, again, withoutLookups, withLookups }) };
     },

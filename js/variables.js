@@ -310,21 +310,26 @@ const Variables = (function () {
   }
 
   // Option « Si la valeur vaut zéro : Ne rien afficher » d'une bulle nombre (`zero: 'hide'`, barre flottante) : un zéro ne s'écrit pas du tout - ni le nombre, ni sa
-  // devise, ni « zéro » en toutes lettres. Choisie seule, elle n'a pas de `type` : le reste des valeurs garde le rendu historique (String(val)), les autres
-  // réglages nombre posant le `type` quand on les touche.
+  // devise, ni « zéro » en toutes lettres. Choisie seule, elle n'a pas de `type` : le reste des valeurs garde l'écriture par défaut d'un nombre (voir formatValue), les
+  // autres réglages nombre posant le `type` quand on les touche.
   function hidesZero(format) { return !!format && format.zero === 'hide' && (!format.type || format.type === 'number'); }
-  // Sans format explicite, une colonne Date/DateTime Grist reçoit quand même un préréglage par défaut (sinon valeur brute illisible) ; un nombre sans format
-  // reste en revanche `String(val)` brut.
+  // Sans réglage de format, une colonne Date/DateTime Grist reçoit quand même un préréglage par défaut (sinon valeur brute illisible), et une colonne
+  // Numérique/Entier s'écrit comme la barre flottante l'annonce : FR (espaces entre les milliers, virgule), ou US quand l'interface est en anglais
+  // (VariableFormat.numberLang sans style). Avant, un nombre sans réglage s'écrivait tel que Grist le livre (« 1200 ») alors que la barre montrait « FR »
+  // allumé : il fallait recliquer dessus pour que le réglage s'applique (retour d'Antoine du 2026-10-01). `rawNumbers` : les champs texte (nom du fichier,
+  // Objet/À/Cc/Cci) gardent le nombre tel quel - « Facture 2026012 » ne doit pas devenir « Facture 2 026 012 ». Seul un vrai nombre est mis en forme : un texte
+  // saisi dans une colonne numérique (Grist le garde tel quel, en rouge) reste ce qu'il est - « 12 EUR » ne deviendrait pas « 12 ».
   // Un tableau (une valeur par ligne liée d'une règle "match", ou une liste) est formaté élément par élément : un simple join laissait une date d'une autre
   // table en secondes brutes et ignorait le format nombre/date de la bulle. Un zéro masqué en est retiré : il ne laisse pas de trou entre deux virgules.
-  function formatValue(val, format, varTable, varColumn) {
+  function formatValue(val, format, varTable, varColumn, rawNumbers) {
     if (val === null || val === undefined) return '';
-    if (Array.isArray(val)) return (hidesZero(format) ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn)).join(', ');
+    if (Array.isArray(val)) return (hidesZero(format) ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn, rawNumbers)).join(', ');
     if (hidesZero(format) && VariableFormat.isZero(val)) return '';
     let effectiveFormat = format;
-    if (!effectiveFormat && varTable && varColumn) {
+    if ((!effectiveFormat || !effectiveFormat.type) && varTable && varColumn) {
       const colType = GristAPI.getColumnType(varTable, varColumn);
-      if (colType === 'Date' || colType === 'DateTime') effectiveFormat = { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key };
+      if (colType === 'Date' || colType === 'DateTime') effectiveFormat = Object.assign({}, effectiveFormat, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
+      else if (!rawNumbers && typeof val === 'number' && (colType === 'Numeric' || colType === 'Int')) effectiveFormat = Object.assign({}, effectiveFormat, { type: 'number' });
     }
     if (effectiveFormat && effectiveFormat.type === 'number') return VariableFormat.formatNumber(val, effectiveFormat);
     if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat);
@@ -537,13 +542,13 @@ const Variables = (function () {
     try {
       const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, opts);
       if (error) return { text: error, isError: true };
-      return { text: formatValue(value, format, varTable, varColumn), isError: false };
+      return { text: formatValue(value, format, varTable, varColumn, !!(opts && opts.rawNumbers)), isError: false };
     } catch (e) {
       console.error('[variables] échec résolution', e);
       return { text: I18n.t('variables.error.failed', { table: varTable, column: varColumn }), isError: true };
     }
   }
-  // Le texte seul, pour ce qui l'écrit tel quel (nom de fichier, champs du mode email, boucles en ligne, aperçus des fenêtres).
+  // Le texte seul, pour ce qui l'écrit tel quel (nom de fichier, champs du mode email, boucles en ligne, aperçus des fenêtres). `opts.rawNumbers` : voir formatValue.
   async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
     return (await resolveVariableResult(varTable, varColumn, currentTableId, record, format, opts)).text;
   }
@@ -601,7 +606,7 @@ const Variables = (function () {
     const matches = findTextVariables(text);
     if (!matches.length) return text;
     const resolved = await Promise.all(matches.map(async m => {
-      try { return String((await resolveVariable(m.table, m.column, currentTableId, record)) || ''); }
+      try { return String((await resolveVariable(m.table, m.column, currentTableId, record, null, { rawNumbers: true })) || ''); }
       catch (e) { return ''; }
     }));
     let result = ''; let lastEnd = 0;
