@@ -723,6 +723,94 @@ const EditorNodes = (function () {
     return { TwoColumnsColumn, TwoColumnsZone };
   }
 
+  // Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs - paragraphes mis en forme, titres, listes, tableaux et d'autres blocs
+  // conditionnels, à toute profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie (js/conditional-text.js). Même condition
+  // que celle d'une bulle ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, le bloc est toujours affiché.
+  // Le cadre et l'étiquette « Si … » n'existent que dans l'éditeur (NodeView) : renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise
+  // que <div class="conditional-text" data-condition>, que le rendu défait (condition remplie) ou retire (sinon).
+  function createConditionalTextNode(Node, mergeAttributes) {
+    // Les étiquettes d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
+    const views = new Set();
+    I18n.onChange(() => views.forEach(refresh => refresh()));
+    return Node.create({
+      name: 'conditionalText',
+      group: 'block',
+      content: 'block+',
+      // Le premier paragraphe d'un bloc qu'on vide ou qu'on colle ailleurs garde son bloc autour de lui, comme une citation.
+      defining: true,
+      addAttributes() {
+        return { condition: { default: null, renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{
+          tag: 'div.conditional-text',
+          getAttrs: el => {
+            const raw = el.getAttribute('data-condition');
+            if (!raw) return { condition: null };
+            try { return { condition: JSON.parse(raw) }; } catch (e) { return { condition: null }; }
+          },
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-text' });
+        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+        return ['div', attrs, 0];
+      },
+      // Vue de l'éditeur SEULEMENT. L'étiquette est hors du contentDOM (jamais lue comme contenu du bloc) ; un clic dessus sélectionne le bloc entier - un
+      // conteneur ne se sélectionne pas d'un clic simple - ce qui ouvre sa barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar).
+      addNodeView() {
+        return ({ node: initialNode, editor: nodeEditor, getPos }) => {
+          let node = initialNode;
+          const dom = document.createElement('div');
+          dom.className = 'conditional-text';
+          const tag = document.createElement('div');
+          tag.className = 'conditional-text-tag';
+          tag.contentEditable = 'false';
+          tag.setAttribute('role', 'button');
+          const contentDOM = document.createElement('div');
+          contentDOM.className = 'conditional-text-content';
+          dom.append(tag, contentDOM);
+          function refresh() {
+            const condition = ConditionRules.normalizeCondition(node.attrs.condition);
+            if (node.attrs.condition) dom.setAttribute('data-condition', JSON.stringify(node.attrs.condition)); else dom.removeAttribute('data-condition');
+            dom.classList.toggle('has-condition', !!condition);
+            // Le texte entier de la condition va dans l'info-bulle : l'étiquette, elle, se coupe par « … » si elle dépasse la largeur du bloc.
+            const summary = condition ? VariableCondition.describe(condition, { full: true }) : '';
+            tag.textContent = condition ? I18n.t('condText.tag.if', { condition: summary }) : I18n.t('condText.tag.none');
+            const title = condition ? I18n.t('condText.tag.titleIf', { condition: summary }) : I18n.t('condText.tag.titleNone');
+            tag.title = title;
+            tag.setAttribute('aria-label', title);
+          }
+          refresh();
+          views.add(refresh);
+          tag.addEventListener('mousedown', event => {
+            event.preventDefault(); event.stopPropagation();
+            const pos = getPos();
+            if (typeof pos === 'number') nodeEditor.chain().focus().setNodeSelection(pos).run();
+          });
+          return {
+            dom,
+            contentDOM,
+            update: updatedNode => {
+              if (updatedNode.type !== node.type) return false;
+              node = updatedNode;
+              refresh();
+              return true;
+            },
+            // Le bloc sélectionné (clic sur son étiquette) porte sa propre classe, comme l'image (editor-image-selected) ; ProseMirror, pour un conteneur sélectionné,
+            // le rend aussi déplaçable à la souris - on garde ce comportement.
+            selectNode: () => { dom.classList.add('conditional-text-selected'); dom.draggable = true; },
+            deselectNode: () => { dom.classList.remove('conditional-text-selected'); dom.removeAttribute('draggable'); },
+            // L'étiquette et les attributs du cadre sont posés hors transaction : ProseMirror ne doit pas les lire comme une modification du document.
+            ignoreMutation: mutation => mutation.type !== 'selection' && (tag.contains(mutation.target) || mutation.target === dom),
+            stopEvent: event => tag.contains(event.target),
+            destroy: () => views.delete(refresh),
+          };
+        };
+      },
+    });
+  }
+
   // Image - nœud atome en ligne : `layer` (normal/devant/derrière), `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({}) - le nœud
   // construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
@@ -1055,7 +1143,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createEditorImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createEditorImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();

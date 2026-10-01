@@ -7,6 +7,8 @@
 // (js/editor-nodes.js) : { mode: 'all'|'any', rules: [{ column, operator, value }] }. Ouverte depuis la barre flottante de la bulle
 // (js/floating-toolbars.js:wireVariableFloatingToolbar). « Copier » / « Coller » (demande d'Antoine, 2026-09-29) : la condition affichée dans la fenêtre
 // d'une variable se recolle dans la fenêtre d'une autre - Coller remplace les règles de la fenêtre comme un brouillon, « Enregistrer » les applique.
+// La même fenêtre sert à un bloc de texte conditionnel (nœud conditionalText, js/conditional-text.js) : même condition { mode, rules } dans son attribut `condition`, mêmes
+// colonnes, mêmes liens entre tables ; seuls changent l'introduction, les phrases de l'aperçu (le bloc s'affiche ou non, plutôt qu'une valeur) et celle de « Coller ».
 const VariableCondition = (function () {
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
@@ -27,6 +29,11 @@ const VariableCondition = (function () {
   }
   function emptyRule() { return { column: '', operator: '=', value: '' }; }
   function isOpen() { return !!state; }
+  // Le nœud dont la fenêtre est ouverte : un bloc de texte conditionnel ou, par défaut, une bulle #Variable.
+  function isBlock() { return !!state && state.node.type.name === 'conditionalText'; }
+  // Clé d'une phrase de la fenêtre : celle de la bulle, ou celle du bloc de texte (js/i18n.js, section « Bloc de texte conditionnel »). Les deux s'écrivent en
+  // toutes lettres à l'appel, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
+  function textKey(bubbleKey, blockKey) { return isBlock() ? blockKey : bubbleKey; }
   // La forme enregistrée dans la bulle : règles sans colonne écartées, valeurs en texte, copie neuve (jamais un lien vers les règles que la fenêtre modifie
   // en place) ; null sans aucune règle complète.
   function plainCondition(condition) {
@@ -230,7 +237,7 @@ const VariableCondition = (function () {
     state.working = plainCondition(clipboard);
     renderRules();
     scheduleDebug();
-    refs.clipStatus.textContent = I18n.t('varCond.clip.pastedStatus');
+    refs.clipStatus.textContent = I18n.t(textKey('varCond.clip.pastedStatus', 'varCond.clip.pastedStatusBlock'));
   }
   function clearClipboard() {
     clipboard = null;
@@ -294,11 +301,12 @@ const VariableCondition = (function () {
     setDebugLine(debugCurrent, I18n.t('varCond.debug.computing'), false);
     try {
       const holds = await ConditionRules.conditionHolds(condition, tableId, record);
-      const shown = holds ? await displayValue(record, tableId) : '';
+      // Un bloc de texte n'a pas de valeur à montrer : l'aperçu dit seulement s'il s'affiche.
+      const shown = holds && !isBlock() ? await displayValue(record, tableId) : '';
       if (stale()) return;
       setDebugLine(debugCurrent, holds
-        ? I18n.t('varCond.debug.currentMet', { id: record.id, value: shown })
-        : I18n.t('varCond.debug.currentNotMet', { id: record.id }), holds);
+        ? I18n.t(textKey('varCond.debug.currentMet', 'varCond.debug.currentMetBlock'), { id: record.id, value: shown })
+        : I18n.t(textKey('varCond.debug.currentNotMet', 'varCond.debug.currentNotMetBlock'), { id: record.id }), holds);
 
       const fetchRows = memoFetchRows();
       const rows = await fetchRows(tableId);
@@ -316,23 +324,26 @@ const VariableCondition = (function () {
       }
       if (stale()) return;
       if (!count) { setDebugLine(debugCount, I18n.t('varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
-      const firstValue = await displayValue(first, tableId);
+      const firstValue = isBlock() ? '' : await displayValue(first, tableId);
       if (stale()) return;
       setDebugLine(debugCount, I18n.t('varCond.debug.count', { table: tableId, count, total: rows.length }) + ' '
-        + I18n.t('varCond.debug.first', { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
+        + I18n.t(textKey('varCond.debug.first', 'varCond.debug.firstBlock'), { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
     } catch (e) {
       console.warn('[VariableCondition] aperçu indisponible', e);
       if (!stale()) setDebugLine(debugCurrent, I18n.t('linkConfig.previewUnavailable'), false);
     }
   }
 
-  // Réécrit l'attribut `condition` de la bulle d'origine, retrouvée à sa position capturée au clic - seulement si c'est toujours la même variable.
+  // Réécrit l'attribut `condition` du nœud d'origine (bulle ou bloc de texte), retrouvé à sa position capturée au clic - seulement si c'est toujours le même : la même
+  // variable, ou un bloc de texte conditionnel.
   function applyCondition(condition) {
     const { editor, pos, node: original } = state;
     const node = editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'varBadge' || node.attrs.table !== original.attrs.table || node.attrs.column !== original.attrs.column) {
-      console.warn('[VariableCondition] bulle introuvable à sa position d\'origine - condition non enregistrée.');
-      alert(I18n.t('varCond.saveLost'));
+    const sameNode = node && node.type.name === original.type.name
+      && (isBlock() || (node.attrs.table === original.attrs.table && node.attrs.column === original.attrs.column));
+    if (!sameNode) {
+      console.warn('[VariableCondition] nœud introuvable à sa position d\'origine - condition non enregistrée.');
+      alert(I18n.t(textKey('varCond.saveLost', 'varCond.saveLostBlock')));
       return false;
     }
     EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { condition }));
@@ -356,10 +367,10 @@ const VariableCondition = (function () {
     if (editor) editor.view.focus();
   }
 
-  // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
+  // `pos` : position de la bulle ou du bloc dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   function open(editor, pos) {
     const node = editor && editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'varBadge') return;
+    if (!node || (node.type.name !== 'varBadge' && node.type.name !== 'conditionalText')) return;
     ensureModal();
     const existing = ConditionRules.normalizeCondition(node.attrs.condition);
     state = {
@@ -369,8 +380,12 @@ const VariableCondition = (function () {
     };
     const { title, intro, modeBefore, modeSelect, modeAfter, removeBtn, cancelBtn, saveBtn } = refs;
     title.textContent = I18n.t('varCond.title');
-    const badge = el('span', 'var-badge', Variables.triggerChar() + (node.attrs.key || ''));
-    intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t('varCond.intro')));
+    if (isBlock()) {
+      intro.replaceChildren(document.createTextNode(I18n.t('varCond.introBlock')));
+    } else {
+      const badge = el('span', 'var-badge', Variables.triggerChar() + (node.attrs.key || ''));
+      intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t('varCond.intro')));
+    }
     modeBefore.textContent = I18n.t('varCond.modeBefore');
     modeAfter.textContent = I18n.t('varCond.modeAfter');
     modeSelect.setAttribute('aria-label', I18n.t('varCond.modeAria'));

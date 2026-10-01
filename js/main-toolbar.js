@@ -451,7 +451,9 @@ const MainToolbar = (function () {
     I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.
-    bind('v2-btn-insert-variable', () => editor.chain().focus().insertContent(Variables.triggerChar()).run());
+    // Du texte sélectionné n'est pas remplacé par le « # » : la liste s'ouvre devant lui, sur l'onglet Chips, pour entourer ce texte d'un bloc « Texte conditionnel »
+    // (js/conditional-text.js:startFromSelection).
+    bind('v2-btn-insert-variable', () => { if (!ConditionalText.startFromSelection(editor)) editor.chain().focus().insertContent(Variables.triggerChar()).run(); });
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
     bind('v2-btn-track-changes', () => editor.chain().focus().toggleSuggestMode().run());

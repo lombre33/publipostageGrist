@@ -26,6 +26,9 @@ const Variables = (function () {
     { key: 'Date du jour', i18nKey: 'chips.date', kind: 'chip', chipKind: 'date' },
     { key: 'Heure actuelle', i18nKey: 'chips.time', kind: 'chip', chipKind: 'time' },
     { key: 'Email de l’utilisateur', i18nKey: 'chips.email', kind: 'chip', chipKind: 'email' },
+    // Pas un chip en ligne mais un BLOC (js/conditional-text.js) : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la liste dessus, sinon il
+    // se pose vide, curseur dedans.
+    { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
   ];
   function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
   // Dernières props reçues de @tiptap/suggestion - permet de rejouer updateItems() depuis un clic sur un onglet, qui n'est pas un évènement du plugin
@@ -127,10 +130,16 @@ const Variables = (function () {
   // réutilisée depuis onKeyDown et depuis un survol/clic souris (render).
   let latestCommand = null;
 
+  // Le bouton « Insérer une variable » avec du texte sélectionné (js/conditional-text.js:startFromSelection) ouvre la liste sur l'onglet Chips : la seule chose qu'elle sache
+  // faire d'une sélection est de l'entourer. L'onglet revient à Variables à la fermeture de la liste (onExit).
+  function preferChipsTab() { activeTab = 'chips'; }
+
   function updateItems(props) {
     latestProps = props;
     currentItems = props.items || [];
-    selectedIndex = 0;
+    // Avec un texte à entourer en attente, « Texte conditionnel » est l'entrée sélectionnée : Entrée suffit.
+    const wrapIndex = ConditionalText.hasPending() ? currentItems.findIndex(item => item.chipKind === 'conditionalText') : -1;
+    selectedIndex = wrapIndex > 0 ? wrapIndex : 0;
     latestCommand = props.command;
     setTabsVisible(true);
     render(currentItems, item => latestCommand(item));
@@ -154,7 +163,7 @@ const Variables = (function () {
         if (props.event.key === 'Escape') { hide(); return true; }
         return false;
       },
-      onExit() { hide(); schemaRefreshedForSession = false; activeTab = 'variables'; },
+      onExit() { hide(); schemaRefreshedForSession = false; activeTab = 'variables'; ConditionalText.cancelPending(); },
     };
   }
 
@@ -180,6 +189,10 @@ const Variables = (function () {
               // Chip (note de bas de page / date / heure / email) : jamais de colonne/table à lier, insertion synchrone directe contrairement à la branche
               // #Variable ci-dessous. La note de bas de page ouvre en plus immédiatement son popup d'édition de texte.
               if (props.kind === 'chip') {
+                if (props.chipKind === 'conditionalText') {
+                  ConditionalText.insertFromPanel(editor, range);
+                  return;
+                }
                 if (props.chipKind === 'footnote') {
                   const id = 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                   editor.chain().focus().insertContentAt(range, { type: 'footnoteRef', attrs: { id, text: '' } }).run();
@@ -918,6 +931,6 @@ const Variables = (function () {
   // d'une bulle nombre (js/floating-toolbars.js) lit la même règle que le rendu.
   return {
     createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue,
   };
 })();

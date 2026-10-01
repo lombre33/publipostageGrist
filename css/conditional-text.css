@@ -1,0 +1,32 @@
+/* Bloc de texte conditionnel dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode). Une vue de l'éditeur seulement : le HTML
+   enregistré ne porte que <div class="conditional-text" data-condition>, que la Lecture, le PDF, le Word et l'e-mail défont (condition remplie) ou retirent (sinon) -
+   js/conditional-text.js. D'où le soin de ne rien changer à la largeur du texte : le cadre est un `outline` (il ne participe pas à la mise en page, comme celui de la
+   zone 2 colonnes, css/editor-v2.css) et le bloc n'a ni marge ni remplissage sur les côtés, si bien que le texte qu'il contient passe à la ligne exactement où il le
+   fera à l'export. Seule la hauteur change : l'étiquette et un peu d'air au-dessus et au-dessous.
+   Même direction artistique que les bulles de variable (css/style.css:.var-badge, css/variable-actions.css) : fond #eaf2ff, texte #12406b, liseré #b7cdf2 ; en pointillés
+   #5b7fc0 une fois la condition posée. La page reste blanche dans les deux thèmes, d'où des couleurs écrites en dur comme pour la bulle. */
+.tiptap .conditional-text { position: relative; margin: 8px 0; outline: 1px dashed #b7cdf2; outline-offset: 5px; border-radius: 2px; }
+.tiptap .conditional-text.has-condition { outline-color: #5b7fc0; }
+/* Deux blocs l'un sous l'autre : les marges se confondent, et les cadres (5 px au-delà du texte) se chevaucheraient - un peu plus d'air entre eux. */
+.tiptap .conditional-text + .conditional-text { margin-top: 14px; }
+
+/* Blocs emboîtés : le contenu d'un bloc intérieur occupe exactement la même largeur que celui de son parent, donc leurs cadres ne se distinguent que par leur
+   écart au texte - 5 px pour le premier niveau, 2 px pour le deuxième, 0 au-delà. Dans une case de tableau, une colonne de zone 2 colonnes, un élément de liste ou
+   une citation, le premier niveau commence déjà à 2 px : un cadre à 5 px passerait sur le liseré de la case ou sur la puce. */
+.tiptap :where(td, th, li, blockquote, .two-columns-column) .conditional-text { outline-offset: 2px; }
+.tiptap .conditional-text .conditional-text { outline-offset: 2px; }
+.tiptap :where(td, th, li, blockquote, .two-columns-column) .conditional-text .conditional-text,
+.tiptap .conditional-text .conditional-text .conditional-text { outline-offset: -1px; }
+
+/* Étiquette : « Si Statut = Urgent » (ou « Texte conditionnel · sans condition »), en tête du bloc. Un clic la sélectionne, ce qui ouvre la barre flottante de la bulle
+   (condition d'affichage). Trop longue pour la largeur du bloc, elle est coupée par « … » ; le texte entier est dans son info-bulle. */
+.tiptap .conditional-text-tag { display: block; width: fit-content; max-width: 100%; box-sizing: border-box; margin: 0 0 3px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #eaf2ff; color: #12406b; border: 1px solid #b7cdf2; border-radius: 3px; font: 600 10.5px/15px var(--font-ui, system-ui, sans-serif); letter-spacing: .01em; cursor: pointer; user-select: none; }
+.tiptap .conditional-text.has-condition > .conditional-text-tag { border-style: dashed; border-color: #5b7fc0; }
+.tiptap .conditional-text-tag:hover { background: #dbe9ff; }
+/* Le premier élément du bloc ne se décolle pas de l'étiquette par sa propre marge ; le dernier ne pousse pas le cadre. */
+.tiptap .conditional-text-content > :last-child { margin-bottom: 0; }
+
+/* Bloc sélectionné (clic sur son étiquette) : même anneau que l'image sélectionnée (css/editor-v2.css). */
+.tiptap .conditional-text.conditional-text-selected { outline: 2px solid var(--accent, #2f6fed); }
+.tiptap .conditional-text.conditional-text-selected > .conditional-text-tag { border-style: solid; border-color: var(--accent, #2f6fed); }

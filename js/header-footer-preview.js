@@ -227,9 +227,10 @@ const HeaderFooterPreview = (function () {
   }
 
   // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
-  // l'aperçu, qui ne peut pas couper le DOM d'une zone 2 colonnes ou d'un tableau, doit traiter d'une pièce.
+  // l'aperçu, qui ne peut pas couper le DOM d'une zone 2 colonnes ou d'un tableau, doit traiter d'une pièce. Un bloc de texte conditionnel en fait partie : son cadre
+  // n'existe que dans l'éditeur, à l'export son texte coule d'une page à l'autre comme n'importe quel paragraphe.
   function isSplittableByExport(el) {
-    return el.classList.contains('two-columns-zone-outer') || el.classList.contains('tableWrapper') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
+    return el.classList.contains('two-columns-zone-outer') || el.classList.contains('tableWrapper') || el.classList.contains('conditional-text') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
   }
   // Paragraphe sans texte ni objet (un <br> décoratif ne compte pas) : la ligne vide que l'éditeur ajoute derrière un bloc (zone, tableau, image) pour pouvoir y
   // poser le curseur.

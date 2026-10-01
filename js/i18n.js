@@ -688,6 +688,22 @@ const I18n = (function () {
     'varCond.clip.copiedStatus': { fr: 'Condition copiée.', en: 'Condition copied.' },
     'varCond.clip.pastedStatus': { fr: 'Condition collée. Enregistrez pour l’appliquer à la variable.', en: 'Condition pasted. Save to apply it to the variable.' },
 
+    // --- Bloc de texte conditionnel (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode, js/conditional-text.js) : l'entrée du panneau, l'étiquette du bloc
+    // dans l'éditeur, et les variantes « bloc » de la barre flottante et de la fenêtre de condition d'une variable (js/floating-toolbars.js, js/variable-condition.js) ---
+    'chips.conditionalText': { fr: 'Texte conditionnel', en: 'Conditional text' },
+    'varToolbar.linkedBlock': { fr: 'Disponible pour une variable, pas pour un bloc de texte', en: 'Available for a variable, not for a text block' },
+    'varToolbar.loopBlock': { fr: 'Disponible pour une variable liée à plusieurs lignes, pas pour un bloc de texte', en: 'Available for a variable linked to several rows, not for a text block' },
+    'varCond.introBlock': { fr: 'Ce bloc de texte n’apparaît en lecture et à l’export que si la condition est remplie. En édition, il reste visible, entouré de pointillés.', en: 'This text block only appears in read mode and in exports when the condition is met. While editing, it stays visible inside a dashed frame.' },
+    'varCond.debug.currentMetBlock': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, le bloc s’affiche.', en: 'Selected row (#{id}): condition met, the block is shown.' },
+    'varCond.debug.currentNotMetBlock': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, le bloc est masqué.', en: 'Selected row (#{id}): condition not met, the block is hidden.' },
+    'varCond.debug.firstBlock': { fr: 'Première : n° {id}{label}.', en: 'First: #{id}{label}.' },
+    'varCond.saveLostBlock': { fr: 'Le bloc de texte a été déplacé ou supprimé pendant l’édition : la condition n’a pas été enregistrée.', en: 'The text block was moved or deleted while editing: the condition was not saved.' },
+    'varCond.clip.pastedStatusBlock': { fr: 'Condition collée. Enregistrez pour l’appliquer au bloc de texte.', en: 'Condition pasted. Save to apply it to the text block.' },
+    'condText.tag.none': { fr: 'Texte conditionnel · sans condition', en: 'Conditional text · no condition' },
+    'condText.tag.if': { fr: 'Si {condition}', en: 'If {condition}' },
+    'condText.tag.titleNone': { fr: 'Texte conditionnel sans condition : il s’affiche toujours. Cliquez pour choisir sa condition.', en: 'Conditional text with no condition: it always shows. Click to choose its condition.' },
+    'condText.tag.titleIf': { fr: 'S’affiche si {condition}. Cliquez pour modifier sa condition.', en: 'Shown if {condition}. Click to edit its condition.' },
+
     // --- Fenêtre « Autres attributs » d'une variable (js/variable-linked-attrs.js) ---
     'varLinked.title': { fr: 'Autres attributs de « {table} »', en: 'Other attributes of “{table}”' },
     'varLinked.subtitleVia': { fr: 'Même ligne que {badge}, trouvée via {via}.', en: 'Same row as {badge}, found via {via}.' },

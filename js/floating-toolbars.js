@@ -376,6 +376,12 @@ const FloatingToolbars = (function () {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'varBadge') ? node : null;
     }
+    // Un bloc de texte conditionnel sélectionné (clic sur son étiquette, js/editor-nodes.js:createConditionalTextNode) ouvre la même barre : sa condition d'affichage
+    // seulement (la même fenêtre que celle d'une bulle) ; « Autres attributs » et « Boucle » n'ont pas d'objet ici et sont grisés, avec leur raison en info-bulle.
+    function selectedBlockNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'conditionalText') ? node : null;
+    }
     function setSelectedBadgeFormat(format) {
       const node = selectedVarBadgeNode();
       if (!node) return;
@@ -393,6 +399,10 @@ const FloatingToolbars = (function () {
       return VariableLinkedAttrs.isAvailable(node.attrs);
     }
     function onAction(action) {
+      if (selectedBlockNode()) {
+        if (action === 'var-condition') VariableCondition.open(editor, editor.state.selection.from);
+        return;
+      }
       const node = selectedVarBadgeNode();
       if (!node) return;
       // Position capturée AU CLIC : la fenêtre ouverte ensuite retire le focus de l'éditeur, et c'est cette bulle précise qu'elle modifiera.
@@ -443,6 +453,24 @@ const FloatingToolbars = (function () {
       if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
       if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
       if (role === 'date-preset') { updateSelectedBadge({ type: 'date', preset: value }); return; }
+    }
+
+    // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle expliquant POURQUOI il est grisé ne s'afficherait pas.
+    function setButtonDisabled(button, disabled, title) {
+      if (!button) return;
+      button.classList.toggle('is-disabled', disabled);
+      button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      button.title = title;
+    }
+    function syncBlockState(node) {
+      const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
+      if (conditionBtn) conditionBtn.classList.toggle('is-active', !!ConditionRules.normalizeCondition(node.attrs.condition));
+      const linkedBtn = panel.el.querySelector('button[data-action="var-linked"]');
+      setButtonDisabled(linkedBtn, true, I18n.t('varToolbar.linkedBlock'));
+      if (linkedBtn) linkedBtn.classList.remove('is-active');
+      const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
+      setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopBlock'));
+      if (loopBtn) loopBtn.classList.remove('is-active');
     }
 
     function syncState() {
@@ -511,11 +539,13 @@ const FloatingToolbars = (function () {
       // natif commençait tout juste à s'ouvrir (symptôme rapporté : "la liste apparaît une micro-seconde puis disparaît"). La fermeture "clic hors du
       // panneau" reste déjà gérée ailleurs (hideFloatingContextToolbars, js/editor-core.js, basée sur la CIBLE du mousedown, pas sur le focus résultant -
       // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
-      const node = selectedVarBadgeNode();
-      if (!node) { panel.hide(); return; }
+      const block = selectedBlockNode();
+      const node = block ? null : selectedVarBadgeNode();
+      if (!block && !node) { panel.hide(); return; }
       // Fenêtre de condition / d'autres attributs / de boucle ouverte sur cette bulle : la barre (z-index 2000) passerait par-dessus son voile.
       if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen()) { panel.hide(); return; }
-      const type = GristAPI.getColumnType(node.attrs.table, node.attrs.column);
+      // Bloc de texte conditionnel : pas de réglage nombre/date ni de séparateur, et la barre s'ancre sur l'étiquette du bloc (en haut à gauche), pas au milieu de sa largeur.
+      const type = node ? GristAPI.getColumnType(node.attrs.table, node.attrs.column) : null;
       const isNumber = type === 'Numeric' || type === 'Int';
       const isDate = type === 'Date' || type === 'DateTime';
       panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
@@ -525,6 +555,11 @@ const FloatingToolbars = (function () {
       // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre en haut à gauche (8, 8) -
       // une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la rouvrir.
       if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+      if (block) {
+        syncBlockState(block);
+        panel.show((dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom, GridEditor.floatingOptions);
+        return;
+      }
       syncState();
       panel.show(dom, GridEditor.floatingOptions);
     };

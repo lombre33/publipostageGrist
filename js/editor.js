@@ -303,6 +303,7 @@ const Editor = (function () {
     const TableHeaderWithBg = EditorNodes.withCellBackground(GridEditor.withCellAttributes(TableHeader));
     const TableCellWithBg = EditorNodes.withCellBackground(GridEditor.withCellAttributes(TableCell));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
+    const ConditionalText = EditorNodes.createConditionalTextNode(Node, mergeAttributes);
     const EditorImage = EditorNodes.createEditorImageNode(Node);
     const PageBreak = EditorNodes.createPageBreakNode(Node);
     const HeadingNumberingConfig = EditorNodes.createHeadingNumberingConfigNode(Node);
@@ -324,6 +325,7 @@ const Editor = (function () {
     const TrackedTwoColumnsZone = TrackChanges.extendForTracking(TwoColumnsZone);
     // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur ses enfants.
     const TrackedCallout = TrackChanges.extendForTracking(Callout.createNode(Node, mergeAttributes));
+    const TrackedConditionalText = TrackChanges.extendForTracking(ConditionalText);
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
@@ -381,6 +383,7 @@ const Editor = (function () {
         TrackedTwoColumnsColumn,
         TrackedTwoColumnsZone,
         TrackedCallout,
+        TrackedConditionalText,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,

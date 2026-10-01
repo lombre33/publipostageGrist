@@ -175,7 +175,8 @@ const LoopRules = (function () {
 
   // === Association d'un élément copié à la ligne du tour ===
   const bindings = new WeakMap();
-  const BOUND_SELECTOR = '.var-badge, img.editor-image[data-var-table]';
+  // Les blocs de texte conditionnels aussi (js/conditional-text.js) : copiés avec leur zone, chacun lit la ligne de son tour pour évaluer sa condition.
+  const BOUND_SELECTOR = '.var-badge, img.editor-image[data-var-table], .conditional-text';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
   // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa table).
   function itemBinding(loop, item, inherited) {
@@ -334,6 +335,6 @@ const LoopRules = (function () {
 
   return {
     EMPTY_MODES, defaultEmpty, normalizeLoop, parseLoop, sourceFor, createContext, iterate, itemBinding, bindingOf,
-    expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, joinValues,
+    expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();
