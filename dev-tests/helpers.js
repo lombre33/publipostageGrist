@@ -395,6 +395,59 @@ window.TestHelpers = (function () {
   }
 
 
+  // Les traits RÉELLEMENT tracés dans un PDF (pdf.js, même philosophie que extractPdfGroundTruth : on lit les octets du fichier, pas les objets pdfmake - une case fusionnée, un bord caché ou une
+  // couleur de trait ne se jugent que sur ce qui est peint). Un trait horizontal ou vertical par entrée : { x1, y1, x2, y2, color: '#rrggbb', width }, en pt, origine en HAUT à gauche de la page ;
+  // une page par entrée de `pages`. Un rectangle (`re`) est rendu comme ses quatre côtés.
+  async function extractPdfLines(base64) {
+    await ensurePdfJsLoaded();
+    const binStr = atob(base64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const OPS = window.pdfjsLib.OPS;
+    const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+    const hex = rgb => '#' + Array.from(rgb).map(v => { const n = Math.round((Number(v) <= 1 ? Number(v) * 255 : Number(v))); return Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0'); }).join('');
+    const pages = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const opList = await page.getOperatorList();
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const saved = [];
+      let stroke = [0, 0, 0];
+      let width = 1;
+      let path = [];
+      let cur = null; // le point courant survit d'une opération `constructPath` à la suivante : pdf.js peut couper un tracé entre `m` et `l`
+      const lines = [];
+      const at = (x, y) => { const px = ctm[0] * x + ctm[2] * y + ctm[4]; const py = ctm[1] * x + ctm[3] * y + ctm[5]; return [px, viewport.height - py]; };
+      const round = n => Math.round(n * 100) / 100;
+      for (let i = 0; i < opList.fnArray.length; i++) {
+        const fn = opList.fnArray[i]; const args = opList.argsArray[i];
+        if (fn === OPS.save) saved.push({ ctm: ctm.slice() });
+        else if (fn === OPS.restore) { const top = saved.pop(); if (top) ctm = top.ctm; }
+        else if (fn === OPS.transform) ctm = mul(ctm, args);
+        else if (fn === OPS.setStrokeRGBColor) stroke = Array.from(args);
+        else if (fn === OPS.setLineWidth) width = args[0];
+        else if (fn === OPS.constructPath) {
+          const ops = args[0]; const co = args[1]; let k = 0;
+          ops.forEach((op) => {
+            if (op === OPS.moveTo) { cur = [co[k], co[k + 1]]; k += 2; }
+            else if (op === OPS.lineTo) { if (cur) path.push([cur, [co[k], co[k + 1]]]); cur = [co[k], co[k + 1]]; k += 2; }
+            else if (op === OPS.rectangle) {
+              const [x, y, w, hgt] = [co[k], co[k + 1], co[k + 2], co[k + 3]]; k += 4;
+              path.push([[x, y], [x + w, y]], [[x + w, y], [x + w, y + hgt]], [[x + w, y + hgt], [x, y + hgt]], [[x, y + hgt], [x, y]]);
+            }
+          });
+        } else if (fn === OPS.stroke || fn === OPS.closeStroke) {
+          path.forEach(([a, b]) => { const [x1, y1] = at(a[0], a[1]); const [x2, y2] = at(b[0], b[1]); lines.push({ x1: round(x1), y1: round(y1), x2: round(x2), y2: round(y2), color: hex(stroke), width }); });
+          path = []; cur = null;
+        } else if (fn === OPS.fill || fn === OPS.eoFill || fn === OPS.endPath || fn === OPS.fillStroke) { path = []; cur = null; }
+      }
+      pages.push({ lines, width: viewport.width, height: viewport.height });
+    }
+    return { pages };
+  }
+
   // --- Export DOCX : ouverture du .docx GÉNÉRÉ, jamais des objets docx.js intermédiaires ---
   // Même philosophie que extractPdfGroundTruth ci-dessus, et pour la même raison : un objet
   // `docx.ImageRun`/`docx.Paragraph` en mémoire n'est PAS le fichier que Word ouvrira. Entre les deux
@@ -697,7 +750,7 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
-    ensurePdfJsLoaded, extractPdfGroundTruth,
+    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
     docxFields, docxNumbering, docxFootnotes,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,

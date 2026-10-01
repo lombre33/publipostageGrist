@@ -333,6 +333,13 @@ const XlsxExport = (function () {
   // dont la couleur suit le thème sombre de l'éditeur.
   const BORDER_EDGE = { style: 'thin', color: { argb: 'FF777777' } };
   const CELL_BORDER = { top: BORDER_EDGE, left: BORDER_EDGE, bottom: BORDER_EDGE, right: BORDER_EDGE };
+  // Les bords réglés d'une case de grille (barre de la case, js/table-borders.js) : le trait de départ, une couleur, ou rien (un côté sans trait n'est pas écrit).
+  function borderOfSides(sides) {
+    const edge = value => (value === TableBorders.NONE ? null : value ? { style: 'thin', color: { argb: 'FF' + value.slice(1).toUpperCase() } } : BORDER_EDGE);
+    const border = {};
+    ['top', 'left', 'bottom', 'right'].forEach((side) => { const e = edge(sides[side]); if (e) border[side] = e; });
+    return border;
+  }
 
   // --- Images -----------------------------------------------------------------------------------------------------------------------------------------------------------
   const IMAGE_EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpeg', 'image/gif': 'gif' };
@@ -454,6 +461,7 @@ const XlsxExport = (function () {
     // Les fusions d'abord : ExcelJS copie le style de la case maîtresse sur les autres au moment de fusionner, on style ensuite chaque case une à une.
     placed.forEach(p => { if (p.rowSpan > 1 || p.colSpan > 1) sheet.mergeCells(p.row + 1, p.col + 1, p.row + p.rowSpan, p.col + p.colSpan); });
 
+    const borderSides = ExportCommon.cellBorderSides(table);
     const pendingImages = [];
     for (const p of placed) {
       const { td } = p;
@@ -489,12 +497,14 @@ const XlsxExport = (function () {
       const alignment = { vertical: vertical === 'top' || vertical === 'bottom' ? vertical : 'middle', wrapText: true };
       if (content.horizontal) alignment.horizontal = content.horizontal;
       else if (typedInfo) alignment.horizontal = 'left'; // comme dans la grille et le PDF : un nombre s'y lit à gauche, comme tout le texte
+      // Chaque case d'une fusion porte les quatre bords de la case fusionnée : Excel ne dessine que ceux de son pourtour.
+      const border = borderSides && borderSides.get(td) ? borderOfSides(borderSides.get(td)) : CELL_BORDER;
       for (let rr = p.row; rr < p.row + p.rowSpan; rr++) {
         for (let cc = p.col; cc < p.col + p.colSpan; cc++) {
           const cell = sheet.getCell(rr + 1, cc + 1);
           cell.alignment = alignment;
           if (cellFill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cellFill } };
-          cell.border = CELL_BORDER;
+          cell.border = border;
           if (cell !== master && !cell.font) cell.font = master.font;
         }
       }

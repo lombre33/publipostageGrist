@@ -134,5 +134,36 @@ const ExportCommon = (function () {
     };
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
+  // Les bords de chaque case d'un tableau de grille, tels que l'éditeur les montre (js/table-borders.js : un trait que deux cases se partagent n'a qu'UNE valeur, que l'HTML dise ce qu'il
+  // veut) : une Map case -> { top, right, bottom, left } (null = le trait fin gris de départ, 'none' = pas de trait, '#rrggbb'), lue sur les `data-border-*` de l'éditeur (jamais sur le
+  // style calculé : il suit le thème sombre). null quand aucune case n'en porte - tout tableau de document, la plupart des grilles : le PDF et l'Excel gardent alors leur trait de départ.
+  function cellBorderSides(table) {
+    const rows = Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
+    const taken = [];
+    const cells = [];
+    let width = 0;
+    let any = false;
+    rows.forEach((tr, r) => {
+      let c = 0;
+      Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName)).forEach((el) => {
+        while (taken[r] && taken[r][c]) c += 1;
+        const colspan = Math.max(1, parseInt(el.getAttribute('colspan') || '1', 10) || 1);
+        const rowspan = Math.max(1, Math.min(rows.length - r, parseInt(el.getAttribute('rowspan') || '1', 10) || 1));
+        for (let dr = 1; dr < rowspan; dr += 1) for (let dc = 0; dc < colspan; dc += 1) (taken[r + dr] = taken[r + dr] || [])[c + dc] = true;
+        const cell = { el, row: r, col: c, rowspan, colspan };
+        TableBorders.SIDES.forEach((side) => {
+          cell[side] = el.getAttribute('data-border-' + side);
+          if (cell[side]) any = true;
+        });
+        cells.push(cell);
+        c += colspan;
+        width = Math.max(width, c);
+      });
+    });
+    if (!any) return null;
+    const sides = TableBorders.resolve({ width, height: rows.length, cells });
+    return new Map(cells.map((cell, i) => [cell.el, sides[i]]));
+  }
+
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
 })();

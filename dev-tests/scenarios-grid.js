@@ -1089,6 +1089,308 @@
     },
   });
 
+  // === 10) Lot B2 : bordures des cases (menu « Bordures » de la barre), Lecture, PDF ================================================================================================
+  // La règle (js/table-borders.js), les réglages du menu écrits sur les deux cases d'un trait, la fusion et la scission, les lignes et colonnes ajoutées, l'enregistrement et la Lecture, le PDF
+  // lu sur ses traits tracés. L'Excel est dans la suite xlsx ; le menu à la vraie souris (dev-tests/verify-grid-borders-mouse.mjs).
+  const RED = '#c0392b';
+  const GREEN = '#1e8449';
+  const BORDER_NAMES = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'];
+  // Les quatre bords de la case (ligne, rang dans la ligne), dans l'ordre haut, droite, bas, gauche : « - » = le trait de départ.
+  const sidesOf = (r, c) => BORDER_NAMES.map(n => tableNode().child(r).child(c).attrs[n] || '-').join(',');
+  const apply = async (preset, color) => { const done = GridEditor.applyBorders(ed(), preset, color === undefined ? null : color); await sleep(650); return done; }; // 650 ms : un évènement d'historique de plus
+  const cellOf = (r, c) => document.querySelectorAll('.tiptap table > tbody > tr')[r].cells[c];
+
+  cases.push({
+    id: 'grid_borders_rule_hidden_wins_then_the_first_color_and_a_merged_side_is_one_group',
+    description: 'La règle des bords (js/table-borders.js) : deux cases qui se partagent un trait n\'ont qu\'une valeur - pas de trait devant tout, sinon la première couleur, sinon le trait de départ ; une case fusionnée n\'a qu\'une valeur par côté (ses voisines suivent) ; un trait à l\'intérieur d\'une case fusionnée n\'existe pas ; les réglages du menu visent les bons traits ; une valeur abîmée vaut le trait de départ',
+    run: async () => {
+      const cell = (row, col, extra) => Object.assign({ row, col, rowspan: 1, colspan: 1, top: null, right: null, bottom: null, left: null }, extra);
+      const show = sides => sides.map(x => [x.top, x.right, x.bottom, x.left].map(v => v || '-').join(',')).join(' | ');
+      const pair = (a, b) => show(TableBorders.resolve({ width: 2, height: 1, cells: [cell(0, 0, { right: a }), cell(0, 1, { left: b })] }));
+      const block = (right, topLeft, bottomLeft) => ({ width: 2, height: 2, cells: [cell(0, 0, { rowspan: 2, right }), cell(0, 1, { left: topLeft }), cell(1, 1, { left: bottomLeft })] });
+      const rect = { left: 0, top: 0, right: 3, bottom: 2 };
+      const got = {
+        colorOverDefault: pair(RED, null),
+        hiddenOverColor: pair('none', RED),
+        hiddenAfterColor: pair(RED, 'none'),
+        firstColor: pair(RED, GREEN),
+        mergedSideIsOneGroup: show(TableBorders.resolve(block(null, RED, null))),
+        forcedOverHidden: show(TableBorders.set(block('none', 'none', 'none'), [{ kind: 'v', row: 1, col: 1 }], GREEN)),
+        usableInner: TableBorders.usableEdges(block(null, null, null), TableBorders.presetEdges('inner', { left: 0, top: 0, right: 2, bottom: 2 })).length,
+        usableInnerInsideOneMergedCell: TableBorders.usableEdges(block(null, null, null), TableBorders.presetEdges('inner', { left: 0, top: 0, right: 1, bottom: 2 })).length,
+        presetCounts: ['all', 'outer', 'inner', 'top', 'bottom', 'left', 'right', 'none'].map(p => TableBorders.presetEdges(p, rect).length).join(','),
+        normalized: [TableBorders.normalizeValue('NONE'), TableBorders.normalizeValue('#C0392B'), TableBorders.normalizeValue('red'), TableBorders.normalizeValue('#fff'), TableBorders.normalizeValue(undefined)].map(v => v || '-').join(','),
+        values: [TableBorders.valueFor('none', RED), TableBorders.valueFor('all', RED), TableBorders.valueFor('outer', null)].map(v => v || '-').join(','),
+      };
+      const want = {
+        colorOverDefault: `-,${RED},-,- | -,-,-,${RED}`,
+        hiddenOverColor: '-,none,-,- | -,-,-,none',
+        hiddenAfterColor: '-,none,-,- | -,-,-,none',
+        firstColor: `-,${RED},-,- | -,-,-,${RED}`,
+        mergedSideIsOneGroup: `-,${RED},-,- | -,-,-,${RED} | -,-,-,${RED}`,
+        forcedOverHidden: `-,${GREEN},-,- | -,-,-,${GREEN} | -,-,-,${GREEN}`,
+        usableInner: 3, usableInnerInsideOneMergedCell: 0,
+        presetCounts: '17,10,7,3,3,2,2,17',
+        normalized: `none,${RED},-,-,-`,
+        values: `none,${RED},-`,
+      };
+      const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+      return { pass: !bad.length, notes: bad.length ? bad.map(k => `${k}: ${JSON.stringify(got[k])} (attendu ${JSON.stringify(want[k])})`).join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'grid_borders_each_setting_writes_both_cells_of_a_shared_edge_and_is_one_undo',
+    description: 'Menu « Bordures » : chaque réglage (toutes, extérieures, intérieures, un côté, aucune) pose la couleur du stylo sur les traits qu\'il vise ET sur la case voisine de chaque trait (sinon le trait partagé se contredit), en une seule transaction - un seul Annuler ; « Aucune » cache aussi les traits partagés avec les cases d\'à côté ; la couleur par défaut rend le trait de départ ; « Intérieures » n\'a rien à tracer pour une seule case',
+    run: async (h) => inGrid(h, async () => {
+      const read = () => ({ corner: sidesOf(1, 1), centre: sidesOf(2, 2), lowerRight: sidesOf(3, 3), above: sidesOf(0, 1), leftOf: sidesOf(1, 0), below: sidesOf(4, 3), rightOf: sidesOf(3, 4), far: sidesOf(0, 0) });
+      await selectCells(1, 1, 3, 3);
+      const single = await (async () => { await selectCells(2, 2, 2, 2); const r = { can: GridEditor.canApplyBorders(ed(), 'inner'), done: GridEditor.applyBorders(ed(), 'inner', RED) }; await selectCells(1, 1, 3, 3); return r; })();
+      const got = { start: read() };
+      await apply('outer', RED); got.outer = read();
+      await apply('inner', GREEN); got.inner = read();
+      await apply('top', null); got.top = read();
+      await apply('none'); got.none = read();
+      ed().commands.undo(); await sleep(80); got.undoNone = read();
+      await apply('all'); got.all = read();
+      const dash = '-,-,-,-';
+      const want = {
+        start: { corner: dash, centre: dash, lowerRight: dash, above: dash, leftOf: dash, below: dash, rightOf: dash, far: dash },
+        outer: { corner: `${RED},-,-,${RED}`, centre: dash, lowerRight: `-,${RED},${RED},-`, above: `-,-,${RED},-`, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
+        inner: { corner: `${RED},${GREEN},${GREEN},${RED}`, centre: `${GREEN},${GREEN},${GREEN},${GREEN}`, lowerRight: `${GREEN},${RED},${RED},${GREEN}`, above: `-,-,${RED},-`, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
+        top: { corner: `-,${GREEN},${GREEN},${RED}`, centre: `${GREEN},${GREEN},${GREEN},${GREEN}`, lowerRight: `${GREEN},${RED},${RED},${GREEN}`, above: dash, leftOf: `-,${RED},-,-`, below: `${RED},-,-,-`, rightOf: `-,-,-,${RED}`, far: dash },
+        none: { corner: 'none,none,none,none', centre: 'none,none,none,none', lowerRight: 'none,none,none,none', above: '-,-,none,-', leftOf: '-,none,-,-', below: 'none,-,-,-', rightOf: '-,-,-,none', far: dash },
+        all: { corner: dash, centre: dash, lowerRight: dash, above: dash, leftOf: dash, below: dash, rightOf: dash, far: dash },
+      };
+      want.undoNone = want.top;
+      const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+      const pass = !bad.length && single.can === false && single.done === false;
+      return { pass, notes: JSON.stringify({ bad: bad.map(k => ({ step: k, got: got[k], want: want[k] })), single }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_borders_a_merged_cell_has_one_value_per_side_and_no_line_inside',
+    description: 'Une case fusionnée n\'a pas de trait à l\'intérieur (« Intérieures » est grisé pour elle seule) et une valeur par côté : tracer le trait entre elle et ses voisines les met toutes d\'accord, et choisir ce trait pour une seule de ses voisines le change pour toutes les autres de ce côté',
+    run: async (h) => inGrid(h, async () => {
+      await selectCells(0, 0, 1, 1);
+      GridEditor.mergeCells(ed()); await sleep(650);
+      await selectCells(0, 0, 0, 0); // la case fusionnée seule
+      const alone = { can: GridEditor.canApplyBorders(ed(), 'inner'), done: GridEditor.applyBorders(ed(), 'inner', RED), changed: sidesOf(0, 0) };
+      await selectCells(0, 0, 1, 1); // sa case, puis jusqu'à la 2e case de la ligne 1 : les colonnes 0 à 3, lignes 0 et 1
+      const withNeighbours = { can: GridEditor.canApplyBorders(ed(), 'inner') };
+      await apply('inner', RED);
+      const lines = { merged: sidesOf(0, 0), upperRight: sidesOf(0, 1), lowerRight: sidesOf(1, 0), farRight: sidesOf(0, 2) };
+      await placeCursor(1, 0); // la voisine du bas : « Gauche » en vert
+      await apply('left', GREEN);
+      const spill = { merged: sidesOf(0, 0), upperRight: sidesOf(0, 1), lowerRight: sidesOf(1, 0) };
+      const want = {
+        alone: { can: false, done: false, changed: '-,-,-,-' },
+        withNeighbours: { can: true },
+        lines: { merged: `-,${RED},-,-`, upperRight: `-,${RED},${RED},${RED}`, lowerRight: `${RED},${RED},-,${RED}`, farRight: `-,-,${RED},${RED}` },
+        spill: { merged: `-,${GREEN},-,-`, upperRight: `-,${RED},${RED},${GREEN}`, lowerRight: `${RED},${RED},-,${GREEN}` },
+      };
+      const got = { alone, withNeighbours, lines, spill };
+      const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+      return { pass: !bad.length, notes: JSON.stringify({ bad: bad.map(k => ({ step: k, got: got[k], want: want[k] })) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_borders_merging_keeps_the_outline_of_the_cells_and_splitting_gives_it_back',
+    description: 'Fusionner deux cases dont le trait du milieu est caché garde le trait de droite de la case de droite (le pourtour des cases fusionnées), pas celui du milieu qui disparaît ; scinder rend les bords du pourtour aux cases du pourtour et laisse le trait de départ entre les nouvelles cases',
+    run: async (h) => inGrid(h, async () => {
+      await selectCells(1, 1, 1, 2);
+      await apply('none');
+      await placeCursor(1, 2);
+      await apply('right', RED);
+      const before = { left: sidesOf(1, 1), right: sidesOf(1, 2), next: sidesOf(1, 3) };
+      await selectCells(1, 1, 1, 2);
+      GridEditor.mergeCells(ed()); await sleep(650);
+      const merged = { cell: sidesOf(1, 1), next: sidesOf(1, 2), above: sidesOf(0, 1) };
+      await selectCells(1, 1, 1, 1);
+      GridEditor.splitCell(ed()); await sleep(300);
+      const split = { left: sidesOf(1, 1), right: sidesOf(1, 2), next: sidesOf(1, 3) };
+      const want = {
+        before: { left: 'none,none,none,none', right: `none,${RED},none,none`, next: `-,-,-,${RED}` },
+        merged: { cell: `none,${RED},none,none`, next: `-,-,-,${RED}`, above: '-,-,none,-' },
+        split: { left: 'none,-,none,none', right: `none,${RED},none,-`, next: `-,-,-,${RED}` },
+      };
+      const got = { before, merged, split };
+      const bad = Object.keys(want).filter(k => JSON.stringify(got[k]) !== JSON.stringify(want[k]));
+      return { pass: !bad.length, notes: JSON.stringify({ bad: bad.map(k => ({ step: k, got: got[k], want: want[k] })) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_borders_a_row_or_column_added_at_an_end_keeps_the_frame_outside_and_the_inner_lines_inside',
+    description: 'Une grille sans cadre (bords extérieurs cachés, traits intérieurs de départ) : une colonne ou une ligne ajoutée au bout ou au début garde le cadre caché à l\'extérieur et un trait intérieur visible entre l\'ancienne case et la nouvelle (le trait qui était extérieur devient intérieur) ; au milieu, la nouvelle ligne ou colonne prolonge le trait coloré qu\'elle coupe',
+    run: async (h) => inGrid(h, async () => {
+      await selectCells(0, 0, 14, 5);
+      await apply('none');
+      await apply('inner', null);
+      const got = { frame: [sidesOf(0, 0), sidesOf(3, 5), sidesOf(14, 5), sidesOf(3, 3)].join(' ') };
+      await placeCursor(3, 5);
+      ed().chain().focus().addColumnAfter().run(); await sleep(250);
+      got.columnAtEnd = [sidesOf(3, 5), sidesOf(3, 6), sidesOf(0, 6), sidesOf(14, 6)].join(' ');
+      await placeCursor(14, 0);
+      ed().chain().focus().addRowAfter().run(); await sleep(250);
+      got.rowAtEnd = [sidesOf(14, 0), sidesOf(15, 0), sidesOf(15, 3), sidesOf(15, 6)].join(' ');
+      await placeCursor(3, 0);
+      ed().chain().focus().addColumnBefore().run(); await sleep(250);
+      got.columnAtStart = [sidesOf(3, 0), sidesOf(3, 1), sidesOf(0, 0)].join(' ');
+      await placeCursor(0, 3);
+      ed().chain().focus().addRowBefore().run(); await sleep(250);
+      got.rowAtStart = [sidesOf(0, 3), sidesOf(1, 3), sidesOf(0, 0)].join(' ');
+      const rows = tableNode().childCount; const cols = tableNode().child(0).childCount;
+      // au milieu : les traits intérieurs en rouge, une colonne coupée en deux les prolonge
+      await selectCells(0, 0, rows - 1, cols - 1);
+      await apply('inner', RED);
+      await placeCursor(3, 2);
+      ed().chain().focus().addColumnAfter().run(); await sleep(250);
+      got.middle = [sidesOf(3, 2), sidesOf(3, 3), sidesOf(3, 4)].join(' ');
+      const dash = '-,-,-,-';
+      const want = {
+        frame: `none,-,-,none -,none,-,- -,none,none,- ${dash}`,
+        columnAtEnd: `${dash} -,none,-,- none,none,-,- -,none,none,-`,
+        rowAtEnd: `-,-,-,none -,-,none,none -,-,none,- -,none,none,-`,
+        columnAtStart: `-,-,-,none ${dash} none,-,-,none`,
+        rowAtStart: `none,-,-,- ${dash} none,-,-,none`,
+        middle: `${RED},${RED},${RED},${RED} ${RED},${RED},${RED},${RED} ${RED},${RED},${RED},${RED}`,
+      };
+      const bad = Object.keys(want).filter(k => got[k] !== want[k]);
+      return { pass: !bad.length, notes: JSON.stringify({ bad: bad.map(k => ({ step: k, got: got[k], want: want[k] })) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_borders_are_saved_with_the_model_and_shown_by_the_editor_and_reading_mode',
+    description: 'Les bords sont enregistrés avec le modèle (un attribut par côté, relu à l\'ouverture) et l\'éditeur comme la Lecture montrent la même chose : le trait de la couleur choisie sur les deux cases d\'un trait partagé, « pas de trait » en bordure cachée',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord(); // la Lecture a besoin d'un enregistrement : ce cas ne compte pas sur ceux d'avant
+      await selectCells(0, 0, 2, 2);
+      await apply('outer', RED);
+      await selectCells(1, 1, 1, 1);
+      await apply('none');
+      const grid = () => [0, 1, 2].map(r => [0, 1, 2].map(c => sidesOf(r, c)).join(' ')).join(' / ');
+      const before = grid();
+      const html = Editor.getHTML();
+      await loadGrid(html);
+      const after = grid();
+      const look = (root) => {
+        const rows = root.querySelectorAll('table > tbody > tr');
+        const cs = (r, c, side) => { const style = getComputedStyle(rows[r].cells[c]); return style['border' + side + 'Style'] + ' ' + style['border' + side + 'Color']; };
+        return { topLeft: [cs(0, 0, 'Top'), cs(0, 0, 'Left')], middle: [cs(1, 1, 'Top'), cs(1, 1, 'Left'), cs(1, 1, 'Right'), cs(1, 1, 'Bottom')], aboveMiddle: cs(0, 1, 'Bottom'), plain: cs(5, 5, 'Top') };
+      };
+      const inEditor = look(document.querySelector('.tiptap'));
+      let inReader = null;
+      await h.clickButton('btn-mode-read');
+      try {
+        // La première Lecture d'une page peut tarder (chargements à la demande) : on attend le tableau lu plutôt qu'un délai fixe.
+        for (let waited = 0; waited < 8000 && document.querySelectorAll('#reader-container table > tbody > tr').length < 6; waited += 100) await sleep(100);
+        await sleep(200);
+        inReader = look(document.getElementById('reader-container'));
+      }
+      finally { await h.clickButton('btn-mode-edit'); await sleep(300); }
+      const red = 'solid rgb(192, 57, 43)';
+      const hidden = c => c.startsWith('hidden');
+      const sameLook = a => !!a && a.topLeft[0] === red && a.topLeft[1] === red && a.middle.every(hidden) && hidden(a.aboveMiddle) && /^solid/.test(a.plain);
+      const attrs = ['data-border-top="' + RED + '"', 'data-border-left="none"'].every(t => html.includes(t));
+      const pass = before === after && before.includes('none') && before.includes(RED) && attrs && sameLook(inEditor) && sameLook(inReader);
+      return { pass, notes: JSON.stringify({ before, after, attrs, inEditor, inReader }) };
+    }),
+  });
+
+  // Les traits peints d'un PDF de la grille courante : les longueurs par couleur et par sens, et leur place.
+  async function pdfStrokes(h) {
+    const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+    const lines = (await h.extractPdfLines(pdf.base64)).pages[0].lines.filter(l => l.width < 1);
+    const horizontal = l => Math.abs(l.y1 - l.y2) < 0.01;
+    const sorted = list => Array.from(new Set(list.map(v => Math.round(v * 10) / 10))).sort((a, b) => a - b);
+    return {
+      lines, horizontal,
+      byColor: color => lines.filter(l => l.color === color),
+      xs: sorted(lines.filter(l => !horizontal(l)).map(l => l.x1)),
+      ys: sorted(lines.filter(horizontal).map(l => l.y1)),
+    };
+  }
+  // La longueur peinte, chaque trait compté une fois : pdfmake prolonge de la moitié de l'épaisseur chaque segment d'un côté fait de plusieurs cases, ces bouts se recouvrent.
+  const lengthOf = (list) => {
+    const groups = new Map();
+    list.forEach((l) => {
+      const horizontal = Math.abs(l.y1 - l.y2) < 0.01;
+      const key = (horizontal ? 'h' : 'v') + Math.round((horizontal ? l.y1 : l.x1) * 2);
+      const span = horizontal ? [Math.min(l.x1, l.x2), Math.max(l.x1, l.x2)] : [Math.min(l.y1, l.y2), Math.max(l.y1, l.y2)];
+      groups.set(key, (groups.get(key) || []).concat([span]));
+    });
+    let total = 0;
+    groups.forEach((spans) => {
+      let [from, to] = [null, null];
+      spans.sort((a, b) => a[0] - b[0]).forEach(([a, b]) => {
+        if (to === null || a > to + 0.01) { if (to !== null) total += to - from; from = a; to = b; } else to = Math.max(to, b);
+      });
+      if (to !== null) total += to - from;
+    });
+    return Math.round(total);
+  };
+
+  cases.push({
+    id: 'grid_pdf_borders_draw_only_the_chosen_lines_in_their_color',
+    description: 'PDF d\'une grille, lu sur les traits peints : sans réglage, tous les traits sont le filet gris de départ ; un cadre rouge sur une grille sans autre trait ne peint que les quatre côtés du cadre, en rouge ; des traits verticaux seuls (les cinq traits entre les six cases d\'une ligne) ne peignent aucun trait horizontal',
+    run: async (h) => inGrid(h, async () => {
+      const plain = await pdfStrokes(h);
+      await selectCells(0, 0, 14, 5);
+      await apply('none');
+      await apply('outer', RED);
+      const frame = await pdfStrokes(h);
+      await apply('none');
+      await selectCells(0, 0, 0, 5); // la première ligne seule : ses traits intérieurs sont des traits verticaux
+      await apply('inner', null);
+      const verticals = await pdfStrokes(h);
+      // le cadre : les quatre côtés, rien à l'intérieur
+      const x0 = frame.xs[0]; const x1 = frame.xs[frame.xs.length - 1]; const y0 = frame.ys[0]; const y1 = frame.ys[frame.ys.length - 1];
+      const on = (l) => (frame.horizontal(l) ? (Math.abs(l.y1 - y0) < 0.6 || Math.abs(l.y1 - y1) < 0.6) : (Math.abs(l.x1 - x0) < 0.6 || Math.abs(l.x1 - x1) < 0.6));
+      const reds = frame.byColor(RED);
+      const sides = {
+        top: lengthOf(reds.filter(l => frame.horizontal(l) && Math.abs(l.y1 - y0) < 0.6)), bottom: lengthOf(reds.filter(l => frame.horizontal(l) && Math.abs(l.y1 - y1) < 0.6)),
+        left: lengthOf(reds.filter(l => !frame.horizontal(l) && Math.abs(l.x1 - x0) < 0.6)), right: lengthOf(reds.filter(l => !frame.horizontal(l) && Math.abs(l.x1 - x1) < 0.6)),
+      };
+      const width = x1 - x0; const height = y1 - y0;
+      const framed = frame.lines.length > 0 && frame.lines.every(l => l.color === RED && on(l)) && frame.xs.length === 2 && frame.ys.length === 2
+        && Math.abs(sides.top - width) <= 2 && Math.abs(sides.bottom - width) <= 2 && Math.abs(sides.left - height) <= 2 && Math.abs(sides.right - height) <= 2;
+      const onlyVertical = verticals.lines.length > 0 && verticals.lines.every(l => l.color === '#777777' && !verticals.horizontal(l)) && verticals.xs.length === 5;
+      const pass = plain.lines.length > 0 && plain.lines.every(l => l.color === '#777777') && framed && onlyVertical;
+      return { pass, notes: JSON.stringify({ plain: plain.lines.length, frame: { lines: frame.lines.length, xs: frame.xs, ys: frame.ys, sides }, verticals: { lines: verticals.lines.length, xs: verticals.xs, ys: verticals.ys.length, colors: Array.from(new Set(verticals.lines.map(l => l.color))) } }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_pdf_borders_of_a_merged_cell_are_its_outline_only',
+    description: 'PDF d\'une grille dont une case fusionnée sur deux colonnes et deux lignes a un cadre rouge : les quatre côtés de la case fusionnée sont rouges, sans trait rouge à l\'intérieur, et le reste de la grille garde son filet gris',
+    run: async (h) => inGrid(h, async () => {
+      await selectCells(0, 0, 1, 1);
+      GridEditor.mergeCells(ed()); await sleep(650);
+      await selectCells(0, 0, 0, 0);
+      await apply('outer', RED);
+      const view = await pdfStrokes(h);
+      const reds = view.byColor(RED);
+      const grey = view.byColor('#777777');
+      const x0 = view.xs[0]; const x1 = view.xs[1]; const x2 = view.xs[2]; const y0 = view.ys[0]; const y1 = view.ys[1]; const y2 = view.ys[2];
+      const near = (a, b) => Math.abs(a - b) < 0.8;
+      const at = (list, horizontal, value) => list.filter(l => view.horizontal(l) === horizontal && near(horizontal ? l.y1 : l.x1, value));
+      // la case fusionnée couvre les deux premières colonnes (x0 à x2) et les deux premières lignes (y0 à y2)
+      const got = {
+        top: lengthOf(at(reds, true, y0)), bottom: lengthOf(at(reds, true, y2)), left: lengthOf(at(reds, false, x0)), right: lengthOf(at(reds, false, x2)),
+        inside: lengthOf(at(reds, true, y1)) + lengthOf(at(reds, false, x1)),
+        redTotal: lengthOf(reds), greyAround: grey.length,
+      };
+      const w = x2 - x0; const hgt = y2 - y0;
+      const pass = reds.length > 0 && Math.abs(got.top - w) <= 2 && Math.abs(got.bottom - w) <= 2 && Math.abs(got.left - hgt) <= 2 && Math.abs(got.right - hgt) <= 2
+        && got.inside === 0 && Math.abs(got.redTotal - (2 * w + 2 * hgt)) <= 6 && got.greyAround > 20;
+      return { pass, notes: JSON.stringify({ got, w, hgt, xs: view.xs.slice(0, 4), ys: view.ys.slice(0, 4) }) };
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.grid = cases;
 })();

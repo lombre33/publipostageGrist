@@ -944,6 +944,88 @@
     },
   });
 
+  // --- 13) Bordures choisies dans la grille (lot B2) -------------------------------------------------------------------------------------------------------------------
+  // `sides('B1')` = « haut,droite,bas,gauche » : la couleur (sans « FF ») d'un trait fin, « - » pour un côté sans trait.
+  const RED = '#c0392b';
+  const GREY = '777777';
+  const withSide = (name, value) => ` data-border-${name}="${value}"`;
+  const sidesOf = (sheet, ref) => {
+    const border = sheet.cell(ref).style.border || {};
+    return ['top', 'right', 'bottom', 'left'].map(name => (border[name] ? (border[name].style === 'thin' ? String(border[name].color).slice(2) : border[name].style + ':' + border[name].color) : '-')).join(',');
+  };
+
+  cases.push({
+    id: 'xlsx_borders_chosen_in_the_grid_are_the_borders_of_the_sheet',
+    description: 'Le trait choisi (couleur) devient le bord fin de cette couleur des DEUX cases qui se le partagent, « pas de trait » ne laisse aucun bord des deux côtés, les autres cases gardent le filet gris de départ',
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([80, 80, 80], [30, 30, 30], [
+        [td('A1', withSide('right', RED) + withSide('bottom', RED)), td('B1', withSide('left', RED) + withSide('right', 'none')), td('C1', withSide('left', 'none'))],
+        [td('A2', withSide('top', RED)), 'B2', 'C2'],
+        ['A3', 'B3', 'C3'],
+      ]);
+      const s = x.sheet;
+      const want = {
+        A1: `${GREY},C0392B,C0392B,${GREY}`,
+        B1: `${GREY},-,${GREY},C0392B`,
+        C1: `${GREY},${GREY},${GREY},-`,
+        A2: `C0392B,${GREY},${GREY},${GREY}`,
+        B2: `${GREY},${GREY},${GREY},${GREY}`,
+        C3: `${GREY},${GREY},${GREY},${GREY}`,
+      };
+      const bad = Object.keys(want).filter(ref => sidesOf(s, ref) !== want[ref]).map(ref => `${ref} = ${sidesOf(s, ref)} (attendu ${want[ref]})`);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(Object.keys(want).map(ref => sidesOf(s, ref))) };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_borders_that_the_two_cells_of_an_edge_disagree_on_are_settled_like_the_editor_does',
+    description: 'Un HTML qui n\'a pas été relu par l\'éditeur (deux cases voisines en désaccord sur leur trait commun) donne le même bord que dans l\'éditeur : « pas de trait » devant une couleur, une couleur devant le trait de départ',
+    run: async (h) => {
+      await seed(h);
+      // Le HTML part tel quel à l'export, sans passer par loadGrid : seule la règle commune (js/table-borders.js) peut le mettre d'accord.
+      const html = gridHtml([80, 80], [30, 30], [
+        [td('A1', withSide('right', RED)), 'B1'],
+        [td('A2', withSide('right', 'none')), td('B2', withSide('left', RED))],
+      ]);
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(html, TABLE, RECORD, '');
+      const s = (await openXlsx(blob)).sheet;
+      const want = {
+        A1: `${GREY},C0392B,${GREY},${GREY}`,
+        B1: `${GREY},${GREY},${GREY},C0392B`,
+        A2: `${GREY},-,${GREY},${GREY}`,
+        B2: `${GREY},${GREY},${GREY},-`,
+      };
+      const bad = Object.keys(want).filter(ref => sidesOf(s, ref) !== want[ref]).map(ref => `${ref} = ${sidesOf(s, ref)} (attendu ${want[ref]})`);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_a_merged_block_has_one_outline_on_every_cell_of_its_range',
+    description: 'Un bloc fusionné garde UN trait par côté (couleur ou pas de trait), porté par toutes les cases de sa plage ; les cases autour reprennent le trait qu\'elles partagent avec lui',
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([80, 80, 80], [30, 30, 30], [
+        [td('Bloc', ' colspan="2" rowspan="2"' + withSide('top', RED) + withSide('right', RED) + withSide('bottom', RED) + withSide('left', 'none')), 'C1'],
+        ['C2'],
+        ['A3', 'B3', 'C3'],
+      ]);
+      const s = x.sheet;
+      const block = `C0392B,C0392B,C0392B,-`;
+      const want = {
+        A1: block, B1: block, A2: block, B2: block,
+        C1: `${GREY},${GREY},${GREY},C0392B`,
+        C2: `${GREY},${GREY},${GREY},C0392B`,
+        A3: `C0392B,${GREY},${GREY},${GREY}`,
+        B3: `C0392B,${GREY},${GREY},${GREY}`,
+      };
+      const bad = Object.keys(want).filter(ref => sidesOf(s, ref) !== want[ref]).map(ref => `${ref} = ${sidesOf(s, ref)} (attendu ${want[ref]})`);
+      if (JSON.stringify(s.merges) !== JSON.stringify(['A1:B2'])) bad.push('fusions=' + s.merges);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.xlsx = cases;
 })();

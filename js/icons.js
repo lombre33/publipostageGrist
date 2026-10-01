@@ -3,6 +3,15 @@
 const Icons = (function () {
   const WRAP_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
   const WRAP_CLOSE = '</svg>';
+  // Bordures d'une grille (barre de la case, js/floating-toolbars.js) : un carré (4 côtés) et sa croix (2 traits) ; ce que le réglage pose est plein, le reste en pointillé clair.
+  const BORDER_SEGMENTS = { top: 'M4 4h16', right: 'M20 4v16', bottom: 'M4 20h16', left: 'M4 4v16', cv: 'M12 4v16', ch: 'M4 12h16' };
+  function bordersIcon(solid) {
+    const keys = Object.keys(BORDER_SEGMENTS);
+    const draw = list => list.map(k => BORDER_SEGMENTS[k]).join('');
+    const off = draw(keys.filter(k => !solid.includes(k)));
+    const on = draw(keys.filter(k => solid.includes(k)));
+    return (off ? `<path d="${off}" stroke-width="1.5" stroke-opacity=".45" stroke-dasharray="1.5 2"/>` : '') + (on ? `<path d="${on}"/>` : '');
+  }
   const PATHS = {
     undo: '<path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/>',
     redo: '<path d="M15 7l5 5-5 5M20 12H9A5 5 0 0 0 9 22h1"/>',
@@ -51,6 +60,16 @@ const Icons = (function () {
     valignTop: '<path d="M4 4h16"/><rect x="8" y="8" width="8" height="12" rx="1"/>',
     valignMiddle: '<path d="M4 12h16"/><rect x="8" y="5" width="8" height="14" rx="1"/>',
     valignBottom: '<path d="M4 20h16"/><rect x="8" y="4" width="8" height="12" rx="1"/>',
+    // Puce « Bordures » (maquette du 2026-10-01 : le carré et sa croix pointillée) puis les huit réglages de son menu.
+    borders: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18" stroke-dasharray="2 2"/>',
+    bordersAll: bordersIcon(['top', 'right', 'bottom', 'left', 'cv', 'ch']),
+    bordersOuter: bordersIcon(['top', 'right', 'bottom', 'left']),
+    bordersInner: bordersIcon(['cv', 'ch']),
+    bordersTop: bordersIcon(['top']),
+    bordersBottom: bordersIcon(['bottom']),
+    bordersLeft: bordersIcon(['left']),
+    bordersRight: bordersIcon(['right']),
+    bordersNone: bordersIcon([]),
     trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
     zoomOut: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M7 10h6"/>',
     zoomIn: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M10 7v6M7 10h6"/>',

@@ -44,6 +44,29 @@ const FloatingToolbars = (function () {
     return panel;
   }
 
+  // Menu « Bordures » d'une grille (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - la grille de nuances et le pied « personnalisé » / « par défaut » du menu de
+  // couleur ci-dessus, sans refermer le menu au choix d'une couleur. `onPreset(preset)` et `onPen(color | null)` ne touchent pas à l'éditeur eux-mêmes.
+  function createBordersDropdown(presets, colors, { onPreset, onPen }) {
+    const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
+    const swatches = colors.map(c => `<button data-action="pen:${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('');
+    const html = '<div class="v2-borders-presets">' + buttons + '</div>'
+      + `<div class="v2-borders-pen">${I18n.t('table.bordersPen')}</div>`
+      + '<div class="v2-color-grid">' + swatches + '</div>'
+      + '<div class="v2-color-dropdown-footer">'
+      + `<button data-action="pen-custom" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
+      + `<button data-action="pen-auto" title="${I18n.t('colorDropdown.noneDefault')}">${Icons.svg('noColor')}<span>${I18n.t('colorDropdown.noneDefault')}</span></button>`
+      + '</div>'
+      + '<input type="color" class="v2-color-dropdown-native">';
+    const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-borders-dropdown', html, (action) => {
+      if (action.indexOf('borders:') === 0) { onPreset(action.slice('borders:'.length)); return; }
+      if (action === 'pen-custom') { panel.el.querySelector('.v2-color-dropdown-native').click(); return; }
+      if (action === 'pen-auto') { onPen(null); return; }
+      if (action.indexOf('pen:') === 0) onPen(action.slice('pen:'.length));
+    });
+    panel.el.querySelector('.v2-color-dropdown-native').addEventListener('input', event => onPen(event.target.value.toLowerCase()));
+    return panel;
+  }
+
   // Couleur de police / surlignage : bouton "appliquer" (réapplique la dernière couleur choisie) + bouton chevron séparé (menu de nuances).
   function wireColorPickers() {
     const { captureSelection, withSavedSelection } = EditorCore.createSelectionPreserver();
@@ -98,6 +121,13 @@ const FloatingToolbars = (function () {
     // Ce que seule une grille a (js/grid-editor.js) : fusion, alignement vertical. Posé dans la barre pour tous les tableaux, montré par css/grid.css sous `body.pp-grid-mode` seulement :
     // la barre d'un tableau de document reste celle d'avant.
     const VALIGN_BUTTONS = [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]];
+    // Menu « Bordures » d'une grille : les huit réglages (icône, info-bulle) ; la couleur du stylo (null = le trait de départ) se choisit une fois et reste pour les réglages suivants.
+    const BORDER_PRESETS = [['all', 'bordersAll', I18n.t('table.bordersAll')], ['outer', 'bordersOuter', I18n.t('table.bordersOuter')], ['inner', 'bordersInner', I18n.t('table.bordersInner')],
+      ['top', 'bordersTop', I18n.t('table.bordersTop')], ['bottom', 'bordersBottom', I18n.t('table.bordersBottom')], ['left', 'bordersLeft', I18n.t('table.bordersLeft')],
+      ['right', 'bordersRight', I18n.t('table.bordersRight')], ['none', 'bordersNone', I18n.t('table.bordersNone')]];
+    let penColor = null;
+    // Les menus de la barre d'une grille (fond, bordures) s'ouvrent SOUS la bande où elle est fixée : au-dessus, ils recouvriraient la barre d'outils.
+    const menuPlacement = () => (GridEditor.isActive() ? { placement: 'bottom-start' } : undefined);
     const gridButton = (action, icon, title) => `<button data-action="${action}" class="v2-grid-only" title="${title}">${Icons.svg(icon)}</button>`;
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
@@ -108,6 +138,8 @@ const FloatingToolbars = (function () {
       + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
       + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
       + '</button>'
+      + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip v2-grid-only" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`
+      + Icons.svg('borders') + Icons.svg('caretDown') + '</button>'
       + '<span class="v2-floating-sep v2-grid-only"></span>'
       + VALIGN_BUTTONS.map(([action, icon, , title]) => gridButton(action, icon, title)).join('');
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
@@ -124,11 +156,19 @@ const FloatingToolbars = (function () {
         'valign-top': () => GridEditor.setVerticalAlign(editor, 'top'),
         'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
         'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
+        'borders-open': () => {
+          const btn = document.getElementById('v2-table-borders-btn');
+          if (EditorCore.getOpenDropdownPanel() === bordersPanel) { EditorCore.closeDropdownPanel(); return; }
+          EditorCore.closeDropdownPanel();
+          syncBordersPanel();
+          bordersPanel.show(btn, menuPlacement());
+          EditorCore.setOpenDropdownPanel(bordersPanel, btn);
+        },
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
           if (EditorCore.getOpenDropdownPanel() === fillPanel) { EditorCore.closeDropdownPanel(); return; }
           EditorCore.closeDropdownPanel();
-          fillPanel.show(btn);
+          fillPanel.show(btn, menuPlacement());
           EditorCore.setOpenDropdownPanel(fillPanel);
         },
       };
@@ -141,6 +181,24 @@ const FloatingToolbars = (function () {
       onPick: (chain, color) => { setCellsBackground(editor, color); EditorCore.setColorBar('v2-table-fill-bar', color); },
       onNone: () => { setCellsBackground(editor, null); EditorCore.setColorBar('v2-table-fill-bar', null); },
     });
+    // Menu « Bordures » : un réglage pose la couleur du stylo sur les traits qu'il vise (une seule transaction, un seul Annuler) et referme le menu ; une couleur se choisit sans le refermer.
+    const bordersPanel = createBordersDropdown(BORDER_PRESETS, TEXT_COLOR_PRESETS, {
+      onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
+      onPen: (color) => { penColor = color; markPen(); },
+    });
+    const markPen = () => {
+      bordersPanel.el.querySelectorAll('button[data-action^="pen:"]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.action === 'pen:' + penColor));
+      const auto = bordersPanel.el.querySelector('button[data-action="pen-auto"]');
+      if (auto) auto.classList.toggle('is-active', penColor === null);
+      const custom = bordersPanel.el.querySelector('button[data-action="pen-custom"]');
+      if (custom) custom.classList.toggle('is-active', penColor !== null && !TEXT_COLOR_PRESETS.includes(penColor));
+    };
+    // « Intérieures » n'a rien à tracer pour une seule case : grisé (jamais retiré), un clic dessus ne fait rien.
+    const syncBordersPanel = () => {
+      const inner = bordersPanel.el.querySelector('button[data-action="borders:inner"]');
+      if (inner) inner.setAttribute('aria-disabled', GridEditor.canApplyBorders(editor, 'inner') ? 'false' : 'true');
+      markPen();
+    };
     EditorCore.registerFloatingPanel(panel);
     // Boutons d'une grille selon la sélection : « Fusionner » et « Scinder » grisés quand ils n'ont pas de sens (jamais retirés), l'alignement vertical des cases visées enfoncé
     // (aucun quand la sélection mêle plusieurs alignements).

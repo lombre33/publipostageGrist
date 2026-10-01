@@ -96,7 +96,8 @@ const EditorCore = (function () {
       undock,
       isDocked() { return docked; },
       // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui - la grille s'en sert pour que
-      // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions). Sans lui, rien ne change.
+      // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions) - et { placement } (au-dessus par défaut : le menu d'une barre fixée en haut de la page, comme celle de
+      // la case d'une grille, s'ouvre dessous plutôt que sur la barre d'outils). Sans lui, rien ne change.
       show(referenceEl, options) {
         undock();
         // À l'OUVERTURE seulement : show est rappelé à chaque transaction, panneau déjà affiché. Un menu (couleur, police) passe au-dessus de ceux déjà ouverts et de toute barre flottante ;
@@ -107,7 +108,7 @@ const EditorCore = (function () {
         const update = () => {
           const opts = (typeof options === 'function' ? options() : options) || {};
           floatingUi.computePosition(referenceEl, el, {
-            placement: 'top',
+            placement: opts.placement || 'top',
             middleware: [floatingUi.offset(8), floatingUi.flip(opts.flip), floatingUi.shift(Object.assign({ padding: 8 }, opts.shift))],
           }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
         };
@@ -136,7 +137,12 @@ const EditorCore = (function () {
   let openDropdownPanel = null;
   let openDropdownButton = null;
   function getOpenDropdownPanel() { return openDropdownPanel; }
-  function setOpenDropdownPanel(panel) { openDropdownPanel = panel; }
+  // `button` (facultatif) : le bouton qui a ouvert `panel` - il annonce son état ouvert (aria-expanded) jusqu'à ce que closeDropdownPanel referme le menu, comme ceux de wireDropdownButton.
+  function setOpenDropdownPanel(panel, button) {
+    openDropdownPanel = panel;
+    openDropdownButton = button || null;
+    if (openDropdownButton) openDropdownButton.setAttribute('aria-expanded', 'true');
+  }
   document.addEventListener('mousedown', (event) => {
     if (!openDropdownPanel) return;
     if (event.target.closest('.v2-color-dropdown') || event.target.closest('.v2-color-split')

@@ -591,6 +591,7 @@ const PdfExport = (function () {
     return result;
   }
 
+  const TABLE_BORDER_COLOR = '#777777'; // le trait fin d'un tableau, celui de départ d'une case de grille
   function tableFrom(node, pageBreakBefore, rootRect, inMainFlow) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
@@ -644,6 +645,11 @@ const PdfExport = (function () {
     // la croissance due au texte) la complète. pdfmake ne centre rien dans une case : le centrage est une marge haute, calculée sur la hauteur du texte mesurée dans l'hôte.
     const isGrid = rawRows.some(row => row.hasAttribute('data-row-height'));
     const GRID_BORDER_PT = 0.5; // hLineWidth du layout plus bas
+    // Bords réglés d'une grille (barre de la case, js/table-borders.js) : le trait de départ est celui du layout plus bas ; pdfmake dessine un trait dès que l'une des deux cases voisines le veut,
+    // et lit les bords d'une case fusionnée sur sa case de départ seule (les `{}` qui la prolongent n'y changent rien : vérifié en lisant les traits du PDF) - chaque case porte donc ses
+    // quatre côtés, et les cases voisines, d'accord avec elle sur le trait qu'elles se partagent, disent la même chose.
+    const borderSides = isGrid ? ExportCommon.cellBorderSides(node) : null;
+    const edgeColor = value => (value && value !== TableBorders.NONE ? value : TABLE_BORDER_COLOR);
     const gridRowAreaPt = isGrid ? rawRows.map(row => {
       const px = Math.max(parseFloat(row.getAttribute('data-row-height')) || 0, row.getBoundingClientRect().height);
       return Math.max(0, px * PX_TO_PT - cellPadTopPt - cellPadBottomPt - GRID_BORDER_PT);
@@ -681,6 +687,11 @@ const PdfExport = (function () {
         const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
+        const sides = borderSides && borderSides.get(cell);
+        if (sides) {
+          pdfCell.border = [sides.left !== TableBorders.NONE, sides.top !== TableBorders.NONE, sides.right !== TableBorders.NONE, sides.bottom !== TableBorders.NONE];
+          pdfCell.borderColor = [sides.left, sides.top, sides.right, sides.bottom].map(edgeColor);
+        }
         if (isGrid) {
           const offsetPt = gridCellOffsetPt(cell, rowIndex, rowSpan);
           if (offsetPt > 0.25) pdfCell.margin = [0, (pdfCell.margin ? pdfCell.margin[1] : 0) + offsetPt, 0, 0];
@@ -710,7 +721,7 @@ const PdfExport = (function () {
     const table = {
       table: Object.assign({ headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
       layout: {
-        hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777',
+        hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => TABLE_BORDER_COLOR, vLineColor: () => TABLE_BORDER_COLOR,
         paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
       },
       margin: [0, 5, 0, 5],

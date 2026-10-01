@@ -493,12 +493,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   restent collés. Règle générale : rien de flottant ne se pose sur les cases d'un tableau pendant qu'on y travaille ; une barre reste dans sa bande ou hors du plan de travail. Les boutons de la
   barre de la case se déclenchent aussi au clavier (Tab puis Entrée ou Espace), sans doubler le clic de la souris.
 - Barre de la case d'une grille : fusion et alignement vertical (demande d'Antoine du 01/10, maquette « Barre »). De gauche à droite, séparés par un trait fin : Lignes (avant, après, supprimer), Colonnes (avant, après,
-  supprimer), « Supprimer le tableau » (toujours grisé), Fusion (« Fusionner les cases », « Scinder la case »), Fond, Alignement vertical (en haut, au milieu, en bas). Fusion et alignement n'existent que dans une grille :
+  supprimer), « Supprimer le tableau » (toujours grisé), Fusion (« Fusionner les cases », « Scinder la case »), Fond, Bordures, Alignement vertical (en haut, au milieu, en bas). Fusion, bordures et alignement n'existent que dans une grille :
   la barre d'un tableau de document reste celle d'avant. Rien ne disparaît, on grise : « Fusionner » ne s'allume que sur deux cases ou plus, « Scinder » que sur une case fusionnée ; les trois boutons d'alignement sont des
   états (celui des cases choisies est enfoncé, aucun quand elles en mêlent plusieurs) et un seul Annuler défait le geste sur toutes les cases. Fusionner garde tout le texte (à la suite, dans la première case), son fond et son
   alignement, et la largeur de chaque colonne couverte ; scinder rend les cases (la première garde le texte, les autres naissent vides). Le PDF, l'Excel et la Lecture dessinent la case fusionnée comme l'éditeur (colonnes à leur
   largeur, texte en haut, au milieu ou en bas de la hauteur de toutes ses lignes). Trop large pour le panneau, la barre passe à la ligne au lieu de déborder, et elle garde le niveau des barres flottantes (« Couches flottantes »),
   sous tout menu : « + » descend sur sa bande et reste dessus.
+- Bordures d'une grille (demande d'Antoine du 01/10, maquette « Barre » : « Bordures » entre Fond et Alignement vertical). Le bouton « Bordures » de la barre de la case (un carré aux traits pointillés, une flèche) ouvre un
+  menu SOUS la bande de la barre, jamais sur la barre d'outils (le menu de fond s'ouvre lui aussi dessous) : huit réglages en icônes — Toutes les bordures, Bordures extérieures, Bordures intérieures, Haut, Bas, Gauche,
+  Droite, Aucune bordure —, puis « Couleur du trait » (les huit nuances du texte, « Personnalisé… », « Par défaut » = le trait fin gris de départ). Une couleur choisie ne referme pas le menu et reste celle du stylo pour les
+  réglages suivants ; un réglage s'applique aux cases choisies, referme le menu, et un seul Annuler le défait. « Intérieures » est grisé, jamais retiré, quand il n'y a rien à tracer (une seule case, l'intérieur d'une case
+  fusionnée). Un trait entre deux cases est UN trait : il s'écrit sur les deux cases (`data-border-top`, `-right`, `-bottom`, `-left` = `none` ou `#rrggbb`, absent = le trait de départ) et, quand deux valeurs divergent
+  (fusion, ligne ou colonne supprimée, HTML d'ailleurs), « pas de trait » l'emporte, puis la première couleur dans l'ordre de lecture ; une case fusionnée n'a qu'une valeur par côté : fusionner garde son pourtour, scinder le
+  rend, une ligne ou une colonne ajoutée prolonge les traits intérieurs (le cadre reste dehors). L'éditeur, la Lecture, le PDF et l'Excel dessinent les mêmes traits — un trait fin et plein, de sa couleur, ou aucun —, sans
+  épaisseur ni style au choix. Le texte du menu suit les contrastes de la charte (≥ 4,5:1, clair et sombre).
 - Colonnes d'un tableau avec le suivi des modifications (choix « Faire marcher » d'Antoine, 01/10) : « Colonne avant », « Colonne après » et « Supprimer la colonne » de la barre du tableau agissent comme
   une frappe suggérée. Une colonne ajoutée reste dans le tableau, alignée case par case, teintée de vert pâle (texte `#146c48` sur `#e5f6ee`) ; une colonne supprimée reste, barrée et teintée de rouge pâle
   (texte `#b42318` sur `#fbe9e9`) ; ces teintes sont des constantes, pas des jetons du thème : la page du document reste blanche en clair comme en sombre, et le texte y atteint 4,5:1 au moins. « Tout accepter »
