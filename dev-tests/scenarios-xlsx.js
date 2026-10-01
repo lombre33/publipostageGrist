@@ -507,7 +507,6 @@
   const rowState = id => { const el = document.getElementById(id); return el ? { greyed: el.classList.contains('v2-hover-row-disabled'), aria: el.getAttribute('aria-disabled') } : null; };
   async function enterGrid(h) {
     await h.resetEditor();
-    GridEditor.syncEntryVisibility('?dev');
     h.openFlyout('#v2-new-template-group');
     await h.clickButton('v2-btn-new-grid');
     await sleep(250);

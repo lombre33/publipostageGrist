@@ -18,8 +18,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 
 ## Conception
 
-- Un modèle de type `grille` (colonne `TypeModele`, comme `email` et `macro`), créé par « + » ▸ « Nouvelle grille » ; **entrée cachée sans `?dev`** dans l'adresse du widget
-  tant que l'export Excel complet (lot E : toutes les valeurs de la table) n'est pas livré (`GridEditor.syncEntryVisibility`).
+- Un modèle de type `grille` (colonne `TypeModele`, comme `email` et `macro`), créé par « + » ▸ « Nouvelle grille ». L'entrée a été cachée sans `?dev` dans l'adresse du widget
+  tant que l'export Excel complet (lot E : toutes les valeurs de la table) n'était pas livré ; elle est dans le menu de tout widget depuis le lot E.
 - Même éditeur TipTap que les documents, aucun second éditeur. `js/grid-editor.js` ajoute seulement ce qui fait d'un document « un tableau et rien d'autre » :
   - le **garde-fou** (`filterTransaction`) : le document reste UN tableau en tête (+ le paragraphe vide que `StarterKit` range sous un tableau final, caché par CSS) ; refusés :
     second tableau, deux colonnes, sommaire, saut de page de document, citation, encadré, bloc de code, trait horizontal, note de bas de page, numéro de page, image en calque ;

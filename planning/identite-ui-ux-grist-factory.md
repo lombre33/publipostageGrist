@@ -369,8 +369,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   barre de la case), à l'identique dans l'éditeur, en Lecture et dans le PDF : une ligne plus haute que son texte reste haute, une grille
   large garde ses colonnes et défile à l'horizontale en Lecture au lieu d'être écrasée, aucune ligne vide ne la suit, et dans le PDF une
   grille plus large que la page est ramenée à sa largeur. La barre
-  flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Tant que
-  l'export Excel complet (une ligne, puis toutes les valeurs de la table) n'est pas livré, « Nouvelle grille » reste cachée du menu « + » sans `?dev` dans l'adresse du widget.
+  flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Depuis que l'export Excel est complet
+  (une ligne, puis toutes les valeurs de la table), « Nouvelle grille » est dans le menu « + » de tout widget, sans rien dans l'adresse.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »

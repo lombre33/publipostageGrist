@@ -44,17 +44,6 @@ const GridEditor = (function () {
   function isActive() { return active; }
   function isGridType(typeModele) { return typeModele === TYPE; }
 
-  // Entrée « Nouvelle grille » du menu « + » : cachée tant que la grille n'a pas son export Excel complet - `?dev` dans l'adresse du widget (même clé que le
-  // catalogue de test de la galerie, js/template-gallery.js) la montre. Fonction pure sur la chaîne de requête pour pouvoir la tester sans changer l'adresse.
-  function isDevEnabled(search) {
-    try { return new URLSearchParams(search === undefined ? window.location.search : search).has('dev'); }
-    catch (e) { return false; }
-  }
-  function syncEntryVisibility(search) {
-    const row = document.getElementById('v2-btn-new-grid');
-    if (row) row.hidden = !isDevEnabled(search);
-  }
-
   // --- Extension TipTap : hauteur de ligne -------------------------------------------------------------------------------------------------------------------
   // `rowHeight` : hauteur MINIMALE en px (une ligne que son texte agrandit garde sa hauteur de texte, comme un <tr style="height">). Absent (null) pour tout
   // tableau de document : aucun changement de rendu ni de HTML hors grille.
@@ -657,7 +646,6 @@ const GridEditor = (function () {
     ed.on('transaction', ({ transaction }) => { if (active && (transaction.docChanged || transaction.selectionSet)) scheduleSync(); });
     wireLockedClickGuard();
     I18n.onChange(refreshLabels);
-    syncEntryVisibility();
     if (active) setActive(true, true);
   }
 
@@ -693,7 +681,7 @@ const GridEditor = (function () {
 
   return {
     TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
-    configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, isDevEnabled, syncEntryVisibility, refresh,
+    configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
     currentCellDom, columnWidths, colName, floatingOptions,
   };
 })();

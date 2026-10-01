@@ -112,8 +112,7 @@ async function openWidget(colorScheme) {
     await page.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
     await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   }
-  // `?dev` : sans lui, « Nouvelle grille » reste cachée du menu « + » (la grille n'a pas encore son export Excel).
-  await page.goto(`${BASE}/_test-harness.html?dev`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => {
     const el = document.getElementById('status-msg');
@@ -180,7 +179,7 @@ const CONTRAST_FN = `(a, b) => {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }`;
 
-// « + » puis « Nouvelle grille » à la vraie souris : une grille de départ toute neuve (le menu s'ouvre au survol, l'entrée est visible grâce à ?dev).
+// « + » puis « Nouvelle grille » à la vraie souris : une grille de départ toute neuve (le menu s'ouvre au survol, l'entrée y est de tout widget).
 async function freshGrid(page) {
   const newBtn = await boxOf(page, '#btn-new');
   await page.mouse.move(newBtn.x, newBtn.y, { steps: 3 });
@@ -213,7 +212,7 @@ async function runTheme(theme) {
 
   // 1) « + » puis « Nouvelle grille » à la souris.
   const entry = await freshGrid(page);
-  check(`${label} - le menu « + » montre « Nouvelle grille » (avec ?dev), dans le panneau`, !!entry && entry.inViewport && entry.w > 0, entry);
+  check(`${label} - le menu « + » montre « Nouvelle grille » (sans rien dans l'adresse), dans le panneau`, !!entry && entry.inViewport && entry.w > 0, entry);
   const start = await gridState(page);
   check(`${label} - vrai clic sur « Nouvelle grille » : une grille de 15 lignes x 6 colonnes de 100 px, lignes de 28 px`,
     start.rows === 15 && start.cols === 6 && start.widths.every(w => w === 100) && start.heights.every(h => h === 28), start);

@@ -17,10 +17,9 @@
   const rowHeads = () => Array.from(document.querySelectorAll('.v2-grid-rowhead'));
   const near = (a, b, tolerance) => Math.abs(a - b) <= (tolerance === undefined ? 0.6 : tolerance);
 
-  // Les mêmes gestes qu'une personne : « + » puis « Nouvelle grille » (entrée visible seulement avec ?dev dans l'adresse, ici forcée), puis « Nouveau document » pour en sortir.
+  // Les mêmes gestes qu'une personne : « + » puis « Nouvelle grille », puis « Nouveau document » pour en sortir.
   async function enterGrid(h) {
     await h.resetEditor();
-    GridEditor.syncEntryVisibility('?dev');
     h.openFlyout('#v2-new-template-group');
     await h.clickButton('v2-btn-new-grid');
     await sleep(250);
@@ -29,7 +28,6 @@
     h.openFlyout('#v2-new-template-group');
     await h.clickButton('v2-btn-new-document');
     await sleep(150);
-    GridEditor.syncEntryVisibility('');
   }
   async function inGrid(h, body) {
     await enterGrid(h);
@@ -81,21 +79,21 @@
   // === 1) Entrée, forme de départ, pas de feuille ===================================================================================================================
 
   cases.push({
-    id: 'grid_entry_is_hidden_without_dev_in_the_address',
-    description: '« Nouvelle grille » du menu « + » reste cachée tant que « ?dev » n\'est pas dans l\'adresse du widget (la grille n\'a pas encore son export Excel) ; avec « ?dev » elle apparaît',
-    run: async () => {
+    id: 'grid_entry_is_in_the_new_menu_without_any_parameter_in_the_address',
+    description: '« Nouvelle grille » est dans le menu « + » de tout widget, sans « ?dev » dans l\'adresse : ni cachée par un attribut, ni sans affichage, et un clic dessus ouvre une grille ; une adresse qui porte « ?dev » n\'y change rien',
+    run: async (h) => {
+      await h.resetEditor();
       const row = document.getElementById('v2-btn-new-grid');
-      GridEditor.syncEntryVisibility('');
-      const hiddenWithout = row.hidden && getComputedStyle(row).display === 'none';
-      GridEditor.syncEntryVisibility('?autre=1');
-      const hiddenWithOther = row.hidden && getComputedStyle(row).display === 'none';
-      GridEditor.syncEntryVisibility('?dev');
-      const shownWith = !row.hidden && getComputedStyle(row).display !== 'none';
-      GridEditor.syncEntryVisibility('?a=1&dev');
-      const shownAmongOthers = !row.hidden;
-      const pure = [GridEditor.isDevEnabled(''), GridEditor.isDevEnabled('?dev'), GridEditor.isDevEnabled('?developer'), GridEditor.isDevEnabled('?x=1&dev=1')];
-      GridEditor.syncEntryVisibility('');
-      return { pass: hiddenWithout && hiddenWithOther && shownWith && shownAmongOthers && pure.join() === 'false,true,false,true', notes: JSON.stringify({ hiddenWithout, hiddenWithOther, shownWith, shownAmongOthers, pure }) };
+      const address = window.location.search;
+      h.openFlyout('#v2-new-template-group');
+      // Le menu ouvert : l'entrée y a une taille (fermé, tout le menu est sans affichage).
+      const visible = !row.hidden && getComputedStyle(row).display !== 'none' && row.getBoundingClientRect().width > 0;
+      const inFlyout = !!row.closest('#v2-new-template-group .v2-hover-flyout');
+      await h.clickButton('v2-btn-new-grid');
+      await sleep(250);
+      const opened = GridEditor.isActive() && rowEls().length === 15;
+      await leaveGrid(h);
+      return { pass: !/(^|[?&])dev\b/.test(address) && visible && inFlyout && opened, notes: JSON.stringify({ address, visible, inFlyout, opened, hasDevApi: typeof GridEditor.isDevEnabled !== 'undefined' || typeof GridEditor.syncEntryVisibility !== 'undefined' }) };
     },
   });
 
@@ -144,7 +142,6 @@
       const saved = box.style.cssText;
       let result = null;
       try {
-        GridEditor.syncEntryVisibility('?dev');
         h.openFlyout('#v2-new-template-group');
         await h.clickButton('v2-btn-new-grid');
         await sleep(250);
