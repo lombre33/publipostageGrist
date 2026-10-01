@@ -673,6 +673,16 @@ const I18n = (function () {
     'varFmt.showYear': { fr: 'Afficher/masquer l’année', en: 'Show/hide year' },
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },
+    // Colonne Oui / Non : les quatre écritures de la barre d'une bulle. Les trois cases sont celles de la liste à cases (mêmes icônes, mêmes infobulles list.checklistClassic.tip et
+    // list.checklistAccentPlain.tip ; la première précise ce que le style barre dans une variable), le texte écrit « vrai » / « faux » (« true » / « false » en anglais) - c'est aussi
+    // ce que la bulle écrit sans réglage. Coché / décoché : le nom accessible d'une case de la Lecture.
+    'varFmt.boolTrue': { fr: 'vrai', en: 'true' },
+    'varFmt.boolFalse': { fr: 'faux', en: 'false' },
+    'varFmt.boolChecked': { fr: 'Coché', en: 'Checked' },
+    'varFmt.boolUnchecked': { fr: 'Décoché', en: 'Unchecked' },
+    'varFmt.boolTextButton': { fr: 'vrai / faux', en: 'true / false' },
+    'varFmt.boolTextTitle': { fr: 'Écrire vrai ou faux', en: 'Write true or false' },
+    'varFmt.boolAccentStrike': { fr: 'Case à cocher (accent, texte qui suit barré)', en: 'Checkbox (accent, following text struck through)' },
 
     // --- Pastille flottante d'édition d'en-tête/pied (js/editor.js:renderHfPill) ---
     'hf.zoneHeader': { fr: 'En-tête', en: 'Header' },

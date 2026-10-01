@@ -1,4 +1,4 @@
-// Formatage nombre/date d'une bulle #Variable - aucune dépendance externe : Intl.NumberFormat/Intl.DateTimeFormat couvrent tout sauf l'écriture d'un nombre
+// Formatage nombre/date/Oui-Non d'une bulle #Variable - aucune dépendance externe : Intl.NumberFormat/Intl.DateTimeFormat couvrent tout sauf l'écriture d'un nombre
 // en toutes lettres (pas d'équivalent Intl), écrite à la main ci-dessous (orthographe classique "vingt et un", pas la réforme de 1990, forme attendue en contrat).
 const VariableFormat = (function () {
   // labelEn n'est pas une traduction du texte français mais ce que ce même préréglage produit réellement une fois dateLocale() basculée sur 'en-US' - l'ordre
@@ -238,6 +238,31 @@ const VariableFormat = (function () {
     return typeof val === 'string' && /^\s*[-+]?0+(?:[.,]0*)?\s*$/.test(val);
   }
 
+  // --- Oui / Non (colonne booléenne) ---
+  // format = { type: 'bool', style } : 'text' écrit « vrai » / « faux » (« true » / « false » en anglais), c'est aussi l'écriture d'une bulle sans réglage ; 'accentStrike', 'classic' et
+  // 'accentPlain' écrivent une case, cochée ou non - les trois styles de la liste à cases (`data-tasklist-style`, js/main-toolbar.js), au même nom pour que la barre de la bulle et celle de
+  // la liste se ressemblent. Dans le texte que rend formatBool, la case est le caractère ☑ ou ☐ : ReaderMode.checkboxNode en fait une vraie case dessinée (`.resolved-checkbox`). Partout où
+  // seul du texte compte (champs Objet / À / Cc / Cci, nom du PDF, fenêtres), Variables.formatValue écrit « vrai » / « faux » à la place (option `rawNumbers`).
+  const BOOL_CHECKBOX_STYLES = ['accentStrike', 'classic', 'accentPlain'];
+  const CHECKED_BOX = '☑';
+  const UNCHECKED_BOX = '☐';
+  function isCheckboxStyle(style) { return BOOL_CHECKBOX_STYLES.indexOf(style) !== -1; }
+  // Le style d'une bulle Oui / Non : l'un des trois styles de case, sinon 'text' (sans réglage, ou réglage d'un autre type).
+  function boolStyle(format) {
+    return format && format.type === 'bool' && isCheckboxStyle(format.style) ? format.style : 'text';
+  }
+  // Couleur d'une case (hexa), celle que la Lecture dessine (`currentColor`) et que le PDF, le Word et l'Excel reprennent pour la case : accent plein quand elle est cochée, gris du contour sinon ;
+  // « classic » reste noir et gris, comme la case de la liste.
+  function checkboxColor(checked, style) {
+    if (style === 'classic') return checked ? '#222222' : '#6b7684';
+    return checked ? '#2f6fed' : '#767676';
+  }
+  function formatBool(val, format) {
+    if (typeof val !== 'boolean') return val == null ? '' : String(val);
+    if (boolStyle(format) === 'text') return I18n.t(val ? 'varFmt.boolTrue' : 'varFmt.boolFalse');
+    return val ? CHECKED_BOX : UNCHECKED_BOX;
+  }
+
   // opts = { style: 'fr'|'us'|'none', decimals: 0-3|null, currency: ''|'€'|'$'|texte, words: bool } - l'option `zero` est traitée avant cet appel, par Variables.formatValue.
   function formatNumber(val, opts) {
     if (val == null || val === '') return '';
@@ -260,5 +285,8 @@ const VariableFormat = (function () {
     return formatted;
   }
 
-  return { DATE_PRESETS, presetLabel, formatDate, formatNumber, isZero, numberToWordsFr, numberToWordsEn };
+  return {
+    DATE_PRESETS, presetLabel, formatDate, formatNumber, isZero, numberToWordsFr, numberToWordsEn,
+    BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
+  };
 })();

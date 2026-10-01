@@ -9,6 +9,8 @@ const PdfExport = (function () {
     // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
     { src: 'js/pdf-fonts.js?v=0.67' },
     { src: 'js/pdf-fonts-extra.js?v=0.67' },
+    // Les deux polices de cases à cocher des variables Oui / Non (dev-tests/build-pdf-boxes-font.py) : ~3 Ko, lues par inlineRuns.
+    { src: 'js/pdf-fonts-boxes.js?v=0.1' },
   ];
   let pdfLibsPromise = null;
   // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc doivent s'exécuter après pdfmake.min.js/vfs_fonts.min.js.
@@ -216,19 +218,29 @@ const PdfExport = (function () {
     if (mode === 'box') {
       leftPx = node.getBoundingClientRect().left;
     } else {
-      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
-        acceptNode: n => (n.nodeValue && n.nodeValue.trim()) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+      // Case d'une variable Oui / Non (`.resolved-checkbox`) : le premier « caractère rendu » d'un paragraphe qui commence par elle est la case, pas son ☑ / ☐ (poussé hors de sa boîte
+      // par `text-indent` : le mesurer décalait tout le paragraphe d'une quarantaine de pt) ni le texte qui la suit (sa case lui ferait un faux retrait).
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode: n => {
+          if (n.nodeType === Node.ELEMENT_NODE) return n.classList.contains('resolved-checkbox') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          return (n.nodeValue && n.nodeValue.trim()) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        },
       });
-      const textNode = walker.nextNode();
-      if (!textNode) { node.style.clear = previousClear; return 0; }
+      const first = walker.nextNode();
+      if (!first) { node.style.clear = previousClear; return 0; }
       // Neutralise temporairement l'alignement du bloc pendant la mesure - un bloc centré/aligné à droite pousse son texte loin du bord gauche du large hôte
       // de mesure, ce qui n'est PAS un retrait réel.
       const previousAlign = node.style.textAlign;
       node.style.textAlign = 'left';
-      const range = document.createRange();
-      range.setStart(textNode, 0);
-      range.setEnd(textNode, 1);
-      leftPx = range.getBoundingClientRect().left;
+      if (first.nodeType === Node.ELEMENT_NODE) {
+        // Sans l'écart de .1em que la feuille de style met de chaque côté de la case : c'est un jeu entre elle et son voisin, pas un retrait.
+        leftPx = first.getBoundingClientRect().left - (parseFloat(getComputedStyle(first).marginLeft) || 0);
+      } else {
+        const range = document.createRange();
+        range.setStart(first, 0);
+        range.setEnd(first, 1);
+        leftPx = range.getBoundingClientRect().left;
+      }
       node.style.textAlign = previousAlign;
     }
     node.style.clear = previousClear;
@@ -303,6 +315,16 @@ const PdfExport = (function () {
       return [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }];
     }
     if (node.classList.contains('smart-chip')) return [{ text: node.textContent || '', ...style }];
+    // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : un glyphe des polices de cases (js/pdf-fonts-boxes.js) - la police du texte n'a ni ☑ ni ☐ -, de la taille du texte et de
+    // la couleur de la case (style en ligne, déjà lu par inheritedStyle). Jamais barrée, grasse ni en italique : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case.
+    if (node.classList.contains('resolved-checkbox')) {
+      const box = Object.assign({}, style, {
+        text: node.getAttribute('data-checked') === 'true' ? '\u2611' : '\u2610',
+        font: node.getAttribute('data-checkbox-style') === 'classic' ? 'PPBoxClassic' : 'PPBoxAccent',
+      });
+      delete box.decoration; delete box.bold; delete box.italics;
+      return [box];
+    }
     // Le numéro (contrairement à .page-number-badge) n'a aucune dépendance à la pagination - assigné immédiatement via un compteur de module (remis à 0 une
     // fois par passe) plutôt qu'un paramètre à faire traverser tableFrom/twoColumnsFrom/cellLineToPdfObject, correct à toute profondeur.
     if (node.classList.contains('footnote-ref-marker')) {

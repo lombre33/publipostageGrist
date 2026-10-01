@@ -286,7 +286,13 @@ const DocxExport = (function () {
     if (node.classList.contains('heading-numbering-config') || node.classList.contains('toc-marker')) return [];
     // .var-badge/.smart-chip : ne devraient jamais apparaître ici (ReaderMode.preview les résout déjà en <span class="resolved-var">/texte simple) - gardés
     // par robustesse, même esprit que pdf-export.js.
-    if (node.classList.contains('var-badge') || node.classList.contains('resolved-var') || node.classList.contains('smart-chip')) {
+    // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ / ☐ en « Segoe UI Symbol » (Word, Google Docs et LibreOffice en prennent une autre si elle manque), dans la
+    // couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré : le barré d'une case d'accent cochée vise le texte qui la suit.
+    if (node.classList.contains('resolved-checkbox')) {
+      return [new docx.TextRun(Object.assign({ text: node.textContent }, runOpts(Object.assign({}, style, { strike: false, font: 'Segoe UI Symbol' }))))];
+    }
+    // Une valeur qui porte une case (« ☑, ☐ » d'une liste de valeurs) passe par ses enfants, case par case.
+    if (node.classList.contains('var-badge') || (node.classList.contains('resolved-var') && !node.querySelector('.resolved-checkbox')) || node.classList.contains('smart-chip')) {
       return node.textContent ? [new docx.TextRun(Object.assign({ text: node.textContent }, runOpts(style)))] : [];
     }
     if (node.classList.contains('page-number-badge')) {

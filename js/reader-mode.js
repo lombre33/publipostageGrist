@@ -139,9 +139,10 @@ const ReaderMode = (function () {
       if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
       if (inline) { badge.replaceWith(inline.node); return; }
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); const span = document.createElement('span'); span.textContent = value; badge.replaceWith(span); } catch (e) {}
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); } catch (e) {}
     }));
     LoopRules.removeHiddenBlocks(wrapper);
+    strikeAfterCheckedBoxes(wrapper);
     // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
     // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
@@ -308,6 +309,7 @@ const ReaderMode = (function () {
     }));
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
+    strikeAfterCheckedBoxes(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     trimTrailingBlankBlocks(wrapper);
@@ -417,6 +419,78 @@ const ReaderMode = (function () {
   function carryReaderAtom(from, to) {
     if (to && to.nodeType === 1 && from.hasAttribute('data-pp-atom')) to.setAttribute('data-pp-atom', from.getAttribute('data-pp-atom'));
   }
+  // Case à cocher d'une variable Oui / Non (format { type: 'bool', style } d'un style de case, VariableFormat) : un <span class="resolved-checkbox"> qui garde le caractère ☑ / ☐ comme texte
+  // (copier-coller, lecteur d'écran, et le Word ou l'Excel qui n'ont rien d'autre à lire), dessiné par css/editor-v2.css dans la couleur de la case. Cette couleur est posée EN LIGNE, comme celle
+  // d'un texte coloré : c'est elle que lisent le PDF (js/pdf-export.js:inlineRuns), le Word et l'Excel, jamais la feuille de style. L'e-mail écrit « [x] » / « [ ] » (js/mailto-export.js).
+  function checkboxNode(checked, style) {
+    const box = document.createElement('span');
+    box.className = 'resolved-checkbox';
+    box.setAttribute('data-checked', checked ? 'true' : 'false');
+    box.setAttribute('data-checkbox-style', style);
+    box.setAttribute('role', 'img');
+    box.setAttribute('aria-label', I18n.t(checked ? 'varFmt.boolChecked' : 'varFmt.boolUnchecked'));
+    box.style.color = VariableFormat.checkboxColor(checked, style);
+    box.textContent = checked ? VariableFormat.CHECKED_BOX : VariableFormat.UNCHECKED_BOX;
+    return box;
+  }
+  // Le nœud d'une valeur résolue : un <span> de texte ; pour une bulle réglée sur un style de case, chaque ☑ / ☐ du texte (une liste de valeurs en a plusieurs : « ☑, ☐ ») devient une vraie case.
+  // `className` : celle du <span> (« resolved-var », avec « error-msg » pour une erreur) ; les en-têtes et pieds n'en portaient aucune et n'en prennent pas.
+  function valueNode(text, format, className) {
+    const span = document.createElement('span');
+    if (className) span.className = className;
+    const style = VariableFormat.boolStyle(format);
+    if (style !== 'text' && !(className && className.indexOf('error-msg') !== -1)) {
+      const { CHECKED_BOX, UNCHECKED_BOX } = VariableFormat;
+      const split = new RegExp('([' + CHECKED_BOX + UNCHECKED_BOX + '])');
+      if (split.test(text)) {
+        String(text).split(split).forEach(part => {
+          if (part === CHECKED_BOX || part === UNCHECKED_BOX) span.appendChild(checkboxNode(part === CHECKED_BOX, style));
+          else if (part) span.appendChild(document.createTextNode(part));
+        });
+        return span;
+      }
+    }
+    span.textContent = text;
+    return span;
+  }
+  // Style « accent, texte barré » d'une case Oui / Non (comme un item coché de la liste à cases, js/main-toolbar.js:applyTaskListStyle) : le texte qui suit une case COCHÉE sur la même ligne - jusqu'à un
+  // retour à la ligne, la case suivante ou la fin du paragraphe - est barré et grisé. Posé EN LIGNE (`text-decoration`, `color`), comme tout texte barré ou coloré : c'est ce que lisent le PDF, le Word
+  // et l'Excel. Une couleur déjà posée sur ce texte est gardée (le PDF et le Word de la liste font de même). Appelé une fois les bulles remplacées, avant l'enregistrement du HTML des exports.
+  const STRUCK_COLOR = '#667085'; // --paper-text-faint (css/style.css) : le gris du texte discret posé sur la page blanche, 4,97:1 ; la Lecture le donne aussi à la tâche cochée de la liste
+  const LINE_ENDING_TAGS = /^(BR|P|LI|UL|OL|DIV|TABLE|TR|TD|TH|BLOCKQUOTE|H[1-6]|PRE)$/;
+  // Le nœud qui suit `node` dans l'ordre du document sans entrer dans `node` ; null au bord de `limit`.
+  function nextOutside(node, limit) {
+    while (node && node !== limit && !node.nextSibling) node = node.parentNode;
+    return node && node !== limit ? node.nextSibling : null;
+  }
+  function hasInlineColor(node, limit) {
+    for (let el = node.parentElement; el && el !== limit; el = el.parentElement) if (el.style && el.style.color) return true;
+    return false;
+  }
+  function strikeAfterCheckedBoxes(root) {
+    root.querySelectorAll('.resolved-checkbox[data-checked="true"][data-checkbox-style="accentStrike"]').forEach(box => {
+      const block = box.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, pre') || root;
+      const texts = [];
+      let node = nextOutside(box, block);
+      while (node) {
+        if (node.nodeType === 1) {
+          if (LINE_ENDING_TAGS.test(node.tagName) || node.classList.contains('resolved-checkbox')) break;
+          node = node.firstChild || nextOutside(node, block);
+          continue;
+        }
+        if (node.nodeType === 3 && node.nodeValue.trim()) texts.push(node);
+        node = nextOutside(node, block);
+      }
+      texts.forEach(text => {
+        const struck = document.createElement('span');
+        struck.className = 'resolved-struck';
+        struck.style.textDecoration = 'line-through';
+        if (!hasInlineColor(text, block)) struck.style.color = STRUCK_COLOR;
+        text.parentNode.insertBefore(struck, text);
+        struck.appendChild(text);
+      });
+    });
+  }
   // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
   // par GristAPI.hydrateAttachmentImages, appelé juste après.
   function attachmentImages(ids) {
@@ -453,8 +527,7 @@ const ReaderMode = (function () {
         binding => Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)));
       if (!res) return null;
       if (res.node) return { node: res.node, isError: false };
-      const span = document.createElement('span'); span.textContent = res.text; span.className = 'resolved-var';
-      return { node: span, isError: false };
+      return { node: valueNode(res.text, format, 'resolved-var'), isError: false };
     } catch (e) {
       console.error('[ReaderMode] échec de la boucle d\'une variable', e);
       return null;
@@ -478,8 +551,7 @@ const ReaderMode = (function () {
     try {
       // isError vient de Variables.resolveVariableResult, jamais des premiers mots du texte : le message d'erreur suit la langue de l'interface.
       const { text, isError } = await Variables.resolveVariableResult(table, column, tableId, record, format, loopOpts(binding));
-      const span = document.createElement('span'); span.textContent = text; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
-      return { node: span, isError };
+      return { node: valueNode(text, format, 'resolved-var' + (isError ? ' error-msg' : '')), isError };
     } catch (e) {
       const span = document.createElement('span'); span.textContent = I18n.t('variables.error.generic', { message: e.message }); span.className = 'resolved-var error-msg';
       return { node: span, isError: true };
@@ -504,6 +576,7 @@ const ReaderMode = (function () {
       badge.replaceWith(node);
     }));
     LoopRules.removeHiddenBlocks(wrapper);
+    strikeAfterCheckedBoxes(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);

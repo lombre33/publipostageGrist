@@ -76,6 +76,25 @@
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { pointer-events: none; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div,
 .reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div { text-decoration: line-through; color: var(--paper-text-faint, #667085); }
+/* Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode ; barre « Oui / Non » d'une bulle, js/floating-toolbars.js) - mêmes trois styles que la liste à cases ci-dessus (accent et
+   texte barré, classique, accent et texte normal), dessinés à la main : une case native ne se pose pas dans une ligne de texte et n'a pas de couleur à elle. La taille suit celle du texte (15 px
+   pour un texte de 14 px, comme la case d'un item de liste). La couleur vient de la bulle, en style en ligne (VariableFormat.checkboxColor) : `currentColor` fait le contour, le fond plein d'une
+   case d'accent cochée et la coche, pour que la Lecture, l'impression et les exports (PDF, Word, Excel) disent la même couleur. Le caractère ☑ / ☐ reste dans la case, repoussé hors de sa
+   boîte : il se copie et se lit, il ne se voit pas. `overflow: hidden` fait aussi du bas de la case la ligne de base de la boîte, d'où un `vertical-align` négatif : la case descend un peu sous
+   le texte, comme celle d'un item de liste. Sélecteurs sans `.reader-content` : les exports raster et l'impression reprennent ces feuilles sur leur propre conteneur. */
+.resolved-checkbox {
+  display: inline-block; position: relative; box-sizing: border-box; width: 1.07em; height: 1.07em; margin: 0 .1em; vertical-align: -.16em;
+  overflow: hidden; white-space: nowrap; text-indent: 3em; text-decoration: none;
+  border: .107em solid currentColor; border-radius: .2em; background: #fff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.resolved-checkbox[data-checkbox-style="classic"] { border-radius: .143em; }
+.resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"]) { background: currentColor; }
+.resolved-checkbox[data-checked="true"]::after {
+  content: ''; position: absolute; left: .21em; top: -.07em; width: .29em; height: .57em;
+  border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg);
+}
+.resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"])::after { border-color: #fff; }
 /* Parité stricte mode Lecture (#reader-container/.reader-content) avec .tiptap, AU-DELÀ des puces/numéros ci-dessus : #reader-container est un sélecteur
    générique partagé avec la V1 (jamais mis à jour pour les valeurs V2 - taille de police absente donc 16px navigateur contre 14px ici, marge de paragraphe
    6px contre 0, autres bordures/espacements tableau/2-colonnes). Mêmes valeurs EXACTES que .tiptap partout ci-dessous (pas une approximation) : un écart d'un

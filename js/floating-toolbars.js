@@ -359,8 +359,8 @@ const FloatingToolbars = (function () {
   }
 
   // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur TOUTES les variables depuis la maquette validée le 2026-09-28 : un groupe
-  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne, boucle sur les lignes liées), puis, pour une colonne nombre/date
-  // seulement, le sous-panneau de formatage choisi par le type de colonne Grist (inchangé).
+  // d'actions à gauche (condition d'affichage, autres attributs de la même ligne, boucle sur les lignes liées), puis, pour une colonne nombre, date ou
+  // Oui / Non seulement, le sous-panneau de formatage choisi par le type de colonne Grist (nombre et date inchangés ; Oui / Non : trois cases et « vrai / faux »).
   function wireVariableFloatingToolbar() {
     const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
     const html = [
@@ -392,6 +392,13 @@ const FloatingToolbars = (function () {
       `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
       '<span class="v2-floating-sep"></span>',
       `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+      '</div>',
+      // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ». Libellés et infobulles réécrits par syncState (langue en cours).
+      '<div data-var-panel="bool" hidden>',
+      '<span class="v2-varfmt-seg">',
+      VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
+      '<button data-action="bool-style:text"></button>',
+      '</span>',
       '</div>',
     ].join('');
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', html, onAction, onInput);
@@ -470,6 +477,14 @@ const FloatingToolbars = (function () {
       if (action === 'date-words') {
         const current = node.attrs.format || {};
         updateSelectedBadge({ type: 'date', words: !current.words });
+        return;
+      }
+      // Oui / Non : le style remplace tout le format (une colonne passée de nombre à Oui / Non ne garde pas ses décimales). « vrai / faux » est l'écriture par défaut : la choisir retire le réglage,
+      // la bulle retrouve un format vide (sans le point bleu d'une bulle réglée), comme le bouton du zéro d'un nombre.
+      if (action.indexOf('bool-style:') === 0) {
+        const style = action.slice(11);
+        if (style === 'text') setSelectedBadgeFormat(null);
+        else if (VariableFormat.isCheckboxStyle(style)) setSelectedBadgeFormat({ type: 'bool', style });
       }
     }
     function onInput(role, value) {
@@ -551,6 +566,19 @@ const FloatingToolbars = (function () {
       setActive('date-part:month', !isDate || format.month !== false);
       setActive('date-part:year', !isDate || format.year !== false);
       setActive('date-words', isDate && !!format.words);
+      // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit). Libellés et infobulles relus à chaque ouverture : la langue de l'interface
+      // a pu changer depuis la création de la barre.
+      const boolStyle = VariableFormat.boolStyle(format);
+      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
+      Object.keys(boolTitles).forEach(style => {
+        setActive('bool-style:' + style, style === boolStyle);
+        const btn = panel.el.querySelector(`button[data-action="bool-style:${style}"]`);
+        if (!btn) return;
+        btn.title = I18n.t(boolTitles[style]);
+        btn.setAttribute('aria-label', btn.title);
+        btn.setAttribute('aria-pressed', style === boolStyle ? 'true' : 'false');
+        if (style === 'text') btn.textContent = I18n.t('varFmt.boolTextButton');
+      });
     }
 
     const check = ({ transaction } = {}) => {
@@ -574,9 +602,11 @@ const FloatingToolbars = (function () {
       const type = node ? GristAPI.getColumnType(node.attrs.table, node.attrs.column) : null;
       const isNumber = type === 'Numeric' || type === 'Int';
       const isDate = type === 'Date' || type === 'DateTime';
+      const isBool = type === 'Bool';
       panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
       panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
-      panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate;
+      panel.el.querySelector('[data-var-panel="bool"]').hidden = !isBool;
+      panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre en haut à gauche (8, 8) -
       // une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la rouvrir.

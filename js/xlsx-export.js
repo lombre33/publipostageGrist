@@ -240,6 +240,9 @@ const XlsxExport = (function () {
       if (tag === 'IMG') { images.push({ img: node, line: lines.length - 1 }); return; }
       if (tag === 'STYLE' || tag === 'SCRIPT') return;
       const own = inheritedRun(node, style);
+      // Case d'une variable Oui / Non (ReaderMode.checkboxNode) : son texte est le caractère ☑ / ☐, sa couleur vient du style en ligne de la case (lue par inheritedRun) ; Arial n'a pas ces
+      // caractères, la police des symboles de Windows les dessine à la même taille que Word (DocxExport) sans attendre le remplacement de police d'Excel.
+      if (node.classList.contains('resolved-checkbox')) own.name = 'Segoe UI Symbol';
       if (tag === 'UL' || tag === 'OL') {
         const ordered = tag === 'OL';
         let n = parseInt(node.getAttribute('start') || '1', 10) || 1;

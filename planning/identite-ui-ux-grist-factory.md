@@ -406,6 +406,25 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Word (choix d'Antoine du 01/10, modèles déjà enregistrés compris) ; la barre de la bulle a un seul bouton en bascule,
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
+- Variable Oui / Non (demande d'Antoine du 01/10) : une bulle sur une colonne Oui / Non a sa propre barre flottante, comme une date ou
+  une image, à quatre boutons d'une même rangée : les trois styles de la liste à cases (`accentStrike`, `classic`, `accentPlain`, mêmes
+  icônes, mêmes noms que les boutons de la liste) puis « vrai / faux » (« true / false » en interface anglaise). Sans réglage la bulle
+  écrit « vrai » ou « faux » dans la langue de l'interface et « vrai / faux » est le bouton enfoncé : choisir ce bouton retire le réglage
+  du modèle (un seul état « sans réglage », pas de réglage « texte » à côté), comme « — » pour un nombre. Les trois autres posent
+  `{ type: 'bool', style }` ; le bouton du style posé est enfoncé (`aria-pressed`, fond différent des trois autres). Dans la barre, ces trois
+  icônes sont à 20 px (à 15 px elles ne se lisent plus) ; l'infobulle de chaque case nomme son style, la première dit aussi qu'elle
+  barre le texte qui suit. En Lecture, au PDF, au Word, à l'Excel et à l'e-mail, la bulle devient une vraie case à cocher, de la
+  taille de celle d'un item de liste (1,07 em, jamais plus haute que la ligne) : accent coché `#2f6fed`, accent décoché `#767676`,
+  classique coché `#222222`, classique décoché `#6b7684` (4,5:1 au moins sur blanc, la page reste blanche en sombre) ; l'accent coché est
+  une case pleine à coche blanche, la classique cochée un contour à coche de sa couleur, une case décochée un contour sur fond blanc ;
+  son `aria-label` dit « Coché » ou « Décoché » (« Checked » / « Unchecked »). Le PDF peint ces cases dans
+  deux polices maigres du widget (`js/pdf-fonts-boxes.js`, générée par `dev-tests/build-pdf-boxes-font.py`) parce que les polices
+  embarquées n'ont pas ☐ ni ☑ ; l'e-mail écrit « [x] » et « [ ] ». Le style « accent, texte barré » barre aussi le texte qui suit
+  une case cochée, jusqu'à la fin de la ligne, du bloc ou de la case suivante, dans le gris des textes discrets
+  (`--paper-text-faint`, `#667085`, 4,5:1) sauf si ce texte a déjà sa couleur ; une case décochée ne barre rien. Objet, À, Cc, Cci, nom
+  du PDF et attributs d'une ligne liée gardent « true » / « false » tels que Grist les stocke (aucune case dans un champ texte). Un
+  réglage de format s'applique partout où celui d'une date s'applique : une colonne de boucle en tableau, une boucle dans la phrase, un
+  en-tête ou un pied de page.
 - Barres flottantes d'une bulle, d'un tableau ou d'une image : ancrées dans l'éditeur, aucune n'est ouverte quand il est
   masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
   01/10) ; elles ne recouvrent jamais la barre du haut. Un clic hors de l'éditeur et hors de la barre ferme celle d'une

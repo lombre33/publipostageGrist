@@ -362,6 +362,10 @@ const Variables = (function () {
     const hideZero = !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
     if (Array.isArray(val)) return (hideZero ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn, opts)).join(', ');
     if (hideZero && VariableFormat.isZero(val)) return '';
+    // Oui / Non : « vrai » / « faux » (« true » / « false » en anglais) sans réglage - la barre « Oui / Non » (js/floating-toolbars.js) le montre enfoncé -, une case ☑ / ☐ quand la bulle porte l'un des
+    // trois styles de case. Avant, tout s'écrivait « true » / « false » quelle que soit la langue. Les champs texte (`rawNumbers` : Objet, À, Cc, Cci, nom du PDF) et les valeurs montrées comme donnée
+    // (`keepZero` : attributs d'une ligne liée) gardent « true » / « false » : un nom de fichier ou un objet ne change pas d'écriture d'un jour à l'autre.
+    if (typeof val === 'boolean') return opts.rawNumbers || opts.keepZero ? String(val) : VariableFormat.formatBool(val, format);
     let effectiveFormat = format;
     if ((!effectiveFormat || !effectiveFormat.type) && colType) {
       if (colType === 'Date' || colType === 'DateTime') effectiveFormat = Object.assign({}, effectiveFormat, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });

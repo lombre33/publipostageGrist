@@ -72,6 +72,8 @@ const MailtoExport = (function () {
           out += text ? ` (${text})` : '';
           return;
         }
+        // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases (listItemsText).
+        if (child.classList && child.classList.contains('resolved-checkbox')) { out += child.getAttribute('data-checked') === 'true' ? '[x]' : '[ ]'; return; }
         if (child.tagName === 'IMG') return; // aucune image possible en texte brut mailto
         if (child.tagName === 'STYLE' || child.tagName === 'SCRIPT') return; // jamais de contenu utilisateur, à ignorer partout où il peut apparaître
         out += inlineText(child);
