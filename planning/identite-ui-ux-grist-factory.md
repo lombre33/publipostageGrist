@@ -168,8 +168,9 @@ sombre pour six d'entre elles, un titre qui sortait de l'écran, un clavier qui 
   revient à l'élément qui l'avait à la fermeture ; Tab et Maj+Tab tournent dans la fenêtre, même quand le focus est tombé
   sur `<body>` ; Échap la ferme (une liste avec recherche ouverte ferme d'abord son propre panneau). Pour une fenêtre
   écrite dans `index.html`, Échap déclenche son bouton de fermeture : même sortie qu'à la souris.
-- **Empilement** : 1990 pour les fenêtres de variable, 2000 pour celles d'`index.html`, 2100 pour les saisies et
-  confirmations, qui s'ouvrent par-dessus toutes les autres.
+- **Empilement** : 1990 pour les fenêtres de variable, 2000 pour celles d'`index.html`, 2050 pour la clé de
+  correspondance (elle s'ouvre par-dessus la fenêtre de condition comme par-dessus un macro-modèle, écrit après elle dans
+  `index.html`), 2100 pour les saisies et confirmations, qui s'ouvrent par-dessus toutes les autres.
 - **Une nouvelle fenêtre** passe par `ModalBase.create({...})` (bâtie en JS) ou `ModalBase.adopt(id, {closeId})` (déjà
   dans `index.html`, branchée dans `wirePageModals` de `js/main.js`) ; jamais d'écouteur Tab ou Échap posé sur le voile.
   Le réglage propre à la zone de contenu d'une fenêtre s'écrit avec deux classes (`.sa-fenetre .sa-liste`), sinon la
@@ -195,7 +196,11 @@ Demande d'Antoine (29/09). Tout choix de colonne, de table ou de modèle passe p
 `<select>` reste la source de vérité, masqué ; une colonne s'affiche avec son type ; la valeur vide est grisée ; si le
 composant échoue, la liste native reste (`try/catch`). Le champ **Valeur** d'une règle sur une colonne à choix ou à
 référence (`attachValues`) est lui aussi une liste avec recherche des valeurs possibles, « Autre valeur… » toujours en
-bas.
+bas. La colonne d'une règle de **macro-modèle** (demande d'Antoine du 01/10) est UNE seule liste qui réunit celles de toutes
+les tables, sans intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une
+table pas encore liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente) ; « Autre (colonne
+d'une autre table…) » reste en bas. La condition d'une bulle garde un intitulé par table, avec l'état de son lien (maquette
+du 28/09).
 
 ### Le panneau de référence : 700×400
 Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : tout doit y tenir et s'y manier à la souris.

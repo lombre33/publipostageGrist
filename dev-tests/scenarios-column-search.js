@@ -306,7 +306,7 @@
 
   cases.push({
     id: 'colsearch_loop_filter_and_macro_rules_use_the_same_list',
-    description: 'Le filtre d’une boucle (colonnes de la table parcourue, sans groupes) et les règles d’un macro-modèle (colonnes de la page) proposent la même liste avec recherche, avec la saisie avancée en dernier',
+    description: 'Le filtre d’une boucle (colonnes de la table parcourue) et les règles d’un macro-modèle (colonnes de toutes les tables) proposent la même liste avec recherche, sans groupes, avec la saisie avancée en dernier',
     run: async (h) => {
       await seed(h);
       const loop = await openLoopWindow(h);
@@ -349,7 +349,7 @@
         && JSON.stringify(loopFiltered) === JSON.stringify(['Presence' + hintOf('macro.modal.typeChoice'), advanced])
         && loopChosen.value === 'Presence' && loopChosen.valueField
         && macroHeads.length === 0 && macroRows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && macroRows[macroRows.length - 1] === advanced
-        && macroRows.includes('Titre') && macroRows.includes('Responsable' + hintOf('macro.modal.typeRef')) && !macroRows.some(r => r.indexOf('CsAnnuaire') !== -1)
+        && macroRows.includes('Titre') && macroRows.includes('Responsable' + hintOf('macro.modal.typeRef')) && macroRows.includes('CsAnnuaire.NomPrenom')
         && macroChosen === 'Statut';
       return { pass, notes: JSON.stringify({ loopRows, loopHeads, loopFiltered, loopChosen, macroRows, macroHeads, macroChosen }) };
     },
@@ -1201,6 +1201,217 @@
         && result.kept.cover === '11' && result.kept.rule === '12' && result.kept.dflt === '13' && !result.kept.ruleField
         && result.back.every(b => b.field && b.hidden);
       return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  // === Colonne d'une règle du macro-modèle (Antoine, 2026-10-01 : « dans la modale pour les macro modèle lorsque je veux ajouter une colonne d'une autre table je ne
+  // peux pas la rechercher, je dois mettre à la main table.colonne … pas besoin de séparer les colonnes de la table en cours et les autres, une seule dropdown avec
+  // recherche dynamique. Et si jamais le lien entre les deux tables n'est pas déjà fait … ouvrir la modale pour le choix ») : UNE liste avec recherche pour les colonnes de
+  // TOUTES les tables, sans groupes, et la fenêtre de choix de la clé pour une table pas encore liée (js/macro-editor.js, js/condition-fields.js:ensureTableLinked). ===
+  const linkConfigModal = () => document.getElementById('link-config-modal');
+  const macroColumnTrigger = () => triggerIn(macroModal().querySelector('.macro-rule-row'));
+  // Ce qui se trouve réellement au premier plan au centre de la fenêtre de la clé : une fenêtre recouverte par le macro-modèle ne recevrait aucun clic.
+  function onTopAtCenter(modal) {
+    const box = modal.querySelector('.modal-content').getBoundingClientRect();
+    const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return !!top && modal.contains(top);
+  }
+  const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+  cases.push({
+    id: 'colsearch_macro_rule_lists_the_columns_of_every_table_in_one_flat_list_found_by_name',
+    description: 'Macro-modèle : la colonne d’une règle se choisit dans UNE liste avec recherche qui réunit les colonnes de toutes les tables, sans groupes (celles de la page en nom nu, les autres en « Table.Colonne ») ; la frappe retrouve une colonne d’une autre table par son nom, sans saisir « Table.Colonne » à la main',
+    run: async (h) => {
+      await seed(h);
+      let out;
+      try {
+        await openMacroWindow(h);
+        const trigger = macroColumnTrigger();
+        const select = selectOf(trigger);
+        const listed = await readList(h, trigger);
+        const found = {
+          role: await searchList(h, trigger, 'role', 'Escape'),
+          table: await searchList(h, trigger, 'annuaire telephone', 'Escape'),
+          name: await searchList(h, trigger, 'nom', 'Escape'),
+          date: await searchList(h, trigger, 'date', 'Escape'),
+        };
+        // Entrée sur le premier résultat : la colonne d'une table déjà liée est adoptée sans rien demander, celle de la page garde son nom nu.
+        await searchList(h, trigger, 'telephone', 'Enter');
+        const other = { value: select.value, shown: shownIn(trigger), asked: visible(linkConfigModal()), advancedHidden: macroModal().querySelector('.macro-rule-column-advanced').hidden };
+        await searchList(h, trigger, 'statut', 'Enter');
+        const own = { value: select.value, shown: shownIn(trigger) };
+        out = { listed, found, other, own, groups: select.querySelectorAll('optgroup').length };
+      } finally {
+        await closeMacroWindow(h);
+      }
+      const advanced = I18n.t('macro.modal.columnAdvanced');
+      const page = ['Titre', 'Statut', 'Responsable' + hintOf('macro.modal.typeRef'), 'Montant' + hintOf('macro.modal.typeNumeric'), 'Echeance' + hintOf('macro.modal.typeDate'), 'Actif' + hintOf('macro.modal.typeBool')];
+      const rows = out.listed.rows;
+      const pass = out.listed.headers === 0 && out.groups === 0
+        && rows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && rows[rows.length - 1] === advanced
+        && JSON.stringify(rows.slice(1, 1 + page.length)) === JSON.stringify(page)
+        && ['CsAnnuaire.NomPrenom', 'CsAnnuaire.Telephone', 'CsAnnuaire.Naissance' + hintOf('macro.modal.typeDate'), 'CsContacts.Role', 'CsContacts.Dossier' + hintOf('macro.modal.typeRef'),
+          'CsFactures.Client', 'CsLignes.Presence' + hintOf('macro.modal.typeChoice')].every(r => rows.includes(r))
+        && rows.slice(1 + page.length, -1).every(r => r.indexOf('.') !== -1) && !rows.some(r => r.indexOf('gristHelper_') !== -1)
+        && out.found.role.includes('CsContacts.Role') && !out.found.role.includes('Titre')
+        && JSON.stringify(out.found.table) === JSON.stringify(['CsAnnuaire.Telephone', advanced])
+        && out.found.name.includes('CsAnnuaire.NomPrenom') && out.found.name.includes('CsContacts.Nom') && !out.found.name.includes('Titre')
+        && out.found.date.includes('Echeance' + hintOf('macro.modal.typeDate')) && out.found.date.includes('CsAnnuaire.Naissance' + hintOf('macro.modal.typeDate'))
+        && out.other.value === 'CsAnnuaire.Telephone' && out.other.shown === 'CsAnnuaire.Telephone' && !out.other.asked && out.other.advancedHidden
+        && out.own.value === 'Statut' && out.own.shown === 'Statut';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_macro_rule_unlinked_table_column_asks_for_the_key_above_the_macro_window',
+    description: 'Macro-modèle : une colonne d’une table pas encore liée ouvre la fenêtre de choix de la clé PAR-DESSUS le macro-modèle ; Échap ou Annuler remet la colonne précédente dans le <select> et le champ visible (le macro-modèle reste ouvert, le focus revient au champ), Valider enregistre le lien et garde la colonne',
+    run: async (h) => {
+      await seed(h);
+      let out;
+      try {
+        await openMacroWindow(h);
+        const trigger = macroColumnTrigger();
+        const select = selectOf(trigger);
+        await searchList(h, trigger, 'statut', 'Enter');
+        // Par Échap : la fenêtre du dessus (la clé) se ferme, pas le macro-modèle.
+        await searchList(h, trigger, 'role', 'Enter');
+        await h.sleep(150);
+        const asked = { visible: visible(linkConfigModal()), onTop: onTopAtCenter(linkConfigModal()), title: document.getElementById('link-config-title').textContent };
+        pressEscape();
+        await h.sleep(80);
+        const escaped = {
+          linkOpen: visible(linkConfigModal()), macroOpen: visible(macroModal()), value: select.value, shown: shownIn(trigger),
+          rule: GristAPI.getLinkRule('CsContacts'), focusBack: document.activeElement === trigger,
+        };
+        // Par le bouton Annuler, puis Valider.
+        await searchList(h, trigger, 'role', 'Enter');
+        await h.sleep(150);
+        const askedAgain = visible(linkConfigModal());
+        document.getElementById('link-config-cancel').click();
+        await h.sleep(80);
+        const cancelled = { linkOpen: visible(linkConfigModal()), macroOpen: visible(macroModal()), value: select.value, shown: shownIn(trigger), rule: GristAPI.getLinkRule('CsContacts') };
+        await searchList(h, trigger, 'role', 'Enter');
+        await h.sleep(150);
+        document.getElementById('link-config-confirm').click();
+        await h.sleep(150);
+        const confirmed = {
+          linkOpen: visible(linkConfigModal()), macroOpen: visible(macroModal()), value: select.value, shown: shownIn(trigger), rule: GristAPI.getLinkRule('CsContacts'),
+          typeHint: macroModal().querySelector('.macro-rule-column-type').textContent, focusBack: document.activeElement === trigger,
+        };
+        // Une fois liée, une autre colonne de la même table ne demande plus rien.
+        await searchList(h, trigger, 'contacts nom', 'Enter');
+        await h.sleep(60);
+        const sameTable = { value: select.value, asked: visible(linkConfigModal()) };
+        out = { asked, escaped, askedAgain, cancelled, confirmed, sameTable };
+      } finally {
+        if (visible(linkConfigModal())) document.getElementById('link-config-cancel').click();
+        await closeMacroWindow(h);
+      }
+      const pass = out.asked.visible && out.asked.onTop && out.asked.title.indexOf('CsContacts') !== -1
+        && !out.escaped.linkOpen && out.escaped.macroOpen && out.escaped.value === 'Statut' && out.escaped.shown === 'Statut' && !out.escaped.rule && out.escaped.focusBack
+        && out.askedAgain && !out.cancelled.linkOpen && out.cancelled.macroOpen && out.cancelled.value === 'Statut' && out.cancelled.shown === 'Statut' && !out.cancelled.rule
+        && !out.confirmed.linkOpen && out.confirmed.macroOpen && out.confirmed.value === 'CsContacts.Role' && out.confirmed.shown === 'CsContacts.Role'
+        && !!out.confirmed.rule && out.confirmed.rule.mode === 'match' && out.confirmed.rule.colonneCible === 'Dossier' && out.confirmed.rule.colonneSource === 'id'
+        && out.confirmed.typeHint === '' && out.confirmed.focusBack
+        && out.sameTable.value === 'CsContacts.Nom' && !out.sameTable.asked;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_macro_rule_saved_table_column_shows_in_the_list_and_the_rule_picks_its_model',
+    description: 'Macro-modèle : une règle déjà enregistrée sur « Table.Colonne » (saisie à la main jusqu’ici) s’affiche choisie dans la liste, une colonne inconnue reste dans la saisie avancée ; la colonne choisie dans la liste est celle que lit le macro-modèle : la règle sur la table liée retient son modèle pour la ligne qui la remplit, et le modèle par défaut pour les autres',
+    run: async (h) => {
+      await seed(h);
+      const realCached = Templates.getCached;
+      const realSave = Templates.save;
+      const realAlert = window.alert;
+      const realError = console.error;
+      let out;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        MacroEditor.openModal({ id: 900, nom: 'Notification_classique', macroSlots: { slots: [
+          { type: 'conditional', rules: [
+            { column: 'CsAnnuaire.NomPrenom', operator: '=', value: 'Dupont Jean', modeleId: '12' },
+            { column: 'CsInconnue.Colonne', operator: '=', value: 'x', modeleId: '13' },
+          ], defaultModeleId: '11' },
+        ] } });
+        await h.sleep(60);
+        const rows = Array.from(macroModal().querySelectorAll('.macro-rule-row'));
+        const shown = rows.map(row => ({
+          value: row.querySelector('select.macro-rule-column').value, shown: shownIn(triggerIn(row)),
+          free: row.querySelector('.macro-rule-column-advanced').value, freeVisible: !row.querySelector('.macro-rule-column-advanced').hidden,
+        }));
+        let captured = null;
+        Templates.save = async (...args) => { captured = args; throw new Error('enregistrement simulé (test)'); };
+        window.alert = () => {};
+        console.error = () => {};
+        const slotsOf = () => JSON.parse(captured[2]).slots;
+        const record = GristAPI.getCurrentRecord();
+        document.getElementById('macro-editor-name').value = 'Notification_classique';
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(80);
+        const savedFirst = slotsOf()[0];
+        const pickedFilled = await MacroTemplates.pickModeleId(savedFirst, 'CsDossiers', record);
+        // La même règle avec une valeur que la ligne ne remplit pas : le modèle par défaut.
+        setInput(rows[0].querySelector('.macro-rule-value'), 'Martin Anne');
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(80);
+        const pickedOther = await MacroTemplates.pickModeleId(slotsOf()[0], 'CsDossiers', record);
+        out = { shown, savedColumns: savedFirst.rules.map(r => r.column), pickedFilled, pickedOther };
+      } finally {
+        Templates.getCached = realCached;
+        Templates.save = realSave;
+        window.alert = realAlert;
+        console.error = realError;
+        await closeMacroWindow(h);
+      }
+      const pass = out.shown.length === 2
+        && out.shown[0].value === 'CsAnnuaire.NomPrenom' && out.shown[0].shown === 'CsAnnuaire.NomPrenom' && !out.shown[0].freeVisible
+        && out.shown[1].value === '__advanced__' && out.shown[1].shown === I18n.t('macro.modal.columnAdvanced') && out.shown[1].freeVisible && out.shown[1].free === 'CsInconnue.Colonne'
+        && JSON.stringify(out.savedColumns) === JSON.stringify(['CsAnnuaire.NomPrenom', 'CsInconnue.Colonne'])
+        && out.pickedFilled === '12' && out.pickedOther === '11';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_macro_rule_native_column_list_stays_when_the_component_fails',
+    description: 'Macro-modèle : si le composant de recherche est indisponible, la colonne d’une règle garde le <select> natif (visible, toutes les tables à la suite) et le choix d’une table pas encore liée ouvre toujours la fenêtre de la clé, dont Annuler remet la colonne précédente',
+    run: async (h) => {
+      await seed(h);
+      const realAttach = SearchSelect.attachColumns;
+      const warn = console.warn;
+      let out;
+      try {
+        console.warn = () => {};
+        SearchSelect.attachColumns = () => { throw new Error('composant indisponible (test)'); };
+        await openMacroWindow(h);
+        const select = macroModal().querySelector('select.macro-rule-column');
+        const native = { visible: visible(select) && select.getBoundingClientRect().width > 40, field: hasField(select), groups: select.querySelectorAll('optgroup').length, values: Array.from(select.options).map(o => o.value) };
+        changed(select, 'Statut');
+        await h.sleep(30);
+        changed(select, 'CsContacts.Role');
+        await h.sleep(150);
+        const asked = visible(linkConfigModal());
+        document.getElementById('link-config-cancel').click();
+        await h.sleep(80);
+        const cancelled = { value: select.value, macroOpen: visible(macroModal()), rule: GristAPI.getLinkRule('CsContacts') };
+        changed(select, 'CsAnnuaire.Telephone');
+        await h.sleep(60);
+        const linked = { value: select.value, asked: visible(linkConfigModal()) };
+        out = { native, asked, cancelled, linked };
+      } finally {
+        SearchSelect.attachColumns = realAttach;
+        console.warn = warn;
+        if (visible(linkConfigModal())) document.getElementById('link-config-cancel').click();
+        await closeMacroWindow(h);
+      }
+      const pass = out.native.visible && !out.native.field && out.native.groups === 0 && out.native.values.includes('CsAnnuaire.Telephone') && out.native.values.includes('CsContacts.Role')
+        && out.asked && out.cancelled.value === 'Statut' && out.cancelled.macroOpen && !out.cancelled.rule
+        && out.linked.value === 'CsAnnuaire.Telephone' && !out.linked.asked;
+      return { pass, notes: JSON.stringify(out) };
     },
   });
 

@@ -1,8 +1,8 @@
 // Champs d'une règle « Colonne / Opérateur / Valeur » (+ indication de type) - partagés entre la fenêtre des macro-modèles (js/macro-editor.js) et celle
 // des variables conditionnelles (maquette du 2026-09-28). Déplacés tel quel depuis js/macro-editor.js (mêmes classes .macro-rule-*, donc mêmes styles de
 // css/toolbar-v2.css et mêmes sélecteurs dans dev-tests/scenarios-macro-modeles.js) pour qu'il n'en existe jamais deux copies. Chaque champ mute `rule`
-// en place ; la fenêtre appelante décide seule quand l'enregistrer. Opérateurs : ConditionRules.OPERATORS (js/condition-rules.js, chargé avant). La
-// fenêtre des variables y ajoute seulement des options (colonnes de toutes les tables, choix de la clé d'une table pas encore liée).
+// en place ; la fenêtre appelante décide seule quand l'enregistrer. Opérateurs : ConditionRules.OPERATORS (js/condition-rules.js, chargé avant). Les fenêtres
+// des variables et des macro-modèles y ajoutent des options (colonnes de toutes les tables, choix de la clé d'une table pas encore liée).
 const ConditionFields = (function () {
   // Colonnes de la table Grist courante (celle du Select By, demande d'Antoine 2026-09-28 : "que le champ ... soit une liste des colonnes de la page
   // sur laquelle est le widget" - liste toujours à jour, pas un texte libre où un id de colonne mal recopié cassait silencieusement la condition sans
@@ -56,26 +56,41 @@ const ConditionFields = (function () {
     if (hint) o.dataset.hint = hint;
     parent.appendChild(o);
   }
-  // Colonnes de la table de la page en valeur NUE (même forme que les macro-modèles), celles des autres tables en "Table.Colonne" (parseColumnRef).
-  function appendAllTablesOptions(select, currentTableId) {
+  // Colonnes de la table de la page en valeur NUE (même forme que les macro-modèles), celles des autres tables en "Table.Colonne" (parseColumnRef). Un groupe
+  // par table (fenêtre de condition) ; avec `flat`, toutes à la suite dans UNE seule liste, sans intitulé (macro-modèles, demande d'Antoine du 2026-10-01 :
+  // « pas besoin de séparer les colonnes de la table en cours et les autres, une seule dropdown avec recherche dynamique ») - la table se lit dans le nom
+  // de la colonne (« Annuaire.Service »), et se cherche avec lui.
+  function appendAllTablesOptions(select, currentTableId, flat) {
     const tables = GristAPI.getTables().slice();
     const ordered = currentTableId && tables.indexOf(currentTableId) !== -1 ? [currentTableId].concat(tables.filter(t => t !== currentTableId)) : tables;
     ordered.forEach(table => {
-      const group = document.createElement('optgroup');
-      group.label = tableGroupLabel(table, currentTableId);
+      const parent = flat ? select : document.createElement('optgroup');
+      if (!flat) parent.label = tableGroupLabel(table, currentTableId);
       // Sans les colonnes d'aide « gristHelper_… » (valeur affichée d'une Référence, cachées par Grist lui-même) : la Référence se compare déjà à sa
       // valeur affichée (js/variables.js:cellValue).
       GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0)
-        .forEach(c => appendColumnOption(group, table === currentTableId ? c : table + '.' + c, table, c));
-      if (group.children.length) select.appendChild(group);
+        .forEach(c => appendColumnOption(parent, table === currentTableId ? c : table + '.' + c, table, c));
+      if (!flat && parent.children.length) select.appendChild(parent);
     });
   }
 
-  // `options` (facultatif, fenêtre de condition d'une variable) : { allTables: true } liste les colonnes de TOUTES les tables (cf. appendAllTablesOptions)
-  // au lieu de la seule table de la page ; { onColumnChosen(ref, value) } est appelé avant d'adopter une colonne choisie dans la liste - s'il renvoie (ou
-  // résout) false, la colonne précédente est remise (ex. choix de la clé annulé pour une table pas encore liée). Sans options : comportement des
-  // macro-modèles, inchangé. { table } (fenêtre de boucle, js/variable-loop.js) : les colonnes de CETTE table seule, en valeur nue - le filtre d'une boucle
-  // porte sur les lignes parcourues (js/loop-rules.js:ruleHolds lit la colonne dans la table de la boucle).
+  // Colonne d'une table pas encore liée à celle de la page : la fenêtre de choix de la clé (js/variables.js:ensureLinkConfigured) s'ouvre avant que la colonne
+  // ne soit adoptée. Rend `true` TOUT DE SUITE quand il n'y a rien à demander (colonne de la page elle-même, ou d'une table déjà liée : la colonne est adoptée
+  // dans l'évènement même du choix, comme avant) ; sinon une promesse - vrai si le lien vient d'être enregistré, faux si le choix de la clé est annulé
+  // (options.onColumnChosen : la colonne précédente est alors remise). Même règle pour toute fenêtre qui liste les colonnes de toutes les tables.
+  function ensureTableLinked(ref) {
+    const currentTableId = GristAPI.getCurrentTableId();
+    if (!ref || !ref.table || !currentTableId || ref.table === currentTableId) return true;
+    if (GristAPI.getLinkRule(ref.table)) return true;
+    return Variables.ensureLinkConfigured({ table: ref.table });
+  }
+
+  // `options` (facultatif, fenêtres de condition d'une variable et de macro-modèle) : { allTables: true } liste les colonnes de TOUTES les tables (cf.
+  // appendAllTablesOptions) au lieu de la seule table de la page, et { flat: true } en une seule liste sans groupes ; { onColumnChosen(ref, value) } est appelé
+  // avant d'adopter une colonne choisie dans la liste - `true` : adoptée tout de suite ; une promesse (ou false) qui ne résout pas vrai : la colonne précédente
+  // est remise (ex. choix de la clé annulé pour une table pas encore liée, cf. ensureTableLinked). Sans options : les colonnes de la page seule. { table }
+  // (fenêtre de boucle, js/variable-loop.js) : les colonnes de CETTE table seule, en valeur nue - le filtre d'une boucle porte sur les lignes parcourues
+  // (js/loop-rules.js:ruleHolds lit la colonne dans la table de la boucle).
   function buildColumnField(rule, onTypeChange, options) {
     const opts = options || {};
     const baseTable = () => opts.table || GristAPI.getCurrentTableId();
@@ -89,7 +104,7 @@ const ConditionFields = (function () {
     empty.textContent = I18n.t('macro.modal.columnChoosePlaceholder');
     select.appendChild(empty);
     if (opts.table) GristAPI.getColumns(opts.table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => appendColumnOption(select, c, opts.table, c));
-    else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId());
+    else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId(), !!opts.flat);
     else { const tableId = GristAPI.getCurrentTableId(); currentTableColumns().forEach(c => appendColumnOption(select, c, tableId, c)); }
     const listed = Array.from(select.querySelectorAll('option')).map(o => o.value).filter(Boolean);
     const advancedOpt = document.createElement('option');
@@ -169,7 +184,10 @@ const ConditionFields = (function () {
       }
       const chosen = select.value;
       if (!opts.onColumnChosen || !chosen) { adopt(chosen); return; }
-      Promise.resolve(opts.onColumnChosen(ConditionRules.parseColumnRef(chosen, baseTable()), chosen)).then(ok => {
+      const answer = opts.onColumnChosen(ConditionRules.parseColumnRef(chosen, baseTable()), chosen);
+      // `true` rendu tel quel : rien à demander, la colonne est adoptée dans l'évènement même (une promesse, elle, ne répond qu'après).
+      if (answer === true) { adopt(chosen); return; }
+      Promise.resolve(answer).then(ok => {
         if (ok) { adopt(chosen); return; }
         restoreAdopted();
       }, e => {
@@ -371,5 +389,5 @@ const ConditionFields = (function () {
     return { columnWrap: columnField.wrap, operatorSelect, valueSlot, typeHint: columnField.typeHint };
   }
 
-  return { friendlyTypeLabel, appendColumnOption, valuePlaceholderForType, buildColumnField, buildValueField, buildConditionFields };
+  return { friendlyTypeLabel, appendColumnOption, ensureTableLinked, valuePlaceholderForType, buildColumnField, buildValueField, buildConditionFields };
 })();

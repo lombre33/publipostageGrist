@@ -19,7 +19,11 @@ const MacroEditor = (function () {
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
   // Champs Colonne / Opérateur / Valeur d'une règle (liste des colonnes, choix réels d'une colonne Choice, indication de type, avertissement
-  // "colonne absente de la ligne") : js/condition-fields.js, partagé avec les variables conditionnelles - jamais recopié ici.
+  // "colonne absente de la ligne") : js/condition-fields.js, partagé avec les variables conditionnelles - jamais recopié ici. La colonne se choisit dans UNE
+  // seule liste avec recherche qui réunit celles de TOUTES les tables, à la suite et sans groupes (demande d'Antoine du 2026-10-01 : « trouver avec son nom la
+  // colonne dans le champ de recherche, pas besoin de séparer les colonnes de la table en cours et les autres ») : celles de la page en nom nu, les autres en
+  // « Table.Colonne ». Choisir une colonne d'une table pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
+  const COLUMN_FIELD_OPTIONS = { allTables: true, flat: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
 
   // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne (demande d'Antoine du 2026-09-29). Le <select> reste la source de la
   // valeur - et la liste native si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un
@@ -97,7 +101,7 @@ const MacroEditor = (function () {
         connector.textContent = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
         lineOne.appendChild(connector);
 
-        const fields = ConditionFields.buildConditionFields(rule);
+        const fields = ConditionFields.buildConditionFields(rule, COLUMN_FIELD_OPTIONS);
         lineOne.appendChild(fields.columnWrap);
         lineOne.appendChild(fields.operatorSelect);
         lineTwo.appendChild(fields.valueSlot);

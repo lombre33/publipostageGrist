@@ -12,11 +12,13 @@
   --pp-modal-gap: 12px;
 }
 
-/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Trois étages de z-index : 1990 pour les fenêtres de variable, sous la barre flottante d'une bulle (2000,
-   masquée tant que la fenêtre est ouverte) ; 2000 pour les fenêtres écrites dans index.html (`.pp-modal-page`), dont la clé de correspondance, que le choix d'une
-   table pas encore liée ouvre PAR-DESSUS la fenêtre de condition ; 2100 pour les saisies et confirmations, qui s'ouvrent par-dessus toutes les autres. */
+/* Le voile suit le thème (--pp-scrim, plus foncé en sombre). Quatre étages de z-index : 1990 pour les fenêtres de variable, sous la barre flottante d'une bulle (2000,
+   masquée tant que la fenêtre est ouverte) ; 2000 pour les fenêtres écrites dans index.html (`.pp-modal-page`) ; 2050 pour la clé de correspondance, que le choix
+   d'une colonne d'une table pas encore liée ouvre PAR-DESSUS la fenêtre de condition (1990) comme celle d'un macro-modèle (2000, écrite après elle dans index.html :
+   à z-index égal, la clé passerait dessous) ; 2100 pour les saisies et confirmations, qui s'ouvrent par-dessus toutes les autres. */
 .pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990; }
 .pp-modal-page { z-index: 2000; }
+#link-config-modal { z-index: 2050; }
 
 /* max-height en % de l'écran (le voile est fixe sur tout le panneau) et flex en colonne : le contenu prend la place qui reste, le titre et les boutons gardent
    la leur. Pas d'overflow sur le cadre : il rognerait les coins et défilerait à sa guise quand un champ prend le focus. */

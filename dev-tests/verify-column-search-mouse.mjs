@@ -475,7 +475,7 @@ const SECTIONS = {
     await page.mouse.click(field.x, field.y);
     await page.waitForTimeout(150);
     const open = await panelInfo(scope);
-    check('macro : la liste s’ouvre dans le panneau Grist avec les colonnes de la page, sans groupe', !!open && open.inside && open.searchFocused && open.heads.length === 0 && open.rows.includes('Titre') && !open.rows.some(r => r.indexOf('CsAnnuaire') !== -1), open);
+    check('macro : la liste s’ouvre dans le panneau Grist avec les colonnes de la page puis celles des autres tables, sans groupe', !!open && open.inside && open.searchFocused && open.heads.length === 0 && open.rows.includes('Titre') && open.rows.includes('CsAnnuaire.NomPrenom'), open);
     await page.keyboard.type('resp');
     await page.waitForTimeout(100);
     const row = await rowCenter(scope, 'Responsable');
@@ -530,6 +530,109 @@ const SECTIONS = {
     if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
     await page.waitForTimeout(200);
     await page.evaluate(() => { Templates.getCached = window.__csRealCached; });
+  },
+
+  // Macro-modèle, colonne d'une AUTRE table (Antoine, 2026-10-01 : « lorsque je veux ajouter une colonne d'une autre table je ne peux pas la rechercher, je dois mettre à la
+  // main table.colonne … une seule dropdown avec recherche dynamique. Et si jamais le lien entre les deux tables n'est pas déjà fait … ouvrir la modale pour le choix »), en
+  // clair puis en sombre : la colonne se retrouve à la frappe par son nom dans la liste unique ; une table pas encore liée ouvre la clé de correspondance PAR-DESSUS le
+  // macro-modèle (fenêtre entière dans le panneau, au premier plan) ; Échap ou Annuler remet la colonne précédente, Valider enregistre le lien et garde la colonne.
+  async macroTables() {
+    const scope = '#macro-editor-modal';
+    const link = '#link-config-modal';
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await page.evaluate(() => {
+      window.__csRealCached = Templates.getCached;
+      Templates.getCached = () => [{ id: 11, nom: 'Notification_base', typeModele: 'document' }];
+    });
+    const fieldState = () => page.evaluate(() => {
+      const select = document.querySelector('#macro-editor-modal select.macro-rule-column');
+      return {
+        value: select.value, shown: select.nextElementSibling.querySelector('.ss-name').textContent,
+        macroOpen: document.getElementById('macro-editor-modal').style.display !== 'none', linkOpen: document.getElementById('link-config-modal').style.display !== 'none',
+        hint: document.querySelector('#macro-editor-modal .macro-rule-column-type').textContent,
+      };
+    });
+    // Ouvre la liste de la colonne à la vraie souris, tape `typed` au vrai clavier et clique la ligne `row`.
+    const pick = async (typed, row) => {
+      const field = await reveal(scope + ' .macro-rule-column-wrap .ss-trigger', scope + ' .modal-content');
+      await page.mouse.click(field.x, field.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(typed);
+      await page.waitForTimeout(100);
+      const found = await rowCenter(scope, row);
+      if (found) await page.mouse.click(found.x, found.y);
+      await page.waitForTimeout(350);
+      return found;
+    };
+    for (const theme of ['light', 'dark']) {
+      const label = theme === 'dark' ? 'sombre' : 'clair';
+      await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+      await page.evaluate(async () => { await GristAPI.deleteLinkRule('CsContacts'); });
+      await page.waitForTimeout(100);
+      await page.evaluate(() => MacroEditor.openModal(null));
+      await page.waitForTimeout(200);
+      await reveal('#macro-editor-add-slot', scope + ' .modal-content');
+      await clickCenter('#macro-editor-add-slot');
+      // Une colonne de la page d'abord : elle garde son nom nu.
+      const own = await pick('stat', 'Statut');
+      const afterOwn = await fieldState();
+      check(`macro tables (${label}) : une colonne de la page se choisit à la frappe et garde son nom nu (« Statut »)`, !!own && own.onTop && own.inViewport && afterOwn.value === 'Statut' && afterOwn.shown === 'Statut' && !afterOwn.linkOpen, { own, afterOwn });
+      // Retrouver une colonne d'une autre table par son seul nom : la liste est unique, la table se lit dans le nom de la colonne.
+      const field = await reveal(scope + ' .macro-rule-column-wrap .ss-trigger', scope + ' .modal-content');
+      await page.mouse.click(field.x, field.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type('role');
+      await page.waitForTimeout(100);
+      const search = await panelInfo(scope);
+      const roleRow = await rowCenter(scope, 'CsContacts.Role');
+      check(`macro tables (${label}) : « role » retrouve CsContacts.Role dans la liste unique, sans intitulé de table, visible et non recouvert`,
+        !!search && search.inside && search.heads.length === 0 && search.rows.includes('CsContacts.Role') && !!roleRow && roleRow.onTop && roleRow.inViewport, { search, roleRow });
+      if (roleRow) await page.mouse.click(roleRow.x, roleRow.y);
+      await page.waitForTimeout(350);
+      // Table pas encore liée : la clé s'ouvre par-dessus le macro-modèle, entière dans le panneau ; le champ montre la colonne demandée, le temps du choix de la clé.
+      const asked = await hitTest(link + ' .modal-content');
+      const whileAsking = await fieldState();
+      check(`macro tables (${label}) : une table pas encore liée ouvre la fenêtre de la clé PAR-DESSUS le macro-modèle, entière dans le panneau et au premier plan`,
+        asked.found && asked.inViewport && asked.onTop && whileAsking.linkOpen && whileAsking.macroOpen && whileAsking.value === 'CsContacts.Role', { asked, whileAsking });
+      // Échap (vrai clavier) ferme la clé seule : le macro-modèle reste ouvert, la colonne précédente est remise dans le champ.
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(250);
+      const escaped = await fieldState();
+      const ruleAfterEscape = await page.evaluate(() => !!GristAPI.getLinkRule('CsContacts'));
+      check(`macro tables (${label}) : Échap ferme la clé seule, le macro-modèle reste ouvert, la colonne précédente (« Statut ») est remise, aucun lien enregistré`,
+        !escaped.linkOpen && escaped.macroOpen && escaped.value === 'Statut' && escaped.shown === 'Statut' && !ruleAfterEscape, { escaped, ruleAfterEscape });
+      // Deuxième essai, bouton Annuler à la vraie souris.
+      await pick('role', 'CsContacts.Role');
+      const cancel = await reveal('#link-config-cancel', link + ' .modal-content');
+      if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+      await page.waitForTimeout(250);
+      const cancelled = await fieldState();
+      check(`macro tables (${label}) : Annuler (vrai clic) remet aussi la colonne précédente et laisse le macro-modèle ouvert`, cancel.found && cancel.onTop && !cancelled.linkOpen && cancelled.macroOpen && cancelled.value === 'Statut' && cancelled.shown === 'Statut', { cancel, cancelled });
+      // Troisième essai, Valider : le lien est enregistré, la colonne est adoptée, le macro-modèle reste ouvert.
+      await pick('role', 'CsContacts.Role');
+      const confirm = await reveal('#link-config-confirm', link + ' .modal-content');
+      if (confirm.found) await page.mouse.click(confirm.x, confirm.y);
+      await page.waitForTimeout(350);
+      const confirmed = await fieldState();
+      const rule = await page.evaluate(() => GristAPI.getLinkRule('CsContacts'));
+      check(`macro tables (${label}) : Valider (vrai clic) enregistre le lien et garde CsContacts.Role dans le champ, le macro-modèle reste ouvert`,
+        confirm.found && confirm.onTop && !confirmed.linkOpen && confirmed.macroOpen && confirmed.value === 'CsContacts.Role' && confirmed.shown === 'CsContacts.Role' && !!rule && rule.mode === 'match', { confirm, confirmed, rule });
+      // Une fois liée, une autre colonne de la même table, comme une colonne d'une table déjà liée, s'adopte sans rien demander.
+      await pick('contacts nom', 'CsContacts.Nom');
+      const sameTable = await fieldState();
+      await pick('annuaire tel', 'CsAnnuaire.Telephone');
+      const linkedTable = await fieldState();
+      check(`macro tables (${label}) : une table déjà liée n'ouvre plus la clé (une autre colonne de CsContacts, puis CsAnnuaire.Telephone)`,
+        sameTable.value === 'CsContacts.Nom' && !sameTable.linkOpen && linkedTable.value === 'CsAnnuaire.Telephone' && !linkedTable.linkOpen && linkedTable.macroOpen, { sameTable, linkedTable });
+      const close = await reveal('#macro-editor-cancel', scope + ' .modal-content');
+      if (close.found) await page.mouse.click(close.x, close.y);
+      await page.waitForTimeout(200);
+    }
+    await page.evaluate(async theme => {
+      Templates.getCached = window.__csRealCached;
+      await GristAPI.deleteLinkRule('CsContacts');
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
+    }, previousTheme);
   },
 
   // Règle d'une annexe du macro-modèle sur DEUX lignes (audit UX/UI du 2026-09-29, F8), en clair puis en sombre : cinq contrôles sur une ligne se chevauchaient dans la
