@@ -603,7 +603,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   la zone est vide. L'éditeur, la Lecture et le Word se calent dessus : le corps commence à la marge + 55 pt du bord de la feuille dans les quatre rendus, l'en-tête à la moitié de la marge du
   haut, le pied juste sous le texte, les pages se coupent aux mêmes lignes, et une image en calque tirée au coin de la feuille s'arrête au vrai bord (marge + bande), pas à la marge. Une
   zone vide ne prend aucune place mais reste cliquable dans la marge ; une zone ne prend jamais la souris (une image posée dans la marge garde son clic) : c'est un clic dans la marge, là
-  où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume.
+  où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume. Le texte d'un en-tête ou d'un pied a la taille du PDF et du Word, 10,5 pt, soit 14 px à l'écran
+  comme le corps du modèle, dans l'éditeur et à la Lecture (choix d'Antoine du 01/10, « Comme le PDF » ; il valait 10,5 px, les trois quarts de ce qui s'imprime) : il ne change plus de taille quand on
+  ouvre la zone, et le libellé « + Ajouter un en-tête » d'une zone vide, qui ne s'imprime pas, garde sa taille d'interface.
 - Pages entières (choix d'Antoine du 01/10, carte « Afficher chaque feuille à sa taille réelle dans l'éditeur et la Lecture ? » : « Pages entières », l'autre choix était « Garder compact ») : dans
   l'éditeur et à la Lecture, chaque page est une feuille entière de son format, la dernière comprise. Un modèle d'une ligne montre une feuille entière, un saut de page forcé laisse sa page
   entière, et la page 2 ne bouge pas quand on écrit sur la page 1 : une page a sa place (le haut de la page k est à k hauteurs de feuille et k gouttières du haut de la première), pas celle que

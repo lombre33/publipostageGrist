@@ -320,6 +320,12 @@
   font-size: 10.5px; line-height: 1.42; color: #1b2430;
   transition: background .12s ease, box-shadow .12s ease;
 }
+/* Le TEXTE d'un en-tête ou d'un pied vaut 14 px, soit 10,5 pt : la taille de tout texte du modèle, celle du PDF (`DEFAULT_FONT_SIZE`, js/pdf-export.js) et du Word (21 demi-points,
+   js/docx-export.js) - choix d'Antoine du 01/10 (« Comme le PDF »), il était à 10,5 px à l'écran, trois quarts de ce qui s'imprime. Les 10,5 px de l'espaceur restent à ce qui
+   n'est pas imprimé : le libellé fantôme « + Ajouter un en-tête » d'une zone vide (`js/header-footer-preview.js:sizeHfZone` le centre sur une ligne de 15 px). Dans l'éditeur le
+   texte est le corps de la zone (`.v2-hf-zone-body`) ; en Lecture il est directement dans l'espaceur, qui n'a pas de libellé. Les bandes de couture (`.v2-page-band-header`,
+   `.v2-page-band-footer`) en font autant plus bas. En édition de la zone le texte est dans `.tiptap`, déjà à 14 px : la taille ne saute plus à l'entrée. */
+.v2-hf-zone-body, #reader-container.a4-preview .v2-page-edge-spacer { font-size: 14px; }
 /* Un espaceur ne prend JAMAIS le clic : il recouvre la marge de `.tiptap` (celui du haut passe dessous), et une image en calque posée dans cette marge - le triangle d'un
    coin de feuille, par exemple - doit rester atteignable. Le clic dans la marge (là où rien n'est posé : le padding de `.tiptap`, ou le fond de la feuille au-dessus
    de lui) est repris par js/header-footer-preview.js:zoneUnderPointer, qui ouvre l'en-tête ou le pied ; le survol, par la classe `v2-hf-zone-hover` qu'il pose. */
@@ -394,6 +400,7 @@
 .v2-page-layer-page { position: absolute; overflow: hidden; pointer-events: none; }
 .v2-page-layer-copy { position: absolute; max-width: none; pointer-events: none; user-select: none; }
 .v2-page-band { position: absolute; box-sizing: border-box; font-size: 10.5px; line-height: 1.42; color: #1b2430; }
+.v2-page-band-header, .v2-page-band-footer { font-size: 14px; }
 /* Une bande de couture rejoue la frontière entre deux pages PHYSIQUES, à leur vraie taille (feuilles entières, choix d'Antoine du 01/10) : le bas de la page qui finit
    (`.v2-page-seam-foot` : sa marge du bas et la bande de son pied, avec le pied tout en haut), une vraie gouttière (`.v2-page-seam-divider`), puis le haut de la
    page qui commence (`.v2-page-seam-head` : la bande de son en-tête et sa marge du haut, avec l'en-tête à la moitié de la marge). Le bas et le haut de page sont

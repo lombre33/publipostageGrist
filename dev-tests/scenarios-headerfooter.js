@@ -378,6 +378,115 @@
     },
   });
 
+  // --- Taille du texte d'un en-tête ou d'un pied : 10,5 pt à l'écran comme dans le PDF et le Word (choix d'Antoine du 01/10, « Comme le PDF ») ---
+  // Le texte d'une zone s'affichait à 10,5 PX (7,9 pt), les trois quarts de ce qui s'imprime : 10,5 pt = 14 px, la taille du corps du modèle, du PDF (DEFAULT_FONT_SIZE) et du
+  // Word (21 demi-points). On compare à ce que les deux exports écrivent vraiment : la taille des glyphes décodés par pdf.js dans les octets du PDF, et le `w:sz` du XML du Word.
+  const HF_TEXT_DATA = () => ({ enabled: true, differentFirstPage: false, header: { default: '<p>Rapport trimestriel confidentiel</p>', first: '' }, footer: { default: '<p>Société Exemple SA</p>', first: '' } });
+  const HF_TEXT_BODY = '<p>Un</p><div class="page-break-marker">Saut de page</div><p>Deux</p>';
+  const fontPx = el => el ? parseFloat(getComputedStyle(el).fontSize) : null;
+  // Taille des glyphes de chaque run de texte du PDF (pt) : la matrice du texte porte la taille de police.
+  async function pdfTextSizes(h, base64) {
+    await h.ensurePdfJsLoaded();
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const out = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const content = await (await pdf.getPage(n)).getTextContent();
+      content.items.filter(it => it.str && it.str.trim()).forEach(it => out.push({ page: n, str: it.str, pt: Math.round(Math.hypot(it.transform[0], it.transform[1]) * 100) / 100 }));
+    }
+    return out;
+  }
+  const docxRunHalfPoints = xml => Array.from((xml || '').matchAll(/<w:sz w:val="(\d+)"\/>/g)).map(m => Number(m[1]));
+
+  cases.push({
+    id: 'hf_text_is_10_5pt_in_editor_zones_and_seams_like_pdf_and_word',
+    description: 'Le texte d\'un en-tête et d\'un pied vaut 14 px (10,5 pt) dans les zones de l\'éditeur et dans leurs bandes de couture, comme dans le PDF et le Word ; le libellé fantôme d\'une zone vide garde 10,5 px, et le texte ne change pas de taille quand on ouvre la zone',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      PageLayout.setMarginsMm(null);
+      Editor.setHeaderFooterData(HF_TEXT_DATA());
+      Editor.setHTML(HF_TEXT_BODY);
+      Editor.refreshLayout();
+      await h.sleep(300);
+      const root = document.getElementById('editor-container');
+      const bodyPx = fontPx(root.querySelector('.tiptap p'));
+      const px = {
+        top: fontPx(root.querySelector('.v2-page-edge-top .v2-hf-zone-body p')),
+        bottom: fontPx(root.querySelector('.v2-page-edge-bottom .v2-hf-zone-body p')),
+        seamHeader: fontPx(root.querySelector('.v2-page-band-header p')),
+        seamFooter: fontPx(root.querySelector('.v2-page-band-footer p')),
+      };
+      const editorPt = Object.fromEntries(Object.entries(px).map(([k, v]) => [k, v == null ? null : Math.round(v * 0.75 * 100) / 100]));
+
+      // Ce que écrivent les exports, lu dans leurs octets.
+      const hfData = Editor.getHeaderFooterData();
+      const pdf = await h.exportPdfContent(Editor.getHTML(), hfData, PageLayout.getMarginsPt());
+      const sizes = await pdfTextSizes(h, pdf.base64);
+      const pdfOf = word => (sizes.find(it => it.str === word) || {}).pt;
+      const pdfPt = { header: pdfOf('Rapport'), footer: pdfOf('Société') };
+      const docx = await h.exportDocxParts(Editor.getHTML(), hfData, null);
+      const wordPt = { header: docxRunHalfPoints(docx.parts['word/header1.xml']).map(v => v / 2), footer: docxRunHalfPoints(docx.parts['word/footer1.xml']).map(v => v / 2) };
+
+      // Le texte de la zone ouverte est celui de `.tiptap` : la taille ne saute plus à l'entrée.
+      const before = px.top;
+      const zone = root.querySelector('.v2-page-edge-top');
+      zone.click();
+      await h.sleep(150);
+      const editing = Editor.isEditingHeaderFooter();
+      const insidePx = fontPx(root.querySelector('.tiptap p'));
+      const done = document.getElementById('v2-hf-btn-done');
+      if (done) done.click();
+      await h.sleep(150);
+
+      // Le libellé « + Ajouter un en-tête » d'une zone vide n'est pas imprimé : il garde sa taille d'interface.
+      Editor.setHeaderFooterData(Object.assign(EMPTY_DATA(), { enabled: true }));
+      Editor.refreshLayout();
+      await h.sleep(250);
+      const ghostPx = fontPx(root.querySelector('.v2-page-edge-top .v2-hf-zone-ghost'));
+
+      const same = (a, b) => a != null && b != null && Math.abs(a - b) < 0.05;
+      const pass = same(bodyPx, 14)
+        && Object.values(px).every(v => same(v, 14))
+        && Object.values(editorPt).every(v => same(v, 10.5))
+        && same(pdfPt.header, 10.5) && same(pdfPt.footer, 10.5)
+        && wordPt.header.length > 0 && wordPt.header.every(v => v === 10.5) && wordPt.footer.length > 0 && wordPt.footer.every(v => v === 10.5)
+        && editing && same(before, insidePx)
+        && same(ghostPx, 10.5);
+      return { pass, notes: JSON.stringify({ bodyPx, px, editorPt, pdfPt, wordPt, editing, before, insidePx, ghostPx }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_text_is_10_5pt_in_reader_edges_and_seams_like_pdf',
+    description: 'En Lecture, le texte d\'un en-tête et d\'un pied vaut 14 px (10,5 pt) dans les bandes du haut et du bas de la feuille et dans les coutures, comme dans le PDF',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true); // la Lecture ne pose ses bandes que sous a4-preview
+      PageLayout.setMarginsMm(null);
+      await h.renderReaderMode(HF_TEXT_BODY, HF_TEXT_DATA());
+      await h.sleep(300);
+      const root = document.getElementById('reader-container');
+      const px = {
+        top: fontPx(root.querySelector('.v2-page-edge-top p')),
+        bottom: fontPx(root.querySelector('.v2-page-edge-bottom p')),
+        seamHeader: fontPx(root.querySelector('.v2-page-band-header p')),
+        seamFooter: fontPx(root.querySelector('.v2-page-band-footer p')),
+      };
+      const bodyPx = fontPx(root.querySelector('.reader-content p'));
+      // renderReaderMode montre les deux conteneurs à la fois (jamais le cas en usage réel) : retour au Mode édition pour les scénarios suivants.
+      root.style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      const same = (a, b) => a != null && b != null && Math.abs(a - b) < 0.05;
+      const pass = same(bodyPx, 14) && Object.values(px).every(v => same(v, 14));
+      return { pass, notes: JSON.stringify({ bodyPx, px }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();
