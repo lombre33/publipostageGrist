@@ -238,8 +238,9 @@
     resetAutosaveState(tpl);
   }
 
-  // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer. Le renommage ne touche que l'affichage local
-  // : la persistance reste au prochain clic sur Enregistrer.
+  // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer : hidden sur le <select> réel suffit,
+  // js/template-tree-select.js masque alors son déclencheur (sans cela le champ s'ouvrait à côté de la liste). Le renommage ne touche que l'affichage local
+  // : la persistance reste au prochain clic sur Enregistrer (ou à l'enregistrement automatique, qui voit la saisie).
   function closeTemplateRenameEditor() {
     if (!templateNameInput || !templateSelect) return;
     templateNameInput.hidden = true;
@@ -250,6 +251,9 @@
     const renameBtn = document.getElementById('btn-rename-template');
     if (!renameBtn || !templateNameInput || !templateSelect) return;
     function openEditor() {
+      // Le champ reprend la largeur du nom qu'il remplace (120 px au moins) : la barre ne bouge pas, et à 700 px elle ne passe pas sur une deuxième ligne.
+      const shown = document.querySelector('#v2-title-cluster .tts-wrap');
+      if (shown && shown.offsetWidth) templateNameInput.style.width = Math.max(120, shown.offsetWidth) + 'px';
       templateNameInput.hidden = false;
       templateSelect.hidden = true;
       templateNameInput.focus();
@@ -257,7 +261,11 @@
     }
     function commitAndClose() {
       const opt = templateSelect.options[templateSelect.selectedIndex];
-      if (opt && templateNameInput.value.trim()) opt.textContent = templateNameInput.value.trim();
+      if (opt && templateNameInput.value.trim()) {
+        // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à l'enregistrement.
+        const isDefault = opt.value !== '' && String(Templates.getDefaultId()) === String(opt.value);
+        opt.textContent = isDefault ? (templateNameInput.value.trim() + ' ★') : templateNameInput.value.trim();
+      }
       closeTemplateRenameEditor();
     }
     renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
@@ -1357,7 +1365,8 @@
     // "Prêt" - sans aucun message. Cas réel trouvé et corrigé séparément (js/template-organizer.js,
     // ligne avec Nom vide/null), mais Enregistrer ne doit plus jamais dépendre du bon fonctionnement de
     // cette vue décorative : un futur bug de rendu de l'arbre reste dans l'arbre.
-    try { TemplateTreeSelect.attach(templateSelect); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
+    // onOrganize : « Organiser mes modèles » vit dans l'en-tête du panneau depuis le 2026-10-01 (js/template-tree-select.js), plus dans la barre.
+    try { TemplateTreeSelect.attach(templateSelect, { onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); } }); } catch (e) { console.error('[main] TemplateTreeSelect.attach a échoué, arbre non disponible', e); }
     // Chargement non bloquant, même patron que Comments.loadForTemplate ci-dessous : l'identification
     // utilisateur (GristAPI.getCurrentUserEmail) est un aller-retour réseau, pas de raison de retarder
     // le démarrage du widget pour la section "Épinglés" de l'arbre.
@@ -1387,7 +1396,6 @@
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     MacroEditor.wire(onMacroSaved);
     TemplateOrganizeModal.wire();
-    document.getElementById('btn-organize-templates').addEventListener('click', () => { if (!isReadOnly()) TemplateOrganizeModal.open(); });
     document.getElementById('btn-save').addEventListener('click', onSave);
     document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);

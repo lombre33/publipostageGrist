@@ -357,6 +357,11 @@ async function realClick(selector, wait = 300) {
   await page.waitForTimeout(wait);
   return c;
 }
+// « Organiser mes modèles » est dans l'en-tête de la liste des modèles (depuis le 2026-10-01) : ouvrir la liste au vrai clic, puis le bouton.
+async function openOrganize() {
+  await realClick('.tts-trigger', 250);
+  await realClick('#btn-organize-templates', 700);
+}
 async function realHover(selector) {
   const c = await centerOf(selector);
   if (!c) throw new Error('introuvable : ' + selector);
@@ -631,7 +636,7 @@ async function runSites(theme) {
   await page.waitForTimeout(900);
   const tplId = await page.evaluate(() => Templates.getCurrentId());
   await page.evaluate(async ({ id, folder }) => { await TemplatePreferences.setFolder(id, folder); }, { id: tplId, folder: `Litiges ${T}` });
-  await realClick('#btn-organize-templates', 700);
+  await openOrganize();
   const organizeOpen = () => page.evaluate(() => document.getElementById('template-organize-modal').style.display !== 'none');
   const pending = () => page.evaluate(() => Array.from(document.querySelectorAll('#template-organize-list .tom-pending-folder')).map(e => e.textContent.replace(/\s+/g, ' ').trim()));
   await realClick('#template-organize-new-folder', 300);
@@ -732,7 +737,7 @@ async function runEnglish() {
   expectDialog(`${T}, export DOCX en lot : le message garde ses nombres et le nom de la table`, s,
     { title: 'Export all rows', message: 'Generate a DOCX for each of the 2 rows in “SiDossiers” and bundle them into a ZIP archive?', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
   await click(CANCEL);
-  await realClick('#btn-organize-templates', 700);
+  await openOrganize();
   await realClick('#template-organize-new-folder', 300);
   s = await state();
   expectDialog(`${T}, nouveau dossier : « New folder », « Create »`, s, { title: 'New folder', label: 'New folder name', message: null, value: '', buttons: ['Cancel', 'Create'], focus: 'input' });

@@ -98,6 +98,7 @@ const NODE_SCRIPTS = {
   settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : six onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
+  templateMenuMouse: 'verify-template-menu-mouse.mjs', // liste des modèles (12,5 px, sans « Nouveau modèle », « Organiser » en haut à droite) et renommage sur place, 700x400 clair et sombre
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
   tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',

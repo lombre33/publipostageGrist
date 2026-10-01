@@ -326,9 +326,10 @@ const WINDOWS = [
     },
   },
   {
-    key: 'organize', label: 'Organiser mes modèles', id: '#template-organize-modal', width: 480, back: 'btn-organize-templates', scrolls: true,
+    // « Organiser » est dans l'en-tête de la liste des modèles (depuis le 2026-10-01) : on ouvre la liste au vrai clic, puis le bouton ; le focus revient au déclencheur de la liste.
+    key: 'organize', label: 'Organiser mes modèles', id: '#template-organize-modal', width: 480, backSelector: '.tts-trigger', scrolls: true,
     fixed: ['#template-organize-modal h3', '#template-organize-search', '#template-organize-new-folder', '#template-organize-close'],
-    open: async () => { await realClick('#btn-organize-templates', 0); },
+    open: async () => { await realClick('.tts-trigger', 250); await realClick('#btn-organize-templates', 0); },
   },
   {
     key: 'gallery', label: 'Galerie', id: '#template-gallery-modal', width: 'large', scrolls: true,

@@ -73,31 +73,35 @@
   }
 
   cases.push({
-    id: 'organize_toolbar_button_opens_modal',
-    description: '#btn-organize-templates (icône seule, à côté de "nouveau modèle") ouvre la modale - déplacé hors du panneau de l’arbre le 2026-09-28 (retour d’Antoine : "mettre ailleurs que tout en bas")',
+    id: 'organize_button_in_the_list_header_opens_modal',
+    description: '#btn-organize-templates est dans l’en-tête de la liste des modèles (en haut à droite), plus dans la barre : il ouvre la modale - d’abord déplacé hors du panneau (2026-09-28, « mettre ailleurs que tout en bas »), puis ramené en haut à droite du panneau (Antoine, 2026-10-01)',
     run: async (h) => {
+      await openTreePopup(h);
       const btn = document.getElementById('btn-organize-templates');
       const hasIcon = !!(btn && btn.querySelector('.tts-icon.tts-icon-organize'));
+      const inHeader = !!btn && !!btn.closest('.tts-popup .tts-head');
+      const inBar = !!document.querySelector('#toolbar-top #btn-organize-templates');
       await clickEl(h, btn);
-      const pass = hasIcon && modalOpen();
+      const pass = hasIcon && inHeader && !inBar && modalOpen() && !popupOpen();
       TemplateOrganizeModal.close();
-      return { pass, notes: JSON.stringify({ hasIcon, modalOpen: modalOpen() }) };
+      return { pass, notes: JSON.stringify({ hasIcon, inHeader, inBar, modalOpen: modalOpen(), popupOpen: popupOpen() }) };
     },
   });
 
   cases.push({
-    id: 'organize_toolbar_button_has_no_phantom_before_square',
-    description: 'Régression connue (2026-09-19/28) : #btn-organize-templates porte son icône via un <span class="tts-icon"> enfant, pas via ::before - sans neutralisation explicite, le carré plein générique de #toolbar-top button::before s’affiche en plus',
+    id: 'organize_button_has_no_phantom_before_square',
+    description: 'Régression connue (2026-09-19/28) : le bouton Organiser porte son icône via un <span class="tts-icon"> enfant, pas via ::before - jamais le carré plein générique de #toolbar-top button::before (il n’est plus dans la barre, mais ne doit pas y revenir)',
     run: () => {
-      const before = getComputedStyle(document.getElementById('btn-organize-templates'), '::before');
-      const pass = before.content === 'none';
-      return { pass, notes: JSON.stringify({ content: before.content }) };
+      const btn = document.getElementById('btn-organize-templates');
+      const before = getComputedStyle(btn, '::before');
+      const pass = before.content === 'none' && !btn.closest('#toolbar-top');
+      return { pass, notes: JSON.stringify({ content: before.content, inBar: !!btn.closest('#toolbar-top') }) };
     },
   });
 
   cases.push({
     id: 'organize_tree_no_longer_has_organize_row',
-    description: 'Le panneau de l’arbre ne contient plus de ligne "Organiser mes modèles" (déplacée, pas dupliquée)',
+    description: 'Le panneau de l’arbre ne contient pas de LIGNE "Organiser mes modèles" (c’est le bouton de son en-tête, qui n’est pas une ligne de l’arbre)',
     run: async (h) => {
       await openTreePopup(h);
       const pass = !popup().querySelector('.tts-row-organize');

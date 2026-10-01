@@ -8,6 +8,8 @@
 .tts-native-select.tts-native-select { display: none !important; }
 
 .tts-wrap { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+/* [hidden] seul perd contre `display: inline-flex` ci-dessus : pendant « Renommer », le déclencheur disparaît pour laisser le champ du nom à sa place (js/template-tree-select.js, syncDisabledState). */
+.tts-wrap[hidden] { display: none; }
 
 .tts-trigger { display: inline-flex; align-items: center; gap: 4px; border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; min-width: 0; border-radius: 0; font: inherit; color: inherit; cursor: pointer; }
 /* .tts-trigger est un <button> dans #toolbar-top : la règle générique #toolbar-top button::before (css/style.css) lui pose donc un ::before de 14x14
@@ -40,8 +42,7 @@
 /* Macro-modèle : plusieurs pages assemblées (distinct d'un document simple), cf. planning/feature-macro-modeles.md. */
 .tts-icon-macro { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); }
 .tts-icon-folder { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z'/%3E%3C/svg%3E"); }
-/* Dernière ligne du panneau ("Organiser mes modèles…", js/template-tree-select.js:makeOrganizeRow) - icône
-   de réglages (curseurs), distincte du dossier pour ne pas laisser croire que c'est un dossier de plus. */
+/* Bouton « Organiser » de l'en-tête du panneau (.tts-organize-btn) - icône de réglages (curseurs), distincte du dossier pour ne pas laisser croire que c'est un dossier de plus. */
 .tts-icon-organize { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'%3E%3Cline x1='4' y1='7' x2='20' y2='7'/%3E%3Ccircle cx='9' cy='7' r='2'/%3E%3Cline x1='4' y1='17' x2='20' y2='17'/%3E%3Ccircle cx='15' cy='17' r='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'%3E%3Cline x1='4' y1='7' x2='20' y2='7'/%3E%3Ccircle cx='9' cy='7' r='2'/%3E%3Cline x1='4' y1='17' x2='20' y2='17'/%3E%3Ccircle cx='15' cy='17' r='2'/%3E%3C/svg%3E"); }
 
 .tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
@@ -62,8 +63,23 @@
    par défaut du navigateur - texte noir sur fond sombre (constaté le 2026-09-29 en vérifiant les dossiers en thème sombre). */
 /* font-family explicite : rattaché à document.body (cf. commentaire JS positionPopup), le panneau sort de la cascade de la barre d'outils (Manrope) et
    retombait sur l'Arial par défaut du body (css/style.css) - régression relevée par le coordinateur, mesure indépendante 2026-09-28. */
-.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); color: var(--text); }
+/* font-size explicite, pour la même raison que font-family et color : le panneau, rattaché à <body>, héritait des 16 px du navigateur - les noms de modèles y faisaient 16 px, soit plus que le
+   déclencheur (13 px) et que les menus au survol de la barre (12,5 px, .v2-hover-row) (retour d'Antoine, 2026-10-01 : « un peu gros, un peu gras, pas très sobre »). Même taille que ces menus. */
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); font-size: 12.5px; color: var(--text); }
 .tts-popup.is-open { display: block; }
+
+/* En-tête du panneau : il reste en haut quand la liste défile (sticky), titre à gauche et « Organiser mes modèles » en haut à droite (Antoine, 2026-10-01). Les marges négatives le font couvrir le
+   padding de 4 px du panneau, pour que les lignes qui défilent ne se voient pas au-dessus de lui. */
+.tts-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 2px; padding: 4px 6px 4px 12px; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
+.tts-head-title { font-size: 11px; font-weight: 600; color: var(--text-faint); white-space: nowrap; }
+.tts-organize-btn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; font-weight: 500; cursor: pointer; }
+.tts-organize-btn .tts-icon { width: 13px; height: 13px; }
+/* @media (hover: hover) - même piège que .tts-trigger:hover ci-dessus (fond collé après un tap). */
+@media (hover: hover) and (pointer: fine) {
+  .tts-organize-btn:hover { background: var(--surface-sunken); color: var(--text); }
+}
+.tts-organize-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--surface-sunken); color: var(--text); }
+.tts-empty { padding: 8px 12px; font-size: 12px; color: var(--text-muted); }
 
 .tts-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--text-faint); padding: 6px 8px 2px; }
 
@@ -80,9 +96,12 @@
 
 /* Dossiers et modèles doivent se distinguer d'un coup d'œil, pas seulement par la petite icône (Antoine, 2026-09-29) : le nom d'un dossier est en gras sur une bande de fond
    pleine largeur, celui d'un modèle reste en graisse normale sans fond ; un trait vertical relie chaque dossier déplié à son contenu. Poids 700 : présent dans Manrope
-   (charte, planning/identite-ui-ux-grist-factory.md), aucune couleur ajoutée - --surface-sunken/--border-strong suivent le thème sombre. */
+   (charte, planning/identite-ui-ux-grist-factory.md), aucune couleur ajoutée - --surface-sunken/--border-strong suivent le thème sombre. Ces règles servent aussi la fenêtre
+   « Organiser mes modèles » ; la liste déroulante allège le gras juste après. */
 .tts-row-folder { background: var(--surface-sunken); font-weight: 700; margin-top: 2px; }
 .tts-row-folder .tts-row-label { font-weight: 700; }
+/* Dans la liste déroulante seulement : demi-gras (600) plutôt que 700 (retour d'Antoine du 2026-10-01 : « un peu gras, pas très sobre »). La fenêtre Organiser garde son gras. */
+.tts-popup .tts-row-folder, .tts-popup .tts-row-folder .tts-row-label { font-weight: 600; }
 @media (hover: hover) and (pointer: fine) {
   .tts-row-folder:hover { background: var(--border); }
 }

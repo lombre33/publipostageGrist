@@ -9,7 +9,7 @@
 .title-cluster { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
 .title-cluster select { border: none; height: 26px; background: transparent; padding: 0 6px 0 8px; max-width: 168px; border-radius: 0; }
 .title-cluster select:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -2px; }
-.title-cluster .title-cluster-input { border: none; height: 26px; background: var(--accent-soft); padding: 0 8px; width: 160px; outline: none; }
+.title-cluster .title-cluster-input { box-sizing: border-box; border: none; height: 26px; background: var(--accent-soft); padding: 0 8px; width: 160px; outline: none; }
 .title-cluster button.rename-btn { border: none; border-left: 1px solid var(--border); border-radius: 0; height: 26px; width: 26px; padding: 0; background: transparent; color: var(--text-faint); }
 .title-cluster button.rename-btn:hover, .title-cluster button.rename-btn:focus-visible { color: var(--text); background: var(--surface-sunken); }
 /* Crayon de renommage : délibérément plus petit/discret que celui du mode Édition pour ne pas laisser croire aux deux boutons la même fonction. */
@@ -160,12 +160,6 @@
    avant, cf. #v2-toolbar button::before dans editor-v2.css qui règle le même problème pour l'autre
    toolbar) et affiche un carré plein 14x14, faute de mask-image défini pour ce bouton. */
 #toolbar-top #v2-btn-toggle-cci::before { content: none; }
-
-/* #btn-organize-templates (2026-09-28, déplacé du panneau de l'arbre vers la toolbar) porte son icône
-   via un <span class="tts-icon tts-icon-organize"> enfant (même mécanisme que .tts-trigger, cf.
-   css/template-tree-select.css), pas via ::before - même neutralisation que ci-dessus, sinon le carré
-   générique de #toolbar-top button::before (css/style.css) s'affiche en plus de l'icône réelle. */
-#toolbar-top #btn-organize-templates::before { content: none; }
 
 /* Compteur de longueur + bouton d'action de la bar-row 1, visibles uniquement en mode email (js/main.js) - insérés après le bouton Exporter PDF existant,
    jamais à côté (il n'y a qu'un seul bouton d'action ici, cf. planning/feature-email-mode.md §4.1 - "le bouton exporter en pdf disparaît [du bandeau email]

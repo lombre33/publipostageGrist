@@ -8,11 +8,15 @@
 //
 // Scope limité à parcourir/choisir/épingler depuis l'arbre - pas de glisser-déposer, jamais éprouvé ici.
 // Créer un dossier et y ranger un modèle se fait depuis la modale js/template-organize-modal.js
-// ("Organiser mes modèles", ouverte depuis #btn-organize-templates dans la toolbar - Antoine a demandé
-// le 2026-09-28 de déplacer ce déclencheur hors du panneau, où il vivait initialement en dernière ligne).
+// ("Organiser mes modèles"). Son déclencheur a changé d'endroit deux fois : dernière ligne du panneau, puis un bouton de la
+// barre (Antoine, 2026-09-28), et depuis le 2026-10-01 l'en-tête du panneau, en haut à droite (#btn-organize-templates,
+// créé ici une seule fois ; js/main.js passe `onOrganize` à attach() et garde l'id pour le verrou de lecture seule).
 const TemplateTreeSelect = (function () {
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
+  // En-tête fixe du panneau (titre + « Organiser ») : créé une fois par attachInner(), render() ne redessine que les lignes en dessous.
+  let head, headTitle, organizeBtn, organizeLabel;
+  let onOrganize = null;
   let mo = null;
   let outsideClickHandler = null;
   // Dossiers dépliés/repliés À LA MAIN pendant que le panneau est ouvert (chemin -> ouvert ?). Le panneau se redessine en entier à chaque
@@ -156,7 +160,6 @@ const TemplateTreeSelect = (function () {
 
 
   function render() {
-    const selectedValue = realSelect.value;
     // Un ré-affichage déclenché pendant que le popup est ouvert (ex. clic sur l'épingle d'une ligne, cf.
     // pinBtn ci-dessus) reconstruit tout popup.innerHTML : sans ceci, la ligne qui avait le focus clavier
     // roulant (tabindex=0 + focus DOM réel) disparaîtrait et le focus retomberait sur <body>, cassant la
@@ -166,24 +169,19 @@ const TemplateTreeSelect = (function () {
       const focusedRow = document.activeElement.closest('.tts-row');
       if (focusedRow) focusedId = focusedRow.dataset.templateId;
     }
-    popup.innerHTML = '';
+    // Seules les lignes sont redessinées : l'en-tête (titre et « Organiser ») reste en place, avec son id et son focus.
+    Array.from(popup.children).forEach((child) => { if (child !== head) popup.removeChild(child); });
 
-    // Entrée "-- Nouveau modèle --" (value '') : toujours en tête, hors arbre - même position que la
-    // 1re <option> posée par refreshTemplateList (js/main.js).
-    const newRow = document.createElement('div');
-    newRow.className = 'tts-row tts-row-leaf tts-row-new';
-    newRow.setAttribute('role', 'treeitem');
-    newRow.setAttribute('tabindex', '-1');
-    newRow.dataset.templateId = '';
-    if (selectedValue === '') newRow.setAttribute('aria-selected', 'true');
-    const newLabel = document.createElement('span');
-    newLabel.className = 'tts-row-label';
-    newLabel.textContent = I18n.t('template.newOption');
-    newRow.appendChild(newLabel);
-    newRow.addEventListener('click', () => selectValue(''));
-    popup.appendChild(newRow);
-
+    // Pas de ligne « — Nouveau modèle — » (value '') : le bouton « + » de la barre sert à ça (Antoine, 2026-10-01). La 1re <option> du <select> réel, elle, reste : c'est
+    // l'état « modèle pas encore enregistré », que le déclencheur affiche.
     const view = TemplateOrganizer.buildView(currentTemplates(), currentPreferences());
+
+    if (!view.pinned.length && !view.tree.length) {
+      const empty = document.createElement('div');
+      empty.className = 'tts-empty';
+      empty.textContent = I18n.t('templateTree.empty');
+      popup.appendChild(empty);
+    }
 
     if (view.pinned.length) {
       const sep = document.createElement('div');
@@ -220,7 +218,10 @@ const TemplateTreeSelect = (function () {
     const id = realSelect.value;
     const tpl = findTemplateById(id);
     triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
-    triggerLabel.textContent = tpl ? labelFor(tpl) : I18n.t('template.newOption');
+    // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle n'est pas enregistré, et le
+    // nouveau nom doit se voir tout de suite - avec le <select> natif il se voyait, alors que le cache garde l'ancien nom jusqu'à « Enregistrer ».
+    const opt = realSelect.options[realSelect.selectedIndex];
+    triggerLabel.textContent = tpl ? ((opt && opt.value !== '' && opt.textContent) || labelFor(tpl)) : I18n.t('template.newOption');
     popup.querySelectorAll('.tts-row[aria-selected]').forEach((r) => r.removeAttribute('aria-selected'));
     const row = popup.querySelector('.tts-row-leaf[data-template-id="' + CSS.escape(String(id)) + '"]');
     if (row) row.setAttribute('aria-selected', 'true');
@@ -228,6 +229,10 @@ const TemplateTreeSelect = (function () {
 
   function syncDisabledState() {
     trigger.disabled = !!realSelect.disabled;
+    // « Renommer » (js/main.js) pose hidden sur le <select> réel pour faire apparaître le champ du nom À SA PLACE. Son display:none permanent le rend déjà invisible : c'est donc
+    // le déclencheur qui doit suivre, sinon le champ s'ouvrait à côté de la liste (retour d'Antoine, 2026-10-01).
+    wrap.hidden = !!realSelect.hidden;
+    if (realSelect.hidden) closePopup();
   }
 
   // Redéfinit l'accesseur `value` sur CETTE instance de <select> (masque l'accesseur du prototype
@@ -315,7 +320,9 @@ const TemplateTreeSelect = (function () {
     trigger.setAttribute('aria-expanded', 'true');
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];
-    setRovingFocus(selected);
+    // Aucun modèle : le focus va sur « Organiser », sinon Échap ne serait plus capté par le panneau (le focus resterait sur le déclencheur).
+    if (selected) setRovingFocus(selected);
+    else if (organizeBtn) organizeBtn.focus({ preventScroll: true });
     // Le navigateur GARDE le scrollTop de .tts-popup d'une fermeture à l'autre (overflow-y:auto, cf. CSS) -
     // sans repositionnement explicite ici, rouvrir après avoir défilé rendait visibles des lignes qui
     // n'étaient plus les mêmes que celles attendues en haut du panneau (mesure indépendante du
@@ -352,6 +359,14 @@ const TemplateTreeSelect = (function () {
 
   function onPopupKeydown(e) {
     const rows = visibleRows();
+    // « Organiser » (en-tête) fait partie du parcours au clavier : Flèche haut depuis la première ligne l'atteint (plus bas), Flèche bas le quitte pour la première ligne. Entrée et
+    // Espace restent au clic natif du bouton ; Échap et Tab sont traités plus bas comme depuis une ligne.
+    if (organizeBtn && document.activeElement === organizeBtn) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[0]); return; }
+      if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
+      if (e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); return; }
+      if (e.key === 'Enter' || e.key === ' ') return;
+    }
     const current = document.activeElement && document.activeElement.classList.contains('tts-row') ? document.activeElement : rows[0];
     const idx = rows.indexOf(current);
     if (e.key === 'Escape') { e.preventDefault(); closePopup(); trigger.focus({ preventScroll: true }); return; }
@@ -363,7 +378,12 @@ const TemplateTreeSelect = (function () {
     // la barre) plutôt que de la ligne du panneau.
     if (e.key === 'Tab') { closePopup(); trigger.focus({ preventScroll: true }); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); return; }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setRovingFocus(rows[Math.max(idx - 1, 0)]); return; }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (idx <= 0 && organizeBtn) organizeBtn.focus({ preventScroll: true });
+      else setRovingFocus(rows[Math.max(idx - 1, 0)]);
+      return;
+    }
     if (e.key === 'Home') { e.preventDefault(); setRovingFocus(rows[0]); return; }
     if (e.key === 'End') { e.preventDefault(); setRovingFocus(rows[rows.length - 1]); return; }
     // ArrowRight/ArrowLeft suivent le patron WAI-ARIA "Tree View" : sur un dossier fermé, Right l'ouvre ;
@@ -398,9 +418,11 @@ const TemplateTreeSelect = (function () {
   }
 
   // --- Attache / détache ----------------------------------------------------------------------------
-  function attach(select) {
+  function attach(select, options) {
     if (realSelect) detach();
     realSelect = select;
+    // Gardé d'un attach() à l'autre quand on n'en repasse pas : la même vue rattachée sans options (après un échec, dev-tests) continue d'ouvrir « Organiser ».
+    if (options && typeof options.onOrganize === 'function') onOrganize = options.onOrganize;
 
     // Piège 4 (relevé 2026-09-28, jamais reproduit mais jamais protégé) : le <select> réel est masqué
     // (classe + tabIndex + aria-hidden ci-dessous) AVANT que le reste de cette fonction (construction de
@@ -422,7 +444,7 @@ const TemplateTreeSelect = (function () {
         realSelect.removeAttribute('aria-hidden');
         realSelect.tabIndex = 0;
       }
-      realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = null;
+      realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = head = headTitle = organizeBtn = organizeLabel = null;
       throw err;
     }
   }
@@ -481,6 +503,32 @@ const TemplateTreeSelect = (function () {
     popup.setAttribute('aria-label', I18n.t('template.select'));
     popup.addEventListener('keydown', onPopupKeydown);
 
+    // En-tête fixe : titre à gauche, « Organiser mes modèles » en haut à droite. tabIndex -1 : on y arrive par Flèche haut depuis la première ligne (onPopupKeydown), pas par Tab,
+    // qui referme le panneau. Le clic referme le panneau et rend le focus au déclencheur AVANT d'ouvrir la fenêtre : celle-ci le rendra à son tour à la fermeture, et le bouton,
+    // masqué avec le panneau, ne peut pas le recevoir.
+    head = document.createElement('div');
+    head.className = 'tts-head';
+    headTitle = document.createElement('span');
+    headTitle.className = 'tts-head-title';
+    organizeBtn = document.createElement('button');
+    organizeBtn.type = 'button';
+    organizeBtn.id = 'btn-organize-templates';
+    organizeBtn.className = 'tts-organize-btn';
+    organizeBtn.tabIndex = -1;
+    organizeLabel = document.createElement('span');
+    organizeLabel.className = 'tts-organize-label';
+    organizeBtn.appendChild(iconSpan('organize'));
+    organizeBtn.appendChild(organizeLabel);
+    organizeBtn.addEventListener('click', () => {
+      closePopup();
+      trigger.focus({ preventScroll: true });
+      if (onOrganize) onOrganize();
+    });
+    head.appendChild(headTitle);
+    head.appendChild(organizeBtn);
+    popup.appendChild(head);
+    syncHeadTexts();
+
     wrap.appendChild(trigger);
     // popup rattaché à document.body, PAS à wrap : cf. commentaire de .tts-popup (css/template-tree-select.css)
     // sur le rognage par #v2-title-cluster { overflow: hidden }. Repositionné à chaque ouverture (openPopup()).
@@ -497,7 +545,7 @@ const TemplateTreeSelect = (function () {
       if (structural) render();
       else if (attrChanged) syncDisabledState();
     });
-    mo.observe(realSelect, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    mo.observe(realSelect, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden'] });
 
     render();
   }
@@ -514,7 +562,15 @@ const TemplateTreeSelect = (function () {
     realSelect.classList.remove('tts-native-select');
     realSelect.removeAttribute('aria-hidden');
     realSelect.tabIndex = 0;
-    realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = null;
+    realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = head = headTitle = organizeBtn = organizeLabel = null;
+  }
+
+  function syncHeadTexts() {
+    if (!head) return;
+    headTitle.textContent = I18n.t('templateTree.title');
+    organizeLabel.textContent = I18n.t('templateTree.organize');
+    organizeBtn.title = I18n.t('toolbar.organizeTemplates');
+    organizeBtn.setAttribute('aria-label', I18n.t('toolbar.organizeTemplates'));
   }
 
   // Force un nouveau rendu depuis les données actuelles - utile après TemplatePreferences.loadForCurrentUser()
@@ -528,7 +584,7 @@ const TemplateTreeSelect = (function () {
   // puisque ce module peut être détaché.
   if (typeof I18n !== 'undefined') {
     I18n.onChange(() => {
-      if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); render(); }
+      if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
     });
   }
 

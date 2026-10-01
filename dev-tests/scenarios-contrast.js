@@ -163,7 +163,17 @@
   cases.push({
     id: 'contrast_template_picker_focus_ring_is_3_to_1_against_what_it_borders',
     description: 'Anneau de focus du sélecteur de modèle (bouton et lignes de la liste) : 3:1 au moins contre le fond qu’il borde, en clair et en sombre',
-    run: async () => {
+    run: async (h) => {
+      // La liste n'a plus de ligne « Nouveau modèle » : sans modèle enregistré elle n'a aucune ligne à mesurer.
+      if (!Templates.getCached().length) {
+        h.openFlyout('#v2-new-template-group');
+        await h.clickButton('v2-btn-new-document');
+        await h.sleep(50);
+        Editor.setHTML('<p>Contraste</p>');
+        document.getElementById('template-name').value = 'Contraste - Modèle';
+        await h.clickButton('btn-save');
+        await h.sleep(400);
+      }
       const trigger = document.querySelector('.tts-trigger');
       const popup = document.querySelector('.tts-popup');
       const wasOpen = popup && popup.classList.contains('is-open');
@@ -188,6 +198,42 @@
         });
         const bad = failing(byTheme, 3);
         return { pass: bad.length === 0 && !!row, notes: JSON.stringify({ bad, byTheme, rows: !!row }) };
+      } finally {
+        if (!wasOpen) trigger.click();
+        trigger.blur();
+      }
+    },
+  });
+
+  cases.push({
+    id: 'contrast_template_list_header_and_empty_text_reach_4_5_and_organize_focus_ring_3_to_1',
+    description: 'En-tête de la liste des modèles (titre, bouton « Organiser ») et phrase « Aucun modèle enregistré » : 4,5:1 au moins sur le fond du panneau ; anneau de focus du bouton « Organiser » : 3:1 ; en clair et en sombre',
+    run: async () => {
+      const trigger = document.querySelector('.tts-trigger');
+      const popup = document.querySelector('.tts-popup');
+      const wasOpen = popup && popup.classList.contains('is-open');
+      if (!wasOpen) trigger.click();
+      await new Promise(r => setTimeout(r, 250));
+      try {
+        const title = document.querySelector('.tts-head-title');
+        const organize = document.getElementById('btn-organize-templates');
+        const byTheme = inBothThemes(() => {
+          const out = {
+            'titre de l’en-tête': round2(textRatio(title)),
+            'bouton Organiser': round2(textRatio(organize.querySelector('.tts-organize-label') || organize)),
+            'phrase « aucun modèle »': withProbe('<div class="tts-popup is-open" style="position:static;"><div class="tts-empty">x</div></div>', p => round2(textRatio(p.querySelector('.tts-empty')))),
+          };
+          organize.focus();
+          const cs = getComputedStyle(organize);
+          const ringColor = parseColor(cs.outlineColor);
+          const bg = backgroundOf(organize);
+          out['anneau de focus (3:1)'] = organize.matches(':focus-visible') && ringColor ? round2(ratio(over(ringColor, bg), bg)) : 0;
+          return out;
+        });
+        const ringLow = Object.keys(byTheme).filter(t => !(byTheme[t]['anneau de focus (3:1)'] >= 3));
+        const textsBad = [];
+        for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (name !== 'anneau de focus (3:1)' && !(value >= 4.5)) textsBad.push(theme + ' ' + name + ' ' + value);
+        return { pass: textsBad.length === 0 && ringLow.length === 0, notes: JSON.stringify({ textsBad, ringLow, byTheme }) };
       } finally {
         if (!wasOpen) trigger.click();
         trigger.blur();

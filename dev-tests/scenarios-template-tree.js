@@ -159,7 +159,7 @@
   // (graisse, fond, trait guide du groupe), pas le texte du CSS.
   cases.push({
     id: 'tree_folder_rows_are_bold_on_a_band_unlike_template_rows',
-    description: 'Un dossier et un sous-dossier ont un nom en gras sur une bande de fond, un modèle une graisse normale sans fond, et chaque groupe déplié a son trait guide calé sur le caret de son dossier',
+    description: 'Un dossier et un sous-dossier ont un nom en demi-gras sur une bande de fond, un modèle une graisse normale sans fond, et chaque groupe déplié a son trait guide calé sur le caret de son dossier',
     run: async (h) => {
       const idA = await createTemplate(h, 'document', 'Arbre - Modèle rangé');
       await createTemplate(h, 'document', 'Arbre - Modèle à la racine');
@@ -179,7 +179,7 @@
       };
       const g0 = guide(top), g1 = guide(sub);
       const pass = !!top && !!sub && !!leaf
-        && weight(top) >= 700 && weight(sub) >= 700 && weight(leaf) <= 600
+        && weight(top) >= 600 && weight(top) < 700 && weight(sub) >= 600 && weight(sub) < 700 && weight(leaf) <= 500
         && bg(top) !== 'rgba(0, 0, 0, 0)' && bg(sub) !== 'rgba(0, 0, 0, 0)' && bg(top) !== bg(leaf) && bg(sub) !== bg(leaf)
         && g0.isGroup && g0.position === 'absolute' && g0.width === '1px' && g0.left === '13px' && g0.depthVar === '0'
         && g1.isGroup && g1.left === '29px' && g1.depthVar === '1';
@@ -681,6 +681,165 @@
       const pass = result.otherUserIgnored && result.ownStateSurvivesReload && result.noZeroKeyInCache
         && result.foldersListed.includes('Arbre-Perso-1') && !result.foldersListed.includes('Arbre-Perso-2');
       return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+
+  // --- Retours d'Antoine du 2026-10-01 sur la liste des modèles : noms plus sobres, « Organiser » dans le panneau, plus de ligne « Nouveau modèle », renommage sur place.
+  // Les mesures à la vraie souris et à 700x400 : dev-tests/verify-template-menu-mouse.mjs (groupe Node `templateMenuMouse`). ---
+  cases.push({
+    id: 'tree_rows_are_sober_same_size_as_the_toolbar_menus',
+    description: 'Les noms de la liste des modèles font la taille des menus au survol de la barre (12,5 px), pas les 16 px hérités de <body> : modèle en graisse normale, dossier en demi-gras (600), jamais en gras plein',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Sobre - Modèle rangé');
+      await TemplatePreferences.setFolder(idA, 'Sobre - Dossier');
+      TemplateTreeSelect.refresh();
+      await openPopup(h);
+      const cs = (el) => { const c = getComputedStyle(el.querySelector('.tts-row-label')); return { size: parseFloat(c.fontSize), weight: Number(c.fontWeight) }; };
+      const leaf = cs(rowFor(idA));
+      const folder = cs(folderRowByPath('Sobre - Dossier'));
+      const flyoutRow = parseFloat(getComputedStyle(document.querySelector('.v2-hover-row')).fontSize);
+      await closeTree(h);
+      await tidyFolders([], [idA]);
+      const pass = leaf.size === flyoutRow && folder.size === flyoutRow && leaf.size <= 13 && leaf.weight <= 500 && folder.weight === 600;
+      return { pass, notes: JSON.stringify({ leaf, folder, flyoutRow }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_has_no_new_template_row_the_plus_button_does_that',
+    description: 'La liste ne propose plus de ligne « — Nouveau modèle — » en tête (le bouton « + » de la barre sert à ça) ; l’état « pas encore enregistré » reste affiché par le déclencheur',
+    run: async (h) => {
+      await createTemplate(h, 'document', 'Sans ligne nouveau');
+      await openPopup(h);
+      const rows = Array.from(popup().querySelectorAll('.tts-row'));
+      const newOptionText = I18n.t('template.newOption');
+      const emptyIdRow = rows.some((r) => r.dataset.templateId === '');
+      const newLabelRow = rows.some((r) => r.textContent.trim() === newOptionText);
+      const firstIsATemplate = !!rows[0] && (rows[0].classList.contains('tts-row-folder') || rows[0].dataset.templateId !== '');
+      await closeTree(h);
+      await h.clickButton('btn-new');
+      await h.sleep(60);
+      const triggerLabel = trigger().querySelector('.tts-trigger-label').textContent;
+      const pass = rows.length > 0 && !emptyIdRow && !newLabelRow && firstIsATemplate && triggerLabel === newOptionText;
+      return { pass, notes: JSON.stringify({ rows: rows.length, emptyIdRow, newLabelRow, firstIsATemplate, triggerLabel }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_header_holds_organize_button_top_right_and_opens_the_window',
+    description: '« Organiser mes modèles » est en haut à droite du panneau (plus dans la barre), reste visible quand la liste défile, referme le panneau et ouvre la fenêtre ; à sa fermeture le focus revient au déclencheur',
+    run: async (h) => {
+      await createTemplate(h, 'document', 'Entête - Un');
+      await openPopup(h);
+      const btn = document.getElementById('btn-organize-templates');
+      const head = popup().firstElementChild;
+      const inBar = !!document.querySelector('#toolbar-top #btn-organize-templates');
+      const pr = popup().getBoundingClientRect();
+      const br = btn.getBoundingClientRect();
+      const topRight = head.classList.contains('tts-head') && head.contains(btn) && br.right <= pr.right - 1 && pr.right - br.right < 16 && br.top >= pr.top && br.bottom <= pr.top + 40;
+      // La liste défile, l'en-tête reste en haut du panneau (sticky) : le bouton reste atteignable.
+      popup().scrollTop = popup().scrollHeight;
+      await h.sleep(30);
+      const br2 = btn.getBoundingClientRect();
+      const stillVisible = Math.abs(br2.top - br.top) <= 1 && popup().scrollTop >= 0;
+      const hasLabel = btn.textContent.trim() === I18n.t('templateTree.organize') && btn.title === I18n.t('toolbar.organizeTemplates') && btn.getAttribute('aria-label') === I18n.t('toolbar.organizeTemplates');
+      popup().scrollTop = 0;
+      await clickEl(h, btn);
+      await h.sleep(120);
+      const modalIsOpen = getComputedStyle(document.getElementById('template-organize-modal')).display !== 'none';
+      const popupClosed = !popupOpen();
+      document.getElementById('template-organize-close').click();
+      await h.sleep(150);
+      const focusBack = document.activeElement === trigger();
+      const pass = !inBar && topRight && stillVisible && hasLabel && modalIsOpen && popupClosed && focusBack;
+      return { pass, notes: JSON.stringify({ inBar, topRight, stillVisible, hasLabel, modalIsOpen, popupClosed, focusBack, pr: [pr.left, pr.right, pr.top], br: [br.left, br.right, br.top, br.bottom] }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_arrow_up_from_first_row_reaches_organize_and_arrow_down_comes_back',
+    description: 'Au clavier : Flèche haut depuis la première ligne atteint « Organiser » (qui n’est plus dans l’ordre de tabulation de la barre), Flèche bas revient à la première ligne, Échap referme',
+    run: async (h) => {
+      await createTemplate(h, 'document', 'Clavier - Un');
+      await openPopup(h);
+      const rows = Array.from(popup().querySelectorAll('.tts-row'));
+      rows[0].focus();
+      const key = (el, k) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      key(document.activeElement, 'ArrowUp');
+      await h.sleep(20);
+      const onOrganize = document.activeElement === document.getElementById('btn-organize-templates');
+      key(document.activeElement, 'ArrowDown');
+      await h.sleep(20);
+      const backOnFirst = document.activeElement === rows[0];
+      key(document.activeElement, 'ArrowUp');
+      key(document.activeElement, 'Escape');
+      await h.sleep(30);
+      const pass = onOrganize && backOnFirst && !popupOpen() && document.activeElement === trigger();
+      return { pass, notes: JSON.stringify({ onOrganize, backOnFirst, popupOpen: popupOpen(), focusIsTrigger: document.activeElement === trigger() }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_without_any_template_says_so_and_keeps_organize_reachable',
+    description: 'Sans aucun modèle enregistré, la liste dit « Aucun modèle enregistré. » (plus de ligne « Nouveau modèle » pour la remplir) et « Organiser » reste là, avec le focus pour qu’Échap marche',
+    run: async (h) => {
+      await h.resetEditor();
+      const original = Templates.getCached;
+      Templates.getCached = () => [];
+      let result;
+      try {
+        TemplateTreeSelect.refresh();
+        await openPopup(h);
+        const empty = popup().querySelector('.tts-empty');
+        const rows = popup().querySelectorAll('.tts-row').length;
+        const focusOnOrganize = document.activeElement === document.getElementById('btn-organize-templates');
+        popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await h.sleep(30);
+        result = { empty: !!empty && empty.textContent === I18n.t('templateTree.empty'), rows, focusOnOrganize, closed: !popupOpen() };
+      } finally {
+        Templates.getCached = original;
+        TemplateTreeSelect.refresh();
+      }
+      const pass = result.empty && result.rows === 0 && result.focusOnOrganize && result.closed;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_rename_field_replaces_the_trigger_in_place_and_new_name_shows',
+    description: 'Le crayon « Renommer » fait apparaître le champ du nom À LA PLACE du déclencheur (pas à côté), à sa largeur ; Entrée le referme et le déclencheur montre le nouveau nom (étoile gardée) avant même l’enregistrement',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Renommer - Avant');
+      await Templates.setDefault(id);
+      await TemplateTreeSelect.refresh();
+      const wrap = document.querySelector('#v2-title-cluster .tts-wrap');
+      const input = document.getElementById('template-name');
+      const before = wrap.getBoundingClientRect();
+      const clusterBefore = document.getElementById('v2-title-cluster').getBoundingClientRect();
+      await clickEl(h, document.getElementById('btn-rename-template'));
+      await h.sleep(50);
+      const wrapDisplay = getComputedStyle(wrap).display;
+      const triggerVisible = isLaidOut(trigger());
+      const ir = input.getBoundingClientRect();
+      const clusterOpen = document.getElementById('v2-title-cluster').getBoundingClientRect();
+      const inPlace = !input.hidden && Math.abs(ir.left - before.left) <= 2 && Math.abs(ir.width - before.width) <= 2;
+      const barDidNotMove = Math.abs(clusterOpen.width - clusterBefore.width) <= 2;
+      const focused = document.activeElement === input;
+      input.value = 'Renommer - Après';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await h.sleep(60);
+      const label = trigger().querySelector('.tts-trigger-label').textContent;
+      const backToTrigger = getComputedStyle(wrap).display !== 'none' && input.hidden;
+      await h.clickButton('btn-save');
+      await h.sleep(400);
+      const savedName = (Templates.getCached().find((t) => String(t.id) === String(id)) || {}).nom;
+      const labelAfterSave = trigger().querySelector('.tts-trigger-label').textContent;
+      await Templates.setDefault(null);
+      await TemplateTreeSelect.refresh();
+      const pass = wrapDisplay === 'none' && !triggerVisible && inPlace && barDidNotMove && focused && label === 'Renommer - Après ★' && backToTrigger && savedName === 'Renommer - Après' && labelAfterSave === 'Renommer - Après ★';
+      return { pass, notes: JSON.stringify({ wrapDisplay, triggerVisible, inPlace, barDidNotMove, focused, label, backToTrigger, savedName, labelAfterSave, before: [before.left, before.width], input: [ir.left, ir.width] }) };
     },
   });
 

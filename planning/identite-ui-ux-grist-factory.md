@@ -262,6 +262,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
   favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
   choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).
+  La liste reste sobre (retours d'Antoine du 01/10) : même corps que les menus de la barre (12,5 px), noms en graisse
+  normale, dossiers en demi-gras ; « Organiser » est un petit bouton dans l'en-tête fixe de la liste, en haut à droite, et
+  non dans la barre ; pas de ligne « Nouveau modèle » dans la liste (le bouton « + » crée un modèle) ; renommer un modèle
+  remplace son nom, sur place, par un champ de même largeur (pas de champ à côté de la liste).
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

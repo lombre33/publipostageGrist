@@ -19,6 +19,10 @@ const I18n = (function () {
     'templateTree.unpin.tip': { fr: 'Retirer des épinglés', en: 'Remove from pinned' },
     'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
     'templateTree.allSection': { fr: 'Tous les modèles', en: 'All templates' },
+    // En-tête du panneau : titre et bouton « Organiser » (son info-bulle et son aria-label restent 'toolbar.organizeTemplates').
+    'templateTree.title': { fr: 'Modèles', en: 'Templates' },
+    'templateTree.organize': { fr: 'Organiser', en: 'Organize' },
+    'templateTree.empty': { fr: 'Aucun modèle enregistré.', en: 'No saved template yet.' },
     // --- Modale "Organiser mes modèles" (créer des dossiers, y ranger des modèles), js/template-organize-modal.js ---
     'organize.modal.title': { fr: 'Organiser mes modèles', en: 'Organize my templates' },
     'organize.modal.intro': { fr: 'Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.', en: 'This organization is personal: other people using this document don’t see it.' },
