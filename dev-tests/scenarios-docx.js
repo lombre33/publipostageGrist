@@ -200,7 +200,7 @@
     });
 
   add('docx_task_list_glyphs',
-    'Case à cocher : glyphe Unicode littéral (☑/☐) et texte barré gris quand l\'item est coché',
+    'Case à cocher : glyphe Unicode littéral (☑/☐) et texte barré quand l\'item est coché, dans le gris foncé de la Lecture (#667085, 4,97:1 sur blanc ; c\'était #98a2b3, 2,6:1)',
     async (h) => {
       const parts = await h.exportDocxParts('<ul data-type="taskList"><li data-checked="true">fait</li><li data-checked="false">a faire</li></ul>');
       const ps = meaningful(h.docxParagraphs(parts.doc));
@@ -208,7 +208,7 @@
       const coche = ps[0], aFaire = ps[1];
       const texteCoche = coche.runs.find(r => r.text === 'fait') || {};
       const pass = coche.text === '☑ fait' && aFaire.text === '☐ a faire'
-        && texteCoche.strike === true && texteCoche.color === '98A2B3'
+        && texteCoche.strike === true && texteCoche.color === '667085'
         && !coche.numId; // jamais une liste numérotée Word : le glyphe EST le marqueur
       return { pass, notes: JSON.stringify({ textes: ps.map(p => p.text), barreSiCoche: texteCoche.strike, couleur: texteCoche.color, numId: coche.numId }) };
     });

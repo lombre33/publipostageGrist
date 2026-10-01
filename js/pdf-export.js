@@ -422,7 +422,7 @@ const PdfExport = (function () {
     if (!checked || style === 'classic' || style === 'accentPlain') return base;
     return base.map(r => Object.assign({}, r, {
       decoration: Array.isArray(r.decoration) ? r.decoration.concat('lineThrough') : (r.decoration ? [r.decoration, 'lineThrough'] : ['lineThrough']),
-      color: r.color || '#98a2b3',
+      color: r.color || '#667085', // le gris de la Lecture (--paper-text-faint, 4,97:1 sur blanc) ; c'était #98a2b3, 2,6:1
     }));
   }
 

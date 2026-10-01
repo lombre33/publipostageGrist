@@ -81,7 +81,8 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
   sur le fond de sa zone. Un message de réussite prend `--good` sur `--good-soft`.
 - La page (éditeur, Lecture) reste blanche dans les deux thèmes : un texte discret posé dessus prend `--paper-text-faint`,
   jamais `--text-faint`, qui s'éclaircit en sombre (2,46:1 sur blanc). Une zone qui prend le fond teinté du thème au
-  survol (en-tête et pied de page remplis) y reprend le gris du thème.
+  survol (en-tête et pied de page remplis) y reprend le gris du thème. Dans le PDF et le Word, le texte barré d'un item
+  coché d'une liste à cases prend ce même gris (`#667085`, 4,97:1) comme en Lecture, et non `#98a2b3` (2,6:1) (Antoine, 01/10).
 
 ### Deux polices, jamais mélangées : chrome vs contenu produit
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un

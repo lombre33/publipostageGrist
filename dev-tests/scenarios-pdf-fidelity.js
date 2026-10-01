@@ -729,6 +729,41 @@
     });
   });
 
+  // Texte barré d'un item coché d'une liste à cases : le gris de la Lecture (--paper-text-faint, #667085, 4,97:1 sur blanc) et non plus un gris clair (#98a2b3, 2,6:1) - réponse d'Antoine
+  // du 01/10 à la carte « Foncer le gris du texte barré des listes à cases dans le PDF et le Word ? » : « Oui, gris foncé ». Le Word : docx_task_list_glyphs (scenarios-docx.js).
+  cases.push({
+    id: 'pdffid_task_list_checked_item_text_is_struck_in_the_reading_grey',
+    description: 'Le texte d’un item coché d’une liste à cases (« accent, texte barré ») est barré dans le gris foncé de la Lecture (#667085, 4,5:1 au moins sur blanc, pas le #98a2b3 à 2,6:1) ; un item décoché et le style « classique » gardent leur texte normal',
+    run: async (h) => {
+      const item = (checked, text) => `<li data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked="checked"' : ''}><span></span></label><div><p>${text}</p></div></li>`;
+      const html = `<ul data-type="taskList">${item(true, 'fait')}${item(false, 'a faire')}</ul>`
+        + `<ul data-type="taskList" data-tasklist-style="classic">${item(true, 'classique')}</ul>`;
+      const result = await h.exportPdfContent(html, null);
+      const runs = [];
+      const walk = node => {
+        if (Array.isArray(node)) { node.forEach(walk); return; }
+        if (!node || typeof node !== 'object') return;
+        if (typeof node.text === 'string') runs.push(node);
+        Object.keys(node).forEach(k => walk(node[k]));
+      };
+      walk(result.content);
+      const run = text => runs.find(r => r.text.trim() === text) || {};
+      const struck = r => [].concat(r.decoration || []).indexOf('lineThrough') !== -1;
+      const channel = (hex, i) => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      const onWhite = hex => /^#[0-9a-f]{6}$/i.test(hex || '') ? 1.05 / (0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5) + 0.05) : 0;
+      const done = run('fait');
+      const checks = {
+        checkedItemIsStruck: struck(done),
+        greyIsTheReadingGrey: String(done.color).toLowerCase() === '#667085',
+        greyIsReadable: onWhite(String(done.color)) >= 4.5,
+        uncheckedStaysPlain: !struck(run('a faire')),
+        classicStaysPlain: !struck(run('classique')),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, done, unchecked: run('a faire'), classic: run('classique'), contrast: onWhite(String(done.color)) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFidelity = cases;
 })();

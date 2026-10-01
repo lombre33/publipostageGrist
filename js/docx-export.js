@@ -410,7 +410,7 @@ const DocxExport = (function () {
     const checked = li.getAttribute('data-checked') === 'true';
     const style = (li.parentElement && li.parentElement.getAttribute('data-tasklist-style')) || 'accentStrike';
     if (!checked || style === 'classic' || style === 'accentPlain') return { size: DEFAULT_HALF_PT };
-    return { size: DEFAULT_HALF_PT, strike: true, color: '98A2B3' };
+    return { size: DEFAULT_HALF_PT, strike: true, color: '667085' }; // le gris de la Lecture (--paper-text-faint, 4,97:1 sur blanc) ; c'était 98A2B3, 2,6:1
   }
 
   // Une <li> -> un Paragraph (marqueur natif Word `numbering:` OU, pour une case à cocher, marqueur littéral + son propre contenu inline sans les
