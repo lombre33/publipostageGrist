@@ -1,0 +1,37 @@
+/* Panneau Rechercher / Remplacer (js/find-replace.js) : une barre fine entre la barre d'outils et le texte, jamais une fenêtre. Les couleurs de la barre viennent des jetons de
+   css/style.css (clair et sombre, 4,5:1 au moins) ; le surlignage dans la page, lui, a des couleurs fixes : la page reste blanche dans les deux thèmes (cf. css/style.css). */
+.pp-find-bar { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 5px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12.5px; }
+.pp-find-bar[hidden], .pp-find-row[hidden] { display: none; }
+.pp-find-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+
+.pp-find-input { flex: 1 1 150px; min-width: 110px; height: 28px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
+.pp-find-input::placeholder { color: var(--text-muted); opacity: 1; }
+.pp-find-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+
+/* Boutons icône : nus au repos, fond et bordure discrets au survol (comme ceux de la barre d'outils, css/editor-v2.css). */
+.pp-find-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); cursor: pointer; }
+.pp-find-btn svg { width: 16px; height: 16px; pointer-events: none; }
+.pp-find-btn:hover { background: var(--surface-sunken); border-color: var(--border); }
+.pp-find-btn:focus-visible, .pp-find-text-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Option allumée (Respecter la casse, Mot entier) : fond doux et cadre d'accent, l'icône garde la couleur du texte (le bleu sur le fond doux ne ferait que 4,02:1). */
+.pp-find-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+/* Le chevron qui montre / cache la ligne « Remplacer par » se tourne vers le bas quand elle est montrée. */
+.pp-find-toggle svg { transition: transform .12s ease; }
+.pp-find-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.pp-find-spacer { flex: none; width: 28px; }
+
+.pp-find-text-btn { flex: none; height: 28px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pp-find-text-btn:hover { background: var(--surface-sunken); }
+/* Grisé, jamais retiré, et toujours atteignable au clavier (aria-disabled) : le bouton qui vient de remplacer le dernier résultat ne doit pas faire perdre le focus. */
+.pp-find-bar [aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-find-bar [aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
+.pp-find-bar .pp-find-text-btn[aria-disabled="true"]:hover { background: var(--surface); border-color: var(--border-strong); }
+
+/* Compteur : « 3 sur 12 », « 12 résultats », « Aucun résultat », « 5 remplacements ». Largeur minimale pour que les boutons ne dansent pas pendant la frappe. */
+.pp-find-count { flex: none; min-width: 5.5em; padding: 0 4px; text-align: right; white-space: nowrap; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.pp-find-count[data-kind="flash"] { color: var(--text); }
+
+/* Surlignage dans le texte : toutes les correspondances en jaune pâle, la courante en orange cerclé (le cerclage la distingue sans la couleur seule). Le texte garde sa
+   couleur : au moins 8:1 sur ces deux fonds avec le noir bleuté du texte de la page. */
+.tiptap .pp-find-match { background: #ffe58f; border-radius: 2px; }
+.tiptap .pp-find-match.pp-find-current { background: #ffb347; box-shadow: 0 0 0 1.5px #8a4b00; }

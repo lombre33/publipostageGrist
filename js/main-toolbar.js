@@ -187,6 +187,7 @@ const MainToolbar = (function () {
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature');
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
+    set('v2-btn-find', 'search');
     set('v2-btn-track-changes', 'trackChanges');
     set('v2-btn-accept-all', 'acceptAll'); set('v2-btn-reject-all', 'rejectAll');
     set('v2-highlight-icon', 'highlight');
@@ -277,6 +278,7 @@ const MainToolbar = (function () {
     setLocked('v2-btn-insert-variable', inMacroMode);
     setLocked('v2-btn-undo', inMacroMode);
     setLocked('v2-btn-redo', inMacroMode);
+    setLocked('v2-btn-find', inMacroMode);
     setLocked('v2-btn-track-changes', inMacroMode);
     // Menu « Lien et blocs de contenu » : grisé en entier pour un macro-modèle (comme le reste de la barre) ; en édition, deux lignes se grisent selon la
     // sélection au lieu de disparaître - pas de lien dans un bloc de code ni sur une image seule, pas de bloc de code qui effacerait une variable ou une image.
@@ -374,6 +376,14 @@ const MainToolbar = (function () {
     const label = document.getElementById('v2-btn-callout-label');
     if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
   }
+  // La loupe (js/find-replace.js) : le raccourci dépend de la plateforme (Ctrl+F ou ⌘F), posé sur l'infobulle et l'aria-label, réécrit à chaque changement de langue.
+  function decorateFindShortcut() {
+    const button = document.getElementById('v2-btn-find');
+    if (!button) return;
+    const label = FindReplace.findShortcutLabel();
+    button.setAttribute('data-tip', I18n.t('find.tip') + ' (' + label + ')');
+    button.setAttribute('aria-label', I18n.t('find.button.aria') + ' (' + label + ')');
+  }
   function decorateLinkShortcut() {
     const label = LinkDialog.shortcutLabel();
     const button = document.getElementById('v2-btn-link');
@@ -450,6 +460,9 @@ const MainToolbar = (function () {
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
+    decorateFindShortcut();
+    I18n.onChange(decorateFindShortcut);
+    bind('v2-btn-find', () => FindReplace.toggle());
     I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré
     // programmatiquement rouvre donc la même autocomplétion que si l'utilisateur venait de le taper, sans dupliquer sa logique.

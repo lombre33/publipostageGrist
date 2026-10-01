@@ -14,6 +14,13 @@ remplacement un par un ou "tout remplacer" — attention à bien passer par des 
 réelles (comme tout le reste de l'éditeur) pour que l'historique Annuler/Rétablir fonctionne
 correctement sur un remplacement.
 
+**Livré le 01/10** (roadmap A20, tâche de fond ; Antoine a choisi d'ajouter la loupe à la barre d'outils) : `js/find-replace.js` et `css/find-replace.css`. Une barre fine entre la barre d'outils et le texte
+(jamais une fenêtre), ouverte par la loupe, Ctrl+F ou Ctrl+H (⌘⇧H sur Mac). L'état de la recherche vit dans le module, pas dans le plugin ProseMirror : `Editor.setHTML` reconstruit l'état de l'éditeur
+et remettrait les plugins à zéro. Les résultats se calculent par bloc de texte (jamais à cheval sur deux paragraphes), à travers les changements de mise en forme ; une bulle, une image et le texte
+supprimé en suivi comptent pour des caractères qu'aucune requête ne trouve. Un remplacement est une vraie transaction (UNE étape d'annulation, « Tout remplacer » compris), garde la mise en forme
+du texte remplacé et passe par le pont du suivi des modifications quand il est allumé. Les règles d'interface sont dans la charte (`identite-ui-ux-grist-factory.md`, « Rechercher / Remplacer »),
+les tests dans les groupes `findReplace` et `findReplaceMouse`. Pas fait : chercher dans le texte des bulles (noms de variables), dans l'en-tête et le pied de page hors édition, ni par expression régulière.
+
 ## Fusion de cellules de tableau
 
 Le tableau du projet utilise `@tiptap/extension-table` (confirmé par les mêmes classes

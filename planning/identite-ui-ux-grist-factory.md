@@ -309,6 +309,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   s'écrit sans fond ni mot ajouté. Bloc de signature : une zone 2 colonnes toute faite (trois lignes vides pour signer, une
   ligne de tirets bas, puis « Nom et signature » à gauche et « Date » à droite) posée sous le bloc du curseur, jamais dedans ;
   c'est du texte ordinaire, qu'on modifie (une variable à la place du nom, une autre légende).
+- Rechercher / Remplacer (demande d'Antoine du 01/10 ; sa réponse à la carte : « Ajouter la loupe », la seule icône ajoutée à la barre gelée) : une barre fine entre la barre d'outils et
+  le texte, jamais une fenêtre - le modèle reste visible et modifiable pendant qu'on cherche. La loupe est sur la dernière rangée, après Rétablir (aucune rangée de plus à 700 px) ; allumée tant que
+  la barre est ouverte, grisée en Lecture et en macro-modèle, son infobulle dit « Rechercher / Remplacer (Ctrl+F) ». Ctrl+F / ⌘F ouvre la barre, Ctrl+H (⌘⇧H sur Mac, ⌘H est réservé à macOS)
+  y ajoute la ligne « Remplacer par » : où que soit le clavier, même resté sur un bouton de la barre d'outils, sauf sous une fenêtre ouverte et quand l'éditeur n'est pas à l'écran (la
+  recherche du navigateur reprend alors la main). Un mot sélectionné est repris dans le champ ; Entrée / Maj+Entrée passent au résultat suivant / précédent en repartant de l'autre bout ;
+  « 3 sur 12 » dit où l'on est, « Aucun résultat » grise les flèches (grisées, jamais retirées). « Respecter la casse » et « Mot entier » sont deux boutons à état, le chevron de gauche montre
+  ou cache « Remplacer par ». Tous les résultats sont surlignés en jaune pâle `#ffe58f`, le courant en orange `#ffb347` cerclé de `#8a4b00` (le cerclage le distingue sans la couleur) :
+  couleurs fixes, la page reste blanche en sombre, le texte garde la sienne (8:1 au moins). Espaces insécables et apostrophes ou guillemets courbes valent leurs formes droites ; une
+  correspondance ne traverse jamais deux paragraphes ni deux cases ; ne se trouvent pas : les bulles (variables, calculs, numéros de page), les images, le texte supprimé en suivi, et l'en-tête
+  ou le pied de page tant qu'on ne les modifie pas. « Remplacer » met le texte au résultat courant puis passe au suivant (sans résultat courant il se place d'abord sur le prochain) ;
+  « Tout remplacer » les remplace tous et dit combien (« 5 remplacements »). Chaque remplacement est UNE étape d'annulation, « Tout remplacer » compris ; Ctrl+Z, Ctrl+Maj+Z et Ctrl+Y agissent
+  sur le modèle même quand le clavier est resté sur un bouton de la barre (dans un champ, Ctrl+Z reste celui du champ). Le nouveau texte garde la mise en forme du texte remplacé (gras,
+  couleur, lien) ; avec le suivi des modifications allumé, le remplacement devient une suppression et une insertion suggérées, comme une frappe. Échap ferme depuis n'importe quel contrôle
+  de la barre, rend le clavier au texte et laisse le dernier résultat sélectionné ; la barre se ferme aussi quand l'éditeur disparaît (Mode lecture, macro-modèle).
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la

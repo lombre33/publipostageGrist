@@ -383,6 +383,8 @@ const Editor = (function () {
         trackChangesApi.SuggestChangesBridge,
         Variables.createExtension(Extension, Suggestion),
         LinkDialog.createExtension(Extension),
+        // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf. wireEditor).
+        FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
         TrackedTable.configure({ resizable: true }),
         TrackedTableRow,
         TrackedTableHeaderWithBg,
@@ -418,6 +420,7 @@ const Editor = (function () {
     MainToolbar.setEditor(editor);
     MainToolbar.wireToolbar();
     LinkDialog.wireEditor(editor);
+    FindReplace.wireEditor(editor);
     FloatingToolbars.wireColorPickers();
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();

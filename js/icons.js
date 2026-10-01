@@ -80,6 +80,15 @@ const Icons = (function () {
     // Encadré (une boîte avec sa barre de couleur à gauche et deux lignes de texte) et bloc de signature (un paraphe au-dessus de sa ligne), lignes du même menu.
     callout: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14"/><path d="M11.5 10h5M11.5 14h3"/>',
     signature: '<path d="M3 20h18"/><path d="M5 15.5c1.5-3.8 2.8-8 4-8 1.3 0-.5 6.4.9 6.4 1.4 0 2.2-3.8 3.4-3.8 1 0 .9 2.4 2 2.4.6 0 1.2-.7 1.7-1.5"/>',
+    // Rechercher / Remplacer (js/find-replace.js) : la loupe de la barre, puis les contrôles du panneau - chevrons précédent / suivant / afficher le remplacement,
+    // « Aa » (respecter la casse), « ab » souligné d'un crochet (mot entier) et la croix de fermeture (distincte de rejectAll, qui est « tout refuser »).
+    search: '<circle cx="10.5" cy="10.5" r="6"/><path d="m20 20-5.2-5.2"/>',
+    chevronUp: '<path d="m6 15 6-6 6 6"/>',
+    chevronDown: '<path d="m6 9 6 6 6-6"/>',
+    chevronRight: '<path d="m9 6 6 6-6 6"/>',
+    matchCase: '<path d="M2.5 18 7 6l4.5 12M4.2 14h5.6"/><circle cx="17" cy="15" r="3"/><path d="M20 12v6"/>',
+    wholeWord: '<circle cx="7.5" cy="10" r="2.8"/><path d="M10.3 7.2V13"/><path d="M13.7 4v9"/><circle cx="16.7" cy="10" r="2.8"/><path d="M3.5 17v3.5h17V17"/>',
+    closeFind: '<path d="M7 7l10 10M17 7 7 17"/>',
   };
   return { svg: name => WRAP_OPEN + (PATHS[name] || '') + WRAP_CLOSE };
 })();
