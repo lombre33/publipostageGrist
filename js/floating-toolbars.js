@@ -219,7 +219,9 @@ const FloatingToolbars = (function () {
       const dom = editor.view.nodeDOM(state.selection.from);
       const img = dom && dom.querySelector && dom.querySelector('img');
       if (!img) return;
-      const imgWidthPx = img.getBoundingClientRect().width;
+      // En pixels de mise en page, comme la largeur du conteneur juste dessous : getBoundingClientRect est en pixels écran, plus petits que ceux de la page quand la
+      // feuille est réduite (~0,85 à 700 px). Sans la division, « à droite » dépassait de la marge et « au centre » tombait à côté.
+      const imgWidthPx = img.getBoundingClientRect().width / EditorCore.layoutZoom(img);
       const containerWidthPx = EditorCore.editorContentWidthPx(editor);
       // `left` est stocké depuis le bord de la boîte de padding, mais l'alignement vise le bord du texte - décalage explicite du padding.
       const rootCs = getComputedStyle(editor.view.dom);
@@ -250,8 +252,11 @@ const FloatingToolbars = (function () {
           const imgRect = img.getBoundingClientRect();
           // offsetParent du wrapper (pas toujours .tiptap - une cellule de tableau en est un elle-même) : sinon l'image saute à l'affichage.
           const rootRect = (dom.offsetParent || editor.view.dom).getBoundingClientRect();
-          patch.left = Math.round(imgRect.left - rootRect.left);
-          patch.top = Math.round(imgRect.top - rootRect.top);
+          // Écart mesuré en pixels écran, `left`/`top` s'écrivent en pixels de mise en page : à ~700 px de panneau (feuille réduite à ~0,85) l'image sautait en haut à
+          // gauche au premier passage en calque.
+          const zoom = EditorCore.layoutZoom(img);
+          patch.left = Math.round((imgRect.left - rootRect.left) / zoom);
+          patch.top = Math.round((imgRect.top - rootRect.top) / zoom);
           // Reporté IMMÉDIATEMENT sur `dom` (pas seulement sur `patch`, qui n'est appliqué qu'à la toute fin) : computePageGridPosition ci-dessous mesure
           // ET corrige `dom` lui-même si cette position sort de la page physique (cf. son propre commentaire) - sans ce report, la correction ne serait
           // jamais reflétée dans le left/top finalement enregistré.

@@ -33,6 +33,16 @@ const EditorCore = (function () {
     return Math.max(0, rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0));
   }
 
+  // Facteur de réduction de la feuille A4 (`zoom: var(--pp-fit-zoom)` sur .v2-page-sheet et .reader-content, posé par applyPageFitZoom de js/main.js) : à ~700 px de
+  // panneau il vaut ~0,85. Les rectangles de getBoundingClientRect et les déplacements de la souris sont en pixels ÉCRAN, alors que `left`, `top` et `width` d'une
+  // image s'écrivent en pixels de MISE EN PAGE : tout geste qui passe de l'un à l'autre divise par ce facteur (redimensionner, déplacer, aligner, passer en calque).
+  // Même lecture que layoutZoom de js/header-footer-preview.js (copie locale à son module). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché).
+  function layoutZoom(el) {
+    const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(z) && z > 0) ? z : 1;
+  }
+
   // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
@@ -280,7 +290,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver,

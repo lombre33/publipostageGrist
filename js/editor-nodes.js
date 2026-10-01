@@ -1049,9 +1049,12 @@ const EditorNodes = (function () {
             event.preventDefault(); event.stopPropagation();
             const rect = img.getBoundingClientRect();
             const attrsNow = currentAttrs();
+            // La souris et getBoundingClientRect parlent en pixels ÉCRAN, `width`/`height` s'écrivent en pixels de MISE EN PAGE : la feuille est réduite à ~0,85 dans
+            // un panneau de ~700 px (cf. EditorCore.layoutZoom). Sans cette conversion, agrandir de 100 px rétrécissait l'image.
+            const zoom = EditorCore.layoutZoom(wrap);
             resizeState = {
-              startX: event.clientX, startY: event.clientY,
-              startWidth: rect.width, startHeight: rect.height,
+              startX: event.clientX, startY: event.clientY, zoom,
+              startWidth: rect.width / zoom, startHeight: rect.height / zoom,
               signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
               isVarBox: !!attrsNow.varTable,
               // En calque, `wrap` a une largeur explicite (cf. applyAttrs) ; sans la faire grandir aussi pendant le glisser (pas seulement à la fin),
@@ -1063,21 +1066,21 @@ const EditorNodes = (function () {
           }
           function onResizeMove(event) {
             if (!resizeState) return;
-            let width = Math.max(30, resizeState.startWidth + (event.clientX - resizeState.startX) * resizeState.signX);
+            let width = Math.max(30, resizeState.startWidth + ((event.clientX - resizeState.startX) / resizeState.zoom) * resizeState.signX);
             // En en-tête/pied, la poignée bute sur le plafond mais reste utilisable (rétrécir reste toujours libre).
             width = HeaderFooterPreview.clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
             img.style.width = Math.round(width) + 'px';
             if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
             if (resizeState.isVarBox) {
-              const height = Math.max(30, resizeState.startHeight + (event.clientY - resizeState.startY) * resizeState.signY);
+              const height = Math.max(30, resizeState.startHeight + ((event.clientY - resizeState.startY) / resizeState.zoom) * resizeState.signY);
               img.style.height = Math.round(height) + 'px';
             }
           }
           function onResizeUp() {
             document.removeEventListener('mousemove', onResizeMove);
             if (resizeState) {
-              const patch = { width: Math.round(img.getBoundingClientRect().width) + 'px' };
-              if (resizeState.isVarBox) patch.height = Math.round(img.getBoundingClientRect().height) + 'px';
+              const patch = { width: Math.round(img.getBoundingClientRect().width / resizeState.zoom) + 'px' };
+              if (resizeState.isVarBox) patch.height = Math.round(img.getBoundingClientRect().height / resizeState.zoom) + 'px';
               updateAttrs(patch);
             }
             resizeState = null;
@@ -1089,14 +1092,15 @@ const EditorNodes = (function () {
             // Attributs courants via getPos()/nodeAt, pas `node` (figé au 1er rendu).
             const pos = getPos();
             const current = (typeof pos === 'number' && nodeEditor.state.doc.nodeAt(pos)) || node;
-            moveState = { startX: event.clientX, startY: event.clientY, startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
+            // Déplacement de la souris en pixels écran, `left`/`top` en pixels de mise en page (cf. startResize) : sans la division, l'image traînait derrière le pointeur.
+            moveState = { startX: event.clientX, startY: event.clientY, zoom: EditorCore.layoutZoom(wrap), startLeft: current.attrs.left || 0, startTop: current.attrs.top || 0 };
             document.addEventListener('mousemove', onMoveMove);
             document.addEventListener('mouseup', onMoveUp, { once: true });
           }
           function onMoveMove(event) {
             if (!moveState) return;
-            wrap.style.left = (moveState.startLeft + (event.clientX - moveState.startX)) + 'px';
-            wrap.style.top = (moveState.startTop + (event.clientY - moveState.startY)) + 'px';
+            wrap.style.left = (moveState.startLeft + (event.clientX - moveState.startX) / moveState.zoom) + 'px';
+            wrap.style.top = (moveState.startTop + (event.clientY - moveState.startY) / moveState.zoom) + 'px';
           }
           function onMoveUp(event) {
             document.removeEventListener('mousemove', onMoveMove);
