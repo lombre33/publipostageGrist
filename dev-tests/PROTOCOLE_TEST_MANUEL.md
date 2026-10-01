@@ -385,7 +385,9 @@ exerce le VRAI clic natif.
    et, sur une colonne Date, le sélecteur "format de date".
 4. Cliquer ensuite AILLEURS dans la page (hors de l'éditeur et hors de la barre flottante, ex. le
    nom du modèle) — la barre doit bien se refermer (ne pas rester affichée indéfiniment - garde-fou
-   contre une sur-correction du Bug 5).
+   contre une sur-correction du Bug 5). Vérifier avec une bulle, une image et un tableau, juste après
+   les avoir cliqués (l'éditeur a alors le focus : c'est seulement dans ce cas que le blur de l'éditeur
+   rouvrait la barre d'une bulle ou d'une image).
 5. Même vérification sur la barre flottante d'une image en calque (slider d'opacité) : glisser le
    curseur doit modifier l'opacité en direct sans que la barre ne se referme pendant le geste.
 6. Bulle #Variable sélectionnée (sa barre ouverte), cliquer « Lecture » : aucune barre flottante ne reste

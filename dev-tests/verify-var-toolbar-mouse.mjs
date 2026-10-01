@@ -900,6 +900,55 @@ await page.waitForTimeout(600);
 const keyboardBack = await visibleBars();
 check('... et Entrée sur « Édition » ramène l\'éditeur', keyboardBack.editorShown, keyboardBack);
 
+// Clic ailleurs dans la page (choix « Corriger » d'Antoine, 2026-10-01) : une bulle ou une image sélectionnée, un vrai clic hors de l'éditeur et hors de la barre - le texte d'état -
+// ferme sa barre. Avant, le blur de l'éditeur qui suit le clic la rouvrait juste après le filet de js/editor-core.js (seule la barre d'un tableau se fermait). Un clic DANS la barre
+// (FR, curseur d'opacité) ne la ferme pas, et un clic sur l'objet la rouvre.
+const statusText = await hitTest('#status-msg');
+await openNumberBar();
+const numberOpen = await visibleBars();
+await page.mouse.click(statusText.x, statusText.y);
+await page.waitForTimeout(500);
+const numberAway = await visibleBars();
+check('bulle nombre sélectionnée, vrai clic sur le texte d\'état : sa barre se ferme', numberOpen.open === 1 && numberAway.open === 0, { numberOpen, numberAway });
+await reselectNumberBadge();
+const numberAgain = await visibleBars();
+check('... un clic sur la bulle la rouvre', numberAgain.open === 1, numberAgain);
+const frInside = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-style:fr"]');
+if (frInside.found) await page.mouse.click(frInside.x, frInside.y);
+await page.waitForTimeout(300);
+const afterInside = await visibleBars();
+check('... et un clic dans la barre elle-même (FR) ne la ferme pas', frInside.found && afterInside.open === 1, { frInside, afterInside });
+
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  Editor.setHTML('<p>Texte avant.</p><p><img class="editor-image" src="' + png + '" alt="" style="width:120px"></p><p>Texte après.</p>');
+});
+await page.waitForTimeout(500);
+const IMAGE = '.tiptap img.editor-image';
+let imageBox = await hitTest(IMAGE);
+await page.mouse.click(imageBox.x, imageBox.y);
+await page.waitForTimeout(500);
+const imageOpen = await visibleBars();
+const opacity = await hitTest('.v2-floating-toolbar.visible input[data-role="opacity"]');
+check('image sélectionnée à la vraie souris : sa barre est ouverte, le curseur d\'opacité atteignable', imageOpen.open === 1 && opacity.found && opacity.inViewport && opacity.onTop, { imageOpen, opacity });
+if (opacity.found) await page.mouse.click(opacity.x, opacity.y);
+await page.waitForTimeout(300);
+const imageInside = await visibleBars();
+check('... un clic dans la barre (curseur d\'opacité) ne la ferme pas', imageInside.open === 1, imageInside);
+imageBox = await hitTest(IMAGE);
+await page.mouse.click(imageBox.x, imageBox.y);
+await page.waitForTimeout(400);
+await page.mouse.click(statusText.x, statusText.y);
+await page.waitForTimeout(500);
+const imageAway = await visibleBars();
+check('image sélectionnée, vrai clic sur le texte d\'état : sa barre se ferme', imageAway.open === 0, imageAway);
+imageBox = await hitTest(IMAGE);
+await page.mouse.click(imageBox.x, imageBox.y);
+await page.waitForTimeout(500);
+const imageAgain = await visibleBars();
+check('... un clic sur l\'image la rouvre', imageAgain.open === 1, imageAgain);
+
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(300);

@@ -101,7 +101,7 @@
 
   cases.push({
     id: 'varfmt_panel_still_hides_on_real_outside_click',
-    description: 'Un vrai clic hors de l\'éditeur ET hors du panneau referme quand même la barre flottante (garde-fou : ne pas sur-corriger le Bug 5)',
+    description: 'Un vrai clic hors de l\'éditeur ET hors du panneau referme quand même la barre flottante, blur de l\'éditeur compris (garde-fou : ne pas sur-corriger le Bug 5)',
     run: async (h) => {
       await h.resetEditor();
       window.__gristStub.setVariables('VarFmtTestTable', { Montant: 'Numeric' });
@@ -114,7 +114,10 @@
       // Un vrai clic ailleurs dans la page (ex. le titre du modèle), hors .tiptap ET hors .v2-floating-toolbar - doit déclencher hideFloatingContextToolbars.
       const outside = document.getElementById('template-name') || document.body;
       outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      await h.sleep(50);
+      // Un mousedown synthétique ne déplace pas le focus : le blur de l'éditeur que provoque un vrai clic est rejoué ici. Sa transaction TipTap rappelait check(), qui rouvrait
+      // la barre juste après sa fermeture (mesuré à la vraie souris, 2026-10-01) - ce cas ne voyait pas le défaut tant qu'il s'arrêtait au mousedown.
+      document.querySelector('.tiptap').blur();
+      await h.sleep(100);
       return { pass: !panel.classList.contains('visible'), notes: 'panelVisible=' + panel.classList.contains('visible') };
     },
   });

@@ -446,6 +446,32 @@
     },
   });
 
+  // Choix « Corriger » d'Antoine (2026-10-01) : un vrai clic hors de l'éditeur et hors de la barre ferme la barre flottante d'une image (hideFloatingContextToolbars sur le
+  // mousedown), mais le blur de l'éditeur qui suit est une transaction TipTap de plus, et check() la rouvrait - mesuré à la vraie souris sur un clic dans le texte d'état. Un
+  // mousedown synthétique seul ne déplace pas le focus : le blur est rejoué ici, comme le fait un vrai clic.
+  cases.push({
+    id: 'img_floating_bar_closes_on_outside_click_with_blur',
+    description: 'Un clic hors de l\'éditeur et hors de la barre ferme la barre flottante d\'une image, blur de l\'éditeur compris ; un clic sur l\'image la rouvre',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      const img = await insertImageViaToolbar(h);
+      await h.selectAtomNode(img);
+      const panel = Array.from(document.querySelectorAll('.v2-floating-toolbar')).find(b => b.querySelector('input[data-role="opacity"]'));
+      if (!panel || !panel.classList.contains('visible')) return { pass: false, notes: 'barre image non affichée après la sélection de l\'image' };
+      h.tiptap().focus();
+      const outside = document.getElementById('template-name') || document.body;
+      outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      h.tiptap().blur();
+      await h.sleep(100);
+      const closed = !panel.classList.contains('visible');
+      h.tiptap().focus();
+      await h.selectAtomNode(img);
+      const reopened = panel.classList.contains('visible');
+      return { pass: closed && reopened, notes: JSON.stringify({ closed, reopened }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();

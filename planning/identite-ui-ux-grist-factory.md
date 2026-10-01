@@ -276,7 +276,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
 - Barres flottantes d'une bulle, d'un tableau ou d'une image : ancrées dans l'éditeur, aucune n'est ouverte quand il est
   masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
-  01/10) ; elles ne recouvrent jamais la barre du haut.
+  01/10) ; elles ne recouvrent jamais la barre du haut. Un clic hors de l'éditeur et hors de la barre ferme celle d'une
+  bulle, d'un tableau ou d'une image (choix « Corriger » d'Antoine, 01/10) ; un clic sur l'objet la rouvre.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

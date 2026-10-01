@@ -305,7 +305,11 @@ const FloatingToolbars = (function () {
 
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
     EditorCore.registerFloatingPanel(panel);
-    const check = () => {
+    const check = ({ transaction } = {}) => {
+      // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus : la traiter rouvrait la barre juste après le filet de editor-core.js qui venait de la
+      // fermer (clic hors de .tiptap et hors de la barre) - elle restait affichée après un vrai clic sur le texte d'état, par exemple. Un blur ne change ni la sélection ni le
+      // document, il n'y a rien à recalculer.
+      if (transaction && transaction.getMeta('blur')) return;
       // PAS de garde hasFocus() ici (contrairement à wireTableFloatingToolbar) : ce panneau contient un vrai contrôle de formulaire (slider d'opacité,
       // data-role="opacity") - cf. commentaire détaillé équivalent dans wireVariableFloatingToolbar sur pourquoi hasFocus()/document.activeElement sont
       // invérifiables de façon fiable au moment où l'utilisateur interagit avec un contrôle natif. La fermeture "clic hors du panneau" reste déjà gérée
@@ -490,7 +494,9 @@ const FloatingToolbars = (function () {
       setActive('date-words', isDate && !!format.words);
     }
 
-    const check = () => {
+    const check = ({ transaction } = {}) => {
+      // Le blur de l'éditeur ne passe pas ici : cf. wireImageFloatingToolbar (il rouvrait la barre que le clic hors de l'éditeur venait de fermer).
+      if (transaction && transaction.getMeta('blur')) return;
       // PAS de garde hasFocus()/document.activeElement ici, contrairement à un premier correctif tenté puis insuffisant : ce panneau contient de vrais
       // contrôles de formulaire (select nb décimales/format de date, input devise) - cliquer dessus déplace bien le focus DOM hors de l'éditeur (mesuré :
       // editor.view.hasFocus() devient faux), MAIS le <select> lui-même ne reçoit pas forcément le focus DOM de façon fiable/synchrone pour autant (mesuré
