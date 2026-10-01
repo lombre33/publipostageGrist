@@ -259,7 +259,9 @@ const Editor = (function () {
       { TaskItem },
       { Placeholder },
       { computePosition, offset, flip, shift, autoUpdate },
-      { NodeSelection, TextSelection, EditorState },
+      { NodeSelection, TextSelection, EditorState, Plugin, PluginKey },
+      { Decoration, DecorationSet },
+      { TableMap, CellSelection },
     ] = await Promise.all([
       import('@tiptap/core'),
       import('@tiptap/starter-kit'),
@@ -277,8 +279,11 @@ const Editor = (function () {
       import('@tiptap/extension-placeholder'),
       import('@floating-ui/dom'),
       import('prosemirror-state'),
+      import('prosemirror-view'),
+      import('prosemirror-tables'),
     ]);
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
+    GridEditor.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, TableMap, CellSelection });
     let EditorStateClass;
     EditorCore.setNodeSelectionClass(NodeSelection);
     EditorCore.setTextSelectionClass(TextSelection);
@@ -370,7 +375,7 @@ const Editor = (function () {
         Variables.createExtension(Extension, Suggestion),
         LinkDialog.createExtension(Extension),
         TrackedTable.configure({ resizable: true }),
-        TableRow,
+        GridEditor.withRowAttributes(TableRow),
         TrackedTableHeaderWithBg,
         TrackedTableCellWithBg,
         TrackedTwoColumnsColumn,
@@ -382,6 +387,7 @@ const Editor = (function () {
         Toc,
         EditorNodes.createTabNavigationExtension(Extension),
         EditorNodes.createClearHistoryExtension(Extension, EditorStateClass),
+        GridEditor.createExtension(Extension),
       ],
       content: '',
     });
@@ -394,6 +400,7 @@ const Editor = (function () {
     pageSheet.className = 'v2-page-sheet';
     editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
     pageSheet.appendChild(editor.view.dom);
+    GridEditor.attach(editor);
 
     FloatingToolbars.setEditor(editor);
     MainToolbar.setEditor(editor);
@@ -490,10 +497,17 @@ const Editor = (function () {
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     HeaderFooterPreview.schedulePaginationRecompute();
+    GridEditor.refresh();
   }
 
   function isTrackChangesOn() {
     return !!editor && !!trackChangesApi && trackChangesApi.isSuggestModeOn(editor.state);
+  }
+
+  // Allume ou éteint le suivi sans passer par le bouton de la barre : une grille l'éteint à l'ouverture (js/grid-editor.js:setActive).
+  function setTrackChanges(on) {
+    if (!editor || !trackChangesApi || isTrackChangesOn() === !!on) return;
+    trackChangesApi.toggleSuggestMode(editor);
   }
 
   function hasPendingTrackedChanges() {
@@ -524,6 +538,7 @@ const Editor = (function () {
     openFootnoteEditorAt,
     isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter,
     isTrackChangesOn,
+    setTrackChanges,
     hasPendingTrackedChanges,
     getSuiviModificationsForSave,
   };

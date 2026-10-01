@@ -53,12 +53,15 @@ const EditorCore = (function () {
     let stopAutoUpdate = null;
     return {
       el,
-      show(referenceEl) {
+      // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui - la grille s'en sert pour que
+      // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions). Sans lui, rien ne change.
+      show(referenceEl, options) {
         el.classList.add('visible');
         const update = () => {
+          const opts = (typeof options === 'function' ? options() : options) || {};
           floatingUi.computePosition(referenceEl, el, {
             placement: 'top',
-            middleware: [floatingUi.offset(8), floatingUi.flip(), floatingUi.shift({ padding: 8 })],
+            middleware: [floatingUi.offset(8), floatingUi.flip(opts.flip), floatingUi.shift(Object.assign({ padding: 8 }, opts.shift))],
           }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
         };
         if (stopAutoUpdate) stopAutoUpdate();

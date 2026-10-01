@@ -335,6 +335,19 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   champs texte ; « Créer l'email » ouvre le logiciel de messagerie (`mailto:`) et la fenêtre « Email trop long »
   avertit au-delà de ~2000 caractères sans bloquer ; ce qui n'a pas de sens en Email (en-tête et pied de page, modèle par
   défaut) est grisé, pas masqué.
+- Grille (mode tableau, demande d'Antoine du 01/10) : « + » puis « Nouvelle grille » crée un modèle de type `grille` — un seul tableau
+  (15 lignes × 6 colonnes de 100 × 28 px au départ), sans feuille A4 ni en-tête ni pied, qui part du coin du plan de travail et défile
+  dans le panneau, entouré de ses bandeaux A, B, C et 1, 2, 3 (gris du chrome, texte ≥ 4,5:1, collés au défilement). On tire le trait entre
+  deux lettres pour régler la largeur de la colonne de gauche, entre deux numéros la hauteur de la ligne du dessus : aperçu en direct, taille
+  affichée près du pointeur, une seule transaction (un seul Annuler), Échap annule ; une colonne ne passe pas sous 24 px, une ligne ne passe
+  pas sous la hauteur de son texte. Un clic sur une lettre, un numéro ou le coin sélectionne la colonne, la ligne ou toute la grille ;
+  Ctrl+A prend les cases, Suppr les vide, les flèches et Tab ne sortent jamais du tableau. Ce qui n'a pas de sens dans un tableau unique est
+  grisé, jamais retiré : Tableau, Deux colonnes, Sommaire, Saut de page (le temps que la grille ait le sien), Citation, Bloc de code, Encadré, Bloc de signature, les trois
+  boutons du suivi des modifications et l'aperçu A4 ; « Lien », la mise en forme, l'image, les variables et Annuler restent actifs. Le
+  garde-fou de l'éditeur tient aussi pour le clavier et le collage : la grille reste UN tableau — ni second tableau, ni deux colonnes, ni
+  sommaire, ni citation, ni encadré, ni bloc de code, ni image en calque, et on ne supprime ni le tableau, ni sa dernière ligne ou colonne. La barre
+  flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Tant que
+  l'export Excel n'est pas livré, « Nouvelle grille » reste cachée du menu « + » sans `?dev` dans l'adresse du widget.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.

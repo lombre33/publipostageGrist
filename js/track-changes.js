@@ -265,6 +265,8 @@ const TrackChanges = (function () {
       InsertionMark, DeletionMark, ModificationMark, SuggestChangesBridge,
       isSuggestModeOn: state => isSuggestChangesEnabled(state),
       restoreSuggestModeIfNeeded,
+      // Bascule du suivi hors de la barre (une grille l'éteint à l'ouverture) : même appel direct de la lib que restoreSuggestModeIfNeeded, jamais la commande.
+      toggleSuggestMode: editor => toggleSuggestChanges(editor.state, editor.view.dispatch),
     };
   }
 

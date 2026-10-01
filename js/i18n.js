@@ -46,6 +46,7 @@ const I18n = (function () {
     'toolbar.newDocument': { fr: 'Nouveau document', en: 'New document' },
     'toolbar.newEmail': { fr: 'Nouvel email', en: 'New email' },
     'toolbar.newMacro': { fr: 'Nouveau macro-modèle', en: 'New macro template' },
+    'toolbar.newGrid': { fr: 'Nouvelle grille', en: 'New grid' },
     'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
     'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
     'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },
@@ -61,6 +62,10 @@ const I18n = (function () {
     'toolbar.orientation.landscape': { fr: 'Page en paysage (passer en portrait)', en: 'Landscape page (switch to portrait)' },
     'toolbar.orientation.unavailable': { fr: 'Orientation de la page (pas disponible pour ce modèle)', en: 'Page orientation (not available for this template)' },
     'toolbar.autosave.row': { fr: 'Enregistrement automatique', en: 'Auto-save' },
+    // Mode grille (js/grid-editor.js) : infobulles des bandeaux A, B, C / 1, 2, 3.
+    'grid.selectAll': { fr: 'Tout sélectionner', en: 'Select all' },
+    'grid.resizeColumn': { fr: 'Tirer pour régler la largeur de la colonne', en: 'Drag to set the column width' },
+    'grid.resizeRow': { fr: 'Tirer pour régler la hauteur de la ligne', en: 'Drag to set the row height' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },

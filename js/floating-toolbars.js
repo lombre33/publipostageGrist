@@ -132,7 +132,12 @@ const FloatingToolbars = (function () {
       const dom = editor.view.nodeDOM($from.before(tableDepth));
       if (!dom) { panel.hide(); return; }
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
-      panel.show(tableEl);
+      // Une grille (js/grid-editor.js) : le tableau EST le modèle, et il peut dépasser le panneau dans les deux sens - la barre se pose sur la case courante, et
+      // « Supprimer le tableau » est grisé (le garde-fou de la grille le refuserait de toute façon).
+      const inGrid = GridEditor.isActive();
+      panel.show((inGrid && GridEditor.currentCellDom()) || tableEl, GridEditor.floatingOptions);
+      const tableDelBtn = panel.el.querySelector('button[data-action="table-del"]');
+      if (tableDelBtn) tableDelBtn.classList.toggle('v2-hf-locked', inGrid);
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
       EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };
@@ -270,8 +275,9 @@ const FloatingToolbars = (function () {
         'layer-normal': () => setLayer('normal'),
         // Verrouillé en mode en-tête/pied (cf. syncState pour le grisage visuel) - garde-fou en plus du CSS pointer-events:none : pdf-export.js ne résout
         // pas encore la position d'une image en calque dans un en-tête/pied (pas de mesure en 2 passes pour cette zone, contrairement au flux principal).
-        'layer-front': () => { if (!HeaderFooterPreview.getHfMode()) setLayer('front'); },
-        'layer-behind': () => { if (!HeaderFooterPreview.getHfMode()) setLayer('behind'); },
+        // Grillé aussi dans une grille (js/grid-editor.js) : une image y est posée sur sa case, à sa taille - jamais en calque.
+        'layer-front': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('front'); },
+        'layer-behind': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('behind'); },
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -299,8 +305,8 @@ const FloatingToolbars = (function () {
       // Cf. commentaire sur 'layer-front'/'layer-behind' dans onAction ci-dessus : calque non résolu par pdf-export.js à l'intérieur d'un en-tête/pied, grisé
       // pendant tout le mode (même classe/mécanisme que le reste de la toolbar, cf. .v2-hf-locked dans css/toolbar-v2.css).
       const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
-      setLockedBtn('layer-front', !!HeaderFooterPreview.getHfMode());
-      setLockedBtn('layer-behind', !!HeaderFooterPreview.getHfMode());
+      setLockedBtn('layer-front', !!HeaderFooterPreview.getHfMode() || GridEditor.isActive());
+      setLockedBtn('layer-behind', !!HeaderFooterPreview.getHfMode() || GridEditor.isActive());
     }
 
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
@@ -321,7 +327,7 @@ const FloatingToolbars = (function () {
       if (!img) { panel.hide(); return; }
       dom.classList.add('editor-image-selected');
       syncState();
-      panel.show(img);
+      panel.show(img, GridEditor.floatingOptions);
     };
     editor.on('selectionUpdate', check);
     editor.on('transaction', check);
@@ -520,7 +526,7 @@ const FloatingToolbars = (function () {
       // une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la rouvrir.
       if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
       syncState();
-      panel.show(dom);
+      panel.show(dom, GridEditor.floatingOptions);
     };
     editor.on('selectionUpdate', check);
     editor.on('transaction', check);

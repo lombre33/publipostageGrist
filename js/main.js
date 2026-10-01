@@ -129,6 +129,7 @@
   function loadMacroIntoEditor(tpl) {
     closeTemplateRenameEditor();
     Editor.exitHeaderFooterModeIfActive();
+    GridEditor.setActive(false);
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
     Editor.setHTML('');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
@@ -140,7 +141,9 @@
     [emailSubjectInput, emailToInput, emailCcInput, emailCciInput].forEach(el => { if (el) { el.value = ''; el.readOnly = false; } });
     MainToolbar.setEmailMode(false);
     MainToolbar.setMacroMode(true);
+    MainToolbar.setGridMode(false);
     HeaderFooterPreview.setEmailMode(false);
+    syncA4PreviewForModelType();
     Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = true;
@@ -184,6 +187,9 @@
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
     // s'apprête à écraser - même garde que Save/Export/Mode Lecture.
     Editor.exitHeaderFooterModeIfActive();
+    // Le garde-fou d'une grille (js/grid-editor.js) refuse tout contenu qui n'est pas « un tableau » : levé AVANT de charger celui d'un autre modèle, reposé plus bas
+    // si ce modèle est lui-même une grille.
+    GridEditor.setActive(false);
     // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
     // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
@@ -214,7 +220,12 @@
     }
     MainToolbar.setEmailMode(currentTypeModele === 'email');
     MainToolbar.setMacroMode(false);
+    MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
     HeaderFooterPreview.setEmailMode(currentTypeModele === 'email');
+    // Une grille n'a pas de feuille A4 : la classe a4-preview sort des conteneurs AVANT que la mise en page (syncEditorVisibilityForMode) et la pagination ne
+    // mesurent quoi que ce soit.
+    syncA4PreviewForModelType();
+    GridEditor.setActive(GridEditor.isGridType(currentTypeModele));
     if (macroSummaryContainer) macroSummaryContainer.style.display = 'none';
     syncEditorVisibilityForMode();
     // Editor.setHTML() plus haut a déjà déclenché un premier rendu de l'aperçu paginé (onUpdate ->
@@ -296,6 +307,13 @@
     if (isReadOnly()) return;
     templateSelect.value = '';
     loadTemplateIntoEditor(null, 'email');
+  }
+
+  // Même schéma encore : une nouvelle grille est un modèle vide d'un type fixé à la création (un tableau de départ, posé par GridEditor.setActive).
+  async function onNewGrid() {
+    if (isReadOnly()) return;
+    templateSelect.value = '';
+    loadTemplateIntoEditor(null, GridEditor.TYPE);
   }
 
   // Un nouveau macro-modèle n'a rien à "charger" avant d'avoir été composé et enregistré au moins une fois (contrairement à onNew/onNewEmail, qui vident
@@ -1050,23 +1068,38 @@
     await updateEmailLengthGauge();
   }
 
+  // Posée sur les deux conteneurs (édition et lecture), sinon la largeur réelle d'une page PDF ne s'appliquait jamais en mode Lecture. .checked sur le
+  // <label> lui-même fait rester l'icône en accent/bleu tant que la case est cochée, plutôt qu'un simple texte de case à cocher. Une grille n'a pas de feuille :
+  // la case est alors grisée (GridEditor.setActive) et la classe retirée, la case garde sa valeur pour le modèle suivant.
+  function applyA4Preview() {
+    const toggle = document.getElementById('v2-toggle-a4-preview');
+    if (!toggle) return;
+    const label = toggle.closest('.a4-toggle');
+    const on = toggle.checked && !GridEditor.isGridType(currentTypeModele);
+    editorContainer.classList.toggle('a4-preview', on);
+    readerContainer.classList.toggle('a4-preview', on);
+    if (label) label.classList.toggle('checked', toggle.checked);
+    // Le facteur d'ajustement n'a de sens qu'en Aperçu A4 : applyPageFitZoom le retire de lui-même quand la classe disparaît. Avant la pagination,
+    // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
+    refreshPageFitZoom();
+    Editor.refreshPaginationPreview();
+  }
+
+  // Rappelée à chaque changement de modèle (loadTemplateIntoEditor, loadMacroIntoEditor) : seul le passage d'une grille à un autre type (ou l'inverse) change la
+  // classe, dans tous les autres cas la case seule la gouverne, comme avant les grilles.
+  let a4ForcedOffByGrid = false;
+  function syncA4PreviewForModelType() {
+    const grid = GridEditor.isGridType(currentTypeModele);
+    if (grid === a4ForcedOffByGrid) return;
+    a4ForcedOffByGrid = grid;
+    applyA4Preview();
+  }
+
   function wireA4PreviewToggle() {
     const toggle = document.getElementById('v2-toggle-a4-preview');
     if (!toggle) return;
-    // Posée sur les deux conteneurs (édition et lecture), sinon la largeur réelle d'une page PDF ne s'appliquait jamais en mode Lecture. .checked sur le
-    // <label> lui-même fait rester l'icône en accent/bleu tant que la case est cochée, plutôt qu'un simple texte de case à cocher.
-    const label = toggle.closest('.a4-toggle');
-    const sync = () => {
-      editorContainer.classList.toggle('a4-preview', toggle.checked);
-      readerContainer.classList.toggle('a4-preview', toggle.checked);
-      if (label) label.classList.toggle('checked', toggle.checked);
-      // Le facteur d'ajustement n'a de sens qu'en Aperçu A4 : applyPageFitZoom le retire de lui-même quand la classe disparaît. Avant la pagination,
-      // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
-      refreshPageFitZoom();
-      Editor.refreshPaginationPreview();
-    };
-    toggle.addEventListener('change', sync);
-    sync();
+    toggle.addEventListener('change', applyA4Preview);
+    applyA4Preview();
   }
 
   // Nom de fichier PDF masqué par défaut derrière un crayon : réglage secondaire, pas besoin d'occuper en permanence une zone de la barre du haut. Reste
@@ -1429,9 +1462,11 @@
     const btnNewDocument = document.getElementById('v2-btn-new-document');
     const btnNewEmail = document.getElementById('v2-btn-new-email');
     const btnNewMacro = document.getElementById('v2-btn-new-macro');
+    const btnNewGrid = document.getElementById('v2-btn-new-grid');
     if (btnNewDocument) btnNewDocument.addEventListener('click', onNew);
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
+    if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
     MacroEditor.wire(onMacroSaved);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);

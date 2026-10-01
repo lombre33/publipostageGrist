@@ -14,6 +14,18 @@ const MainToolbar = (function () {
   // (qui a, lui, un vrai corps de document à mettre en forme).
   let inMacroMode = false;
   function setMacroMode(active) { inMacroMode = !!active; }
+  // Mode grille (planning/feature-mode-grille-excel.md) : même patron, posé par js/main.js quand le modèle courant est de type 'grille' - un tableau unique, sans
+  // feuille. GRID_LOCKED_IDS = ce qui n'a aucun sens dans un tableau unique, grisé et jamais retiré (règle d'Antoine) ; « Lien » reste actif (un lien dans une case a
+  // un sens). Les boutons qui ouvrent sur un autre type de bloc (citation, bloc de code, encadré, signature du menu Lien) en font partie ; un fil qui ajoute un bouton de ce menu
+  // l'ajoute ici. Le saut de page y entre tant qu'il n'est pas porté par une ligne du tableau (il redevient actif avec la bascule portrait / paysage de la grille).
+  let inGridMode = false;
+  function setGridMode(active) { inGridMode = !!active; }
+  const GRID_LOCKED_IDS = [
+    'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-page-break',
+    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature',
+    'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all',
+  ];
+  const gridLockedIds = new Set();
 
   // Menu listant les colonnes Attachments : insère un placeholder lié à la #Variable (résolu en vraie image en mode Lecture/export).
   let imageVarPickerBox = null;
@@ -231,7 +243,8 @@ const MainToolbar = (function () {
     // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque
     // devant/derrière est bloqué plus bas.
     const inHfMode = !!HeaderFooterPreview.getHfMode();
-    const setLocked = (id, locked) => { const el = document.getElementById(id); if (el) el.classList.toggle('v2-hf-locked', !!locked); };
+    const lockedNow = new Set();
+    const setLocked = (id, locked) => { const el = document.getElementById(id); if (!el) return; el.classList.toggle('v2-hf-locked', !!locked); if (locked) lockedNow.add(id); };
     setLocked('v2-btn-table', inHfMode);
     setLocked('v2-btn-two-columns', inHfMode);
     setLocked('v2-btn-page-break', inHfMode);
@@ -275,6 +288,14 @@ const MainToolbar = (function () {
     setLocked('v2-btn-signature', inEmailMode || inHfMode);
     setLocked('v2-btn-accept-all', inMacroMode);
     setLocked('v2-btn-reject-all', inMacroMode);
+    // Mode grille : appliqué APRÈS tous les verrouillages ci-dessus (le dernier appel gagne). En quittant la grille, un bouton que l'une des lignes ci-dessus gère
+    // vient d'être recalculé par elle ; seul un bouton qu'aucune ne gère (la citation) est rendu ici ; ceux de l'encadré et de la signature, que la ligne ci-dessus grise pour un e-mail ou un en-tête, le restent.
+    GRID_LOCKED_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (inGridMode) { el.classList.add('v2-hf-locked'); gridLockedIds.add(id); }
+      else if (gridLockedIds.delete(id) && !lockedNow.has(id)) el.classList.remove('v2-hf-locked');
+    });
     const headerSelect = document.getElementById('v2-header-select');
     if (headerSelect) {
       let value = 'p';
@@ -539,7 +560,7 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, setEmailMode, setMacroMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
+    setEditor, setEmailMode, setMacroMode, setGridMode, applyToolbarIcons, syncToolbarState, wireToolbar, wireHeadingMenu,
     wireSelectionDependentSelects, wireCompactFontSizeControls,
   };
 })();
