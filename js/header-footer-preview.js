@@ -450,6 +450,9 @@ const HeaderFooterPreview = (function () {
   // Un modèle chargé pendant que l'éditeur est masqué (Lecture, après un macro-modèle) n'a rien de mesurable : il garde ses images sans grille, et cette passe est
   // rejouée quand l'éditeur redevient visible (Editor.refreshLayout). Mesurée masquée, l'image recevait -marge/-marge (le coin de la page), et cette position
   // s'enregistrait à la première frappe ou au premier Enregistrer, sans jamais être recalculée (pageIndex n'est plus nul).
+  // La passe n'est pas une modification de la personne : une seule transaction (setNodeMarkup, la sélection n'est pas touchée), hors historique et hors suivi des
+  // modifications. Suivie, la bibliothèque en faisait une suppression + une insertion de l'image ; l'original (marqué supprimé, pageIndex toujours nul) restait candidat
+  // à la passe suivante, et chaque retour de l'éditeur (Lecture puis Édition, chaque frappe dans une marge des Réglages) ajoutait une copie de plus, en suggestion en attente.
   function migrateLegacyImagePositions() {
     if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return;
     // En édition d'en-tête/pied, le document affiché est le fragment, pas le corps du modèle dont les images sont à migrer.
@@ -460,14 +463,22 @@ const HeaderFooterPreview = (function () {
         toPatch.push(pos);
       }
     });
+    // Toutes les mesures d'abord, la transaction ensuite : elle pourrait sinon redessiner un nœud pendant qu'on mesure le suivant.
+    const patches = [];
     toPatch.forEach(pos => {
       const dom = editor.view.nodeDOM(pos);
       if (!dom) return;
       const grid = computePageGridPosition(dom);
       if (!grid) return;
       const current = editor.state.doc.nodeAt(pos);
-      if (current) EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, current.attrs, grid));
+      if (current) patches.push({ pos, attrs: Object.assign({}, current.attrs, grid) });
     });
+    if (!patches.length) return;
+    const tr = editor.state.tr;
+    patches.forEach(p => tr.setNodeMarkup(p.pos, undefined, p.attrs));
+    tr.setMeta('addToHistory', false);
+    TrackChanges.skipTracking(tr);
+    editor.view.dispatch(tr);
   }
 
   function renderPaginationOverlay() {

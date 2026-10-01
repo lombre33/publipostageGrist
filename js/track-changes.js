@@ -8,6 +8,9 @@
 const TrackChanges = (function () {
   const MARK_NAMES = ['insertion', 'deletion', 'modification'];
 
+  // Clé du plugin de la lib, gardée pour skipTracking() : createExtensions() est le seul endroit qui importe la lib. Null tant qu'il n'a pas tourné.
+  let suggestKey = null;
+
   // Un conteneur de bloc (doc, table, twoColumnsColumn, twoColumnsZone, cellule de tableau...) doit
   // explicitement autoriser ces 3 marques sur ses enfants directs pour qu'une suppression/insertion
   // de BLOC ENTIER (pas seulement de texte inline) puisse être posée comme marque de nœud
@@ -16,6 +19,14 @@ const TrackChanges = (function () {
   // renvoie une NOUVELLE définition, à utiliser à la place de l'originale dans `extensions: [...]`.
   function extendForTracking(nodeOrMarkExtension) {
     return nodeOrMarkExtension.extend({ marks: MARK_NAMES.join(' ') });
+  }
+
+  // Marque `tr` « déjà le résultat » : dispatchTransaction (plus bas) la laisse passer au lieu de la transformer en suggestion. Pour une transaction qui n'est
+  // pas une modification de la personne mais le widget qui relit ce qu'il a lui-même écrit (grille page des images en calque après un changement d'orientation,
+  // HeaderFooterPreview.recaptureLayeredImageGrids) : suivie, elle ressortait en une suppression + une insertion de l'image, à accepter ou refuser, que
+  // personne n'avait faite. Rend `tr` (pour chaîner) ; sans suivi actif, la marque est sans effet.
+  function skipTracking(tr) {
+    return suggestKey ? tr.setMeta(suggestKey, { skip: true }) : tr;
   }
 
   function lastNodeCarriesSuggestionMark(state) {
@@ -68,6 +79,7 @@ const TrackChanges = (function () {
       applySuggestions, revertSuggestions, applySuggestion, revertSuggestion,
       transformToSuggestionTransaction,
     } = await import('@handlewithcare/prosemirror-suggest-changes');
+    suggestKey = suggestChangesKey;
     const { DOMParser: PMDOMParser } = await import('prosemirror-model');
     // Note vérifiée le 2026-09-20 (cf. prototype) : applySuggestionsInRange/revertSuggestionsInRange
     // existent dans le paquet npm source mais PAS dans le bundle ESM esm.sh réellement chargé ici -
@@ -271,6 +283,6 @@ const TrackChanges = (function () {
   }
 
   return {
-    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions,
+    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking,
   };
 })();

@@ -566,6 +566,173 @@
     },
   });
 
+  // --- Le même ancien modèle, suivi des modifications actif (Antoine, 01/10, suite de la carte « Corriger ») ---
+  // La passe de migration n'est pas une modification de la personne. Suivie, la bibliothèque en faisait une suppression + une insertion de l'image ; l'original (marqué
+  // supprimé, pageIndex toujours nul) restait candidat à la passe suivante, et chaque retour de l'éditeur (Editor.refreshLayout : Lecture puis Édition, chaque frappe dans
+  // une marge des Réglages) ajoutait une copie de plus, en suggestion en attente enregistrée avec le modèle (2 images à l'ouverture, 3, 4, 5... ensuite).
+  const imageCount = () => {
+    const images = [];
+    EditorCore.getEditor().state.doc.descendants(node => {
+      if (node.type.name === 'editorImage') images.push({ marks: node.marks.map(m => m.type.name), pageIndex: node.attrs.pageIndex });
+    });
+    return {
+      images: images.length,
+      marked: images.filter(i => i.marks.length).length,
+      inserted: images.filter(i => i.marks.includes('insertion')).length,
+      deleted: images.filter(i => i.marks.includes('deletion')).length,
+      withGrid: images.filter(i => i.pageIndex != null).length,
+      pending: Editor.hasPendingTrackedChanges(),
+    };
+  };
+  const layerImgHtml = (grid) => '<img class="editor-image" src="' + DATA_PNG + '" alt="" style="width: 100px; position: absolute; left: 123px; top: 210px; z-index: 5;" data-layer="front" data-wrap="inline"'
+    + (grid ? ' data-page-index="0" data-page-left-pt="64.25" data-page-top-pt="129.5"' : '') + '>';
+  // Ce qu'enregistrait l'ancienne passe : l'original en suppression, puis ses copies (ici 3) dans une même insertion.
+  const damagedLayerHtml = '<p>Avant</p><p>Texte <del data-id="1">' + layerImgHtml(false) + '</del><ins data-id="1">' + layerImgHtml(true).repeat(3) + '</ins> fin</p><p>Suite</p>';
+  const withTrackChanges = async (body) => {
+    try {
+      Editor.setTrackChanges(true);
+      await new Promise(r => setTimeout(r, 200));
+      if (!Editor.isTrackChangesOn()) return { pass: false, notes: 'le suivi des modifications ne s\'allume pas' };
+      return await body();
+    } finally { Editor.setTrackChanges(false); }
+  };
+
+  cases.push({
+    id: 'image_legacy_layer_track_changes_load_is_migrated_without_a_suggestion',
+    description: 'Suivi des modifications actif : un ancien modèle reçoit la position de page de son image à l\'ouverture sans suggestion (une seule image, ni suppression ni insertion), hors Annuler et sans sélectionner l\'image',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      return withTrackChanges(async () => {
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(400);
+        const state = imageCount();
+        const ed = EditorCore.getEditor();
+        const canUndo = ed.can().undo();
+        const imageSelected = !!ed.state.selection.node;
+        const grid = gridOfFirstImage();
+        return {
+          pass: state.images === 1 && state.marked === 0 && state.withGrid === 1 && state.pending === false && !canUndo && !imageSelected && !!grid && grid.pageIndex === 0,
+          notes: JSON.stringify({ state, canUndo, imageSelected, grid }),
+        };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'image_legacy_layer_track_changes_each_return_of_the_editor_adds_no_copy',
+    description: 'Suivi actif : chaque retour de l\'éditeur (refreshLayout, puis un vrai aller-retour Lecture / Édition) laisse une seule image, sans suggestion en attente',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      return withTrackChanges(async () => {
+        Editor.setHTML(legacyLayerHtml);
+        await h.sleep(400);
+        const steps = [['ouverture', imageCount()]];
+        for (let i = 1; i <= 3; i++) {
+          Editor.refreshLayout();
+          await h.sleep(250);
+          steps.push(['refreshLayout ' + i, imageCount()]);
+        }
+        for (let i = 1; i <= 2; i++) {
+          await h.clickButton('btn-mode-read');
+          await h.sleep(500);
+          await h.clickButton('btn-mode-edit');
+          await h.sleep(500);
+          steps.push(['Lecture puis Edition ' + i, imageCount()]);
+        }
+        const bad = steps.filter(([, s]) => s.images !== 1 || s.marked !== 0 || s.pending !== false);
+        return { pass: bad.length === 0, notes: JSON.stringify(steps.map(([label, s]) => label + ' : ' + s.images + ' image(s), ' + s.marked + ' marquee(s)')) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'image_legacy_layer_track_changes_hidden_load_is_migrated_once_back_without_a_suggestion',
+    description: 'Suivi actif, ancien modèle chargé éditeur masqué : l\'image reçoit sa position de page au retour de l\'éditeur, une seule fois et sans suggestion',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      const container = document.getElementById('editor-container');
+      return withTrackChanges(async () => {
+        try {
+          container.style.display = 'none';
+          Editor.setHTML(legacyLayerHtml);
+          await h.sleep(300);
+          const hidden = imageCount();
+          container.style.display = 'block';
+          Editor.refreshLayout();
+          await h.sleep(300);
+          const shown = imageCount();
+          Editor.refreshLayout();
+          await h.sleep(300);
+          const again = imageCount();
+          const ok = hidden.images === 1 && hidden.withGrid === 0 && [shown, again].every(s => s.images === 1 && s.marked === 0 && s.withGrid === 1 && s.pending === false);
+          return { pass: ok, notes: JSON.stringify({ hidden, shown, again }) };
+        } finally { container.style.display = 'block'; }
+      });
+    },
+  });
+
+  cases.push({
+    id: 'image_legacy_layer_track_changes_deleted_by_the_person_is_not_copied',
+    description: 'Suivi actif : une image que la personne a supprimée en suggestion reste une seule image marquée supprimée au retour de l\'éditeur, elle ne se recopie pas',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      const container = document.getElementById('editor-container');
+      return withTrackChanges(async () => {
+        try {
+          // Chargé masqué : l'image n'a pas encore sa position de page, la passe de migration l'attend (cf. les cas plus haut).
+          container.style.display = 'none';
+          Editor.setHTML(legacyLayerHtml);
+          await h.sleep(300);
+          container.style.display = 'block';
+          const ed = EditorCore.getEditor();
+          let imagePos = null;
+          ed.state.doc.descendants((node, pos) => { if (node.type.name === 'editorImage') imagePos = pos; });
+          ed.chain().focus().setNodeSelection(imagePos).deleteSelection().run();
+          await h.sleep(200);
+          const deleted = imageCount();
+          Editor.refreshLayout();
+          await h.sleep(300);
+          Editor.refreshLayout();
+          await h.sleep(300);
+          const back = imageCount();
+          return { pass: deleted.images === 1 && deleted.deleted === 1 && back.images === 1 && back.deleted === 1 && back.inserted === 0, notes: JSON.stringify({ deleted, back }) };
+        } finally { container.style.display = 'block'; }
+      });
+    },
+  });
+
+  cases.push({
+    id: 'image_legacy_layer_track_changes_a_template_already_damaged_stops_growing_and_reject_all_restores_one_image',
+    description: 'Un modèle déjà abîmé (l\'original en suppression et trois copies en insertion) ne grossit plus à l\'ouverture ni au retour de l\'éditeur ; « Tout refuser » ne laisse que l\'image d\'origine, avec sa position de page',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      return withTrackChanges(async () => {
+        Editor.setHTML(damagedLayerHtml);
+        await h.sleep(400);
+        const loaded = imageCount();
+        Editor.refreshLayout();
+        await h.sleep(300);
+        Editor.refreshLayout();
+        await h.sleep(300);
+        const refreshed = imageCount();
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(400);
+        const rejected = imageCount();
+        const grid = gridOfFirstImage();
+        const stable = loaded.images === 4 && loaded.deleted === 1 && loaded.inserted === 3 && refreshed.images === 4 && refreshed.inserted === 3;
+        return {
+          pass: stable && rejected.images === 1 && rejected.marked === 0 && rejected.pending === false && rejected.withGrid === 1 && !!grid && grid.pageIndex === 0,
+          notes: JSON.stringify({ loaded, refreshed, rejected, grid }),
+        };
+      });
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.images = cases;
 })();
