@@ -760,7 +760,10 @@ l'image doit donc occuper son propre `<w:p>` centré (cf. `splitRunsAtFloatedIma
 couleur est maintenant lue par le navigateur (`cssColorHex`, `js/docx-export.js`). `docx_run_color_forms` couvre toutes
 les formes (nom, `#f00`, `rgb()` en %, `hsl()`, `rgba()`, transparent, illisible) ; `docx_fiche_mission_named_colors_and_reference_paths`
 rejoue le modèle d'Antoine avec des bulles à chemin de références sur trois niveaux et une date (dernier du groupe : il
-fixe la ligne courante de la page).
+fixe la ligne courante de la page). Le fond de cellule (le bleu de la colonne d'étiquettes) sortait lui aussi sans rien dans
+le Word : `cellShadingFrom` (`js/docx-export.js`) en fait le `<w:shd>` de la `<w:tcPr>`, d'après le style en ligne comme le
+PDF ; `docx_table_cell_background_follows_the_editor` couvre les formes de couleur, le transparent et la fusion, et le
+scénario de la Fiche mission vérifie un fond par étiquette.
 
 ## Vérification transversale — marges de page et largeur de colonne mm (`scenarios-pagelayout.js`)
 

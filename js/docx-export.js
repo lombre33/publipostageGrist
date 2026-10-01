@@ -458,6 +458,11 @@ const DocxExport = (function () {
   // marge de cellule Word par défaut (2×108 twips, jamais incluse dans une mesure de CONTENU) rajoutée pour que la largeur totale demandée à Word colle à
   // ce qui a été mesuré.
   const WORD_DEFAULT_CELL_MARGIN_TWIP = 216;
+  // Fond d'une cellule : celui de son style en ligne, comme le PDF (js/pdf-export.js) - le fond calculé suivrait le thème sombre de l'éditeur. Pas de fond, ou transparent : pas de <w:shd>.
+  function cellShadingFrom(cell) {
+    const fill = cell.style.backgroundColor && cssColorHex(cell.style.backgroundColor);
+    return fill ? { type: docx.ShadingType.CLEAR, fill, color: 'auto' } : undefined;
+  }
   async function tableBlockFrom(tableEl, ctx) {
     const rows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr'));
     if (!rows.length) return null;
@@ -484,6 +489,7 @@ const DocxExport = (function () {
           width: { size: width, type: docx.WidthType.DXA },
           columnSpan: span > 1 ? span : undefined,
           rowSpan: rowSpan > 1 ? rowSpan : undefined,
+          shading: cellShadingFrom(cell),
         }));
       }
       tableRows.push(new docx.TableRow({ children: tableCells }));

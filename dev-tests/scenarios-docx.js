@@ -307,6 +307,41 @@
       return { pass: !!titre && titre.style === 'Heading2' && !!item && !!item.numId, notes: JSON.stringify({ titreStyle: titre && titre.style, itemNumId: item && item.numId }) };
     });
 
+  // Le fond de chaque cellule, dans l'ordre du document : le <w:shd> posé directement sur sa <w:tcPr> (celui d'un texte surligné est dans un <w:rPr>, jamais pris pour un fond de cellule).
+  const tableCellFills = doc => Array.from(doc.getElementsByTagName('w:tc')).map(tc => {
+    const tcPr = Array.from(tc.children).find(n => n.nodeName === 'w:tcPr');
+    const shd = tcPr && Array.from(tcPr.children).find(n => n.nodeName === 'w:shd');
+    return { text: tc.textContent, fill: shd ? shd.getAttribute('w:fill') : null, val: shd ? shd.getAttribute('w:val') : null };
+  });
+
+  // Fiche mission d'Antoine (01/10) : la colonne d'étiquettes est bleue dans l'éditeur, la Lecture et le PDF, et sortait sans fond dans le Word. Le fond est celui du style en ligne de la cellule, comme le PDF
+  // (js/pdf-export.js) : le fond calculé suivrait le thème sombre de l'éditeur.
+  add('docx_table_cell_background_follows_the_editor',
+    'Le fond d\'une cellule de tableau (rgb, nom de couleur, #abc) devient le <w:shd> de sa <w:tcPr>, comme dans le PDF ; sans fond ou transparent, la cellule n\'en a pas, et un texte surligné n\'en donne pas à sa cellule',
+    async (h) => {
+      const cell = (style, inner) => '<td' + (style ? ' style="' + style + '"' : '') + '><p>' + inner + '</p></td>';
+      const html = '<table><tbody>'
+        + '<tr>' + cell('background-color: rgb(138, 210, 254);', 'bleu') + cell('', 'sans fond') + '</tr>'
+        + '<tr>' + cell('background-color: yellow', 'nommé') + cell('background-color: #f00', 'court') + '</tr>'
+        + '<tr>' + cell('background-color: transparent', 'transparent') + cell('background-color: rgba(0, 0, 0, 0)', 'alpha nul') + '</tr>'
+        + '<tr>' + cell('', '<span style="background-color: #00ff00">surligné</span>') + cell('background-color: rgb(138, 210, 254);', 'bleu bis') + '</tr>'
+        + '<tr><td colspan="2" style="background-color: rgb(138, 210, 254);"><p>fusion</p></td></tr>'
+        + '</tbody></table>';
+      const parts = await h.exportDocxParts(html);
+      const fills = tableCellFills(parts.doc);
+      const wanted = { bleu: '8AD2FE', 'sans fond': null, 'nommé': 'FFFF00', court: 'FF0000', transparent: null, 'alpha nul': null, 'surligné': null, 'bleu bis': '8AD2FE', fusion: '8AD2FE' };
+      const bad = [];
+      fills.forEach(f => {
+        if (f.fill !== wanted[f.text]) bad.push(f.text + ' : fond=' + f.fill + ' (attendu ' + wanted[f.text] + ')');
+        if (f.fill && f.val !== 'clear') bad.push(f.text + ' : motif=' + f.val + ' (attendu clear)');
+      });
+      const surligne = h.docxParagraphs(parts.doc).flatMap(p => p.runs).find(r => r.text === 'surligné');
+      if (!surligne || surligne.highlight !== '00FF00') bad.push('le surlignage du texte a changé : ' + (surligne && surligne.highlight));
+      const fusion = h.docxTables(parts.doc)[0].rows[4].cells[0];
+      if (fusion.gridSpan !== 2) bad.push('fusion : gridSpan=' + fusion.gridSpan);
+      return { pass: fills.length === 9 && !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(fills.map(f => f.text + '=' + f.fill)) };
+    });
+
   // --- Module 2 colonnes ---
   add('docx_two_columns_borderless_table',
     'Le module 2 colonnes est émulé par un tableau SANS bordures, avec une cellule vide au milieu qui reproduit la gouttière CSS',
@@ -580,7 +615,7 @@
   // Fiche mission d'Antoine (2026-10-01), l'« Annexe 7 » collée de Word : tableau à colonne d'étiquettes bleue, textes `color: black` et `color: red`, bulles à chemin de références sur plusieurs
   // niveaux (personne -> service -> établissement) et une date, sur la ligne que grist.onRecord livre. Avant le correctif des couleurs, l'export s'arrêtait net sur « Invalid hex value 'BLACK' ».
   add('docx_fiche_mission_named_colors_and_reference_paths',
-    'Un modèle collé de Word (couleurs nommées, fond de cellule) avec des bulles à chemin de références sur trois niveaux et une date s\'exporte en Word, valeurs résolues',
+    'Un modèle collé de Word (couleurs nommées, fond de cellule) avec des bulles à chemin de références sur trois niveaux et une date s\'exporte en Word, valeurs résolues et fond bleu des étiquettes gardé',
     async (h) => {
       const PAGE = 'FmOrdres';
       const stub = window.__gristStub;
@@ -613,8 +648,11 @@
       const rows = Array.from(doc.getElementsByTagName('w:tr')).map(tr => Array.from(tr.getElementsByTagName('w:tc')).map(tc => tc.textContent));
       const colors = h.docxParagraphs(doc).flatMap(p => p.runs.map(r => r.color));
       const expected = [['Nom et Prénom', 'Dupont Jean'], ['Adresse mail', 'jean.dupont@ex.fr'], ['Date de naissance', '01/01/1990'], ['Employeur', 'Université de Bordeaux'], ['Dates', 'Début : 01/10/2026']];
-      const pass = JSON.stringify(rows) === JSON.stringify(expected) && colors.includes('000000') && colors.includes('FF0000');
-      return { pass, notes: JSON.stringify({ rows, couleurs: Array.from(new Set(colors)) }) };
+      // Le bleu des étiquettes (colonne de gauche) sort aussi : un fond par ligne sur la cellule de gauche, aucun sur celle de droite.
+      const fills = tableCellFills(doc).map(f => f.fill);
+      const expectedFills = [].concat(...expected.map(() => ['8AD2FE', null]));
+      const pass = JSON.stringify(rows) === JSON.stringify(expected) && colors.includes('000000') && colors.includes('FF0000') && JSON.stringify(fills) === JSON.stringify(expectedFills);
+      return { pass, notes: JSON.stringify({ rows, couleurs: Array.from(new Set(colors)), fonds: fills }) };
     });
 
   window.EditorTestSuites = window.EditorTestSuites || {};
