@@ -26,7 +26,6 @@ const ReaderMode = (function () {
   // Mêmes valeurs que le padding de .reader-content en Aperçu A4 (css/editor-v2.css), mais lues à chaud depuis js/page-layout.js : codées en dur
   // (37.33px / 719.04px), elles ignoraient les marges propres au modèle et paginaient le mode Lecture comme un modèle à 28pt de marge.
   function marginsPx() { return PageLayout.getMarginsPx(); }
-  function contentWidthPx() { return PageLayout.getContentWidthMm() * PageLayout.MM_TO_PX; }
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, js/pdf-export.js
 
   // Même rôle que layoutZoom() dans js/header-footer-preview.js (copie volontairement locale, comme tout ce module) : les rectangles mesurés DANS la
@@ -37,18 +36,13 @@ const ReaderMode = (function () {
     return (isFinite(z) && z > 0) ? z : 1;
   }
 
-  function measureHtmlHeightPx(html) {
-    if (!html || !html.replace(/<[^>]*>/g, '').trim()) return 0;
-    const host = document.createElement('div');
-    host.className = 'reader-content';
-    host.innerHTML = html;
-    // min-height:0 : .reader-content n'a pas le min-height:200px de .tiptap (css/editor-v2.css, propre à l'éditeur VIDE) - conservé quand même par
-    // cohérence/robustesse avec la même mesure côté éditeur/export PDF.
-    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx() + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
-    document.body.appendChild(host);
-    const h = host.getBoundingClientRect().height;
-    document.body.removeChild(host);
-    return h;
+  // La bande que le PDF réserve à un en-tête (sous la marge du haut) ou à un pied (au-dessus de la marge du bas) dès que l'une de ses variantes a du contenu : un plafond
+  // fixe (60 px, HF_MAX_ZONE_HEIGHT_PT de js/pdf-export.js) plus l'écart de 10 pt, jamais la hauteur rendue du texte. Mesurée à la hauteur du texte, la Lecture réservait
+  // moins que le PDF pour un en-tête d'une ligne et coupait ses pages plus bas que lui. Du texte ou une image : même test que pdf-export.js:resolveZone.
+  const HF_MAX_ZONE_HEIGHT_PX = 60;
+  const HEADER_FOOTER_BAND_PX = HF_MAX_ZONE_HEIGHT_PX + HEADER_FOOTER_GAP_PX;
+  function hasZoneContent(html) {
+    return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
   }
   // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
   // cet aperçu, qui ne coupe pas le DOM, traite d'une pièce. Même règle que js/header-footer-preview.js:isSplittableByExport, sur le HTML sérialisé de la
@@ -166,12 +160,10 @@ const ReaderMode = (function () {
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
 
-    const headerHeightPx = Math.max(measureHtmlHeightPx(headerDefault), measureHtmlHeightPx(headerFirst));
-    const footerHeightPx = Math.max(measureHtmlHeightPx(footerDefault), measureHtmlHeightPx(footerFirst));
-    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
+    const topBandPx = (hasZoneContent(headerDefault) || hasZoneContent(headerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
+    const bottomBandPx = (hasZoneContent(footerDefault) || hasZoneContent(footerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
     const mPx = marginsPx();
-    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
+    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topBandPx - bottomBandPx);
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 
@@ -181,16 +173,23 @@ const ReaderMode = (function () {
     // alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return;
 
-    if (headerForPage(1)) {
+    // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de CETTE page n'a rien (page 1 sans en-tête
+    // alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur, le contenu de l'en-tête à la
+    // moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste sous le texte, là où le PDF le peint.
+    if (topBandPx) {
       const edgeTop = document.createElement('div');
       edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
-      edgeTop.innerHTML = PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages);
+      edgeTop.innerHTML = headerForPage(1) ? PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages) : '';
+      edgeTop.style.height = topBandPx + 'px';
+      edgeTop.style.paddingTop = (mPx.top / 2) + 'px';
       container.insertBefore(edgeTop, wrapper);
     }
-    if (footerForPage(totalPages)) {
+    if (bottomBandPx) {
       const edgeBottom = document.createElement('div');
       edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-      edgeBottom.innerHTML = PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages);
+      edgeBottom.innerHTML = footerForPage(totalPages) ? PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages) : '';
+      edgeBottom.style.height = (bottomBandPx + mPx.bottom) + 'px';
+      edgeBottom.style.marginTop = (-mPx.bottom) + 'px';
       container.appendChild(edgeBottom);
     }
 

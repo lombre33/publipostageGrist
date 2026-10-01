@@ -572,6 +572,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   touche se montre là où le bouton se nomme : dans son infobulle (« Gras (Ctrl+B) », la touche après le texte, entière dans la fenêtre), à droite de la ligne d'un menu (Citation, Titre
   1…), après le titre d'un menu (« Exporter en PDF (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
   s'ajoute à la liste (`ACTIONS` de `js/shortcuts.js`, avec son nom français et anglais) et au scénario « la touche fait ce que fait la souris ».
+- En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
+  contenu, sur l'une de ses pages ou sur toutes (45 pt de zone + 10 pt d'écart = 55 pt, quelle que soit la hauteur du texte), autant au-dessus de la marge du bas pour le pied, et rien quand
+  la zone est vide. L'éditeur, la Lecture et le Word se calent dessus : le corps commence à la marge + 55 pt du bord de la feuille dans les quatre rendus, l'en-tête à la moitié de la marge du
+  haut, le pied juste sous le texte, les pages se coupent aux mêmes lignes, et une image en calque tirée au coin de la feuille s'arrête au vrai bord (marge + bande), pas à la marge. Une
+  zone vide ne prend aucune place mais reste cliquable dans la marge ; une zone ne prend jamais la souris (une image posée dans la marge garde son clic) : c'est un clic dans la marge, là
+  où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume.
 
 ## 4. Spécifique à SlidesPlus
 

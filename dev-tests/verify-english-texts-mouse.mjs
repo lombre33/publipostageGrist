@@ -143,7 +143,9 @@ async function locate(selector, scroll = true) {
     return {
       found: true, x, y, w: r.width, h: r.height,
       inViewport: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
-      onTop: !!top && (top === el || el.contains(top)),
+      // Un espaceur d'en-tête ou de pied ne prend pas la souris (css/editor-v2.css : il recouvre la marge de la feuille, où se posent aussi les images en calque) : sur
+      // lui, c'est la feuille ou `.tiptap` qui la reçoit, et js/header-footer-preview.js:zoneUnderPointer ouvre alors la zone.
+      onTop: !!top && (top === el || el.contains(top) || (!!el.closest('.v2-page-edge-spacer') && top.matches('.tiptap, .v2-page-sheet'))),
       // Le texte tient dans sa boîte : rien n'est rogné à droite.
       fits: el.scrollWidth <= el.clientWidth + 0.5,
     };

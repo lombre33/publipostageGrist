@@ -32,10 +32,16 @@ const DocxExport = (function () {
   // 1 twip = 1/20 pt = 1/1440 pouce. Page A4 + marges alignées sur PAGE_MARGIN_PT de pdf-export.js (28pt = 560 twips) - pas une obligation technique, juste
   // une cohérence visuelle bienvenue entre les deux exports.
   const TWIPS_PER_PT = 20;
-  const HF_DISTANCE_TWIP = 20 * TWIPS_PER_PT;
+  // La bande que le PDF réserve à un en-tête (sous la marge du haut) ou à un pied (au-dessus de la marge du bas) dès qu'il a du contenu : 60 px de zone (HF_MAX_ZONE_HEIGHT_PT)
+  // plus 10 pt d'écart (HEADER_FOOTER_GAP_PT), js/pdf-export.js - 55 pt, quelle que soit la hauteur réelle du texte. Word reçoit les mêmes marges : ce que l'éditeur, la Lecture
+  // et le PDF dessinent à la marge + 55 pt du bord de la feuille, il le dessine aussi. L'en-tête est posé à la moitié de la marge du haut du bord de la feuille (marginTopPt * 0.5
+  // du PDF) ; le pied, que Word ancre par son BAS, à la distance qui met son HAUT sous le texte, là où le PDF l'ancre (cf. buildDocxDocument).
+  const HF_BAND_TWIP = (60 * 0.75 + 10) * TWIPS_PER_PT;
   // Marges de page (twip) - variables de module plutôt que des constantes : réglées par setPageMarginsTwip() une fois par export, à partir des marges du
   // modèle courant (js/page-layout.js). 28pt (560 twip) sur les 4 côtés = comportement d'avant PageLayout, repli si l'appelant ne fournit aucune marge.
   let marginTopTwip = 560, marginRightTwip = 560, marginBottomTwip = 560, marginLeftTwip = 560;
+  // Bande réservée au-dessus du corps par un en-tête (0 sans en-tête), posée par buildDocxDocument avant de construire les blocs : l'ancrage d'une image en calque la compte.
+  let topBandTwip = 0;
   // Page courante : A4 portrait (11906 x 16838 twips) par défaut, au format et dans le sens que PageLayout.getMarginsTwip() joint aux marges. Les dimensions
   // viennent de PageLayout.pageSizeTwipFor, toujours rendues dans le sens de la page (largeur 16838 en A4 paysage) - buildDocxDocument les redonne à docx.js
   // en portrait + drapeau d'orientation, car docx.js échange lui-même largeur et hauteur dès qu'il voit LANDSCAPE.
@@ -224,8 +230,8 @@ const DocxExport = (function () {
   //     voie 1, jamais pire que le repli en image en ligne (qui perdait la position purement et simplement).
   // `null` uniquement si l'image n'est pas en calque, ou en calque sans AUCUNE des deux sources disponible (image détachée du DOM, cas qui ne devrait pas
   // arriver ici) : repli sur l'image en ligne classique dans ce cas.
-  // marge + décalage = même formule que p.image.absolutePosition, js/pdf-export.js : la position est relative au CONTENU (dans les marges), pas au bord
-  // brut de la page - il faut donc rajouter la marge avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
+  // marge + bande + décalage = même formule que p.image.absolutePosition, js/pdf-export.js : la position est relative au CONTENU (dans les marges, bande d'en-tête
+  // comprise), pas au bord brut de la page - il faut donc rajouter la marge et la bande avant de convertir en EMU pour un ancrage Word relatif à la PAGE.
   // Alignement gauche/droite (data-align, cf. css/editor-v2.css `.tiptap img.editor-image[data-align="left/right"] { float }`) : HABILLAGE réel, le texte
   // contourne l'image des DEUX côtés d'un même paragraphe - un cas totalement différent du calque (qui ne touche jamais le texte). 'center' n'en a pas
   // besoin (déjà un simple bloc centré, aucun flottant nécessaire). Pas de position à mesurer/capturer ici : `align` (jeton, pas une coordonnée) suffit à
@@ -270,7 +276,7 @@ const DocxExport = (function () {
       return null;
     }
     const xEmu = Math.round((marginLeftTwip / TWIPS_PER_PT + leftPt) * EMU_PER_PT);
-    const yEmu = Math.round((marginTopTwip / TWIPS_PER_PT + topPt) * EMU_PER_PT);
+    const yEmu = Math.round(((marginTopTwip + topBandTwip) / TWIPS_PER_PT + topPt) * EMU_PER_PT);
     return {
       behindDocument: layer === 'behind',
       zIndex: 1000 + uniqueId, // unique par image, comme altText.id ci-dessus - évite de dépendre du repli par défaut de docx.js (hauteur de l'image).
@@ -755,6 +761,22 @@ const DocxExport = (function () {
     return blocks;
   }
 
+  // Du texte ou une image : même test que js/pdf-export.js:resolveZone (une zone vide ne réserve rien).
+  function hasZoneContent(html) {
+    return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
+  }
+  // Hauteur rendue d'un fragment d'en-tête ou de pied à la largeur du contenu, en twips : sert à placer le pied (Word l'ancre par son bas). Mesurée comme le fait
+  // js/pdf-export.js:resolveZone (images décodées d'abord, sinon elles mesurent 0).
+  async function measureZoneHeightTwip(html) {
+    if (!hasZoneContent(html)) return 0;
+    const root = document.createElement('div'); root.innerHTML = html;
+    const detach = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
+    try {
+      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      return Math.round(root.getBoundingClientRect().height * PX_TO_TWIP);
+    } finally { detach(); }
+  }
+
   async function headerFooterBlocksFrom(html, ctx) {
     if (!html) return [];
     const root = document.createElement('div'); root.innerHTML = html;
@@ -766,6 +788,14 @@ const DocxExport = (function () {
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche (Antoine, 2026-10-01).
     ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
+    // Les bandes du PDF : sur toutes les pages dès qu'une variante a du contenu (la page 1 sans en-tête garde la marge des autres), rien sinon. Posées avant les
+    // blocs : l'ancrage d'une image en calque compte la bande du haut.
+    const hfOn = !!(headerFooterData && headerFooterData.enabled);
+    const differentFirstPage = hfOn && !!headerFooterData.differentFirstPage;
+    const zoneVariants = differentFirstPage ? ['default', 'first'] : ['default'];
+    const zoneHtml = (zone, variant) => (hfOn && headerFooterData[zone] && headerFooterData[zone][variant]) || '';
+    topBandTwip = zoneVariants.some(v => hasZoneContent(zoneHtml('header', v))) ? HF_BAND_TWIP : 0;
+    const bottomBandTwip = zoneVariants.some(v => hasZoneContent(zoneHtml('footer', v))) ? HF_BAND_TWIP : 0;
     // Hôte de mesure hors-écran le temps du parcours : measuredColumnWidthsPx a besoin d'un rendu réel, jamais possible sur un <div> détaché du document.
     const detachMeasureHost = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
     let bodyBlocks;
@@ -779,7 +809,19 @@ const DocxExport = (function () {
       bodyBlocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
     }
 
-    const differentFirstPage = !!(headerFooterData && headerFooterData.enabled && headerFooterData.differentFirstPage);
+    // Le pied : Word l'ancre par son BAS (distance du bord de la feuille au bas du pied), le PDF par son HAUT, juste sous le texte. La distance qui met le haut du pied
+    // le plus haut des deux variantes là où le PDF le met est donc marge du bas + bande - sa hauteur ; une variante plus basse est complétée d'une ligne vide à hauteur
+    // fixe pour que la sienne commence aussi au même endroit.
+    const footerHeights = {};
+    for (const v of zoneVariants) footerHeights[v] = await measureZoneHeightTwip(zoneHtml('footer', v));
+    const footerHeightTwip = Math.max(0, ...Object.values(footerHeights));
+    const footerDistanceTwip = bottomBandTwip ? Math.max(0, marginBottomTwip + bottomBandTwip - footerHeightTwip) : Math.round(marginBottomTwip / 2);
+    async function footerBlocksFor(variant) {
+      const blocks = await headerFooterBlocksFrom(zoneHtml('footer', variant), ctx);
+      const pad = footerHeightTwip - (footerHeights[variant] || 0);
+      if (blocks.length && pad >= TWIPS_PER_PT) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: pad, lineRule: 'exact' } }));
+      return blocks;
+    }
     const sectionProps = {
       page: {
         // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les ré-échangerait
@@ -788,19 +830,19 @@ const DocxExport = (function () {
           { width: PageLayout.pageSizeTwipFor('portrait', pageFormat).width, height: PageLayout.pageSizeTwipFor('portrait', pageFormat).height },
           pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}
         ),
-        margin: { top: marginTopTwip, bottom: marginBottomTwip, left: marginLeftTwip, right: marginRightTwip, header: HF_DISTANCE_TWIP, footer: HF_DISTANCE_TWIP },
+        margin: { top: marginTopTwip + topBandTwip, bottom: marginBottomTwip + bottomBandTwip, left: marginLeftTwip, right: marginRightTwip, header: Math.round(marginTopTwip / 2), footer: footerDistanceTwip },
       },
       titlePage: differentFirstPage,
     };
     const section = { properties: sectionProps, children: bodyBlocks.length ? bodyBlocks : [new docx.Paragraph('')] };
-    if (headerFooterData && headerFooterData.enabled) {
-      const headerDefaultBlocks = await headerFooterBlocksFrom(headerFooterData.header && headerFooterData.header.default, ctx);
-      const footerDefaultBlocks = await headerFooterBlocksFrom(headerFooterData.footer && headerFooterData.footer.default, ctx);
+    if (hfOn) {
+      const headerDefaultBlocks = await headerFooterBlocksFrom(zoneHtml('header', 'default'), ctx);
+      const footerDefaultBlocks = await footerBlocksFor('default');
       if (headerDefaultBlocks.length) section.headers = Object.assign({}, section.headers, { default: new docx.Header({ children: headerDefaultBlocks }) });
       if (footerDefaultBlocks.length) section.footers = Object.assign({}, section.footers, { default: new docx.Footer({ children: footerDefaultBlocks }) });
       if (differentFirstPage) {
-        const headerFirstBlocks = await headerFooterBlocksFrom(headerFooterData.header && headerFooterData.header.first, ctx);
-        const footerFirstBlocks = await headerFooterBlocksFrom(headerFooterData.footer && headerFooterData.footer.first, ctx);
+        const headerFirstBlocks = await headerFooterBlocksFrom(zoneHtml('header', 'first'), ctx);
+        const footerFirstBlocks = await footerBlocksFor('first');
         if (headerFirstBlocks.length) section.headers = Object.assign({}, section.headers, { first: new docx.Header({ children: headerFirstBlocks }) });
         if (footerFirstBlocks.length) section.footers = Object.assign({}, section.footers, { first: new docx.Footer({ children: footerFirstBlocks }) });
       }

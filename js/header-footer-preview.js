@@ -66,7 +66,7 @@ const HeaderFooterPreview = (function () {
   }
 
   // Fragment d'en-tête/pied qui montre quelque chose : du texte (le numéro de page, une variable, une puce intelligente en portent un) ou une image. Même règle
-  // que measureHtmlHeightPx, updateHfZone et pdf-export.js:resolveZone - ce que l'écran et l'export ignorent est aussi ce qu'on ne garde pas.
+  // que updateHfZone, currentPageGeometry et pdf-export.js:resolveZone - ce que l'écran et l'export ignorent est aussi ce qu'on ne garde pas.
   function hasZoneContent(html) {
     return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
   }
@@ -197,11 +197,8 @@ const HeaderFooterPreview = (function () {
   // de couture, "Saut de page") et la grille de page qui ancre les images en calque ignoraient PUREMENT ET SIMPLEMENT les marges du modèle : un modèle
   // à 30mm de marge haute affichait encore la découpe d'un modèle à 9.9mm, et l'export PDF/DOCX plaçait l'image sur une autre page que l'éditeur.
   function marginsPx() { return PageLayout.getMarginsPx(); }
-  function contentWidthPx() { return PageLayout.getContentWidthMm() * PageLayout.MM_TO_PX; }
   const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
 
-  // Hauteur rendue d'un fragment HTML, hors écran. min-height:0 annule le 200px réservé par .tiptap pour rester cliquable à vide (sinon un en-tête d'une
-  // ligne mesurerait 200px).
   // Facteur `zoom` effectif de la feuille (ajustement automatique à la largeur disponible, cf. js/main.js:applyPageFitZoom). Indispensable pour toute
   // mesure faite avec getBoundingClientRect() DANS la feuille : ces rectangles sont en pixels ÉCRAN, donc déjà multipliés par le zoom, alors que
   // pageContentHeightPx, offsetTop/offsetLeft et les styles inline posés sur les bandes sont tous en pixels de MISE EN PAGE. Sans cette division, toutes
@@ -211,19 +208,6 @@ const HeaderFooterPreview = (function () {
     const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
     const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
     return (isFinite(z) && z > 0) ? z : 1;
-  }
-
-  function measureHtmlHeightPx(html) {
-    // Teste aussi <img : un en-tête/pied ne contenant qu'une image sans texte mesurerait sinon une hauteur de 0 (chevauchement avec le corps dans l'aperçu).
-    if (!hasZoneContent(html)) return 0;
-    const host = document.createElement('div');
-    host.className = 'tiptap';
-    host.innerHTML = html;
-    host.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + contentWidthPx() + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
-    document.body.appendChild(host);
-    const h = host.getBoundingClientRect().height;
-    document.body.removeChild(host);
-    return h;
   }
 
   // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
@@ -301,6 +285,7 @@ const HeaderFooterPreview = (function () {
     if (paginationEdgeTopEl && paginationEdgeTopEl.parentNode) paginationEdgeTopEl.parentNode.removeChild(paginationEdgeTopEl);
     if (paginationEdgeBottomEl && paginationEdgeBottomEl.parentNode) paginationEdgeBottomEl.parentNode.removeChild(paginationEdgeBottomEl);
     paginationEdgeTopEl = null; paginationEdgeBottomEl = null;
+    hoveredZoneEl = null;
     clearPageBreakMargins();
   }
 
@@ -318,18 +303,109 @@ const HeaderFooterPreview = (function () {
       pageSheet.insertBefore(paginationEdgeBottomEl, tiptapEl.nextSibling);
     }
   }
-  function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel) {
+  // Bande cliquable d'une zone VIDE : le libellé « + Ajouter un en-tête » et un peu d'air autour. Rien n'étant imprimé, elle se pose DANS la marge, à son bord extérieur ;
+  // le reste de la marge garde son rôle de page (cliquer juste sous la dernière ligne place le curseur à la fin du texte, comme avant, au lieu d'ouvrir le pied).
+  const HF_EMPTY_STRIP_PX = 24;
+  // Air sous le contenu d'une zone remplie : le bas de la bande cliquable.
+  const HF_FILLED_PAD_PX = 8;
+  // La boîte d'une zone est sa bande cliquable (celle que le survol teinte, celle d'un clic), pas toute la marge : pour le haut, de la feuille jusque sous le contenu ;
+  // pour le bas, du dessous du texte jusque sous le contenu. Les marges de la boîte rendent à la page ce que le PDF y réserve : `bandPx`, la bande que le PDF place sous
+  // la marge du haut ou au-dessus de la marge du bas (0 quand aucune des deux variantes n'a de contenu), plus rien. La marge de `.tiptap` de ce côté garde son
+  // padding (c'est lui qui porte les positions des images en calque). Le contenu de l'en-tête commence à la moitié de la marge du haut du bord de la feuille, celui
+  // du pied juste sous le texte : là où le PDF les peint.
+  function sizeHfZone(el, zone, hasContent, bandPx) {
+    const mPx = marginsPx();
+    const marginPx = zone === 'header' ? mPx.top : mPx.bottom;
+    const band = bandPx || 0;
+    let height;
+    if (hasContent) {
+      // Hauteur mesurée (en pixels de mise en page, hors zoom) : le contenu, sous la moitié de la marge pour l'en-tête, plus l'air du bas.
+      el.style.height = 'auto';
+      el.style.paddingTop = zone === 'header' ? (marginPx / 2) + 'px' : '0';
+      el.style.paddingBottom = HF_FILLED_PAD_PX + 'px';
+      height = el.offsetHeight;
+    } else {
+      height = Math.min(HF_EMPTY_STRIP_PX, marginPx + band);
+      // Libellé au milieu de la bande (une ligne de texte fait 1,42 x 10,5 px).
+      el.style.paddingTop = Math.max(0, (height - 15) / 2) + 'px';
+      el.style.paddingBottom = '0';
+    }
+    el.style.height = height + 'px';
+    if (zone === 'header') {
+      // Avant `.tiptap`, collée au bord de la feuille : elle ne pèse dans la page que par la bande.
+      el.style.marginTop = '0';
+      el.style.marginBottom = (band - height) + 'px';
+    } else {
+      // Après `.tiptap`, dont le padding de bas de page (la marge) commence sous le texte. Remplie, ou quand une bande est réservée, la boîte démarre sous le texte ;
+      // vide et sans bande, elle se pose au bord de la feuille, et la marge au-dessus d'elle reste de la page.
+      const offsetBelowText = (hasContent || band) ? 0 : marginPx - height;
+      el.style.marginTop = (offsetBelowText - marginPx) + 'px';
+      el.style.marginBottom = (band - (offsetBelowText - marginPx) - height) + 'px';
+    }
+  }
+  function updateHfZone(el, html, pageNum, totalPages, zone, variant, ghostLabel, bandPx) {
     const resolved = html ? PageLayout.resolvePageNumberBadges(html, pageNum, totalPages) : '';
     // Teste aussi <img : sinon une zone ne contenant qu'une image (pas de texte) serait traitée à tort comme vide (même correctif que resolveZone,
     // pdf-export.js).
-    const hasContent = !!(resolved.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(resolved));
+    const hasContent = hasZoneContent(resolved);
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
     el.classList.toggle('v2-hf-locked', inEmailMode);
     el.innerHTML = hasContent
       ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
       : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
+    sizeHfZone(el, zone, hasContent, bandPx);
+    // Une image d'en-tête qui finit de se charger agrandit la boîte : les marges suivent, sinon le corps de la page glisserait de la différence.
+    el.querySelectorAll('img').forEach(img => {
+      if (!img.complete) img.addEventListener('load', () => { if (el.isConnected) sizeHfZone(el, zone, hasContent, bandPx); }, { once: true });
+    });
     el.onclick = () => enterHeaderFooterMode(zone, variant);
+  }
+  // Les espaceurs ne prennent jamais le clic (`pointer-events: none`, css/editor-v2.css) : ils recouvrent la marge de `.tiptap`, et une image en calque posée dans
+  // cette marge - le triangle d'un coin de feuille - doit rester atteignable. C'est donc ici qu'on retrouve la zone sous le curseur. Ne compte qu'un clic tombé sur le
+  // padding de `.tiptap` ou sur le fond de la feuille : une image, une ligne de texte ou une poignée gardent leur propre clic.
+  function zoneUnderPointer(event) {
+    // Bouton principal seulement : le menu contextuel d'un clic droit dans la marge n'ouvre rien.
+    if (hfMode || inEmailMode || !editor || !editor.view || event.button) return null;
+    const tiptapEl = editor.view.dom;
+    if (event.target !== tiptapEl && event.target !== tiptapEl.parentElement) return null;
+    for (const el of [paginationEdgeTopEl, paginationEdgeBottomEl]) {
+      if (!el || !el.isConnected) continue;
+      const r = el.getBoundingClientRect();
+      if (event.clientX >= r.left && event.clientX < r.right && event.clientY >= r.top && event.clientY < r.bottom) return el;
+    }
+    return null;
+  }
+  // Survol : l'espaceur ne le reçoit pas non plus, la classe tient lieu de :hover (mêmes règles, css/editor-v2.css).
+  let hoveredZoneEl = null;
+  function setHoveredZone(el) {
+    if (hoveredZoneEl === el) return;
+    if (hoveredZoneEl) hoveredZoneEl.classList.remove('v2-hf-zone-hover');
+    hoveredZoneEl = el;
+    if (el) el.classList.add('v2-hf-zone-hover');
+    // Le curseur main que la zone donnait d'elle-même : posé sur la feuille (jamais sur `.tiptap`, dont ProseMirror garde les attributs).
+    const sheet = editor && editor.view && editor.view.dom.parentElement;
+    if (sheet) sheet.classList.toggle('v2-hf-zone-pointing', !!el);
+  }
+  let marginZonesWired = false;
+  function wireMarginZones(container) {
+    if (marginZonesWired) return;
+    marginZonesWired = true;
+    // En capture : le clic est pris avant ProseMirror, qui poserait sinon le curseur au début du document avant d'ouvrir la zone.
+    container.addEventListener('mousedown', event => { if (zoneUnderPointer(event)) { event.preventDefault(); event.stopPropagation(); } }, true);
+    container.addEventListener('click', event => {
+      const el = zoneUnderPointer(event);
+      if (!el) return;
+      event.preventDefault(); event.stopPropagation();
+      el.onclick();
+    }, true);
+    // Bouton enfoncé : on glisse une image ou on sélectionne du texte, la marge ne doit pas s'allumer au passage.
+    // L'invitation « + Ajouter un en-tête » est la seule partie d'un espaceur à recevoir la souris : tant que le curseur est dessus, sa zone reste allumée.
+    container.addEventListener('mousemove', event => {
+      const own = event.target.closest && event.target.closest('.v2-page-edge-spacer');
+      setHoveredZone(event.buttons ? null : (own || zoneUnderPointer(event)));
+    });
+    container.addEventListener('mouseleave', () => setHoveredZone(null));
   }
   // Le libellé des zones fantômes est écrit par renderPaginationOverlay : sans ce crochet, un changement de langue dans Réglages ne le corrigerait qu'à la
   // prochaine frappe.
@@ -347,17 +423,17 @@ const HeaderFooterPreview = (function () {
     const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
     const footerHtml = enabled ? headerFooterDraft.footer.default : null;
     const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
-    // measureHtmlHeightPx ne sert plus qu'à détecter "zone vraiment vide" (même logique que pdf-export.js:resolveZone) - sa valeur de hauteur elle-même
-    // n'est plus utilisée pour dimensionner la réserve.
-    const headerHasContent = enabled && (measureHtmlHeightPx(headerHtml) > 0 || measureHtmlHeightPx(headerFirstHtml) > 0);
-    const footerHasContent = enabled && (measureHtmlHeightPx(footerHtml) > 0 || measureHtmlHeightPx(footerFirstHtml) > 0);
+    // Même test que pdf-export.js:resolveZone (du texte ou une image) sur les deux variantes : la hauteur rendue du contenu ne compte pas, seule sa présence.
+    const headerHasContent = enabled && (hasZoneContent(headerHtml) || hasZoneContent(headerFirstHtml));
+    const footerHasContent = enabled && (hasZoneContent(footerHtml) || hasZoneContent(footerFirstHtml));
     const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
     const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
+    // Les bandes que le PDF réserve sous la marge du haut et au-dessus de la marge du bas : sur TOUTES les pages dès qu'une variante a du contenu, rien sinon.
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const mPx = marginsPx();
     const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
-    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx };
+    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx, topBandPx: topExtraPx, bottomBandPx: bottomExtraPx };
   }
 
   // Ancêtre direct de .tiptap contenant `el` (computePageBreaks ne regarde jamais plus profond qu'un enfant direct - une zone 2-colonnes/un tableau compte
@@ -386,7 +462,7 @@ const HeaderFooterPreview = (function () {
     // laissée par un calcul PRÉCÉDENT (contenu ou en-tête/pied différents à ce moment-là) gonfle la hauteur mesurée d'un bloc au hasard et fait déclencher
     // des coupures bien trop tôt - confirmé (pageIndex aberrant, ~= l'index brut de l'élément) avant ce correctif.
     renderPaginationOverlay();
-    const { pageContentHeightPx } = currentPageGeometry();
+    const { pageContentHeightPx, topBandPx } = currentPageGeometry();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
     const children = Array.from(tiptapEl.children);
     const elIdx = children.indexOf(topLevelEl);
@@ -397,8 +473,11 @@ const HeaderFooterPreview = (function () {
     }
     const tiptapRect = tiptapEl.getBoundingClientRect();
     const cs = getComputedStyle(tiptapEl);
-    const padTop = parseFloat(cs.paddingTop) || 0;
-    const padLeft = parseFloat(cs.paddingLeft) || 0;
+    // Les rectangles sont en pixels écran, le remplissage lu par getComputedStyle en pixels de mise en page : à ~700 px la feuille est réduite (zoom CSS), et
+    // l'origine de la grille se décalait de remplissage x (1 - zoom), soit ~6 px pour une marge de 28 pt à 0,85 : l'image tirée au coin s'arrêtait en retrait.
+    const gridZoom = layoutZoom(tiptapEl);
+    const padTop = (parseFloat(cs.paddingTop) || 0) * gridZoom;
+    const padLeft = (parseFloat(cs.paddingLeft) || 0) * gridZoom;
     let pageStartTop, pageStartLeft = tiptapRect.left + padLeft;
     if (!lastBreak) {
       pageStartTop = tiptapRect.top + padTop;
@@ -410,7 +489,6 @@ const HeaderFooterPreview = (function () {
     }
     const elRect = el.getBoundingClientRect();
     // Les deux termes sont des rectangles écran : leur différence est en pixels écran, à ramener en pixels de mise en page avant la conversion en points.
-    const gridZoom = layoutZoom(tiptapEl);
     const rawLeftPt = ((elRect.left - pageStartLeft) / gridZoom) / PT_TO_PX;
     const rawTopPt = ((elRect.top - pageStartTop) / gridZoom) / PT_TO_PX;
     // Une image en calque glissée au-dessus/à gauche du bord PHYSIQUE de la page (pas seulement dans la marge - au-delà de la marge de ce côté) donnerait un point
@@ -424,8 +502,10 @@ const HeaderFooterPreview = (function () {
     // diffèrent, et toutes deux diffèrent de l'ancien -28pt codé en dur (qui rognait une image parfaitement placée sous une grande marge, et en laissait
     // sortir une sous une petite).
     const marginsPtNow = PageLayout.getMarginsPt();
+    // Le bord du haut est plus loin que la marge quand un en-tête réserve sa bande (le PDF la compte dans la marge du haut de CHAQUE page) : sans elle, une image
+    // tirée au coin s'arrêtait 55 pt plus bas que le bord de la feuille.
     const minLeftPt = -marginsPtNow.left;
-    const minTopPt = -marginsPtNow.top;
+    const minTopPt = -(marginsPtNow.top + topBandPx / PT_TO_PX);
     const clampDeltaLeftPt = rawLeftPt < minLeftPt ? minLeftPt - rawLeftPt : 0;
     const clampDeltaTopPt = rawTopPt < minTopPt ? minTopPt - rawTopPt : 0;
     if (clampDeltaLeftPt || clampDeltaTopPt) {
@@ -520,6 +600,7 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
     if (hfMode || !container.classList.contains('a4-preview')) { clearPaginationOverlay(); return; }
+    wireMarginZones(container);
 
     if (!paginationOverlayEl) {
       paginationOverlayEl = document.createElement('div');
@@ -528,7 +609,7 @@ const HeaderFooterPreview = (function () {
     }
     paginationOverlayEl.innerHTML = '';
 
-    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx } = currentPageGeometry();
+    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx, topBandPx, bottomBandPx } = currentPageGeometry();
     // Nettoie avant de recalculer : le bloc "dernier de la page" peut changer d'une frappe à l'autre, une ancienne marge orpheline gonflerait le document.
     clearPageBreakMargins();
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
@@ -537,8 +618,8 @@ const HeaderFooterPreview = (function () {
     const pageSheet = tiptapEl.parentElement;
     ensureEdgeZone(pageSheet, tiptapEl, 'top');
     ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
-    updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', I18n.t('hf.addHeader'));
-    updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'));
+    updateHfZone(paginationEdgeTopEl, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', I18n.t('hf.addHeader'), topBandPx);
+    updateHfZone(paginationEdgeBottomEl, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
 
     // Les bandes couvrent toute la largeur de la FEUILLE, pas de la colonne de texte : ce sont des frontières entre deux pages physiques, et depuis que la
     // frontière se dessine comme une vraie gouttière (fond gris + tranche des deux feuilles, cf. css/editor-v2.css), une bande large de la seule colonne

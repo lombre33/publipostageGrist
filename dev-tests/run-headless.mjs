@@ -91,6 +91,7 @@ const GROUPS = {
   blankLastPage: 'scenarios-blank-last-page',
   findReplace: 'scenarios-find-replace', // Rechercher / Remplacer (js/find-replace.js) : moteur, panneau, loupe, remplacement en une étape d'annulation, mode suivi, textes FR / EN, contrastes
   layers: 'scenarios-layers', // ordre d'empilement des couches flottantes (js/layers.js, jetons --z-* ) : barres flottantes < menus < info-bulles < fenêtres, le dernier ouvert au-dessus, menu # sous la barre du tableau
+  imageParity: 'scenarios-image-parity', // bande d'en-tête et de pied sur le PDF : même origine du corps, même coin de feuille, mêmes coupures de page et mêmes marges dans l'éditeur, la Lecture, le PDF et le Word
   xlsx: 'scenarios-xlsx', // export Excel d'une grille (js/xlsx-export.js) : le .xlsx est dézippé et son OOXML lu (valeurs, formats, largeurs, fusions, liens, images, menu)
   externalImages: 'scenarios-external-images', // fenêtre qui liste les sites externes des images avant un export (js/external-images.js) : le module, un PDF et un Word, les lots, l'annulation
   textExpansion: 'scenarios-text-expansion', // expansion de texte « §ub » (js/text-expansion.js) : abréviations par personne dans une table du document, règle de saisie, onglet Réglages > Raccourcis, contrastes
@@ -138,6 +139,7 @@ const NODE_SCRIPTS = {
   wideImagesMouse: 'verify-wide-images-mouse.mjs', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : au vrai clic à 700x400, le PDF et le Word téléchargés sont relus, chaque image a la largeur que l'éditeur lui montre
   imageZoomMouse: 'verify-image-zoom-mouse.mjs', // gestes sur une image à la vraie souris à 700x400 (feuille réduite à ~0,85) : devant le texte, glisser, redimensionner, à gauche / au centre / à droite ; témoin à 1400x1000
   imageArrowsKeyboard: 'verify-image-arrows-keyboard.mjs', // flèches du clavier sur une image en calque sélectionnée (1 px, 10 px avec Maj), vrai clavier à 700x400 puis 1400x1000 ; le curseur qui arrive sur son ancre la traverse encore
+  imageCornerMouse: 'verify-image-corner-mouse.mjs', // une image tirée dans un coin de la feuille avec un en-tête et un pied remplis, vraie souris à 700x400 : elle s'arrête dans le coin, garde son clic sous la zone, la marge à vide ouvre l'en-tête et le pied ; témoin à 1400x1000
   headerFooterMouse: 'verify-header-footer-mouse.mjs', // en-tête et pied de page vides (js/header-footer-preview.js) : clic dans la marge puis « Terminer » sans rien écrire, texte tapé, tout effacé, modèle déjà enregistré activé vide, 700x400
   tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
