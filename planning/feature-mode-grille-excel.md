@@ -83,9 +83,9 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   collage d'un tableau, Annuler, tailles des lignes et colonnes ajoutées, bandeaux alignés, tirer un trait (une transaction, un Annuler, minimum, Échap), clic sur un bandeau, barre de la case, suivi coupé,
   contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour ; lot A2 : alignement vertical enregistré (ancien modèle, valeur inconnue, `vertical-align` collé hors grille),
   Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
-- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 22 cas, lots D et E) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
+- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 23 cas, lots D et E) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
-  les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D
+  un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D
   (LibreOffice n'a pas de module Calc dans ce bac à sable).
 - `dev-tests/verify-grid-mouse.mjs` (script Node `gridMouse`) : les mêmes gestes à la vraie souris et au vrai clavier à 700×400, clair et sombre, avec la molette et les contrastes ;
   la Lecture d'une grille large au vrai bouton « Lecture » (colonnes gardées, défilement horizontal, texte au milieu, bulle résolue, pas de ligne vide, contraste du texte) ;

@@ -886,6 +886,38 @@
     },
   });
 
+  // --- 13) Bloc de texte conditionnel (menu des variables, onglet Chips) dans une case -------------------------------------------------------------------------------
+  cases.push({
+    id: 'xlsx_a_conditional_text_block_in_a_cell_is_resolved_like_in_reading',
+    description: 'Un bloc de texte conditionnel dans une case de grille est résolu comme à la Lecture, avant la lecture de la case : condition remplie, le cadre disparaît et son contenu reste (une bulle seule dans le bloc reste un vrai nombre) ; sinon le bloc disparaît et la case reste vide, avec son filet ; sans condition, le bloc est toujours là ; aucun cadre ni étiquette ne passe dans le classeur',
+    run: async (h) => {
+      await seed(h);
+      const yes = withCondition({ mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Alpha Durand' }] });
+      const no = withCondition({ mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'personne' }] });
+      // Une case dont le contenu est le bloc lui-même (un <td> déjà écrit : gridHtml n'enveloppe pas un <td> dans un paragraphe, ce qui sortirait le <div> du <p>).
+      const frame = (inner, condition) => `<div class="conditional-text"${condition}>${inner}</div>`;
+      const block = (inner, condition) => `<td>${frame(inner, condition)}</td>`;
+      const x = await exportGrid([100, 180], [30, 40, 30, 30, 30], [
+        ['Nombre', block(`<p>${badge('Montant')}</p>`, yes)],
+        ['Texte', block(`<p>Gros</p><p>${badge('Nom')}</p>`, yes)],
+        ['Faux', block('<p>Jamais</p>', no)],
+        ['Libre', block('<p>Sans condition</p>', '')],
+        ['Emboîté', block(`<p>Dehors</p>${frame('<p>Dedans</p>', yes)}${frame('<p>Caché</p>', no)}`, yes)],
+      ]);
+      const cell = ref => x.sheet.cell(ref);
+      const bad = [];
+      if (cell('B1').kind !== 'number' || cell('B1').value !== 1234.5) bad.push('bulle seule dans un bloc : ' + JSON.stringify(cell('B1').value));
+      if (cell('B2').value !== 'Gros\nAlpha Durand') bad.push('deux paragraphes : ' + JSON.stringify(cell('B2').value));
+      if (cell('B3').kind !== 'empty') bad.push('bloc faux : ' + JSON.stringify(cell('B3').value));
+      if (cell('B4').value !== 'Sans condition') bad.push('sans condition : ' + JSON.stringify(cell('B4').value));
+      if (cell('B5').value !== 'Dehors\nDedans') bad.push('blocs emboîtés : ' + JSON.stringify(cell('B5').value));
+      const border = cell('B3').style.border;
+      if (!border || !border.left || !border.top) bad.push('la case vide n\'a plus son filet : ' + JSON.stringify(border));
+      if (/Jamais|Caché|conditionnel|Si /.test(x.sheet.text())) bad.push('du contenu d\'un bloc retiré ou une étiquette est passé dans le classeur : ' + x.sheet.text());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.xlsx = cases;
 })();
