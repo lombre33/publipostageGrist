@@ -510,7 +510,9 @@ const FloatingToolbars = (function () {
       panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
       panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate;
       const dom = editor.view.nodeDOM(editor.state.selection.from);
-      if (!dom) { panel.hide(); return; }
+      // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre en haut à gauche (8, 8) -
+      // une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la rouvrir.
+      if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
       syncState();
       panel.show(dom);
     };

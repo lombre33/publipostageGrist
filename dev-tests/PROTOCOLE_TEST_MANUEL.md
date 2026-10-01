@@ -388,6 +388,10 @@ exerce le VRAI clic natif.
    contre une sur-correction du Bug 5).
 5. Même vérification sur la barre flottante d'une image en calque (slider d'opacité) : glisser le
    curseur doit modifier l'opacité en direct sans que la barre ne se referme pendant le geste.
+6. Bulle #Variable sélectionnée (sa barre ouverte), cliquer « Lecture » : aucune barre flottante ne reste
+   affichée (ni au-dessus de la bulle, ni en haut à gauche de la page par-dessus la barre du haut). Même
+   résultat en allant sur « Lecture » au clavier (Tab jusqu'au bouton puis Entrée). Revenir en « Édition »,
+   cliquer la bulle : sa barre se rouvre.
 
 ---
 

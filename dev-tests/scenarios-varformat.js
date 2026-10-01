@@ -119,6 +119,47 @@
     },
   });
 
+  // Choix « Corriger » d'Antoine (2026-10-01) : une bulle restée sélectionnée quand on passe en Lecture gardait sa barre flottante, posée en haut à gauche (8, 8) par floating-ui
+  // sur un éditeur sans boîte, par-dessus la barre du haut. Le changement de mode ferme les barres contextuelles (main.js:syncEditorVisibilityForMode), et une transaction qui
+  // arrive pendant la Lecture - le blur de l'éditeur à un vrai clic sur « Lecture », qui rouvrait la barre juste après sa fermeture - ne la rouvre plus (check() ne montre rien
+  // pour une bulle sans boîte). Un vrai clic et la touche Entrée sont rejoués dans verify-var-toolbar-mouse.mjs ; ici le changement de mode lui-même.
+  cases.push({
+    id: 'varfmt_panel_closes_in_reader_mode_and_stays_closed',
+    description: 'Passer en Lecture ferme la barre flottante d\'une bulle restée sélectionnée, une transaction qui arrive pendant la Lecture ne la rouvre pas, et de retour en Édition la barre revient dès qu\'une transaction concerne la bulle',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables('VarFmtTestTable', { Montant: 'Numeric' });
+      await GristAPI.refreshSchema();
+      Editor.setHTML('<p>Montant : <span class="var-badge" data-table="VarFmtTestTable" data-column="Montant" data-key="Montant"></span></p>');
+      const ed = await selectFirstVarBadge(h);
+      if (!ed) return { pass: false, notes: 'bulle #Variable introuvable après setHTML' };
+      const panel = document.querySelector('.v2-varfmt-toolbar');
+      const openBefore = panel.classList.contains('visible');
+      const seen = { openBefore };
+      try {
+        document.getElementById('btn-mode-read').click();
+        await h.sleep(300);
+        seen.editorHiddenInReader = getComputedStyle(document.getElementById('editor-container')).display === 'none';
+        seen.openInReader = panel.classList.contains('visible');
+        // Une transaction qui arrive pendant la Lecture, la bulle étant toujours la sélection de l'éditeur masqué.
+        ed.view.dispatch(ed.state.tr);
+        await h.sleep(300);
+        seen.openAfterTransactionInReader = panel.classList.contains('visible');
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(300);
+        seen.openBackInEdit = panel.classList.contains('visible');
+        ed.view.dispatch(ed.state.tr);
+        await h.sleep(300);
+        seen.openAfterTransactionInEdit = panel.classList.contains('visible');
+      } finally {
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(200);
+      }
+      const pass = openBefore && seen.editorHiddenInReader && !seen.openInReader && !seen.openAfterTransactionInReader && seen.openAfterTransactionInEdit;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varFormat = cases;
 })();

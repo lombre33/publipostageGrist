@@ -160,6 +160,10 @@
     const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
     editorContainer.style.display = showEditor ? 'block' : 'none';
     if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
+    // Les barres flottantes d'une bulle, d'un tableau ou d'une image sont ancrées dans l'éditeur : masqué (Lecture, résumé d'un macro-modèle), elles n'ont plus rien à
+    // montrer. Sans cela la barre d'une bulle restée sélectionnée sautait en haut à gauche (8, 8), par-dessus les boutons Lecture et Édition : un clic réel sur « Lecture »
+    // fermait la barre (EditorCore.hideFloatingContextToolbars) mais le blur de l'éditeur qui suit la réaffichait aussitôt, et le passage au clavier ne la fermait jamais.
+    if (!showEditor) EditorCore.hideFloatingContextToolbars();
     // Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pas pu être mesuré : ses colonnes sont ajustées maintenant qu'il a une
     // mise en page. Sans cela un tableau resté trop large pour la page ne rentrait qu'à la prochaine frappe. Ce n'est pas une modification de la personne :
     // l'état « à enregistrer » reste celui d'avant, sinon un simple retour au Mode édition réécrirait le modèle à la prochaine passe d'auto-save (le chargement

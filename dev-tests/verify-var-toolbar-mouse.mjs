@@ -789,13 +789,9 @@ async function clickZero() {
   return button;
 }
 const fireDossier = montant => page.evaluate(m => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: m }, 'VcDossiers'), montant);
-// Ce que la Lecture écrit pour la bulle : un clic dans le texte referme d'abord la barre (sinon elle reste affichée par-dessus les boutons du mode : défaut déjà là, hors de
-// ce test), puis le bouton Lecture à la vraie souris, puis le retour à l'édition en glissant d'abord vers le bouton (l'info-bulle du bouton Lecture, encore sous le pointeur,
-// couvrirait sinon son voisin).
+// Ce que la Lecture écrit pour la bulle, la bulle restant sélectionnée : le bouton Lecture à la vraie souris, puis le retour à l'édition en glissant d'abord vers le bouton
+// (l'info-bulle du bouton Lecture, encore sous le pointeur, couvrirait sinon son voisin).
 async function readBubbleInReaderMode() {
-  const paragraph = await page.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; });
-  await page.mouse.click(paragraph.x, paragraph.y);
-  await page.waitForTimeout(300);
   const readButton = await hitTest('#btn-mode-read');
   if (readButton.found) await page.mouse.click(readButton.x, readButton.y);
   await page.waitForTimeout(900);
@@ -863,6 +859,46 @@ const barHiddenAgain = await numberBar();
 check('second vrai clic : le réglage zéro disparaît (retour au défaut), FR reste, le bouton est de nouveau enfoncé', !!hiddenAgain && hiddenAgain.type === 'number' && hiddenAgain.style === 'fr' && !('zero' in hiddenAgain)
   && !!barHiddenAgain && barHiddenAgain.zeroPressed === 'true' && barHiddenAgain.zeroSlash, { hiddenAgain, barHiddenAgain });
 await fireDossier(1200);
+
+// Bulle sélectionnée puis Lecture (choix « Corriger » d'Antoine, 2026-10-01) : la barre flottante de la bulle se ferme quand l'éditeur se masque. Avant, un vrai clic sur
+// « Lecture » la fermait (clic hors de l'éditeur) puis le blur de l'éditeur la rouvrait aussitôt, et l'éditeur masqué la faisait sauter en haut à gauche (8, 8), par-dessus la
+// barre du haut ; au clavier (Entrée sur le bouton) rien ne la fermait. De retour en Édition, un clic sur la bulle la rouvre.
+const visibleBars = () => page.evaluate(() => ({
+  open: document.querySelectorAll('.v2-floating-toolbar.visible').length,
+  coversTopLeft: !!document.elementFromPoint(24, 24)?.closest('.v2-floating-toolbar'),
+  editorShown: getComputedStyle(document.getElementById('editor-container')).display !== 'none',
+}));
+await openNumberBar();
+const openBar = await visibleBars();
+check('bulle nombre sélectionnée : sa barre est ouverte avant de passer en Lecture', openBar.open === 1 && openBar.editorShown, openBar);
+const readNow = await hitTest('#btn-mode-read');
+await page.mouse.click(readNow.x, readNow.y);
+await page.waitForTimeout(800);
+const inReader = await visibleBars();
+check('vrai clic sur « Lecture » avec la bulle sélectionnée : aucune barre flottante n\'est affichée (éditeur masqué, rien en haut à gauche)', !inReader.editorShown && inReader.open === 0 && !inReader.coversTopLeft, inReader);
+let backButton = await hitTest('#btn-mode-edit');
+await page.mouse.move(backButton.x - 6, backButton.y, { steps: 2 });
+await page.mouse.move(backButton.x, backButton.y, { steps: 3 });
+await page.waitForTimeout(200);
+backButton = await hitTest('#btn-mode-edit');
+check('... le bouton Édition est atteignable, non recouvert', backButton.found && backButton.inViewport && backButton.onTop, backButton);
+await page.mouse.click(backButton.x, backButton.y);
+await page.waitForTimeout(600);
+const backInEdit = await visibleBars();
+check('vrai clic sur « Édition » : l\'éditeur revient', backInEdit.editorShown, backInEdit);
+await reselectNumberBadge();
+const reopened = await visibleBars();
+check('... un clic sur la bulle rouvre sa barre', reopened.open === 1 && reopened.editorShown, reopened);
+await page.focus('#btn-mode-read');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(800);
+const keyboardReader = await visibleBars();
+check('Entrée sur le bouton « Lecture » (clavier, sans clic) : la barre se ferme aussi', !keyboardReader.editorShown && keyboardReader.open === 0 && !keyboardReader.coversTopLeft, keyboardReader);
+await page.focus('#btn-mode-edit');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(600);
+const keyboardBack = await visibleBars();
+check('... et Entrée sur « Édition » ramène l\'éditeur', keyboardBack.editorShown, keyboardBack);
 
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });

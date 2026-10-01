@@ -274,6 +274,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Word (choix d'Antoine du 01/10, modèles déjà enregistrés compris) ; la barre de la bulle a un seul bouton en bascule,
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
+- Barres flottantes d'une bulle, d'un tableau ou d'une image : ancrées dans l'éditeur, aucune n'est ouverte quand il est
+  masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
+  01/10) ; elles ne recouvrent jamais la barre du haut.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
