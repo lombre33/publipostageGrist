@@ -67,3 +67,12 @@ body.pp-grid-mode #v2-a4-toggle { opacity: .35; pointer-events: none; }
 .v2-cell-bar-dock { display: none; flex: none; align-items: center; box-sizing: border-box; min-height: 34px; padding: 3px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
 body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
 .v2-cell-bar-dock .v2-floating-toolbar { position: static; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+/* Une barre trop large pour le panneau passe à la ligne (tout reste atteignable) plutôt que de déborder ; un trait fin sépare les groupes (lignes et colonnes, fusion, fond, alignement).
+   Elle garde le niveau des barres flottantes (--z-floating-toolbar, css/style.css : un enfant de bande flex garde son z-index même sans position), SOUS celui des menus : le menu « + » descend
+   jusque sur cette bande (« Nouvelle grille ») et reste dessus - gridCellsMouse. */
+.v2-cell-bar-dock .v2-floating-toolbar { flex-wrap: wrap; row-gap: 2px; }
+.v2-cell-bar-dock .v2-floating-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border); }
+/* Ce que seule une grille a (fusion, alignement vertical) : dans la barre de tous les tableaux, montré ici seulement - la barre d'un tableau de document reste celle d'avant. */
+.v2-floating-toolbar .v2-grid-only { display: none; }
+body.pp-grid-mode .v2-floating-toolbar button.v2-grid-only { display: inline-flex; }
+body.pp-grid-mode .v2-floating-toolbar .v2-floating-sep.v2-grid-only { display: block; }

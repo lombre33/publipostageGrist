@@ -709,6 +709,12 @@ const I18n = (function () {
     'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
+    // Barre de la case d'une grille (js/floating-toolbars.js) : fusion, alignement vertical.
+    'table.cellMerge': { fr: 'Fusionner les cases', en: 'Merge cells' },
+    'table.cellSplit': { fr: 'Scinder la case', en: 'Split cell' },
+    'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
+    'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
+    'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },
     'twoColumns.resizeGrip': { fr: 'Redimensionner les colonnes', en: 'Resize columns' },
     'twoColumns.widthMmButton': { fr: 'Régler les largeurs en mm', en: 'Set widths in mm' },
     'twoColumns.widthMmLeftLabel': { fr: 'Gauche (mm)', en: 'Left (mm)' },

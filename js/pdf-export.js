@@ -642,18 +642,30 @@ const PdfExport = (function () {
       const px = Math.max(parseFloat(row.getAttribute('data-row-height')) || 0, row.getBoundingClientRect().height);
       return Math.max(0, px * PX_TO_PT - cellPadTopPt - cellPadBottomPt - GRID_BORDER_PT);
     }) : null;
-    const gridCellOffsetPt = (cell, rowIndex) => {
+    // Une case fusionnée sur plusieurs lignes se centre (ou se pose en bas) sur la hauteur de toutes les lignes qu'elle couvre, traits et marges intérieures des lignes du milieu compris.
+    const gridCellOffsetPt = (cell, rowIndex, rowSpan) => {
       const valign = cell.style.verticalAlign;
       if (valign !== 'middle' && valign !== 'bottom') return 0;
+      let areaPt = (rowSpan - 1) * (cellPadTopPt + cellPadBottomPt + GRID_BORDER_PT);
+      for (let i = rowIndex; i < rowIndex + rowSpan; i += 1) areaPt += gridRowAreaPt[i];
       const range = document.createRange();
       range.selectNodeContents(cell);
-      const free = Math.max(0, gridRowAreaPt[rowIndex] - range.getBoundingClientRect().height * PX_TO_PT);
+      const free = Math.max(0, areaPt - range.getBoundingClientRect().height * PX_TO_PT);
       return valign === 'bottom' ? free : free / 2;
     };
+    // Cases fusionnées sur plusieurs lignes (`rowspan`) : le HTML ne les répète pas dans les lignes suivantes, pdfmake veut un emplacement vide ({}) à leur place, dans chaque colonne
+    // qu'elles couvrent. `covered[colonne]` = nombre de lignes, sous la ligne en cours, qu'une case venue d'au-dessus occupe encore dans cette colonne.
+    const covered = new Array(columnCount).fill(0);
     const body = rawRows.map((row, rowIndex) => {
       const output = [];
+      const skipCovered = () => { while (output.length < columnCount && covered[output.length] > 0) { covered[output.length] -= 1; output.push({}); } };
       cellsOf(row).forEach(cell => {
-        const colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
+        skipCovered();
+        if (output.length >= columnCount) return;
+        let colSpan = Math.min(columnCount - output.length, Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1));
+        // Jamais par-dessus une colonne déjà prise par une case d'au-dessus (HTML venu d'ailleurs, mal formé).
+        for (let i = 1; i < colSpan; i += 1) if (covered[output.length + i] > 0) { colSpan = i; break; }
+        const rowSpan = Math.min(rawRows.length - rowIndex, Math.max(1, parseInt(cell.getAttribute('rowspan') || '1', 10) || 1));
         const cellWidthPt = widths.slice(output.length, output.length + colSpan).reduce((sum, w) => sum + w, 0) || null;
         let content;
         try { content = cellContentFrom(cell, cellWidthPt, rootRect); }
@@ -664,13 +676,18 @@ const PdfExport = (function () {
         if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
         if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
         if (isGrid) {
-          const offsetPt = gridCellOffsetPt(cell, rowIndex);
+          const offsetPt = gridCellOffsetPt(cell, rowIndex, rowSpan);
           if (offsetPt > 0.25) pdfCell.margin = [0, (pdfCell.margin ? pdfCell.margin[1] : 0) + offsetPt, 0, 0];
         }
         if (colSpan > 1) pdfCell.colSpan = colSpan;
+        if (rowSpan > 1) {
+          pdfCell.rowSpan = rowSpan;
+          for (let i = 0; i < colSpan; i += 1) covered[output.length + i] = rowSpan - 1;
+        }
         output.push(pdfCell);
         for (let i = 1; i < colSpan; i += 1) output.push({});
       });
+      skipCovered();
       while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
       return output.slice(0, columnCount);
     });

@@ -280,6 +280,58 @@ const GridEditor = (function () {
     return pos == null ? null : editor.view.nodeDOM(pos);
   }
 
+  // --- Barre de la case : fusion, alignement vertical ------------------------------------------------------------------------------------------------------------
+  // Les cases que la barre vise : toutes celles d'une sélection de cases, sinon la case du curseur.
+  function selectedCells(state) {
+    const sel = state.selection;
+    const out = [];
+    if (isCellSelection(sel)) { sel.forEachCell((node, pos) => out.push({ node, pos })); return out; }
+    const pos = currentCellPos(state);
+    if (pos != null) out.push({ node: state.doc.nodeAt(pos), pos });
+    return out;
+  }
+
+  // 'top', 'middle' ou 'bottom' quand toutes les cases visées s'accordent, null quand la sélection est mêlée (aucun bouton n'est alors enfoncé).
+  function selectedVerticalAlign(ed) {
+    if (!active) return null;
+    const values = new Set(selectedCells(ed.state).map(({ node }) => (VALIGNS.has(node.attrs.verticalAlign) ? node.attrs.verticalAlign : DEFAULT_VALIGN)));
+    return values.size === 1 ? Array.from(values)[0] : null;
+  }
+
+  // Une seule transaction pour toutes les cases visées : un seul Annuler.
+  function setVerticalAlign(ed, value) {
+    if (!active || !VALIGNS.has(value)) return false;
+    const tr = ed.state.tr;
+    selectedCells(ed.state).forEach(({ node, pos }) => {
+      if (node.attrs.verticalAlign !== value) tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { verticalAlign: value }));
+    });
+    if (tr.docChanged) ed.view.dispatch(tr);
+    return true;
+  }
+
+  function canMerge(ed) { return active && ed.can().mergeCells(); }
+  function canSplit(ed) { return active && ed.can().splitCell(); }
+
+  // Fusionne les cases sélectionnées en une seule : le texte des autres s'ajoute à la suite du sien (rien n'est perdu, Annuler rend tout), le fond et l'alignement sont ceux de la
+  // première. prosemirror-tables ne laisse à la case fusionnée que la largeur de sa première colonne (0 pour les autres) : on lui rend, dans la même transaction, celle de chaque
+  // colonne qu'elle couvre - sans cela, fusionner toutes les lignes de deux colonnes remettait la seconde à la largeur par défaut (fixDimensions ne la retrouvait dans aucune autre case).
+  function mergeCells(ed) {
+    if (!canMerge(ed)) return false;
+    const widths = columnWidths(tableInfo(ed.state.doc).node);
+    return ed.chain().focus().mergeCells().command(({ tr }) => {
+      const merged = tr.selection.$anchorCell ? tr.selection.$anchorCell.pos : null;
+      const info = tableInfo(tr.doc);
+      if (merged == null || !info) return true;
+      const cell = tr.doc.nodeAt(merged);
+      const left = libs.TableMap.get(info.node).colCount(merged - (info.pos + 1));
+      tr.setNodeMarkup(merged, undefined, Object.assign({}, cell.attrs, { colwidth: widths.slice(left, left + (cell.attrs.colspan || 1)) }));
+      return true;
+    }).run();
+  }
+
+  // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond, l'alignement et la largeur de leur colonne.
+  function splitCell(ed) { return canSplit(ed) && ed.chain().focus().splitCell().run(); }
+
   // --- Extension TipTap : garde-fou, sélection, touches ----------------------------------------------------------------------------------------------------------
   function createExtension(Extension) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
@@ -688,5 +740,6 @@ const GridEditor = (function () {
     TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
     configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
     currentCellDom, columnWidths, colName, floatingOptions, barSlot,
+    canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign,
   };
 })();

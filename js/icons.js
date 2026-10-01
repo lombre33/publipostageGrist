@@ -44,6 +44,13 @@ const Icons = (function () {
     colBefore: '<path d="M9 4v16M15 4v16M4 12h4"/>',
     colAfter: '<path d="M9 4v16M15 4v16M16 12h4"/>',
     colDel: '<path d="M9 4v16M15 4v16"/>',
+    // Barre de la case d'une grille (maquette validée le 2026-10-01) : fusionner (deux flèches vers le centre) et scinder (deux flèches vers les bords), puis l'alignement vertical -
+    // un trait de référence (haut, milieu, bas) et la case posée contre lui.
+    cellMerge: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h5"/><path d="M16 12h5"/><polyline points="9 9 12 12 9 15"/><polyline points="15 9 12 12 15 15"/>',
+    cellSplit: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><polyline points="8 9 5 12 8 15"/><polyline points="16 9 19 12 16 15"/>',
+    valignTop: '<path d="M4 4h16"/><rect x="8" y="8" width="8" height="12" rx="1"/>',
+    valignMiddle: '<path d="M4 12h16"/><rect x="8" y="5" width="8" height="14" rx="1"/>',
+    valignBottom: '<path d="M4 20h16"/><rect x="8" y="4" width="8" height="12" rx="1"/>',
     trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
     zoomOut: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M7 10h6"/>',
     zoomIn: '<circle cx="10" cy="10" r="6.5"/><path d="M20 20l-5.5-5.5M10 7v6M7 10h6"/>',

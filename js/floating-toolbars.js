@@ -91,12 +91,21 @@ const FloatingToolbars = (function () {
       ['col-del', 'colDel', I18n.t('table.colDel')],
       ['table-del', 'trash', I18n.t('table.tableDel')],
     ];
+    // Ce que seule une grille a (js/grid-editor.js) : fusion, alignement vertical. Posé dans la barre pour tous les tableaux, montré par css/grid.css sous `body.pp-grid-mode` seulement :
+    // la barre d'un tableau de document reste celle d'avant.
+    const VALIGN_BUTTONS = [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]];
+    const gridButton = (action, icon, title) => `<button data-action="${action}" class="v2-grid-only" title="${title}">${Icons.svg(icon)}</button>`;
     const html = buttons.map(([action, icon, title]) =>
       `<button data-action="${action}" title="${title}">${Icons.svg(icon)}</button>`).join('')
+      + '<span class="v2-floating-sep v2-grid-only"></span>'
+      + gridButton('cell-merge', 'cellMerge', I18n.t('table.cellMerge'))
+      + gridButton('cell-split', 'cellSplit', I18n.t('table.cellSplit'))
       + '<span class="v2-floating-sep"></span>'
       + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
       + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
-      + '</button>';
+      + '</button>'
+      + '<span class="v2-floating-sep v2-grid-only"></span>'
+      + VALIGN_BUTTONS.map(([action, icon, , title]) => gridButton(action, icon, title)).join('');
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const commands = {
         'row-before': () => editor.chain().focus().addRowBefore().run(),
@@ -106,6 +115,11 @@ const FloatingToolbars = (function () {
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
         'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
         'table-del': () => editor.chain().focus().deleteTable().run(),
+        'cell-merge': () => GridEditor.mergeCells(editor),
+        'cell-split': () => GridEditor.splitCell(editor),
+        'valign-top': () => GridEditor.setVerticalAlign(editor, 'top'),
+        'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
+        'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
           if (EditorCore.getOpenDropdownPanel() === fillPanel) { EditorCore.closeDropdownPanel(); return; }
@@ -124,6 +138,27 @@ const FloatingToolbars = (function () {
       onNone: () => { setCellsBackground(editor, null); EditorCore.setColorBar('v2-table-fill-bar', null); },
     });
     EditorCore.registerFloatingPanel(panel);
+    // Boutons d'une grille selon la sélection : « Fusionner » et « Scinder » grisés quand ils n'ont pas de sens (jamais retirés), l'alignement vertical des cases visées enfoncé
+    // (aucun quand la sélection mêle plusieurs alignements).
+    const gridButtonOf = action => panel.el.querySelector(`button[data-action="${action}"]`);
+    const setLocked = (action, locked) => {
+      const btn = gridButtonOf(action);
+      if (!btn) return;
+      btn.classList.toggle('v2-hf-locked', locked);
+      btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    };
+    const syncGridButtons = () => {
+      setLocked('table-del', true);
+      setLocked('cell-merge', !GridEditor.canMerge(editor));
+      setLocked('cell-split', !GridEditor.canSplit(editor));
+      const align = GridEditor.selectedVerticalAlign(editor);
+      VALIGN_BUTTONS.forEach(([action, , value]) => {
+        const btn = gridButtonOf(action);
+        if (!btn) return;
+        btn.classList.toggle('is-active', align === value);
+        btn.setAttribute('aria-pressed', align === value ? 'true' : 'false');
+      });
+    };
     const check = () => {
       // Une grille (js/grid-editor.js) : la barre est fixée dans sa bande au-dessus du tableau (css/grid.css) et y reste, focus ou non - posée sur la case courante elle
       // recouvrait les cases voisines (un appui dessus tombait sur ses boutons, rien ne se sélectionnait à la souris). « Supprimer le tableau » est grisé (le garde-fou de la
@@ -132,8 +167,7 @@ const FloatingToolbars = (function () {
         const slot = GridEditor.barSlot();
         if (slot) {
           panel.dock(slot);
-          const tableDel = panel.el.querySelector('button[data-action="table-del"]');
-          if (tableDel) tableDel.classList.add('v2-hf-locked');
+          syncGridButtons();
           const attrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
           EditorCore.setColorBar('v2-table-fill-bar', attrs.backgroundColor || null);
           return;

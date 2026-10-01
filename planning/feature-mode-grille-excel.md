@@ -33,8 +33,19 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   (`wireLockedClickGuard`) tient aussi pour Entrée et Espace.
 - Barre de la case : fixée dans une bande (`#v2-cell-bar-dock`, `GridEditor.barSlot`) entre la barre d'outils et le plan de travail, jamais posée sur une case (01/10, glissé de souris : la barre flottante
   recouvrait les cases voisines de la case courante ; `createFloatingPanel` a `dock` / `undock`, la branche « grille » de `wireTableFloatingToolbar` l'y range) ; masquée avec l'éditeur (`pp-editor-hidden` posé par
-  `syncEditorVisibilityForMode`) ; hors d'une grille elle flotte comme avant. « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés. Fusion et scission, bordures et alignement vertical
-  (lot B) s'y ajoutent, leur place est déjà là.
+  `syncEditorVisibilityForMode`) ; hors d'une grille elle flotte comme avant. « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés.
+- Barre de la case, lot B1 (01/10) : Lignes, Colonnes, Tableau (grisé), Fusion, Fond, Alignement vertical (maquette `Barre`, bordures au lot B2), sur une ligne à 700 px (elle passe à la ligne au-delà), un
+  trait fin entre les groupes. Les boutons propres à la grille portent `v2-grid-only` (montrés par `css/grid.css` sous `body.pp-grid-mode` seulement : la barre d'un tableau de document reste celle d'avant).
+  « Fusionner » (`GridEditor.mergeCells`) n'est actif que sur plusieurs cases (`editor.can().mergeCells()`), « Scinder » (`splitCell`) que sur une case fusionnée : grisés sinon (`v2-hf-locked` + `aria-disabled`),
+  jamais retirés. Fusionner garde le texte de toutes les cases (à la suite dans la première : rien n'est perdu), le fond et l'alignement de la première, UN seul Annuler. prosemirror-tables ne laisse à la case
+  fusionnée que la largeur de sa première colonne (les autres à 0) : `mergeCells` la remet, dans la même transaction, d'après les largeurs d'avant (`columnWidths`) - sinon fusionner toutes les lignes de deux
+  colonnes ramenait la seconde à 100 px, `fixDimensions` ne la retrouvant dans aucune autre case. `setColumnWidth` (poignée du bandeau) règle déjà la seule part d'une case fusionnée. Alignement vertical :
+  `setVerticalAlign` change toutes les cases choisies d'un coup, le bouton enfoncé (`is-active`, `aria-pressed`) dit l'alignement de toutes les cases choisies, aucun quand elles diffèrent.
+  Rendu : l'éditeur et la Lecture montrent `colspan` / `rowspan` tels quels ; l'Excel les fusionnait déjà (`placeCells`) ; le PDF (`tableFrom`) sait maintenant `rowSpan` (une case fusionnée sur plusieurs lignes
+  laisse un emplacement vide `{}` dans chaque colonne qu'elle couvre, aux lignes d'après ; le centrage vertical se calcule sur la hauteur de toutes les lignes couvertes) et `ExportCommon.measuredColumnWidthsPx`
+  mesure chaque colonne sur la première case d'UNE seule colonne (une ligne de titre fusionnée sur toute la largeur rendait toutes les colonnes égales dans le PDF et le Word, grille ou document).
+  Limite : une case fusionnée qui chevauche un saut de page du PDF (lot C) ne sera pas coupée par pdfmake. L'export Word (`js/docx-export.js`) ne traite pas encore `rowspan` dans le calcul des largeurs
+  (une grille ne s'y exporte pas ; tableau de document : roadmap A21).
 - Sélection de cases à la souris (01/10) : `js/table-select.js` fait défiler le plan de travail quand le pointeur, bouton appuyé dans une case, est près d'un bord (ou au-delà) et prolonge la sélection de cases
   (`CellSelection`) jusqu'à la case qui arrive sous le bord ; le voile `.selectedCell::after` (`css/editor-v2.css`) rend la sélection visible sur une case colorée. Tableau de document et grille. Limite : le défilement
   horizontal d'un `.tableWrapper` d'un document classique n'est pas suivi (seul `#editor-container` défile ; un tableau de document est ramené à la largeur de la page).
@@ -62,7 +73,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | 0, 0b | Orientation dans `PageLayout` (clé `orientation` de la colonne `Margins`) et bouton portrait / paysage (`js/orientation-toggle.js`) | en ligne (01/10) |
 | A1 | La grille dans l'éditeur : type, garde-fou, bandeaux et poignées, barre grisée, barre de la case, enregistrement | en ligne (01/10, `654f926`) |
 | A2 | Lecture et PDF d'une grille (sans feuille A4, `rowHeight` et `colwidth` respectés, texte au milieu de sa case, grille plus large que la page ramenée à la largeur) | en ligne (01/10, `418e609`) |
-| B | Barre de la case : fusion et scission, bordures, alignement vertical | à faire |
+| B1 | Barre de la case : fusion et scission, alignement vertical ; cases fusionnées dans le PDF (`rowSpan`) et colonnes mesurées sur une case simple | prêt (01/10) |
+| B2 | Barre de la case : bordures | à faire |
 | C | Saut de page porté par la ligne ; bascule portrait / paysage active pour `grille` (`OrientationToggle.TYPES`) | à faire |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) : ligne « Exporter en Excel… » du menu Qualité PDF, grisée hors grille ; les deux lignes Word grisées dans une grille | en ligne (01/10) |
 | E | « Exporter toutes les valeurs de la table » : une archive ZIP d'un classeur par valeur et un classeur unique d'une feuille par valeur ; dans une grille, « lignes » devient « valeurs de la table » (lot PDF compris) ; « Nouvelle grille » visible sans `?dev` (second commit, séparé) | en ligne (01/10) |

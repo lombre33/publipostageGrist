@@ -45,29 +45,42 @@ const ExportCommon = (function () {
   }
 
   // Largeurs mesurées sur le rendu réel (le <col> de @tiptap ne porte qu'un minimum px, pas un pourcentage exploitable), largeur de CONTENU (pas la boîte
-  // entière : chaque exporteur applique déjà son propre padding de cellule), mesurée sur le 1er enfant de bloc de chaque cellule de la 1ère ligne - un simple
-  // soustrait padding+bordure est imprécis d'~1px. Le tableau doit être attaché au document (cf. attachMeasureHost).
+  // entière : chaque exporteur applique déjà son propre padding de cellule), mesurée sur le 1er enfant de bloc de la cellule - un simple soustrait
+  // padding+bordure est imprécis d'~1px. Le tableau doit être attaché au document (cf. attachMeasureHost).
+  // Chaque colonne se mesure sur la première case d'UNE seule colonne qui la couvre (la 1re ligne dans un tableau ordinaire). Une case fusionnée sur plusieurs colonnes ne dit rien
+  // de la largeur propre de chacune : une ligne de titre fusionnée sur toute la largeur rendait toutes les colonnes égales dans le PDF ; elle ne sert (à parts égales) qu'à une
+  // colonne qu'aucune case simple ne couvre. Les cases fusionnées sur plusieurs lignes (`rowspan`), que le HTML ne répète pas dans les lignes suivantes, décalent les cases d'après.
   function measuredColumnWidthsPx(table, columnCount) {
-    const firstRow = table.querySelector(':scope > tbody > tr, :scope > thead > tr, :scope > tr');
-    if (!firstRow) return null;
-    const cells = Array.from(firstRow.children).filter(c => /^(TD|TH)$/i.test(c.tagName));
-    if (!cells.length) return null;
-    const widths = [];
-    cells.forEach(cell => {
-      const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
+    const rows = Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
+    if (!rows.length) return null;
+    const perColumnPx = (cell, span) => {
       const contentEl = cell.querySelector(':scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol');
-      let perCol;
-      if (contentEl) {
-        perCol = contentEl.getBoundingClientRect().width / span;
-      } else {
-        const cs = getComputedStyle(cell);
-        const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
-        perCol = (cell.getBoundingClientRect().width - inset) / span;
-      }
-      for (let i = 0; i < span; i += 1) widths.push(perCol);
+      if (contentEl) return contentEl.getBoundingClientRect().width / span;
+      const cs = getComputedStyle(cell);
+      const inset = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+      return (cell.getBoundingClientRect().width - inset) / span;
+    };
+    const single = [];
+    const merged = [];
+    const taken = [];
+    let any = false;
+    rows.forEach((tr, r) => {
+      let c = 0;
+      Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName)).forEach(cell => {
+        any = true;
+        while (taken[r] && taken[r][c]) c += 1;
+        const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1);
+        const rowSpan = Math.max(1, Math.min(rows.length - r, parseInt(cell.getAttribute('rowspan') || '1', 10) || 1));
+        for (let dr = 1; dr < rowSpan; dr += 1) for (let dc = 0; dc < span; dc += 1) (taken[r + dr] = taken[r + dr] || [])[c + dc] = true;
+        if (span === 1) { if (single[c] === undefined) single[c] = perColumnPx(cell, 1); }
+        else for (let i = 0; i < span; i += 1) if (!merged[c + i]) merged[c + i] = { cell, span };
+        c += span;
+      });
     });
-    while (widths.length < columnCount) widths.push(0);
-    return widths.slice(0, columnCount);
+    if (!any) return null;
+    const widths = [];
+    for (let col = 0; col < columnCount; col += 1) widths.push(single[col] !== undefined ? single[col] : merged[col] ? perColumnPx(merged[col].cell, merged[col].span) : 0);
+    return widths;
   }
 
   // #Variable/chips des 4 fragments d'en-tête/pied résolus (ReaderMode.preview) au même niveau que le corps, pour que les exporteurs restent appelables avec

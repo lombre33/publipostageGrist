@@ -869,6 +869,226 @@
     },
   });
 
+  // === 9) Lot B1 : fusion et alignement vertical dans la barre de la case, cases fusionnées dans la Lecture et le PDF ==============================================================
+  // Les gestes à la vraie souris (glisser sur un bloc, cliquer « Fusionner », Ctrl+Z, tirer le bord d'une colonne sous une case fusionnée) : dev-tests/verify-grid-cells-mouse.mjs.
+
+  const barButton = action => document.querySelector(`.v2-cell-bar-dock .v2-floating-toolbar button[data-action="${action}"]`);
+  const barLocked = action => barButton(action).classList.contains('v2-hf-locked');
+  // Le clic d'une personne sur un bouton de la barre de la case : appui, relâchement, clic (la barre agit à l'appui et ignore le clic qui le suit).
+  async function pressBar(action) {
+    const btn = barButton(action);
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await sleep(60);
+  }
+  async function selectCells(r1, c1, r2, c2) {
+    ed().chain().focus().setCellSelection({ anchorCell: cellPos(r1, c1), headCell: cellPos(r2, c2) }).run();
+    await sleep(60);
+  }
+  const allCells = () => { const list = []; tableNode().forEach((row, _o, r) => row.forEach(cell => list.push({ row: r, cell }))); return list; };
+  const mergedCell = () => { const found = allCells().find(c => c.cell.attrs.colspan > 1 || c.cell.attrs.rowspan > 1); return found ? found.cell : null; };
+  const colWidthsNow = () => colEls().map(c => Math.round(c.getBoundingClientRect().width * 10) / 10);
+  const rowHeightsNow = () => rowEls().map(r => Math.round(r.getBoundingClientRect().height * 10) / 10);
+
+  cases.push({
+    id: 'grid_cell_bar_merge_and_split_follow_the_selection_and_are_greyed_never_removed',
+    description: 'Barre de la case d\'une grille : « Fusionner les cases » n\'est actif que si plusieurs cases sont choisies, « Scinder la case » que sur une case fusionnée - grisés (jamais retirés) le reste du temps ; fusionner fait une case de 2 colonnes x 2 lignes qui garde le texte des deux cases, scinder rend les cases ; chacun est annulé par un seul Annuler',
+    run: async (h) => inGrid(h, async () => {
+      const labels = {};
+      ['cell-merge', 'cell-split', 'valign-top', 'valign-middle', 'valign-bottom'].forEach(a => { labels[a] = barButton(a) ? barButton(a).title : null; });
+      await placeCursor(0, 0);
+      const cursor = { merge: barLocked('cell-merge'), split: barLocked('cell-split'), shown: ['cell-merge', 'cell-split'].every(a => barButton(a).getBoundingClientRect().width > 0) };
+      await typeInCell(1, 1, 'x1');
+      await typeInCell(1, 2, 'x2');
+      await sleep(650); // deux gestes à moins de 500 ms sont UN évènement d'historique
+      await selectCells(1, 1, 2, 2);
+      const block = { merge: barLocked('cell-merge'), split: barLocked('cell-split'), canMerge: GridEditor.canMerge(ed()), canSplit: GridEditor.canSplit(ed()) };
+      const before = { widths: colWidthsNow(), heights: rowHeightsNow(), count: cellCount() };
+      await pressBar('cell-merge');
+      const merged = mergedCell();
+      const afterMerge = { count: cellCount(), colspan: merged && merged.attrs.colspan, rowspan: merged && merged.attrs.rowspan, text: merged && Array.from({ length: merged.childCount }, (_, i) => merged.child(i).textContent).join('|'),
+        merge: barLocked('cell-merge'), split: barLocked('cell-split'), widths: colWidthsNow(), heights: rowHeightsNow(), selected: ed().state.selection.$anchorCell ? document.querySelectorAll('.tiptap .selectedCell').length : 0 };
+      await sleep(650);
+      await pressBar('cell-split');
+      const afterSplit = { count: cellCount(), merged: !!mergedCell(), second: Array.from({ length: tableNode().child(1).childCount }, (_, i) => tableNode().child(1).child(i).textContent).join('|'), valigns: new Set(allCells().map(c => c.cell.attrs.verticalAlign)).size };
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(80);
+      const undoSplit = { count: cellCount(), merged: !!mergedCell() };
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(80);
+      const undoMerge = { count: cellCount(), merged: !!mergedCell(), second: Array.from({ length: tableNode().child(1).childCount }, (_, i) => tableNode().child(1).child(i).textContent).join('|') };
+      // Rien ne se fusionne quand ce n'est pas possible (la commande est refusée, pas ignorée en silence : elle répond faux).
+      await placeCursor(3, 3);
+      const refused = !GridEditor.mergeCells(ed()) && !GridEditor.splitCell(ed()) && cellCount() === 90;
+      const pass = ['cell-merge', 'cell-split', 'valign-top', 'valign-middle', 'valign-bottom'].every(a => !!labels[a])
+        && cursor.merge && cursor.split && cursor.shown && !block.merge && block.split && block.canMerge && !block.canSplit
+        && afterMerge.count === 87 && afterMerge.colspan === 2 && afterMerge.rowspan === 2 && afterMerge.text === 'x1|x2' && afterMerge.merge && !afterMerge.split && afterMerge.selected === 1
+        && JSON.stringify(afterMerge.widths) === JSON.stringify(before.widths) && JSON.stringify(afterMerge.heights) === JSON.stringify(before.heights)
+        && afterSplit.count === 90 && !afterSplit.merged && afterSplit.second === '|x1x2||||' && afterSplit.valigns === 1
+        && undoSplit.count === 87 && undoSplit.merged && undoMerge.count === 90 && !undoMerge.merged && undoMerge.second === '|x1|x2|||' && refused;
+      return { pass, notes: JSON.stringify({ labels, cursor, block, before, afterMerge, afterSplit, undoSplit, undoMerge, refused }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_merging_whole_columns_keeps_their_widths_and_a_split_gives_them_back',
+    description: 'Fusionner toutes les lignes de deux colonnes de largeurs différentes (150 px et 60 px) ne remet aucune des deux à la largeur par défaut (la case fusionnée porte 150 et 60), scinder rend à chaque colonne la sienne ; tirer le trait d\'une de ces colonnes ne règle que la sienne',
+    run: async (h) => inGrid(h, async () => {
+      await loadGrid(gridHtml([100, 150, 60, 100], [28, 28, 28, 28], [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(c => String.fromCharCode(65 + c) + (r + 1)))));
+      const before = colWidthsNow();
+      await selectCells(0, 1, 3, 2);
+      await pressBar('cell-merge');
+      const merged = mergedCell();
+      const afterMerge = { widths: colWidthsNow(), span: merged && [merged.attrs.colspan, merged.attrs.rowspan], colwidth: merged && String(merged.attrs.colwidth) };
+      // Le trait du bandeau C (la colonne de 60 px, recouverte par la case fusionnée) de 25 px vers la droite : seule la colonne C change, la case fusionnée en porte les deux parts.
+      await dragHandle(colHeads()[2].querySelector('.v2-grid-handle'), 25, 0);
+      const resized = { widths: colWidthsNow(), colwidth: String(mergedCell().attrs.colwidth) };
+      await sleep(650);
+      await pressBar('cell-split');
+      const afterSplit = { widths: colWidthsNow(), row1: Array.from({ length: tableNode().child(0).childCount }, (_, i) => String(tableNode().child(0).child(i).attrs.colwidth)).join('|') };
+      const pass = JSON.stringify(before) === JSON.stringify([100, 150, 60, 100]) && JSON.stringify(afterMerge.widths) === JSON.stringify(before) && afterMerge.span.join() === '2,4' && afterMerge.colwidth === '150,60'
+        && allNear(resized.widths, [100, 150, 85, 100], 1.5) && resized.colwidth === '150,85'
+        && allNear(afterSplit.widths, [100, 150, 85, 100], 1.5) && afterSplit.row1 === '100|150|85|100';
+      return { pass, notes: JSON.stringify({ before, afterMerge, resized, afterSplit }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_cell_bar_vertical_alignment_buttons_apply_to_every_chosen_cell_in_one_undo',
+    description: 'Barre de la case : « Aligner en haut / au milieu / en bas » change toutes les cases choisies d\'un coup (un seul Annuler), le bouton enfoncé dit l\'alignement des cases choisies - aucun quand elles diffèrent -, l\'alignement est enregistré avec le modèle et suivi par la Lecture',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await loadGrid(gridHtml([100, 100, 100], [28, 90, 28], [['A1', 'B1', 'C1'], ['Haut', 'Milieu', 'Bas'], ['A3', 'B3', 'C3']]));
+      const pressed = () => ['valign-top', 'valign-middle', 'valign-bottom'].filter(a => barButton(a).classList.contains('is-active') && barButton(a).getAttribute('aria-pressed') === 'true').join();
+      const valigns = () => allCells().map(c => c.cell.attrs.verticalAlign).join();
+      await placeCursor(0, 0);
+      const start = pressed();
+      await selectCells(1, 0, 1, 1);
+      await pressBar('valign-top');
+      const afterTop = { pressed: pressed(), valigns: valigns() };
+      await selectCells(0, 0, 1, 0);
+      const mixed = pressed();
+      await sleep(650);
+      await pressBar('valign-bottom');
+      const afterBottom = { pressed: pressed(), valigns: valigns() };
+      await sleep(650);
+      ed().commands.undo();
+      await sleep(80);
+      const undone = valigns();
+      await placeCursor(1, 0);
+      await pressBar('valign-top');
+      await placeCursor(1, 1);
+      await pressBar('valign-middle');
+      await placeCursor(1, 2);
+      await pressBar('valign-bottom');
+      const editor = Array.from(document.querySelectorAll('.tiptap table tr:nth-child(2) > td')).map(td => { const range = document.createRange(); range.selectNodeContents(td); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2 - td.getBoundingClientRect().top; });
+      const saved = Editor.getHTML();
+      await h.clickButton('btn-mode-read');
+      let reader = [];
+      try {
+        await sleep(600);
+        reader = Array.from(document.querySelectorAll('#reader-container table tr:nth-child(2) > td')).map(td => { const range = document.createRange(); range.selectNodeContents(td); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2 - td.getBoundingClientRect().top; });
+      } finally { await h.clickButton('btn-mode-edit'); await sleep(300); }
+      const pass = start === 'valign-middle' && afterTop.pressed === 'valign-top' && afterTop.valigns === 'middle,middle,middle,top,top,middle,middle,middle,middle' && mixed === ''
+        && afterBottom.pressed === 'valign-bottom' && afterBottom.valigns === 'bottom,middle,middle,bottom,top,middle,middle,middle,middle'
+        && undone === 'middle,middle,middle,top,top,middle,middle,middle,middle'
+        && editor[0] < editor[1] - 15 && editor[1] < editor[2] - 15 && allNear(reader, editor, 1.5)
+        && (saved.match(/data-valign="top"/g) || []).length === 1 && (saved.match(/data-valign="bottom"/g) || []).length === 1 && (saved.match(/data-valign="middle"/g) || []).length === 7;
+      return { pass, notes: JSON.stringify({ start, afterTop, mixed, afterBottom, undone, editor, reader }) };
+    }),
+  });
+
+  // Une grille avec une ligne de titre fusionnée sur toute la largeur et un bloc de deux lignes : le HTML d'un modèle enregistré (cases fusionnées : colspan, rowspan, colwidth par colonne).
+  const MERGE_WIDTHS = [120, 200, 80];
+  const mergedTd = (inner, width, attrs) => `<td colwidth="${width}"${attrs || ''}><p>${inner}</p></td>`;
+  const MERGED_GRID = '<table style="width: 400px;"><colgroup>' + MERGE_WIDTHS.map(w => `<col style="width: ${w}px;">`).join('') + '</colgroup><tbody>'
+    + `<tr data-row-height="40" style="height: 40px">${mergedTd('Titre', '120,200,80', ' colspan="3" data-valign="middle"')}</tr>`
+    + `<tr data-row-height="28" style="height: 28px">${mergedTd('a', 120, ' data-valign="middle"')}${mergedTd('b', 200, ' data-valign="middle"')}${mergedTd('c', 80, ' data-valign="middle"')}</tr>`
+    + `<tr data-row-height="28" style="height: 28px">${mergedTd('bloc', 120, ' rowspan="2" data-valign="middle"')}${mergedTd('d', 200, ' data-valign="middle"')}${mergedTd('e', 80, ' data-valign="middle"')}</tr>`
+    + `<tr data-row-height="60" style="height: 60px">${mergedTd('f', 200, ' data-valign="bottom"')}${mergedTd('g', 80, ' data-valign="top"')}</tr>`
+    + '</tbody></table>';
+  // Où le texte d'une case est dans un tableau rendu : abscisse de son début, ordonnée de son milieu, depuis le coin du tableau.
+  function textSpot(root, text) {
+    const table = root.querySelector('table');
+    const td = Array.from(table.querySelectorAll('td')).find(c => c.textContent.trim() === text);
+    const range = document.createRange(); range.selectNodeContents(td);
+    const r = range.getBoundingClientRect(), t = table.getBoundingClientRect();
+    return { x: r.left - t.left, y: (r.top + r.bottom) / 2 - t.top };
+  }
+
+  cases.push({
+    id: 'grid_pdf_merged_cells_keep_the_layout_of_the_editor',
+    description: 'PDF d\'une grille aux cases fusionnées (titre sur 3 colonnes, bloc de 2 lignes, trois largeurs différentes) : la case fusionnée sur plusieurs lignes laisse un emplacement vide dans les lignes d\'après (rien ne se décale), les colonnes ont la largeur de l\'éditeur (pas des parts égales parce que la 1re ligne est fusionnée), le texte est à la même hauteur que dans l\'éditeur - au milieu d\'un bloc de 2 lignes, en haut, en bas - sur une page',
+    run: async (h) => inGrid(h, async () => {
+      await loadGrid(MERGED_GRID);
+      const names = ['Titre', 'a', 'b', 'c', 'bloc', 'd', 'e', 'f', 'g'];
+      const inEditor = {}; names.forEach(n => { inEditor[n] = textSpot(document.querySelector('.tiptap'), n); });
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const items = truth.pages[0].textItems;
+      const spot = str => { const item = items.find(i => i.str === str); return item ? { x: item.x, y: item.y } : null; };
+      const tableBlock = pdf.content.find(b => b.table);
+      const body = tableBlock ? tableBlock.table.body : [];
+      const shape = body.map(row => row.map(cell => (cell.rowSpan || cell.colSpan ? `${cell.colSpan || 1}x${cell.rowSpan || 1}` : (cell.text !== undefined || cell.stack ? 'c' : '-'))).join(','));
+      // Horizontalement : l'écart entre les débuts de texte de a, b, c est celui des colonnes de l'éditeur (en pt, à quelques points près : la largeur de contenu retire une marge de cellule).
+      const gapsPdf = [spot('b').x - spot('a').x, spot('c').x - spot('b').x];
+      const gapsEditor = [inEditor.b.x - inEditor.a.x, inEditor.c.x - inEditor.b.x].map(v => v * 0.75);
+      // Verticalement : chaque texte, depuis celui de « Titre », à la hauteur de l'éditeur (1 px = 0,75 pt).
+      const gapsY = names.map(n => (spot(n) ? Math.round(((spot(n).y - spot('Titre').y) - (inEditor[n].y - inEditor.Titre.y) * 0.75) * 100) / 100 : null));
+      const pass = truth.pages.length === 1 && !!tableBlock && body.length === 4 && body.every(row => row.length === 3)
+        && shape.join(' / ') === '3x1,-,- / c,c,c / 1x2,c,c / -,c,c'
+        && names.every(n => !!spot(n)) && Math.abs(gapsPdf[0] - gapsEditor[0]) <= 6 && Math.abs(gapsPdf[1] - gapsEditor[1]) <= 6 && gapsPdf[1] > gapsPdf[0] * 1.2
+        && gapsY.every(g => g !== null && Math.abs(g) <= 1.2);
+      return { pass, notes: JSON.stringify({ pages: truth.pages.length, shape, gapsPdf, gapsEditor, gapsY }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_reading_mode_shows_merged_cells_as_the_editor_does',
+    description: 'Lecture d\'une grille aux cases fusionnées : même largeur de tableau, même hauteur de chaque ligne, cases fusionnées (titre sur 3 colonnes, bloc de 2 lignes) de la même taille que dans l\'éditeur',
+    run: async (h) => inGrid(h, async () => {
+      await loadGrid(MERGED_GRID);
+      const sizes = root => {
+        const table = root.querySelector('table');
+        return { table: table.getBoundingClientRect().width, rows: Array.from(table.rows).map(tr => tr.getBoundingClientRect().height),
+          title: table.querySelector('td[colspan="3"]').getBoundingClientRect().width, block: (() => { const r = table.querySelector('td[rowspan="2"]').getBoundingClientRect(); return [r.width, r.height]; })() };
+      };
+      const inEditor = sizes(document.querySelector('.tiptap'));
+      let inReader = null;
+      await h.clickButton('btn-mode-read');
+      try { await sleep(600); inReader = sizes(document.getElementById('reader-container')); }
+      finally { await h.clickButton('btn-mode-edit'); await sleep(300); }
+      const pass = !!inReader && near(inReader.table, inEditor.table, 1) && allNear(inReader.rows, inEditor.rows, 1) && near(inReader.title, inEditor.title, 1) && allNear(inReader.block, inEditor.block, 1) && inEditor.title > 395;
+      return { pass, notes: JSON.stringify({ inEditor, inReader }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdf_a_document_table_with_a_merged_first_row_keeps_its_unequal_columns',
+    description: 'PDF d\'un tableau de document dont la 1re ligne est une case fusionnée sur 3 colonnes : les colonnes (120, 200 et 80 px) gardent leurs largeurs de l\'éditeur au lieu de parts égales (la largeur d\'une colonne se lit sur la première case d\'une seule colonne qui la couvre)',
+    run: async (h) => {
+      await h.resetEditor();
+      GridEditor.setActive(false);
+      Editor.setHTML(MERGED_GRID.replace(/ data-row-height="\d+" style="height: \d+px"/g, '').replace(/ data-valign="\w+"/g, '') + '<p>après</p>');
+      await sleep(300);
+      const inEditor = {}; ['a', 'b', 'c'].forEach(n => { inEditor[n] = textSpot(document.querySelector('.tiptap'), n); });
+      // La feuille peut être réduite à la largeur du panneau (zoom CSS) : les mesures de l'éditeur sont ramenées à la taille de la page.
+      const zoom = parseFloat(getComputedStyle(document.querySelector('.v2-page-sheet')).zoom) || 1;
+      const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const items = truth.pages[0].textItems;
+      const spot = str => { const item = items.find(i => i.str === str); return item ? item.x : null; };
+      const gapsPdf = [spot('b') - spot('a'), spot('c') - spot('b')];
+      const gapsEditor = [inEditor.b.x - inEditor.a.x, inEditor.c.x - inEditor.b.x].map(v => v * 0.75 / zoom);
+      const widths = (pdf.content.find(b => b.table) || { table: {} }).table.widths;
+      const pass = !!widths && Math.abs(gapsPdf[0] - gapsEditor[0]) <= 6 && Math.abs(gapsPdf[1] - gapsEditor[1]) <= 6 && gapsPdf[1] > gapsPdf[0] * 1.2;
+      return { pass, notes: JSON.stringify({ gapsPdf, gapsEditor, widths }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.grid = cases;
 })();
