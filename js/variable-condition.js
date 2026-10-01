@@ -10,6 +10,8 @@
 // La même fenêtre sert à un bloc de texte conditionnel (nœud conditionalText, js/conditional-text.js) : même condition { mode, rules } dans son attribut `condition`, mêmes
 // colonnes, mêmes liens entre tables ; seuls changent l'introduction, les phrases de l'aperçu (le bloc s'affiche ou non, plutôt qu'une valeur) et celle de « Coller » - et, pour le
 // bloc seul, le bouton « Défaire le bloc » à côté de « Retirer la condition » (demande d'Antoine, 2026-10-01 : le cadre et la condition partent, le texte reste).
+// Et à la case conditionnelle (nœud conditionalCheckbox, js/conditional-checkbox.js ; demande d'Antoine, 2026-10-01, « même modale et système que les variables conditionnelles
+// classiques ») : même condition { mode, rules }, mêmes colonnes ; la case est cochée quand elle est remplie, décochée sinon - titre, introduction, « Cocher si » et phrases de l'aperçu à elle.
 const VariableCondition = (function () {
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
@@ -30,11 +32,15 @@ const VariableCondition = (function () {
   }
   function emptyRule() { return { column: '', operator: '=', value: '' }; }
   function isOpen() { return !!state; }
-  // Le nœud dont la fenêtre est ouverte : un bloc de texte conditionnel ou, par défaut, une bulle #Variable.
+  // Le nœud dont la fenêtre est ouverte : un bloc de texte conditionnel, une case conditionnelle ou, par défaut, une bulle #Variable.
   function isBlock() { return !!state && state.node.type.name === 'conditionalText'; }
-  // Clé d'une phrase de la fenêtre : celle de la bulle, ou celle du bloc de texte (js/i18n.js, section « Bloc de texte conditionnel »). Les deux s'écrivent en
-  // toutes lettres à l'appel, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
-  function textKey(bubbleKey, blockKey) { return isBlock() ? blockKey : bubbleKey; }
+  function isCheckbox() { return !!state && state.node.type.name === 'conditionalCheckbox'; }
+  // Seule une bulle a une valeur à montrer dans l'aperçu : un bloc de texte ou une case s'affiche, ou se coche, sans valeur.
+  function showsValue() { return !!state && !isBlock() && !isCheckbox(); }
+  // Clé d'une phrase de la fenêtre : celle de la bulle, celle du bloc de texte (js/i18n.js, section « Bloc de texte conditionnel ») ou celle de la case conditionnelle ; sans clé de
+  // case, la case reprend celle du bloc (« Première : n° 3. » dit la même chose pour les deux). Les clés s'écrivent en toutes lettres à l'appel, pour que la recherche des clés
+  // sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
+  function textKey(bubbleKey, blockKey, checkboxKey) { return isCheckbox() ? (checkboxKey || blockKey) : isBlock() ? blockKey : bubbleKey; }
   // La forme enregistrée dans la bulle : règles sans colonne écartées, valeurs en texte, copie neuve (jamais un lien vers les règles que la fenêtre modifie
   // en place) ; null sans aucune règle complète.
   function plainCondition(condition) {
@@ -248,7 +254,7 @@ const VariableCondition = (function () {
     state.working = plainCondition(clipboard);
     renderRules();
     scheduleDebug();
-    refs.clipStatus.textContent = I18n.t(textKey('varCond.clip.pastedStatus', 'varCond.clip.pastedStatusBlock'));
+    refs.clipStatus.textContent = I18n.t(textKey('varCond.clip.pastedStatus', 'varCond.clip.pastedStatusBlock', 'varCond.clip.pastedStatusCheckbox'));
   }
   function clearClipboard() {
     clipboard = null;
@@ -312,12 +318,12 @@ const VariableCondition = (function () {
     setDebugLine(debugCurrent, I18n.t('varCond.debug.computing'), false);
     try {
       const holds = await ConditionRules.conditionHolds(condition, tableId, record);
-      // Un bloc de texte n'a pas de valeur à montrer : l'aperçu dit seulement s'il s'affiche.
-      const shown = holds && !isBlock() ? await displayValue(record, tableId) : '';
+      // Un bloc de texte ou une case n'a pas de valeur à montrer : l'aperçu dit seulement s'il s'affiche, ou si la case est cochée.
+      const shown = holds && showsValue() ? await displayValue(record, tableId) : '';
       if (stale()) return;
       setDebugLine(debugCurrent, holds
-        ? I18n.t(textKey('varCond.debug.currentMet', 'varCond.debug.currentMetBlock'), { id: record.id, value: shown })
-        : I18n.t(textKey('varCond.debug.currentNotMet', 'varCond.debug.currentNotMetBlock'), { id: record.id }), holds);
+        ? I18n.t(textKey('varCond.debug.currentMet', 'varCond.debug.currentMetBlock', 'varCond.debug.currentMetCheckbox'), { id: record.id, value: shown })
+        : I18n.t(textKey('varCond.debug.currentNotMet', 'varCond.debug.currentNotMetBlock', 'varCond.debug.currentNotMetCheckbox'), { id: record.id }), holds);
 
       const fetchRows = memoFetchRows();
       const rows = await fetchRows(tableId);
@@ -335,7 +341,7 @@ const VariableCondition = (function () {
       }
       if (stale()) return;
       if (!count) { setDebugLine(debugCount, I18n.t('varCond.debug.none', { table: tableId, total: rows.length }), false); return; }
-      const firstValue = isBlock() ? '' : await displayValue(first, tableId);
+      const firstValue = showsValue() ? await displayValue(first, tableId) : '';
       if (stale()) return;
       setDebugLine(debugCount, I18n.t('varCond.debug.count', { table: tableId, count, total: rows.length }) + ' '
         + I18n.t(textKey('varCond.debug.first', 'varCond.debug.firstBlock'), { id: first.id, label: rowLabel(first, tableId), value: firstValue }), false);
@@ -345,16 +351,16 @@ const VariableCondition = (function () {
     }
   }
 
-  // Réécrit l'attribut `condition` du nœud d'origine (bulle ou bloc de texte), retrouvé à sa position capturée au clic - seulement si c'est toujours le même : la même
-  // variable, ou un bloc de texte conditionnel.
+  // Réécrit l'attribut `condition` du nœud d'origine (bulle, bloc de texte ou case), retrouvé à sa position capturée au clic - seulement si c'est toujours le même : la même
+  // variable, un bloc de texte conditionnel ou une case conditionnelle.
   function applyCondition(condition) {
     const { editor, pos, node: original } = state;
     const node = editor.state.doc.nodeAt(pos);
     const sameNode = node && node.type.name === original.type.name
-      && (isBlock() || (node.attrs.table === original.attrs.table && node.attrs.column === original.attrs.column));
+      && (isBlock() || isCheckbox() || (node.attrs.table === original.attrs.table && node.attrs.column === original.attrs.column));
     if (!sameNode) {
       console.warn('[VariableCondition] nœud introuvable à sa position d\'origine - condition non enregistrée.');
-      alert(I18n.t(textKey('varCond.saveLost', 'varCond.saveLostBlock')));
+      alert(I18n.t(textKey('varCond.saveLost', 'varCond.saveLostBlock', 'varCond.saveLostCheckbox')));
       return false;
     }
     EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { condition }));
@@ -385,10 +391,10 @@ const VariableCondition = (function () {
     if (editor) editor.view.focus();
   }
 
-  // `pos` : position de la bulle ou du bloc dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
+  // `pos` : position de la bulle, du bloc ou de la case dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   function open(editor, pos) {
     const node = editor && editor.state.doc.nodeAt(pos);
-    if (!node || (node.type.name !== 'varBadge' && node.type.name !== 'conditionalText')) return;
+    if (!node || (node.type.name !== 'varBadge' && node.type.name !== 'conditionalText' && node.type.name !== 'conditionalCheckbox')) return;
     ensureModal();
     const existing = ConditionRules.normalizeCondition(node.attrs.condition);
     state = {
@@ -397,14 +403,16 @@ const VariableCondition = (function () {
       working: existing ? JSON.parse(JSON.stringify({ mode: existing.mode, rules: existing.rules })) : { mode: 'all', rules: [emptyRule()] },
     };
     const { title, intro, modeBefore, modeSelect, modeAfter, removeBtn, unwrapBtn, cancelBtn, saveBtn } = refs;
-    title.textContent = I18n.t('varCond.title');
-    if (isBlock()) {
+    title.textContent = I18n.t(isCheckbox() ? 'varCond.titleCheckbox' : 'varCond.title');
+    if (isCheckbox()) {
+      intro.replaceChildren(document.createTextNode(I18n.t('varCond.introCheckbox')));
+    } else if (isBlock()) {
       intro.replaceChildren(document.createTextNode(I18n.t('varCond.introBlock')));
     } else {
       const badge = el('span', 'var-badge', Variables.triggerChar() + (node.attrs.key || ''));
       intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t('varCond.intro')));
     }
-    modeBefore.textContent = I18n.t('varCond.modeBefore');
+    modeBefore.textContent = I18n.t(isCheckbox() ? 'varCond.modeBeforeCheckbox' : 'varCond.modeBefore');
     modeAfter.textContent = I18n.t('varCond.modeAfter');
     modeSelect.setAttribute('aria-label', I18n.t('varCond.modeAria'));
     modeSelect.replaceChildren(el('option', null, I18n.t('varCond.modeAll')), el('option', null, I18n.t('varCond.modeAny')));

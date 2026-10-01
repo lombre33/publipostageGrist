@@ -783,6 +783,24 @@ const I18n = (function () {
     'condText.tag.titleNone': { fr: 'Texte conditionnel sans condition : il s’affiche toujours. Cliquez pour choisir sa condition.', en: 'Conditional text with no condition: it always shows. Click to choose its condition.' },
     'condText.tag.titleIf': { fr: 'S’affiche si {condition}. Cliquez pour modifier sa condition.', en: 'Shown if {condition}. Click to edit its condition.' },
 
+    // --- Case conditionnelle (menu des variables, onglet Chips ; js/conditional-checkbox.js, js/editor-nodes.js:createConditionalCheckboxNode) : l'entrée du panneau, le libellé et l'info-bulle
+    // de la puce dans l'éditeur, les deux boutons grisés de sa barre (js/floating-toolbars.js). La fenêtre de condition a ses phrases à part (`varCond.*Checkbox`).
+    'chips.conditionalCheckbox': { fr: 'Case conditionnelle', en: 'Conditional checkbox' },
+    'condCheckbox.tag.none': { fr: 'sans condition', en: 'no condition' },
+    'condCheckbox.tag.if': { fr: 'Si {condition}', en: 'If {condition}' },
+    'condCheckbox.tag.titleNone': { fr: 'Case conditionnelle sans condition : elle reste décochée. Cliquez pour choisir sa condition.', en: 'Conditional checkbox with no condition: it stays unchecked. Click to choose its condition.' },
+    'condCheckbox.tag.titleIf': { fr: 'Cochée si {condition}. Cliquez pour modifier sa condition.', en: 'Checked if {condition}. Click to edit its condition.' },
+    'varToolbar.conditionCheckbox': { fr: 'Condition de la case : cochée si…', en: 'Checkbox condition: checked if…' },
+    'varToolbar.linkedCheckbox': { fr: 'Disponible pour une variable, pas pour une case conditionnelle', en: 'Available for a variable, not for a conditional checkbox' },
+    'varToolbar.loopCheckbox': { fr: 'Disponible pour une variable liée à plusieurs lignes, pas pour une case conditionnelle', en: 'Available for a variable linked to several rows, not for a conditional checkbox' },
+    'varCond.titleCheckbox': { fr: 'Condition de la case', en: 'Checkbox condition' },
+    'varCond.introCheckbox': { fr: 'Cette case est cochée en lecture et à l’export si la condition est remplie, décochée sinon. En édition, la puce reste visible, en pointillés.', en: 'This checkbox is checked in read mode and in exports when the condition is met, and unchecked otherwise. While editing, the chip stays visible with a dashed border.' },
+    'varCond.modeBeforeCheckbox': { fr: 'Cocher si', en: 'Check if' },
+    'varCond.debug.currentMetCheckbox': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la case est cochée.', en: 'Selected row (#{id}): condition met, the checkbox is checked.' },
+    'varCond.debug.currentNotMetCheckbox': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la case est décochée.', en: 'Selected row (#{id}): condition not met, the checkbox is unchecked.' },
+    'varCond.saveLostCheckbox': { fr: 'La case conditionnelle a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The conditional checkbox was moved or deleted while editing: the condition was not saved.' },
+    'varCond.clip.pastedStatusCheckbox': { fr: 'Condition collée. Enregistrez pour l’appliquer à la case.', en: 'Condition pasted. Save to apply it to the checkbox.' },
+
     // --- Fenêtre « Autres attributs » d'une variable (js/variable-linked-attrs.js) ---
     'varLinked.title': { fr: 'Autres attributs de « {table} »', en: 'Other attributes of “{table}”' },
     'varLinked.subtitleVia': { fr: 'Même ligne que {badge}, trouvée via {via}.', en: 'Same row as {badge}, found via {via}.' },

@@ -29,6 +29,8 @@ const Variables = (function () {
     // Pas un chip en ligne mais un BLOC (js/conditional-text.js) : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la liste dessus, sinon il
     // se pose vide, curseur dedans.
     { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
+    // Une puce en ligne, pas un chip de valeur : une case que sa condition coche ou non (js/conditional-checkbox.js), posée à la place de « #requête » et sélectionnée pour que sa barre s'ouvre.
+    { key: 'Case conditionnelle', i18nKey: 'chips.conditionalCheckbox', kind: 'chip', chipKind: 'conditionalCheckbox' },
   ];
   function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
   // Dernières props reçues de @tiptap/suggestion - permet de rejouer updateItems() depuis un clic sur un onglet, qui n'est pas un évènement du plugin
@@ -203,6 +205,10 @@ const Variables = (function () {
               if (props.kind === 'chip') {
                 if (props.chipKind === 'conditionalText') {
                   ConditionalText.insertFromPanel(editor, range);
+                  return;
+                }
+                if (props.chipKind === 'conditionalCheckbox') {
+                  ConditionalCheckbox.insertFromPanel(editor, range);
                   return;
                 }
                 if (props.chipKind === 'footnote') {

@@ -425,6 +425,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   du PDF et attributs d'une ligne liée gardent « true » / « false » tels que Grist les stocke (aucune case dans un champ texte). Un
   réglage de format s'applique partout où celui d'une date s'applique : une colonne de boucle en tableau, une boucle dans la phrase, un
   en-tête ou un pied de page.
+- Case conditionnelle (demande d'Antoine du 01/10, « une case cochée ou décochée en fonction d'une condition basée sur une colonne » ; sa réponse à la carte : « Puce dédiée », pas un
+  texte conditionnel) : une ligne « Case conditionnelle » (« Conditional checkbox ») de l'onglet Chips du menu des variables, jamais une nouvelle icône ; UN clic la pose à la place de «
+  # » et la sélectionne, sa barre flottante est déjà ouverte pour choisir la condition (un clic sur une ligne de la liste referme les barres à la fin de son `mousedown` : la sélection
+  est reposée juste après). Elle se pose là où une bulle se pose (paragraphe, titre, élément de liste, case de tableau, colonne, en-tête ou pied de page, ligne d'une boucle). La puce
+  suit la direction artistique des bulles (fond `#eaf2ff`, texte `#12406b`, liseré `#b7cdf2`, en pointillés `#5b7fc0` une fois la condition posée) et montre la case décochée de la
+  Lecture puis son étiquette, « Si Statut = Urgent » ou « sans condition » ; trop longue pour sa case ou sa colonne, elle coupe le milieu de son étiquette par « … », sans déborder ni
+  passer à la ligne, et elle n'agrandit pas la ligne. Sa barre : les trois styles de case de la variable Oui / Non (mêmes icônes, mêmes noms, pas de « vrai / faux » : une case est
+  toujours une case) et le bouton Condition, qui ouvre la même fenêtre que pour une bulle ou un bloc (mêmes colonnes, mêmes liens entre tables, Copier / Coller entre les trois) sous le
+  titre « Condition de la case », avec « Cocher si » devant la combinaison de plusieurs règles et un aperçu qui dit si la case est cochée pour la ligne courante ; « Autres attributs »
+  et « Boucle » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur raison en info-bulle, jamais retirés. Une case neuve est « accent, texte normal » : « accent, texte barré »
+  barrerait « Pièce fournie » dès que la condition est remplie, ce que seul un choix dans la barre doit faire. Elle se lit cochée quand la condition est remplie pour la ligne affichée
+  (pour la ligne du tour dans une zone répétée), décochée sinon, et décochée sans condition ou quand la condition ne se lit plus ; la case est celle de la variable Oui / Non (mêmes
+  couleurs, même nom accessible « Coché » / « Décoché ») en Lecture, PDF, Word, Excel et e-mail (« [x] » / « [ ] »), et le style « accent, texte barré » barre le texte qui suit quand
+  elle est cochée.
 - Barres flottantes d'une bulle, d'un tableau ou d'une image : ancrées dans l'éditeur, aucune n'est ouverte quand il est
   masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
   01/10) ; elles ne recouvrent jamais la barre du haut. Un clic hors de l'éditeur et hors de la barre ferme celle d'une

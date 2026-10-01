@@ -164,7 +164,7 @@
   // === Éditeur : entrée du panneau, pose du bloc ===
   cases.push({
     id: 'condtext_chips_tab_lists_the_block_entry_in_both_languages',
-    description: 'L’onglet Chips du panneau « # » propose « Texte conditionnel » (« Conditional text » en anglais), après les quatre chips existants',
+    description: 'L’onglet Chips du panneau « # » propose « Texte conditionnel » (« Conditional text » en anglais), après les quatre chips existants, puis « Case conditionnelle » (suite condCheckbox)',
     run: async (h) => {
       await seed(h);
       await h.focusAtEnd();
@@ -184,8 +184,8 @@
         await openChipsTab(h);
         en = panelItems();
       } finally { I18n.setLang(lang); }
-      const pass = fr.length === 5 && fr[4] === 'Texte conditionnel' && fr.slice(0, 4).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur'
-        && en.length === 5 && en[4] === 'Conditional text';
+      const pass = fr.length === 6 && fr[4] === 'Texte conditionnel' && fr[5] === 'Case conditionnelle' && fr.slice(0, 4).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur'
+        && en.length === 6 && en[4] === 'Conditional text' && en[5] === 'Conditional checkbox';
       return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });

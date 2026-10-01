@@ -414,6 +414,12 @@ const FloatingToolbars = (function () {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'conditionalText') ? node : null;
     }
+    // Une case conditionnelle sélectionnée (clic sur la puce, js/editor-nodes.js:createConditionalCheckboxNode) ouvre la même barre : sa condition (la même fenêtre que celle d'une bulle)
+    // et les trois styles de case ; « Autres attributs » et « Boucle » n'ont pas d'objet ici et sont grisés, avec leur raison en info-bulle.
+    function selectedCheckboxNode() {
+      const node = editor.state.selection.node;
+      return (node && node.type && node.type.name === 'conditionalCheckbox') ? node : null;
+    }
     function setSelectedBadgeFormat(format) {
       const node = selectedVarBadgeNode();
       if (!node) return;
@@ -433,6 +439,14 @@ const FloatingToolbars = (function () {
     function onAction(action) {
       if (selectedBlockNode()) {
         if (action === 'var-condition') VariableCondition.open(editor, editor.state.selection.from);
+        return;
+      }
+      const checkbox = selectedCheckboxNode();
+      if (checkbox) {
+        if (action === 'var-condition') VariableCondition.open(editor, editor.state.selection.from);
+        else if (action.indexOf('bool-style:') === 0 && VariableFormat.isCheckboxStyle(action.slice(11))) {
+          EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, checkbox.attrs, { style: action.slice(11) }));
+        }
         return;
       }
       const node = selectedVarBadgeNode();
@@ -502,7 +516,15 @@ const FloatingToolbars = (function () {
       button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       button.title = title;
     }
+    // Le bouton de condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait pas de sens pour elle).
+    function setConditionTitle(key) {
+      const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
+      if (!conditionBtn) return;
+      conditionBtn.title = I18n.t(key);
+      conditionBtn.setAttribute('aria-label', conditionBtn.title);
+    }
     function syncBlockState(node) {
+      setConditionTitle('varToolbar.condition');
       const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
       if (conditionBtn) conditionBtn.classList.toggle('is-active', !!ConditionRules.normalizeCondition(node.attrs.condition));
       const linkedBtn = panel.el.querySelector('button[data-action="var-linked"]');
@@ -513,9 +535,37 @@ const FloatingToolbars = (function () {
       if (loopBtn) loopBtn.classList.remove('is-active');
     }
 
+    // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans réglage ; une case conditionnelle n'a pas ce bouton.
+    // Libellés et infobulles relus à chaque ouverture : la langue de l'interface a pu changer depuis la création de la barre.
+    function syncBoolButtons(currentStyle) {
+      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
+      Object.keys(boolTitles).forEach(style => {
+        const btn = panel.el.querySelector(`button[data-action="bool-style:${style}"]`);
+        if (!btn) return;
+        btn.classList.toggle('is-active', style === currentStyle);
+        btn.title = I18n.t(boolTitles[style]);
+        btn.setAttribute('aria-label', btn.title);
+        btn.setAttribute('aria-pressed', style === currentStyle ? 'true' : 'false');
+        if (style === 'text') btn.textContent = I18n.t('varFmt.boolTextButton');
+      });
+    }
+    function syncCheckboxState(node) {
+      setConditionTitle('varToolbar.conditionCheckbox');
+      const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
+      if (conditionBtn) conditionBtn.classList.toggle('is-active', !!ConditionRules.normalizeCondition(node.attrs.condition));
+      const linkedBtn = panel.el.querySelector('button[data-action="var-linked"]');
+      setButtonDisabled(linkedBtn, true, I18n.t('varToolbar.linkedCheckbox'));
+      if (linkedBtn) linkedBtn.classList.remove('is-active');
+      const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
+      setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopCheckbox'));
+      if (loopBtn) loopBtn.classList.remove('is-active');
+      syncBoolButtons(ConditionalCheckbox.styleOf(node.attrs.style));
+    }
+
     function syncState() {
       const node = selectedVarBadgeNode();
       if (!node) return;
+      setConditionTitle('varToolbar.condition');
       const format = node.attrs.format || {};
       const setActive = (action, isActive) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('is-active', !!isActive); };
       setActive('var-condition', !!ConditionRules.normalizeCondition(node.attrs.condition));
@@ -566,19 +616,8 @@ const FloatingToolbars = (function () {
       setActive('date-part:month', !isDate || format.month !== false);
       setActive('date-part:year', !isDate || format.year !== false);
       setActive('date-words', isDate && !!format.words);
-      // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit). Libellés et infobulles relus à chaque ouverture : la langue de l'interface
-      // a pu changer depuis la création de la barre.
-      const boolStyle = VariableFormat.boolStyle(format);
-      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
-      Object.keys(boolTitles).forEach(style => {
-        setActive('bool-style:' + style, style === boolStyle);
-        const btn = panel.el.querySelector(`button[data-action="bool-style:${style}"]`);
-        if (!btn) return;
-        btn.title = I18n.t(boolTitles[style]);
-        btn.setAttribute('aria-label', btn.title);
-        btn.setAttribute('aria-pressed', style === boolStyle ? 'true' : 'false');
-        if (style === 'text') btn.textContent = I18n.t('varFmt.boolTextButton');
-      });
+      // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
+      syncBoolButtons(VariableFormat.boolStyle(format));
     }
 
     const check = ({ transaction } = {}) => {
@@ -593,8 +632,9 @@ const FloatingToolbars = (function () {
       // panneau" reste déjà gérée ailleurs (hideFloatingContextToolbars, js/editor-core.js, basée sur la CIBLE du mousedown, pas sur le focus résultant -
       // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
       const block = selectedBlockNode();
-      const node = block ? null : selectedVarBadgeNode();
-      if (!block && !node) { panel.hide(); return; }
+      const checkbox = selectedCheckboxNode();
+      const node = (block || checkbox) ? null : selectedVarBadgeNode();
+      if (!block && !checkbox && !node) { panel.hide(); return; }
       // Fenêtre de condition / d'autres attributs / de boucle ouverte sur cette bulle : la barre reste masquée tant qu'elle l'est (règle d'Antoine) ; son niveau, sous les fenêtres, la
       // cacherait de toute façon derrière le voile.
       if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen()) { panel.hide(); return; }
@@ -602,10 +642,13 @@ const FloatingToolbars = (function () {
       const type = node ? GristAPI.getColumnType(node.attrs.table, node.attrs.column) : null;
       const isNumber = type === 'Numeric' || type === 'Int';
       const isDate = type === 'Date' || type === 'DateTime';
-      const isBool = type === 'Bool';
+      // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
+      const isBool = type === 'Bool' || !!checkbox;
       panel.el.querySelector('[data-var-panel="number"]').hidden = !isNumber;
       panel.el.querySelector('[data-var-panel="date"]').hidden = !isDate;
       panel.el.querySelector('[data-var-panel="bool"]').hidden = !isBool;
+      const textButton = panel.el.querySelector('button[data-action="bool-style:text"]');
+      if (textButton) textButton.hidden = !!checkbox;
       panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
       const dom = editor.view.nodeDOM(editor.state.selection.from);
       // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre en haut à gauche (8, 8) -
@@ -614,6 +657,11 @@ const FloatingToolbars = (function () {
       if (block) {
         syncBlockState(block);
         panel.show((dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom, GridEditor.floatingOptions);
+        return;
+      }
+      if (checkbox) {
+        syncCheckboxState(checkbox);
+        panel.show(dom, GridEditor.floatingOptions);
         return;
       }
       syncState();

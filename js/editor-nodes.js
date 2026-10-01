@@ -811,6 +811,90 @@ const EditorNodes = (function () {
     });
   }
 
+  // Case conditionnelle (menu des variables, onglet Chips ; demande d'Antoine du 01/10) : une puce en ligne qui se lit comme une case cochée quand sa condition est remplie, décochée sinon
+  // (js/conditional-checkbox.js). Même condition que celle d'une bulle ou d'un bloc de texte ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante
+  // js/floating-toolbars.js) ; `style` : l'un des trois styles de case de la liste à cases (VariableFormat.BOOL_CHECKBOX_STYLES). Dans l'éditeur la puce montre sa case décochée, dessinée
+  // comme à la Lecture (la classe `.resolved-checkbox`), et « Si Statut = Urgent » (ou « sans condition ») ; renderHTML, donc l'enregistrement, le presse-papiers et les exports,
+  // ne sérialise que <span class="conditional-checkbox" data-condition data-checkbox-style>, que le rendu remplace par la case cochée ou non.
+  function createConditionalCheckboxNode(Node, mergeAttributes) {
+    // Les libellés d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
+    const views = new Set();
+    I18n.onChange(() => views.forEach(refresh => refresh()));
+    function attrsOf(HTMLAttributes, node) {
+      const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-checkbox', contenteditable: 'false', 'data-checkbox-style': ConditionalCheckbox.styleOf(node.attrs.style) });
+      if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+      return attrs;
+    }
+    return Node.create({
+      name: 'conditionalCheckbox',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          condition: { default: null, renderHTML: () => ({}) },
+          style: { default: ConditionalCheckbox.DEFAULT_STYLE, renderHTML: () => ({}) },
+        };
+      },
+      parseHTML() {
+        return [{
+          tag: 'span.conditional-checkbox',
+          getAttrs: el => {
+            let condition = null;
+            try { condition = JSON.parse(el.getAttribute('data-condition') || 'null'); } catch (e) { condition = null; }
+            return { condition, style: ConditionalCheckbox.styleOf(el.getAttribute('data-checkbox-style')) };
+          },
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        return ['span', attrsOf(HTMLAttributes, node), VariableFormat.UNCHECKED_BOX];
+      },
+      // Vue de l'éditeur SEULEMENT : la case dessinée, puis le libellé de la condition (coupé par « … » quand la case ou la colonne qui le porte est trop étroite, css/conditional-checkbox.css) ;
+      // le texte entier est dans son info-bulle et dans son nom accessible. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon.
+      addNodeView() {
+        return ({ node, HTMLAttributes }) => {
+          const attrs = attrsOf(HTMLAttributes, node);
+          const dom = document.createElement('span');
+          Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+          // Comme l'étiquette d'un bloc de texte conditionnel : sans rôle, l'`aria-label` d'un simple <span> n'est pas lu.
+          dom.setAttribute('role', 'button');
+          const style = ConditionalCheckbox.styleOf(node.attrs.style);
+          const box = document.createElement('span');
+          box.className = 'resolved-checkbox';
+          box.setAttribute('data-checked', 'false');
+          box.setAttribute('data-checkbox-style', style);
+          box.setAttribute('aria-hidden', 'true');
+          box.style.color = VariableFormat.checkboxColor(false, style);
+          box.textContent = VariableFormat.UNCHECKED_BOX;
+          // Le libellé en deux morceaux, comme une bulle (splitBadgeLabel) : trop long pour sa case ou sa colonne, c'est son MILIEU que « … » remplace, jamais le bout (css/conditional-checkbox.css).
+          const head = document.createElement('span');
+          head.className = 'conditional-checkbox-head';
+          const tail = document.createElement('span');
+          tail.className = 'conditional-checkbox-tail';
+          const tailText = document.createElement('span');
+          tail.appendChild(tailText);
+          dom.append(box, head, tail);
+          const condition = ConditionRules.normalizeCondition(node.attrs.condition);
+          dom.classList.toggle('has-condition', !!condition);
+          function refresh() {
+            const summary = condition ? VariableCondition.describe(condition, { full: true }) : '';
+            const parts = splitBadgeLabel(condition ? I18n.t('condCheckbox.tag.if', { condition: summary }) : I18n.t('condCheckbox.tag.none'));
+            head.textContent = parts.head;
+            tailText.textContent = parts.tail;
+            tail.hidden = !parts.tail;
+            const title = condition ? I18n.t('condCheckbox.tag.titleIf', { condition: summary }) : I18n.t('condCheckbox.tag.titleNone');
+            dom.title = title;
+            dom.setAttribute('aria-label', title);
+          }
+          refresh();
+          views.add(refresh);
+          return { dom, destroy: () => views.delete(refresh) };
+        };
+      },
+    });
+  }
+
   // Image - nœud atome en ligne : `layer` (normal/devant/derrière), `opacity`, `align`, `wrap`. Chaque attribut garde renderHTML: () => ({}) - le nœud
   // construit lui-même la chaîne `style` complète ci-dessous.
   function createEditorImageNode(Node) {
@@ -1143,7 +1227,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createEditorImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createEditorImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();

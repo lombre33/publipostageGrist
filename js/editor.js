@@ -310,6 +310,7 @@ const Editor = (function () {
     const TableCellWithBg = EditorNodes.withCellBackground(GridEditor.withCellAttributes(TableCell));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     const ConditionalText = EditorNodes.createConditionalTextNode(Node, mergeAttributes);
+    const ConditionalCheckboxNode = EditorNodes.createConditionalCheckboxNode(Node, mergeAttributes);
     const EditorImage = EditorNodes.createEditorImageNode(Node);
     const PageBreak = EditorNodes.createPageBreakNode(Node);
     const HeadingNumberingConfig = EditorNodes.createHeadingNumberingConfigNode(Node);
@@ -394,6 +395,7 @@ const Editor = (function () {
         TrackedTwoColumnsZone,
         TrackedCallout,
         TrackedConditionalText,
+        ConditionalCheckboxNode,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,

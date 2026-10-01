@@ -131,6 +131,7 @@ const ReaderMode = (function () {
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
+    await ConditionalCheckbox.resolve(wrapper, tableId, record);
     const badges = wrapper.querySelectorAll('.var-badge');
     await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
@@ -301,6 +302,7 @@ const ReaderMode = (function () {
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
+    await ConditionalCheckbox.resolve(wrapper, tableId, record);
     const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
@@ -568,6 +570,7 @@ const ReaderMode = (function () {
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
     await ConditionalText.resolve(wrapper, tableId || lastCurrentTableId, record);
+    await ConditionalCheckbox.resolve(wrapper, tableId || lastCurrentTableId, record);
     const badges = wrapper.querySelectorAll('.var-badge');
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
@@ -596,5 +599,5 @@ const ReaderMode = (function () {
     result += filenameTemplate.slice(lastEnd);
     return result;
   }
-  return { render, preview, resolveFilename, trimTrailingBlankBlocks };
+  return { render, preview, resolveFilename, trimTrailingBlankBlocks, checkboxNode };
 })();
