@@ -68,6 +68,7 @@ const GROUPS = {
   templateTree: 'scenarios-template-tree',
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
+  templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle
   contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
@@ -119,6 +120,7 @@ const NODE_SCRIPTS = {
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   templateMenuMouse: 'verify-template-menu-mouse.mjs', // liste des modèles (12,5 px, sans « Nouveau modèle », « Organiser » en haut à droite) et renommage sur place, 700x400 clair et sombre
   saveMenuMouse: 'verify-save-menu-mouse.mjs', // menu du bouton Enregistrer (Enregistrer sous…, enregistrement automatique coché), souris et clavier, 700x400 clair et sombre
+  templateNamesMouse: 'verify-template-names-mouse.mjs', // nom de modèle déjà pris à la vraie souris : « Enregistrer sous… » (proposition sélectionnée, nom saisi déjà pris), crayon « Renommer », galerie deux fois, anglais, 700x400
   menuClickMouse: 'verify-menu-click-mouse.mjs', // un clic de souris sur « + », Enregistrer, Qualité PDF ou Titre ne les laisse plus ouverts ni ne prend le curseur du texte, 700x400
   leaveUnsavedMouse: 'verify-leave-unsaved-mouse.mjs', // quitter un modèle dont une modification attend : la question Enregistrer / Abandonner / Annuler (liste, « + », galerie), 700x400 clair, sombre et anglais
   layersMouse: 'verify-layers-mouse.mjs', // ordre d'empilement des couches flottantes à la vraie souris et au vrai clavier : la liste # et les menus de la barre du haut au-dessus des barres du tableau, d'une image et d'une bulle, 700x400

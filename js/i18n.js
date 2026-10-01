@@ -435,6 +435,7 @@ const I18n = (function () {
     // cause. init().catch(...) affiche maintenant l'erreur ici plutôt que de laisser le widget muet.
     'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
+    'status.nameExists': { fr: 'Ce nom existe déjà : renommé « {name} ».', en: 'This name already exists: renamed “{name}”.' },
     // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
     // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de l'enregistrement
     // automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.

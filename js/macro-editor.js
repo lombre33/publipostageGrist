@@ -226,11 +226,15 @@ const MacroEditor = (function () {
     const nom = nameInput() ? nameInput().value.trim() : '';
     if (!nom) { alert(I18n.t('macro.modal.nameRequired')); return; }
     const macroSlots = collectSlotsForSave();
+    // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (demande d'Antoine du 01/10, même règle que js/main.js:settleTemplateName) ; un macro-modèle
+    // qui garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
+    const stored = editingId != null ? Templates.getCached().find(t => String(t.id) === String(editingId)) : null;
+    const finalName = stored && Templates.sameName(nom, stored.nom) ? nom : Templates.uniqueName(nom, editingId);
     try {
       const kept = settingsToKeep();
-      const { id } = await Templates.save(editingId, nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
+      const { id } = await Templates.save(editingId, finalName, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
       closeModal();
-      if (onSaved) await onSaved(id);
+      if (onSaved) await onSaved(id, finalName !== nom ? finalName : null);
     } catch (e) {
       console.error('[MacroEditor] échec de l’enregistrement', e);
       alert(I18n.t('macro.modal.saveError'));

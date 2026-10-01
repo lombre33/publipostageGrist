@@ -270,6 +270,7 @@
     resetAutosaveState(tpl);
   }
 
+  let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
   // Le select choisit/affiche le modèle courant, le crayon fait apparaître l'input à sa place pour le renommer : hidden sur le <select> réel suffit,
   // js/template-tree-select.js masque alors son déclencheur (sans cela le champ s'ouvrait à côté de la liste). Le renommage ne touche que l'affichage local
   // : la persistance reste au prochain clic sur Enregistrer (ou à l'enregistrement automatique, qui voit la saisie).
@@ -277,6 +278,36 @@
     if (!templateNameInput || !templateSelect) return;
     templateNameInput.hidden = true;
     templateSelect.hidden = false;
+    nameBeforeEdit = null;
+  }
+
+  // Le nom sous lequel le modèle vient d'être enregistré : celui de la galerie, ou « nom (2) » s'il existait déjà (les messages de la galerie disent le nom retenu).
+  function savedTemplateName(fallback) {
+    const name = templateNameInput ? templateNameInput.value.trim() : '';
+    return name || fallback;
+  }
+
+  // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (demande d'Antoine du 01/10). Posé quand la saisie est VALIDÉE (Entrée, clic ailleurs, enregistrement),
+  // jamais à chaque lettre : le champ ne change pas sous les doigts de la personne qui tape, et l'enregistrement automatique, qui n'écrit que le nom courant, n'y touche pas.
+  // Un modèle déjà enregistré dont le nom n'a pas changé reste tel quel, même si un doublon d'avant cette règle existe : seul un nom NOUVEAU est vérifié (modèle pas encore
+  // enregistré, ou nom changé depuis l'ouverture du crayon). Rend le nom retenu ; s'il a changé, le champ le prend et le coin d'état dit pourquoi.
+  function settleTemplateName() {
+    if (!templateNameInput) return '';
+    const typed = templateNameInput.value.trim();
+    if (!typed) return typed;
+    const id = Templates.getCurrentId();
+    const stored = id == null ? null : Templates.getCached().find(t => String(t.id) === String(id));
+    // Pas encore enregistré (id nul : nouveau modèle, copie, galerie) : le nom est toujours vérifié.
+    const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (stored ? stored.nom : null));
+    if (previous != null && Templates.sameName(typed, previous)) return typed;
+    const unique = Templates.uniqueName(typed, id);
+    if (unique !== typed) {
+      templateNameInput.value = unique;
+      markAutosaveDirty(); // le nom a pu être écrit tel que tapé par un passage de l'enregistrement automatique : le prochain écrit le nouveau
+      // Enregistrement automatique coupé, le coin d'état garde « Modifications non enregistrées. » : ce message-là protège ce qui n'est écrit nulle part, le nouveau nom se lit dans le titre.
+      if (isAutosaveEnabled()) setStatus(I18n.t('status.nameExists', { name: unique }));
+    }
+    return unique;
   }
 
   function wireTemplateRename() {
@@ -286,12 +317,14 @@
       // Le champ reprend la largeur du nom qu'il remplace (120 px au moins) : la barre ne bouge pas, et à 700 px elle ne passe pas sur une deuxième ligne.
       const shown = document.querySelector('#v2-title-cluster .tts-wrap');
       if (shown && shown.offsetWidth) templateNameInput.style.width = Math.max(120, shown.offsetWidth) + 'px';
+      nameBeforeEdit = templateNameInput.value.trim();
       templateNameInput.hidden = false;
       templateSelect.hidden = true;
       templateNameInput.focus();
       templateNameInput.select();
     }
     function commitAndClose() {
+      if (nameBeforeEdit !== null) settleTemplateName(); // seulement une saisie ouverte par le crayon, pas un blur parasite
       const opt = templateSelect.options[templateSelect.selectedIndex];
       if (opt && templateNameInput.value.trim()) {
         // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à l'enregistrement.
@@ -399,15 +432,17 @@
 
   // Rappel de MacroEditor après "Enregistrer" dans sa modale (nouveau macro-modèle ou modification d'un existant) - même geste que la fin d'onSave() :
   // rafraîchir la liste, sélectionner ce qui vient d'être enregistré, resynchroniser le bouton "par défaut".
-  async function onMacroSaved(id) {
+  // renamedTo : le nom retenu quand celui qui était demandé existait déjà (« nom (2) »), le coin d'état le dit à la place de « Macro-modèle enregistré ».
+  async function onMacroSaved(id, renamedTo) {
     await refreshTemplateList();
+    const done = () => setStatus(renamedTo ? I18n.t('status.nameExists', { name: renamedTo }) : I18n.t('status.macroSaved'));
     // Le macro-modèle est enregistré dans tous les cas ; le charger remplace l'éditeur, donc les modifications en attente du modèle qu'on quitte : même question.
-    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { setStatus(I18n.t('status.macroSaved')); return; }
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { done(); return; }
     templateSelect.value = id;
     const tpl = Templates.getCached().find(t => String(t.id) === String(id));
     loadTemplateIntoEditor(tpl);
     syncDefaultTemplateButton();
-    setStatus(I18n.t('status.macroSaved'));
+    done();
   }
 
   // Un macro-modèle s'édite exclusivement via sa modale (MacroEditor) - jamais Editor.getHTML() (toujours vide pour ce type, cf. loadMacroIntoEditor), qui
@@ -423,7 +458,8 @@
     }
     Editor.exitHeaderFooterModeIfActive();
     const id = Templates.getCurrentId();
-    const nom = templateNameInput ? templateNameInput.value.trim() : '';
+    const typedName = templateNameInput ? templateNameInput.value.trim() : '';
+    const nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     let savedId, dateModif;
     try {
@@ -452,11 +488,16 @@
     autosaveLastKnownDateModif = dateModif;
     hideConflictBanner();
     updateSaveStatus();
+    if (nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom })); // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
   }
 
+  // La copie est proposée sous le premier nom libre (« Contrat (2) » pour « Contrat ») : Entrée suffit, la saisie est sélectionnée pour la remplacer d'une frappe.
   async function onSaveAs() {
     if (isReadOnly()) return;
-    const nom = await Dialogs.prompt({ title: I18n.t('toolbar.saveAs'), label: I18n.t('prompt.newTemplateName'), confirmLabel: I18n.t('common.save') });
+    const currentName = templateNameInput ? templateNameInput.value.trim() : '';
+    const asked = await Dialogs.prompt({ title: I18n.t('toolbar.saveAs'), label: I18n.t('prompt.newTemplateName'), value: Templates.uniqueName(currentName), confirmLabel: I18n.t('common.save') });
+    if (!asked) return;
+    const nom = asked.trim();
     if (!nom) return;
     // Copie un macro-modèle par sa composition (mêmes slots, nouvel id Grist) plutôt que de passer par onSave() ci-dessus, qui rouvrirait la modale au
     // lieu d'enregistrer quoi que ce soit - "sous" doit ici dupliquer directement, comme pour un document normal.
@@ -466,8 +507,9 @@
       const macroSlots = tpl && tpl.macroSlots ? tpl.macroSlots : { slots: [] };
       try {
         const kept = macroSettingsOnScreen();
-        const { id: newId } = await Templates.save(null, nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
-        await onMacroSaved(newId);
+        const copyName = Templates.uniqueName(nom);
+        const { id: newId } = await Templates.save(null, copyName, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
+        await onMacroSaved(newId, copyName !== nom ? copyName : null);
       } catch (e) {
         console.error('[main] échec de la copie du macro-modèle', e);
         setStatus(I18n.t('status.saveError'), true);
@@ -1568,7 +1610,7 @@
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
-      setStatus(I18n.t('status.templateSavedAsNew', { name: currentEntry.name }));
+      setStatus(I18n.t('status.templateSavedAsNew', { name: savedTemplateName(currentEntry.name) }));
     }
 
     async function useWithData() {
@@ -1605,7 +1647,7 @@
       loadTemplateIntoEditor({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' });
       await onSave();
       closeAll();
-      setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: currentEntry.name }));
+      setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: savedTemplateName(currentEntry.name) }));
     }
 
     openLink.addEventListener('click', openGallery);

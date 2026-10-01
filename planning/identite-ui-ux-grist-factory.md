@@ -367,6 +367,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'enregistrement automatique soit allumé ou non, et il n'écrit rien tant qu'elle est ouverte. Annuler et Échap restent sur le modèle (la liste le montre à nouveau, le curseur revient où
   il était) ; Abandonner perd la modification ; Enregistrer l'écrit puis continue. Un nouveau modèle sans nom n'a pas d'Enregistrer, et le message dit pourquoi. Aucune question quand rien
   n'attend, en lecture seule, pour un macro-modèle (il s'édite dans sa fenêtre) ni après « Supprimer » (le modèle n'existe plus).
+- Nom de modèle déjà pris (demande d'Antoine du 01/10, « nom(x) avec incrémentation de x ») : un nom que porte déjà un autre modèle devient « nom (2) », puis « nom (3) »... avec une espace
+  avant la parenthèse, comme les noms de fichiers d'une archive ; majuscules et espaces autour ne comptent pas (« contrat » et « Contrat » sont le même nom), et un nom qui finit déjà par « (n) »
+  continue sa série (« Rapport (2) » donne « Rapport (3) », jamais « Rapport (2) (2) »). Le nom n'est vérifié qu'à la validation : Entrée ou un clic ailleurs sur le crayon « Renommer »,
+  Enregistrer, Ctrl+S, « Enregistrer sous… », « Utiliser ce modèle » de la galerie, la fenêtre du macro-modèle ; jamais lettre par lettre, et jamais par l'enregistrement automatique, qui
+  n'écrit que le nom courant. « Enregistrer sous… » arrive avec le premier nom libre déjà saisi et sélectionné : Entrée suffit, une frappe le remplace. Le coin d'état dit le nom retenu
+  (« Ce nom existe déjà : renommé « Rapport (2) ». ») ; enregistrement automatique coupé il garde « Modifications non enregistrées. », le nouveau nom se lit dans le titre. Un modèle
+  déjà enregistré qui garde son nom n'est jamais renommé, même s'il a un jumeau d'avant la règle.
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

@@ -260,6 +260,27 @@ const Templates = (function () {
 
   function getCached() { return templatesCache; }
 
+  // Deux noms sont le même quand ils ne diffèrent que par les majuscules ou les espaces autour : « contrat » et « Contrat » se confondent dans la liste.
+  function sameName(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
+
+  // Un autre modèle porte-t-il déjà ce nom ? `ignoreId` ne compte pas : le modèle qu'on enregistre ne se gêne pas lui-même.
+  function isNameTaken(nom, ignoreId) {
+    return templatesCache.some(t => (ignoreId == null || String(t.id) !== String(ignoreId)) && sameName(t.nom, nom));
+  }
+
+  // Nom libre le plus proche de `nom` (demande d'Antoine du 01/10) : `nom` lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue sa série
+  // au numéro suivant (dupliquer « Rapport (2) » donne « Rapport (3) », pas « Rapport (2) (2) »). Lit le cache des modèles : relu à chaque enregistrement et à chaque passage de
+  // l'enregistrement automatique, il ne retarde que d'un nom créé à l'instant par quelqu'un d'autre.
+  function uniqueName(nom, ignoreId) {
+    const base = String(nom || '').trim();
+    if (!base || !isNameTaken(base, ignoreId)) return base;
+    const series = base.match(/^(.*\S)\s*\((\d+)\)$/);
+    const root = series ? series[1] : base;
+    let x = series ? Number(series[2]) + 1 : 2;
+    while (isNameTaken(root + ' (' + x + ')', ignoreId)) x++;
+    return root + ' (' + x + ')';
+  }
+
   function getCurrentId() { return currentTemplateId; }
 
   function setCurrentId(id) { currentTemplateId = id; }
@@ -337,6 +358,9 @@ const Templates = (function () {
       await grist.docApi.applyUserActions([
         ['UpdateRecord', TABLE_NAME, id, columns]
       ]);
+      // Le cache garde le nom que la ligne vient de recevoir : js/main.js (settleTemplateName) y compare le nom tapé, et uniqueName y cherche les noms pris.
+      const cached = templatesCache.find(t => String(t.id) === String(id));
+      if (cached) cached.nom = nom;
       const dateModif = await readBackDateModif(id, now);
       return { id, dateModif };
     } else {
@@ -356,5 +380,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, sameName, uniqueName, TABLE_NAME };
 })();

@@ -535,8 +535,10 @@ async function runSites(theme) {
   const focusBeforeSaveAs = await focusKey();
   await openSaveAs();
   s = await state();
-  expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau modèle »`, s,
-    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle :', message: null, value: '', buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
+  // La copie est proposée sous le premier nom libre (« Modèle … (2) », retour d'Antoine du 01/10), sélectionné : Entrée suffit, une frappe le remplace.
+  expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau modèle » et le premier nom libre déjà saisi`, s,
+    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle :', message: null, value: `Modèle ${T} (2)`, buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
+  check(`${T}, enregistrer sous : la proposition est sélectionnée en entier`, s.selection[0] === 0 && s.selection[1] === `Modèle ${T} (2)`.length, s.selection);
   await snap(`${T}-s2-enregistrer-sous`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
@@ -818,7 +820,7 @@ async function runEnglish() {
   await realClick('#btn-save', 800);
   await openSaveAs();
   s = await state();
-  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save »`, s, { title: 'Save as (copy)', label: 'Name of the new template:', message: null, value: '', buttons: ['Cancel', 'Save'], focus: 'input' });
+  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new template:', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await realClick('#btn-delete');
