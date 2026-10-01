@@ -298,8 +298,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   rouge, violet, gris), Icône (information, triangle, point d'exclamation, coche, ampoule, étoile) et un aperçu sur une
   feuille blanche (le papier reste blanc en sombre). Les flèches et Début/Fin changent le choix, un seul arrêt de Tab par
   groupe, Entrée valide, Échap annule. Dans un encadré la ligne devient « Modifier l'encadré… » et la même fenêtre offre
-  « Retirer l'encadré » (même bouton cerclé de rouge que « Retirer le lien »). L'encadré est un fond teinté, une barre de
-  4 px de la couleur d'accent à gauche et l'icône dans la marge, le texte garde la couleur du document ; palette unique
+  « Retirer l'encadré » (même bouton cerclé de rouge que « Retirer le lien ») ; il laisse tout le texte à sa place, la
+  sélection où elle était, un seul Annuler ; en mode suivi le cadre est barré et son texte inséré (choix « Corriger »
+  d'Antoine, 01/10) : « Tout accepter » rend le texte seul, jamais un cadre vide, « Tout refuser » l'encadré d'origine.
+  L'encadré est un fond teinté, une barre de 4 px de la couleur d'accent à gauche et l'icône dans la marge, le texte
+  garde la couleur du document ; palette unique
   (`js/callout.js`) lue par l'éditeur, la Lecture, le PDF et le Word, texte ≥ 4,5:1 sur les six teintes, barre et icône
   ≥ 3:1. Pas de titre écrit tout seul ; seuls la couleur et l'icône sont gardées (le type n'est pas stocké). Entrée deux
   fois en sort, comme d'une citation ; sur un élément de liste, l'encadré prend la liste entière. En e-mail (texte brut) il

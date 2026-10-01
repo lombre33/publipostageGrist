@@ -136,16 +136,27 @@ const Callout = (function () {
     return false;
   }
 
-  // Retire l'encadré autour du curseur sans toucher à son contenu : tous ses blocs remontent d'un niveau, le curseur reste où il était (la sélection suit la transaction). La plage
-  // est prise entre le premier et le dernier bloc de l'encadré, jamais comme une sélection de texte (ses bornes ne tombent pas dans du texte). Faux, sans rien changer, quand le
-  // parent n'accepte pas ces blocs (le premier bloc d'un élément de liste doit être un paragraphe).
+  // Retire l'encadré autour du curseur sans toucher à son contenu : le cadre est REMPLACÉ par ses blocs, qui prennent sa place, et la sélection reste où elle était dans le texte
+  // (un cran plus bas : le jeton d'ouverture du cadre n'est plus devant elle). Pas `tr.lift` : en mode suivi, la bibliothèque traduit une levée en texte barré dans le cadre et le
+  // même texte inséré après lui - le cadre, vide, reste une fois tout accepté -, alors qu'un remplacement donne le cadre entier barré et son contenu inséré : « Tout accepter » rend
+  // exactement le document sans l'encadré, « Tout refuser » celui d'avant (même technique que ConditionalText.unwrap, js/conditional-text.js). Faux, sans rien changer, quand le
+  // parent n'accepte pas ces blocs à la place du cadre (le premier bloc d'un élément de liste doit être un paragraphe).
   function unwrapAround(ed) {
     const found = findAround(ed.state.selection.$from);
     if (!found) return false;
     return ed.chain().focus().command(({ tr }) => {
-      const range = tr.doc.resolve(found.pos + 1).blockRange(tr.doc.resolve(found.pos + found.node.nodeSize - 1));
-      if (!range) return false;
-      try { tr.lift(range, range.depth - 1); } catch (e) { return false; }
+      const $pos = tr.doc.resolve(found.pos);
+      if (!$pos.parent.canReplace($pos.index(), $pos.index() + 1, found.node.content)) return false;
+      const { selection } = tr;
+      const end = found.pos + found.node.nodeSize;
+      const inside = pos => pos > found.pos && pos < end;
+      const type = selection.toJSON().type;
+      tr.replaceWith(found.pos, end, found.node.content);
+      let next = null;
+      // Un nœud sélectionné (une image du cadre) reste sélectionné : sa classe est celle de la sélection même (deux exemplaires du module de ProseMirror circulent, cf. selectedImageNode).
+      if (type === 'node' && inside(selection.from)) next = selection.constructor.create(tr.doc, selection.from - 1);
+      else if (type === 'text' && inside(selection.anchor) && inside(selection.head)) next = EditorCore.getTextSelectionClass().create(tr.doc, selection.anchor - 1, selection.head - 1);
+      tr.setSelection(next || EditorCore.getTextSelectionClass().near(tr.doc.resolve(found.pos), 1));
       return true;
     }).run();
   }

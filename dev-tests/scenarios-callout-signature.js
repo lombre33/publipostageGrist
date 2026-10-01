@@ -374,6 +374,78 @@
   });
 
   cases.push({
+    id: 'co_remove_keeps_a_selected_image_and_a_text_range_selected_where_they_were',
+    description: '« Retirer l\'encadré » garde la sélection telle quelle : une image du cadre reste sélectionnée, une plage de texte sur deux blocs du cadre garde le même texte sélectionné',
+    run: async (h) => {
+      const img = '<img class="editor-image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" style="width: 40px">';
+      const ed = () => EditorCore.getEditor();
+      await setDoc(h, '<p>Avant</p><div class="callout" data-color="blue" data-icon="info"><p>Un' + img + '</p><p>Deux</p></div><p>Après</p>');
+      let imagePos = null;
+      ed().state.doc.descendants((node, pos) => { if (imagePos == null && node.type.name === 'editorImage') imagePos = pos; });
+      ed().commands.setNodeSelection(imagePos);
+      await sleep(120);
+      await openWindow();
+      removeButton().click();
+      await sleep(200);
+      const node = ed().state.selection.node;
+      const imageKept = !!node && node.type.name === 'editorImage' && !Editor.getHTML().includes('callout');
+      await setDoc(h, '<p>Avant</p><div class="callout" data-color="blue" data-icon="info"><p>Premier bloc</p><p>Second bloc</p></div><p>Après</p>');
+      let from = null;
+      ed().state.doc.descendants((n, pos) => { if (from == null && n.isText && n.text === 'Premier bloc') from = pos + 3; });
+      let to = null;
+      ed().state.doc.descendants((n, pos) => { if (to == null && n.isText && n.text === 'Second bloc') to = pos + 6; });
+      ed().commands.setTextSelection({ from, to });
+      await sleep(120);
+      const selectedBefore = ed().state.doc.textBetween(ed().state.selection.from, ed().state.selection.to, '|');
+      await openWindow();
+      removeButton().click();
+      await sleep(200);
+      const sel = ed().state.selection;
+      const selectedAfter = ed().state.doc.textBetween(sel.from, sel.to, '|');
+      const rangeKept = selectedBefore === selectedAfter && selectedAfter === 'mier bloc|Second' && Editor.getHTML() === '<p>Avant</p><p>Premier bloc</p><p>Second bloc</p><p>Après</p>';
+      return { pass: imageKept && rangeKept, notes: JSON.stringify({ imageKept, selectedBefore, selectedAfter, html: Editor.getHTML() }) };
+    },
+  });
+
+  cases.push({
+    id: 'co_remove_in_track_changes_accept_all_leaves_the_text_without_a_frame_and_reject_all_restores_it',
+    description: 'Suivi des modifications actif : « Retirer l\'encadré » montre le cadre barré et son texte inséré à la place ; « Tout accepter » rend le texte seul, sans encadré vide ; « Tout refuser » rend l\'encadré d\'origine, couleur et icône comprises',
+    run: async (h) => {
+      const html = '<p>Alpha</p><div class="callout" data-color="purple" data-icon="bulb"><p>Beta</p><p>Gamma</p></div><p>Delta</p>';
+      const results = {};
+      const errors = [];
+      const onError = e => errors.push(String(e.message || e));
+      window.addEventListener('error', onError);
+      try {
+        for (const verdict of ['accept', 'reject']) {
+          await setDoc(h, html);
+          const original = Editor.getHTML();
+          if (!Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+          await selectText('Gamma', 2);
+          await openWindow();
+          removeButton().click();
+          await sleep(250);
+          const tracked = Editor.getHTML();
+          await h.clickButton(verdict === 'accept' ? 'v2-btn-accept-all' : 'v2-btn-reject-all');
+          await sleep(300);
+          results[verdict] = { original, tracked, html: Editor.getHTML() };
+          if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+        }
+      } finally {
+        window.removeEventListener('error', onError);
+        if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+      }
+      const tracked = parse(results.accept.tracked);
+      // Le cadre ENTIER est barré (le suivi voit un remplacement, pas une levée) et son contenu est inséré juste derrière.
+      const struck = !!tracked.querySelector('del > .callout');
+      const inserted = !!tracked.querySelector('del + ins') && tracked.querySelector('del + ins').textContent === 'BetaGamma';
+      const acceptOk = results.accept.html === '<p>Alpha</p><p>Beta</p><p>Gamma</p><p>Delta</p>';
+      const rejectOk = results.reject.html === results.reject.original;
+      return { pass: struck && inserted && acceptOk && rejectOk && errors.length === 0, notes: JSON.stringify({ struck, inserted, acceptOk, rejectOk, accepted: results.accept.html, rejected: results.reject.html, tracked: results.accept.tracked, errors }) };
+    },
+  });
+
+  cases.push({
     id: 'co_cancel_escape_and_enter_on_a_choice',
     description: 'Annuler et Échap ferment la fenêtre sans rien changer et rendent le clavier à l\'éditeur ; Entrée sur un choix (type, couleur ou icône) valide la fenêtre ; les flèches changent le choix avec le focus',
     run: async (h) => {
