@@ -11,6 +11,8 @@
 //   4) idem avec la barre d'une image sélectionnée, puis avec celle d'une bulle sélectionnée ;
 //   5) panneau étroit (360 px) : un clic sur l'étiquette d'un bloc de texte conditionnel d'une case de tableau ouvre la barre du bloc PUIS celle du tableau (le focus n'arrive qu'après la sélection) ;
 //      les deux se recouvrent et la barre du bloc garde tous ses boutons - les barres flottantes ne sont pas rangées « la dernière ouverte au-dessus », l'ordre du DOM garde la plus précise dessus ;
+//   6) la liste # d'un champ de FENÊTRE (la ligne « Calcul » ouvre la fenêtre de la bulle « Calcul ») : barre du tableau, liste # de l'éditeur et menu de la barre du haut ouverts avant, la liste du champ
+//      passe devant sa fenêtre (Layers.raise(boîte, fenêtre)), aucune de ses lignes n'est cachée ; rouverte ensuite depuis l'éditeur, elle revient au niveau des menus, sous les fenêtres ;
 // Lancé par run-headless.mjs (groupe Node "layersMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-layers-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -349,6 +351,69 @@ check('les deux barres se recouvrent (la mesure porte sur un vrai recouvrement)'
 check('aucun bouton de la barre du bloc ne passe sous celle du tableau (au centre de chacun, la souris atteint la barre du bloc)', nested.buttons > 0 && nested.covered.length === 0, nested);
 await shot('5-bloc-dans-un-tableau-360');
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+
+console.log('\n== 6) la liste # d\'un champ de fenêtre passe devant sa fenêtre, après d\'autres couches ouvertes avant elle ==');
+// La ligne « Calcul » de la liste # ouvre la fenêtre de la bulle « Calcul » (js/variable-calc.js), dont le champ complète les colonnes à la touche #. Les fenêtres (css/modal-base.css, 1990 et plus)
+// sont au-dessus de tous les menus : un rang de menu ne suffit jamais à passer devant, la liste s'ouvrait dessous, invisible. Elle passe devant sa fenêtre par Layers.raise(boîte, fenêtre), quelles que
+// soient les couches ouvertes avant : ici la barre du tableau (curseur dans une cellule), la liste # de l'éditeur et un menu de la barre du haut survolé par-dessus elle.
+const CALC_WINDOW = '#pp-calc-modal';
+const windowZ = () => page.evaluate((sel) => parseInt(getComputedStyle(document.querySelector(sel)).zIndex, 10), CALC_WINDOW);
+const calcWindowOpen = () => page.evaluate((sel) => { const m = document.querySelector(sel); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; }, CALC_WINDOW);
+await setDoc(TABLE_DOC);
+await park();
+await click('.tiptap table tr:nth-child(2) td:nth-child(2)');
+await page.keyboard.press('End');
+await page.keyboard.type(' #', { delay: 60 });
+await wait(350);
+const alignWin = await rectOf('#v2-btn-align-main');
+await page.mouse.move(alignWin.x, alignWin.y - 6, { steps: 5 });
+await page.mouse.move(alignWin.x, alignWin.y, { steps: 3 });
+await wait(450);
+const openedBefore = { bar: await floatingBar(), list: await hashMenu(), flyout: await flyoutOf('#v2-btn-align-main') };
+check('avant la fenêtre : la barre du tableau, la liste # de l\'éditeur et le menu « Alignement » sont ouverts', !!openedBefore.bar && openedBefore.bar.actions.includes('table-del') && !!openedBefore.list && !!openedBefore.flyout, openedBefore);
+await park();
+await click('#autocomplete-box .ac-tab[data-tab="chips"]');
+const calcRow = await page.evaluate(() => {
+  const row = Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).find(item => /^(Calcul|Calculation)$/.test(item.textContent.trim()));
+  if (!row) return null;
+  row.scrollIntoView({ block: 'nearest' });
+  const r = row.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+check('l\'onglet Chips de la liste # montre la ligne « Calcul »', !!calcRow, calcRow);
+if (calcRow) {
+  await page.mouse.move(calcRow.x, calcRow.y, { steps: 6 });
+  await page.mouse.click(calcRow.x, calcRow.y);
+  await wait(450);
+}
+const calcOpen = await calcWindowOpen();
+check('un vrai clic sur « Calcul » ouvre la fenêtre de la formule', calcOpen, { calcOpen });
+await page.keyboard.type('#Contacts', { delay: 60 });
+await wait(350);
+const windowList = await hashMenu();
+const winZ = await windowZ();
+check('taper # dans le champ de la fenêtre ouvre la liste des colonnes', !!windowList, windowList);
+check('la liste est devant sa fenêtre : son niveau est au-dessus de celui de la fenêtre', !!windowList && Number(windowList.z) > winZ, { list: windowList && windowList.z, window: winZ });
+const windowListRows = await coveredRows('#autocomplete-box', '.ac-item');
+check('aucune ligne de la liste ne passe sous la fenêtre (au centre de chacune, la souris atteint la liste)', windowListRows.found && windowListRows.rows >= 3 && windowListRows.covered.length === 0, windowListRows);
+await shot('6-liste-diese-devant-la-fenetre');
+await page.keyboard.press('Escape');
+await wait(150);
+check('Échap referme la liste, la fenêtre reste ouverte', (await hashMenu()) === null && (await calcWindowOpen()), { list: await hashMenu(), open: await calcWindowOpen() });
+await page.keyboard.press('Escape');
+await wait(250);
+check('un second Échap referme la fenêtre', !(await calcWindowOpen()));
+// La même liste rouverte depuis l'éditeur retrouve son étage de menu : sous les fenêtres, au-dessus de la barre du tableau, sans ligne cachée.
+await page.keyboard.press('End');
+await page.keyboard.type(' #', { delay: 60 });
+await wait(350);
+const listAfter = await hashMenu();
+const barAfter = await floatingBar();
+const rowsAfter = await coveredRows('#autocomplete-box', MENU_ROWS);
+check('rouverte depuis l\'éditeur, la liste revient au niveau des menus : sous les fenêtres', !!listAfter && Number(listAfter.z) >= 1600 && Number(listAfter.z) < winZ, { list: listAfter && listAfter.z, window: winZ });
+check('et reste au-dessus de la barre du tableau : aucune ligne cachée', !!barAfter && !!listAfter && Number(listAfter.z) > Number(barAfter.z) && rowsAfter.rows > 0 && rowsAfter.covered.length === 0, { list: listAfter && listAfter.z, bar: barAfter && barAfter.z, rowsAfter });
+await page.keyboard.press('Escape');
+await wait(150);
 
 check('aucune erreur de page', pageErrors.length === 0, pageErrors);
 console.log('  (captures : ' + SHOTS + ')');

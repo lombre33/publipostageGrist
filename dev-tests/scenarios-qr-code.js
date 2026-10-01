@@ -501,7 +501,7 @@
 
   cases.push({
     id: 'qr_hash_in_the_field_opens_the_column_completion_above_the_window_and_enter_picks_without_inserting',
-    description: 'Taper « # » dans le champ ouvre la même liste de colonnes que dans l\'objet d\'un e-mail, rangée AU-DESSUS du voile de la fenêtre (elle se voit et se clique : js/variables.js la range au niveau des fenêtres par la classe ac-over-window, sans niveau propre à la fenêtre) ; Entrée choisit la colonne sans valider la fenêtre',
+    description: 'Taper « # » dans le champ ouvre la même liste de colonnes que dans l\'objet d\'un e-mail, rangée AU-DESSUS du voile de la fenêtre (elle se voit et se clique : js/layers.js la passe devant sa fenêtre, Layers.raise(boîte, fenêtre), sans classe ni niveau propres à la fenêtre) ; Entrée choisit la colonne sans valider la fenêtre',
     run: async (h) => {
       await seed(h);
       await openWindow();
@@ -517,7 +517,8 @@
       const itemRect = item && item.getBoundingClientRect();
       const topAtItem = itemRect ? document.elementFromPoint(itemRect.left + itemRect.width / 2, itemRect.top + itemRect.height / 2) : null;
       const above = !!topAtItem && box.contains(topAtItem);
-      const overWindow = !!box && box.classList.contains('ac-over-window');
+      const zOf = el => parseInt(getComputedStyle(el).zIndex, 10);
+      const overWindow = !!box && zOf(box) > zOf(modal()); // le niveau de la fenêtre + 1, posé par Layers.raise(boîte, fenêtre)
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       await sleep(300);
       const picked = input.value;

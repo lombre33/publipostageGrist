@@ -462,6 +462,75 @@
     },
   });
 
+  // === 6) Un popup ouvert depuis le champ d'une fenêtre (la liste # de la bulle « Calcul », js/variable-calc.js) ========================================================
+  // Les fenêtres (css/modal-base.css : 1990, 2000 pour celles de la page) sont au-dessus des trois niveaux flottants : un rang de menu ne suffit jamais à passer devant (1600 à 1699). Layers.raise(popup,
+  // fenêtre) prend le niveau de la fenêtre d'où il s'ouvre. La liste # y était montée par un jeton et un `!important` propres à la bulle : rien qui vaille pour un autre popup, ni qui suive l'ordre d'ouverture.
+
+  // Une fenêtre « de décor » : la classe des fenêtres (voile plein écran), sans contenu ; `onPage` en fait une fenêtre de la page (2000).
+  function fakeWindow(onPage) {
+    const win = document.createElement('div');
+    win.className = onPage ? 'pp-modal pp-modal-page' : 'pp-modal';
+    document.body.appendChild(win);
+    return win;
+  }
+  // Un popup de la taille de la liste #, au niveau que la feuille de style donne aux menus (var(--z-menu), comme #autocomplete-box).
+  function menuPopup(left, top) {
+    const popup = document.createElement('div');
+    popup.style.cssText = 'position:absolute;z-index:var(--z-menu);left:' + left + 'px;top:' + top + 'px;width:220px;height:90px;background:#fff;border:2px solid #080;box-sizing:border-box;';
+    document.body.appendChild(popup);
+    return popup;
+  }
+
+  cases.push({
+    id: 'layers_a_popup_opened_from_a_window_field_is_in_front_of_that_window_whatever_was_opened_before',
+    description: 'Layers.raise(popup, fenêtre) passe le popup devant sa fenêtre, après des menus ouverts avant elle et des menus et une info-bulle ouverts après lui ; ouvert ensuite sans fenêtre (l\'éditeur), il retrouve le niveau des menus, sous les fenêtres',
+    run: async () => {
+      window.scrollTo(0, 0);
+      const zOf = el => parseInt(getComputedStyle(el).zIndex, 10);
+      const earlier = [0, 1, 2].map(i => { const menu = menuPopup(30 + i * 20, 30 + i * 20); Layers.raise(menu); return menu; }); // ouverts avant la fenêtre
+      const win = fakeWindow(false);
+      const popup = menuPopup(120, 120);
+      const later = [];
+      try {
+        Layers.raise(popup); // comme la liste # de l'éditeur : au niveau des menus, donc SOUS la fenêtre
+        const behind = isOver(popup, win);
+        Layers.raise(popup, win);
+        const inFront = isOver(popup, win) === true && zOf(popup) > zOf(win);
+        // Des couches ouvertes APRÈS la liste : six menus, puis une info-bulle. Aucune ne la ramène sous sa fenêtre (son rang d'avant ne reste pas dans la pile des menus).
+        for (let i = 0; i < 6; i++) { const menu = menuPopup(10 + i * 3, 10 + i * 3); later.push(menu); Layers.raise(menu); }
+        const tip = menuPopup(60, 60);
+        tip.style.zIndex = 'var(--z-tip)';
+        later.push(tip);
+        Layers.raise(tip);
+        const stillInFront = isOver(popup, win) === true && zOf(popup) > zOf(win);
+        // La même liste rouverte depuis l'éditeur, sans fenêtre : le niveau des menus, au-dessus du dernier menu ouvert, sous les fenêtres.
+        Layers.raise(popup);
+        const menuLevel = zOf(popup) < zOf(win) && zOf(popup) >= zOf(later[5]) && zOf(popup) >= 1600 && zOf(popup) < 1700;
+        return { pass: behind === false && inFront && stillInFront && menuLevel, notes: JSON.stringify({ behind, inFront, stillInFront, menuLevel, popupZ: zOf(popup), windowZ: zOf(win), lastMenuZ: zOf(later[5]) }) };
+      } finally { dropAll(win, popup, ...earlier, ...later); }
+    },
+  });
+
+  cases.push({
+    id: 'layers_a_window_popup_takes_the_level_of_the_window_it_is_opened_from_at_every_opening',
+    description: 'Le niveau d\'un popup de fenêtre est lu sur la fenêtre d\'où il s\'ouvre, à chaque ouverture : un cran au-dessus d\'une fenêtre de variable (1990), puis un cran au-dessus d\'une fenêtre de la page (2000) ouverte après elle',
+    run: async () => {
+      window.scrollTo(0, 0);
+      const zOf = el => parseInt(getComputedStyle(el).zIndex, 10);
+      const low = fakeWindow(false);
+      const high = fakeWindow(true); // ouverte après la première et au-dessus d'elle
+      const popup = menuPopup(120, 120);
+      try {
+        Layers.raise(popup, low);
+        const overLow = zOf(popup) === zOf(low) + 1;
+        const coveredByHigh = isOver(popup, high) === false; // la fenêtre du dessus recouvre le popup de celle du dessous : il lui appartient
+        Layers.raise(popup, high);
+        const overHigh = zOf(popup) === zOf(high) + 1 && isOver(popup, high) === true;
+        return { pass: zOf(low) < zOf(high) && overLow && coveredByHigh && overHigh, notes: JSON.stringify({ lowZ: zOf(low), highZ: zOf(high), popupZ: zOf(popup), overLow, coveredByHigh, overHigh }) };
+      } finally { dropAll(low, high, popup); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.layers = cases;
 })();

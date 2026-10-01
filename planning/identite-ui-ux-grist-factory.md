@@ -200,8 +200,12 @@ posée une fois dans `js/layers.js` et trois jetons de `css/style.css`, pas menu
   une case de tableau : la barre de la bulle, puis celle du tableau quand le focus arrive). Elles gardent l'ordre du DOM, la
   plus précise (bulle, image, bloc) est créée après la plus générale (tableau) et reste dessus ; « la dernière ouverte
   au-dessus » mettrait la barre du tableau sur les boutons de la bulle (vu au rejeu de `condTextMouse`, panneau de 360 px).
-- **Aucun `z-index` de 100 ou plus écrit en dur** dans une feuille de style, aucun `style.zIndex` hors `js/layers.js` :
-  `codeHygiene` le vérifie. Une nouvelle couche flottante prend le jeton de son niveau et appelle `Layers.raise` quand elle
+- **Un popup ouvert depuis le champ d'une fenêtre passe devant elle** : les fenêtres (1990 à 2100) sont au-dessus des trois
+  niveaux, aucun rang de menu ne suffit (la liste `#` du champ de la fenêtre « Calcul » s'ouvrait dessous, invisible).
+  `Layers.raise(popup, fenêtre)` (`ViewportFit.placePopup`, option `over`) prend le `z-index` de CETTE fenêtre + 1 à chaque
+  ouverture, quelles que soient les couches ouvertes avant : ni jeton propre à une fonctionnalité ni `!important`.
+- **Aucun `z-index` de 100 ou plus écrit en dur** dans une feuille de style, aucun jeton `--z-*` hors `css/style.css`, aucun
+  `z-index` en `!important`, aucun `style.zIndex` hors `js/layers.js` : `codeHygiene` le vérifie. Une nouvelle couche flottante prend le jeton de son niveau et appelle `Layers.raise` quand elle
   s'ouvre ; elle se vérifie avec une barre de tableau, d'image ou de bulle affichée, au centre de chacune de ses lignes
   (`layers`, `layersMouse`).
 

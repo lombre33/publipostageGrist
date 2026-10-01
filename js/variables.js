@@ -38,6 +38,9 @@ const Variables = (function () {
   // Dernières props reçues de @tiptap/suggestion - permet de rejouer updateItems() depuis un clic sur un onglet, qui n'est pas un évènement du plugin
   // Suggestion et ne fournit donc pas ces props lui-même.
   let latestProps = null;
+  // La fenêtre d'où la liste s'ouvre quand c'est depuis le champ d'une fenêtre (le calcul d'une bulle, js/variable-calc.js) : elle passe devant elle (ViewportFit.placePopup puis
+  // Layers.raise(boîte, fenêtre), js/layers.js), les fenêtres étant au-dessus des menus où la liste est posée. null pour la liste de l'éditeur et pour les champs de la page.
+  let listWindow = null;
 
   function ensureBox() {
     if (acBox) return acBox;
@@ -139,7 +142,7 @@ const Variables = (function () {
     if (!rect) return;
     const box = ensureBox();
     if (box.style.display === 'none') return;
-    ViewportFit.placePopup(box, rect, { gap: 4 });
+    ViewportFit.placePopup(box, rect, { gap: 4, over: listWindow });
   }
 
   // La fonction command() n'est fournie par @tiptap/suggestion que dans les props d'onStart/onUpdate, jamais celles d'onKeyDown - mémorisée ici pour être
@@ -159,7 +162,7 @@ const Variables = (function () {
     latestCommand = props.command;
     setTabsVisible(true);
     render(currentItems, item => latestCommand(item));
-    ensureBox().classList.remove('ac-over-window'); // la liste de l'éditeur retrouve son étage : un champ de fenêtre l'a peut-être montée devant son voile (checkForFilenameTrigger)
+    listWindow = null; // la liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger)
     ensureBox().style.display = currentItems.length ? 'flex' : 'none';
     position(props.clientRect);
   }
@@ -312,9 +315,8 @@ const Variables = (function () {
     latestCommand = item => insertFilenameVariable(item);
     setTabsVisible(false);
     render(currentItems, latestCommand);
-    // Un champ d'une fenêtre (le calcul d'une bulle, js/variable-calc.js) : le panneau s'ouvre devant son voile, pas dessous - les fenêtres sont au-dessus des menus (css/variable-calc.css, jeton
-    // --z-window-list). Une classe et non un z-index en ligne : js/layers.js est le seul script à en poser (codeHygiene).
-    ensureBox().classList.toggle('ac-over-window', !!el.closest('.pp-modal'));
+    // Un champ d'une fenêtre (le calcul d'une bulle, js/variable-calc.js) : la liste s'ouvre devant elle, pas dessous - les fenêtres sont au-dessus des menus (listWindow, Layers.raise).
+    listWindow = el.closest('.pp-modal');
     ensureBox().style.display = 'flex';
     position(() => el.getBoundingClientRect());
   }

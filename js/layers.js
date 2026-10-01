@@ -8,6 +8,10 @@
 //  - Le niveau des BARRES FLOTTANTES n'est pas rangé : un seul geste en ouvre souvent deux (cliquer une bulle dans une case de tableau ouvre la barre de la bulle ET celle du tableau,
 //    dans l'ordre où le code les teste), et « la dernière ouverte au-dessus » mettrait celle du tableau sur celle de la bulle. Elles gardent l'ordre du DOM : la plus précise est créée
 //    après la plus générale et reste dessus. Raise ne fait donc rien pour elles, et la barre d'une bulle ou d'une image reste lisible quand celle du tableau s'ouvre en dernier.
+//  - Un popup ouvert depuis le champ d'une FENÊTRE passe devant elle : les fenêtres (css/modal-base.css, 1990 à 2100) sont au-dessus des trois niveaux, aucun rang ne l'y amène (la liste #
+//    d'un champ de fenêtre s'ouvrait dessous, invisible). Layers.raise(el, fenêtre) prend alors pour niveau le z-index de CETTE fenêtre + 1, lu à chaque appel (il change d'une fenêtre à l'autre) :
+//    devant elle quelles que soient les couches ouvertes avant, sans jeton ni z-index de plus dans une feuille. Un élément n'a qu'un niveau à la fois (la liste # sert à l'éditeur puis à une
+//    fenêtre) : en changer le retire de la pile de l'ancien, où le rang d'un menu ouvert ensuite le ramènerait sous la fenêtre.
 // À appeler à l'OUVERTURE d'une couche flottante (ou à chaque placement d'un popup en cours d'usage, comme la liste #), jamais à chaque recalage d'une barre déjà affichée : elle
 // changerait de rang sans que rien ne s'ouvre. Script classique (pas type="module"), même convention de portée globale que EditorCore/ViewportFit.
 const Layers = (function () {
@@ -30,10 +34,22 @@ const Layers = (function () {
     return level === toolbarLevel;
   }
 
-  function raise(el) {
+  // Le niveau juste au-dessus de la fenêtre `over` (0 sans fenêtre ou sans z-index) : lu à chaque appel, une fenêtre pouvant être à 1990, 2000, 2050 ou 2100 (css/modal-base.css).
+  function levelAbove(over) {
+    if (!over || !over.isConnected) return 0;
+    const z = parseInt(getComputedStyle(over).zIndex, 10);
+    return z > 0 ? z + 1 : 0;
+  }
+
+  function raise(el, over) {
     if (!el || !el.isConnected) return;
-    const level = levelOf(el);
-    if (!(level > 0) || isToolbarLevel(level)) return; // aucun niveau en CSS, ou barres flottantes : rien à ordonner (ordre du DOM, voir plus haut)
+    const base = levelOf(el);
+    if (!(base > 0) || isToolbarLevel(base)) return; // aucun niveau en CSS, ou barres flottantes : rien à ordonner (ordre du DOM, voir plus haut)
+    const level = Math.max(base, levelAbove(over));
+    stacks.forEach((members, other) => {
+      const at = other === level ? -1 : members.indexOf(el);
+      if (at >= 0) members.splice(at, 1);
+    });
     const stack = (stacks.get(level) || []).filter(other => other !== el && isShown(other));
     stack.push(el);
     stacks.set(level, stack);

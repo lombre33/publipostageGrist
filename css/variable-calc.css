@@ -25,11 +25,8 @@
 .tiptap :where(td, th, .two-columns-column) .calc-badge-tail { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; white-space: nowrap; }
 
 /* === Fenêtre « Insérer / Modifier le calcul » === Le cadre, le libellé et le champ viennent de css/modal-base.css, les boutons de css/variable-actions.css. */
-/* La liste « # » ouverte depuis le champ de la formule : devant le voile de la fenêtre. Les fenêtres (css/modal-base.css, 1990) sont au-dessus des menus (--z-menu, 1600), où la liste est posée comme
-   celle de l'éditeur : elle s'ouvrait dessous, invisible. La classe est posée par js/variables.js (checkForFilenameTrigger) et ne vaut que pour un champ de fenêtre ; `!important` parce que
-   js/layers.js écrit le rang de la liste en ligne à chaque placement. Le niveau est un jeton, jamais un nombre dans la déclaration (codeHygiene) ; 2200 est celui des info-bulles de lien. */
-:root { --z-window-list: 2200; }
-#autocomplete-box.ac-over-window { z-index: var(--z-window-list) !important; }
+/* La liste « # » ouverte depuis le champ de la formule garde le niveau des menus (--z-menu, css/editor-v2.css) : js/variables.js la passe devant la fenêtre à chaque placement
+   (Layers.raise(boîte, fenêtre), js/layers.js) - aucun niveau ni z-index de plus ici. */
 .pp-calc-functions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 .pp-calc-functions-label { margin-right: 2px; font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-calc-function { font-family: var(--font-ui); font-size: 12px; font-weight: 600; height: 26px; padding: 0 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }

@@ -10,7 +10,7 @@
 //     de focus, jamais celle du survol, et la navigation au clavier garde les siennes.
 //  3. placePopup() : popups rattachés à document.body (#Variable, commentaires, image depuis une variable) placés sous leur ancre - ou au-dessus s'il y a
 //     plus de place -, décalés et plafonnés (défilement interne) pour ne jamais sortir de la fenêtre, et remontés au-dessus des couches déjà ouvertes (Layers.raise,
-//     js/layers.js) : la liste # passait sous la barre flottante d'un tableau.
+//     js/layers.js) : la liste # passait sous la barre flottante d'un tableau. `options.over` : la fenêtre d'où le popup s'ouvre (le champ d'une fenêtre), devant laquelle il passe.
 // Plus le coin "info" (#status-msg), désormais tronqué à largeur fixe par css/toolbar-v2.css : message entier en infobulle native quand il est coupé.
 const ViewportFit = (function () {
   const TIP_HOSTS = '.bar-row [data-tip], #v2-toolbar [data-tip]';
@@ -83,8 +83,9 @@ const ViewportFit = (function () {
     const left = Math.max(EDGE, Math.min(rect.left, viewportWidth - EDGE - width));
     box.style.left = Math.round(left + window.scrollX) + 'px';
     box.style.top = Math.round(Math.max(EDGE, top) + window.scrollY) + 'px';
-    // Le popup qu'on vient de placer est celui qu'on utilise : au-dessus de ce qui est ouvert (barre flottante du tableau, autre menu), jamais dessous.
-    Layers.raise(box);
+    // Le popup qu'on vient de placer est celui qu'on utilise : au-dessus de ce qui est ouvert (barre flottante du tableau, autre menu), jamais dessous - et devant la fenêtre dont il
+    // sort quand il vient du champ d'une fenêtre (options.over), qui est elle-même au-dessus de tous les menus.
+    Layers.raise(box, options && options.over);
   }
 
   return { placePopup, fitTooltip };

@@ -453,8 +453,8 @@ async function run(theme) {
   await typeSlowly('https://x.fr/#QrC');
   const suggest = await hit(SUGGEST);
   const suggestItem = await hit(`${SUGGEST} .ac-item`);
-  const overWindow = await page.evaluate(sel => document.querySelector(sel).classList.contains('ac-over-window'), SUGGEST);
-  check(`${T}, « # » : la liste des colonnes s'ouvre dans le panneau, au premier plan par-dessus la fenêtre (classe ac-over-window de js/variables.js, aucun niveau propre à la fenêtre), premier choix cliquable`, suggest.found && suggest.inPanel && overWindow && seen(suggestItem), { suggest, suggestItem, overWindow });
+  const overWindow = await page.evaluate(({ list, win }) => parseInt(getComputedStyle(document.querySelector(list)).zIndex, 10) > parseInt(getComputedStyle(document.querySelector(win)).zIndex, 10), { list: SUGGEST, win: WIN });
+  check(`${T}, « # » : la liste des colonnes s'ouvre dans le panneau, au premier plan par-dessus la fenêtre (niveau de la fenêtre + 1 par Layers.raise(boîte, fenêtre) de js/layers.js, aucune classe ni niveau propres à la fenêtre), premier choix cliquable`, suggest.found && suggest.inPanel && overWindow && seen(suggestItem), { suggest, suggestItem, overWindow });
   await snap(`${T}-9-diese`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
