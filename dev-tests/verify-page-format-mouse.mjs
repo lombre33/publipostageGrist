@@ -405,7 +405,7 @@ async function runTheme(theme) {
   const turnedBack = await formatNow(page);
   check(`${label} - second vrai clic : retour au portrait, format inchangé`, !turnedBack.landscape && turnedBack.format === 'A4', turnedBack);
 
-  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse ses six lignes, puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
+  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse ses six lignes puis « Filigrane… », puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
   await page.focus('#v2-toggle-a4-preview');
   const stops = [];
   for (let i = 0; i < 8; i++) {
@@ -419,6 +419,11 @@ async function runTheme(theme) {
     if (stops[stops.length - 1] === 'A6') break;
   }
   check(`${label} - clavier : Tab passe du bouton Page à Portrait, Paysage, A3, A4, A5 puis A6 (${stops.join(' > ')})`, stops.join() === 'btn-page-orientation,portrait,landscape,A3,A4,A5,A6', stops);
+  // Après A6 vient la ligne « Filigrane… » (menu Page, js/orientation-toggle.js), le menu reste ouvert ; Maj+Tab revient sur A6.
+  await page.keyboard.press('Tab');
+  const afterLast = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
+  check(`${label} - clavier : après A6, Tab arrive sur « Filigrane… » et le menu reste ouvert`, afterLast.active === 'v2-btn-watermark' && afterLast.menu === 'flex', afterLast);
+  await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(900);
   const viaEnter = await formatNow(page);
@@ -428,7 +433,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(900);
   const viaSpace = await formatNow(page);
   check(`${label} - clavier, Espace deux lignes plus haut (A4) : format A4`, viaSpace.format === 'A4' && !viaSpace.landscape, viaSpace);
-  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
   const outside = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
   check(`${label} - clavier : Tab hors du menu le referme (focus sur ${outside.active})`, outside.menu === 'none' && outside.active === 'v2-btn-quality', outside);
   await page.evaluate(() => document.activeElement && document.activeElement.blur());

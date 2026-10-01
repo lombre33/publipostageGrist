@@ -59,6 +59,7 @@ const GROUPS = {
   pageLayout: 'scenarios-pagelayout',
   orientation: 'scenarios-orientation',
   pageFormat: 'scenarios-page-format', // formats de page A3, A4, A5, A6 (suite de l'orientation) : menu de la barre, feuille, pagination, Lecture, enregistrement, PDF, Word, images en calque
+  watermark: 'scenarios-watermark', // filigrane de la page (roadmap n° 14) : réglage borné, géométrie commune, éditeur, Lecture, PDF (texte derrière le contenu), Word (image de l'en-tête), enregistrement, fenêtre, ligne du menu Page
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
   comments: 'scenarios-comments',
@@ -121,6 +122,7 @@ const NODE_SCRIPTS = {
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
   tableSelectMouse: 'verify-table-select-mouse.mjs', // sélection de cases en glissant la souris, tableau de document et grille : rectangle exact dans tous les sens, voile visible sur une case colorée, défilement tenu au bord du panneau, barre de la case fixée dans sa bande (aucune case recouverte), clavier ; 700x400 clair et sombre
   gridCellsMouse: 'verify-grid-cells-mouse.mjs', // barre de la case d'une grille : fusionner, scinder (UNE case, taille des colonnes gardée, un Ctrl+Z chacun), alignement vertical en haut, au milieu, en bas, boutons grisés jamais retirés, barre d'un tableau de document inchangée ; 700x400 clair et sombre

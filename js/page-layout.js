@@ -7,6 +7,8 @@
 // Format de la page (A3, A4, A5, A6) : même brouillon, même colonne, clé `format` du JSON (absente = A4, comme un modèle enregistré avant ce réglage). FORMATS
 // est la SEULE table des formats : millimètres (l'écran), points (pdfmake) et twips (Word) y sont écrits côte à côte, dans le sens portrait, avec le nom que
 // pdfmake et jsPDF donnent au format - un format de plus est une ligne de cette table, sans autre fichier à toucher.
+// Filigrane (roadmap n° 14) : un texte en travers de chaque page, propre au modèle - même brouillon, même colonne, clé `watermark` du JSON (absente = pas de filigrane, un
+// modèle enregistré avant ce réglage se recharge à l'identique). Ce module le garde et le borne (normalizeWatermark) ; sa géométrie et son dessin sont à js/page-layer.js.
 const PageLayout = (function () {
   const A4_WIDTH_MM = 210;
   const A4_HEIGHT_MM = 297;
@@ -62,6 +64,25 @@ const PageLayout = (function () {
   // Les formats proposés (copie : le menu de la barre les lit ici, il n'en écrit aucun). Dimensions du portrait.
   function getFormats() { return FORMATS.map(f => ({ id: f.id, widthMm: f.widthMm, heightMm: f.heightMm })); }
 
+  // Filigrane : { text, angle: 'diagonal' | 'horizontal', color: '#rrggbb', opacity: 0.05 à 1 } ou null. Un texte vide (ou qui n'est pas un texte) n'est pas un filigrane ; les
+  // blancs se réduisent à une espace et le texte tient sur une ligne de WATERMARK_MAX_CHARS caractères au plus ; tout autre réglage inconnu (JSON abîmé, version plus
+  // récente) retombe sur sa valeur par défaut, jamais sur une erreur - le gris à 20 % que Word donne à ses filigranes « semi-transparents ».
+  const WATERMARK_MAX_CHARS = 40;
+  const WATERMARK_DEFAULT = { angle: 'diagonal', color: '#808080', opacity: 0.2 };
+  const WATERMARK_MIN_OPACITY = 0.05;
+  function normalizeWatermark(value) {
+    if (!value || typeof value !== 'object' || typeof value.text !== 'string') return null;
+    const text = value.text.replace(/\s+/g, ' ').trim().slice(0, WATERMARK_MAX_CHARS).trim();
+    if (!text) return null;
+    const opacity = Number(value.opacity);
+    return {
+      text,
+      angle: value.angle === 'horizontal' ? 'horizontal' : WATERMARK_DEFAULT.angle,
+      color: typeof value.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.color) ? value.color.toLowerCase() : WATERMARK_DEFAULT.color,
+      opacity: value.opacity != null && value.opacity !== '' && Number.isFinite(opacity) ? Math.min(1, Math.max(WATERMARK_MIN_OPACITY, Math.round(opacity * 100) / 100)) : WATERMARK_DEFAULT.opacity,
+    };
+  }
+
   // Page en mm dans le sens demandé, sans état : les trois unités des moteurs (mm, pt, twip) se déduisent d'un même couple (sens, format).
   function pageSizeMmFor(orientation, format) {
     const f = formatOf(format);
@@ -92,6 +113,9 @@ const PageLayout = (function () {
     const [left, right] = clampPair(merged.left, merged.right, page.width);
     const [top, bottom] = clampPair(merged.top, merged.bottom, page.height);
     marginsDraft = { top, right, bottom, left, orientation, format };
+    // La clé n'existe que pour un modèle qui a un filigrane : l'objet d'un modèle sans filigrane reste celui d'avant ce réglage, clé pour clé.
+    const watermark = normalizeWatermark(merged.watermark);
+    if (watermark) marginsDraft.watermark = watermark;
     applyToPreviewCss();
   }
 
@@ -148,6 +172,19 @@ const PageLayout = (function () {
     announcePageLayoutChanged();
   }
 
+  function getWatermark() { return marginsDraft.watermark || null; }
+  // Pose (ou retire, avec null ou un texte vide) le filigrane en gardant tout le reste. Même contrat que setOrientation : ne rafraîchit rien, annonce `pp:watermarkChanged` si le
+  // filigrane CHANGE (js/main.js repeint la pagination et la Lecture), l'appelant marque le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
+  function setWatermark(value) {
+    const next = normalizeWatermark(value);
+    if (JSON.stringify(next) === JSON.stringify(getWatermark())) return false;
+    const rest = Object.assign({}, marginsDraft);
+    delete rest.watermark;
+    setMarginsMm(next ? Object.assign(rest, { watermark: next }) : rest);
+    document.dispatchEvent(new CustomEvent('pp:watermarkChanged', { detail: { watermark: getWatermark() } }));
+    return true;
+  }
+
   // Page courante (sens et format compris) dans chaque unité des moteurs : mm, pt (pdfmake), px CSS (aperçu, pagination), twip (docx).
   function getPageSizeMm() { return pageSizeMm(marginsDraft.orientation, marginsDraft.format); }
   function getPageSizePt() { const s = getPageSizeMm(); return { width: s.width * MM_TO_PT, height: s.height * MM_TO_PT }; }
@@ -162,7 +199,10 @@ const PageLayout = (function () {
   // n'ont donc aucun autre canal pour apprendre que la page est en paysage, ou en A5.
   function getMarginsPt() {
     const m = marginsDraft;
-    return { top: m.top * MM_TO_PT, right: m.right * MM_TO_PT, bottom: m.bottom * MM_TO_PT, left: m.left * MM_TO_PT, orientation: m.orientation, format: m.format };
+    const out = { top: m.top * MM_TO_PT, right: m.right * MM_TO_PT, bottom: m.bottom * MM_TO_PT, left: m.left * MM_TO_PT, orientation: m.orientation, format: m.format };
+    // Le filigrane voyage avec la page, comme le sens et le format : les exporteurs n'ont aucun autre canal pour l'apprendre.
+    if (m.watermark) out.watermark = m.watermark;
+    return out;
   }
 
   // Marges en pixels CSS - même conversion que applyToPreviewCss ci-dessous. Consommées par les deux moteurs de pagination à l'écran
@@ -174,11 +214,13 @@ const PageLayout = (function () {
 
   function getMarginsTwip() {
     const m = marginsDraft;
-    return {
+    const out = {
       top: Math.round(m.top * MM_TO_TWIP), right: Math.round(m.right * MM_TO_TWIP),
       bottom: Math.round(m.bottom * MM_TO_TWIP), left: Math.round(m.left * MM_TO_TWIP),
       orientation: m.orientation, format: m.format,
     };
+    if (m.watermark) out.watermark = m.watermark;
+    return out;
   }
 
   // Posées sur :root (pas #editor-container) - #editor-container et #reader-container sont deux conteneurs FRÈRES (l'aperçu paginé en lecture,
@@ -220,6 +262,7 @@ const PageLayout = (function () {
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
+    WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     pageNumberText, resolvePageNumberBadges,
   };
 })();

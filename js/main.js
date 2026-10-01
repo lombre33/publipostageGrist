@@ -1427,6 +1427,13 @@
     if (currentMode === 'read') renderReader();
   }
 
+  // Le filigrane (fenêtre « Filigrane… » du menu Page) est peint par la couche de page de l'éditeur (Aperçu A4) et de la Lecture : la page garde sa taille, seule la couche est
+  // repeinte. Un macro-modèle n'a pas d'éditeur à repeindre (son résumé n'a pas de page) : sa Lecture, son PDF et son Word relisent le réglage.
+  function onWatermarkChanged() {
+    if (currentMode === 'read') renderReader();
+    else if (currentTypeModele !== 'macro') Editor.refreshPaginationPreview();
+  }
+
   function wirePageFitZoom() {
     refreshPageFitZoom();
     if (typeof ResizeObserver === 'function') {
@@ -1690,6 +1697,8 @@
     document.addEventListener('pp:marginsChanged', markAutosaveDirty);
     // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur ET de hauteur. Le bouton ne rafraîchit rien lui-même.
     document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);
+    // Émis par PageLayout.setWatermark (fenêtre « Filigrane… ») : la couche des pages est repeinte, la page ne change pas de forme.
+    document.addEventListener('pp:watermarkChanged', onWatermarkChanged);
     GristAPI.onRecord(async function (record, tableId) {
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();

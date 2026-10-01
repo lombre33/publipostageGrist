@@ -4,11 +4,13 @@
 // et le format à PageLayout, rien n'est rafraîchi d'ici : le changement est annoncé par PageLayout (pp:pageLayoutChanged), que js/main.js écoute pour réajuster
 // l'éditeur, la pagination, la grille des images en calque et la Lecture.
 // Une icône = une fonction : l'icône montre la page telle qu'elle est (haute en portrait, large en paysage), le bouton est allumé en paysage. Le menu répète le sens en
-// toutes lettres (ligne cochée) et porte le format, qu'aucune icône ne dit ; il n'ajoute rien à la barre, qui reste gelée.
+// toutes lettres (ligne cochée) et porte le format, qu'aucune icône ne dit ; il n'ajoute rien à la barre, qui reste gelée. Sa dernière ligne, « Filigrane… », ouvre la fenêtre
+// du filigrane de la page (js/watermark-dialog.js) : un réglage de la page comme le sens et le format, qui suit les mêmes règles (types suivis, lecture seule, export en cours).
 const OrientationToggle = (function () {
   const BUTTON_ID = 'btn-page-orientation';
   const FLYOUT_ID = 'v2-page-flyout';
   const A4_TOGGLE_ID = 'v2-a4-toggle';
+  const WATERMARK_ROW_ID = 'v2-btn-watermark';
   // Types de modèle (colonne TypeModele) dont les moteurs suivent le sens et le format de PageLayout. Le bouton et son menu sont grisés pour tous les autres : un
   // réglage qui ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ICI, quand ses moteurs suivent - sans toucher
   // js/main.js. Un macro-modèle porte sa propre page (colonne Margins de sa ligne, comme ses marges) et l'impose aux modèles qu'il assemble : l'assemblage ne reprend que le
@@ -49,6 +51,11 @@ const OrientationToggle = (function () {
 
   function toggle() {
     selectOrientation(PageLayout.isLandscape() ? PageLayout.PORTRAIT : PageLayout.LANDSCAPE);
+  }
+
+  function openWatermark() {
+    if (!canChange() || typeof WatermarkDialog === 'undefined') return;
+    WatermarkDialog.open();
   }
 
   // Une ligne du menu : un <span> atteignable au clavier (tabindex), comme celles du menu Enregistrer (js/main.js:wireSaveMenu). mousedown ne prend pas le focus (le
@@ -107,6 +114,23 @@ const OrientationToggle = (function () {
       row.appendChild(size);
       host.appendChild(row);
     });
+    // Le filigrane : une action (une fenêtre), pas un choix à cocher - une ligne de menu comme « Enregistrer sous… », avec le texte en cours à droite.
+    const separatorBeforeWatermark = document.createElement('span');
+    separatorBeforeWatermark.className = 'v2-hover-hsep';
+    separatorBeforeWatermark.setAttribute('role', 'separator');
+    host.appendChild(separatorBeforeWatermark);
+    const watermark = document.createElement('span');
+    watermark.className = 'v2-hover-row v2-page-watermark-row';
+    watermark.id = WATERMARK_ROW_ID;
+    watermark.setAttribute('role', 'menuitem');
+    watermark.tabIndex = 0;
+    const watermarkName = document.createElement('span');
+    watermarkName.className = 'v2-page-row-name';
+    const watermarkText = document.createElement('span');
+    watermarkText.className = 'v2-page-row-size';
+    watermark.append(watermarkName, watermarkText);
+    wireRow(watermark, openWatermark);
+    host.appendChild(watermark);
   }
 
   function syncMenu(supported, landscape, format) {
@@ -125,6 +149,15 @@ const OrientationToggle = (function () {
       row.classList.toggle('v2-hover-row-disabled', !enabled);
       row.tabIndex = enabled ? 0 : -1;
     });
+    const watermarkRow = document.getElementById(WATERMARK_ROW_ID);
+    if (watermarkRow) {
+      const watermark = PageLayout.getWatermark();
+      watermarkRow.querySelector('.v2-page-row-name').textContent = I18n.t('toolbar.page.watermark');
+      watermarkRow.querySelector('.v2-page-row-size').textContent = watermark ? watermark.text : '';
+      watermarkRow.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      watermarkRow.classList.toggle('v2-hover-row-disabled', !enabled);
+      watermarkRow.tabIndex = enabled ? 0 : -1;
+    }
   }
 
   // « Aperçu A4 » devient « Aperçu A5 » : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4.
@@ -166,6 +199,8 @@ const OrientationToggle = (function () {
     buildMenu();
     btn.addEventListener('click', toggle);
     I18n.onChange(() => sync());
+    // Le filigrane change depuis sa fenêtre : la ligne du menu en montre le texte.
+    document.addEventListener('pp:watermarkChanged', () => sync());
     sync();
   }
 

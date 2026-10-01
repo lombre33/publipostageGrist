@@ -50,6 +50,8 @@ const PdfExport = (function () {
   let pageOrientation = 'portrait';
   let pageFormat = 'A4';
   let pageWidthPt = 595.28, pageHeightPt = 841.89;
+  // Filigrane du modèle (PageLayout.normalizeWatermark) : il voyage avec les marges comme le sens et le format, absent = aucun. Peint par buildNativeDocDefinition.
+  let pageWatermark = null;
   // Notes de bas de page : collectées par inlineRuns à toute profondeur d'appel (cellule/colonne/corps) - variables de module plutôt qu'un paramètre
   // traversant tableFrom/twoColumnsFrom/cellLineToPdfObject. Remises à zéro à chaque buildPdfContentFromRoot racine (une fois par passe, cf. isTopLevel).
   let footnoteCounter = 0;
@@ -100,6 +102,7 @@ const PdfExport = (function () {
     pageFormat = PageLayout.normalizeFormat(m.format);
     const page = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
     pageWidthPt = page.width; pageHeightPt = page.height;
+    pageWatermark = PageLayout.normalizeWatermark(m.watermark);
     A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
     A4_PREVIEW_PADDING_LEFT_PX = marginLeftPt / PX_TO_PT;
     CONTENT_WIDTH_PT = pageWidthPt - marginLeftPt - marginRightPt;
@@ -1674,6 +1677,18 @@ const PdfExport = (function () {
     return wrapper.innerHTML;
   }
 
+  // Le filigrane en SVG de la taille de la page, pour le fond de chaque page : un seul <text> Roboto gras (les caractères sont ceux de l'embarqué, du vrai texte que le PDF garde),
+  // tourné autour du centre de la page. `y` est la LIGNE DE BASE, à 0,342 em sous le centre (PageLayer.WATERMARK_BASELINE_EM) comme à l'écran. Le texte est échappé : une
+  // esperluette ou un chevron dans « R&D < 5 » ne doit jamais casser le SVG, et avec lui tout l'export.
+  function watermarkSvgFrom(layout) {
+    const cx = pageWidthPt / 2, cy = pageHeightPt / 2;
+    const escaped = layout.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const num = n => Math.round(n * 100) / 100;
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + num(pageWidthPt) + '" height="' + num(pageHeightPt) + '" viewBox="0 0 ' + num(pageWidthPt) + ' ' + num(pageHeightPt) + '">'
+      + '<text x="' + num(cx) + '" y="' + num(cy + PageLayer.WATERMARK_BASELINE_EM * layout.fontSizePt) + '" font-family="Roboto" font-weight="bold" font-size="' + layout.fontSizePt + '" text-anchor="middle"'
+      + ' fill="' + layout.color + '" fill-opacity="' + layout.opacity + '" transform="rotate(' + layout.angleDeg + ' ' + num(cx) + ' ' + num(cy) + ')">' + escaped + '</text></svg>';
+  }
+
   // `headerFooterChunks` threadé à l'identique dans les deux passes (mesure et rendu réel) : sinon la hauteur de page disponible diffère entre elles et un
   // titre/image pourrait changer de page entre mesure et rendu final.
   function buildNativeDocDefinition(content, filename, headerFooterChunks) {
@@ -1689,14 +1704,18 @@ const PdfExport = (function () {
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
+    // Le filigrane (js/page-layer.js:watermarkLayout : le corps et l'angle que l'éditeur dessine) : le premier des fonds de CHAQUE page, donc derrière le texte et derrière les
+    // images en calque, comme à l'écran. Pas le `watermark` natif de pdfmake, qui se peint APRÈS le contenu (par-dessus le texte et les images) et que rien ne descend dessous.
+    const watermarkNode = (layout => (layout ? { svg: watermarkSvgFrom(layout), absolutePosition: { x: 0, y: 0 } } : null))(PageLayer.watermarkLayout(pageWatermark, pageWidthPt, pageHeightPt));
     // Images « derrière » à position de page, au-delà de la 1re page (resolveNativePdfContent) : pdfmake appelle `background` page par page, 1-based.
     const behindByPage = content._backgroundByPage || {};
     // Les images répétées (« Sur toutes les pages ») sur chaque page de leur courrier, avant celles d'une seule page : une copie par appel, pdfmake range ses mesures sur le nœud
     // qu'il traite.
     const repeatedLayer = content._repeatedLayer || [];
-    if (repeatedLayer.length || Object.keys(behindByPage).length) {
+    if (watermarkNode || repeatedLayer.length || Object.keys(behindByPage).length) {
       doc.background = currentPage => {
-        const nodes = repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image)).concat(behindByPage[currentPage] || []);
+        const nodes = (watermarkNode ? [Object.assign({}, watermarkNode)] : [])
+          .concat(repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image)), behindByPage[currentPage] || []);
         return nodes.length ? nodes : null;
       };
     }

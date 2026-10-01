@@ -210,10 +210,10 @@ const ren = await page.evaluate(() => ({ hidden: document.getElementById('templa
 check('renommer puis cliquer Qualité PDF : le champ se referme, le nom tapé est affiché dans la liste, le bouton n’a pas gardé le focus', ren.hidden && /renommé en route/.test(ren.label) && ren.focus !== 'v2-btn-quality', { ren });
 await away(page);
 
-// 4) le clavier est intact (le bouton Portrait / Paysage, entre Aperçu A4 et Qualité PDF, a un menu de six lignes atteignables au clavier : la dernière, A6, est la dernière avant Qualité PDF
-// dans l'ordre de Tab ; le parcours de ce menu, ligne par ligne, est dans verify-page-format-mouse.mjs)
+// 4) le clavier est intact (le bouton Portrait / Paysage, entre Aperçu A4 et Qualité PDF, a un menu de sept lignes atteignables au clavier : la dernière, « Filigrane… », est la dernière avant
+// Qualité PDF dans l'ordre de Tab ; le parcours de ce menu, ligne par ligne, est dans verify-page-format-mouse.mjs)
 await page.focus('#btn-page-orientation');
-await page.focus('#v2-page-flyout [data-page-format="A6"]');
+await page.focus('#v2-btn-watermark');
 await page.keyboard.press('Tab');
 const kq = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-quality-flyout')).display, expanded: document.getElementById('v2-btn-quality').getAttribute('aria-expanded'), pageMenu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
 check('Tab depuis la dernière ligne du menu Page : on arrive sur Qualité PDF, son menu s’ouvre (focus clavier) et celui de Page se referme', kq.active === 'v2-btn-quality' && kq.open === 'flex' && kq.expanded === 'true' && kq.pageMenu === 'none', kq);

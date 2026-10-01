@@ -458,7 +458,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   retiré, hors du calque derrière le texte (image dans le texte ou devant, en-tête et pied, mode grille) et, sans Aperçu A4, tant que l'image n'a pas sa place de page ; son info-bulle dit pourquoi.
   Passer devant ou dans le texte efface la case, et revenir derrière le texte ne la rend pas. Dans un macro-modèle chaque courrier a sa couche, sur ses pages, dans le PDF ; le Word n'a qu'un
   en-tête : toutes les couches y valent pour tout le document, jusqu'aux sections par courrier. Le module `PageLayer` (`js/page-layer.js`) est la couche de page commune : le filigrane de
-  « Paysage et portrait » s'en servira, une couche et non deux.
+  « Paysage et portrait » s'y appuie (règle « Filigrane » plus bas), une couche et non deux.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
@@ -552,6 +552,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   au même endroit et du même aspect ; la coche dit le sens et le format de ce macro-modèle (« Page A3 en paysage (passer en portrait) »). Sa page est dans sa propre ligne (colonne `Margins`, avec ses marges)
   et il l'impose aux modèles qu'il assemble : la Lecture, le PDF (unique, en lot, en un seul fichier) et le Word suivent la page du macro-modèle, jamais celle de sa page de garde ou d'une annexe, qui gardent la
   leur quand on les ouvre seules. Son résumé ne montre pas de feuille : la page se lit sur le bouton (allumé en paysage), dans le menu et à la Lecture. Un macro-modèle sans réglage reste en A4 portrait.
+- Filigrane (roadmap n° 14 « WaterMark », demande d'Antoine du 01/10) : « Filigrane… » est la dernière ligne du menu Page, après un second filet : la barre ne gagne aucune icône, la ligne ouvre une fenêtre et dit à sa droite
+  le texte en cours (gris discret, coupé par « … » s'il est long). Elle suit le reste du menu : grisée pour un email ou une grille et pendant un export, active pour un macro-modèle (qui a son propre filigrane, comme sa propre page).
+  Un filigrane est UN texte (40 caractères au plus) écrit en Roboto gras au centre de chaque feuille, derrière le texte et les images, ni cliquable ni sélectionnable, jamais dans le document : il vit avec la page (clé `watermark` de la
+  colonne `Margins`, absente = pas de filigrane ; un modèle d'avant ce réglage se recharge à l'identique). Réglages : le sens (en diagonale à -45° ou horizontal), six couleurs (le gris d'abord) et l'opacité de 5 à 100 % par pas de 5
+  (20 % au départ). La fenêtre « Filigrane de la page » tient dans 700×400 sans défiler : le champ du texte (l'indication SOUS le champ), le sens, les couleurs, le curseur d'opacité et une feuille d'aperçu à l'échelle de la page du
+  modèle, dessinée par le même code que la page (ce qu'elle montre est ce que la page porte) ; Entrée valide, Échap annule, « Valider » avec un texte vidé retire comme « Retirer le filigrane ». Le corps des lettres vient de la page, un
+  seul calcul pour les quatre rendus (`PageLayer.watermarkLayout` : de 6 à 200 pt, 45 % du petit côté au plus, l'encre reste dans la page de A3 à A6, en portrait et en paysage). L'éditeur (avec l'Aperçu A4) et la Lecture le peignent dans la
+  couche de page, le PDF en vrai texte vectoriel au fond de chaque page, le Word en image dans l'en-tête, derrière le texte (une image, pas du texte modifiable : c'est ce que Word et Google Docs ouvrent sans surprise). Une image
+  « Sur toutes les pages » et un filigrane partagent la même couche.
 - Image plus large que sa place (carte d'Antoine du 01/10, « Ramener à la page les images trop larges dans le PDF et le Word ? » : « logique de WYSIWYG, si ça dépend en éditeur ça dépasse partout sinon nulle
   part ») : l'éditeur est la référence, la Lecture, le PDF et le Word montrent ce qu'il montre. Une image dans le texte plus large que la zone de texte, la case de tableau ou la colonne qui la porte y est
   ramenée partout, proportions gardées, et suit le format de page et les marges ; une image qui tient garde sa taille réglée. Une image en calque garde sa taille réglée (son placement est une autre règle).

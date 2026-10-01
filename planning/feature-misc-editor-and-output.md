@@ -76,6 +76,16 @@ UI : un réglage (texte ou image, opacité, position) — probablement dans les 
 nouveau petit panneau dédié, à trancher avec l'utilisateur (filigrane par modèle, ou global à tous les
 exports ?).
 
+**Filigrane texte livré le 01/10** (suite du fil Paysage et portrait) : réglage PAR MODÈLE, clé `watermark` (`{text, angle: 'diagonal'|'horizontal', color: '#rrggbb', opacity 0,05 à 1}`) de la colonne
+`Margins` à côté du sens, du format et des marges (`js/page-layout.js` : `normalizeWatermark`, `getWatermark`, `setWatermark`, évènement `pp:watermarkChanged` ; absent = pas de filigrane, aucune migration).
+On a gardé la seconde approche de ci-dessus (une couche posée à la main), pas l'option `watermark` de pdfmake, qui peint PAR-DESSUS le contenu : la géométrie est commune aux quatre rendus
+(`PageLayer.watermarkLayout`, `watermarkElement`), le dessin est la première chose peinte dans la boîte de chaque page (derrière les images « Sur toutes les pages »). Éditeur et Lecture : élément
+`.v2-page-watermark` de `paintCopies` (visible avec Aperçu A4, jamais dans le document) ; PDF : un nœud SVG à Roboto gras en tête de `doc.background` de chaque page (vrai texte vectoriel) ;
+Word : une image PNG ancrée derrière le texte dans l'en-tête, centrée sur la page. UI : ligne « Filigrane… » en bas du menu Page (`js/orientation-toggle.js`) qui ouvre `js/watermark-dialog.js` (texte
+de 40 caractères au plus, sens, six couleurs, opacité de 5 à 100 %, feuille d'aperçu, « Retirer le filigrane ») ; grisée pour un email et une grille. Un macro-modèle a le sien.
+**Reste** : un filigrane IMAGE seul (aujourd'hui : une image « Sur toutes les pages » derrière le texte avec son opacité) ; le Word n'applique pas l'opacité d'une image de la couche ; le filigrane
+du Word est une image (pas du texte modifiable dans Word).
+
 ## Taille et orientation de page
 
 **Chantier plus profond qu'il n'y paraît** : `A4`, le format portrait, et `PAGE_MARGIN_PT = 28`

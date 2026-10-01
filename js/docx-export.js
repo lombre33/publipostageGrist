@@ -49,6 +49,8 @@ const DocxExport = (function () {
   let pageFormat = 'A4';
   let pageWidthTwip = 11906;
   let CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
+  // Filigrane du modèle (PageLayout.normalizeWatermark) : il voyage avec les marges comme le sens et le format, absent = aucun. Posé dans l'en-tête par buildDocxDocument.
+  let pageWatermark = null;
 
   function setPageMarginsTwip(marginsTwip) {
     const m = marginsTwip || {};
@@ -60,6 +62,7 @@ const DocxExport = (function () {
     pageFormat = PageLayout.normalizeFormat(m.format);
     pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).width;
     CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
+    pageWatermark = PageLayout.normalizeWatermark(m.watermark);
   }
   const DEFAULT_HALF_PT = 21; // 10.5pt - doit correspondre à DEFAULT_FONT_SIZE, js/pdf-export.js
   // *2 (demi-points) des mêmes tailles que HEADING_SIZES, js/pdf-export.js - `heading:` (style Word natif) fixe déjà une taille par défaut, mais on la
@@ -787,11 +790,70 @@ const DocxExport = (function () {
     } finally { detach(); }
   }
 
+  // Le filigrane du modèle (js/page-layer.js:watermarkLayout : le corps, l'angle, la couleur et l'opacité que l'éditeur et le PDF dessinent) en image PNG : le texte est rendu par un
+  // canevas dans la même police (Roboto gras), tourné, l'opacité cuite dans les pixels - Word n'applique pas celle d'une image ancrée, et un filigrane « Word » natif (VML) ne
+  // s'affiche ni dans Google Docs ni partout ailleurs. L'image est de la taille du rectangle qui contient le texte tourné ; Word la centre sur la page (watermarkRun). Une fois par
+  // réglage : un lot de 200 courriers ne redessine pas 200 fois le même canevas. Rend null quand le navigateur ne sait pas dessiner (l'export continue sans filigrane).
+  const WATERMARK_PX_PER_PT = 1.5;
+  const WATERMARK_MAX_CANVAS_PX = 4096;
+  const watermarkImageCache = new Map();
+  async function watermarkImageData(layout) {
+    if (!layout) return null;
+    const key = JSON.stringify(layout);
+    if (watermarkImageCache.has(key)) return watermarkImageCache.get(key);
+    try { await document.fonts.load('700 40px Roboto', layout.text); } catch (e) { /* police indisponible : le canevas prend le repli du navigateur */ }
+    const k = WATERMARK_PX_PER_PT;
+    const fontPx = layout.fontSizePt * k;
+    const fontCss = '700 ' + fontPx + 'px Roboto, Helvetica, Arial, sans-serif';
+    const canvas = document.createElement('canvas');
+    const g = canvas.getContext('2d');
+    if (!g) return null;
+    g.font = fontCss;
+    const textW = g.measureText(layout.text).width;
+    const textH = fontPx * 1.2;
+    const rad = layout.angleDeg * Math.PI / 180;
+    const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    const pad = Math.ceil(fontPx * 0.1);
+    const width = Math.min(WATERMARK_MAX_CANVAS_PX, Math.ceil(textW * cos + textH * sin) + 2 * pad);
+    const height = Math.min(WATERMARK_MAX_CANVAS_PX, Math.ceil(textW * sin + textH * cos) + 2 * pad);
+    canvas.width = width; canvas.height = height;
+    g.translate(width / 2, height / 2);
+    g.rotate(rad);
+    g.font = fontCss;
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    g.fillStyle = layout.color;
+    g.globalAlpha = layout.opacity;
+    g.fillText(layout.text, 0, PageLayer.WATERMARK_BASELINE_EM * fontPx);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return null;
+    // docx.js compte la taille d'une image en pixels de 96 dpi : points = pixels du canevas / k, pixels = points x 96 / 72.
+    const image = { data: new Uint8Array(await blob.arrayBuffer()), widthPx: Math.round(width / k * 96 / 72), heightPx: Math.round(height / k * 96 / 72) };
+    if (watermarkImageCache.size >= 8) watermarkImageCache.clear();
+    watermarkImageCache.set(key, image);
+    return image;
+  }
+
+  // Son ancre : centrée sur la PAGE (pas sur les marges) dans les deux sens, derrière le texte, sous toutes les images en calque (zIndex 1 contre 1000 et plus).
+  function watermarkRun(image) {
+    layerObjectId += 1;
+    return new docx.ImageRun({
+      type: 'png', data: image.data, transformation: { width: image.widthPx, height: image.heightPx },
+      altText: { id: layerObjectId, name: '', description: '', title: '' },
+      floating: {
+        behindDocument: true, zIndex: 1,
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, align: docx.HorizontalPositionAlign.CENTER },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, align: docx.VerticalPositionAlign.CENTER },
+      },
+    });
+  }
+
   // « Sur toutes les pages » (js/page-layer.js) : un paragraphe de 1 pt qui porte, en ancres flottantes derrière le texte, chaque image répétée à sa place de la page - le même ancrage
   // que dans le corps (docxFloatingOptionsFrom), mais placé dans l'en-tête, que Word répète sur chaque page. Un paragraphe neuf et des images neuves par en-tête : un en-tête
-  // ne partage rien avec un autre. Les numéros d'objet partent de 9000, hors de ceux du contenu de l'en-tête (headerFooterBlocksFrom recompte depuis 1).
-  async function repeatedLayerParagraph(images, ctx) {
-    const runs = [];
+  // ne partage rien avec un autre. Les numéros d'objet partent de 9000, hors de ceux du contenu de l'en-tête (headerFooterBlocksFrom recompte depuis 1). Le filigrane du modèle
+  // (`watermark` : watermarkImageData), s'il y en a un, est la première ancre : le fond de tout le reste.
+  async function repeatedLayerParagraph(images, ctx, watermark) {
+    const runs = watermark ? [watermarkRun(watermark)] : [];
     for (const img of images) {
       const imgData = await docxImageDataFrom(img);
       if (!imgData) continue;
@@ -877,9 +939,12 @@ const DocxExport = (function () {
       }
     }
     // Chaque en-tête que Word peut montrer (celui de la première page aussi quand elle diffère) porte les images répétées ; sans en-tête du tout, il est créé pour elles.
+    // Le filigrane du modèle rejoint ces images : la même ancre dans chaque en-tête, créé pour lui s'il manque.
+    const pageSizePt = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
+    const watermarkImage = await watermarkImageData(PageLayer.watermarkLayout(pageWatermark, pageSizePt.width, pageSizePt.height));
     for (const variant of zoneVariants) {
       const blocks = headerBlocks[variant] || [];
-      const layerParagraph = layerImages.length ? await repeatedLayerParagraph(layerImages, ctx) : null;
+      const layerParagraph = (layerImages.length || watermarkImage) ? await repeatedLayerParagraph(layerImages, ctx, watermarkImage) : null;
       if (layerParagraph) blocks.push(layerParagraph);
       if (blocks.length) section.headers = Object.assign({}, section.headers, { [variant]: new docx.Header({ children: blocks }) });
     }

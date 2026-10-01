@@ -794,7 +794,10 @@ const HeaderFooterPreview = (function () {
         });
       });
     }
-    if (!items.length) {
+    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
+    const pageSize = PageLayout.getPageSizePt();
+    const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
+    if (!items.length && !watermark) {
       if (paginationCopiesEl && paginationCopiesEl.parentNode) paginationCopiesEl.parentNode.removeChild(paginationCopiesEl);
       paginationCopiesEl = null;
       return;
@@ -807,7 +810,7 @@ const HeaderFooterPreview = (function () {
       pageSheet.insertBefore(paginationCopiesEl, pageSheet.firstChild);
     }
     PageLayer.paintCopies(paginationCopiesEl, {
-      left: view.sheetLeft, width: view.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: view.contentLeftPx, pages, items,
+      left: view.sheetLeft, width: view.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: view.contentLeftPx, pages, items, watermark,
     });
   }
   // Éditeur visible (pas masqué par la Lecture) : sans mise en page, tous les rectangles valent 0 et rien ne se mesure.

@@ -530,6 +530,32 @@ La référence est la largeur que l'éditeur donne à l'image (`max-width: 100%`
 
 ---
 
+## 18. Filigrane de la page (texte en travers de chaque page)
+
+**Couverture automatisée** : groupe `watermark` (`scenarios-watermark.js`, 13 cas : le réglage et ses bornes, la géométrie de A3 à A6, le dessin de l'éditeur et de la Lecture, le PDF lu par pdf.js,
+le Word lu dans le .docx, l'enregistrement dans `Margins`, la fenêtre et la ligne du menu), script Node `watermarkMouse` (menu et fenêtre à la vraie souris et au clavier, à 700×400, clair, sombre et anglais,
+captures avec `WATERMARK_SHOTS=<dossier>`). Le texte, l'angle, la couleur et l'opacité sont lus sur les sorties, jamais sur les objets pdfmake ou docx.js.
+**Non couvert** : le rendu réel dans Word et dans Google Docs (seuls l'image ancrée dans l'en-tête, ses pixels et sa place sont lus dans le fichier), un lecteur PDF autre que pdf.js, l'impression navigateur.
+
+### Protocole
+1. Ouvrir un modèle classique de plusieurs pages, survoler le bouton Portrait / Paysage : la dernière ligne du menu, après un filet, est « Filigrane… » (rien à droite tant que le modèle n'en a pas).
+   La cliquer : une fenêtre s'ouvre avec un champ de texte (rien d'écrit), Diagonale / Horizontale, six couleurs (le gris est choisi), un curseur d'opacité (20 %) et une feuille d'aperçu à la forme de la page.
+2. Écrire « CONFIDENTIEL » : la feuille d'aperçu montre le mot en travers de la page, gris clair. Passer en Horizontal, choisir le rouge, tirer le curseur vers 60 % : l'aperçu suit chaque geste. Valider.
+3. Aperçu A4 allumé : chaque feuille de l'éditeur porte le mot, au centre exact de la page, derrière le texte ; cliquer et taper dessus place le curseur dans le texte du document (le filigrane ne se sélectionne pas).
+   Passer en Mode lecture : même filigrane, même place. Décocher Aperçu A4 : il n'est plus peint (un filigrane n'a de sens que sur la feuille) ; le rallumer le ramène.
+4. « Exporter en PDF » : le mot est derrière le texte de chaque page (une image « Sur toutes les pages » le recouvre), à la couleur, à l'angle et à l'opacité choisis ; le texte du filigrane est un vrai texte
+   (le sélectionner, le chercher). Même résultat pour « Exporter toutes les lignes ».
+5. « Exporter en DOCX » : dans Word, le mot est derrière le texte de chaque page, centré sur la page, de la couleur choisie et pâle (c'est une image, pas du texte modifiable : il ne se retouche pas dans Word).
+6. Changer de format (A5 paysage, A3, A6) : le mot reste centré, tourné de la même façon, et rentre dans la page ; un texte de 40 « W » descend à un corps très petit mais reste dans la page.
+7. Enregistrer, recharger la page du document Grist : le filigrane est revenu avec le modèle ; un autre modèle n'en a pas ; un macro-modèle a le sien.
+8. Rouvrir « Filigrane… », vider le champ puis Valider (ou « Retirer le filigrane ») : le filigrane disparaît de l'éditeur, de la Lecture, du PDF et du Word, et la ligne du menu n'affiche plus de texte. Échap ou
+   « Annuler » ne change rien. Un email et une grille : la ligne est grisée.
+9. À 700×400, la fenêtre tient sans défiler (titre, texte et son indication, sens, couleurs, curseur, aperçu, boutons), en clair, en sombre et en anglais ; Tab fait le tour de la fenêtre et revient au champ,
+   les flèches changent le sens et la couleur, Entrée valide.
+10. Écart connu : le Word ne prend pas en compte l'opacité d'une image (la sienne est cuite dans les pixels du filigrane, pas celle d'une image de la couche).
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

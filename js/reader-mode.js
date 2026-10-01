@@ -381,7 +381,10 @@ const ReaderMode = (function () {
   // page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
   function paintRepeatedCopies(wrapper, paged) {
     const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src'));
-    if (!images.length) { paged.layer.textContent = ''; return; }
+    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
+    const pageSize = PageLayout.getPageSizePt();
+    const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
+    if (!images.length && !watermark) { paged.layer.textContent = ''; return; }
     const children = Array.from(wrapper.children);
     const markers = [];
     children.forEach((child, index) => { if (child.matches('.page-break-marker[data-macro-slot]')) markers.push(index); });
@@ -407,7 +410,7 @@ const ReaderMode = (function () {
       };
     });
     PageLayer.paintCopies(paged.layer, {
-      left: paged.sheetLeft, width: paged.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: paged.contentLeftPx, pages: paged.pages, items,
+      left: paged.sheetLeft, width: paged.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: paged.contentLeftPx, pages: paged.pages, items, watermark,
     });
   }
 
