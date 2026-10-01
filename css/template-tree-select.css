@@ -91,7 +91,7 @@
   .tts-row:hover { background: var(--surface-sunken); }
 }
 .tts-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tts-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tts-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .tts-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tts-group.is-collapsed { display: none; }

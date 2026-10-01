@@ -10,6 +10,12 @@
   const html = document.documentElement;
 
   function parseColor(str) {
+    // Un mélange (color-mix) ressort du navigateur en `color(srgb 0.34 0.38 0.45)`, composantes de 0 à 1.
+    const srgb = String(str).match(/^color\(srgb\s+([^)]+)\)/);
+    if (srgb) {
+      const q = srgb[1].split(/[\s\/]+/).filter(Boolean).map(Number);
+      return { r: q[0] * 255, g: q[1] * 255, b: q[2] * 255, a: q.length > 3 ? q[3] : 1 };
+    }
     const m = String(str).match(/rgba?\(([^)]+)\)/);
     if (!m) return null;
     const p = m[1].split(/[\s,\/]+/).filter(Boolean).map(Number);
@@ -423,6 +429,93 @@
       } finally {
         el.textContent = saved.text;
         el.className = saved.cls;
+      }
+    },
+  });
+
+  // Trois restes du constat F5 (choix d'Antoine du 01/10) : le message vert « lignes trouvées », le bleu d'accent posé sur un fond gris ou teinté, les puces de la galerie.
+  cases.push({
+    id: 'contrast_success_message_reaches_4_5_and_its_box_follows_the_dark_theme',
+    description: 'Message de réussite en vert (« lignes trouvées », ligne de test de la condition, « Copié ») : 4,5:1 au moins, et l’encadré passe en vert sombre en thème sombre',
+    run: async () => {
+      const preview = document.getElementById('link-config-preview');
+      const saved = { text: preview.textContent, cls: preview.className };
+      try {
+        preview.textContent = '2 lignes trouvées dans « Contrats » (n° 1, 2).';
+        preview.className = 'link-config-preview is-good';
+        const boxes = {};
+        const byTheme = inBothThemes(theme => {
+          const out = { 'lignes trouvées': round2(textRatio(preview)) };
+          out['ligne de test de la condition'] = withProbe('<div class="var-condition-debug-line is-good">ok</div>', el => round2(textRatio(el)));
+          out['bouton Copié'] = withProbe('<button class="var-condition-clip-btn is-done">Copié</button>', el => round2(textRatio(el)));
+          boxes[theme] = Math.round(lum(backgroundOf(preview)) * 1000) / 1000;
+          return out;
+        });
+        const bad = failing(byTheme, 4.5);
+        const darkBoxIsDark = boxes.dark < 0.1 && boxes.light > 0.5;
+        return { pass: bad.length === 0 && darkBoxIsDark, notes: JSON.stringify({ bad, darkBoxIsDark, boxLuminance: boxes, byTheme }) };
+      } finally {
+        preview.textContent = saved.text;
+        preview.className = saved.cls;
+      }
+    },
+  });
+
+  cases.push({
+    id: 'contrast_accent_text_on_tinted_backgrounds_reaches_4_5_in_light_and_dark',
+    description: 'Texte d’accent sur un fond gris ou teinté (ligne choisie de la liste des modèles, Cci actif, « Modifier le lien », « + Ajouter une règle », lien de la boucle) : 4,5:1 au moins',
+    run: async () => {
+      const trigger = document.querySelector('.tts-trigger');
+      const popup = document.querySelector('.tts-popup');
+      const wasOpen = popup && popup.classList.contains('is-open');
+      if (!wasOpen) trigger.click();
+      await new Promise(r => setTimeout(r, 250));
+      const row = document.querySelector('.tts-popup .tts-row');
+      const cci = document.querySelector('.v2-email-cci-toggle');
+      const savedRow = row && row.getAttribute('aria-selected');
+      const savedCci = cci && cci.classList.contains('is-active');
+      try {
+        if (row) row.setAttribute('aria-selected', 'true');
+        if (cci) cci.classList.add('is-active');
+        const byTheme = inBothThemes(() => {
+          const out = {};
+          if (row) out['ligne choisie de la liste des modèles'] = round2(textRatio(row.querySelector('.tts-row-label') || row));
+          if (cci) out['Cci actif'] = round2(textRatio(cci));
+          out['Modifier le lien'] = withProbe('<div class="var-condition-rules"><div class="var-condition-link-hint">x <button type="button">Modifier le lien</button></div></div>', el => round2(textRatio(el.querySelector('button'))));
+          out['+ Ajouter une règle'] = withProbe('<div class="macro-slot-card"><button type="button" class="macro-rule-add">+ Ajouter une règle</button></div>', el => round2(textRatio(el.querySelector('button'))));
+          out['lien de la boucle'] = withProbe('<div class="var-loop-source"><span>x</span><button type="button" class="var-loop-link">Modifier</button></div>', el => round2(textRatio(el.querySelector('button'))));
+          return out;
+        });
+        const bad = failing(byTheme, 4.5);
+        return { pass: bad.length === 0 && !!row && !!cci, notes: JSON.stringify({ bad, row: !!row, cci: !!cci, byTheme }) };
+      } finally {
+        if (row) { if (savedRow === null) row.removeAttribute('aria-selected'); else row.setAttribute('aria-selected', savedRow); }
+        if (cci && !savedCci) cci.classList.remove('is-active');
+        if (!wasOpen) trigger.click();
+      }
+    },
+  });
+
+  cases.push({
+    id: 'contrast_gallery_card_chips_reach_4_5_on_their_grey_in_light_and_dark',
+    description: 'Puces d’étiquettes des cartes de la galerie (10,5 px sur fond gris) : 4,5:1 au moins en clair et en sombre',
+    run: async () => {
+      const modal = document.getElementById('template-gallery-modal');
+      document.getElementById('v2-btn-new-from-template').click();
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5000 && !document.querySelector('#tpl-gallery-grid .tpl-gallery-card-tags span')) await new Promise(r => setTimeout(r, 40));
+      try {
+        const chips = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card-tags span'));
+        const byTheme = inBothThemes(() => {
+          const values = chips.map(c => round2(textRatio(c)));
+          return { 'puce la moins contrastée': Math.min.apply(null, values), 'nombre de puces': chips.length };
+        });
+        const bad = failing({ light: { 'puce la moins contrastée': byTheme.light['puce la moins contrastée'] }, dark: { 'puce la moins contrastée': byTheme.dark['puce la moins contrastée'] } }, 4.5);
+        return { pass: bad.length === 0 && chips.length >= 4, notes: JSON.stringify({ bad, byTheme }) };
+      } finally {
+        const close = document.getElementById('tpl-gallery-close');
+        if (close) close.click();
+        if (modal) modal.style.display = 'none';
       }
     },
   });

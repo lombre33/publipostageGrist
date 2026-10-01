@@ -20,6 +20,13 @@
      le fond, ne donnerait que 3,08:1 au texte blanc. Survol : plus foncé, donc plus contrasté, dans les deux thèmes. */
   --accent-solid: #2f6fed;
   --accent-solid-hover: #2558c4;
+  /* Texte d'accent posé sur un fond teinté (--accent-soft, --surface-sunken) : --accent n'y atteint que 3,97 à 4,43:1. Plus foncé en clair, plus clair en sombre. */
+  --accent-ink: #2558c4;
+  /* Message de réussite (fond teinté de vert) : sans ces jetons, les règles retombaient sur leurs valeurs de secours claires, 3,65:1 pour le texte et un encadré
+     clair en thème sombre. */
+  --good: #146c48;
+  --good-soft: #e5f6ee;
+  --good-soft-border: #bfe6d3;
   --accent-soft: #e8f0fe;
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
@@ -54,6 +61,10 @@
   --accent-hover: #74a3f7;
   --accent-soft: #24324b;
   --accent-soft-border: #35507d;
+  --accent-ink: #74a3f7;
+  --good: #6fd3a3;
+  --good-soft: #163326;
+  --good-soft-border: #2c5c45;
   --danger: #f08a8a;
   --danger-soft: #3a2426;
   --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
@@ -77,6 +88,10 @@
     --accent-hover: #74a3f7;
     --accent-soft: #24324b;
     --accent-soft-border: #35507d;
+    --accent-ink: #74a3f7;
+    --good: #6fd3a3;
+    --good-soft: #163326;
+    --good-soft-border: #2c5c45;
     --danger: #f08a8a;
     --danger-soft: #3a2426;
     --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);

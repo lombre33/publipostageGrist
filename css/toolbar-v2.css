@@ -153,7 +153,7 @@
 }
 .v2-email-cci-toggle { font-size: 12.5px; font-weight: 600; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .v2-email-cci-toggle:hover { background: var(--surface-sunken); color: var(--text); }
-.v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent); }
+.v2-email-cci-toggle.is-active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
 /* Préfixées par #toolbar-top (même compte de spécificité que la règle générique #toolbar-top button de
    css/style.css qui, sinon, gagne et impose sa bordure transparente et son texte foncé - même piège et
    même remède que #toolbar-top #btn-save un peu plus bas dans ce fichier). Sans ce préfixe le bouton
@@ -277,13 +277,13 @@
 .macro-rule-value-wrap select.macro-rule-value { flex: 1 1 90px; min-width: 90px; }
 .macro-rule-value-advanced { flex: 1 1 90px; min-width: 90px; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-rule-value-advanced[hidden] { display: none; }
-.macro-rule-add { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--accent); background: none; border: none; padding: 4px 0; cursor: pointer; font-family: var(--font-ui); }
+.macro-rule-add { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--accent-ink); background: none; border: none; padding: 4px 0; cursor: pointer; font-family: var(--font-ui); }
 .macro-rule-add:hover { color: var(--accent-hover); text-decoration: underline; }
 .macro-slot-sep { border-top: 1px solid var(--border); margin: 8px 0; }
 .macro-slot-default-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
 .macro-slot-default-select { width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .macro-editor-add-slot { display: block; width: 100%; font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 7px; cursor: pointer; font-family: var(--font-ui); }
-.macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); }
+.macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 
 /* Panneau résumé (#macro-summary-container, index.html) affiché à la place de l'éditeur TipTap quand le modèle courant est un macro modèle
    (js/main.js:syncEditorVisibilityForMode) - reste sobre, l'utilisateur ne modifie sa composition qu'en rouvrant la modale ci-dessus. */
@@ -327,7 +327,7 @@
 .tpl-gallery-card img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-sunken); }
 .tpl-gallery-card-name { font-size: 13px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tpl-gallery-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-.tpl-gallery-card-tags span { font-size: 10.5px; font-weight: 600; color: var(--text-faint); background: var(--surface-sunken); border-radius: 8px; padding: 1px 7px; }
+.tpl-gallery-card-tags span { font-size: 10.5px; font-weight: 600; color: color-mix(in srgb, var(--text-faint) 80%, var(--text)); background: var(--surface-sunken); border-radius: 8px; padding: 1px 7px; }
 .tpl-gallery-empty { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-faint); text-align: center; padding: 30px 0; }
 
 .tpl-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
