@@ -75,6 +75,12 @@
     return pdfFilenameInput ? pdfFilenameInput.value.trim() : '';
   }
 
+  // Réglages du macro-modèle chargé que sa fenêtre de composition ne montre pas, tels qu'ils sont à l'écran : nom du fichier PDF, en-tête et pied de page, page (marges, sens, format).
+  // La fenêtre (js/macro-editor.js) et « Enregistrer sous » les réécrivent avec la composition ; remis à zéro, ils perdaient en silence ce que la personne avait réglé.
+  function macroSettingsOnScreen() {
+    return { nomFichierPDF: getPdfFilenameTemplate(), headerFooter: Editor.getHeaderFooterData(), marginsMm: PageLayout.getMarginsMm() };
+  }
+
   async function refreshTemplateList() {
     const templates = await Templates.loadAll();
     templateSelect.innerHTML = '';
@@ -458,7 +464,8 @@
       const tpl = id != null ? Templates.getCached().find(t => String(t.id) === String(id)) : null;
       const macroSlots = tpl && tpl.macroSlots ? tpl.macroSlots : { slots: [] };
       try {
-        const { id: newId } = await Templates.save(null, nom, JSON.stringify(macroSlots), '', null, null, 'macro', null);
+        const kept = macroSettingsOnScreen();
+        const { id: newId } = await Templates.save(null, nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
         await onMacroSaved(newId);
       } catch (e) {
         console.error('[main] échec de la copie du macro-modèle', e);
@@ -685,9 +692,15 @@
     if (Editor.isEditingHeaderFooter()) return;
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
+    // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition, réécrite telle que Grist vient de la rendre
+    // (remoteTpl, relu plus haut). Renommer le macro-modèle, changer son nom de PDF ou ses marges remplaçait sinon sa composition par un paragraphe vide, en moins de 3 s. Macro-modèle
+    // introuvable dans Grist (supprimé ailleurs) : rien n'est écrit, jamais une composition inventée.
+    const isMacro = currentTypeModele === 'macro';
+    if (isMacro && !remoteTpl) return;
     try {
-      const suiviModifications = await Editor.getSuiviModificationsForSave();
-      const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
+      const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
+      const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
+      const { dateModif } = await Templates.save(id, nom, contenu, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
       autosaveLastKnownDateModif = dateModif;
       autosaveDirty = false;
       updateSaveStatus();
@@ -1683,7 +1696,7 @@
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
-    MacroEditor.wire(onMacroSaved);
+    MacroEditor.wire(onMacroSaved, macroSettingsOnScreen);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));

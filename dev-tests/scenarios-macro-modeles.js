@@ -819,6 +819,221 @@
     },
   });
 
+
+  // --- Un macro-modèle ne perd plus sa composition ni ses réglages (01/10, trouvé en préparant la page des macro-modèles) -----------------------------------------------------------
+  // Avant : l'enregistrement automatique (js/main.js:autosaveTick) écrivait Editor.getHTML() - toujours vide pour un macro-modèle - à la place de sa composition dès que le nom, le nom du PDF
+  // ou une marge changeait : le Contenu devenait « <p></p> » en moins de 3 s. Et « Enregistrer » dans sa fenêtre (js/macro-editor.js) remettait à zéro le nom du PDF, l'en-tête / pied et les
+  // marges, comme « Enregistrer sous ». Ces cas passent par les vrais gestes (la vraie fenêtre, le vrai champ de nom, le vrai minuteur d'enregistrement automatique) et lisent la ligne Grist.
+  const MACRO_TABLE = 'Publipostage_Modeles';
+  const TICK_MS = 2500; // = AUTOSAVE_INTERVAL_MS (js/main.js), à garder synchronisé
+  const waitTicks = (h, n) => h.sleep(TICK_MS * n + 900);
+  const macroRow = id => window.__gristStub.getRow(MACRO_TABLE, id);
+  const AUTOSAVE_KEY = 'pp_autosave_enabled';
+  function setAutosave(enabled) { try { if (enabled) localStorage.removeItem(AUTOSAVE_KEY); else localStorage.setItem(AUTOSAVE_KEY, 'false'); } catch (e) { /* stockage indisponible */ } }
+
+  // Repart d'un document vierge (le vrai bouton « + » ouvre un document ; le harnais répond « Abandonner » à la question d'avant de quitter), crée deux modèles puis un macro-modèle par la
+  // VRAIE fenêtre de composition (page de garde = le premier modèle) : il est enregistré, sélectionné et chargé comme par une personne.
+  async function loadedMacro(h, nom) {
+    setAutosave(true);
+    await h.clickButton('btn-new');
+    await h.sleep(300);
+    const cover = await Templates.save(null, nom + ' - garde', '<p>Page de garde</p>', '', null, null, 'document', null);
+    const other = await Templates.save(null, nom + ' - autre', '<p>Autre page</p>', '', null, null, 'document', null);
+    await Templates.loadAll();
+    MacroEditor.openModal(null);
+    document.getElementById('macro-editor-name').value = nom;
+    const select = document.getElementById('macro-editor-cover');
+    select.value = String(cover.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('macro-editor-save').click();
+    await h.sleep(700);
+    return { id: Templates.getCurrentId(), coverId: cover.id, otherId: other.id };
+  }
+  async function leaveMacro(h) {
+    setAutosave(true);
+    await h.clickButton('btn-new');
+    await h.sleep(300);
+  }
+  const composition = row => { try { return JSON.parse(row.Contenu).slots; } catch (e) { return null; } };
+
+  cases.push({
+    id: 'macro_autosave_rename_keeps_the_composition',
+    description: 'Renommer un macro-modèle chargé (champ de nom) enregistre le nom et laisse sa composition intacte : avant, son Contenu devenait « <p></p> » en moins de 3 s',
+    run: async (h) => {
+      try {
+        const { id, coverId } = await loadedMacro(h, 'Macro renommée');
+        const before = macroRow(id).Contenu;
+        const name = document.getElementById('template-name');
+        name.value = 'Macro renommée 2';
+        name.dispatchEvent(new Event('input', { bubbles: true }));
+        await waitTicks(h, 2);
+        const row = macroRow(id);
+        const slots = composition(row);
+        const pass = row.Contenu === before && row.Nom === 'Macro renommée 2' && !!slots && slots.length === 1 && String(slots[0].modeleId) === String(coverId);
+        return { pass, notes: JSON.stringify({ before, after: row.Contenu, nom: row.Nom }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_autosave_margin_change_keeps_the_composition_and_saves_the_margins',
+    description: 'Changer une marge pendant qu\'un macro-modèle est chargé (Réglages) enregistre la marge et laisse la composition intacte',
+    run: async (h) => {
+      try {
+        const { id } = await loadedMacro(h, 'Macro marges');
+        const before = macroRow(id).Contenu;
+        PageLayout.setMarginsMm({ top: 31, right: 24, bottom: 26, left: 22 });
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+        await waitTicks(h, 2);
+        const row = macroRow(id);
+        const margins = JSON.parse(row.Margins || '{}');
+        const pass = row.Contenu === before && Math.abs(margins.top - 31) < .001 && Math.abs(margins.left - 22) < .001;
+        return { pass, notes: JSON.stringify({ before, after: row.Contenu, margins }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_autosave_pdf_filename_keeps_the_composition_and_saves_the_filename',
+    description: 'Saisir un nom de PDF pour un macro-modèle chargé enregistre ce nom et laisse la composition intacte',
+    run: async (h) => {
+      try {
+        const { id } = await loadedMacro(h, 'Macro nom PDF');
+        const before = macroRow(id).Contenu;
+        const field = document.getElementById('pdf-filename-template');
+        field.hidden = false;
+        field.value = 'Dossier-{Nom}';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        await waitTicks(h, 2);
+        const row = macroRow(id);
+        return { pass: row.Contenu === before && row.NomFichierPDF === 'Dossier-{Nom}', notes: JSON.stringify({ before, after: row.Contenu, pdf: row.NomFichierPDF }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_autosave_never_writes_an_empty_composition_when_the_macro_vanished',
+    description: 'Un macro-modèle supprimé ailleurs pendant qu\'il est chargé : l\'enregistrement automatique n\'écrit rien (ni composition vide, ni ligne recréée)',
+    run: async (h) => {
+      try {
+        const { id } = await loadedMacro(h, 'Macro disparue');
+        const rows = window.__gristStub.state.rows[MACRO_TABLE];
+        const before = rows.id.length;
+        const writes = () => window.__gristStub.countActions('UpdateRecord', MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
+        const writes0 = writes();
+        // Suppression « ailleurs » : directement dans l'état du faux Grist, sans passer par le journal d'actions de ce client.
+        const at = rows.id.indexOf(id);
+        Object.keys(rows).forEach(k => { if (Array.isArray(rows[k]) && at >= 0) rows[k].splice(at, 1); });
+        const name = document.getElementById('template-name');
+        name.value = 'Macro disparue 2';
+        name.dispatchEvent(new Event('input', { bubbles: true }));
+        await waitTicks(h, 2);
+        const after = rows.id.length;
+        const writes1 = writes();
+        return { pass: after === before - 1 && writes1 === writes0, notes: JSON.stringify({ before, after, writes0, writes1 }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_modal_save_keeps_pdf_filename_header_footer_and_page_settings',
+    description: 'Enregistrer dans la fenêtre d\'un macro-modèle change sa composition et garde son nom de PDF, son en-tête / pied et ses marges (avant : tout remis à zéro)',
+    run: async (h) => {
+      try {
+        const { id, otherId } = await loadedMacro(h, 'Macro fenêtre');
+        const hf = { enabled: true, differentFirstPage: false, header: { default: '<p>ENTETE DU MACRO</p>', first: '' }, footer: { default: '<p>PIED DU MACRO</p>', first: '' } };
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, {
+          NomFichierPDF: 'Macro-{Nom}', HeaderFooter: JSON.stringify(hf),
+          Margins: JSON.stringify({ top: 22, right: 21, bottom: 20, left: 19, orientation: 'portrait', format: 'A4' }),
+        });
+        await Templates.loadAll();
+        const select = document.getElementById('template-select');
+        select.value = String(id);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await h.sleep(700);
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(200);
+        const cover = document.getElementById('macro-editor-cover');
+        cover.value = String(otherId);
+        cover.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(700);
+        const row = macroRow(id);
+        const slots = composition(row);
+        const savedHf = JSON.parse(row.HeaderFooter || '{}');
+        const margins = JSON.parse(row.Margins || '{}');
+        const pass = !!slots && slots.length === 1 && String(slots[0].modeleId) === String(otherId)
+          && row.NomFichierPDF === 'Macro-{Nom}' && savedHf.enabled === true && savedHf.header.default.includes('ENTETE DU MACRO') && savedHf.footer.default.includes('PIED DU MACRO')
+          && margins.top === 22 && margins.right === 21 && margins.bottom === 20 && margins.left === 19;
+        return { pass, notes: JSON.stringify({ slots, pdf: row.NomFichierPDF, hf: savedHf, margins }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_modal_save_writes_the_settings_still_on_screen_when_autosave_is_off',
+    description: 'Enregistrement automatique coupé : une marge et un nom de PDF réglés à l\'écran pour un macro-modèle partent avec « Enregistrer » de sa fenêtre, composition comprise',
+    run: async (h) => {
+      try {
+        const { id, otherId } = await loadedMacro(h, 'Macro écran');
+        setAutosave(false);
+        PageLayout.setMarginsMm({ top: 33, right: 18, bottom: 18, left: 18 });
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+        const field = document.getElementById('pdf-filename-template');
+        field.value = 'Ecran-{Nom}';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        await waitTicks(h, 2);
+        const untouched = macroRow(id);
+        document.getElementById('btn-edit-macro').click();
+        await h.sleep(200);
+        const cover = document.getElementById('macro-editor-cover');
+        cover.value = String(otherId);
+        cover.dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(700);
+        const row = macroRow(id);
+        const margins = JSON.parse(row.Margins || '{}');
+        const slots = composition(row);
+        const pass = JSON.parse(untouched.Margins || '{}').top !== 33 && untouched.NomFichierPDF === ''
+          && Math.abs(margins.top - 33) < .001 && row.NomFichierPDF === 'Ecran-{Nom}' && !!slots && String(slots[0].modeleId) === String(otherId);
+        return { pass, notes: JSON.stringify({ untouchedPdf: untouched.NomFichierPDF, margins, pdf: row.NomFichierPDF, slots }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_save_as_copy_keeps_pdf_filename_header_footer_and_page_settings',
+    description: '« Enregistrer sous… » sur un macro-modèle en fait une copie qui garde son nom de PDF, son en-tête / pied et ses marges, avec la même composition',
+    run: async (h) => {
+      const dialogs = h.stubDialogs({ prompt: 'Copie du macro réglé' });
+      try {
+        const { id } = await loadedMacro(h, 'Macro à copier');
+        const hf = { enabled: true, differentFirstPage: false, header: { default: '<p>ENTETE COPIE</p>', first: '' }, footer: { default: '', first: '' } };
+        window.__gristStub.remoteWrite(MACRO_TABLE, id, {
+          NomFichierPDF: 'Copie-{Nom}', HeaderFooter: JSON.stringify(hf),
+          Margins: JSON.stringify({ top: 23, right: 17, bottom: 20, left: 17, orientation: 'portrait', format: 'A4' }),
+        });
+        await Templates.loadAll();
+        const select = document.getElementById('template-select');
+        select.value = String(id);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await h.sleep(700);
+        const original = macroRow(id);
+        const rowsBefore = window.__gristStub.state.rows[MACRO_TABLE].id.slice();
+        document.getElementById('v2-btn-save-as').click();
+        await h.sleep(900);
+        const rowsAfter = window.__gristStub.state.rows[MACRO_TABLE].id;
+        const copyId = rowsAfter.find(x => !rowsBefore.includes(x));
+        const copy = copyId != null ? macroRow(copyId) : null;
+        const copyHf = copy ? JSON.parse(copy.HeaderFooter || '{}') : {};
+        const copyMargins = copy ? JSON.parse(copy.Margins || '{}') : {};
+        const pass = !!copy && copy.Nom === 'Copie du macro réglé' && copy.Contenu === original.Contenu && copy.NomFichierPDF === 'Copie-{Nom}'
+          && copyHf.enabled === true && String(copyHf.header && copyHf.header.default).includes('ENTETE COPIE') && copyMargins.top === 23 && copyMargins.left === 17;
+        return { pass, notes: JSON.stringify({ copy: copy && { nom: copy.Nom, pdf: copy.NomFichierPDF, margins: copyMargins, hf: copyHf }, sameContent: copy && copy.Contenu === original.Contenu }) };
+      } finally { dialogs.restore(); await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();

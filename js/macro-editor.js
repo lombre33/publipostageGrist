@@ -210,12 +210,25 @@ const MacroEditor = (function () {
     return { slots: result };
   }
 
+  // Réglages du macro-modèle que cette fenêtre ne montre pas (nom du fichier PDF, en-tête et pied de page, page) : réécrits tels quels avec la composition. Remis à zéro (nom de PDF vide,
+  // en-tête retiré, marges par défaut), ils se perdaient à chaque « Enregistrer ». Le macro-modèle chargé donne ceux de l'écran (screenSettings, fourni par js/main.js : modifications
+  // pas encore enregistrées comprises), un autre ceux de Grist ; un nouveau macro-modèle repart des réglages par défaut.
+  let screenSettings = null;
+  function settingsToKeep() {
+    const none = { nomFichierPDF: '', headerFooter: null, marginsMm: null };
+    if (editingId == null) return none;
+    if (screenSettings && String(Templates.getCurrentId()) === String(editingId)) return screenSettings();
+    const stored = Templates.getCached().find(t => String(t.id) === String(editingId));
+    return stored ? { nomFichierPDF: stored.nomFichierPDF || '', headerFooter: stored.headerFooter, marginsMm: stored.marginsMm } : none;
+  }
+
   async function save(onSaved) {
     const nom = nameInput() ? nameInput().value.trim() : '';
     if (!nom) { alert(I18n.t('macro.modal.nameRequired')); return; }
     const macroSlots = collectSlotsForSave();
     try {
-      const { id } = await Templates.save(editingId, nom, JSON.stringify(macroSlots), '', null, null, 'macro', null);
+      const kept = settingsToKeep();
+      const { id } = await Templates.save(editingId, nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
       closeModal();
       if (onSaved) await onSaved(id);
     } catch (e) {
@@ -226,7 +239,9 @@ const MacroEditor = (function () {
 
   // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à l'init,
   // même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal).
-  function wire(onSaved) {
+  // getScreenSettings() : les réglages du macro-modèle chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js.
+  function wire(onSaved, getScreenSettings) {
+    screenSettings = typeof getScreenSettings === 'function' ? getScreenSettings : null;
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
     if (addSlotBtn) addSlotBtn.addEventListener('click', () => {
       slots.push({ type: 'conditional', rules: [{ column: '', operator: '=', value: '', modeleId: null }], defaultModeleId: null });
