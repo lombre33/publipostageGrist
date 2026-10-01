@@ -391,9 +391,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le texte d'une case est au milieu de sa hauteur (alignement vertical enregistré case par case avec le modèle ; haut et bas viendront avec la
   barre de la case), à l'identique dans l'éditeur, en Lecture et dans le PDF : une ligne plus haute que son texte reste haute, une grille
   large garde ses colonnes et défile à l'horizontale en Lecture au lieu d'être écrasée, aucune ligne vide ne la suit, et dans le PDF une
-  grille plus large que la page est ramenée à sa largeur. La barre
-  flottante de la case se pose sur la case courante (cadre plein, couleur d'accent) et « Supprimer le tableau » y est grisé. Depuis que l'export Excel est complet
+  grille plus large que la page est ramenée à sa largeur. La case
+  courante a son cadre plein, couleur d'accent ; la barre de la case est fixée dans une bande entre la barre d'outils et le plan de travail, jamais posée sur une case ni sur un bandeau
+  (un appui ou un glissé de souris tombe toujours sur la case visée), à la même place quelle que soit la case courante, masquée avec l'éditeur (Lecture, macro-modèle), et
+  « Supprimer le tableau » y est grisé. Depuis que l'export Excel est complet
   (une ligne, puis toutes les valeurs de la table), « Nouvelle grille » est dans le menu « + » de tout widget, sans rien dans l'adresse.
+- Sélectionner des cases en glissant la souris (demande d'Antoine du 01/10, « en mode tableau, laisser le clic appuyé pour sélectionner plusieurs cellules »), dans une grille comme dans un
+  tableau de document : appuyer sur une case puis glisser sélectionne le rectangle entre les deux cases, dans tous les sens, en partant du texte de la case aussi ; Maj + clic l'étend. Une case
+  sélectionnée reçoit un voile bleu translucide posé PAR-DESSUS son fond (un fond de case jaune cachait la sélection) et son texte garde au moins 4,5:1. Le pointeur tenu près d'un bord du plan
+  de travail, ou au-delà (sur la barre d'outils, hors du panneau), le fait défiler, d'autant plus vite qu'il s'éloigne, et la sélection suit la case qui arrive sous le bord ; les bandeaux
+  restent collés. Règle générale : rien de flottant ne se pose sur les cases d'un tableau pendant qu'on y travaille ; une barre reste dans sa bande ou hors du plan de travail. Les boutons de la
+  barre de la case se déclenchent aussi au clavier (Tab puis Entrée ou Espace), sans doubler le clic de la souris.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »

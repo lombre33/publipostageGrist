@@ -404,6 +404,7 @@ const Editor = (function () {
     editor.view.dom.parentNode.insertBefore(pageSheet, editor.view.dom);
     pageSheet.appendChild(editor.view.dom);
     GridEditor.attach(editor);
+    TableSelect.attach(editor);
 
     FloatingToolbars.setEditor(editor);
     MainToolbar.setEditor(editor);

@@ -521,20 +521,26 @@
   // === 5) Cellule courante, barre flottante de la case ===============================================================================================================
 
   cases.push({
-    id: 'grid_cell_bar_sits_on_the_current_cell_and_cannot_delete_the_table',
-    description: 'La barre flottante de la case se pose sur la case courante (pas sur le haut du tableau, qui peut être hors du panneau) ; « Supprimer le tableau » y est grisé, et la case courante a son cadre',
+    id: 'grid_cell_bar_is_docked_above_the_grid_and_cannot_delete_the_table',
+    description: 'La barre de la case est fixée dans sa bande, entre la barre d\'outils et le plan de travail : jamais posée sur une case (elle recouvrait les cases voisines de la case courante, un glissé de souris y tombait sur ses boutons), la même quelle que soit la case courante ; « Supprimer le tableau » y est grisé, et la case courante a son cadre',
     run: async (h) => inGrid(h, async () => {
-      await placeCursor(9, 3);
-      await sleep(250);
-      const del = document.querySelector('.v2-floating-toolbar button[data-action="table-del"]');
-      const bar = del && del.closest('.v2-floating-toolbar');
-      const cell = GridEditor.currentCellDom();
-      if (!bar || !cell) return { pass: false, notes: 'barre ou case introuvable' };
-      const b = bar.getBoundingClientRect(); const c = cell.getBoundingClientRect();
-      const sits = near(b.bottom + 8, c.top, 4) || near(b.top, c.bottom + 8, 4);
-      const framed = cell.classList.contains('v2-grid-cur') && getComputedStyle(cell).outlineStyle === 'solid';
-      const tableTop = document.querySelector('.tiptap table').getBoundingClientRect().top;
-      return { pass: bar.classList.contains('visible') && sits && framed && del.classList.contains('v2-hf-locked') && Math.abs(b.bottom - tableTop) > 40, notes: JSON.stringify({ visible: bar.classList.contains('visible'), bar: [b.top, b.bottom], cell: [c.top, c.bottom], tableTop, framed, delLocked: del.classList.contains('v2-hf-locked') }) };
+      const report = [];
+      for (const [row, col] of [[9, 3], [0, 0], [1, 5]]) {
+        await placeCursor(row, col);
+        await sleep(250);
+        const del = document.querySelector('.v2-floating-toolbar button[data-action="table-del"]');
+        const bar = del && del.closest('.v2-floating-toolbar');
+        const dock = document.getElementById('v2-cell-bar-dock');
+        const cell = GridEditor.currentCellDom();
+        if (!bar || !cell || !dock) return { pass: false, notes: 'barre, bande ou case introuvable' };
+        const b = bar.getBoundingClientRect();
+        const box = document.getElementById('editor-container').getBoundingClientRect();
+        const covered = Array.from(document.querySelectorAll('.tiptap td, .tiptap th')).filter(td => { const c = td.getBoundingClientRect(); return c.width > 0 && c.right > b.left && c.left < b.right && c.bottom > b.top && c.top < b.bottom; }).length;
+        const framed = cell.classList.contains('v2-grid-cur') && getComputedStyle(cell).outlineStyle === 'solid';
+        report.push({ at: row + ',' + col, visible: bar.classList.contains('visible') && b.width > 0, docked: bar.classList.contains('docked') && dock.contains(bar), aboveGrid: b.bottom <= box.top + 1, covered, framed, delLocked: del.classList.contains('v2-hf-locked'), top: Math.round(b.top) });
+      }
+      const sameSpot = report.every(r => r.top === report[0].top);
+      return { pass: report.every(r => r.visible && r.docked && r.aboveGrid && r.covered === 0 && r.framed && r.delLocked) && sameSpot, notes: JSON.stringify(report) };
     }),
   });
 

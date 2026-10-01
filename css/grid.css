@@ -60,3 +60,10 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
 
 /* --- Barre d'outils --- Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré. Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
 body.pp-grid-mode #v2-a4-toggle { opacity: .35; pointer-events: none; }
+
+/* --- Barre de la case --- Fixée dans cette bande (js/floating-toolbars.js, EditorCore.createFloatingPanel : dock) entre la barre d'outils et le plan de travail, jamais posée sur une
+   case : flottante, elle recouvrait les cases voisines de la case courante, un appui dessus tombait sur ses boutons et ni un clic ni un glissé ne pouvait plus les atteindre. La bande
+   se montre tant qu'une grille est dans l'éditeur (pas en Lecture ni sur le résumé d'un macro-modèle, `pp-editor-hidden` : js/main.js:syncEditorVisibilityForMode). */
+.v2-cell-bar-dock { display: none; flex: none; align-items: center; box-sizing: border-box; min-height: 34px; padding: 3px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
+.v2-cell-bar-dock .v2-floating-toolbar { position: static; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }

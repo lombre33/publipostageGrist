@@ -31,7 +31,13 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 - Suivi des modifications coupé et grisé. Barre d'outils : `GRID_LOCKED_IDS` dans `js/main-toolbar.js`, appliqué APRÈS tous les autres verrouillages (le dernier gagne) ;
   grisés : Tableau, Deux colonnes, Sommaire, Saut de page (temporaire), Citation, Bloc de code, Encadré, Bloc de signature, suivi ×3, aperçu A4. Le garde-fou d'un clic sur un bouton grisé
   (`wireLockedClickGuard`) tient aussi pour Entrée et Espace.
-- Barre flottante de la case : ancrée sur la case courante (`GridEditor.currentCellDom`), « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés.
+- Barre de la case : fixée dans une bande (`#v2-cell-bar-dock`, `GridEditor.barSlot`) entre la barre d'outils et le plan de travail, jamais posée sur une case (01/10, glissé de souris : la barre flottante
+  recouvrait les cases voisines de la case courante ; `createFloatingPanel` a `dock` / `undock`, la branche « grille » de `wireTableFloatingToolbar` l'y range) ; masquée avec l'éditeur (`pp-editor-hidden` posé par
+  `syncEditorVisibilityForMode`) ; hors d'une grille elle flotte comme avant. « Supprimer le tableau » grisé ; barre de l'image : calques devant/derrière grisés. Fusion et scission, bordures et alignement vertical
+  (lot B) s'y ajoutent, leur place est déjà là.
+- Sélection de cases à la souris (01/10) : `js/table-select.js` fait défiler le plan de travail quand le pointeur, bouton appuyé dans une case, est près d'un bord (ou au-delà) et prolonge la sélection de cases
+  (`CellSelection`) jusqu'à la case qui arrive sous le bord ; le voile `.selectedCell::after` (`css/editor-v2.css`) rend la sélection visible sur une case colorée. Tableau de document et grille. Limite : le défilement
+  horizontal d'un `.tableWrapper` d'un document classique n'est pas suivi (seul `#editor-container` défile ; un tableau de document est ramené à la largeur de la page).
 - Alignement vertical : attribut `verticalAlign` de `tableCell` et `tableHeader` (`GridEditor.withCellAttributes`), `null` hors grille, « au milieu » par défaut dans une grille
   (`fixDimensions` le pose sur toute case qui n'en a pas ou qui a une valeur inconnue). Enregistré dans `data-valign` + `style="vertical-align: …"` ; lu dans `data-valign` seulement,
   jamais dans le `vertical-align` d'un tableau collé d'Excel (l'export n'applique l'alignement que dans une grille).
@@ -91,3 +97,6 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   la Lecture d'une grille large au vrai bouton « Lecture » (colonnes gardées, défilement horizontal, texte au milieu, bulle résolue, pas de ligne vide, contraste du texte) ;
   lots D et E : les menus d'export au survol (cinq lignes dans « Qualité PDF » et deux dans « Exporter en PDF », atteignables dans le panneau, grisées selon le type de modèle, contraste), un vrai clic sur « Exporter en Excel… »
   qui télécharge un .xlsx, un vrai clic sur les deux lignes « toutes les valeurs » (confirmation dans le panneau, puis l'archive ZIP et le classeur unique) et un vrai clic sur une ligne grisée qui ne télécharge rien.
+- `dev-tests/verify-table-select-mouse.mjs` (script Node `tableSelectMouse`, 67 mesures) : glisser pour sélectionner des cases à la vraie souris à 700×400, clair et sombre, tableau de document puis grille : rectangle exact dans six sens, sur du contenu réel (bulles, zone répétée,
+  condition, liens, images, cases fusionnées, suivi allumé, barre ouverte), voile visible sur une case colorée et texte lisible, défilement tenu au bord du panneau (document, grille de 15 lignes, grille de 12 colonnes), barre de la case dans sa bande qui ne recouvre aucune case (48 glissés), un clic sur
+  la barre agit une fois, Entrée et Espace aussi, Lecture, hors grille la barre flotte comme avant. 40 de ces 67 mesures échouent sur le code d'avant (`0dc5e4c`).

@@ -166,6 +166,8 @@
     const showEditor = currentMode === 'edit' && currentTypeModele !== 'macro';
     const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
     editorContainer.style.display = showEditor ? 'block' : 'none';
+    // La bande de la barre de la case d'une grille (css/grid.css) disparaît avec l'éditeur : Lecture, résumé d'un macro-modèle.
+    document.body.classList.toggle('pp-editor-hidden', !showEditor);
     if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
     // Les barres flottantes d'une bulle, d'un tableau ou d'une image sont ancrées dans l'éditeur : masqué (Lecture, résumé d'un macro-modèle), elles n'ont plus rien à
     // montrer. Sans cela la barre d'une bulle restée sélectionnée sautait en haut à gauche (8, 8), par-dessus les boutons Lecture et Édition : un clic réel sur « Lecture »

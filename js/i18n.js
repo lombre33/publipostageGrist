@@ -72,6 +72,7 @@ const I18n = (function () {
     'grid.selectAll': { fr: 'Tout sélectionner', en: 'Select all' },
     'grid.resizeColumn': { fr: 'Tirer pour régler la largeur de la colonne', en: 'Drag to set the column width' },
     'grid.resizeRow': { fr: 'Tirer pour régler la hauteur de la ligne', en: 'Drag to set the row height' },
+    'grid.cellBar': { fr: 'Barre de la case', en: 'Cell toolbar' },
     'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },

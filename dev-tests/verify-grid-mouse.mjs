@@ -290,6 +290,9 @@ async function runTheme(theme) {
   await page.keyboard.type('Une ligne de texte assez longue pour passer sur trois lignes dans cette case');
   await page.waitForTimeout(250);
   const natural = await rowHeightNow(page, 1);
+  // La bande de la barre de la case (35 px) a descendu la grille : le trait sous la ligne 2, haute de ~148 px, est sous le bord du panneau - on fait défiler d'autant, comme la personne.
+  await page.evaluate(() => { const c = document.getElementById('editor-container'); c.scrollTop += 70; });
+  await page.waitForTimeout(150);
   const handle2 = await boxOf(page, '.v2-grid-rowhead:nth-child(2) .v2-grid-handle');
   await realDrag(page, { x: handle2.x, y: Math.min(handle2.y, HEIGHT - 6) }, { x: handle2.x, y: Math.min(handle2.y, HEIGHT - 6) - 150 });
   const floorState = await gridState(page);
@@ -371,30 +374,29 @@ async function runTheme(theme) {
   const ctrlA = await gridState(page);
   check(`${label} - Ctrl+A sélectionne les 90 cases (pas le document entier)`, ctrlA.selected === 90, ctrlA.selected);
 
-  // 7) Barre de la case : posée contre la case courante, dans le panneau, hors des bandeaux.
+  // 7) Barre de la case : fixée dans sa bande au-dessus de la grille (jamais sur une case ni sur un bandeau), la même quelle que soit la case courante.
   await freshGrid(page);
-  await clickInPanel(page, '.tiptap table tr:nth-child(7) td:nth-child(3)', `${label} - barre`);
+  await clickInPanel(page, '.tiptap table tr:nth-child(5) td:nth-child(3)', `${label} - barre`);
   await page.waitForTimeout(350);
-  const bar = await page.evaluate(() => {
+  const barOf = () => page.evaluate(() => {
     const del = document.querySelector('.v2-floating-toolbar button[data-action="table-del"]');
     const el = del && del.closest('.v2-floating-toolbar');
     if (!el) return null;
-    const b = el.getBoundingClientRect(); const c = GridEditor.currentCellDom().getBoundingClientRect();
+    const b = el.getBoundingClientRect(); const dock = document.getElementById('v2-cell-bar-dock');
     const box = document.getElementById('editor-container').getBoundingClientRect();
-    const corner = document.querySelector('.v2-grid-corner').getBoundingClientRect();
-    return { visible: el.classList.contains('visible'), left: b.left, right: b.right, top: b.top, bottom: b.bottom, cellTop: c.top, cellBottom: c.bottom, boxTop: box.top, stripBottom: corner.bottom, stripRight: corner.right, delGrey: del.classList.contains('v2-hf-locked') };
+    const overlap = r => r.width > 0 && r.right > b.left && r.left < b.right && r.bottom > b.top && r.top < b.bottom;
+    const cells = Array.from(document.querySelectorAll('.tiptap td, .tiptap th')).filter(td => overlap(td.getBoundingClientRect())).length;
+    const strips = Array.from(document.querySelectorAll('.v2-grid-corner, .v2-grid-cols, .v2-grid-rows')).filter(s => overlap(s.getBoundingClientRect())).length;
+    return { visible: el.classList.contains('visible'), inDock: el.classList.contains('docked') && !!dock && dock.contains(el), left: b.left, right: b.right, top: b.top, bottom: b.bottom, boxTop: box.top, cells, strips, delGrey: del.classList.contains('v2-hf-locked') };
   });
-  check(`${label} - la barre de la case est affichée tout contre la case courante, entièrement dans le panneau et hors des bandeaux, « Supprimer le tableau » grisé`,
-    !!bar && bar.visible && bar.left >= bar.stripRight && bar.right <= WIDTH && bar.top >= bar.stripBottom && (Math.abs(bar.bottom + 8 - bar.cellTop) <= 4 || Math.abs(bar.top - (bar.cellBottom + 8)) <= 4) && bar.delGrey, bar);
+  const bar = await barOf();
+  check(`${label} - la barre de la case est fixée dans sa bande au-dessus de la grille, entièrement dans le panneau, ne recouvre ni case ni bandeau, « Supprimer le tableau » grisé`,
+    !!bar && bar.visible && bar.inDock && bar.left >= 0 && bar.right <= WIDTH && bar.bottom <= bar.boxTop + 1 && bar.cells === 0 && bar.strips === 0 && bar.delGrey, bar);
   await clickInPanel(page, '.tiptap table tr:nth-child(2) td:nth-child(1)', `${label} - barre en haut`);
   await page.waitForTimeout(350);
-  const barTop = await page.evaluate(() => {
-    const del = document.querySelector('.v2-floating-toolbar button[data-action="table-del"]');
-    const el = del.closest('.v2-floating-toolbar'); const b = el.getBoundingClientRect(); const corner = document.querySelector('.v2-grid-corner').getBoundingClientRect(); const c = GridEditor.currentCellDom().getBoundingClientRect();
-    return { top: b.top, left: b.left, bottom: b.bottom, stripBottom: corner.bottom, stripRight: corner.right, cellBottom: c.bottom };
-  });
-  check(`${label} - curseur en 2e ligne, colonne A : la barre passe SOUS la case, ni sur le bandeau des lettres ni sur celui des numéros`,
-    barTop.top >= barTop.cellBottom && barTop.left >= barTop.stripRight && barTop.top >= barTop.stripBottom, barTop);
+  const barTop = await barOf();
+  check(`${label} - curseur en 2e ligne, colonne A : la barre reste à la même place, elle ne passe ni sur la case, ni sur le bandeau des lettres, ni sur celui des numéros`,
+    !!barTop && barTop.inDock && barTop.top === bar.top && barTop.cells === 0 && barTop.strips === 0, { bar, barTop });
 
   // 8) Les bandeaux restent collés quand on défile à la molette (vertical puis horizontal).
   await freshGrid(page);

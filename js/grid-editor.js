@@ -617,7 +617,12 @@ const GridEditor = (function () {
     document.addEventListener('keydown', onKey, true);
   }
 
-  // Barres flottantes (case, image, bulle) : elles ne recouvrent jamais les bandeaux. Posée au-dessus de la première ligne, la barre de la case cachait les lettres - ni clic
+  // La bande où la barre de la case est fixée (index.html : #v2-cell-bar-dock, css/grid.css), entre la barre d'outils et le plan de travail : dans une grille cette barre ne flotte
+  // plus sur la case courante. Posée sur une case (au-dessus ou en dessous), elle recouvrait les cases voisines : un appui dessus tombait sur ses boutons, et ni un clic ni un
+  // glissé ne pouvait plus les atteindre (vu à la vraie souris à 700x400, demande d'Antoine : sélectionner plusieurs cases en glissant).
+  function barSlot() { return document.getElementById('v2-cell-bar-dock'); }
+
+  // Barres flottantes d'image et de bulle : elles ne recouvrent jamais les bandeaux. Posée au-dessus de la première ligne, une barre cachait les lettres - ni clic
   // sur une lettre, ni poignée à tirer tant que le curseur était dans la première ligne (vu à la vraie souris à 700x400). floating-ui la garde dans le plan de travail,
   // hors des deux bandeaux : elle passe sous la case quand il n'y a pas la place au-dessus, et reste à droite du bandeau des numéros. Fonction relue à chaque calcul.
   function floatingOptions() {
@@ -682,6 +687,6 @@ const GridEditor = (function () {
   return {
     TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
     configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
-    currentCellDom, columnWidths, colName, floatingOptions,
+    currentCellDom, columnWidths, colName, floatingOptions, barSlot,
   };
 })();

@@ -39,23 +39,56 @@ const EditorCore = (function () {
     el.className = className;
     el.innerHTML = innerHTML;
     // mousedown+preventDefault : évite de perdre le focus/la sélection ProseMirror avant que l'action ne s'exécute.
+    let pressedBtn = null;
     el.addEventListener('mousedown', (event) => {
       const btn = event.target.closest('button[data-action]');
       if (!btn) return;
       event.preventDefault();
+      pressedBtn = btn;
+      // Le bouton n'est « appuyé » que jusqu'au relâchement, où qu'il ait lieu (le clic qui suit, s'il y en a un, passe avant la minuterie).
+      document.addEventListener('mouseup', () => { setTimeout(() => { pressedBtn = null; }, 0); }, { once: true, capture: true });
       onAction(btn.dataset.action);
     });
     if (onInput) el.addEventListener('input', (event) => {
       const input = event.target.closest('[data-role]');
       if (input) onInput(input.dataset.role, input.value);
     });
+    // Un bouton de la barre se déclenche aussi au clavier (Tab puis Entrée ou Espace) : ce clic-là n'est précédé d'aucun mousedown ; celui de la souris est déjà passé par
+    // le mousedown ci-dessus.
+    el.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-action]');
+      if (!btn) return;
+      if (pressedBtn === btn) { pressedBtn = null; return; }
+      onAction(btn.dataset.action);
+    });
     document.body.appendChild(el);
     let stopAutoUpdate = null;
+    let docked = false;
+    function undock() {
+      if (!docked) return;
+      docked = false;
+      el.classList.remove('docked', 'visible');
+      el.style.left = '0px';
+      el.style.top = '0px';
+      document.body.appendChild(el);
+    }
     return {
       el,
+      // Fixée dans `slot` (une bande de la page, hors du défilement) au lieu de flotter : dans une grille la barre de la case posée sur la case courante recouvrait les cases
+      // voisines, un appui dessus tombait sur ses boutons et rien ne pouvait plus être sélectionné à la souris (js/grid-editor.js, css/grid.css). Une barre fixée reste
+      // visible : hide() n'y fait plus rien, c'est la bande qui se montre ou se cache (css/grid.css).
+      dock(slot) {
+        if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
+        if (el.parentElement !== slot) slot.appendChild(el);
+        docked = true;
+        el.classList.add('docked', 'visible');
+      },
+      undock,
+      isDocked() { return docked; },
       // `options` (facultatif, valeur ou fonction relue à chaque calcul) : { flip, shift } passés tels quels aux intergiciels de floating-ui - la grille s'en sert pour que
       // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions). Sans lui, rien ne change.
       show(referenceEl, options) {
+        undock();
         el.classList.add('visible');
         const update = () => {
           const opts = (typeof options === 'function' ? options() : options) || {};
@@ -68,6 +101,7 @@ const EditorCore = (function () {
         stopAutoUpdate = floatingUi.autoUpdate(referenceEl, el, update);
       },
       hide() {
+        if (docked) return;
         el.classList.remove('visible');
         if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
       },

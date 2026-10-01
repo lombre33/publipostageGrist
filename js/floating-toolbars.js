@@ -120,6 +120,21 @@ const FloatingToolbars = (function () {
     });
     EditorCore.registerFloatingPanel(panel);
     const check = () => {
+      // Une grille (js/grid-editor.js) : la barre est fixée dans sa bande au-dessus du tableau (css/grid.css) et y reste, focus ou non - posée sur la case courante elle
+      // recouvrait les cases voisines (un appui dessus tombait sur ses boutons, rien ne se sélectionnait à la souris). « Supprimer le tableau » est grisé (le garde-fou de la
+      // grille le refuserait de toute façon).
+      if (GridEditor.isActive()) {
+        const slot = GridEditor.barSlot();
+        if (slot) {
+          panel.dock(slot);
+          const tableDel = panel.el.querySelector('button[data-action="table-del"]');
+          if (tableDel) tableDel.classList.add('v2-hf-locked');
+          const attrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
+          EditorCore.setColorBar('v2-table-fill-bar', attrs.backgroundColor || null);
+          return;
+        }
+      }
+      if (panel.isDocked()) panel.undock();
       // editor.isActive(...) ne change pas seul quand le focus quitte l'éditeur - vérifier hasFocus() explicitement pour fermer le panneau au clic hors de
       // l'éditeur.
       if (!editor.view.hasFocus()) { panel.hide(); return; }
@@ -132,12 +147,9 @@ const FloatingToolbars = (function () {
       const dom = editor.view.nodeDOM($from.before(tableDepth));
       if (!dom) { panel.hide(); return; }
       const tableEl = dom.tagName === 'TABLE' ? dom : (dom.querySelector && dom.querySelector('table')) || dom;
-      // Une grille (js/grid-editor.js) : le tableau EST le modèle, et il peut dépasser le panneau dans les deux sens - la barre se pose sur la case courante, et
-      // « Supprimer le tableau » est grisé (le garde-fou de la grille le refuserait de toute façon).
-      const inGrid = GridEditor.isActive();
-      panel.show((inGrid && GridEditor.currentCellDom()) || tableEl, GridEditor.floatingOptions);
+      panel.show(tableEl);
       const tableDelBtn = panel.el.querySelector('button[data-action="table-del"]');
-      if (tableDelBtn) tableDelBtn.classList.toggle('v2-hf-locked', inGrid);
+      if (tableDelBtn) tableDelBtn.classList.remove('v2-hf-locked');
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
       EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };
