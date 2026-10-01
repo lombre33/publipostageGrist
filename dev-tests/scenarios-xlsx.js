@@ -503,7 +503,7 @@
   });
 
   // --- 10) Menu --------------------------------------------------------------------------------------------------------------------------------------------------------
-  const ROWS = { docx: 'v2-btn-export-docx', docxBatch: 'v2-btn-export-docx-batch', xlsx: 'v2-btn-export-xlsx' };
+  const ROWS = { docx: 'v2-btn-export-docx', docxBatch: 'v2-btn-export-docx-batch', xlsx: 'v2-btn-export-xlsx', xlsxBatch: 'v2-btn-export-xlsx-batch', xlsxSingle: 'v2-btn-export-xlsx-single' };
   const rowState = id => { const el = document.getElementById(id); return el ? { greyed: el.classList.contains('v2-hover-row-disabled'), aria: el.getAttribute('aria-disabled') } : null; };
   async function enterGrid(h) {
     await h.resetEditor();
@@ -519,33 +519,39 @@
   }
   cases.push({
     id: 'xlsx_menu_rows_are_greyed_by_model_type_never_removed',
-    description: 'Dans le menu d\'export, « Exporter en Excel… » est grisée hors grille et les deux lignes Word sont grisées dans une grille : aucune ne disparaît ; le clic d\'une ligne grisée ne lance aucun export',
+    description: 'Dans le menu d\'export, les trois lignes Excel (une valeur, ZIP, classeur unique) sont grisées hors grille et les deux lignes Word le sont dans une grille : aucune ne disparaît ; le clic d\'une ligne grisée ne lance aucun export et n\'ouvre aucune confirmation',
     run: async (h) => {
       await seed(h);
       const calls = { xlsx: 0, docx: 0 };
       const orig = { xlsx: XlsxExport.exportCurrentRecord, docx: DocxExport.exportCurrentRecord };
       XlsxExport.exportCurrentRecord = async () => { calls.xlsx++; };
       DocxExport.exportCurrentRecord = async () => { calls.docx++; };
+      const dialogs = h.stubDialogs({ confirm: false });
+      const excelRows = [ROWS.xlsx, ROWS.xlsxBatch, ROWS.xlsxSingle];
       const bad = [];
       try {
         await leaveGrid(h);
-        const doc = { docx: rowState(ROWS.docx), docxBatch: rowState(ROWS.docxBatch), xlsx: rowState(ROWS.xlsx) };
-        if (doc.xlsx === null || !doc.xlsx.greyed || doc.xlsx.aria !== 'true') bad.push('document : Excel=' + JSON.stringify(doc.xlsx));
+        const doc = { docx: rowState(ROWS.docx), docxBatch: rowState(ROWS.docxBatch) };
+        excelRows.forEach(id => { const st = rowState(id); if (st === null || !st.greyed || st.aria !== 'true') bad.push('document : ' + id + '=' + JSON.stringify(st)); });
         if (!doc.docx || doc.docx.greyed || !doc.docxBatch || doc.docxBatch.greyed) bad.push('document : Word=' + JSON.stringify([doc.docx, doc.docxBatch]));
-        document.getElementById(ROWS.xlsx).click(); await sleep(150);
+        excelRows.forEach(id => document.getElementById(id).click());
+        await sleep(250);
         if (calls.xlsx) bad.push('clic sur Excel grisé a lancé l\'export');
+        if (dialogs.asked.length) bad.push('clic sur un Excel grisé a ouvert une confirmation : ' + JSON.stringify(dialogs.asked.map(a => a.message)));
         document.getElementById(ROWS.docx).click(); await sleep(250);
         if (!calls.docx) bad.push('clic sur Word d\'un document n\'a rien lancé');
         calls.docx = 0;
         await enterGrid(h);
-        const grid = { docx: rowState(ROWS.docx), docxBatch: rowState(ROWS.docxBatch), xlsx: rowState(ROWS.xlsx) };
-        if (!grid.xlsx || grid.xlsx.greyed || grid.xlsx.aria !== null) bad.push('grille : Excel=' + JSON.stringify(grid.xlsx));
+        excelRows.forEach(id => { const st = rowState(id); if (!st || st.greyed || st.aria !== null) bad.push('grille : ' + id + '=' + JSON.stringify(st)); });
+        const grid = { docx: rowState(ROWS.docx), docxBatch: rowState(ROWS.docxBatch) };
         if (!grid.docx || !grid.docx.greyed || grid.docx.aria !== 'true' || !grid.docxBatch || !grid.docxBatch.greyed || grid.docxBatch.aria !== 'true') bad.push('grille : Word=' + JSON.stringify([grid.docx, grid.docxBatch]));
         document.getElementById(ROWS.docx).click(); await sleep(150);
         document.getElementById(ROWS.docxBatch).click(); await sleep(150);
         if (calls.docx) bad.push('clic sur Word grisé (grille) a lancé l\'export');
+        if (dialogs.asked.length) bad.push('clic sur un Word grisé (grille) a ouvert une confirmation');
         await leaveGrid(h);
       } finally {
+        dialogs.restore();
         XlsxExport.exportCurrentRecord = orig.xlsx; DocxExport.exportCurrentRecord = orig.docx;
         GridEditor.setActive(false);
       }
@@ -627,6 +633,253 @@
         ExportCommon.downloadBlob = origDownload;
         window.__gristStub.fireRecord(Object.assign({}, RECORD), TABLE);
         await sleep(80);
+        await leaveGrid(h);
+        GridEditor.setActive(false);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  // --- 11) Toutes les valeurs de la table : archive ZIP de classeurs et classeur unique -------------------------------------------------------------------------------
+  const VALUES = [
+    { id: 1, Nom: 'Alpha Durand', Montant: 1234.5 },
+    { id: 2, Nom: 'Bravo Martin', Montant: 99 },
+    { id: 3, Nom: 'Charlie Petit', Montant: 0.5 },
+  ];
+  // Trois valeurs dans la table, la première affichée, et la grille [Nom | Montant] / [bulle Nom | bulle Montant] chargée comme un modèle enregistré.
+  async function seedValues(h, values) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, { Nom: 'Text', Montant: 'Numeric', Quantite: 'Int', Date: 'Date', Zero: 'Numeric', Gros: 'Int', Ancienne: 'Date', Mots: 'Text' });
+    stub.setRows(TABLE, values);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, values[0] || RECORD), TABLE);
+    await sleep(100);
+    await enterGrid(h);
+    await loadGrid(gridHtml([140, 100], [30, 30], [['Nom', 'Montant'], [badge('Nom'), badge('Montant')]]));
+  }
+  // Clique la ligne du menu et attend le téléchargement (ou la fin de l'export quand la confirmation est refusée) : la confirmation notée et acceptée ou non, le <a download>
+  // intercepté, chaque message d'état affiché. Même principe que dev-tests/scenarios-pdf-batch.js.
+  async function clickExportRow(h, rowId, accept) {
+    const downloads = [];
+    const confirms = [];
+    const blobsByUrl = new Map();
+    const origCreate = URL.createObjectURL;
+    const origClick = HTMLAnchorElement.prototype.click;
+    const dialogs = h.stubDialogs({ confirm: opts => { confirms.push({ title: opts.title, message: opts.message }); return accept !== false; } });
+    URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
+      return origClick.call(this);
+    };
+    const statusEl = document.getElementById('status-msg');
+    const statuses = [];
+    const statusObserver = new MutationObserver(() => { if (statuses[statuses.length - 1] !== statusEl.textContent) statuses.push(statusEl.textContent); });
+    statusObserver.observe(statusEl, { childList: true, characterData: true, subtree: true });
+    try {
+      document.getElementById(rowId).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const startedAt = Date.now();
+      while (accept !== false && !downloads.length && Date.now() - startedAt < 60000) await sleep(100);
+      await sleep(accept === false ? 400 : 80);
+    } finally {
+      statusObserver.disconnect();
+      dialogs.restore();
+      URL.createObjectURL = origCreate;
+      HTMLAnchorElement.prototype.click = origClick;
+    }
+    return { downloads, confirms, statuses, status: statusEl.textContent };
+  }
+  const withTemplate = async (value, fn) => {
+    const input = document.getElementById('pdf-filename-template');
+    const saved = input.value;
+    input.value = value;
+    try { return await fn(); } finally { input.value = saved; }
+  };
+  const FILE_TEMPLATE = 'Fiche #' + TABLE + '.Nom';
+
+  cases.push({
+    id: 'xlsx_batch_zip_has_one_workbook_per_value_named_like_the_pdf_files',
+    description: '« Exporter toutes les valeurs de la table en Excel (ZIP)… » télécharge une archive « <table>-export-xlsx.zip » avec un classeur par valeur (nommé par le modèle de nom de fichier), chacun d\'une feuille avec SES valeurs (vrais nombres) ; la confirmation, la progression et la fin parlent d\'Excel, jamais de PDF ni de lignes',
+    run: async (h) => {
+      await seedValues(h, VALUES);
+      const bad = [];
+      try {
+        const res = await withTemplate(FILE_TEMPLATE, () => clickExportRow(h, ROWS.xlsxBatch));
+        const dl = res.downloads[0];
+        if (res.downloads.length !== 1 || !dl) return { pass: false, notes: 'téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses) };
+        if (dl.name !== TABLE + '-export-xlsx.zip') bad.push('nom de l\'archive=' + dl.name);
+        const zip = await JSZip.loadAsync(await dl.blob.arrayBuffer());
+        const files = Object.keys(zip.files).sort();
+        const expected = VALUES.map(v => 'Fiche ' + v.Nom + '.xlsx').sort();
+        if (JSON.stringify(files) !== JSON.stringify(expected)) bad.push('fichiers=' + JSON.stringify(files));
+        for (const v of VALUES) {
+          const entry = zip.file('Fiche ' + v.Nom + '.xlsx');
+          if (!entry) continue;
+          const x = await openXlsx(await entry.async('blob'));
+          if (x.sheets.length !== 1) bad.push(v.Nom + ' : ' + x.sheets.length + ' feuilles');
+          else if (x.sheet.cell('A2').value !== v.Nom || x.sheet.cell('B2').value !== v.Montant) bad.push(v.Nom + ' : contenu=' + x.sheet.text());
+          else if (x.sheet.name !== 'Fiche ' + v.Nom) bad.push(v.Nom + ' : feuille=' + x.sheet.name);
+        }
+        const messages = [...res.confirms.map(c => c.title + ' ' + c.message), ...res.statuses];
+        if (res.confirms.length !== 1 || !/Excel/.test(res.confirms[0].message) || !/3/.test(res.confirms[0].message)) bad.push('confirmation=' + JSON.stringify(res.confirms));
+        if (messages.some(m => /pdf|docx|ligne/i.test(m))) bad.push('un message parle de PDF, DOCX ou de lignes : ' + JSON.stringify(messages.filter(m => /pdf|docx|ligne/i.test(m))));
+        if (!res.statuses.some(m => /Excel/.test(m) && /1\/3/.test(m))) bad.push('progression=' + JSON.stringify(res.statuses));
+        if (res.status !== I18n.t('status.batchExportDoneXlsx', { ok: 3 })) bad.push('fin=' + res.status);
+        const locked = [ROWS.xlsx, ROWS.xlsxBatch, ROWS.xlsxSingle, 'btn-export-pdf'].filter(id => document.getElementById(id).style.opacity !== '');
+        if (locked.length) bad.push('contrôles restés verrouillés : ' + locked.join(', '));
+      } finally {
+        await leaveGrid(h);
+        GridEditor.setActive(false);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_single_workbook_has_one_sheet_per_value_named_like_the_files',
+    description: '« Exporter toutes les valeurs de la table dans un seul classeur… » télécharge « <table>-export.xlsx » : une feuille par valeur, nommée comme son fichier (31 caractères au plus, « nom (2) » si deux feuilles s\'appellent pareil), avec SES valeurs ; la confirmation, la progression et la fin parlent d\'Excel',
+    run: async (h) => {
+      await seedValues(h, VALUES);
+      const bad = [];
+      try {
+        const res = await withTemplate(FILE_TEMPLATE, () => clickExportRow(h, ROWS.xlsxSingle));
+        const dl = res.downloads[0];
+        if (res.downloads.length !== 1 || !dl) return { pass: false, notes: 'téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses) };
+        if (dl.name !== TABLE + '-export.xlsx') bad.push('nom=' + dl.name);
+        if (dl.blob.type !== XlsxExport.XLSX_MIME) bad.push('type=' + dl.blob.type);
+        const x = await openXlsx(dl.blob);
+        if (x.sheets.length !== 3) bad.push('feuilles=' + x.sheets.map(sh => sh.name).join(','));
+        VALUES.forEach((v, i) => {
+          const sheet = x.sheets[i];
+          if (!sheet) return;
+          if (sheet.name !== 'Fiche ' + v.Nom) bad.push('feuille ' + (i + 1) + '=' + sheet.name);
+          if (sheet.cell('A2').value !== v.Nom || sheet.cell('B2').value !== v.Montant) bad.push(v.Nom + ' : contenu=' + sheet.text());
+          if (sheet.colWidth(1) === null || sheet.rowHeight(2) !== 22.5) bad.push(v.Nom + ' : largeur ou hauteur absentes (' + sheet.colWidth(1) + ', ' + sheet.rowHeight(2) + ')');
+        });
+        const messages = [...res.confirms.map(c => c.title + ' ' + c.message), ...res.statuses];
+        if (res.confirms.length !== 1 || !/Excel/.test(res.confirms[0].message) || !/une feuille|sheet/i.test(res.confirms[0].message)) bad.push('confirmation=' + JSON.stringify(res.confirms));
+        if (messages.some(m => /pdf|docx|ligne/i.test(m))) bad.push('un message parle de PDF, DOCX ou de lignes : ' + JSON.stringify(messages.filter(m => /pdf|docx|ligne/i.test(m))));
+        if (!res.statuses.some(m => /Excel/.test(m) && /1\/3/.test(m))) bad.push('progression=' + JSON.stringify(res.statuses));
+        if (res.status !== I18n.t('status.singleWorkbookDone', { ok: 3 })) bad.push('fin=' + res.status);
+        // Sans modèle de nom de fichier, les trois valeurs auraient le même nom : « publipostage », « publipostage (2) », « publipostage (3) » - comme dans l'archive ZIP.
+        const same = await withTemplate('', () => clickExportRow(h, ROWS.xlsxSingle));
+        const sameNames = same.downloads[0] ? (await openXlsx(same.downloads[0].blob)).sheets.map(sh => sh.name) : null;
+        if (JSON.stringify(sameNames) !== JSON.stringify(['publipostage', 'publipostage (2)', 'publipostage (3)'])) bad.push('noms sans modèle=' + JSON.stringify(sameNames));
+        // Un nom plus long que les 31 caractères d'Excel, avec des caractères interdits : coupé, nettoyé, et chaque feuille garde un nom à elle.
+        const longName = await withTemplate('Facture [très] longue : numéro de ' + '#' + TABLE + '.Nom', () => clickExportRow(h, ROWS.xlsxSingle));
+        const longNames = longName.downloads[0] ? (await openXlsx(longName.downloads[0].blob)).sheets.map(sh => sh.name) : null;
+        if (!longNames || longNames.length !== 3 || longNames.some(n => n.length > 31 || /[\\\/?*\[\]:]/.test(n)) || new Set(longNames.map(n => n.toLowerCase())).size !== 3) bad.push('noms longs=' + JSON.stringify(longNames));
+      } finally {
+        await leaveGrid(h);
+        GridEditor.setActive(false);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_single_workbook_keeps_no_half_written_sheet_when_a_value_fails',
+    description: 'Dans le classeur unique, une valeur qui échoue en cours de feuille ne laisse ni feuille à moitié écrite ni nom pris : les autres valeurs sont là, et la suivante du même nom reprend le nom sans « (2) »',
+    run: async (h) => {
+      await seed(h);
+      await loadGrid(gridHtml([140, 100], [30, 30], [[td('Nom', ' colspan="2"')], [badge('Nom'), badge('Montant')]].map(r => r)));
+      const html = Editor.getHTML();
+      const book = await XlsxExport.createSingleWorkbook();
+      // La deuxième feuille créée échoue à sa première fusion : la feuille existe déjà dans le classeur quand l'exception tombe.
+      const origAdd = ExcelJS.Workbook.prototype.addWorksheet;
+      let created = 0;
+      ExcelJS.Workbook.prototype.addWorksheet = function (...args) {
+        const sheet = origAdd.apply(this, args);
+        if (++created === 2) sheet.mergeCells = () => { throw new Error('échec voulu'); };
+        return sheet;
+      };
+      const bad = [];
+      let names = null;
+      try {
+        const outcomes = [];
+        for (const v of [VALUES[0], VALUES[1], VALUES[2], VALUES[1]]) {
+          try { await book.appendRecord(html, TABLE, v, FILE_TEMPLATE); outcomes.push('ok'); } catch (e) { outcomes.push('échec'); }
+        }
+        if (outcomes.join() !== 'ok,échec,ok,ok') bad.push('résultats=' + outcomes.join());
+        names = (await openXlsx(await book.toBlob())).sheets.map(sh => sh.name);
+        if (JSON.stringify(names) !== JSON.stringify(['Fiche Alpha Durand', 'Fiche Charlie Petit', 'Fiche Bravo Martin'])) bad.push('feuilles=' + JSON.stringify(names));
+      } finally {
+        ExcelJS.Workbook.prototype.addWorksheet = origAdd;
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  // --- 12) Dans une grille, « lignes » devient « valeurs de la table » (les autres modèles gardent leurs mots) --------------------------------------------------------------
+  const BATCH_LABEL_IDS = ['v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single'];
+  const labelsNow = () => Object.fromEntries(BATCH_LABEL_IDS.map(id => [id, document.getElementById(id).textContent.trim()]));
+  ['fr', 'en'].forEach(lang => cases.push({
+    id: 'xlsx_grid_wording_says_values_of_the_table_not_rows_' + lang,
+    description: 'Dans une grille (' + lang + '), les quatre lignes « toutes les valeurs » du menu, la confirmation du ZIP de PDF et le message d\'une table vide parlent de « valeurs de la table », jamais de lignes ; dans un document les lignes PDF gardent « lignes » et le texte suit un changement de langue',
+    run: async (h) => {
+      await seedValues(h, VALUES);
+      const bad = [];
+      const previous = I18n.getLang();
+      try {
+        I18n.setLang(lang);
+        const words = lang === 'fr' ? /valeurs? de la table/ : /table values?/;
+        const rowWord = lang === 'fr' ? /lignes?/i : /\brows?\b/i;
+        const inGrid = labelsNow();
+        BATCH_LABEL_IDS.forEach(id => { if (!words.test(inGrid[id]) || rowWord.test(inGrid[id])) bad.push('grille : ' + id + '=' + inGrid[id]); });
+        // Confirmation du ZIP de PDF, refusée : rien n'est généré, seul le texte compte.
+        const zipRes = await clickExportRow(h, 'v2-btn-export-pdf-batch', false);
+        const confirm = zipRes.confirms[0];
+        if (!confirm || rowWord.test(confirm.title + ' ' + confirm.message) || !/PDF/.test(confirm.message) || !/3/.test(confirm.message)) bad.push('confirmation du ZIP de PDF=' + JSON.stringify(confirm));
+        if (zipRes.downloads.length) bad.push('téléchargement malgré le refus');
+        const mergedRes = await clickExportRow(h, 'v2-btn-export-pdf-merged', false);
+        const mergedConfirm = mergedRes.confirms[0];
+        if (!mergedConfirm || rowWord.test(mergedConfirm.title + ' ' + mergedConfirm.message)) bad.push('confirmation du PDF unique=' + JSON.stringify(mergedConfirm));
+        // Table vide.
+        window.__gristStub.setRows(TABLE, []);
+        const emptyRes = await clickExportRow(h, 'v2-btn-export-pdf-batch', false);
+        if (rowWord.test(emptyRes.status) || !/values?|valeurs?/i.test(emptyRes.status) || emptyRes.confirms.length) bad.push('table vide=' + JSON.stringify(emptyRes.status));
+        window.__gristStub.setRows(TABLE, VALUES);
+        // Lecture de la table impossible.
+        const realFetch = GristAPI.fetchTableRows;
+        GristAPI.fetchTableRows = async () => { throw new Error('lecture refusée'); };
+        const unreadable = await (async () => { try { return await clickExportRow(h, 'v2-btn-export-xlsx-batch', false); } finally { GristAPI.fetchTableRows = realFetch; } })();
+        if (rowWord.test(unreadable.status) || !/values?|valeurs?/i.test(unreadable.status)) bad.push('table illisible=' + JSON.stringify(unreadable.status));
+        // Dans un document : les mots d'avant, et le changement de langue réécrit chaque ligne dans le bon vocabulaire.
+        await leaveGrid(h);
+        const inDoc = labelsNow();
+        const classic = lang === 'fr'
+          ? { 'v2-btn-export-pdf-batch': 'Exporter toutes les lignes (ZIP)…', 'v2-btn-export-pdf-merged': 'Exporter toutes les lignes en un seul PDF…' }
+          : { 'v2-btn-export-pdf-batch': 'Export all rows (ZIP)…', 'v2-btn-export-pdf-merged': 'Export all rows as a single PDF…' };
+        Object.keys(classic).forEach(id => { if (inDoc[id] !== classic[id]) bad.push('document : ' + id + '=' + inDoc[id]); });
+        const emptyDoc = await (async () => { window.__gristStub.setRows(TABLE, []); const r = await clickExportRow(h, 'v2-btn-export-pdf-batch', false); window.__gristStub.setRows(TABLE, VALUES); return r; })();
+        if (!rowWord.test(emptyDoc.status)) bad.push('document, table vide=' + JSON.stringify(emptyDoc.status));
+        await enterGrid(h);
+        I18n.setLang(lang === 'fr' ? 'en' : 'fr');
+        const switched = labelsNow();
+        const otherWords = lang === 'fr' ? /table values?/ : /valeurs? de la table/;
+        BATCH_LABEL_IDS.forEach(id => { if (!otherWords.test(switched[id])) bad.push('changement de langue : ' + id + '=' + switched[id]); });
+      } finally {
+        I18n.setLang(previous);
+        window.__gristStub.setRows(TABLE, VALUES);
+        await leaveGrid(h);
+        GridEditor.setActive(false);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  }));
+
+  cases.push({
+    id: 'xlsx_grid_merged_pdf_says_values_when_done',
+    description: 'Dans une grille, « Exporter toutes les valeurs de la table en un seul PDF… » génère bien un PDF unique et le dit en « valeurs réunies », pas en lignes',
+    run: async (h) => {
+      await seedValues(h, VALUES);
+      const bad = [];
+      try {
+        const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        if (res.downloads.length !== 1 || res.downloads[0].name !== TABLE + '-export.pdf') bad.push('téléchargements=' + JSON.stringify(res.downloads.map(d => d.name)));
+        if (res.status !== I18n.t('status.mergedExportDoneGrid', { ok: 3 }) || /ligne/i.test(res.status)) bad.push('fin=' + res.status);
+        if (!res.confirms[0] || /ligne/i.test(res.confirms[0].message)) bad.push('confirmation=' + JSON.stringify(res.confirms));
+      } finally {
         await leaveGrid(h);
         GridEditor.setActive(false);
       }

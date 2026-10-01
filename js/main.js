@@ -853,38 +853,23 @@
     const movedElsewhere = now && now !== document.body && now !== el && now.getClientRects().length > 0;
     if (!movedElsewhere) el.focus({ preventScroll: true });
   }
+  // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le premier.
+  const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
+    'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
   function withExportLock(fn) {
     return async (...args) => {
       if (exportOperationInProgress || !AccessRights.get().canExport) return;
       exportOperationInProgress = true;
-      const btnSingle = document.getElementById('btn-export-pdf');
-      const btnBatch = document.getElementById('v2-btn-export-pdf-batch');
-      const btnMerged = document.getElementById('v2-btn-export-pdf-merged');
-      const btnDocx = document.getElementById('v2-btn-export-docx');
-      const btnDocxBatch = document.getElementById('v2-btn-export-docx-batch');
-      const btnXlsx = document.getElementById('v2-btn-export-xlsx');
-      const btnEmail = document.getElementById('btn-create-email');
+      const controls = EXPORT_CONTROL_IDS.map(id => document.getElementById(id));
       const keyboardFocus = keyboardFocusedElement();
       OrientationToggle.setBusy(true);
-      setExportControlLocked(btnSingle, true);
-      setExportControlLocked(btnBatch, true);
-      setExportControlLocked(btnMerged, true);
-      setExportControlLocked(btnDocx, true);
-      setExportControlLocked(btnDocxBatch, true);
-      setExportControlLocked(btnXlsx, true);
-      setExportControlLocked(btnEmail, true);
+      controls.forEach(el => setExportControlLocked(el, true));
       try {
         await fn(...args);
       } finally {
         exportOperationInProgress = false;
         OrientationToggle.setBusy(false);
-        setExportControlLocked(btnSingle, false);
-        setExportControlLocked(btnBatch, false);
-        setExportControlLocked(btnMerged, false);
-        setExportControlLocked(btnDocx, false);
-        setExportControlLocked(btnDocxBatch, false);
-        setExportControlLocked(btnXlsx, false);
-        setExportControlLocked(btnEmail, false);
+        controls.forEach(el => setExportControlLocked(el, false));
         restoreKeyboardFocus(keyboardFocus);
       }
     };
@@ -893,7 +878,7 @@
   async function onExportPdf() {
     Editor.exitHeaderFooterModeIfActive();
     const record = GristAPI.getCurrentRecord();
-    if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    if (!record) { alert(exportText('alert.noRecordForExport')); return; }
     setStatus(I18n.t('status.pdfGenerating'));
     try {
       const qualitySelect = document.getElementById('v2-pdf-quality');
@@ -978,15 +963,43 @@
     }
   }
 
+  // Dans une grille, « lignes » devient « valeurs de la table » : une ligne y est déjà une ligne de la grille (demande d'Antoine, 01/10) ; les autres types de modèle
+  // gardent leurs mots. Chaque texte concerné a sa variante « …Grid » ici ; `exportText` choisit selon le type du modèle affiché.
+  const GRID_WORDING = {
+    'toolbar.exportPdfBatch': 'toolbar.exportPdfBatchGrid',
+    'toolbar.exportPdfMerged': 'toolbar.exportPdfMergedGrid',
+    'dialog.batchExport.title': 'dialog.batchExport.titleGrid',
+    'confirm.batchExport': 'confirm.batchExportGrid',
+    'confirm.mergedExport': 'confirm.mergedExportGrid',
+    'status.cannotReadRows': 'status.cannotReadRowsGrid',
+    'status.noRowsInTable': 'status.noRowsInTableGrid',
+    'status.mergedExportDone': 'status.mergedExportDoneGrid',
+    'status.mergedExportDoneWithFailures': 'status.mergedExportDoneWithFailuresGrid',
+    'alert.noRecordForExport': 'alert.noRecordForExportGrid',
+  };
+  function exportText(key, vars) {
+    return I18n.t(GridEditor.isGridType(currentTypeModele) && GRID_WORDING[key] ? GRID_WORDING[key] : key, vars);
+  }
+
   // Les exports qui n'ont de sens que pour un seul genre de modèle : Word pour un document, Excel pour une grille. La ligne de l'autre genre reste dans le menu, grisée
-  // (« rien ne disparaît, on grise », demande d'Antoine du 2026-10-01) ; le clic d'une ligne grisée ne fait rien (cf. onExportRow, au câblage des boutons).
+  // (« rien ne disparaît, on grise », demande d'Antoine du 2026-10-01) ; le clic d'une ligne grisée ne fait rien (cf. onExportRow, au câblage des boutons). Les deux lignes
+  // PDF « toutes les lignes » prennent aussi les mots de la grille (`data-i18n` change, pour que le texte suive un changement de langue).
   function syncExportRowsForModelType() {
     const grid = GridEditor.isGridType(currentTypeModele);
-    [['v2-btn-export-docx', grid], ['v2-btn-export-docx-batch', grid], ['v2-btn-export-xlsx', !grid]].forEach(([id, off]) => {
+    const grey = (id, off) => {
       const row = document.getElementById(id);
       if (!row) return;
       row.classList.toggle('v2-hover-row-disabled', off);
       if (off) row.setAttribute('aria-disabled', 'true'); else row.removeAttribute('aria-disabled');
+    };
+    ['v2-btn-export-docx', 'v2-btn-export-docx-batch'].forEach(id => grey(id, grid));
+    ['v2-btn-export-xlsx', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single'].forEach(id => grey(id, !grid));
+    [['v2-btn-export-pdf-batch', 'toolbar.exportPdfBatch'], ['v2-btn-export-pdf-merged', 'toolbar.exportPdfMerged']].forEach(([id, key]) => {
+      const row = document.getElementById(id);
+      if (!row) return;
+      const wanted = grid ? GRID_WORDING[key] : key;
+      row.setAttribute('data-i18n', wanted);
+      row.textContent = I18n.t(wanted);
     });
   }
 
@@ -1006,12 +1019,14 @@
     return name;
   }
 
-  // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF ou DOCX), ou mis bout à bout dans un seul PDF (js/pdf-merge.js : même rendu par
-  // ligne que le ZIP, chaque ligne commence sur une nouvelle page). Lit toutes les lignes via docApi (ignore un filtre de vue). Limité au vectoriel pour le PDF :
+  // Export en lot : une ligne = un fichier, regroupés dans une archive ZIP (PDF, DOCX ou classeur Excel), ou mis bout à bout dans un seul PDF (js/pdf-merge.js : même
+  // rendu par ligne que le ZIP, chaque ligne commence sur une nouvelle page) ou un seul classeur Excel (une feuille par ligne, js/xlsx-export.js). Lit toutes les
+  // lignes via docApi (ignore un filtre de vue). Limité au vectoriel pour le PDF :
   // 'Impr. navigateur' ouvrirait une boîte de dialogue par ligne, et les qualités raster n'ont pas de variante "retourne un blob".
   // Ce qui change d'un export à l'autre : ses textes (clés i18n), le nom des fichiers, la fonction qui rend UNE ligne et ses marges (points pour le PDF, twips
-  // pour le DOCX) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo, pas du lot PDF de ~4 Mo) ; tout le reste (lecture des
-  // lignes, confirmation, boucle, archive, téléchargement) est commun.
+  // pour le DOCX, aucune pour l'Excel : la feuille reprend la page du modèle) et ses bibliothèques (`loadLibs` : l'archive ZIP n'a besoin que de JSZip, ~0,1 Mo,
+  // pas du lot PDF de ~4 Mo) ; tout le reste (lecture des lignes, confirmation, boucle, archive, téléchargement) est commun. `single` : pas de blob par ligne, le
+  // classeur unique reçoit une feuille par ligne.
   const BATCH_EXPORTS = {
     pdfZip: {
       label: 'PDF', confirm: 'confirm.batchExport', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
@@ -1034,11 +1049,25 @@
       loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
+    xlsxZip: {
+      label: 'Excel', confirm: 'confirm.batchExportXlsx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
+      noFile: 'status.exportErrorXlsx', done: 'status.batchExportDoneXlsx', doneWithFailures: 'status.batchExportDoneWithFailuresXlsx',
+      entryExt: '.xlsx', fileSuffix: '-export-xlsx.zip',
+      loadLibs: async () => { await ExportCommon.ensureJsZipLoaded(); await XlsxExport.ensureExcelLibLoaded(); },
+      renderRow: (html, tableId, row, filenameTemplate) => XlsxExport.getXlsxBlobForRecord(html, tableId, row, filenameTemplate),
+    },
+    xlsxSingle: {
+      label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
+      noFile: 'status.exportErrorXlsx', done: 'status.singleWorkbookDone', doneWithFailures: 'status.singleWorkbookDoneWithFailures',
+      single: true, fileSuffix: '-export.xlsx',
+      loadLibs: () => XlsxExport.ensureExcelLibLoaded(),
+    },
   };
 
   async function onExportBatch(kind) {
     const cfg = BATCH_EXPORTS[kind];
     const merged = !!cfg.merged;
+    const single = !!cfg.single;
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
@@ -1046,11 +1075,11 @@
     try { rows = await GristAPI.fetchTableRows(tableId); }
     catch (e) {
       console.error('[main] export ' + cfg.label + ' en lot : échec de lecture de la table', e);
-      setStatus(I18n.t('status.cannotReadRows'), true);
+      setStatus(exportText('status.cannotReadRows'), true);
       return;
     }
-    if (!rows.length) { setStatus(I18n.t('status.noRowsInTable', { table: tableId }), true); return; }
-    const proceed = await Dialogs.confirm({ title: I18n.t('dialog.batchExport.title'), message: I18n.t(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
+    if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return; }
+    const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
     if (!proceed) return;
 
     // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une fois.
@@ -1072,9 +1101,10 @@
     const templatesCache = isMacro ? Templates.getCached() : null;
     const filenameTemplate = getPdfFilenameTemplate();
     const headerFooterData = Editor.getHeaderFooterData();
-    const margins = cfg.margins();
-    const zip = merged ? null : new JSZip();
+    const margins = cfg.margins ? cfg.margins() : null;
+    const zip = merged || single ? null : new JSZip();
     const mergedPdf = merged ? await PdfMerge.create(tableId) : null;
+    const workbook = single ? await XlsxExport.createSingleWorkbook() : null;
     const usedNames = new Set();
     let ok = 0;
     let failed = 0;
@@ -1082,12 +1112,16 @@
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: rows.length }));
       try {
         const rowHtml = isMacro ? await MacroTemplates.buildConcatenatedHtml(macroSlots, tableId, rows[i], templatesCache) : html;
-        const { blob, filename } = await cfg.renderRow(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, margins);
-        if (merged) {
-          await mergedPdf.append(blob);
+        if (single) {
+          await workbook.appendRecord(rowHtml, tableId, rows[i], filenameTemplate);
         } else {
-          const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
-          zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
+          const { blob, filename } = await cfg.renderRow(rowHtml, tableId, rows[i], filenameTemplate, headerFooterData, margins);
+          if (merged) {
+            await mergedPdf.append(blob);
+          } else {
+            const base = sanitizeFilenamePart(filename) || ('document-' + rows[i].id);
+            zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
+          }
         }
         ok++;
       } catch (e) {
@@ -1097,10 +1131,10 @@
     }
     if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
 
-    setStatus(I18n.t(merged ? 'status.pdfMerging' : 'status.zipCompressing'));
-    const outBlob = merged ? await mergedPdf.toBlob() : await zip.generateAsync({ type: 'blob' });
+    setStatus(I18n.t(merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
+    const outBlob = merged ? await mergedPdf.toBlob() : single ? await workbook.toBlob() : await zip.generateAsync({ type: 'blob' });
     ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + cfg.fileSuffix);
-    setStatus(failed ? I18n.t(cfg.doneWithFailures, { ok, failed }) : I18n.t(cfg.done, { ok }));
+    setStatus(failed ? exportText(cfg.doneWithFailures, { ok, failed }) : exportText(cfg.done, { ok }));
   }
 
   async function switchMode(mode) {
@@ -1564,6 +1598,8 @@
     onExportRow('v2-btn-export-docx', withExportLock(onExportDocx));
     onExportRow('v2-btn-export-docx-batch', withExportLock(() => onExportBatch('docxZip')));
     onExportRow('v2-btn-export-xlsx', withExportLock(onExportXlsx));
+    onExportRow('v2-btn-export-xlsx-batch', withExportLock(() => onExportBatch('xlsxZip')));
+    onExportRow('v2-btn-export-xlsx-single', withExportLock(() => onExportBatch('xlsxSingle')));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));

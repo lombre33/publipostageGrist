@@ -59,7 +59,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | B | Barre de la case : fusion et scission, bordures, alignement vertical | à faire |
 | C | Saut de page porté par la ligne ; bascule portrait / paysage active pour `grille` (`OrientationToggle.TYPES`) | à faire |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) : ligne « Exporter en Excel… » du menu Qualité PDF, grisée hors grille ; les deux lignes Word grisées dans une grille | en ligne (01/10) |
-| E | ZIP de classeurs et classeur unique, libellés « valeurs de la table », « Nouvelle grille » visible sans `?dev` | à faire |
+| E | « Exporter toutes les valeurs de la table » : une archive ZIP d'un classeur par valeur et un classeur unique d'une feuille par valeur ; dans une grille, « lignes » devient « valeurs de la table » (lot PDF compris) ; « Nouvelle grille » visible sans `?dev` (second commit, séparé) | en ligne (01/10) |
 
 ## Export Excel (lots D et E) : correspondances retenues
 
@@ -68,6 +68,10 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   listes écrites « • », « 1. », « ☐ » ; image posée sur la case, à sa taille.
 - Nombres et dates : valeur typée seulement si la case ne contient que cela (format d'affichage de la bulle conservé), sinon texte.
 - Saut de page : ligne portant le saut → nouvelle feuille, nommée « <nom> (2) » (31 caractères au plus).
+- Précisions du lot E : l'archive « <table>-export-xlsx.zip » contient un classeur par valeur (nom : modèle de nom de fichier, comme les PDF) ; le classeur « <table>-export.xlsx » une feuille par valeur,
+  nommée comme son fichier (caractères `\ / ? * [ ] :` ôtés, 31 caractères au plus, « nom (2) » si le nom est déjà pris, sans tenir compte de la casse) ; une valeur qui échoue est comptée dans la fin du message et retire
+  sa feuille à moitié écrite (le nom est rendu) ; ce sont les mêmes confirmation, progression et ligne de fin que le lot PDF, en mots d'Excel ; `exportText` (`js/main.js`) remplace « lignes » par « valeurs de la table » dans une grille
+  (table `GRID_WORDING`, une clé `*Grid` par texte concerné), les lignes Word restent en « lignes » (grisées dans une grille).
 - Précisions du lot D : un trait gris fin (`FF777777`) sur chaque case, comme le PDF ; fusions écrites avant les styles ; case sans format = ni couleur de texte ni fond ; un lien qui couvre toute la case est un vrai
   lien Excel, partiel il garde sa couleur et son soulignement sans cible, `javascript:` retiré ; un texte qui commence par `=` reste du texte ; nombres au-delà de 15 chiffres, dates avant 1900, mots (« douze »),
   dates amputées, zéro masqué, condition fausse : texte ou vide ; feuille A4, une page de large, orientation et marges du modèle ; limites connues : une image se pose à l'angle haut gauche de sa case, à sa taille (deux images dans une même case se recouvrent),
@@ -79,9 +83,11 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   collage d'un tableau, Annuler, tailles des lignes et colonnes ajoutées, bandeaux alignés, tirer un trait (une transaction, un Annuler, minimum, Échap), clic sur un bandeau, barre de la case, suivi coupé,
   contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour ; lot A2 : alignement vertical enregistré (ancien modèle, valeur inconnue, `vertical-align` collé hors grille),
   Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
-- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 16 cas, lot D) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
-  et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; relu une fois par openpyxl à l'écriture du lot
+- `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 22 cas, lots D et E) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
+  et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
+  les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D
   (LibreOffice n'a pas de module Calc dans ce bac à sable).
 - `dev-tests/verify-grid-mouse.mjs` (script Node `gridMouse`) : les mêmes gestes à la vraie souris et au vrai clavier à 700×400, clair et sombre, avec la molette et les contrastes ;
   la Lecture d'une grille large au vrai bouton « Lecture » (colonnes gardées, défilement horizontal, texte au milieu, bulle résolue, pas de ligne vide, contraste du texte) ;
-  lot D : le menu Qualité PDF au survol (trois lignes d'export atteignables, grisées selon le type de modèle, contraste), un vrai clic sur « Exporter en Excel… » qui télécharge un .xlsx et un vrai clic sur une ligne grisée qui ne télécharge rien.
+  lots D et E : les menus d'export au survol (cinq lignes dans « Qualité PDF » et deux dans « Exporter en PDF », atteignables dans le panneau, grisées selon le type de modèle, contraste), un vrai clic sur « Exporter en Excel… »
+  qui télécharge un .xlsx, un vrai clic sur les deux lignes « toutes les valeurs » (confirmation dans le panneau, puis l'archive ZIP et le classeur unique) et un vrai clic sur une ligne grisée qui ne télécharge rien.

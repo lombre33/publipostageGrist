@@ -148,7 +148,8 @@ async function realClick(page, sel, wait = 250) {
   await page.waitForTimeout(wait);
   return c;
 }
-const away = async (page) => { await page.mouse.move(350, 340, { steps: 6 }); await page.waitForTimeout(250); };
+// Hors de tout menu : celui de « Qualité PDF » (neuf lignes dont les trois d'Excel, jusqu'à ~350 px de haut) recouvre le milieu du panneau, la souris part donc tout en bas.
+const away = async (page) => { await page.mouse.move(350, 385, { steps: 6 }); await page.waitForTimeout(250); };
 const open = (page, fly) => page.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== 'none', fly);
 const expanded = (page, sel) => page.evaluate((s) => document.querySelector(s).getAttribute('aria-expanded'), sel);
 const activeId = (page) => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; });

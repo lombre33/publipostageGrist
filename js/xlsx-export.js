@@ -516,14 +516,24 @@ const XlsxExport = (function () {
     return { landscape: PageLayout.isLandscape(), marginsInch: { left: inch(m.left), right: inch(m.right), top: inch(m.top), bottom: inch(m.bottom) } };
   }
 
-  async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
-    await ensureExcelLibLoaded();
+  // Le HTML d'un enregistrement dont les bulles ont pris leur valeur (typedCellHook marque les cases à nombre ou date) et le nom de son fichier.
+  async function resolveRecord(htmlContent, tableId, record, filenameTemplate) {
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record, typedCellHook(tableId, record));
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
+    return { resolvedHtml, filename };
+  }
+  async function workbookToBlob(workbook) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    return new Blob([buffer], { type: XLSX_MIME });
+  }
+
+  // Un classeur d'une feuille pour un enregistrement : un export seul, ou un fichier de l'archive ZIP d'un lot.
+  async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
+    await ensureExcelLibLoaded();
+    const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
     const workbook = newWorkbook();
     await addRecordSheet(workbook, filename, resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}));
-    const buffer = await workbook.xlsx.writeBuffer();
-    return { blob: new Blob([buffer], { type: XLSX_MIME }), filename };
+    return { blob: await workbookToBlob(workbook), filename };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, options) {
     if (!record) { alert(I18n.t('alert.noRecordForExportXlsx')); return; }
@@ -531,5 +541,27 @@ const XlsxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.xlsx');
   }
 
-  return { exportCurrentRecord, getXlsxBlobForRecord, ensureExcelLibLoaded, typedCellHook, addRecordSheet, newWorkbook, sheetNameFrom, XLSX_MIME };
+  // Un classeur unique pour toute la table : une feuille par enregistrement, nommée comme le fichier qu'il aurait eu dans l'archive ZIP (31 caractères au plus, « nom (2) »
+  // quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
+  async function createSingleWorkbook(options) {
+    await ensureExcelLibLoaded();
+    const workbook = newWorkbook();
+    const usedNames = new Set();
+    return {
+      async appendRecord(htmlContent, tableId, record, filenameTemplate) {
+        const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
+        const before = workbook.worksheets.length;
+        try {
+          await addRecordSheet(workbook, filename, resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, { usedNames }));
+        } catch (e) {
+          workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
+          throw e;
+        }
+        return { filename };
+      },
+      toBlob: () => workbookToBlob(workbook),
+    };
+  }
+
+  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, typedCellHook, addRecordSheet, newWorkbook, sheetNameFrom, XLSX_MIME };
 })();

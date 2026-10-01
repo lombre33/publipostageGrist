@@ -512,17 +512,18 @@ async function runTheme(theme) {
     GridEditor.setActive(false); Editor.setHTML(html); GridEditor.setActive(true);
   });
   await page.waitForTimeout(300);
-  const openExportMenu = async () => {
-    const trigger = await boxOf(page, '#v2-btn-quality');
+  const openExportMenu = async (triggerSelector) => {
+    const trigger = await boxOf(page, triggerSelector || '#v2-btn-quality');
     await page.mouse.move(trigger.x - 20, trigger.y + 40, { steps: 2 });
     await page.mouse.move(trigger.x, trigger.y, { steps: 3 });
     await page.waitForTimeout(450);
   };
-  const exportRows = () => page.evaluate(`(() => {
+  const QUALITY_ROWS = ['v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single'];
+  const exportRows = (ids) => page.evaluate(`(() => {
     const ratio = ${CONTRAST_FN};
     const opaque = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
     const out = {};
-    for (const id of ['v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx']) {
+    for (const id of ${JSON.stringify(ids || QUALITY_ROWS)}) {
       const el = document.getElementById(id);
       const r = el.getBoundingClientRect();
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
@@ -534,9 +535,12 @@ async function runTheme(theme) {
   await openExportMenu();
   const inGridRows = await exportRows();
   const g = inGridRows;
-  check(`${label} - menu d'export dans une grille : les trois lignes sont là, visibles dans le panneau et atteignables ; Excel active, les deux lignes Word grisées`,
-    Object.values(g).every(r => r.shown && r.inPanel && r.reachable) && !g['v2-btn-export-xlsx'].greyed && g['v2-btn-export-docx'].greyed && g['v2-btn-export-docx-batch'].greyed
-    && g['v2-btn-export-docx'].aria === 'true' && g['v2-btn-export-xlsx'].aria === null, g);
+  const EXCEL_ROWS = ['v2-btn-export-xlsx', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single'];
+  check(`${label} - menu d'export dans une grille : les cinq lignes sont là, visibles dans le panneau (les deux plus longues comprises) et atteignables ; les trois lignes Excel actives, les deux lignes Word grisées`,
+    Object.values(g).every(r => r.shown && r.inPanel && r.reachable) && EXCEL_ROWS.every(id => !g[id].greyed && g[id].aria === null) && g['v2-btn-export-docx'].greyed && g['v2-btn-export-docx-batch'].greyed
+    && g['v2-btn-export-docx'].aria === 'true' && g['v2-btn-export-docx-batch'].aria === 'true', g);
+  check(`${label} - menu d'export dans une grille : les lignes « toutes les valeurs » disent « valeurs de la table » (jamais « lignes »)`,
+    /valeurs de la table/.test(g['v2-btn-export-xlsx-batch'].text) && /valeurs de la table/.test(g['v2-btn-export-xlsx-single'].text) && !/lignes?/i.test(g['v2-btn-export-xlsx-batch'].text + g['v2-btn-export-xlsx-single'].text), { batch: g['v2-btn-export-xlsx-batch'].text, single: g['v2-btn-export-xlsx-single'].text });
   check(`${label} - menu d'export : le texte des lignes (grisées comprises) reste lisible, >= 4,5:1`, Object.values(g).every(r => r.contrast >= 4.5), Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.contrast])));
   // Une ligne grisée ne lance rien : vrai clic sur « Exporter en DOCX », aucun téléchargement.
   let wordDownload = null;
@@ -559,6 +563,48 @@ async function runTheme(theme) {
   const statusAfter = await page.evaluate(() => document.getElementById('status-msg').textContent);
   check(`${label} - vrai clic sur « Exporter en Excel… » : un fichier .xlsx est téléchargé (archive avec sa feuille), et le coin d'état annonce « Fichier Excel généré. »`,
     !!xlsxInfo && /\.xlsx$/.test(xlsxInfo.name) && xlsxInfo.zip && xlsxInfo.size > 2000 && xlsxInfo.hasSheet && /Excel/.test(statusAfter), { xlsxInfo, statusAfter });
+  // Toutes les valeurs de la table (lot E), à la vraie souris : la confirmation s'ouvre dans le panneau, son bouton « Continuer » se clique, et le téléchargement est le bon fichier.
+  const PDF_ROWS = ['v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged'];
+  const downloadAfterConfirm = async (menuTrigger, rowSelector) => {
+    await openExportMenu(menuTrigger);
+    const waiting = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
+    await realClick(page, rowSelector);
+    await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none'; }, null, { timeout: 8000 }).catch(() => {});
+    const dialog = await page.evaluate(() => {
+      const ov = document.getElementById('pp-dialog-modal');
+      const box = ov && ov.querySelector('.modal-content');
+      const ok = ov && ov.querySelector('.var-modal-primary');
+      if (!ov || ov.style.display === 'none' || !box || !ok) return null;
+      const inPanel = r => r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+      return { title: ov.querySelector('h3').textContent, message: ov.querySelector('.pp-dialog-message').textContent, boxInPanel: inPanel(box.getBoundingClientRect()), okInPanel: inPanel(ok.getBoundingClientRect()), ok: ok.textContent };
+    });
+    if (dialog) await realClick(page, '#pp-dialog-modal .var-modal-primary');
+    const download = await waiting;
+    let info = null;
+    if (download) {
+      const chunks = []; for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      info = { name: download.suggestedFilename(), size: bytes.length, zip: bytes.slice(0, 2).toString() === 'PK', hasSheet: bytes.includes(Buffer.from('xl/worksheets/sheet1.xml')), hasWorkbookInside: bytes.includes(Buffer.from('.xlsx')) };
+    }
+    await page.waitForTimeout(300);
+    return { dialog, info, status: await page.evaluate(() => document.getElementById('status-msg').textContent) };
+  };
+  const zipRun = await downloadAfterConfirm('#v2-btn-quality', '#v2-btn-export-xlsx-batch');
+  check(`${label} - vrai clic sur « Exporter toutes les valeurs de la table en Excel (ZIP)… » : la confirmation parle d'Excel et de valeurs, tient dans le panneau, et l'archive « -export-xlsx.zip » contient un classeur`,
+    !!zipRun.dialog && zipRun.dialog.boxInPanel && zipRun.dialog.okInPanel && /Excel/.test(zipRun.dialog.message) && /valeur/.test(zipRun.dialog.message) && !/ligne|PDF/i.test(zipRun.dialog.message + zipRun.dialog.title)
+    && !!zipRun.info && /-export-xlsx\.zip$/.test(zipRun.info.name) && zipRun.info.zip && zipRun.info.hasWorkbookInside && /Excel/.test(zipRun.status), zipRun);
+  const singleRun = await downloadAfterConfirm('#v2-btn-quality', '#v2-btn-export-xlsx-single');
+  check(`${label} - vrai clic sur « Exporter toutes les valeurs de la table dans un seul classeur… » : la confirmation tient dans le panneau, et le fichier « -export.xlsx » est un classeur d'une feuille par valeur`,
+    !!singleRun.dialog && singleRun.dialog.boxInPanel && singleRun.dialog.okInPanel && /Excel/.test(singleRun.dialog.message) && !/ligne|PDF/i.test(singleRun.dialog.message)
+    && !!singleRun.info && /-export\.xlsx$/.test(singleRun.info.name) && singleRun.info.zip && singleRun.info.hasSheet && /Excel/.test(singleRun.status), singleRun);
+  // Les deux lignes du menu « Exporter en PDF » prennent, dans une grille, les mots de la grille : lisibles, atteignables, sans « lignes ».
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  await openExportMenu('#btn-export-pdf');
+  const pdfRows = await exportRows(PDF_ROWS);
+  check(`${label} - menu « Exporter en PDF » dans une grille : « Exporter toutes les valeurs de la table (ZIP)… » et « … en un seul PDF… » sont visibles dans le panneau, atteignables, lisibles (>= 4,5:1) et sans le mot « lignes »`,
+    Object.values(pdfRows).every(r => r.shown && r.inPanel && r.reachable && r.contrast >= 4.5 && /valeurs de la table/.test(r.text) && !/lignes?/i.test(r.text)), pdfRows);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+
   // Dans un document : l'inverse - Excel grisée, Word active.
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   const newBtn2 = await boxOf(page, '#btn-new');
@@ -570,13 +616,19 @@ async function runTheme(theme) {
   await openExportMenu();
   const inDocRows = await exportRows();
   const d = inDocRows;
-  check(`${label} - menu d'export dans un document : « Exporter en Excel… » est grisée (elle reste dans le menu), les deux lignes Word sont actives`,
-    Object.values(d).every(r => r.shown && r.inPanel && r.reachable) && d['v2-btn-export-xlsx'].greyed && d['v2-btn-export-xlsx'].aria === 'true' && !d['v2-btn-export-docx'].greyed && !d['v2-btn-export-docx-batch'].greyed && Object.values(d).every(r => r.contrast >= 4.5), d);
+  check(`${label} - menu d'export dans un document : les trois lignes Excel sont grisées (elles restent dans le menu, lisibles), les deux lignes Word sont actives`,
+    Object.values(d).every(r => r.shown && r.inPanel && r.reachable) && EXCEL_ROWS.every(id => d[id].greyed && d[id].aria === 'true') && !d['v2-btn-export-docx'].greyed && !d['v2-btn-export-docx-batch'].greyed && Object.values(d).every(r => r.contrast >= 4.5), d);
   let excelDownload = null;
-  page.once('download', x => { excelDownload = x.suggestedFilename(); });
-  await realClick(page, '#v2-btn-export-xlsx');
-  await page.waitForTimeout(1500);
-  check(`${label} - vrai clic sur la ligne Excel grisée d'un document : aucun téléchargement`, excelDownload === null, { excelDownload });
+  page.on('download', x => { excelDownload = x.suggestedFilename(); });
+  let dialogAfterGreyed = false;
+  for (const id of EXCEL_ROWS) {
+    await openExportMenu();
+    await realClick(page, '#' + id);
+    await page.waitForTimeout(600);
+    dialogAfterGreyed = dialogAfterGreyed || await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none'; });
+  }
+  await page.waitForTimeout(900);
+  check(`${label} - vrai clic sur chacune des trois lignes Excel grisées d'un document : aucun téléchargement, aucune confirmation`, excelDownload === null && !dialogAfterGreyed, { excelDownload, dialogAfterGreyed });
 
   await context.close();
 }
