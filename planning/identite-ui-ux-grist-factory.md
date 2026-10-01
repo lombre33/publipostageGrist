@@ -443,6 +443,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
   01/10) ; elles ne recouvrent jamais la barre du haut. Un clic hors de l'éditeur et hors de la barre ferme celle d'une
   bulle, d'un tableau ou d'une image (choix « Corriger » d'Antoine, 01/10) ; un clic sur l'objet la rouvre.
+- Image en calque (devant ou derrière le texte) : sélectionnée, les flèches du clavier la déplacent de 1 px de mise en page, de 10 px avec
+  Maj (demande d'Antoine du 01/10, « déplacer une image aux flèches ») ; la touche tenue appuyée répète, un Ctrl+Z défait une rafale
+  d'un coup, l'image s'arrête au bord de la page, l'infobulle de sa poignée de déplacement le dit. Une image dans le texte, le
+  curseur et Maj + flèche dans le texte gardent leurs flèches ; le curseur qui ARRIVE sur l'ancre d'une image en calque la traverse
+  encore à la flèche suivante, sans la faire glisser (un clic sur l'image ou une action de sa barre flottante rendent les flèches à
+  l'image). Le suivi des modifications n'y voit pas une suggestion : une position est de la mise en page, pas du contenu.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
