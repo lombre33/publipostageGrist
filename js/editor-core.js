@@ -196,6 +196,24 @@ const EditorCore = (function () {
     const group = groupOf(event.target);
     if (group && realCrossing(event, group)) setGroupExpanded(group, false);
   });
+  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus (retours d'Antoine du 2026-10-01 : « + », « Qualité PDF » et « Titre » restaient ouverts une
+  // fois la souris partie) : le menu s'ouvre et se referme avec le survol, le focus est pour le clavier. Sans ça le bouton cliqué le gardait, son menu avec lui (:focus-within,
+  // css/editor-v2.css), et le curseur quittait le texte en cours - rien ne se tapait plus tant qu'on n'avait pas recliqué dans l'éditeur. Tab, Entrée et Espace ne changent pas.
+  // Un champ de saisie qui avait le focus (nom du modèle en renommage, nom du PDF, objet de l'email...) le perdait à ce clic et se validait à la perte du focus : il le perd donc
+  // au CLIC, avant le gestionnaire du bouton (phase de capture), et non à l'appui - le nom validé peut être plus large, la barre se redessine et le bouton quitterait la souris
+  // avant le relâchement, le clic serait perdu (relevé à la vraie souris sur Enregistrer). Seul l'éditeur garde son focus. Mécanisme commun, par délégation, pour la même raison
+  // que ci-dessus : tout groupe à menu, y compris créé après ce script, en hérite.
+  function menuTriggerOf(target) {
+    const group = groupOf(target);
+    const trigger = group && group.querySelector(':scope > button');
+    return trigger && trigger.contains(target) ? trigger : null;
+  }
+  document.addEventListener('mousedown', (event) => { if (menuTriggerOf(event.target)) event.preventDefault(); });
+  document.addEventListener('click', (event) => {
+    if (!menuTriggerOf(event.target)) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
+  }, true);
   function setColorBar(id, color) {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';

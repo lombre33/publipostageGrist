@@ -529,7 +529,7 @@
   // enregistré.", "PDF généré.", une erreur...) et le gardait affiché indéfiniment, y compris après de nouvelles frappes JAMAIS enregistrées : rien
   // n'indiquait que ce message était devenu faux. Appelée après CHAQUE frappe (markAutosaveDirty) et après chaque sauvegarde/rechargement, elle fait
   // dire au coin "info" la vérité sur l'état ACTUEL plutôt que sur le dernier événement : "Enregistré à HH:MM" seulement quand tout ce qui a été tapé
-  // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu).
+  // est bien en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit non résolu) - sauf enregistrement automatique coupé, où une frappe en attente le dit.
   function updateSaveStatus() {
     // Lecture seule (js/access-rights.js) : rien ne s'enregistre pour cette personne, « Enregistré à… » ou « modèle non enregistré » n'auraient pas de sens.
     if (isReadOnly()) { setStatus(I18n.t('status.readOnly')); return; }
@@ -537,6 +537,15 @@
     // CRÉER un modèle, cf. son "if (!id) return" plus bas) - un statut vide laissait croire, à tort, que tout allait bien pendant que rien n'était
     // jamais protégé par l'auto-save. Même style d'alerte que templateNameRequired (onSave) : même cause réelle, pas encore de nom/ligne Grist.
     if (!Templates.getCurrentId()) { setStatus(I18n.t('status.unsavedTemplateWarning'), true); return; }
+    // Enregistrement automatique coupé (retours d'Antoine du 01/10 : sa bascule barrée a quitté la barre, cet état ne se voyait plus que dans le menu d'Enregistrer) : rien ne partira
+    // tout seul, ce qui vient d'être tapé n'est nulle part ailleurs que dans l'éditeur - le coin d'état le dit tant que ça dure, jusqu'au prochain Enregistrer. Seulement dans ce cas :
+    // enregistrement automatique actif, le délai entre une frappe et le passage suivant ne dure que 2,5 s et le coin reste vide, comme avant. Avant le test de DateModif : un modèle
+    // sans date connue doit pourtant le dire.
+    if (autosaveDirty && !autosaveConflictActive && !isAutosaveEnabled()) {
+      setStatus(I18n.t('status.unsavedChanges'));
+      statusMsg.classList.add('is-unsaved');
+      return;
+    }
     if (!autosaveLastKnownDateModif) { setStatus(''); return; }
     if (autosaveDirty || autosaveConflictActive) { setStatus(''); return; }
     setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
@@ -618,11 +627,9 @@
   // Menu « Enregistrer » (retours d'Antoine du 01/10, points 5 et 6) : le bouton garde son geste - un clic, un enregistrement - et son survol ouvre dessous
   // « Enregistrer sous… » (une copie) et la case « Enregistrement automatique » (activé par défaut), qui remplacent le bouton « Enregistrer sous » et la bascule qui
   // occupaient la barre. Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
-  // - mousedown/preventDefault sur le bouton et sur les lignes : un clic à la souris ne déplace pas le focus. Sinon le bouton cliqué le gardait et son menu
-  //   (:focus-within) restait affiché une fois la souris partie (mesuré sur « + » et sur « Qualité PDF », où il l'est encore), et le curseur quittait le texte en cours.
-  //   Un champ de saisie (renommer, nom du PDF, objet de l'email...) valide pourtant à la perte du focus (commitAndClose du renommage) : on le lui fait perdre, comme
-  //   avant, mais au CLIC et non à l'appui - le nom validé peut être plus large, la barre se redessine et le bouton quitterait la souris avant le relâchement, le clic
-  //   serait perdu (relevé à la vraie souris : renommer puis cliquer Enregistrer n'enregistrait pas). Seul l'éditeur garde son focus.
+  // - Le bouton ne prend pas le focus à la souris, comme tout bouton de menu au survol (délégation de js/editor-core.js : sinon son menu, :focus-within, restait affiché
+  //   une fois la souris partie, et le curseur quittait le texte en cours) ; un champ de saisie qui l'avait (renommage...) le perd au clic, avant onSave, donc le nom
+  //   validé est bien celui qui s'enregistre. Les lignes du menu en font autant ici : ce sont des <span tabindex="0">, que la souris focaliserait sinon.
   // - tabindex="0" et Entrée/Espace sur les lignes : « Enregistrer sous » était un vrai bouton, atteignable au clavier ; des <span> ne le seraient pas. Le menu reste
   //   ouvert tant que le focus est dedans. Au clavier, « Enregistrer sous… » met d'abord le focus sur le bouton : la fenêtre qu'elle ouvre le lui rend à sa fermeture, et
   //   une ligne de menu refermée ne peut pas le recevoir.
@@ -638,14 +645,15 @@
       const active = document.activeElement;
       if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
     };
-    saveBtn.addEventListener('mousedown', holdFocus);
-    saveBtn.addEventListener('click', () => { blurTextField(); onSave(); });
+    saveBtn.addEventListener('click', onSave);
     const syncAutosaveRow = () => { if (autosaveRow) autosaveRow.setAttribute('aria-checked', isAutosaveEnabled() ? 'true' : 'false'); };
     const toggleAutosave = () => {
       const enabled = !isAutosaveEnabled();
       setAutosaveEnabled(enabled);
       syncAutosaveRow();
       setStatus(I18n.t(enabled ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
+      // Coupé avec des modifications déjà en attente : l'indicateur « Modifications non enregistrées » passe devant le message du geste, qui n'aurait été lu qu'un instant.
+      if (!enabled && autosaveDirty) updateSaveStatus();
       // Réactiver ne remet RIEN à zéro : resetAutosaveState() effaçait aussi autosaveDirty, donc ce qui avait été tapé pendant la coupure n'était jamais enregistré
       // (le coin d'état annonçait pourtant « Enregistré à… ») et un changement fait ailleurs pendant ce temps passait sans bandeau de conflit. Rien n'est à
       // re-synchroniser : onSave et le chargement d'un modèle tiennent autosaveLastKnownDateModif à jour même éteint, le prochain tick enregistre ce qui est en
@@ -1493,6 +1501,8 @@
     wirePageFitZoom();
     decorateSaveButtonShortcut();
     I18n.onChange(decorateSaveButtonShortcut);
+    // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans l'ancienne.
+    I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
     wireSaveMenu();

@@ -428,6 +428,100 @@
     },
   });
 
+  // Indicateur « Modifications non enregistrées » (choix d'Antoine du 01/10, carte « Les deux ») : la bascule barrée a quitté la barre, rien ne montrait plus que
+  // l'enregistrement automatique était coupé. Le coin d'état (#status-msg, js/main.js:updateSaveStatus) le dit désormais, et seulement alors : enregistrement automatique
+  // actif, il reste vide entre une frappe et le passage suivant, comme avant. Ces cas passent par la vraie ligne de menu, de vraies frappes et de vrais ticks.
+  const statusEl = () => document.getElementById('status-msg');
+  const statusNow = () => ({ text: statusEl().textContent, unsaved: statusEl().classList.contains('is-unsaved'), error: statusEl().classList.contains('error-msg') });
+  const UNSAVED_RE = /^(Modifications non enregistrées\.|Unsaved changes\.)$/;
+  const SAVED_RE = /^(Enregistré à |Saved at )/;
+
+  cases.push({
+    id: 'autosave_status_says_unsaved_changes_only_while_autosave_is_off_and_manual_save_clears_it',
+    description: "Enregistrement automatique actif, une frappe laisse le coin d'état vide puis « Enregistré à… » revient seul ; coupé, la frappe y écrit « Modifications non enregistrées. » (en couleur de texte courant), le message tient après un tick sans qu'une écriture parte, et Enregistrer le remplace par « Enregistré à… »",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'AutoSave indicateur', '<p>Départ</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      const writes = () => stub().countActions('UpdateRecord', TABLE) + stub().countActions('AddRecord', TABLE);
+      try {
+        await ensureAutosave(h, true);
+        const afterSave = statusNow();
+        await h.focusAtEnd();
+        await h.typeText(' actif');
+        await h.sleep(60);
+        const typedOn = statusNow(); // enregistrement automatique actif : vide, jamais l'indicateur
+        await waitTicks(h, 1);
+        const savedOn = statusNow();
+        await h.clickButton('v2-btn-autosave'); // coupé
+        const afterOff = statusNow();
+        stub().clearActionLog();
+        await h.focusAtEnd();
+        await h.typeText(' coupé');
+        await h.sleep(60);
+        const typedOff = statusNow();
+        await waitTicks(h, 1);
+        const afterTick = statusNow();
+        const offWrites = writes();
+        await h.clickButton('btn-save');
+        await h.sleep(400);
+        const afterManual = statusNow();
+        const pass = SAVED_RE.test(afterSave.text) && !afterSave.unsaved
+          && typedOn.text === '' && !typedOn.unsaved && SAVED_RE.test(savedOn.text) && !savedOn.unsaved
+          && /désactivé|turned off/.test(afterOff.text) && !afterOff.unsaved
+          && UNSAVED_RE.test(typedOff.text) && typedOff.unsaved && !typedOff.error
+          && UNSAVED_RE.test(afterTick.text) && afterTick.unsaved && offWrites === 0
+          && SAVED_RE.test(afterManual.text) && !afterManual.unsaved;
+        return { pass, notes: JSON.stringify({ afterSave, typedOn, savedOn, afterOff, typedOff, afterTick, offWrites, afterManual }) };
+      } finally {
+        await ensureAutosave(h, true);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'autosave_status_unsaved_changes_wins_when_switched_off_with_a_pending_edit_follows_the_language_and_yields_to_the_never_saved_warning',
+    description: "Coupé avec une modification déjà en attente, l'indicateur passe tout de suite devant « Enregistrement automatique désactivé. » ; il suit la langue de l'interface ; rallumé, la modification part et il s'efface ; un brouillon jamais enregistré garde son avertissement rouge",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'AutoSave indicateur 2', '<p>Départ</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      try {
+        await ensureAutosave(h, true);
+        await h.focusAtEnd();
+        await h.typeText(' en attente');
+        await h.clickButton('v2-btn-autosave'); // coupé avant le passage de l'enregistrement automatique
+        const offPending = statusNow();
+        I18n.setLang('en');
+        await h.sleep(60);
+        const english = statusNow();
+        I18n.setLang('fr');
+        await h.sleep(60);
+        const french = statusNow();
+        await h.clickButton('v2-btn-autosave'); // rallumé : la modification en attente part
+        await waitTicks(h, 2);
+        const afterOn = statusNow();
+        const stored = String(stub().getRow(TABLE, id).Contenu).includes('en attente');
+        // Brouillon jamais enregistré, enregistrement automatique coupé et frappe : l'avertissement du brouillon passe avant l'indicateur.
+        await newTemplate(h);
+        await h.clickButton('v2-btn-autosave');
+        await h.focusAtEnd();
+        await h.typeText('brouillon');
+        await h.sleep(60);
+        const draft = statusNow();
+        const pass = UNSAVED_RE.test(offPending.text) && offPending.unsaved
+          && english.text === 'Unsaved changes.' && english.unsaved
+          && french.text === 'Modifications non enregistrées.' && french.unsaved
+          && SAVED_RE.test(afterOn.text) && !afterOn.unsaved && stored
+          && /^(Modèle non enregistré|Template not saved)/.test(draft.text) && draft.error && !draft.unsaved;
+        return { pass, notes: JSON.stringify({ offPending, english, french, afterOn, stored, draft }) };
+      } finally {
+        I18n.setLang('fr');
+        await ensureAutosave(h, true);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosave = cases;
 })();

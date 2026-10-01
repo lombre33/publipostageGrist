@@ -263,6 +263,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   arrondis n'a pas non plus d'`overflow: hidden` (il rognerait leurs info-bulles) : les coins sont portés par les
   boutons d'extrémité. Après un clic à la souris, l'info-bulle de focus d'un bouton reste cachée (`pp-tip-pointer`)
   jusqu'au prochain appui sur Tab ; celle du survol reste.
+  Le bouton principal d'un de ces menus (« + », « Enregistrer », « Qualité PDF », « Titre »…) ne prend pas le focus à la souris : le
+  curseur reste dans le texte et le menu se referme quand la souris part (retour d'Antoine du 01/10 : « + » et « Qualité PDF » restaient
+  ouverts) ; la règle est commune (`editor-core.js`), un menu neuf n'a rien à coder ; au clavier, Tab ouvre toujours le menu.
 - Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
   (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
   est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… » et « Bloc de signature » (titre du volet « Lien et
@@ -309,6 +312,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
   partie ; au clavier, Tab descend dans le menu. Réactiver l'enregistrement automatique n'efface pas ce qui a été tapé pendant la coupure.
+  Enregistrement automatique coupé : le coin d'état dit « Modifications non enregistrées. » (texte normal, pas rouge) dès qu'une modification attend,
+  jusqu'au prochain enregistrement ; allumé, le coin reste vide pendant la frappe, l'enregistrement part tout seul.
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

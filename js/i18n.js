@@ -403,8 +403,13 @@ const I18n = (function () {
     'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     // Coin "info" (#status-msg) piloté par l'état RÉEL de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel qu'il
-    // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe non enregistrée, brouillon jamais enregistré, conflit).
+    // soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de l'enregistrement
+    // automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.
     'status.savedAt': { fr: 'Enregistré à {time}.', en: 'Saved at {time}.' },
+    // Enregistrement automatique coupé et modifications en attente : le coin le dit tant que rien n'est enregistré à la main. Plus large que la base du coin (12,5 em,
+    // css/toolbar-v2.css) : entier quand la barre le met sur sa propre ligne (panneau d'environ 700 px), coupé par « … » dans la bande où il partage la première ligne avec les
+    // boutons (environ 850 à 880 px) - son texte entier s'affiche alors au survol (js/viewport-fit.js).
+    'status.unsavedChanges': { fr: 'Modifications non enregistrées.', en: 'Unsaved changes.' },
     // Cas "brouillon jamais enregistré" de updateSaveStatus() (Templates.getCurrentId() encore null) : sans ce message, le coin "info" restait
     // simplement vide et rien n'expliquait pourquoi l'auto-save (qui ne crée jamais de modèle, cf. main.js:autosaveTick "if (!id) return") ne faisait
     // rien pendant que l'utilisateur tapait. Même style d'alerte que templateNameRequired ci-dessus (même cause réelle : pas encore de nom/ligne Grist).

@@ -267,3 +267,6 @@ body { display:flex; flex-direction:column; }
 /* setStatus(msg, true) (js/main.js) pose cette classe sur #status-msg depuis toujours, mais AUCUNE règle ne la définissait : un message d'erreur
    (« Nom du modèle requis. », « Erreur génération PDF. ») s'affichait exactement comme un message de succès, en gris. */
 #status-msg.error-msg { color: var(--danger); }
+/* « Modifications non enregistrées » (enregistrement automatique coupé, js/main.js:updateSaveStatus) : couleur du texte courant au lieu du gris des autres messages, pour se repérer
+   d'un coup d'œil - sans le rouge d'une erreur : rien n'a échoué, l'enregistrement est simplement à faire à la main. */
+#status-msg.is-unsaved { color: var(--text); }

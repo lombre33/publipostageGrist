@@ -401,6 +401,32 @@
     },
   });
 
+  // « Modifications non enregistrées. » (coin d'état, enregistrement automatique coupé ; choix d'Antoine du 01/10) : couleur du texte courant, plus soutenue que le gris des autres
+  // messages pour se repérer d'un coup d'œil, sans le rouge d'une erreur.
+  cases.push({
+    id: 'contrast_unsaved_status_text_reaches_4_5_and_stands_out_from_the_plain_message',
+    description: "« Modifications non enregistrées. » du coin d'état atteint 4,5:1 sur le fond de la barre en clair et en sombre, et se détache du gris des autres messages",
+    run: async () => {
+      const el = document.getElementById('status-msg');
+      const saved = { text: el.textContent, cls: el.className };
+      try {
+        el.textContent = 'Modifications non enregistrées.';
+        const byTheme = inBothThemes(() => {
+          el.className = '';
+          const plain = round2(textRatio(el));
+          el.className = 'is-unsaved';
+          return { 'message ordinaire': plain, 'message non enregistré': round2(textRatio(el)) };
+        });
+        const bad = failing(byTheme, 4.5);
+        const stronger = Object.values(byTheme).every(v => v['message non enregistré'] > v['message ordinaire']);
+        return { pass: bad.length === 0 && stronger, notes: JSON.stringify({ bad, stronger, byTheme }) };
+      } finally {
+        el.textContent = saved.text;
+        el.className = saved.cls;
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

@@ -651,6 +651,48 @@
     },
   });
 
+  // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus (retours d'Antoine du 01/10, carte « Les deux » : « + », « Qualité PDF » et « Titre »
+  // restaient ouverts une fois la souris partie, et le curseur quittait le texte). Mécanisme commun de js/editor-core.js, par délégation. Ce cas parcourt TOUS les groupes à menu
+  // présents (découverte structurelle, y compris un groupe créé après coup) et vérifie l'appui retenu (mousedown annulé : seul geste que le harnais en page peut établir, un
+  // évènement synthétique ne déplace jamais le focus), puis le champ de saisie rendu au clic. La vraie souris, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
+  cases.push({
+    id: 'toolbar_every_menu_button_refuses_the_focus_on_a_mouse_press_and_blurs_a_text_field_before_its_click',
+    description: "Le bouton principal de chaque groupe à menu (« + », Enregistrer, Qualité PDF, Exporter, Titre, ...) retient le focus à l'appui de la souris, pas une ligne de menu ordinaire ni un bouton ordinaire ; un champ de saisie qui avait le focus le perd au clic, avant le gestionnaire du bouton, mais l'éditeur garde le sien",
+    run: async (h) => {
+      await goToNewDocument(h);
+      const triggers = [...document.querySelectorAll('.v2-hover-group')].map(g => g.querySelector(':scope > button')).filter(Boolean);
+      const press = (el) => { const e = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }); el.dispatchEvent(e); return e.defaultPrevented; };
+      const notHeld = triggers.filter(t => !press(t)).map(t => t.id || t.className);
+      const required = ['btn-new', 'btn-save', 'v2-btn-quality', 'btn-export-pdf', 'v2-heading-chip'];
+      const missing = required.filter(id => !triggers.some(t => t.id === id));
+      const rowHeld = press(document.getElementById('v2-btn-new-document')); // ligne en <span> d'un menu ordinaire : inchangée
+      const plainHeld = press(document.getElementById('btn-delete')); // bouton ordinaire de la barre : inchangé
+      const field = document.createElement('input');
+      field.type = 'text';
+      document.querySelector('.bar-row').appendChild(field);
+      const quality = document.getElementById('v2-btn-quality');
+      const seen = [];
+      const record = () => seen.push(document.activeElement === field ? 'champ encore actif' : 'champ rendu');
+      quality.addEventListener('click', record);
+      let fieldBlurred, editorKept;
+      try {
+        field.focus();
+        const focusedBefore = document.activeElement === field;
+        await h.clickButton('v2-btn-quality');
+        fieldBlurred = focusedBefore && document.activeElement !== field;
+        await h.focusAtEnd();
+        await h.clickButton('v2-btn-quality');
+        editorKept = !!document.activeElement && !!document.activeElement.closest('.ProseMirror');
+      } finally {
+        quality.removeEventListener('click', record);
+        field.remove();
+      }
+      const pass = triggers.length >= 5 && notHeld.length === 0 && missing.length === 0 && !rowHeld && !plainHeld
+        && fieldBlurred && seen[0] === 'champ rendu' && editorKept;
+      return { pass, notes: JSON.stringify({ triggers: triggers.length, notHeld, missing, rowHeld, plainHeld, fieldBlurred, seen, editorKept }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();

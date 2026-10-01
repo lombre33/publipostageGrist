@@ -12,7 +12,10 @@
 //      renommer puis cliquer Enregistrer : le champ de nom se referme (il perd le focus comme avant) et le nouveau nom est enregistré ;
 //   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre, puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
 //      bouton Enregistrer ; Espace sur la case la bascule ; Entrée sur le bouton enregistre ;
-//   6) interface en anglais : « Save (Ctrl+S) », « Save as… », « Auto-save ».
+//   6) interface en anglais : « Save (Ctrl+S) », « Save as… », « Auto-save » ;
+//   7) l'indicateur de la carte « Les deux » (01/10) : enregistrement automatique coupé, une frappe écrit « Modifications non enregistrées. » dans le coin d'état - en entier à 700 px,
+//      sans changer la hauteur de la barre, d'une couleur plus soutenue que les autres messages -, il tient 3 s sans qu'une écriture parte, un clic sur Enregistrer le remplace par
+//      « Enregistré à… » ; à 860 px, où le coin partage la première ligne et coupe le texte, le message entier s'affiche au survol.
 // Lancé par run-headless.mjs (groupe Node "saveMenuMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-save-menu-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -235,14 +238,38 @@ for (const theme of ['light', 'dark']) {
   await away(page);
 
   // 3) éteint : un clic sur Enregistrer est le seul à écrire, et le curseur reste dans le texte
+  const statusLook = () => page.evaluate(() => {
+    const el = document.getElementById('status-msg'), cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    return { text: el.textContent, cls: el.className, color: cs.color, w: Math.round(r.width), fits: el.scrollWidth <= el.clientWidth, barH: Math.round(document.getElementById('toolbar-top').getBoundingClientRect().height), vh: innerHeight };
+  });
+  const plain = await statusLook(); // « Enregistrement automatique désactivé. » : message ordinaire
   const para = await rectOf(page, '.ProseMirror p');
   await page.mouse.click(para.r - 3, para.y); await page.keyboard.press('End'); await page.keyboard.type(' alpha');
   await page.waitForTimeout(3300);
   check(`${T} : éteint, rien n’est écrit tout seul (3 s sans geste)`, !((await contentOf(page, 'Contrat de vente')) || '').includes('alpha'), await contentOf(page, 'Contrat de vente'));
+  const unsaved = await statusLook();
+  check(`${T} : éteint, la frappe écrit « Modifications non enregistrées. » dans le coin d’état, et le message tient encore 3 s plus tard`, unsaved.text === 'Modifications non enregistrées.' && unsaved.cls === 'is-unsaved', unsaved);
+  check(`${T} : ... il tient en entier à 700 px, sans changer la hauteur de la barre, dans une couleur plus soutenue que le message ordinaire`, unsaved.fits && unsaved.barH === plain.barH && unsaved.color !== plain.color, { plain, unsaved });
+  await page.screenshot({ path: SHOTS + `/non-enregistre-${theme}.png`, clip: { x: 0, y: 0, width: 700, height: 200 } });
+  if (theme === 'light') {
+    // Plus large (≈ 860 px), le coin partage la première ligne avec les boutons et coupe le texte : le message entier s'affiche alors au survol (js/viewport-fit.js).
+    await page.setViewportSize({ width: 860, height: HEIGHT });
+    await page.waitForTimeout(300);
+    const narrow = await statusLook();
+    const st = await rectOf(page, '#status-msg');
+    await page.mouse.move(st.x - 6, st.y, { steps: 2 }); await page.mouse.move(st.x, st.y, { steps: 3 });
+    await page.waitForTimeout(150);
+    const title = await page.evaluate(() => document.getElementById('status-msg').title);
+    check('clair : à 860 px le coin est plus étroit que le message (coupé par « … ») et le message entier s’affiche alors au survol', !narrow.fits && title === 'Modifications non enregistrées.', { narrow, title });
+    await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+    await page.waitForTimeout(300);
+    await away(page);
+  }
   const w0 = await updates(page);
   await realClick(page, '#btn-save', 700);
   const w1 = await updates(page);
   check(`${T} : un seul clic sur Enregistrer écrit le modèle (une écriture) et le coin d’état dit « Enregistré à »`, ((await contentOf(page, 'Contrat de vente')) || '').includes('alpha') && w1 - w0 === 1 && /Enregistré à/.test(await statusOf(page)), { w0, w1, status: await statusOf(page) });
+  check(`${T} : ... l’indicateur « Modifications non enregistrées. » a disparu avec lui`, (await statusLook()).cls === '' && !/Modifications non/.test(await statusOf(page)), await statusLook());
   check(`${T} : ... le focus reste dans le texte : la frappe suivante y arrive, au bout`, (await inEditor(page)) && (await (async () => { await page.keyboard.type(' beta'); return (await editorText(page)).endsWith('alpha beta'); })()), { focus: await activeId(page), text: await editorText(page) });
   await away(page); await page.waitForTimeout(250);
   check(`${T} : ... et le menu ne reste pas ouvert une fois la souris partie`, !(await flyOpen(page)) && (await expandedOf(page)) === 'false');
