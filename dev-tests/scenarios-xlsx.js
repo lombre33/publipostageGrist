@@ -918,6 +918,32 @@
     },
   });
 
+  // Un texte collé de Word ou d'une page web garde ses couleurs NOMMÉES (« red », « black » : le navigateur ne les réécrit pas en rgb()). L'Excel ne lisait que rgb() et #hexa : la couleur de ces textes, de ces
+  // surlignages et de ces fonds disparaissait sans un mot (carte d'Antoine du 01/10, « Corriger », après l'« Erreur génération DOCX. » de sa Fiche mission).
+  cases.push({
+    id: 'xlsx_named_css_colors_keep_their_color',
+    description: 'Une couleur de texte, un surlignage ou un fond de case écrits avec un NOM (red, black, yellow, lime ; majuscules comprises) sortent comme leur écriture en rgb() ou en #hexa ; transparent ou illisible : aucune couleur, jamais d\'erreur',
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([150, 110, 110, 110], [30, 30], [
+        [td('<span style="color: red">rouge</span> et <span style="color: BLUE">bleu</span>'), td('<span style="color: black">tout noir</span>'), td('fond nommé', ' style="background-color: yellow"'), td('<span style="background-color: lime">tout surligné</span>')],
+        [td('<span style="color: transparent">transparent</span>'), td('<span style="color: nope">illisible</span>'), td('fond transparent', ' style="background-color: transparent"'), td('fond illisible', ' style="background-color: nope"')],
+      ]);
+      const c = ref => x.sheet.cell(ref);
+      const bad = [];
+      const runs = c('A1').rich || [];
+      const run = t => runs.find(r => r.text.trim() === t) || { font: {} };
+      if (run('rouge').font.color !== 'FFFF0000') bad.push('« rouge » : couleur=' + run('rouge').font.color);
+      if (run('bleu').font.color !== 'FF0000FF') bad.push('« BLUE » : couleur=' + run('bleu').font.color);
+      if (c('B1').style.font.color !== 'FF000000') bad.push('« black » sur toute la case : couleur=' + c('B1').style.font.color);
+      if (!c('C1').style.fill || c('C1').style.fill.argb !== 'FFFFFF00') bad.push('fond « yellow » : ' + JSON.stringify(c('C1').style.fill));
+      if (!c('D1').style.fill || c('D1').style.fill.argb !== 'FF00FF00') bad.push('surlignage « lime » de toute la case : ' + JSON.stringify(c('D1').style.fill));
+      ['A2', 'B2'].forEach(ref => { if (c(ref).style.font.color) bad.push(ref + ' (transparent ou illisible) : couleur de texte=' + c(ref).style.font.color); });
+      ['C2', 'D2'].forEach(ref => { if (c(ref).style.fill) bad.push(ref + ' (transparent ou illisible) : fond=' + JSON.stringify(c(ref).style.fill)); });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.xlsx = cases;
 })();

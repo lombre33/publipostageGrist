@@ -37,11 +37,8 @@ const XlsxExport = (function () {
   function columnWidthFromPx(px) { return Math.min(MAX_COLUMN_WIDTH, Math.max(0.5, (px - 5) / 7)); }
   function rowHeightFromPx(px) { return Math.min(MAX_ROW_PT, Math.max(1, Math.round(px * PX_TO_PT * 4) / 4)); }
 
-  // « rgb(12, 34, 56) », « rgba(12, 34, 56, 0.5) » ou « #123456 » -> « FF123456 » (ARGB d'ExcelJS) ; null si transparent, vide ou illisible.
-  function cssColorArgb(value) {
-    if (!value) return null;
-    const v = String(value).trim().toLowerCase();
-    if (v === 'transparent' || v === 'inherit' || v === 'initial' || v === 'currentcolor') return null;
+  // « rgb(12, 34, 56) », « rgba(12, 34, 56, 0.5) » ou « #123456 » (en minuscules) -> « FF123456 » (ARGB d'ExcelJS) ; null si transparent ou illisible.
+  function argbOfRgbOrHex(v) {
     const rgb = v.match(/^rgba?\(\s*(\d+)\s*[, ]\s*(\d+)\s*[, ]\s*(\d+)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/);
     if (rgb) {
       const alpha = rgb[4] === undefined ? 1 : (rgb[4].endsWith('%') ? parseFloat(rgb[4]) / 100 : parseFloat(rgb[4]));
@@ -53,6 +50,30 @@ const XlsxExport = (function () {
     if (short) return ('FF' + short[1] + short[1] + short[2] + short[2] + short[3] + short[3]).toUpperCase();
     const long = v.match(/^#([0-9a-f]{6})$/);
     return long ? ('FF' + long[1]).toUpperCase() : null;
+  }
+  // La couleur telle que le NAVIGATEUR la lit : « #rrggbb », ou « rgba(r, g, b, a) » sous 100 % d'opacité (le fillStyle d'un canevas, jamais un style calculé : celui-ci suit le thème sombre). Le canevas ignore sans rien
+  // dire une valeur qui n'est pas une couleur : deux amorces distinctes séparent « illisible » (l'amorce revient telle quelle) d'une couleur qui vaut l'amorce. Même lecture que cssColorHex de js/docx-export.js.
+  const browserColorCache = new Map();
+  let colorProbe;
+  function browserColor(v) {
+    if (browserColorCache.has(v)) return browserColorCache.get(v);
+    if (colorProbe === undefined) colorProbe = document.createElement('canvas').getContext('2d');
+    let resolved = null;
+    if (colorProbe) {
+      colorProbe.fillStyle = '#000000'; colorProbe.fillStyle = v; const onBlack = String(colorProbe.fillStyle);
+      colorProbe.fillStyle = '#ffffff'; colorProbe.fillStyle = v; const onWhite = String(colorProbe.fillStyle);
+      if (onBlack === onWhite) resolved = onBlack;
+    }
+    browserColorCache.set(v, resolved);
+    return resolved;
+  }
+  // Une couleur CSS -> « FF123456 » (ARGB d'ExcelJS) ; null si vide, transparente ou illisible. Un texte collé de Word ou d'une page web garde ses couleurs NOMMÉES (« red », « black » : le navigateur ne les réécrit pas en
+  // rgb()), et « hsl(...) » ou « rgb(100%, ...) » sont aussi des couleurs valides : ce que argbOfRgbOrHex ne lit pas passe par le navigateur.
+  function cssColorArgb(value) {
+    if (!value) return null;
+    const v = String(value).trim().toLowerCase();
+    if (v === 'transparent' || v === 'inherit' || v === 'initial' || v === 'currentcolor') return null;
+    return argbOfRgbOrHex(v) || argbOfRgbOrHex(browserColor(v) || '');
   }
   // Taille CSS (« 14px », « 10.5pt », « 1.2em ») -> points, dans les bornes d'Excel ; `fallback` si illisible.
   function cssSizePt(value, fallback) {

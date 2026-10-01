@@ -763,7 +763,10 @@ rejoue le modèle d'Antoine avec des bulles à chemin de références sur trois 
 fixe la ligne courante de la page). Le fond de cellule (le bleu de la colonne d'étiquettes) sortait lui aussi sans rien dans
 le Word : `cellShadingFrom` (`js/docx-export.js`) en fait le `<w:shd>` de la `<w:tcPr>`, d'après le style en ligne comme le
 PDF ; `docx_table_cell_background_follows_the_editor` couvre les formes de couleur, le transparent et la fusion, et le
-scénario de la Fiche mission vérifie un fond par étiquette.
+scénario de la Fiche mission vérifie un fond par étiquette. L'Excel d'une grille avait le même défaut : `cssColorArgb`
+(`js/xlsx-export.js`) ne lisait que `rgb()` et `#hexa`, donc un texte, un surlignage ou un fond en couleur nommée sortait sans
+couleur ; le reste passe par le navigateur (`browserColor`, le `fillStyle` d'un canevas, jamais un style calculé), et
+`xlsx_named_css_colors_keep_their_color` (en fin de `scenarios-xlsx.js`) le vérifie.
 
 ## Vérification transversale — marges de page et largeur de colonne mm (`scenarios-pagelayout.js`)
 
