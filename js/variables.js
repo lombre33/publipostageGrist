@@ -31,6 +31,8 @@ const Variables = (function () {
     { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
     // Une puce en ligne, pas un chip de valeur : une case que sa condition coche ou non (js/conditional-checkbox.js), posée à la place de « #requête » et sélectionnée pour que sa barre s'ouvre.
     { key: 'Case conditionnelle', i18nKey: 'chips.conditionalCheckbox', kind: 'chip', chipKind: 'conditionalCheckbox' },
+    // Pas un chip non plus : une bulle « Calcul » (js/variable-calc.js) dont la fenêtre s'ouvre à l'insertion ; elle se pose par-dessus le texte tapé après la touche de déclenchement.
+    { key: 'Calcul', i18nKey: 'chips.calc', kind: 'chip', chipKind: 'calc' },
   ];
   function displayKey(item) { return item.i18nKey ? I18n.t(item.i18nKey) : item.key; }
   // Dernières props reçues de @tiptap/suggestion - permet de rejouer updateItems() depuis un clic sur un onglet, qui n'est pas un évènement du plugin
@@ -157,6 +159,7 @@ const Variables = (function () {
     latestCommand = props.command;
     setTabsVisible(true);
     render(currentItems, item => latestCommand(item));
+    ensureBox().classList.remove('ac-over-window'); // la liste de l'éditeur retrouve son étage : un champ de fenêtre l'a peut-être montée devant son voile (checkForFilenameTrigger)
     ensureBox().style.display = currentItems.length ? 'flex' : 'none';
     position(props.clientRect);
   }
@@ -209,6 +212,10 @@ const Variables = (function () {
                 }
                 if (props.chipKind === 'conditionalCheckbox') {
                   ConditionalCheckbox.insertFromPanel(editor, range);
+                  return;
+                }
+                if (props.chipKind === 'calc') {
+                  VariableCalc.insertFromPanel(editor, range);
                   return;
                 }
                 if (props.chipKind === 'footnote') {
@@ -305,6 +312,9 @@ const Variables = (function () {
     latestCommand = item => insertFilenameVariable(item);
     setTabsVisible(false);
     render(currentItems, latestCommand);
+    // Un champ d'une fenêtre (le calcul d'une bulle, js/variable-calc.js) : le panneau s'ouvre devant son voile, pas dessous - les fenêtres sont au-dessus des menus (css/variable-calc.css, jeton
+    // --z-window-list). Une classe et non un z-index en ligne : js/layers.js est le seul script à en poser (codeHygiene).
+    ensureBox().classList.toggle('ac-over-window', !!el.closest('.pp-modal'));
     ensureBox().style.display = 'flex';
     position(() => el.getBoundingClientRect());
   }
@@ -364,7 +374,8 @@ const Variables = (function () {
   function formatValue(val, format, varTable, varColumn, opts) {
     opts = opts || {};
     if (val === null || val === undefined) return '';
-    const colType = varTable && varColumn ? GristAPI.getColumnType(varTable, varColumn) : null;
+    // `opts.colType` : le type imposé quand la valeur ne vient d'aucune colonne - le résultat d'un calcul (js/formula.js) est un nombre, écrit et caché à zéro comme celui d'une colonne Numérique.
+    const colType = opts.colType || (varTable && varColumn ? GristAPI.getColumnType(varTable, varColumn) : null);
     const hideZero = !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
     if (Array.isArray(val)) return (hideZero ? val.filter(v => !VariableFormat.isZero(v)) : val).map(v => formatValue(v, format, varTable, varColumn, opts)).join(', ');
     if (hideZero && VariableFormat.isZero(val)) return '';
@@ -598,6 +609,77 @@ const Variables = (function () {
   // Le texte seul, pour ce qui l'écrit tel quel (nom de fichier, champs du mode email, boucles en ligne, aperçus des fenêtres). `opts` : voir resolveVariableResult.
   async function resolveVariable(varTable, varColumn, currentTableId, record, format, opts) {
     return (await resolveVariableResult(varTable, varColumn, currentTableId, record, format, opts)).text;
+  }
+
+  // === Bulle « Calcul » (js/formula.js) ===
+  // Le texte d'une erreur de calcul, dans la langue de l'interface (clés `formula.error.*` de js/i18n.js).
+  function formulaErrorText(error) {
+    return Formula.errorMessage(error, (key, params) => I18n.t(key, params), { lang: I18n.getLang(), trigger: triggerChar() });
+  }
+  // La valeur d'une variable de calcul, prête pour Formula.evaluate : un nombre, null (cellule vide) ou la liste des nombres des lignes liées (règle « match », colonne
+  // liste) ; { error } avec le message prêt à écrire quand la variable ne se lit pas ou n'est pas un nombre. Une date n'est pas un nombre : Grist la garde en secondes, que
+  // le calcul additionnerait sans que personne ne le voie. `opts` : comme resolveRawValue (ligne du tour d'une zone répétée).
+  async function calcOperand(variable, currentTableId, record, opts) {
+    // Une colonne ou une table disparue ne vaut pas 0 : le total dirait faux sans que personne le voie.
+    const end = GristAPI.resolveColumnPath(variable.table, variable.column);
+    if (!end) return { error: I18n.t('formula.error.unknownColumn', { column: variable.column, table: variable.table }) };
+    // La clé est dite comme la bulle l'écrit, avec sa touche de déclenchement.
+    const shown = triggerChar() + variable.key;
+    if (end.type === 'Date' || end.type === 'DateTime') return { error: I18n.t('formula.error.dateColumn', { key: shown }) };
+    if (end.type === 'Attachments') return { error: I18n.t('formula.error.attachments', { key: shown }) };
+    const { value, error } = await resolveRawValue(variable.table, variable.column, currentTableId, record, opts);
+    if (error) return { error };
+    const read = raw => {
+      const found = Formula.toNumber(raw);
+      return found.error ? { error: formulaErrorText(Object.assign({ key: shown }, found.error)) } : found;
+    };
+    if (!Array.isArray(value)) { const one = read(value); return one.error ? { error: one.error } : one.value; }
+    const list = [];
+    for (const item of value) {
+      const one = read(item);
+      if (one.error) return { error: one.error };
+      list.push(one.value);
+    }
+    return list;
+  }
+  // { text, isError } d'un calcul enregistré, comme resolveVariableResult pour une variable : le résultat est un nombre, écrit avec le format de la bulle (FR par défaut, zéro
+  // caché par défaut) ; une erreur s'écrit « [ERREUR: …] » dans la langue de l'interface, une variable illisible avec son propre message. `opts` : ligne du tour d'une zone
+  // répétée (opts.loop) ; opts.rawNumbers et opts.keepZero comme formatValue. Plus, pour la fenêtre du calcul : `value` (le nombre, null s'il n'y a rien à montrer) quand le calcul
+  // aboutit, `message` (l'erreur sans son « [ERREUR: …] ») quand il échoue.
+  async function resolveCalcResult(stored, currentTableId, record, format, opts) {
+    // Le message d'une variable illisible arrive déjà entre « [ERREUR: … » et « ] » (variables.error.*) ; celui du calcul lui-même, non.
+    const failure = error => {
+      const message = error.code === 'variable' ? error.message : formulaErrorText(error);
+      const wrapped = /^\[[^:\]]+:[\s\S]*\]$/.test(message);
+      return { text: wrapped ? message : I18n.t('variables.error.generic', { message }), isError: true, message: wrapped ? message.replace(/^\[[^:\]]+:\s*([\s\S]*)\]$/, '$1') : message };
+    };
+    try {
+      const parsed = Formula.parse(stored);
+      if (parsed.error) return failure(parsed.error);
+      const values = {};
+      await Promise.all(Formula.variablesOf(parsed.ast).map(async variable => { values[variable.key] = await calcOperand(variable, currentTableId, record, opts); }));
+      const result = Formula.evaluate(parsed.ast, values);
+      if (result.error) return failure(result.error);
+      return { text: formatValue(result.value, format, null, null, Object.assign({}, opts, { colType: 'Numeric' })), isError: false, value: result.value };
+    } catch (e) {
+      console.error('[variables] échec du calcul', e);
+      return failure({ code: 'failed' });
+    }
+  }
+  async function resolveCalc(stored, currentTableId, record, format, opts) {
+    return (await resolveCalcResult(stored, currentTableId, record, format, opts)).text;
+  }
+  // Ce qui empêche une bulle « Calcul » de se calculer, sans lire aucune cellule : la formule ne se lit pas, ou elle cite une table ou une colonne qui n'existe plus. '' quand
+  // tout va bien. La bulle de l'éditeur devient rouge avec ce message en info-bulle (Editor.refreshVariableBadgeValidity).
+  function calcProblem(stored) {
+    const parsed = Formula.parse(stored);
+    if (parsed.error) return formulaErrorText(parsed.error);
+    const tables = GristAPI.getTables();
+    for (const variable of Formula.variablesOf(parsed.ast)) {
+      if (tables.indexOf(variable.table) === -1) return I18n.t('formula.error.unknownTable', { table: variable.table });
+      if (!GristAPI.resolveColumnPath(variable.table, variable.column)) return I18n.t('formula.error.unknownColumn', { column: variable.column, table: variable.table });
+    }
+    return '';
   }
 
   // Variables d'un texte brut - champs Objet/À/Cc/Cci du mode email et nom du fichier PDF, de simples <input> sans badge : à chaque déclencheur, la plus longue
@@ -956,5 +1038,6 @@ const Variables = (function () {
   return {
     createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue, currentTables, prioritizeTables,
+    resolveCalcResult, resolveCalc, calcProblem, formulaErrorText,
   };
 })();

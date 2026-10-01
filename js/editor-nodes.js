@@ -28,6 +28,42 @@ const EditorNodes = (function () {
     return { head: label.slice(0, label.length - tail.length), tail };
   }
 
+  // Vue de l'éditeur d'une bulle (variable ou calcul) : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau ou une colonne de zone 2
+  // colonnes trop étroite tronque le MILIEU du nom avec « … » (css/variable-actions.css, css/variable-calc.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et
+  // même texte que renderHTML (badgeSpec), donc getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le rend entier aux lecteurs
+  // d'écran. `prefix` : la classe de la bulle ('var-badge' ou 'calc-badge'), qui nomme aussi celles du début (-head) et de la fin (-tail) et l'état cassé (-broken).
+  function splitBadgeView(spec, prefix) {
+    const [, attrs, label] = spec;
+    const dom = document.createElement('span');
+    Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+    const parts = splitBadgeLabel(label);
+    const head = document.createElement('span');
+    head.className = prefix + '-head';
+    head.textContent = parts.head;
+    dom.appendChild(head);
+    let tail = null;
+    let tailText = null;
+    if (parts.tail) {
+      // La fin est dans une boîte qui la cale à droite : quand la case ou la colonne est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
+      tail = document.createElement('span');
+      tail.className = prefix + '-tail';
+      tailText = document.createElement('span');
+      tailText.textContent = parts.tail;
+      tail.appendChild(tailText);
+      dom.appendChild(tail);
+    }
+    // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
+    // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la gauche, ce que
+    // scrollWidth ne compte pas : on compare les rectangles.
+    dom.addEventListener('mouseenter', () => {
+      if (dom.classList.contains(prefix + '-broken')) return;
+      const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
+      if (cut) dom.title = label;
+      else if (dom.title === label) dom.removeAttribute('title');
+    });
+    return { dom };
+  }
+
   // Badge de variable #Variable — nœud "atome" en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
   // data-column data-key>, reconnu tel quel par reader-mode.js/pdf-export.js.
   function createVarBadgeNode(Node, mergeAttributes) {
@@ -81,42 +117,81 @@ const EditorNodes = (function () {
       renderHTML({ HTMLAttributes, node }) {
         return badgeSpec(HTMLAttributes, node);
       },
-      // Vue de l'éditeur SEULEMENT : le texte de la bulle y est coupé en deux morceaux (début / fin) pour qu'une case de tableau ou une colonne de zone 2
-      // colonnes trop étroite tronque le MILIEU du nom avec « … » (css/variable-actions.css) au lieu de laisser la bulle traverser la case. Mêmes attributs et
-      // même texte que renderHTML (badgeSpec), donc getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte, et textContent le
-      // rend entier aux lecteurs d'écran. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait
+      // Vue de l'éditeur SEULEMENT : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon, comme il le faisait
       // avec renderHTML.
       addNodeView() {
-        return ({ node, HTMLAttributes }) => {
-          const [, attrs, label] = badgeSpec(HTMLAttributes, node);
-          const dom = document.createElement('span');
-          Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
-          const parts = splitBadgeLabel(label);
-          const head = document.createElement('span');
-          head.className = 'var-badge-head';
-          head.textContent = parts.head;
-          dom.appendChild(head);
-          let tail = null;
-          let tailText = null;
-          if (parts.tail) {
-            // La fin est dans une boîte qui la cale à droite : quand la case ou la colonne est trop étroite, c'est son début qui est rogné (css/variable-actions.css).
-            tail = document.createElement('span');
-            tail.className = 'var-badge-tail';
-            tailText = document.createElement('span');
-            tailText.textContent = parts.tail;
-            tail.appendChild(tailText);
-            dom.appendChild(tail);
-          }
-          // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde son message,
-          // posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la gauche, ce que
-          // scrollWidth ne compte pas : on compare les rectangles.
-          dom.addEventListener('mouseenter', () => {
-            if (dom.classList.contains('var-badge-broken')) return;
-            const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
-            if (cut) dom.title = label;
-            else if (dom.title === label) dom.removeAttribute('title');
+        return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
+      },
+    });
+  }
+
+  // Bulle « Calcul » (js/variable-calc.js) : une FORMULE à la place d'une colonne, posée depuis la ligne « Calcul » du menu des variables (onglet Chips). Atome en ligne comme
+  // varBadge ; `formula` est l'écriture enregistrée de js/formula.js (variables {Table.Colonne}, décimales au point, noms de fonction anglais), jamais le texte saisi : la même
+  // formule se relit dans la langue de l'interface et avec la touche de déclenchement du moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne
+  // numérique. Vert comme les chips (« valeur calculée, pas une colonne Grist »). Résolue en lecture et à l'export par js/reader-mode.js, avec la ligne du tour dans une zone répétée.
+  function createCalcBadgeNode(Node, mergeAttributes) {
+    // Le texte de la bulle : « = » puis la formule dans l'écriture saisie, × ÷ − à la place de * / - (régénéré à chaque rendu, jamais stocké).
+    function calcLabel(formula) {
+      return '= ' + Formula.toDisplay(formula, { trigger: varBadgeTriggerChar(), lang: I18n.getLang(), pretty: true });
+    }
+    function badgeSpec(HTMLAttributes, node) {
+      const attrs = mergeAttributes(HTMLAttributes, { class: 'calc-badge', contenteditable: 'false', 'data-formula': node.attrs.formula || '' });
+      if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+      return ['span', attrs, calcLabel(node.attrs.formula)];
+    }
+    return Node.create({
+      name: 'calcBadge',
+      group: 'inline',
+      inline: true,
+      atom: true,
+      selectable: true,
+      addAttributes() {
+        const noBareRender = { default: null, renderHTML: () => ({}) };
+        return { formula: { default: '', renderHTML: () => ({}) }, format: noBareRender };
+      },
+      parseHTML() {
+        return [{
+          tag: 'span.calc-badge',
+          getAttrs: el => {
+            let format = null;
+            try { format = JSON.parse(el.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
+            return { formula: el.getAttribute('data-formula') || '', format };
+          },
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        return badgeSpec(HTMLAttributes, node);
+      },
+      // Même vue que celle d'une bulle de variable (début / fin, cf. splitBadgeView), et un double-clic ouvre le calcul : la barre flottante a le même bouton.
+      addNodeView() {
+        return ({ node, editor, getPos, HTMLAttributes }) => {
+          const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'calc-badge');
+          view.dom.addEventListener('dblclick', event => {
+            const pos = typeof getPos === 'function' ? getPos() : null;
+            if (pos == null || !editor.isEditable) return;
+            event.preventDefault();
+            VariableCalc.openAt(editor, pos);
           });
-          return { dom };
+          return view;
+        };
+      },
+    });
+  }
+
+  // Entrée sur une bulle « Calcul » sélectionnée ouvre son calcul (sans elle, TipTap couperait le paragraphe devant la bulle). Dans une extension à part, de priorité haute,
+  // pour passer avant les touches de base sans changer l'ordre des nœuds du schéma (même précédent : js/grid-editor.js).
+  function createCalcBadgeKeysExtension(Extension) {
+    return Extension.create({
+      name: 'calcBadgeKeys',
+      priority: 1000,
+      addKeyboardShortcuts() {
+        return {
+          Enter: ({ editor }) => {
+            const picked = editor.state.selection.node;
+            if (!picked || picked.type.name !== 'calcBadge' || !editor.isEditable) return false;
+            VariableCalc.openAt(editor, editor.state.selection.from);
+            return true;
+          },
         };
       },
     });
@@ -1272,7 +1347,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, createCalcBadgeNode, createCalcBadgeKeysExtension, createPageNumberBadgeNode, createSmartChipNode, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,

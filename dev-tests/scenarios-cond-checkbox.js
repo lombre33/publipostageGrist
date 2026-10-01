@@ -147,7 +147,8 @@
         return { label: view && view.querySelector('.conditional-checkbox-head').textContent, title: view && view.title, entry: I18n.t('chips.conditionalCheckbox') };
       });
       const checks = {
-        entryIsListed: items.indexOf(I18n.t('chips.conditionalCheckbox')) === items.length - 1 && items.length === 6,
+        // « Calcul » (js/variable-calc.js) a été ajouté après elle : sept lignes, la case conditionnelle sixième.
+        entryIsListed: items.indexOf(I18n.t('chips.conditionalCheckbox')) === 5 && items.length === 7 && items[6] === I18n.t('chips.calc'),
         picked,
         oneChipNoHash: nodes.length === 1 && ed().state.doc.textContent === 'Contrat signé ',
         defaults: nodes.length === 1 && nodes[0].node.attrs.style === 'accentPlain' && nodes[0].node.attrs.condition === null,

@@ -101,6 +101,7 @@ const GROUPS = {
   textExpansion: 'scenarios-text-expansion', // expansion de texte « §ub » (js/text-expansion.js) : abréviations par personne dans une table du document, règle de saisie, onglet Réglages > Raccourcis, contrastes
   shortcuts: 'scenarios-shortcuts', // raccourcis clavier personnalisables (js/shortcuts.js, js/shortcuts-panel.js) : combinaisons, touches de départ, une touche changée libère l'ancienne, refus, boutons grisés, infobulles, liste des Réglages, contrastes
   imageWide: 'scenarios-image-wide', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : la largeur que l'éditeur montre, dans le corps, une case, une colonne, centrée, flottante, selon le format de page
+  varCalc: 'scenarios-var-calc', // bulle « Calcul » (variables calculées) : nœud, fenêtre, barre flottante, Lecture, PDF, Word, zones répétées, total de lignes
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -164,6 +165,8 @@ const NODE_SCRIPTS = {
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
   templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière
+  calcMouse: 'verify-calc-mouse.mjs', // bulle « Calcul » (variables calculées) à la vraie souris et au vrai clavier : ligne « Calcul » de la liste « # », fenêtre dans 700x400, liste des colonnes devant elle, barre aux boutons grisés aux pixels, case étroite, Lecture, anglais ; 700x400 clair et sombre
+  formulaUnit: 'unit-formula.mjs', // Node pur (vm) : js/formula.js, le moteur des bulles « Calcul » (variables calculées) : opérations, listes de lignes, fonctions, fautes de syntaxe, écriture saisie et enregistrée
 };
 
 const argv = process.argv.slice(2);

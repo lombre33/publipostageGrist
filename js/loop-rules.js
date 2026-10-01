@@ -176,8 +176,8 @@ const LoopRules = (function () {
   // === Association d'un élément copié à la ligne du tour ===
   const bindings = new WeakMap();
   // Les blocs de texte conditionnels (js/conditional-text.js) et les cases conditionnelles (js/conditional-checkbox.js) aussi : copiés avec leur zone, chacun lit la ligne de son tour pour
-  // évaluer sa condition.
-  const BOUND_SELECTOR = '.var-badge, img.editor-image[data-var-table], .conditional-text, .conditional-checkbox';
+  // évaluer sa condition. Et les bulles « Calcul » (js/variable-calc.js) : « Prix × Quantité » dans une ligne répétée donne le total de CETTE ligne.
+  const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], .conditional-text, .conditional-checkbox';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
   // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa table).
   function itemBinding(loop, item, inherited) {

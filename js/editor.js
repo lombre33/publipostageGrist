@@ -296,6 +296,7 @@ const Editor = (function () {
     EditorStateClass = EditorState;
 
     const VarBadge = EditorNodes.createVarBadgeNode(Node, mergeAttributes);
+    const CalcBadge = EditorNodes.createCalcBadgeNode(Node, mergeAttributes);
     const PageNumberBadge = EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes);
     const SmartChip = EditorNodes.createSmartChipNode(Node, mergeAttributes);
     const FootnoteRef = EditorNodes.createFootnoteRefNode(Node, mergeAttributes);
@@ -375,6 +376,8 @@ const Editor = (function () {
         // "Commencez à écrire votre modèle ici…" y serait trompeur (l'utilisateur n'édite pas le document principal), donc rien n'y est affiché.
         Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
         VarBadge,
+        CalcBadge,
+        EditorNodes.createCalcBadgeKeysExtension(Extension),
         PageNumberBadge,
         SmartChip,
         FootnoteRef,
@@ -468,6 +471,12 @@ const Editor = (function () {
         reason = `La colonne « ${column} » n'existe plus dans la table « ${table} ».`;
       }
       el.classList.toggle('var-badge-broken', !!reason);
+      if (reason) el.title = reason; else el.removeAttribute('title');
+    });
+    // Bulle « Calcul » : cassée quand sa formule ne se lit plus ou cite une colonne qui n'existe plus (Variables.calcProblem) - le message en info-bulle, comme une bulle de variable.
+    editor.view.dom.querySelectorAll('span.calc-badge').forEach(el => {
+      const reason = Variables.calcProblem(el.getAttribute('data-formula') || '');
+      el.classList.toggle('calc-badge-broken', !!reason);
       if (reason) el.title = reason; else el.removeAttribute('title');
     });
   }

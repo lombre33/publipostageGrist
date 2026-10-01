@@ -9,6 +9,9 @@ const ReaderMode = (function () {
   }
   // Options de résolution d'un élément copié par une zone répétée (js/loop-rules.js) : sa valeur est lue dans la ligne du tour.
   function loopOpts(binding) { return binding ? { loop: binding } : undefined; }
+  // Les bulles à résoudre : celles d'une variable et celles d'un calcul (js/variable-calc.js).
+  const BADGE_SELECTOR = '.var-badge, .calc-badge';
+  const isCalcBadge = badge => badge.classList.contains('calc-badge');
   // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de l'export, le
   // texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle (js/condition-rules.js:matches).
   // `binding` : ligne du tour d'une zone répétée (js/loop-rules.js:bindingOf) - une règle sur une colonne de la table de la boucle lit alors cette ligne.
@@ -137,11 +140,12 @@ const ReaderMode = (function () {
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
-    const badges = wrapper.querySelectorAll('.var-badge');
+    const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
     await Promise.all(Array.from(badges).map(async badge => {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
       const binding = LoopRules.bindingOf(badge);
+      if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); badge.replaceWith(span); return; }
       if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
       if (inline) { badge.replaceWith(inline.node); return; }
@@ -472,7 +476,7 @@ const ReaderMode = (function () {
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
-    const badges = wrapper.querySelectorAll('.var-badge'); let hasError = false;
+    const badges = wrapper.querySelectorAll(BADGE_SELECTOR); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
       const { node, isError } = await resolveBadgeNode(badge, tableId, record, format, loopCtx);
@@ -668,6 +672,12 @@ const ReaderMode = (function () {
   }
   async function resolveBadgeNode(badge, tableId, record, format, loopCtx) {
     const binding = LoopRules.bindingOf(badge);
+    // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une bulle de variable de cette table.
+    if (isCalcBadge(badge)) {
+      const { text, isError } = await Variables.resolveCalcResult(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding));
+      const span = document.createElement('span'); span.textContent = text; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
+      return { node: span, isError };
+    }
     if (!(await badgeConditionHolds(badge, tableId, record, binding))) return { node: document.createTextNode(''), isError: false };
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
@@ -702,7 +712,7 @@ const ReaderMode = (function () {
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
     await ConditionalText.resolve(wrapper, tableId || lastCurrentTableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId || lastCurrentTableId, record);
-    const badges = wrapper.querySelectorAll('.var-badge');
+    const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
       if (onBadge) await onBadge(badge, LoopRules.bindingOf(badge));

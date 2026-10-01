@@ -103,6 +103,8 @@ const Icons = (function () {
     // Un 0 (ovale) barré d'un trait (Ø) : bouton « Ne rien afficher si la valeur vaut zéro » de la barre d'un nombre. Le trait (l'unique <path>) est caché par l'attribut
     // `display` quand la bulle affiche le zéro : on ne remplace pas le SVG, la cible d'un clic en train de se produire doit rester dans la barre (cf. wireVariableFloatingToolbar).
     zeroToggle: '<ellipse cx="12" cy="12" rx="5.5" ry="8"/><path d="M5 21 19 3"/>',
+    // Bouton « Modifier le calcul » de la barre flottante d'une bulle « Calcul » (js/floating-toolbars.js) : une calculatrice (corps, écran, touches).
+    calc: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
     // Menu « Lien et blocs de contenu » de la barre (une seule icône, js/link-dialog.js) : maillon HORIZONTAL pour le lien - le maillon en diagonale
     // (varLinked) est déjà pris par « autres attributs » de la barre d'une bulle, une icône ne porte qu'une fonction - et chevrons pour le bloc de code.
     link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
