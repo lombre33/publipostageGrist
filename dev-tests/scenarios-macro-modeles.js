@@ -297,7 +297,7 @@
   // avancé, texte de l'indice de type), pas seulement la logique - exigence du projet pour toute correction UI. ---
   cases.push({
     id: 'macro_rule_column_field_lists_real_columns',
-    description: 'Le champ colonne de la modale macro liste les vraies colonnes de la table courante, garde un repli "avancé", et adapte l’indice de type',
+    description: 'Le champ colonne de la modale macro liste les vraies colonnes de la table courante, garde un repli "avancé", adapte l’indice de type et le champ Valeur (la liste Oui / Non pour une colonne Oui / Non, plus de texte libre)',
     run: async (h) => {
       await h.resetEditor();
       window.__gristStub.setVariables('DossiersTest', { TypeDossier: 'Text', Actif: 'Bool' });
@@ -318,16 +318,19 @@
       select.value = 'Actif';
       select.dispatchEvent(new Event('change'));
       const typeHint = row.querySelector('.macro-rule-column-type');
-      const valInput = row.querySelector('.macro-rule-value');
       const boolHintOk = typeHint.textContent === I18n.t('macro.modal.typeBool');
-      const boolPlaceholderOk = valInput.placeholder === I18n.t('macro.modal.valuePlaceholderBool');
+      // Colonne Oui / Non : le champ Valeur est la liste de deux mots (js/condition-fields.js:buildBoolList), jamais un texte libre.
+      const valSelect = row.querySelector('select.macro-rule-value');
+      const boolValueOptions = valSelect ? Array.from(valSelect.options).map(o => o.value) : [];
+      const boolValueListOk = JSON.stringify(boolValueOptions) === JSON.stringify(['', I18n.t('macro.modal.valueBoolYes'), I18n.t('macro.modal.valueBoolNo')])
+        && !row.querySelector('input.macro-rule-value');
 
       select.value = '__advanced__';
       select.dispatchEvent(new Event('change'));
       const advancedVisibleAfterToggle = advancedInput.hidden === false;
 
-      const pass = hasRealColumns && hasAdvancedOption && advancedHiddenInitially === true && boolHintOk && boolPlaceholderOk && advancedVisibleAfterToggle;
-      return { pass, notes: JSON.stringify({ optionValues, boolHintOk, boolPlaceholderOk, advancedHiddenInitially, advancedVisibleAfterToggle }) };
+      const pass = hasRealColumns && hasAdvancedOption && advancedHiddenInitially === true && boolHintOk && boolValueListOk && advancedVisibleAfterToggle;
+      return { pass, notes: JSON.stringify({ optionValues, boolHintOk, boolValueOptions, boolValueListOk, advancedHiddenInitially, advancedVisibleAfterToggle }) };
     },
   });
 

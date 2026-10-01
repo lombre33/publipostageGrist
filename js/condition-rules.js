@@ -8,6 +8,8 @@ const ConditionRules = (function () {
 
   function isEmpty(v) { return v === null || v === undefined || v === ''; }
 
+  // Les mots d'une règle sur une colonne Oui / Non que la comparaison lit : seuls ceux-là valent vrai ou faux, tout autre texte ne correspond à rien. Exportée :
+  // la liste Oui / Non du champ Valeur (js/condition-fields.js:buildBoolList) range une valeur déjà enregistrée avec la même lecture, jamais avec sa propre liste de mots.
   const BOOL_TRUE_WORDS = ['oui', 'vrai', 'true', '1', 'yes'];
   const BOOL_FALSE_WORDS = ['non', 'faux', 'false', '0', 'no'];
   function parseBoolExpected(expected) {
@@ -225,5 +227,5 @@ const ConditionRules = (function () {
     return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
   }
 
-  return { OPERATORS, compareValues, parseColumnRef, matches, normalizeCondition, conditionHolds };
+  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds };
 })();

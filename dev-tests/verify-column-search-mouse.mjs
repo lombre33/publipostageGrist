@@ -5,7 +5,7 @@
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
-// à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre).
+// à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -1153,6 +1153,189 @@ const SECTIONS = {
       const stub = window.__gristStub;
       stub.setRows('CsAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000 }]);
       stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    }, previousTheme);
+  },
+
+  // Champ Valeur d'une colonne Oui / Non (Antoine, 2026-10-01 : « si la colonne est une boolean, proposer la liste déroulante oui/non avec les mots qui vont
+  // exactement correspondre à la valeur stockée sur Grist (ou traduite) ; limiter les entrées manuelles ») : la liste de deux mots, sans « Autre valeur… » ni champ
+  // libre, au vrai clic et au vrai clavier à 700x400, dans la fenêtre de condition et le macro-modèle, en clair et en sombre ; une valeur enregistrée que la
+  // comparaison ne lit pas reste visible avec sa mention ; les mots suivent la langue.
+  async boolValues() {
+    const macro = '#macro-editor-modal';
+    const previousTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await page.evaluate(() => {
+      window.__csBoolCached = Templates.getCached;
+      Templates.getCached = () => [{ id: 11, nom: 'Notification_base', typeModele: 'document' }, { id: 12, nom: 'Notification_bureau', typeModele: 'document' }];
+      // Lecture d'une propriété d'un élément qui peut manquer : null, pas d'exception.
+      window.__csQ = (selector, property) => { const el = document.querySelector(selector); return el ? el[property] : null; };
+    });
+    // Une bulle sur CsDossiers.Titre, sans condition ou avec « Actif = valeur » déjà enregistrée (écrite avant la liste, ou à la main).
+    const freshDocument = async value => {
+      const condition = value === undefined ? '' : ' data-condition="' + JSON.stringify({ mode: 'all', rules: [{ column: 'Actif', operator: '=', value }] }).replace(/"/g, '&quot;') + '"';
+      await page.evaluate(html => Editor.setHTML(html), `<p>Objet : <span class="var-badge" data-table="CsDossiers" data-column="Titre" data-key="CsDossiers.Titre"${condition}></span></p>`);
+      await page.waitForTimeout(250);
+    };
+    const clickAt = async box => { if (box && typeof box.x === 'number' && box.width > 0) await page.mouse.click(box.x, box.y); };
+    const savedConditions = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.condition); });
+      return out;
+    });
+    // La colonne de la première règle choisie comme le ferait une personne : clic sur le champ, frappe, clic sur la ligne.
+    const pickColumn = async (scope, typed, column) => {
+      const field = await reveal(scope + ' .macro-rule-column-wrap .ss-trigger', scope + ' .modal-content');
+      await clickAt(field);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(typed);
+      await page.waitForTimeout(100);
+      const row = await rowCenter(scope, column);
+      if (row) await page.mouse.click(row.x, row.y);
+      await page.waitForTimeout(350);
+    };
+    const valueTrigger = scope => scope + ' .macro-rule-value-wrap .ss-trigger';
+    const closeWith = async (scope, selector) => {
+      const button = await reveal(selector, scope + ' .modal-content');
+      if (button.found) await page.mouse.click(button.x, button.y);
+      await page.waitForTimeout(250);
+    };
+    const cancelOf = scope => scope + ' .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)';
+    const saveOf = scope => scope + ' .var-modal-actions .var-modal-primary';
+    const dimming = scope => page.evaluate(sel => {
+      const slot = document.querySelector(sel + ' .macro-rule-value-slot');
+      const trigger = slot && slot.querySelector('.ss-trigger');
+      return trigger ? { slot: getComputedStyle(slot).opacity, trigger: getComputedStyle(trigger).opacity, disabled: trigger.disabled } : null;
+    }, scope);
+    // Le champ Valeur de la première règle : ce qu'il montre fermé (nom et mention), s'il y a un champ libre.
+    const valueState = scope => page.evaluate(sel => {
+      const trigger = document.querySelector(sel + ' .macro-rule-value-wrap .ss-trigger');
+      return {
+        value: __csQ(sel + ' select.macro-rule-value', 'value'), name: trigger && trigger.querySelector('.ss-name').textContent, hint: trigger && trigger.querySelector('.ss-hint').textContent,
+        listOpen: !!document.querySelector(sel + ' .ss-panel:not([hidden])'), free: !!document.querySelector(sel + ' input.macro-rule-value'), advanced: !!document.querySelector(sel + ' .macro-rule-value-advanced'),
+        windowOpen: document.querySelector(sel).style.display !== 'none',
+      };
+    }, scope);
+    const CHOOSE = '— Choisir une valeur —';
+    for (const theme of ['light', 'dark']) {
+      const label = theme === 'dark' ? 'sombre' : 'clair';
+      await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+      await page.waitForTimeout(100);
+
+      // Fenêtre de condition, colonne Oui / Non.
+      await freshDocument();
+      await openWindowFor('Titre', 'var-condition', cond);
+      await pickColumn(cond, 'acti', 'Actif');
+      const field = await reveal(valueTrigger(cond), cond + ' .modal-content');
+      const nativeValue = await hitTest(cond + ' select.macro-rule-value');
+      const closed = await valueState(cond);
+      check(`oui/non (${label}) : condition, colonne Oui / Non : le champ Valeur est une liste (visible, au premier plan, lisible), le <select> natif est masqué, aucun champ libre`,
+        field.found && field.inViewport && field.onTop && field.width > 80 && nativeValue.width === 0 && closed.name === CHOOSE && !closed.free && !closed.advanced, { field, nativeValue, closed });
+      await clickAt(field);
+      await page.waitForTimeout(150);
+      const open = await panelInfo(cond);
+      check(`oui/non (${label}) : condition : un vrai clic ouvre la liste Choisir / Oui / Non, rien d'autre (ni « Autre valeur… »), entièrement dans le panneau, sans défilement, la zone de recherche a le focus`,
+        !!open && open.inside && open.searchFocused && !open.scrollable && JSON.stringify(open.rows) === JSON.stringify([CHOOSE, 'Oui', 'Non']), open);
+      await page.keyboard.type('no');
+      await page.waitForTimeout(100);
+      const typed = await panelInfo(cond);
+      check(`oui/non (${label}) : condition : « no » réduit la liste à Non`, !!typed && JSON.stringify(typed.rows) === JSON.stringify(['Non']), typed);
+      const non = await rowCenter(cond, 'Non');
+      if (non) await page.mouse.click(non.x, non.y);
+      await page.waitForTimeout(150);
+      const chosen = await valueState(cond);
+      check(`oui/non (${label}) : condition : le clic sur Non choisit Non, ferme la liste, la fenêtre reste ouverte`, !!non && non.onTop && chosen.value === 'Non' && chosen.name === 'Non' && !chosen.listOpen && chosen.windowOpen, { non, chosen });
+      // Au clavier : le champ a le focus, une lettre ouvre la liste avec elle comme recherche, Entrée prend le premier résultat.
+      await page.evaluate(sel => { const el = document.querySelector(sel); if (el) el.focus(); }, valueTrigger(cond));
+      await page.keyboard.type('ou');
+      await page.waitForTimeout(100);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(150);
+      const byKeyboard = await valueState(cond);
+      const focusBack = await page.evaluate(sel => document.activeElement === document.querySelector(sel), valueTrigger(cond));
+      check(`oui/non (${label}) : condition : au clavier, « ou » puis Entrée choisit Oui, la liste se ferme et le champ garde le focus`, byKeyboard.value === 'Oui' && byKeyboard.name === 'Oui' && !byKeyboard.listOpen && focusBack, { byKeyboard, focusBack });
+      // « vide » : la liste ne sert pas, elle est grisée UNE fois (le conteneur, pas en plus le champ) et ne s'ouvre plus ; « = » la rend.
+      await page.selectOption(cond + ' .macro-rule-row > select', 'vide');
+      await page.waitForTimeout(150);
+      const greyed = await dimming(cond);
+      await clickAt(await hitTest(valueTrigger(cond)));
+      await page.waitForTimeout(150);
+      const openedWhenGreyed = !!(await panelInfo(cond));
+      await page.selectOption(cond + ' .macro-rule-row > select', '=');
+      await page.waitForTimeout(150);
+      const back = await dimming(cond);
+      check(`oui/non (${label}) : condition : « vide » grise la liste une seule fois (conteneur à 0,45, champ à 1), elle ne s'ouvre plus au clic ; « = » la rend`,
+        !!greyed && greyed.slot === '0.45' && greyed.trigger === '1' && greyed.disabled && !openedWhenGreyed && !!back && back.slot === '1' && back.trigger === '1' && !back.disabled, { greyed, openedWhenGreyed, back });
+      await closeWith(cond, saveOf(cond));
+      const saved = await savedConditions();
+      check(`oui/non (${label}) : condition : Enregistrer garde la règle « Actif = Oui »`,
+        !!saved[0] && saved[0].rules.length === 1 && saved[0].rules[0].column === 'Actif' && saved[0].rules[0].operator === '=' && saved[0].rules[0].value === 'Oui', saved);
+
+      // Une valeur enregistrée que la comparaison ne lit pas : visible avec sa mention, jamais effacée ; Oui ou Non la remplace et elle quitte la liste.
+      await freshDocument('x');
+      await openWindowFor('Titre', 'var-condition', cond);
+      const unknownField = await reveal(valueTrigger(cond), cond + ' .modal-content');
+      const unknown = await valueState(cond);
+      check(`oui/non (${label}) : condition, valeur « x » enregistrée avant la liste : le champ la montre avec « valeur non reconnue », visible et au premier plan`,
+        unknownField.found && unknownField.inViewport && unknownField.onTop && unknown.value === 'x' && unknown.name === 'x' && unknown.hint === '(valeur non reconnue)', { unknownField, unknown });
+      await clickAt(unknownField);
+      await page.waitForTimeout(150);
+      const unknownOpen = await panelInfo(cond);
+      check(`oui/non (${label}) : condition : la liste montre Choisir, Oui, Non puis « x (valeur non reconnue) » en dernière ligne, dans le panneau`,
+        !!unknownOpen && unknownOpen.inside && JSON.stringify(unknownOpen.rows) === JSON.stringify([CHOOSE, 'Oui', 'Non', 'x (valeur non reconnue)']), unknownOpen);
+      const oui = await rowCenter(cond, 'Oui');
+      if (oui) await page.mouse.click(oui.x, oui.y);
+      await page.waitForTimeout(150);
+      await clickAt(await hitTest(valueTrigger(cond)));
+      await page.waitForTimeout(150);
+      const afterChoice = await panelInfo(cond);
+      check(`oui/non (${label}) : condition : Oui choisi, la valeur « x » quitte la liste`, !!afterChoice && JSON.stringify(afterChoice.rows) === JSON.stringify([CHOOSE, 'Oui', 'Non']), afterChoice);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(100);
+      await closeWith(cond, cancelOf(cond));
+
+      // Macro-modèle : la règle d'une annexe, sur ses deux lignes.
+      await page.evaluate(() => MacroEditor.openModal(null));
+      await page.waitForTimeout(200);
+      await reveal('#macro-editor-add-slot', macro + ' .modal-content');
+      await clickCenter('#macro-editor-add-slot');
+      await pickColumn(macro, 'acti', 'Actif');
+      const macroField = await reveal(valueTrigger(macro), macro + ' .modal-content');
+      const macroRule = await ruleBoxes(macro);
+      const macroClosed = await valueState(macro);
+      check(`oui/non (${label}) : macro-modèle : le champ Valeur (colonne Oui / Non) est une liste lisible (90 px), sur la seconde ligne sous la colonne, au premier plan, sans champ libre`,
+        macroField.found && macroField.inViewport && macroField.onTop && macroField.width >= 90 && !!macroRule && macroRule.twoLines && macroRule.boxes.value.t >= macroRule.boxes.column.b - 1
+        && overlapping(macroRule.boxes).length === 0 && macroClosed.name === CHOOSE && !macroClosed.free && !macroClosed.advanced, { macroField, macroRule, macroClosed });
+      await clickAt(macroField);
+      await page.waitForTimeout(150);
+      const macroOpen = await panelInfo(macro);
+      check(`oui/non (${label}) : macro-modèle : la liste Choisir / Oui / Non s'ouvre entièrement dans le panneau, la zone de recherche a le focus`,
+        !!macroOpen && macroOpen.inside && macroOpen.searchFocused && JSON.stringify(macroOpen.rows) === JSON.stringify([CHOOSE, 'Oui', 'Non']), macroOpen);
+      const macroOui = await rowCenter(macro, 'Oui');
+      if (macroOui) await page.mouse.click(macroOui.x, macroOui.y);
+      await page.waitForTimeout(150);
+      const macroChosen = await valueState(macro);
+      check(`oui/non (${label}) : macro-modèle : un vrai clic sur Oui choisit Oui et ferme la liste`, !!macroOui && macroOui.onTop && macroChosen.value === 'Oui' && macroChosen.name === 'Oui' && !macroChosen.listOpen, { macroOui, macroChosen });
+      await closeWith(macro, '#macro-editor-cancel');
+    }
+
+    // En anglais : les mots suivent la langue de l'interface.
+    await page.evaluate(() => I18n.setLang('en'));
+    await freshDocument();
+    await openWindowFor('Titre', 'var-condition', cond);
+    await pickColumn(cond, 'acti', 'Actif');
+    await clickAt(await reveal(valueTrigger(cond), cond + ' .modal-content'));
+    await page.waitForTimeout(150);
+    const english = await panelInfo(cond);
+    check('oui/non (anglais) : condition : la liste dit « Choose a value », Yes, No', !!english && english.inside && JSON.stringify(english.rows) === JSON.stringify(['— Choose a value —', 'Yes', 'No']), english);
+    const yes = await rowCenter(cond, 'Yes');
+    if (yes) await page.mouse.click(yes.x, yes.y);
+    await page.waitForTimeout(150);
+    const yesChosen = await valueState(cond);
+    check('oui/non (anglais) : condition : un vrai clic sur Yes le choisit', !!yes && yes.onTop && yesChosen.value === 'Yes' && yesChosen.name === 'Yes', { yes, yesChosen });
+    await closeWith(cond, cancelOf(cond));
+    await page.evaluate(theme => {
+      I18n.setLang('fr');
+      Templates.getCached = window.__csBoolCached;
+      if (theme) document.documentElement.setAttribute('data-theme', theme); else document.documentElement.removeAttribute('data-theme');
     }, previousTheme);
   },
 

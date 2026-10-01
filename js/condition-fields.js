@@ -200,10 +200,10 @@ const ConditionFields = (function () {
     return { wrap, typeHint };
   }
 
+  // Texte du champ Valeur libre selon le type de la colonne (une date se tape dans un format précis). Une colonne Oui / Non n'a pas de champ libre : buildBoolList.
   function valuePlaceholderForType(type) {
     const t = String(type || '');
     if (t === 'Date' || t.indexOf('DateTime') === 0) return I18n.t('macro.modal.valuePlaceholderDate');
-    if (t === 'Bool') return I18n.t('macro.modal.valuePlaceholderBool');
     return I18n.t('macro.modal.valuePlaceholder');
   }
 
@@ -216,7 +216,7 @@ const ConditionFields = (function () {
     return o;
   }
 
-  // Champ Valeur en texte libre (colonne sans valeurs à proposer, et repli si la liste ne peut pas se remplir) ; placeholder adapté au type (date, oui/non).
+  // Champ Valeur en texte libre (colonne sans valeurs à proposer, et repli si la liste ne peut pas se remplir) ; placeholder adapté au type (date).
   function buildValueText(rule, type) {
     const valInput = document.createElement('input');
     valInput.type = 'text';
@@ -300,6 +300,41 @@ const ConditionFields = (function () {
     };
   }
 
+  // Champ Valeur d'une colonne Oui / Non (Bool) : une liste de DEUX mots, sans saisie libre (Antoine, 2026-10-01 : « si la colonne est une boolean, proposer la
+  // liste déroulante oui/non avec les mots qui vont exactement correspondre à la valeur stockée sur Grist (ou traduite) ... limiter les entrées manuelles pour éviter
+  // les erreurs »). Un mot tapé de travers (« Oui. », « O », « Ouii ») ne correspondait à rien : la règle ne s'appliquait jamais, sans aucun message. Les mots sont
+  // ceux que compareValues lit (ConditionRules.parseBoolExpected : oui / vrai / true / 1 / yes, non / faux / false / 0 / no), écrits dans la langue de l'interface ;
+  // le <select> masqué reste la source de la valeur, comme pour les autres listes de valeurs. Une valeur déjà enregistrée garde sa forme tant qu'on n'y touche pas
+  // (« vrai », « 1 » ou « yes » s'affichent « Oui » sans réécrire la règle) ; une valeur que la comparaison ne lit pas (« x », un reste de la colonne précédente) reste
+  // visible en dernière ligne avec « valeur non reconnue », jamais effacée en silence, et sort de la liste dès qu'on choisit Oui ou Non.
+  function buildBoolList(rule, wrap) {
+    const select = document.createElement('select');
+    select.className = 'macro-rule-value';
+    const yes = I18n.t('macro.modal.valueBoolYes');
+    const no = I18n.t('macro.modal.valueBoolNo');
+    select.appendChild(valueOption('', I18n.t('macro.modal.valueChoosePlaceholder')));
+    select.appendChild(valueOption(yes, yes));
+    select.appendChild(valueOption(no, no));
+    const saved = rule.value == null ? '' : String(rule.value);
+    const word = ConditionRules.parseBoolExpected(saved);
+    let unrecognized = null;
+    if (saved.trim() !== '' && word === null) {
+      const hint = I18n.t('macro.modal.valueUnrecognized');
+      unrecognized = valueOption(saved, saved + ' (' + hint + ')');
+      unrecognized.dataset.name = saved;
+      unrecognized.dataset.hint = hint;
+      select.appendChild(unrecognized);
+    }
+    select.value = unrecognized ? saved : word === true ? yes : word === false ? no : '';
+    select.addEventListener('change', () => {
+      rule.value = select.value;
+      if (unrecognized && select.value !== unrecognized.value) { unrecognized.remove(); unrecognized = null; }
+    });
+    wrap.appendChild(select);
+    try { SearchSelect.attachValues(select, { inline: true }); }
+    catch (e) { console.warn('[ConditionFields] recherche de valeur indisponible, liste native conservée', e); }
+  }
+
   // Remplace le champ Valeur en texte libre par une LISTE AVEC RECHERCHE des valeurs possibles quand la colonne en propose - même raison et même patron que
   // buildColumnField pour la colonne : une valeur tapée à la main qui ne correspond pas EXACTEMENT à la valeur stockée (casse, accent, espace) ne matche jamais,
   // silencieusement (Antoine, 2026-09-28 : "colonne à choix unique, opérateur '=' ne fonctionne pas" ; 2026-09-29 : "autocomplétion ou dropdown des valeurs
@@ -308,13 +343,20 @@ const ConditionFields = (function () {
   // liée (GristAPI.getReferenceValues), lues de façon asynchrone - la liste dit « Chargement… » le temps de la lecture, puis se remplit. « Autre valeur… »
   // reste proposée (jamais retirée, règle de non-régression) : une valeur hors liste, ou une table liée illisible ou vide, garde un texte libre. Repli sur le texte
   // libre (placeholder adapté au type) pour tout le reste, et pour une colonne sans valeur connue (Choice sans widgetOptions.choices - colonne pas encore vue
-  // par refreshSchema, ou vidée -, Référence qui montre l'id de la ligne ou une date) - jamais un champ qui disparaît.
+  // par refreshSchema, ou vidée -, Référence qui montre l'id de la ligne ou une date) - jamais un champ qui disparaît. Une colonne Oui / Non a toujours ses deux
+  // valeurs : liste Oui / Non, sans « Autre valeur… » (buildBoolList).
   // `table` : table de la colonne choisie (celle de la page par défaut) - une colonne d'une autre table a ses propres valeurs.
   function buildValueField(rule, columnType, colId, table) {
     const wrap = document.createElement('span');
     wrap.className = 'macro-rule-value-wrap';
     const type = String(columnType || '');
     const tableId = table || GristAPI.getCurrentTableId();
+
+    if (type === 'Bool') {
+      buildBoolList(rule, wrap);
+      return wrap;
+    }
+
     const choices = (type === 'Choice' || type === 'ChoiceList') && colId && tableId ? GristAPI.getColumnChoices(tableId, colId) : null;
 
     if (choices && choices.length) {
@@ -338,8 +380,8 @@ const ConditionFields = (function () {
     return wrap;
   }
 
-  // Le champ Valeur dépend du type de la colonne choisie (dropdown des vrais choix pour Choice/ChoiceList, placeholder adapté pour Date/Bool,
-  // texte libre sinon - buildValueField) : reconstruit entièrement à chaque changement de colonne plutôt que de juste garder le même <input> et
+  // Le champ Valeur dépend du type de la colonne choisie (dropdown des vrais choix pour Choice/ChoiceList, liste Oui / Non pour Bool, placeholder adapté
+  // pour Date, texte libre sinon - buildValueField) : reconstruit entièrement à chaque changement de colonne plutôt que de juste garder le même <input> et
   // en changer le placeholder, puisque le type de champ lui-même (select vs texte) peut changer. `valueSlot` doit exister AVANT buildColumnField :
   // celui-ci appelle son callback une 1ère fois de façon synchrone, pour la colonne déjà enregistrée de la règle.
   // `typeHint` est à placer par l'appelant en DERNIER enfant de sa ligne (cf. buildColumnField). Même ordre de construction qu'avant le déplacement.

@@ -201,19 +201,23 @@
       const boolRow = Array.from(panelOf(trigger).querySelectorAll('.ss-option')).find(r => label(r) === 'Actif' + hintOf('macro.modal.typeBool'));
       boolRow.click();
       await h.sleep(40);
+      const valueField = () => modal.querySelector('.macro-rule-value-wrap .ss-trigger');
       const afterClick = {
         value: select.value, shown: trigger.textContent, typeHint: typeHint(),
-        valuePlaceholder: modal.querySelector('.macro-rule-value').placeholder, ruleRow: modal.querySelectorAll('.macro-rule-row').length,
+        valueField: valueField().textContent, ruleRow: modal.querySelectorAll('.macro-rule-row').length,
       };
-      setInput(modal.querySelector('.macro-rule-value'), 'Oui');
-      await h.sleep(20);
+      // Colonne Oui / Non : le champ Valeur est la liste « Oui » / « Non » (js/condition-fields.js:buildBoolList), le mot se prend dans la liste.
+      valueField().click();
+      await h.sleep(30);
+      Array.from(panelOf(valueField()).querySelectorAll('.ss-option')).find(r => label(r) === I18n.t('macro.modal.valueBoolYes')).click();
+      await h.sleep(30);
       saveButton(modal).click();
       await h.sleep(80);
       const saved = badgeNodes(ed)[0].node.attrs.condition;
       const pass = seeded === 'r' && afterEnter.value === 'Responsable' && afterEnter.shown === 'Responsable' && afterEnter.typeHint === I18n.t('macro.modal.typeRef')
         && afterEnter.closed && afterEnter.focusBack
         && afterClick.value === 'Actif' && afterClick.shown === 'Actif' && afterClick.typeHint === I18n.t('macro.modal.typeBool')
-        && afterClick.valuePlaceholder === I18n.t('macro.modal.valuePlaceholderBool')
+        && afterClick.valueField === I18n.t('macro.modal.valueChoosePlaceholder')
         && !visible(modal) && !!saved && saved.rules.length === 1 && saved.rules[0].column === 'Actif' && saved.rules[0].value === 'Oui';
       return { pass, notes: JSON.stringify({ seeded, afterEnter, afterClick, saved }) };
     },
@@ -2063,6 +2067,297 @@
         && JSON.stringify(r.sentences.en) === JSON.stringify(['1 more result: refine your search.', '2 more results: refine your search.', '701 more results: refine your search.'])
         && r.english.more === '701 more results: refine your search.';
       return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  // === Valeur d'une colonne Oui / Non (Antoine, 2026-10-01 : « si la colonne est une boolean, proposer la liste déroulante oui/non avec les mots qui vont exactement
+  // correspondre à la valeur stockée sur Grist (ou traduite). il faut limiter les entrées manuelles de l'utilisateur pour éviter les erreurs ») -
+  // js/condition-fields.js:buildBoolList. Page sur CsDossiers, colonne Actif (Bool). ===
+  const BOOL_YES = () => I18n.t('macro.modal.valueBoolYes');
+  const BOOL_NO = () => I18n.t('macro.modal.valueBoolNo');
+  const BOOL_UNKNOWN = () => I18n.t('macro.modal.valueUnrecognized');
+  const optionValues = select => Array.from(select.options).map(o => o.value);
+  // Fenêtre de condition ouverte sur une bulle dont la condition « Actif = valeur » est déjà enregistrée (une valeur écrite avant la liste, ou à la main).
+  async function openBoolWindow(h, value) {
+    const condition = { mode: 'all', rules: [{ column: 'Actif', operator: '=', value }] };
+    Editor.setHTML(`<p>Objet : ${badgeHtml('CsDossiers', 'Titre', ` data-condition="${JSON.stringify(condition).replace(/"/g, '&quot;')}"`)}</p>`);
+    await selectBadge(h, 'CsDossiers.Titre');
+    pressToolbarButton('var-condition');
+    await h.sleep(60);
+    return conditionModal();
+  }
+  // Ouvre la liste du champ Valeur et prend la ligne qui porte ce texte.
+  async function pickValue(h, parts, text) {
+    parts.trigger.click();
+    await h.sleep(30);
+    Array.from(parts.panel.querySelectorAll('.ss-option')).find(r => label(r) === text).click();
+    await h.sleep(40);
+  }
+
+  cases.push({
+    id: 'colsearch_value_bool_column_lists_yes_no_without_free_text_and_saves_the_word_the_comparison_reads',
+    description: 'Colonne Oui / Non : le champ Valeur est la liste « Oui » / « Non » (le <select> est masqué), sans « Autre valeur… » ni champ libre ; le mot se cherche, se prend à Entrée ou au clic et s’enregistre, la comparaison le lit (Oui : ligne cochée, Non : ligne non cochée) et la réouverture montre le mot enregistré',
+    run: async (h) => {
+      await seed(h);
+      let modal = await openConditionWindow(h);
+      const ed = EditorCore.getEditor();
+      await chooseColumn(h, modal, 'Actif');
+      let parts = valueParts(modal);
+      const yes = BOOL_YES(), no = BOOL_NO();
+      const closed = {
+        shown: parts.trigger.textContent, width: parts.trigger.getBoundingClientRect().width, nativeWidth: parts.select.getBoundingClientRect().width,
+        placeholder: parts.trigger.classList.contains('is-placeholder'), free: !!parts.text, advanced: !!parts.advanced, options: optionValues(parts.select),
+      };
+      parts.trigger.click();
+      await h.sleep(30);
+      const all = { rows: valueRows(parts), pinned: parts.panel.querySelectorAll('.ss-option.is-pinned').length, search: inputOf(parts.panel).placeholder };
+      setInput(inputOf(parts.panel), 'no');
+      await h.sleep(10);
+      const filtered = valueRows(parts);
+      press(inputOf(parts.panel), 'Enter');
+      await h.sleep(40);
+      const byKeyboard = { value: parts.select.value, shown: parts.trigger.textContent, closed: parts.panel.hidden };
+      const noReads = { onChecked: ConditionRules.compareValues(true, '=', parts.select.value, 'Bool'), onUnchecked: ConditionRules.compareValues(false, '=', parts.select.value, 'Bool') };
+      await pickValue(h, parts, yes);
+      const byMouse = { value: parts.select.value, shown: parts.trigger.textContent };
+      saveButton(modal).click();
+      await h.sleep(80);
+      const saved = badgeNodes(ed)[0].node.attrs.condition;
+      // La condition enregistrée, évaluée sur la ligne de la page (Actif coché) : « = Oui » la retient, « = Non » non, « ≠ Non » oui.
+      const record = GristAPI.getCurrentRecord();
+      const holds = {};
+      for (const [name, rule] of [['saved', saved.rules[0]], ['no', { column: 'Actif', operator: '=', value: no }], ['notNo', { column: 'Actif', operator: '≠', value: no }]]) {
+        holds[name] = await ConditionRules.conditionHolds({ mode: 'all', rules: [rule] }, 'CsDossiers', record);
+      }
+      await selectBadge(h, 'CsDossiers.Titre');
+      pressToolbarButton('var-condition');
+      await h.sleep(60);
+      modal = conditionModal();
+      parts = valueParts(modal);
+      const reopened = { shown: parts.trigger.textContent, value: parts.select.value, options: optionValues(parts.select) };
+      dismiss(modal);
+      const pass = closed.shown === VALUE_CHOOSE() && closed.width > 80 && closed.nativeWidth === 0 && closed.placeholder && !closed.free && !closed.advanced
+        && JSON.stringify(closed.options) === JSON.stringify(['', yes, no])
+        && JSON.stringify(all.rows) === JSON.stringify([VALUE_CHOOSE(), yes, no]) && all.pinned === 0 && all.search === I18n.t('searchSelect.searchValues')
+        && JSON.stringify(filtered) === JSON.stringify([no])
+        && byKeyboard.value === no && byKeyboard.shown === no && byKeyboard.closed && noReads.onUnchecked === true && noReads.onChecked === false
+        && byMouse.value === yes && byMouse.shown === yes
+        && !!saved && saved.rules.length === 1 && saved.rules[0].column === 'Actif' && saved.rules[0].operator === '=' && saved.rules[0].value === yes
+        && holds.saved === true && holds.no === false && holds.notNo === true
+        && reopened.shown === yes && reopened.value === yes && JSON.stringify(reopened.options) === JSON.stringify(['', yes, no]);
+      return { pass, notes: JSON.stringify({ closed, all, filtered, byKeyboard, noReads, byMouse, saved, holds, reopened }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_bool_keeps_a_saved_value_in_any_spelling_and_shows_one_the_comparison_cannot_read',
+    description: 'Colonne Oui / Non : une valeur déjà enregistrée dans une autre graphie que la comparaison lit (« vrai », « TRUE », « 1 », « yes », « faux », « False », « 0 », « no ») s’affiche « Oui » / « Non » et reste telle quelle à l’enregistrement tant qu’on n’y touche pas ; une valeur qu’elle ne lit pas (« x ») reste visible en dernière ligne avec « valeur non reconnue », jamais effacée, et quitte la liste dès qu’on choisit Oui ou Non',
+    run: async (h) => {
+      await seed(h);
+      const ed = EditorCore.getEditor();
+      const yes = BOOL_YES(), no = BOOL_NO(), hint = BOOL_UNKNOWN();
+      const savedValue = () => badgeNodes(ed)[0].node.attrs.condition.rules[0].value;
+      // 1. Les graphies que la comparaison lit : le mot de la liste, et rien d'autre dans la liste.
+      const spellings = [];
+      for (const [value, word] of [['vrai', yes], ['TRUE', yes], ['1', yes], ['yes', yes], [' oui ', yes], ['faux', no], ['False', no], ['0', no], ['no', no]]) {
+        const modal = await openBoolWindow(h, value);
+        const parts = valueParts(modal);
+        spellings.push({ value, word, shown: shownIn(parts.trigger), selected: parts.select.value, options: optionValues(parts.select).join('|') });
+        dismiss(modal);
+      }
+      // 2. Enregistrée sans y toucher, la règle garde sa graphie ; en choisissant l'autre mot, elle prend le mot choisi.
+      let modal = await openBoolWindow(h, 'vrai');
+      saveButton(modal).click();
+      await h.sleep(80);
+      const untouched = savedValue();
+      modal = await openBoolWindow(h, 'vrai');
+      await pickValue(h, valueParts(modal), no);
+      saveButton(modal).click();
+      await h.sleep(80);
+      const changedWord = savedValue();
+      // 3. Une valeur que la comparaison ne lit pas : visible avec sa mention, en dernière ligne, jamais effacée.
+      modal = await openBoolWindow(h, 'x');
+      let parts = valueParts(modal);
+      parts.trigger.click();
+      await h.sleep(30);
+      const unknown = { shown: shownIn(parts.trigger), selected: parts.select.value, rows: valueRows(parts), options: optionValues(parts.select).join('|') };
+      parts.trigger.click();
+      await h.sleep(10);
+      saveButton(modal).click();
+      await h.sleep(80);
+      unknown.savedUntouched = savedValue();
+      // 4. Oui choisi à la place : la valeur inconnue quitte la liste.
+      modal = await openBoolWindow(h, 'x');
+      parts = valueParts(modal);
+      await pickValue(h, parts, yes);
+      parts.trigger.click();
+      await h.sleep(30);
+      unknown.after = { value: parts.select.value, shown: shownIn(parts.trigger), rows: valueRows(parts), options: optionValues(parts.select).join('|') };
+      parts.trigger.click();
+      await h.sleep(10);
+      saveButton(modal).click();
+      await h.sleep(80);
+      unknown.savedChosen = savedValue();
+      // 5. Une valeur vide : le texte de départ ; le reste d'une autre colonne (un choix) : une valeur inconnue comme « x ».
+      modal = await openBoolWindow(h, '');
+      parts = valueParts(modal);
+      const empty = { shown: shownIn(parts.trigger), placeholder: parts.trigger.classList.contains('is-placeholder'), options: optionValues(parts.select).join('|') };
+      dismiss(modal);
+      modal = await openBoolWindow(h, 'Urgent');
+      parts = valueParts(modal);
+      const leftover = { shown: shownIn(parts.trigger), selected: parts.select.value };
+      dismiss(modal);
+      const pass = spellings.every(s => s.shown === s.word && s.selected === s.word && s.options === ['', yes, no].join('|'))
+        && untouched === 'vrai' && changedWord === no
+        && unknown.shown === 'x (' + hint + ')' && unknown.selected === 'x' && JSON.stringify(unknown.rows) === JSON.stringify([VALUE_CHOOSE(), yes, no, 'x (' + hint + ')'])
+        && unknown.options === ['', yes, no, 'x'].join('|') && unknown.savedUntouched === 'x'
+        && unknown.after.value === yes && unknown.after.shown === yes && JSON.stringify(unknown.after.rows) === JSON.stringify([VALUE_CHOOSE(), yes, no])
+        && unknown.after.options === ['', yes, no].join('|') && unknown.savedChosen === yes
+        && empty.shown === VALUE_CHOOSE() && empty.placeholder && empty.options === ['', yes, no].join('|')
+        && leftover.shown === 'Urgent (' + hint + ')' && leftover.selected === 'Urgent';
+      return { pass, notes: JSON.stringify({ spellings: spellings.filter(s => !(s.shown === s.word && s.selected === s.word)), untouched, changedWord, unknown, empty, leftover }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_bool_list_is_greyed_by_the_empty_operators_and_is_the_same_list_in_the_macro_model',
+    description: '« vide » et « non vide » grisent la liste Oui / Non (le champ visible, pas seulement le <select> masqué) et elle ne s’ouvre plus, « = » la rend, une liste reconstruite pendant « vide » reste grisée ; la règle d’un macro-modèle sur une colonne Oui / Non a la même liste (sans champ libre) et Enregistrer garde le mot choisi',
+    run: async (h) => {
+      await seed(h);
+      const modal = await openConditionWindow(h);
+      const operator = () => modal.querySelector('.macro-rule-row > select');
+      const setOperator = async value => { operator().value = value; operator().dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(20); };
+      const state = () => {
+        const p = valueParts(modal);
+        return { greyed: modal.querySelector('.macro-rule-value-slot').classList.contains('is-disabled'), trigger: p.trigger.disabled, select: p.select.disabled };
+      };
+      await chooseColumn(h, modal, 'Actif');
+      const enabled = state();
+      await setOperator('vide');
+      const greyed = state();
+      valueParts(modal).trigger.click();
+      await h.sleep(30);
+      const opensWhenGreyed = !valueParts(modal).panel.hidden;
+      await setOperator('non vide');
+      const greyedNonEmpty = state();
+      await setOperator('=');
+      const back = state();
+      // Colonne changée puis revenue sur Actif pendant « vide » : la liste reconstruite est grisée aussi.
+      await setOperator('vide');
+      await chooseColumn(h, modal, 'Titre', 20);
+      await chooseColumn(h, modal, 'Actif', 20);
+      const rebuilt = state();
+      dismiss(modal);
+
+      const realCached = Templates.getCached;
+      const realSave = Templates.save;
+      const realAlert = window.alert;
+      const realError = console.error;
+      let macro;
+      try {
+        Templates.getCached = () => MACRO_TEMPLATES;
+        await openMacroWindow(h);
+        changed(macroModal().querySelector('select.macro-rule-column'), 'Actif');
+        await h.sleep(40);
+        const parts = valueParts(macroModal());
+        const closed = { shown: parts.trigger.textContent, free: !!parts.text, advanced: !!parts.advanced };
+        parts.trigger.click();
+        await h.sleep(30);
+        const rows = valueRows(parts);
+        parts.trigger.click();
+        await h.sleep(10);
+        await pickValue(h, parts, BOOL_NO());
+        changed(ruleModelList(), '12');
+        let captured = null;
+        Templates.save = async (...args) => { captured = args; throw new Error('enregistrement simulé (test)'); };
+        window.alert = () => {};
+        console.error = () => {};
+        document.getElementById('macro-editor-name').value = 'Macro de test';
+        document.getElementById('macro-editor-save').click();
+        await h.sleep(80);
+        const slots = captured ? JSON.parse(captured[2]).slots : [];
+        const conditional = slots.find(s => s.type === 'conditional');
+        macro = { closed, rows, saved: conditional ? conditional.rules.map(r => ({ column: r.column, operator: r.operator, value: r.value })) : null };
+      } finally {
+        Templates.getCached = realCached;
+        Templates.save = realSave;
+        window.alert = realAlert;
+        console.error = realError;
+        await closeMacroWindow(h);
+      }
+      const pass = !enabled.greyed && enabled.trigger === false && enabled.select === false
+        && greyed.greyed && greyed.trigger === true && greyed.select === true && !opensWhenGreyed
+        && greyedNonEmpty.greyed && greyedNonEmpty.trigger === true && greyedNonEmpty.select === true
+        && !back.greyed && back.trigger === false && back.select === false
+        && rebuilt.greyed && rebuilt.trigger === true && rebuilt.select === true
+        && macro.closed.shown === VALUE_CHOOSE() && !macro.closed.free && !macro.closed.advanced
+        && JSON.stringify(macro.rows) === JSON.stringify([VALUE_CHOOSE(), BOOL_YES(), BOOL_NO()])
+        && JSON.stringify(macro.saved) === JSON.stringify([{ column: 'Actif', operator: '=', value: BOOL_NO() }]);
+      return { pass, notes: JSON.stringify({ enabled, greyed, opensWhenGreyed, greyedNonEmpty, back, rebuilt, macro }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_value_bool_words_follow_the_language_and_the_comparison_reads_them_and_the_native_list_stays_when_the_component_fails',
+    description: 'Les mots de la liste Oui / Non suivent la langue de l’interface (Oui / Non, Yes / No) et sont ceux que la comparaison lit (une valeur enregistrée en français s’affiche « Yes » en anglais, le mot choisi s’enregistre dans la langue courante) ; si le composant de recherche est indisponible, le <select> natif reste (visible, mêmes mots) et la règle marche pareil',
+    run: async (h) => {
+      await seed(h);
+      const ed = EditorCore.getEditor();
+      const readWords = async lang => {
+        I18n.setLang(lang);
+        const modal = await openConditionWindow(h);
+        await chooseColumn(h, modal, 'Actif');
+        const parts = valueParts(modal);
+        parts.trigger.click();
+        await h.sleep(30);
+        const out = { rows: valueRows(parts), choose: parts.trigger.textContent };
+        parts.trigger.click();
+        await h.sleep(10);
+        await pickValue(h, parts, BOOL_NO());
+        out.chosen = parts.select.value;
+        out.reads = { yes: ConditionRules.parseBoolExpected(BOOL_YES()), no: ConditionRules.parseBoolExpected(BOOL_NO()) };
+        dismiss(modal);
+        return out;
+      };
+      let fr, en, back, french, native;
+      try {
+        fr = await readWords('fr');
+        en = await readWords('en');
+        // Enregistrée en français, la règle s'affiche dans la langue courante ; le mot choisi s'enregistre dans cette langue, et la comparaison le lit.
+        const modal = await openBoolWindow(h, 'Oui');
+        const parts = valueParts(modal);
+        french = { shown: shownIn(parts.trigger) };
+        await pickValue(h, parts, BOOL_NO());
+        saveButton(modal).click();
+        await h.sleep(80);
+        french.saved = badgeNodes(ed)[0].node.attrs.condition.rules[0].value;
+        french.readsOnUnchecked = ConditionRules.compareValues(false, '=', french.saved, 'Bool');
+        back = await readWords('fr');
+      } finally { I18n.setLang('fr'); }
+      const realAttach = SearchSelect.attachValues;
+      const warn = console.warn;
+      try {
+        console.warn = () => {};
+        SearchSelect.attachValues = () => { throw new Error('composant indisponible (test)'); };
+        const modal = await openConditionWindow(h);
+        await chooseColumn(h, modal, 'Actif');
+        const parts = valueParts(modal);
+        const field = { native: visible(parts.select) && parts.select.getBoundingClientRect().width > 60, list: !!parts.trigger, options: optionValues(parts.select) };
+        changed(parts.select, BOOL_NO());
+        saveButton(modal).click();
+        await h.sleep(80);
+        native = { field, saved: badgeNodes(ed)[0].node.attrs.condition };
+      } finally {
+        SearchSelect.attachValues = realAttach;
+        console.warn = warn;
+      }
+      const pass = JSON.stringify(fr.rows) === JSON.stringify(['— Choisir une valeur —', 'Oui', 'Non']) && fr.chosen === 'Non' && fr.reads.yes === true && fr.reads.no === false
+        && JSON.stringify(en.rows) === JSON.stringify(['— Choose a value —', 'Yes', 'No']) && en.chosen === 'No' && en.reads.yes === true && en.reads.no === false
+        && JSON.stringify(back) === JSON.stringify(fr)
+        && french.shown === 'Yes' && french.saved === 'No' && french.readsOnUnchecked === true
+        && native.field.native && !native.field.list && JSON.stringify(native.field.options) === JSON.stringify(['', 'Oui', 'Non'])
+        && !!native.saved && native.saved.rules[0].column === 'Actif' && native.saved.rules[0].value === 'Non';
+      return { pass, notes: JSON.stringify({ fr, en, back, french, native }) };
     },
   });
 

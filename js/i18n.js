@@ -295,8 +295,12 @@ const I18n = (function () {
     'macro.modal.columnMissingFromRecord': { fr: '⚠ absente de la ligne affichée - cochez-la dans les colonnes de ce widget', en: '⚠ missing from the displayed row - check it in this widget\'s columns' },
     'macro.modal.valuePlaceholder': { fr: 'Valeur', en: 'Value' },
     'macro.modal.valuePlaceholderDate': { fr: 'Valeur (ex. 2026-09-26 ou 26/09/2026)', en: 'Value (e.g. 2026-09-26)' },
-    'macro.modal.valuePlaceholderBool': { fr: 'Valeur (Oui / Non)', en: 'Value (Yes / No)' },
     'macro.modal.valueChoosePlaceholder': { fr: '— Choisir une valeur —', en: '— Choose a value —' },
+    // Champ Valeur d'une colonne Oui / Non (Bool) : les deux mots que la comparaison lit (ConditionRules.parseBoolExpected), et la mention d'une valeur déjà
+    // enregistrée qu'elle ne lit pas (js/condition-fields.js:buildBoolList).
+    'macro.modal.valueBoolYes': { fr: 'Oui', en: 'Yes' },
+    'macro.modal.valueBoolNo': { fr: 'Non', en: 'No' },
+    'macro.modal.valueUnrecognized': { fr: 'valeur non reconnue', en: 'unrecognized value' },
     // Champ Valeur d'une colonne Référence, le temps de lire les lignes de la table liée (GristAPI.getReferenceValues).
     'macro.modal.valueLoading': { fr: '— Chargement… —', en: '— Loading… —' },
     'macro.modal.valueAdvanced': { fr: 'Autre valeur…', en: 'Other value…' },

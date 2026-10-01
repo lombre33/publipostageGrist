@@ -196,7 +196,11 @@ Demande d'Antoine (29/09). Tout choix de colonne, de table ou de modèle passe p
 `<select>` reste la source de vérité, masqué ; une colonne s'affiche avec son type ; la valeur vide est grisée ; si le
 composant échoue, la liste native reste (`try/catch`). Le champ **Valeur** d'une règle sur une colonne à choix ou à
 référence (`attachValues`) est lui aussi une liste avec recherche des valeurs possibles, « Autre valeur… » toujours en
-bas. La colonne d'une règle de **macro-modèle** et celle de la **condition d'une bulle** (demande d'Antoine du 01/10, puis
+bas. Sur une colonne **Oui / Non** (case à cocher), c'est la liste « Oui » / « Non » (« Yes » / « No » en anglais), sans
+« Autre valeur… » ni saisie libre (demande d'Antoine du 01/10 : limiter les entrées à la main, source d'erreurs) : ce sont
+les mots que la comparaison lit ; une valeur déjà enregistrée dans une autre graphie (« vrai », « 1 ») s'affiche
+« Oui » / « Non », une valeur que la comparaison ne lit pas reste visible avec « valeur non reconnue » jusqu'à ce qu'on
+choisisse. La colonne d'une règle de **macro-modèle** et celle de la **condition d'une bulle** (demande d'Antoine du 01/10, puis
 son choix « À plat » du même jour pour la condition) sont UNE seule liste qui réunit celles de toutes les tables, sans
 intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une table pas encore
 liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente), et le lien d'une table liée se lit
