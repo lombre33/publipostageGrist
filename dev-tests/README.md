@@ -676,7 +676,7 @@ peinture). **Toujours l'utiliser** (jamais `.positions[]`/`.absolutePosition`
 seuls) pour vérifier la position d'un bloc centré, aligné à droite, ou d'une
 image en calque - `scenarios-pdf-ground-truth.js` (groupe `pdfGroundTruth`)
 en est l'exemple de référence (matrice contexte × alignement × type d'ancre,
-32 cas). `.positions[]`/`.absolutePosition` restent fiables pour du texte
+plus deux cas sur le saut de page avant une image en calque seule dans son paragraphe : 34 cas). `.positions[]`/`.absolutePosition` restent fiables pour du texte
 aligné à GAUCHE en une seule ligne (cas déjà couvert par
 `scenarios-pdf-fidelity.js`, pas besoin de tout migrer).
 

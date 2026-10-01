@@ -1427,12 +1427,16 @@ const PdfExport = (function () {
         // Attache toute note trouvée dans ce nœud au premier bloc produit : plusieurs blocs pour un seul nœud source atterrissent presque toujours sur la
         // même page, précision suffisante ici.
         const newFootnotes = footnoteEntries.length > footnoteCheckpoint ? footnoteEntries.slice(footnoteCheckpoint) : null;
+        // Un saut de page ne tient pas sur une image en calque : elle sort du flux (position absolue résolue plus tard) et l'emporte avec elle, le texte qui suit restait
+        // alors sur la page d'avant. Le paragraphe qui ne contient QUE de telles images (un triangle de coin posé juste après le saut) le laisse au bloc suivant.
+        const breakLeavesWithLayers = pendingPageBreak && produced.length > 0 && produced.every(b => b && b._pendingImgNode);
+        if (breakLeavesWithLayers) produced.forEach(b => { delete b.pageBreak; });
         produced.forEach((b, i) => {
           if (b && b._nestedPending) { nestedPendingAll.push(...b._nestedPending); delete b._nestedPending; }
           push(b, node); if (b && b._isHeading) headingBlocks.push(b);
           if (i === 0 && newFootnotes) footnoteBlocks.push(...newFootnotes.map(fe => ({ block: b, number: fe.number, text: fe.text })));
         });
-        pendingPageBreak = false;
+        pendingPageBreak = breakLeavesWithLayers;
         return;
       }
       for (const child of Array.from(node.childNodes)) { await visit(child); }

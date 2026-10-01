@@ -149,6 +149,33 @@
     });
   });
 
+  // Un saut de page suivi d'une image en calque seule dans son paragraphe (le triangle de coin du courrier suivant, posé au début de sa première page) : l'image sort du flux du PDF
+  // (position absolue, résolue après coup) et emportait le saut avec elle - le texte d'après restait sous celui d'avant, et la page où l'image est posée n'existait plus. Le saut passe
+  // maintenant au bloc suivant (`breakLeavesWithLayers`, js/pdf-export.js). Mesuré sur le PDF décodé : le texte d'après ouvre la 3e page, l'image est peinte sur cette page-là seulement.
+  ['behind', 'front'].forEach(layer => {
+    cases.push({
+      id: 'pdfgt_page_break_before_a_layer_only_paragraph_' + layer,
+      description: 'Un saut de page suivi d\'une image en calque ' + (layer === 'behind' ? 'derrière' : 'devant') + ' le texte, seule dans son paragraphe : le texte d\'après ouvre bien une nouvelle page (il ne reste pas sous celui d\'avant) et l\'image est peinte sur cette page-là',
+      run: async (h) => {
+        await h.resetEditor();
+        document.getElementById('editor-container').classList.add('a4-preview');
+        const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const lines = (n, tag) => Array.from({ length: n }, (_, i) => '<p>' + tag + ' ' + (i + 1) + ' du corps du document.</p>').join('');
+        const image = '<p><img class="editor-image" src="' + PNG + '" alt="" style="width: 80px; height: 80px; position: absolute; left: 0px; top: 0px; z-index: ' + (layer === 'front' ? 5 : -1) + ';" data-layer="' + layer + '" data-wrap="inline" data-page-index="2" data-page-left-pt="100" data-page-top-pt="100"></p>';
+        const html = lines(70, 'Premier') + '<div class="page-break-marker" contenteditable="false">Saut de page</div>' + image + lines(70, 'Second');
+        const res = await h.exportPdfContent(html, null, PageLayout.getMarginsPt());
+        const truth = await h.extractPdfGroundTruth(res.base64);
+        const has = (page, word) => page.textItems.some(t => t.str.indexOf(word) !== -1);
+        const mixed = truth.pages.some(p => has(p, 'Premier') && has(p, 'Second'));
+        const firstSecond = truth.pages.findIndex(p => has(p, 'Second'));
+        const atTop = firstSecond > 0 && !!truth.pages[firstSecond].textItems[0] && truth.pages[firstSecond].textItems[0].str.indexOf('Second') !== -1;
+        const painted = truth.pages.map(p => p.images.length);
+        const pass = !mixed && atTop && firstSecond === 2 && painted[2] === 1 && painted.reduce((a, b) => a + b, 0) === 1;
+        return { pass, notes: JSON.stringify({ pages: truth.pages.length, textesMelanges: mixed, premiereDuSecond: firstSecond + 1, enHaut: atTop, imagesParPage: painted }) };
+      },
+    });
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfGroundTruth = cases;
 })();
