@@ -180,6 +180,7 @@ const CONTRAST_FN = `(a, b) => {
 }`;
 
 // « + » puis « Nouvelle grille » à la vraie souris : une grille de départ toute neuve (le menu s'ouvre au survol, l'entrée y est de tout widget).
+// Une grille modifiée et pas enregistrée ouvre d'abord « Modifications non enregistrées » (retour d'Antoine du 01/10) : ce test repart à zéro, il clique « Abandonner ».
 async function freshGrid(page) {
   const newBtn = await boxOf(page, '#btn-new');
   await page.mouse.move(newBtn.x, newBtn.y, { steps: 3 });
@@ -187,6 +188,19 @@ async function freshGrid(page) {
   const entry = await boxOf(page, '#v2-btn-new-grid');
   await page.mouse.move(entry.x, entry.y, { steps: 4 });
   await page.mouse.click(entry.x, entry.y);
+  await page.waitForTimeout(250);
+  const discard = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    if (!ov || getComputedStyle(ov).display === 'none') return null;
+    const button = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).find(b => b.textContent === 'Abandonner');
+    if (!button) return null;
+    const r = button.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (discard) {
+    await page.mouse.move(discard.x - 10, discard.y, { steps: 2 });
+    await page.mouse.click(discard.x, discard.y);
+  }
   await page.waitForFunction(() => GridEditor.isActive() && document.querySelectorAll('.v2-grid-colhead').length > 0, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(400);
   await page.mouse.move(WIDTH - 10, HEIGHT - 10); // hors du menu

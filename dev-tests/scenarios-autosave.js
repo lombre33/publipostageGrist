@@ -522,6 +522,205 @@
     },
   });
 
+  // Quitter un modèle dont des modifications attendent (choix d'Antoine du 01/10, « Toujours demander » : une fenêtre Enregistrer / Abandonner / Annuler, que l'enregistrement
+  // automatique soit allumé ou non ; js/main.js:askBeforeLeaving). Ces cas rendent la VRAIE fenêtre (h.withRealChoose : le harnais répond « Abandonner » aux autres scénarios,
+  // dont resetEditor laisse un état « modifié ») et cliquent ses boutons ; le survol réel de la liste, le focus rendu et la mise en page à 700x400 sont dans leaveUnsavedMouse.
+  const selectEl = () => document.getElementById('template-select');
+  // Même geste que la liste (js/template-tree-select.js:selectValue) : l'option choisie, puis l'évènement 'change'.
+  function chooseTemplate(id) {
+    selectEl().value = id;
+    selectEl().dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  const dialogEl = () => document.getElementById('pp-dialog-modal');
+  const dialogOpen = () => !!dialogEl() && getComputedStyle(dialogEl()).display !== 'none';
+  const dialogButtons = () => Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).filter(b => !b.hidden);
+  const dialogLabels = () => dialogButtons().map(b => b.textContent);
+  const dialogInfo = () => ({
+    open: dialogOpen(), title: dialogOpen() ? document.getElementById('pp-dialog-title').textContent : '', message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '',
+    labels: dialogOpen() ? dialogLabels() : [], focused: dialogOpen() && document.activeElement ? document.activeElement.textContent : null,
+  });
+  async function answerDialog(h, label) {
+    const button = dialogButtons().find(b => b.textContent === label);
+    if (!button) throw new Error('bouton « ' + label + ' » absent de la fenêtre : ' + JSON.stringify(dialogInfo()));
+    button.click();
+    await h.sleep(500);
+  }
+  const editorText = () => document.querySelector('.ProseMirror').textContent;
+  // Une assertion qui échoue ne doit pas laisser la fenêtre ouverte pour les scénarios suivants.
+  async function closeDialogIfOpen(h) {
+    if (!dialogOpen()) return;
+    const cancel = dialogButtons().find(b => b.textContent === 'Annuler');
+    if (cancel) cancel.click();
+    await h.sleep(300);
+  }
+  const writesNow = () => stub().countActions('UpdateRecord', TABLE) + stub().countActions('AddRecord', TABLE);
+
+  cases.push({
+    id: 'leave_template_asks_save_discard_cancel_only_when_an_edit_is_pending_and_cancel_or_escape_keep_the_template',
+    description: "Changer de modèle sans rien en attente charge aussitôt, sans fenêtre ; avec une modification en attente (enregistrement automatique coupé) la fenêtre « Modifications non enregistrées » propose Annuler / Abandonner / Enregistrer (focus sur Enregistrer, nom du modèle dans le message) et rien n'a bougé tant qu'on n'a pas répondu ; Annuler et Échap gardent le modèle, le texte et la liste ; Abandonner charge l'autre modèle sans écrire",
+    run: async (h) => h.withRealChoose(async () => {
+      await clearConflictIfAny(h);
+      const idA = await saveTemplate(h, 'Quitter A', '<p>Contenu A</p>');
+      await newTemplate(h); // saveTemplate ne change pas de ligne seule : sans « + », le second Enregistrer écraserait le premier modèle
+      const idB = await saveTemplate(h, 'Quitter B', '<p>Contenu B</p>');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : ' + idA + ' / ' + idB };
+      try {
+        await ensureAutosave(h, false);
+        chooseTemplate(idA);
+        await h.sleep(300);
+        const silent = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText() };
+        await h.focusAtEnd();
+        await h.typeText(' modifié');
+        stub().clearActionLog();
+        chooseTemplate(idB);
+        await h.sleep(300);
+        const asked = dialogInfo();
+        const heldBack = { current: Templates.getCurrentId(), text: editorText(), writes: writesNow() };
+        await answerDialog(h, 'Annuler');
+        const afterCancel = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), status: statusNow(), writes: writesNow() };
+        chooseTemplate(idB);
+        await h.sleep(300);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await h.sleep(300);
+        const afterEscape = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), writes: writesNow() };
+        chooseTemplate(idB);
+        await h.sleep(300);
+        await answerDialog(h, 'Abandonner');
+        const afterDiscard = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), status: statusNow(), writes: writesNow(), storedA: String(stub().getRow(TABLE, idA).Contenu) };
+        const pass = !silent.open && String(silent.current) === String(idA) && silent.text === 'Contenu A'
+          && asked.open && asked.title === 'Modifications non enregistrées' && asked.message.includes('Quitter A')
+          && JSON.stringify(asked.labels) === JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) && asked.focused === 'Enregistrer'
+          && String(heldBack.current) === String(idA) && heldBack.text === 'Contenu A modifié' && heldBack.writes === 0
+          && !afterCancel.open && String(afterCancel.current) === String(idA) && String(afterCancel.list) === String(idA) && afterCancel.text === 'Contenu A modifié'
+          && UNSAVED_RE.test(afterCancel.status.text) && afterCancel.writes === 0
+          && !afterEscape.open && String(afterEscape.current) === String(idA) && String(afterEscape.list) === String(idA) && afterEscape.text === 'Contenu A modifié' && afterEscape.writes === 0
+          && !afterDiscard.open && String(afterDiscard.current) === String(idB) && String(afterDiscard.list) === String(idB) && afterDiscard.text === 'Contenu B'
+          && !UNSAVED_RE.test(afterDiscard.status.text) && afterDiscard.writes === 0 && !afterDiscard.storedA.includes('modifié');
+        return { pass, notes: JSON.stringify({ silent, asked, heldBack, afterCancel, afterEscape, afterDiscard }) };
+      } finally {
+        await closeDialogIfOpen(h);
+        await ensureAutosave(h, true);
+      }
+    }),
+  });
+
+  // Une frappe, puis tout de suite un autre modèle. Enregistrement automatique allumé, le passage suivant (toutes les 2,5 s) peut tomber entre les deux : la frappe est alors déjà en base
+  // et rien n'attend plus, la question n'a plus lieu d'être. Le scénario recommence (quatre essais au plus, un texte différent à chaque fois) au lieu de dépendre du hasard.
+  async function typeThenLeave(h, from, to, token) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      chooseTemplate(from);
+      await h.sleep(300);
+      await h.focusAtEnd();
+      await h.typeText(' ' + token + attempt);
+      stub().clearActionLog();
+      chooseTemplate(to);
+      await h.sleep(250);
+      if (dialogOpen()) return { attempt, token: token + attempt };
+    }
+    return { attempt: 0, token: null };
+  }
+
+  cases.push({
+    id: 'leave_template_save_writes_the_pending_edit_first_and_the_autosave_tick_waits_for_the_answer',
+    description: "Enregistrement automatique allumé, une modification encore dans les 2,5 s d'avant le passage suivant pose la même question ; pendant qu'elle est ouverte l'enregistrement automatique n'écrit rien (« Abandonner » laisse vraiment quelque chose à abandonner) ; Enregistrer écrit la modification une seule fois puis charge le modèle choisi, la liste le montre",
+    run: async (h) => h.withRealChoose(async () => {
+      await clearConflictIfAny(h);
+      const idA = await saveTemplate(h, 'Quitter C', '<p>Contenu C</p>');
+      await newTemplate(h);
+      const idB = await saveTemplate(h, 'Quitter D', '<p>Contenu D</p>');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : ' + idA + ' / ' + idB };
+      try {
+        await ensureAutosave(h, true);
+        const first = await typeThenLeave(h, idA, idB, 'enroute');
+        if (!first.token) return { pass: false, notes: 'la question ne s’est jamais ouverte en quatre essais' };
+        const asked = dialogInfo();
+        await waitTicks(h, 1); // un passage de l'enregistrement automatique pendant que la question attend
+        const duringQuestion = { open: dialogOpen(), writes: writesNow(), stored: String(stub().getRow(TABLE, idA).Contenu).includes(first.token), current: Templates.getCurrentId() };
+        await answerDialog(h, 'Enregistrer');
+        const afterSave = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), writes: writesNow(), stored: String(stub().getRow(TABLE, idA).Contenu).includes(first.token), status: statusNow() };
+        // Question « Abandonner » avec l'enregistrement automatique allumé : rien n'est écrit, ni avant ni après.
+        const second = await typeThenLeave(h, idB, idA, 'perdu');
+        if (!second.token) return { pass: false, notes: 'la seconde question ne s’est jamais ouverte en quatre essais : ' + JSON.stringify({ first, afterSave }) };
+        await waitTicks(h, 1);
+        const stillOpen = dialogOpen();
+        await answerDialog(h, 'Abandonner');
+        await waitTicks(h, 1);
+        const afterDiscard = { current: Templates.getCurrentId(), text: editorText(), writes: writesNow(), storedD: String(stub().getRow(TABLE, idB).Contenu).includes(second.token) };
+        const pass = asked.open && asked.labels.length === 3
+          && duringQuestion.open && duringQuestion.writes === 0 && !duringQuestion.stored && String(duringQuestion.current) === String(idA)
+          && !afterSave.open && String(afterSave.current) === String(idB) && String(afterSave.list) === String(idB) && afterSave.text.startsWith('Contenu D') && afterSave.stored && afterSave.writes === 1
+          && stillOpen && String(afterDiscard.current) === String(idA) && afterDiscard.text.includes(first.token) && afterDiscard.writes === 0 && !afterDiscard.storedD;
+        return { pass, notes: JSON.stringify({ first, asked, duringQuestion, afterSave, second, stillOpen, afterDiscard }) };
+      } finally {
+        await closeDialogIfOpen(h);
+        await ensureAutosave(h, true);
+      }
+    }),
+  });
+
+  cases.push({
+    id: 'leave_template_asks_before_new_document_and_new_email_not_after_a_delete_and_a_nameless_draft_has_no_save_button',
+    description: "« + » (nouveau document) et « Nouvel email » posent la même question quand une modification attend et n'ouvrent rien d'autre quand elle n'attend pas ; supprimer le modèle courant ne la pose pas (le modèle n'existe plus) ; un nouveau modèle sans nom n'a pas d'Enregistrer (Annuler / Abandonner), son message le dit, Annuler garde le brouillon",
+    run: async (h) => h.withRealChoose(async () => {
+      await clearConflictIfAny(h);
+      const idA = await saveTemplate(h, 'Quitter E', '<p>Contenu E</p>');
+      if (!idA) return { pass: false, notes: 'modèle non créé' };
+      try {
+        await ensureAutosave(h, false);
+        // Rien n'attend : « + » ouvre un nouveau document sans fenêtre.
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        const blank = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText() };
+        chooseTemplate(idA);
+        await h.sleep(300);
+        await h.focusAtEnd();
+        await h.typeText(' vers un nouveau');
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        const askedNew = dialogInfo();
+        await answerDialog(h, 'Annuler');
+        const keptNew = { current: Templates.getCurrentId(), text: editorText() };
+        document.getElementById('v2-btn-new-email').click();
+        await h.sleep(300);
+        const askedEmail = dialogOpen();
+        await answerDialog(h, 'Abandonner');
+        const email = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText(), name: document.getElementById('template-name').value, emailRow: !document.getElementById('v2-email-fields-row').hidden };
+        // Brouillon sans nom, avec du texte : pas d'Enregistrer.
+        await h.focusAtEnd();
+        await h.typeText('brouillon sans nom');
+        chooseTemplate(idA);
+        await h.sleep(300);
+        const draft = dialogInfo();
+        await answerDialog(h, 'Annuler');
+        const draftKept = { current: Templates.getCurrentId(), list: selectEl().value, text: editorText() };
+        // Supprimer le modèle courant avec une modification en attente : aucune question.
+        chooseTemplate(idA);
+        await h.sleep(300);
+        await answerDialog(h, 'Abandonner');
+        await h.focusAtEnd();
+        await h.typeText(' puis supprimé');
+        const stubbed = h.stubDialogs({ confirm: true });
+        let afterDelete;
+        try {
+          await h.clickButton('btn-delete');
+          await h.sleep(600);
+          afterDelete = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText(), rows: stub().state.rows[TABLE].id.length };
+        } finally { stubbed.restore(); }
+        const pass = !blank.open && blank.current == null && blank.text === ''
+          && askedNew.open && JSON.stringify(askedNew.labels) === JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer'])
+          && String(keptNew.current) === String(idA) && keptNew.text === 'Contenu E vers un nouveau'
+          && askedEmail && !email.open && email.current == null && email.text === '' && email.name === '' && email.emailRow
+          && draft.open && JSON.stringify(draft.labels) === JSON.stringify(['Annuler', 'Abandonner']) && /pas de nom|has no name/.test(draft.message) && draft.focused === 'Annuler'
+          && draftKept.current == null && draftKept.list === '' && draftKept.text === 'brouillon sans nom'
+          && !afterDelete.open && afterDelete.current == null && afterDelete.text === '';
+        return { pass, notes: JSON.stringify({ blank, askedNew, keptNew, askedEmail, email, draft, draftKept, afterDelete }) };
+      } finally {
+        await closeDialogIfOpen(h);
+        await ensureAutosave(h, true);
+      }
+    }),
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosave = cases;
 })();

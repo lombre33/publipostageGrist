@@ -2,6 +2,9 @@
 // confirmations »). Elles reposent sur la base commune (js/modal-base.js) : titre et boutons fixes, Tab et Échap tenus dans la fenêtre, rendu du thème.
 //   Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel? })  -> Promise<string | null>   (null : annulé ; '' : champ laissé vide)
 //   Dialogs.confirm({ title, message, confirmLabel?, danger? })                       -> Promise<boolean>
+//   Dialogs.choose({ title, message, choices, cancelLabel? })                         -> Promise<string | null>   (la `value` du choix cliqué ; null : annulé, Échap compris)
+//     choices : [{ value, label, primary? }] dans l'ordre d'affichage, à droite de « Annuler » (qui reste le premier bouton, « Valider » laisse sa place) ; le focus arrive sur
+//     le choix `primary`, à défaut sur « Annuler » (retours d'Antoine du 01/10 : « Enregistrer / Abandonner / Annuler » avant de quitter un modèle non enregistré).
 // Ne s'appelle qu'avec `await` : la fenêtre n'arrête plus le script comme le faisait la boîte du navigateur. Une seule fenêtre existe, réutilisée : une demande
 // qui arrive pendant qu'une autre est ouverte annule la première (elle se résout comme un clic sur Annuler). Aucun texte ici sauf les deux boutons par défaut
 // (« Annuler », « Valider ») : le titre, le libellé et le verbe du bouton sont ceux de l'appelant, dans la langue de l'interface.
@@ -43,21 +46,30 @@ const Dialogs = (function () {
     const ok = el('button', 'var-modal-primary');
     ok.type = 'button';
     win.actions.append(spacer, cancel, ok);
-    refs = { message, label, input, cancel, ok };
+    refs = { message, label, input, cancel, ok, choices: [] };
   }
 
-  function ask(opts, isPrompt) {
+  // Les boutons d'une demande `choose` n'existent que le temps de la fenêtre : retirés à la fermeture, « Valider » reprend sa place pour la demande suivante.
+  function clearChoices() {
+    refs.choices.forEach(button => button.remove());
+    refs.choices = [];
+  }
+
+  function ask(opts, kind) {
     ensure();
     if (current) current.finish(current.cancelValue);
     return new Promise(resolve => {
       const { message, label, input, cancel, ok } = refs;
-      const cancelValue = isPrompt ? null : false;
+      const isPrompt = kind === 'prompt';
+      const choices = kind === 'choose' ? (opts.choices || []) : null;
+      const cancelValue = isPrompt || choices ? null : false;
       let done = false;
       const finish = value => {
         if (done) return;
         done = true;
         current = null;
         win.hide();
+        clearChoices();
         resolve(value);
       };
       current = { finish, cancelValue };
@@ -77,18 +89,32 @@ const Dialogs = (function () {
       ok.textContent = opts.confirmLabel || I18n.t('common.confirm');
       cancel.onclick = () => finish(cancelValue);
       ok.onclick = () => finish(isPrompt ? input.value : true);
+      ok.hidden = !!choices;
+      let firstFocus = isPrompt ? input : (opts.danger ? cancel : ok);
+      if (choices) {
+        firstFocus = cancel;
+        choices.forEach(choice => {
+          const button = el('button', choice.primary ? 'var-modal-primary' : '', choice.label);
+          button.type = 'button';
+          button.onclick = () => finish(choice.value);
+          win.actions.append(button);
+          refs.choices.push(button);
+          if (choice.primary) firstFocus = button;
+        });
+      }
       input.onkeydown = event => {
         if (event.key !== 'Enter' || event.isComposing) return;
         event.preventDefault();
         ok.click();
       };
-      win.show(isPrompt ? input : (opts.danger ? cancel : ok));
+      win.show(firstFocus);
       if (isPrompt) input.select();
     });
   }
 
   return {
-    prompt: opts => ask(opts || {}, true),
-    confirm: opts => ask(opts || {}, false),
+    prompt: opts => ask(opts || {}, 'prompt'),
+    confirm: opts => ask(opts || {}, 'confirm'),
+    choose: opts => ask(opts || {}, 'choose'),
   };
 })();

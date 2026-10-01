@@ -316,6 +316,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   partie ; au clavier, Tab descend dans le menu. Réactiver l'enregistrement automatique n'efface pas ce qui a été tapé pendant la coupure.
   Enregistrement automatique coupé : le coin d'état dit « Modifications non enregistrées. » (texte normal, pas rouge) dès qu'une modification attend,
   jusqu'au prochain enregistrement ; allumé, le coin reste vide pendant la frappe, l'enregistrement part tout seul.
+- Quitter un modèle dont une modification attend (carte d'Antoine du 01/10, « Toujours demander ») : changer de modèle à la liste, « + », « Nouvel email », « Nouvelle grille » et « Utiliser
+  ce modèle » de la galerie ouvrent d'abord la fenêtre « Modifications non enregistrées » : Annuler, Abandonner, Enregistrer (le bouton principal, où le focus arrive). Elle est posée que
+  l'enregistrement automatique soit allumé ou non, et il n'écrit rien tant qu'elle est ouverte. Annuler et Échap restent sur le modèle (la liste le montre à nouveau, le curseur revient où
+  il était) ; Abandonner perd la modification ; Enregistrer l'écrit puis continue. Un nouveau modèle sans nom n'a pas d'Enregistrer, et le message dit pourquoi. Aucune question quand rien
+  n'attend, en lecture seule, pour un macro-modèle (il s'édite dans sa fenêtre) ni après « Supprimer » (le modèle n'existe plus).
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

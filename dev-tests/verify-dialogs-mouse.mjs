@@ -169,8 +169,8 @@ const state = () => page.evaluate(() => {
     message: shown(message) ? message.textContent : null, messageHeight: shown(message) ? message.getBoundingClientRect().height : 0,
     whiteSpace: getComputedStyle(message).whiteSpace,
     label: shown(label) ? label.textContent : null, inputShown: shown(input), inputValue: input.value, selection: [input.selectionStart, input.selectionEnd],
-    buttons: Array.from(ov.querySelectorAll('.pp-modal-actions button')).map(b => b.textContent),
-    primary: ov.querySelector('.var-modal-primary').textContent,
+    buttons: Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent),
+    primary: (Array.from(ov.querySelectorAll('.var-modal-primary')).find(b => !b.hidden) || { textContent: null }).textContent,
     focus: a === input ? 'input' : (a && a.closest && a.closest('#pp-dialog-modal') ? a.textContent : 'hors de la fenêtre : ' + (a && (a.id || a.tagName))),
     box: { l: r.left, t: r.top, r: r.right, b: r.bottom },
     aria: { role: box.getAttribute('role'), modal: box.getAttribute('aria-modal'), labelledText: (document.getElementById(box.getAttribute('aria-labelledby')) || {}).textContent, describedBy: box.getAttribute('aria-describedby') },
@@ -324,6 +324,94 @@ async function run(theme) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(`${T}, à 360 px de large : la confirmation reste dans le panneau, sans débordement de page`, inPanel(s.box, 360) && overflow <= 0, { box: s.box, overflow });
   await snap(`${T}-5-360`);
+  await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
+  // 9) Choix : Dialogs.choose, la question « Enregistrer / Abandonner / Annuler » d'avant un changement de modèle (js/main.js:askBeforeLeaving, choix d'Antoine du
+  // 01/10). Les choix s'ajoutent à Annuler, le bouton principal est celui de `primary: true`, et ils disparaissent à la fermeture : la confirmation ou la saisie
+  // qui suit n'en garde aucun (et retrouve son bouton principal).
+  const SAVE_ASK = { title: 'Modifications non enregistrées', message: '« Bail habitation » a des modifications non enregistrées. Les enregistrer avant de continuer ?',
+    choices: [{ value: 'discard', label: 'Abandonner' }, { value: 'save', label: 'Enregistrer', primary: true }] };
+  const buttonBox = label => page.evaluate(label => {
+    const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(x => !x.hidden && x.textContent === label);
+    if (!b) return { found: false };
+    const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+    return { found: true, x, y, left: r.left, right: r.right, top: r.top, bottom: r.bottom, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === b || b.contains(top)) };
+  }, label);
+  const clickLabel = async label => { const b = await buttonBox(label); if (b.found) await page.mouse.click(b.x, b.y); await page.waitForTimeout(200); return b; };
+
+  await focusOn('v2-btn-settings');
+  await ask('choose', SAVE_ASK);
+  s = await state();
+  check(`${T}, choix : ouverte dans le panneau, message en entier, pas de champ, Annuler / Abandonner / Enregistrer, focus sur Enregistrer`,
+    s.open && inPanel(s.box) && s.title === SAVE_ASK.title && s.message === SAVE_ASK.message && !s.inputShown && s.label === null
+    && JSON.stringify(s.buttons) === '["Annuler","Abandonner","Enregistrer"]' && s.primary === 'Enregistrer' && s.focus === 'Enregistrer' && s.aria.describedBy === 'pp-dialog-message', s);
+  const boxes = [await buttonBox('Annuler'), await buttonBox('Abandonner'), await buttonBox('Enregistrer')];
+  check(`${T}, choix : les trois boutons sont visibles, au premier plan, dans l’ordre Annuler, Abandonner, Enregistrer, sans se chevaucher`,
+    boxes.every(b => b.found && b.inViewport && b.onTop) && boxes[0].right <= boxes[1].left && boxes[1].right <= boxes[2].left, boxes);
+  await snap(`${T}-6-choix`);
+  const fwd = [s.focus];
+  for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); fwd.push((await state()).focus); }
+  check(`${T}, choix : Tab tourne Enregistrer, Annuler, Abandonner, puis revient à Enregistrer (le bouton caché de la confirmation n’en fait pas partie)`, JSON.stringify(fwd) === '["Enregistrer","Annuler","Abandonner","Enregistrer"]', fwd);
+  const rev = [];
+  await page.keyboard.press('Shift+Tab'); rev.push((await state()).focus);
+  await page.keyboard.press('Shift+Tab'); rev.push((await state()).focus);
+  check(`${T}, choix : Maj+Tab remonte d’Enregistrer à Abandonner puis Annuler`, JSON.stringify(rev) === '["Abandonner","Annuler"]', rev);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  r = await result();
+  check(`${T}, choix : Échap rend null, la fenêtre se ferme, le focus revient au bouton d’origine`, r.done && r.value === null && !(await isOpen()) && await focusIs('v2-btn-settings'), r);
+  for (const [label, expected] of [['Annuler', null], ['Abandonner', 'discard'], ['Enregistrer', 'save']]) {
+    await ask('choose', SAVE_ASK);
+    const clicked = await clickLabel(label);
+    r = await result();
+    check(`${T}, choix : un vrai clic sur « ${label} » rend ${expected === null ? 'null' : "'" + expected + "'"} et ferme la fenêtre, le focus revient`, clicked.found && r.done && r.value === expected && !(await isOpen()) && await focusIs('v2-btn-settings'), { clicked, r });
+  }
+  await ask('choose', SAVE_ASK);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  r = await result();
+  check(`${T}, choix : Entrée à l’ouverture valide le bouton principal ('save')`, r.done && r.value === 'save' && !(await isOpen()), r);
+  // Sans bouton principal (un nouveau modèle sans nom ne peut pas être enregistré) : le focus arrive sur Annuler, Entrée d'emblée annule.
+  const DRAFT_ASK = { title: 'Modifications non enregistrées', message: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré.', choices: [{ value: 'discard', label: 'Abandonner' }] };
+  await ask('choose', DRAFT_ASK);
+  s = await state();
+  check(`${T}, choix sans bouton principal : Annuler et Abandonner seulement, le focus arrive sur Annuler`, JSON.stringify(s.buttons) === '["Annuler","Abandonner"]' && s.primary === null && s.focus === 'Annuler' && inPanel(s.box), s);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  r = await result();
+  check(`${T}, choix sans bouton principal : Entrée d’emblée annule (null), rien n’est abandonné par une frappe distraite`, r.done && r.value === null && !(await isOpen()), r);
+  await ask('choose', DRAFT_ASK);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  r = await result();
+  check(`${T}, choix sans bouton principal : Tab puis Entrée abandonne ('discard')`, r.done && r.value === 'discard', r);
+  // Rien ne reste d'un choix : la confirmation et la saisie suivantes retrouvent leurs boutons.
+  await ask('choose', SAVE_ASK);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await ask('confirm', { title: 'Export', message: 'Générer un PDF pour chacune des 12 lignes ?' });
+  s = await state();
+  check(`${T}, après un choix : la confirmation n’a que ses deux boutons, Annuler et Valider (Valider principal)`, JSON.stringify(s.buttons) === '["Annuler","Valider"]' && s.primary === 'Valider' && s.focus === 'Valider', s);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await ask('prompt', { title: 'Nouveau dossier', label: 'Nom du nouveau dossier', value: 'A', confirmLabel: 'Créer' });
+  s = await state();
+  check(`${T}, après un choix : la saisie n’a que ses deux boutons, Annuler et Créer`, JSON.stringify(s.buttons) === '["Annuler","Créer"]' && s.primary === 'Créer' && s.focus === 'input', s);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  // Panneau étroit : les trois boutons tiennent dans les 360 px, sans débordement de page.
+  await ask('choose', SAVE_ASK);
+  await page.setViewportSize({ width: 360, height: HEIGHT });
+  await page.waitForTimeout(200);
+  s = await state();
+  const narrow = [await buttonBox('Annuler'), await buttonBox('Abandonner'), await buttonBox('Enregistrer')];
+  const narrowOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  check(`${T}, choix à 360 px de large : la fenêtre et ses trois boutons restent dans le panneau, sans débordement de page`, inPanel(s.box, 360) && narrow.every(b => b.found && b.inViewport && b.onTop) && narrowOverflow <= 0, { box: s.box, narrow, narrowOverflow });
+  await snap(`${T}-7-choix-360`);
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
   await page.waitForTimeout(200);
   await page.keyboard.press('Escape');

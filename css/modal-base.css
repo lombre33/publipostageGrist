@@ -40,6 +40,9 @@
 /* === Saisies et confirmations (js/dialogs.js) === Au-dessus des fenêtres écrites dans index.html (z-index 2000), dont elles sont souvent la suite
    (Organiser > nouveau dossier, Tables liées > supprimer une correspondance). Les boutons prennent l'aspect de `.var-modal-actions` (css/variable-actions.css). */
 #pp-dialog-modal { z-index: 2100; }
+/* « Annuler », « Abandonner » et « Enregistrer » (Dialogs.choose) ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) : le dernier passe alors sur sa propre
+   ligne, à droite, au lieu de sortir de la fenêtre. Au-dessus, tout reste sur une ligne, comme pour une saisie ou une confirmation. */
+#pp-dialog-modal .pp-modal-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
 .pp-dialog-message { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .pp-dialog-message[hidden] { display: none; }
 .pp-dialog-label { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--text); }

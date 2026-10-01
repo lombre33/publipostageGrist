@@ -493,6 +493,12 @@ const I18n = (function () {
     'dialog.emailTooLong.title': { fr: 'Email trop long', en: 'Email too long' },
     'dialog.batchExport.title': { fr: 'Exporter toutes les lignes', en: 'Export all rows' },
     'dialog.batchExport.titleGrid': { fr: 'Exporter toutes les valeurs de la table', en: 'Export all table values' },
+    // Quitter un modèle dont des modifications ne sont pas enregistrées (autre modèle, « + », nouvel email, nouvelle grille, galerie) : « Toujours demander » (choix d'Antoine, 01/10).
+    // Sans nom (nouveau modèle jamais enregistré) il n'y a pas d'« Enregistrer » : le nom manque, la fenêtre propose d'abandonner ou d'annuler pour lui en donner un.
+    'dialog.unsaved.title': { fr: 'Modifications non enregistrées', en: 'Unsaved changes' },
+    'dialog.unsaved.message': { fr: '« {name} » a des modifications non enregistrées. Les enregistrer avant de continuer ?', en: '“{name}” has unsaved changes. Save them before continuing?' },
+    'dialog.unsaved.messageNoName': { fr: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré. Annulez pour lui en donner un, ou abandonnez-le.', en: 'This new template has no name and is not saved. Cancel to name it, or discard it.' },
+    'dialog.unsaved.discard': { fr: 'Abandonner', en: 'Discard' },
     'alert.noRecordForExport': { fr: 'Aucune ligne sélectionnée : impossible d’exporter en PDF.', en: 'No row selected: cannot export to PDF.' },
     'alert.noRecordForExportXlsx': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en Excel.', en: 'No table value selected: cannot export to Excel.' },
     'alert.noRecordForExportGrid': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en PDF.', en: 'No table value selected: cannot export to PDF.' },

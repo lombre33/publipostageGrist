@@ -655,8 +655,10 @@ window.TestHelpers = (function () {
   // window.prompt / window.confirm avant que ces boîtes deviennent des fenêtres du widget (29/09). `answers` : { prompt?, confirm? }, chacune une valeur ou une
   // fonction des options reçues ; sans réponse donnée : saisie annulée (null), confirmation refusée (false). `asked` liste les demandes reçues ({ kind, ...options }),
   // `restore()` remet les vraies fenêtres. Le clic réel dans la fenêtre a son propre test : dialogsMouse (dev-tests/verify-dialogs-mouse.mjs).
+  // `choose` (la question « Enregistrer / Abandonner / Annuler » d'avant un changement de modèle) n'est remplacée que si `answers` en donne une : sinon la réponse
+  // par défaut du harnais, plus bas, reste en place.
   function stubDialogs(answers) {
-    const orig = { prompt: Dialogs.prompt, confirm: Dialogs.confirm };
+    const orig = { prompt: Dialogs.prompt, confirm: Dialogs.confirm, choose: Dialogs.choose };
     const asked = [];
     const answerFor = (kind, fallback) => async opts => {
       asked.push(Object.assign({ kind }, opts));
@@ -665,11 +667,28 @@ window.TestHelpers = (function () {
     };
     Dialogs.prompt = answerFor('prompt', null);
     Dialogs.confirm = answerFor('confirm', false);
-    return { asked, restore() { Dialogs.prompt = orig.prompt; Dialogs.confirm = orig.confirm; } };
+    if (answers && answers.choose !== undefined) Dialogs.choose = answerFor('choose', null);
+    return { asked, restore() { Dialogs.prompt = orig.prompt; Dialogs.confirm = orig.confirm; Dialogs.choose = orig.choose; } };
+  }
+
+  // Avant de quitter un modèle dont des modifications attendent, main.js (askBeforeLeaving) pose la question « Enregistrer / Abandonner / Annuler » (choix d'Antoine du
+  // 01/10, « Toujours demander »). resetEditor() ci-dessus passe par Editor.setHTML, que main.js compte comme une modification en attente : sans réponse toute faite,
+  // chaque scénario qui change de modèle ou en crée un derrière lui attendrait une personne. La réponse par défaut est « Abandonner » - ce que le widget faisait avant la
+  // question : le contenu en attente disparaissait. `withRealChoose(fn)` rend la vraie fenêtre le temps de `fn` (le scénario clique alors ses boutons, comme la personne) ;
+  // `choosePrompts` garde les demandes reçues par la réponse par défaut, pour un scénario qui veut savoir si la question a été posée.
+  const realChoose = Dialogs.choose;
+  const choosePrompts = [];
+  const defaultChoose = async (opts) => { choosePrompts.push(opts); return 'discard'; };
+  Dialogs.choose = defaultChoose;
+  async function withRealChoose(fn) {
+    const before = Dialogs.choose;
+    Dialogs.choose = realChoose;
+    try { return await fn(); }
+    finally { Dialogs.choose = before; }
   }
 
   return {
-    sleep, tiptap, resetEditor, stubDialogs, focusAtEnd, focusInElement, typeText,
+    sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth,

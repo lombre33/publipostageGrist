@@ -296,25 +296,79 @@
     templateNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') templateNameInput.blur(); });
   }
 
+  // === Quitter le modèle courant avec des modifications en attente ===
+  // Changer de modèle, créer un document, un email ou une grille, ou en créer un depuis la galerie remplace le contenu de l'éditeur : ce qui attendait d'être
+  // enregistré (autosaveDirty : enregistrement automatique coupé, ou allumé mais dans les 2,5 s d'avant le prochain passage) disparaissait sans rien demander.
+  // Choix d'Antoine du 01/10, « Toujours demander » : une fenêtre Enregistrer / Abandonner / Annuler, que l'enregistrement automatique soit allumé ou non.
+  // Pas de question quand rien n'attend, ni en lecture seule (rien ne s'enregistre pour cette personne), ni pour un macro-modèle (il s'édite dans sa fenêtre).
+  // Les appelants gardent leur chemin synchrone quand il n'y a rien à demander : `if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;`.
+  function hasEditsToConfirmBeforeLeaving() {
+    return autosaveDirty && !isReadOnly() && currentTypeModele !== 'macro';
+  }
+
+  // true : on peut continuer (« Abandonner », ou « Enregistrer » réussi) ; false : la personne reste (« Annuler », Échap, enregistrement refusé : le message d'erreur
+  // est alors dans le coin d'état). Sans nom il n'y a pas d'« Enregistrer » : un nouveau modèle jamais enregistré ne peut pas l'être tant qu'il n'en a pas.
+  async function askBeforeLeaving() {
+    const name = templateNameInput ? templateNameInput.value.trim() : '';
+    const choices = [{ value: 'discard', label: I18n.t('dialog.unsaved.discard') }];
+    if (name) choices.push({ value: 'save', label: I18n.t('common.save'), primary: true });
+    leavePromptOpen = true;
+    let choice;
+    try {
+      choice = await Dialogs.choose({
+        title: I18n.t('dialog.unsaved.title'),
+        message: name ? I18n.t('dialog.unsaved.message', { name }) : I18n.t('dialog.unsaved.messageNoName'),
+        choices,
+      });
+    } finally { leavePromptOpen = false; }
+    if (choice === 'discard') return true;
+    if (choice === 'save') {
+      await onSave();
+      return !autosaveDirty;
+    }
+    // Annuler : la personne reprend où elle en était. Ouverte depuis une ligne de menu (une étiquette que la souris ne focalise pas), la fenêtre n'avait rien à rendre : le
+    // bouton qu'on vient de cliquer, tout juste caché, garde le focus jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du focus sur <body>.
+    const active = document.activeElement;
+    if (currentMode === 'edit' && (!active || active === document.body || active.getClientRects().length === 0)) EditorCore.getEditor().commands.focus();
+    return false;
+  }
+
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
+    if (hasEditsToConfirmBeforeLeaving()) {
+      // La liste referme son menu et rend le focus à son bouton juste après cet évènement : la question vient après, sinon ce focus passerait derrière la fenêtre.
+      await Promise.resolve();
+      if (!(await askBeforeLeaving())) {
+        const currentId = Templates.getCurrentId();
+        templateSelect.value = currentId == null ? '' : currentId; // la liste retrouve le modèle qu'on n'a pas quitté
+        return;
+      }
+      // « Enregistrer » a pu rafraîchir la liste : elle montre de nouveau le modèle choisi.
+      templateSelect.value = id;
+    }
     if (!id) { loadTemplateIntoEditor(null); return; }
     const tpl = Templates.getCached().find(t => String(t.id) === String(id));
     if (tpl) loadTemplateIntoEditor(tpl);
   }
 
+  // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
+  // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
+  // utile (juste après avoir cliqué "Nouveau modèle"). Sans question : onDelete l'appelle quand le modèle courant vient d'être supprimé.
+  function startBlankDocument() {
+    templateSelect.value = '';
+    loadTemplateIntoEditor(null);
+  }
+
   async function onNew() {
     if (isReadOnly()) return;
-    templateSelect.value = '';
-    // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
-    // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
-    // utile (juste après avoir cliqué "Nouveau modèle").
-    loadTemplateIntoEditor(null);
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
+    startBlankDocument();
   }
 
   // Même schéma qu'onNew() - seule différence, le 2e argument qui bascule le bandeau Objet/À/Cc/Cci et le verrouillage de la toolbar.
   async function onNewEmail() {
     if (isReadOnly()) return;
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
     templateSelect.value = '';
     loadTemplateIntoEditor(null, 'email');
   }
@@ -322,6 +376,7 @@
   // Même schéma encore : une nouvelle grille est un modèle vide d'un type fixé à la création (un tableau de départ, posé par GridEditor.setActive).
   async function onNewGrid() {
     if (isReadOnly()) return;
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
     templateSelect.value = '';
     loadTemplateIntoEditor(null, GridEditor.TYPE);
   }
@@ -337,6 +392,8 @@
   // rafraîchir la liste, sélectionner ce qui vient d'être enregistré, resynchroniser le bouton "par défaut".
   async function onMacroSaved(id) {
     await refreshTemplateList();
+    // Le macro-modèle est enregistré dans tous les cas ; le charger remplace l'éditeur, donc les modifications en attente du modèle qu'on quitte : même question.
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { setStatus(I18n.t('status.macroSaved')); return; }
     templateSelect.value = id;
     const tpl = Templates.getCached().find(t => String(t.id) === String(id));
     loadTemplateIntoEditor(tpl);
@@ -419,7 +476,7 @@
     if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
     await Templates.remove(id);
     await refreshTemplateList();
-    onNew();
+    startBlankDocument();
     setStatus(I18n.t('status.templateDeleted'));
   }
 
@@ -516,6 +573,9 @@
   let autosaveConflictActive = false;
   let autosaveConflictTpl = null;
   let autosaveTimer = null;
+  // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps, sinon « Abandonner » ne
+  // laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
+  let leavePromptOpen = false;
 
   function isAutosaveEnabled() {
     try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
@@ -592,6 +652,7 @@
   }
 
   async function autosaveTick() {
+    if (leavePromptOpen) return;
     if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. wireSaveMenu) - aucun appel Grist tant que c'est le cas, pas seulement le
     // dernier enregistrement sauté : ni le polling de conflit ni l'écriture elle-même ne doivent tourner en arrière-plan pendant que c'est éteint.
     if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
@@ -1454,6 +1515,8 @@
     // #template-select. Réutilise onSave() tel quel plutôt que dupliquer l'appel à Templates.save().
     async function useEmpty() {
       if (!currentEntry || !currentHtml) return;
+      // Le nouveau modèle remplace l'éditeur : même question que pour un changement de modèle (« Annuler » laisse la galerie ouverte, rien n'est créé).
+      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
       const html = TemplateGallery.stripVariableBadges(currentHtml);
       const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
       templateSelect.value = '';
@@ -1465,6 +1528,8 @@
 
     async function useWithData() {
       if (!currentEntry || !currentHtml) return;
+      // Avant tout effet (la table Grist n'est créée qu'après) : « Annuler » ne laisse rien derrière elle.
+      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
       let schema;
       try { schema = await TemplateGallery.fetchSchema(currentEntry); }
       catch (e) {
