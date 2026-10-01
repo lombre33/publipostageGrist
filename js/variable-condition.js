@@ -8,7 +8,8 @@
 // (js/floating-toolbars.js:wireVariableFloatingToolbar). « Copier » / « Coller » (demande d'Antoine, 2026-09-29) : la condition affichée dans la fenêtre
 // d'une variable se recolle dans la fenêtre d'une autre - Coller remplace les règles de la fenêtre comme un brouillon, « Enregistrer » les applique.
 // La même fenêtre sert à un bloc de texte conditionnel (nœud conditionalText, js/conditional-text.js) : même condition { mode, rules } dans son attribut `condition`, mêmes
-// colonnes, mêmes liens entre tables ; seuls changent l'introduction, les phrases de l'aperçu (le bloc s'affiche ou non, plutôt qu'une valeur) et celle de « Coller ».
+// colonnes, mêmes liens entre tables ; seuls changent l'introduction, les phrases de l'aperçu (le bloc s'affiche ou non, plutôt qu'une valeur) et celle de « Coller » - et, pour le
+// bloc seul, le bouton « Défaire le bloc » à côté de « Retirer la condition » (demande d'Antoine, 2026-10-01 : le cadre et la condition partent, le texte reste).
 const VariableCondition = (function () {
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
@@ -79,12 +80,21 @@ const VariableCondition = (function () {
     debug.append(debugCurrent, debugCount);
     const removeBtn = el('button', 'var-modal-danger');
     removeBtn.type = 'button';
-    const spacer = el('span', 'var-modal-spacer');
+    // « Défaire le bloc » : pour un bloc de texte seulement, juste après « Retirer la condition » (le premier `.var-modal-danger` reste celui-ci ; les tests et les autres fenêtres
+    // trouvent « Annuler » par `button:not(.var-modal-primary):not(.var-modal-danger)`). Même famille de boutons de retrait, mais le texte garde la couleur du texte (css/variable-actions.css).
+    const unwrapBtn = el('button', 'var-modal-danger var-modal-unwrap');
+    unwrapBtn.type = 'button';
     const cancelBtn = el('button');
     cancelBtn.type = 'button';
     const saveBtn = el('button', 'var-modal-primary');
     saveBtn.type = 'button';
-    win.actions.append(removeBtn, spacer, cancelBtn, saveBtn);
+    // Deux groupes - les retraits à gauche, Annuler et Enregistrer à droite - qui passent sur deux lignes, chacun entier, quand les quatre boutons ne tiennent pas côte à côte
+    // (le français dans les 480 px de la fenêtre) : sans cela, « Enregistrer » sortait de la fenêtre.
+    const startGroup = el('div', 'var-modal-actions-start');
+    startGroup.append(removeBtn, unwrapBtn);
+    const endGroup = el('div', 'var-modal-actions-end');
+    endGroup.append(cancelBtn, saveBtn);
+    win.actions.append(startGroup, endGroup);
     // Copier / Coller : un seul groupe de nœuds, replacé à chaque tracé des règles sur la ligne de « + Ajouter une condition » (cf. renderRules).
     const clip = el('span', 'var-condition-clip');
     const copyBtn = el('button', 'var-condition-clip-btn');
@@ -95,7 +105,7 @@ const VariableCondition = (function () {
     clipStatus.setAttribute('role', 'status');
     clip.append(copyBtn, pasteBtn, clipStatus);
     win.body.append(intro, modeRow, rulesBox, debug);
-    refs = { title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, debugCurrent, debugCount, removeBtn, cancelBtn, saveBtn };
+    refs = { title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, debugCurrent, debugCount, removeBtn, unwrapBtn, cancelBtn, saveBtn };
 
     modeSelect.addEventListener('change', () => {
       if (!state) return;
@@ -104,6 +114,7 @@ const VariableCondition = (function () {
       scheduleDebug();
     });
     removeBtn.addEventListener('click', () => { if (state) { applyCondition(null); close(); } });
+    unwrapBtn.addEventListener('click', unwrapBlock);
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
     copyBtn.addEventListener('click', copyCondition);
@@ -354,6 +365,13 @@ const VariableCondition = (function () {
     applyCondition(plainCondition(state.working));
     close();
   }
+  // « Défaire le bloc » (bloc de texte seulement) : le cadre et la condition disparaissent, le texte reste (js/conditional-text.js:unwrap). Le brouillon de la fenêtre n'est pas
+  // enregistré : le bloc n'existe plus. Le bloc retrouvé à sa position capturée au clic ; s'il n'y est plus, même avertissement que pour une condition qu'on ne peut plus écrire.
+  function unwrapBlock() {
+    if (!state || !isBlock()) return;
+    if (!ConditionalText.unwrap(state.editor, state.pos)) alert(I18n.t('varCond.unwrapLostBlock'));
+    close();
+  }
 
   function close() {
     if (!win) return;
@@ -378,7 +396,7 @@ const VariableCondition = (function () {
       hadCondition: !!existing,
       working: existing ? JSON.parse(JSON.stringify({ mode: existing.mode, rules: existing.rules })) : { mode: 'all', rules: [emptyRule()] },
     };
-    const { title, intro, modeBefore, modeSelect, modeAfter, removeBtn, cancelBtn, saveBtn } = refs;
+    const { title, intro, modeBefore, modeSelect, modeAfter, removeBtn, unwrapBtn, cancelBtn, saveBtn } = refs;
     title.textContent = I18n.t('varCond.title');
     if (isBlock()) {
       intro.replaceChildren(document.createTextNode(I18n.t('varCond.introBlock')));
@@ -394,6 +412,9 @@ const VariableCondition = (function () {
     modeSelect.options[1].value = 'any';
     removeBtn.textContent = I18n.t('varCond.remove');
     removeBtn.hidden = !state.hadCondition;
+    unwrapBtn.textContent = I18n.t('varCond.unwrapBlock');
+    unwrapBtn.title = I18n.t('varCond.unwrapBlockTitle');
+    unwrapBtn.hidden = !isBlock();
     cancelBtn.textContent = I18n.t('common.cancel');
     saveBtn.textContent = I18n.t('common.save');
     resetCopyLabel();

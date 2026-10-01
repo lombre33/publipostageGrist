@@ -47,8 +47,17 @@
 .var-modal-actions button.var-modal-danger { border-color: transparent; background: transparent; color: var(--danger); padding: 0 4px; }
 .var-modal-actions button.var-modal-danger:hover { background: var(--danger-soft, #fbe9e9); }
 .var-modal-actions button[hidden] { display: none; }
+/* « Défaire le bloc » (fenêtre de condition d'un bloc de texte) : un bouton de retrait comme « Retirer la condition », mais le rouge de --danger fait 4,4:1 sur blanc, trop peu pour un
+   texte (4,5:1) - le texte garde la couleur du texte, comme « Retirer l'encadré » et « Retirer le lien ». Le rouge est celui d'une condition qu'on retire, pas d'un texte qui reste. */
+.var-modal-actions button.var-modal-danger.var-modal-unwrap { color: var(--text); }
+.var-modal-actions button.var-modal-danger.var-modal-unwrap:hover { background: var(--surface-sunken); }
 
 /* === Fenêtre de condition === */
+/* La ligne de boutons : les retraits à gauche (« Retirer la condition », « Défaire le bloc »), Annuler et Enregistrer à droite. Si les deux groupes ne tiennent pas sur une ligne, le second
+   passe dessous, à droite, entier. */
+.var-condition-modal-content .var-modal-actions { flex-wrap: wrap; row-gap: 8px; }
+.var-modal-actions-start, .var-modal-actions-end { display: flex; align-items: center; gap: 8px; }
+.var-modal-actions-end { margin-left: auto; }
 .var-condition-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-mode[hidden] { display: none; }
 .var-condition-mode select { height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }

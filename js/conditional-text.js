@@ -1,7 +1,8 @@
 // Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs - paragraphes, titres, listes, tableaux, et d'autres blocs conditionnels à toute
 // profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie. Le nœud de l'éditeur est dans js/editor-nodes.js
 // (createConditionalTextNode), la barre flottante dans js/floating-toolbars.js, la fenêtre de condition (la même que celle d'une bulle) dans js/variable-condition.js.
-// Ce fichier porte les deux bouts qui restent : la pose du bloc dans l'éditeur (à la place de « #requête », ou autour du texte sélectionné), et sa résolution au rendu.
+// Ce fichier porte les bouts qui restent : la pose du bloc dans l'éditeur (à la place de « #requête », ou autour du texte sélectionné), sa résolution au rendu et son défaire
+// (« Défaire le bloc » de la fenêtre de condition : le cadre et la condition partent, le texte reste).
 //
 // Résolution : js/reader-mode.js la fait UNE fois, après le déroulé des zones répétées et avant celle des bulles - le HTML qu'elle rend à la Lecture, au PDF, au Word,
 // à l'e-mail et aux en-têtes/pieds est donc déjà sans bloc. Condition remplie : le cadre disparaît et son contenu reste, sans rien ajouter autour. Sinon : le bloc et tout ce
@@ -167,5 +168,23 @@ const ConditionalText = (function () {
     return true;
   }
 
-  return { resolve, startFromSelection, hasPending, cancelPending, insertFromPanel };
+  // « Défaire le bloc » (fenêtre de condition, js/variable-condition.js) : le bloc qui commence à `pos` disparaît avec sa condition, tout son contenu reste à sa place. Une seule
+  // transaction : un Ctrl+Z rend le bloc et sa condition. Le bloc est REMPLACÉ par son contenu, pas « levé » (tr.lift, comme le fait « Retirer l'encadré » de js/callout.js) :
+  // en mode suivi, la bibliothèque traduit une levée en texte barré dans le cadre et le même texte inséré après lui - le cadre, vide, reste une fois tout accepté -, alors
+  // qu'un remplacement donne le bloc entier barré et son contenu inséré : « Tout accepter » rend exactement le document sans le bloc, « Tout refuser » celui d'avant.
+  // Le curseur se pose au début du texte libéré : la sélection du bloc ne survit pas (mappée à travers le remplacement, elle prendrait le premier paragraphe pour un nœud
+  // sélectionné, que la frappe suivante remplacerait). Faux, sans rien changer, si `pos` ne porte plus un bloc ou si son parent n'accepte pas ses blocs à sa place.
+  function unwrap(editor, pos) {
+    const { state, view } = editor;
+    const node = state.doc.nodeAt(pos);
+    if (!node || node.type.name !== TYPE) return false;
+    const $pos = state.doc.resolve(pos);
+    if (!$pos.parent.canReplace($pos.index(), $pos.index() + 1, node.content)) return false;
+    const tr = state.tr.replaceWith(pos, pos + node.nodeSize, node.content);
+    tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(pos), 1));
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  }
+
+  return { resolve, startFromSelection, hasPending, cancelPending, insertFromPanel, unwrap };
 })();

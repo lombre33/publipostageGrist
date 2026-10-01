@@ -560,6 +560,8 @@
     }));
   }
   function cancelWindow(modal) { modal.querySelector('.var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)').click(); }
+  const unwrapButton = modal => Array.from(modal.querySelectorAll('.var-modal-actions button')).find(b => b.textContent === I18n.t('varCond.unwrapBlock'));
+  const footerLabels = modal => Array.from(modal.querySelectorAll('.var-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent);
   async function openBlockWindow(h, index) {
     await clickTag(h, index || 0);
     pressToolbarButton('var-condition');
@@ -700,21 +702,22 @@
         const labels = tags().map(t => t.textContent);
         const modal = await openBlockWindow(h, 0);
         const intro = modal.querySelector('.var-modal-intro').textContent;
+        const unwrap = { text: unwrapButton(modal) ? unwrapButton(modal).textContent : null, title: unwrapButton(modal) ? unwrapButton(modal).title : null };
         const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
         cancelWindow(modal);
         await h.sleep(40);
         await clickTag(h, 0);
         const bar = barState();
-        seen = { labels, intro, debug, linked: bar.linked.title, loop: bar.loop.title, titleIf: tags()[0].title };
+        seen = { labels, intro, debug, linked: bar.linked.title, loop: bar.loop.title, titleIf: tags()[0].title, unwrap };
       } finally { I18n.setLang(lang); }
       await h.sleep(80);
       const labelsFr = tags().map(t => t.textContent);
       const missing = ['chips.conditionalText', 'varToolbar.linkedBlock', 'varToolbar.loopBlock', 'varCond.introBlock', 'varCond.debug.currentMetBlock', 'varCond.debug.currentNotMetBlock', 'varCond.debug.firstBlock',
-        'varCond.saveLostBlock', 'varCond.clip.pastedStatusBlock', 'condText.tag.none', 'condText.tag.if', 'condText.tag.titleNone', 'condText.tag.titleIf'].filter(k => I18n.t(k) === k);
+        'varCond.saveLostBlock', 'varCond.unwrapBlock', 'varCond.unwrapBlockTitle', 'varCond.unwrapLostBlock', 'varCond.clip.pastedStatusBlock', 'condText.tag.none', 'condText.tag.if', 'condText.tag.titleNone', 'condText.tag.titleIf'].filter(k => I18n.t(k) === k);
       const pass = seen && seen.labels[0] === 'If Statut = Urgent' && seen.labels[1] === 'Conditional text · no condition'
         && /^This text block only appears in read mode/.test(seen.intro) && seen.debug[0] === 'Selected row (#1): condition met, the block is shown.' && /^$|Selected row/.test(seen.debug[0])
         && seen.linked === 'Available for a variable, not for a text block' && /^Available for a variable linked to several rows/.test(seen.loop)
-        && /^Shown if Statut = Urgent\./.test(seen.titleIf)
+        && /^Shown if Statut = Urgent\./.test(seen.titleIf) && seen.unwrap.text === 'Unwrap block' && /^Removes the frame and the condition/.test(seen.unwrap.title)
         && labelsFr[0] === 'Si Statut = Urgent' && labelsFr[1] === 'Texte conditionnel · sans condition' && missing.length === 0;
       return { pass: !!pass, notes: JSON.stringify({ seen, labelsFr, missing }) };
     },
@@ -1107,6 +1110,163 @@
         const pass = started && picked && /<ins|<del/.test(tracked) && accepted === '<p>Alpha</p>' + block('<p>Beta gamma</p>') + '<p>Delta</p>';
         return { pass, notes: JSON.stringify({ started, picked, tracked: tracked.slice(0, 400), accepted }) };
       } finally { if (suggest) ed0.commands.toggleSuggestMode(); }
+    },
+  });
+
+  // === « Défaire le bloc » (fenêtre de condition ; demande d'Antoine du 2026-10-01 : le texte reste, le cadre disparaît) ===
+  // La forme d'un document en types de nœuds, sans le texte : « tableCell(paragraph) ».
+  function outline(node) {
+    const children = Array.from({ length: node.childCount }, (_, i) => node.child(i)).filter(child => !child.isText).map(outline);
+    return children.length ? node.type.name + '(' + children.join(',') + ')' : node.type.name;
+  }
+  const afterFirstParagraph = html => html.slice(html.indexOf('</p>') + 4);
+
+  cases.push({
+    id: 'condtext_window_unwrap_button_keeps_the_text_drops_the_frame_and_one_undo_brings_it_back',
+    description: '« Défaire le bloc » (à côté de « Retirer la condition », avec une info-bulle) : le cadre et la condition disparaissent, tout le texte reste à sa place - les blocs emboîtés gardent leur condition -, la fenêtre se ferme, le curseur est au début du texte libéré, et un Annuler rend le bloc avec sa condition',
+    run: async (h) => {
+      await seed(h);
+      const inner = block('<p>Intérieur</p>', COND_NORMAL);
+      const original = '<p>Avant</p>' + block('<p>Texte 1</p><ul><li><p>Item</p></li></ul>' + inner, COND_URGENT) + '<p>Après</p>';
+      Editor.setHTML(original);
+      // Plus de 500 ms avant la modification : l'historique la groupe sinon avec le chargement du document (un seul « Annuler » reviendrait avant lui).
+      await h.sleep(650);
+      const modal = await openBlockWindow(h, 0);
+      const button = unwrapButton(modal);
+      const opened = { footer: footerLabels(modal), title: button && button.title, firstDanger: modal.querySelector('.var-modal-danger').textContent };
+      if (!button) return { pass: false, notes: JSON.stringify({ opened }) };
+      button.click();
+      await h.sleep(100);
+      const selection = ed().state.selection;
+      const after = {
+        html: Editor.getHTML(), closed: !VariableCondition.isOpen() && !visible(conditionModal()), blocks: blockNodes().length, tags: tags().length,
+        caret: selection.empty && selection.toJSON().type === 'text' && selection.$from.parent.textContent === 'Texte 1' && selection.$from.parentOffset === 0,
+        focus: !!document.activeElement && !!document.activeElement.closest('.tiptap'), barHidden: !visible(toolbar()),
+      };
+      await h.clickButton('v2-btn-undo');
+      await h.sleep(120);
+      const undone = { html: Editor.getHTML(), condition: blockNodes()[0] && blockNodes()[0].node.attrs.condition };
+      await h.clickButton('v2-btn-redo');
+      await h.sleep(120);
+      const redone = Editor.getHTML();
+      const pass = JSON.stringify(opened.footer) === JSON.stringify([I18n.t('varCond.remove'), I18n.t('varCond.unwrapBlock'), I18n.t('common.cancel'), I18n.t('common.save')])
+        && opened.firstDanger === I18n.t('varCond.remove') && opened.title === I18n.t('varCond.unwrapBlockTitle')
+        && after.html === '<p>Avant</p><p>Texte 1</p><ul><li><p>Item</p></li></ul>' + inner + '<p>Après</p>' && after.closed && after.blocks === 1 && after.tags === 1 && after.caret && after.focus && after.barHidden
+        && undone.html === original && JSON.stringify(undone.condition) === JSON.stringify(COND_URGENT) && redone === after.html;
+      return { pass, notes: JSON.stringify({ opened, after, undone, redone }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_window_unwrap_button_is_only_for_blocks_and_needs_no_condition',
+    description: 'La fenêtre d’une bulle n’a pas « Défaire le bloc » (ses boutons ne bougent pas) ; celle d’un bloc sans condition l’a, sans « Retirer la condition » ; défaire un bloc emboîté laisse le bloc qui l’entoure, puis défaire celui-ci ne laisse que le texte',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Dossier ' + badgeHtml('Titre', COND_URGENT) + '</p>' + block('<p>Un</p>' + block('<p>Deux</p>')) + '<p>Fin</p>');
+      await h.sleep(80);
+      await selectBadge(h, 'Titre');
+      pressToolbarButton('var-condition');
+      await h.sleep(80);
+      let modal = conditionModal();
+      const forBadge = { footer: footerLabels(modal), hidden: unwrapButton(modal).hidden };
+      cancelWindow(modal);
+      await h.sleep(40);
+      modal = await openBlockWindow(h, 1);
+      const forInner = { footer: footerLabels(modal), removeHidden: modal.querySelector('.var-modal-danger').hidden, unwrapHidden: unwrapButton(modal).hidden };
+      unwrapButton(modal).click();
+      await h.sleep(100);
+      const afterInner = afterFirstParagraph(Editor.getHTML());
+      modal = await openBlockWindow(h, 0);
+      unwrapButton(modal).click();
+      await h.sleep(100);
+      const afterOuter = afterFirstParagraph(Editor.getHTML());
+      const pass = JSON.stringify(forBadge.footer) === JSON.stringify([I18n.t('varCond.remove'), I18n.t('common.cancel'), I18n.t('common.save')]) && forBadge.hidden === true
+        && JSON.stringify(forInner.footer) === JSON.stringify([I18n.t('varCond.unwrapBlock'), I18n.t('common.cancel'), I18n.t('common.save')]) && forInner.removeHidden === true && forInner.unwrapHidden === false
+        && afterInner === block('<p>Un</p><p>Deux</p>') + '<p>Fin</p>' && afterOuter === '<p>Un</p><p>Deux</p><p>Fin</p>' && blockNodes().length === 0;
+      return { pass, notes: JSON.stringify({ forBadge, forInner, afterInner, afterOuter }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_unwrap_works_in_a_list_item_a_table_cell_a_column_and_a_callout',
+    description: 'Défaire un bloc posé dans un élément de liste, une case de tableau, une colonne ou un encadré : tous ses blocs prennent sa place, rien du texte n’est perdu ni déplacé',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<ul><li><p>un</p>' + block('<p>Dans la liste</p><p>Suite</p>', COND_URGENT) + '</li></ul>'
+        + '<table><tbody><tr><td>' + block('<p>Dans la case</p>', COND_NORMAL) + '</td><td><p>x</p></td></tr></tbody></table>'
+        + '<div class="two-columns-zone"><div class="two-columns-column">' + block('<p>Dans la colonne</p>') + '</div><div class="two-columns-column"><p>Droite</p></div></div>'
+        + '<div class="callout"><p>Titre</p>' + block('<p>Dans l’encadré</p><ul><li><p>puce</p></li></ul>', COND_URGENT) + '</div>');
+      await h.sleep(80);
+      const textBefore = ed().state.doc.textContent;
+      const count = blockNodes().length;
+      const outcomes = [];
+      let guard = 0;
+      while (blockNodes().length && guard++ < 10) outcomes.push(ConditionalText.unwrap(ed(), blockNodes()[0].pos));
+      await h.sleep(60);
+      const shapes = [];
+      ed().state.doc.descendants(node => { if (['listItem', 'tableCell', 'twoColumnsColumn', 'callout'].indexOf(node.type.name) !== -1) shapes.push(outline(node)); });
+      const pass = count === 4 && outcomes.length === 4 && outcomes.every(Boolean) && blockNodes().length === 0 && ed().state.doc.textContent === textBefore
+        && JSON.stringify(shapes) === JSON.stringify(['listItem(paragraph,paragraph,paragraph)', 'tableCell(paragraph)', 'tableCell(paragraph)', 'twoColumnsColumn(paragraph)', 'twoColumnsColumn(paragraph)',
+          'callout(paragraph,paragraph,bulletList(listItem(paragraph)))', 'listItem(paragraph)']);
+      return { pass, notes: JSON.stringify({ count, outcomes, shapes, textBefore, textAfter: ed().state.doc.textContent }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_unwrap_does_nothing_and_warns_when_the_block_is_gone',
+    description: 'Si le bloc a disparu ou changé de place pendant que la fenêtre est ouverte, « Défaire le bloc » ne touche à rien : l’alerte le dit et la fenêtre se ferme ; la fonction rend faux sur une position qui ne porte pas un bloc',
+    run: async (h) => {
+      await seed(h);
+      const html = '<p>Avant</p>' + block('<p>Texte</p>', COND_URGENT) + '<p>Après</p>';
+      Editor.setHTML(html);
+      await h.sleep(80);
+      const refusals = [ConditionalText.unwrap(ed(), 0), ConditionalText.unwrap(ed(), ed().state.doc.content.size), ConditionalText.unwrap(ed(), 3)];
+      const unchanged = Editor.getHTML() === html;
+      const realAlert = window.alert;
+      const alerts = [];
+      window.alert = message => { alerts.push(String(message)); };
+      let outcome;
+      try {
+        const modal = await openBlockWindow(h, 0);
+        // Le bloc disparaît pendant que la fenêtre est ouverte (elle garde sa position d'ouverture).
+        const found = blockNodes()[0];
+        ed().view.dispatch(ed().state.tr.delete(found.pos, found.pos + found.node.nodeSize));
+        unwrapButton(modal).click();
+        await h.sleep(100);
+        outcome = { html: Editor.getHTML(), closed: !VariableCondition.isOpen() && !visible(modal) };
+      } finally { window.alert = realAlert; }
+      const pass = refusals.every(r => r === false) && unchanged && alerts.length === 1 && alerts[0] === I18n.t('varCond.unwrapLostBlock')
+        && alerts[0] === 'Le bloc de texte a été déplacé ou supprimé pendant l’édition : il n’a pas été défait.'
+        && outcome.html === '<p>Avant</p><p>Après</p>' && outcome.closed;
+      return { pass, notes: JSON.stringify({ refusals, unchanged, alerts, outcome }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_suggest_mode_unwrap_is_tracked_accepting_gives_the_text_alone_and_refusing_the_block',
+    description: 'En mode suivi, défaire un bloc se suit (bloc entier barré, texte inséré) : « Tout accepter » rend le document sans le bloc, sans cadre vide laissé derrière, et « Tout refuser » rend le bloc avec sa condition',
+    run: async (h) => {
+      await seed(h);
+      const ed0 = ed();
+      const original = '<p>Alpha</p>' + block('<p>Beta</p><p>Gamma</p>', COND_URGENT) + '<p>Delta</p>';
+      const results = {};
+      let suggest = false;
+      try {
+        for (const verdict of ['accept', 'reject']) {
+          ed0.commands.loadTrackedDocument(original);
+          if (!suggest) { ed0.commands.toggleSuggestMode(); suggest = true; }
+          await h.sleep(80);
+          const done = ConditionalText.unwrap(ed0, blockNodes()[0].pos);
+          await h.sleep(80);
+          const tracked = Editor.getHTML();
+          if (verdict === 'accept') ed0.commands.acceptAllSuggestionsChunked(); else ed0.commands.rejectAllSuggestionsChunked();
+          await h.sleep(150);
+          results[verdict] = { done, struck: /<del[^>]*><div class="conditional-text"/.test(tracked), inserted: /<ins[^>]*><p>Beta<\/p><p>Gamma<\/p><\/ins>/.test(tracked), html: Editor.getHTML() };
+        }
+      } finally { if (suggest) ed0.commands.toggleSuggestMode(); }
+      const pass = results.accept.done && results.accept.struck && results.accept.inserted && results.accept.html === '<p>Alpha</p><p>Beta</p><p>Gamma</p><p>Delta</p>'
+        && results.reject.done && results.reject.html === original;
+      return { pass, notes: JSON.stringify(results) };
     },
   });
 

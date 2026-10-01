@@ -335,7 +335,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   d'affichage y sert (même fenêtre que pour une bulle, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs » et « Boucle » n'ont pas d'objet ici, grisés par
   `aria-disabled` avec leur raison en info-bulle, jamais retirés. Le cadre n'existe que dans l'éditeur : condition remplie, le texte se lit sans cadre ni ligne ajoutée ;
   sinon le bloc et tout ce qu'il contient disparaissent, sans ligne vide, en Lecture, PDF, Word et e-mail (un bloc masqué emporte ceux qu'il contient). Entrée sur un paragraphe
-  vide en fin de bloc en sort, comme d'une citation ; Retour arrière sur le bloc sélectionné le supprime avec son contenu.
+  vide en fin de bloc en sort, comme d'une citation ; Retour arrière sur le bloc sélectionné le supprime avec son contenu. « Défaire le bloc » (choix « Fenêtre » d'Antoine, 01/10) :
+  dans la fenêtre de condition d'un bloc seulement (jamais dans celle d'une bulle), à côté de « Retirer la condition », il retire le cadre et la condition et laisse tout le texte à
+  sa place, un seul Annuler rend le bloc ; son texte garde la couleur du texte (le rouge de « Retirer la condition » ne fait que 4,4:1 sur blanc). Les quatre boutons de la fenêtre
+  d'un bloc à condition passent sur deux lignes - les retraits au-dessus, Annuler et Enregistrer dessous, à droite - quand ils ne tiennent pas côte à côte (le français dans les
+  480 px) : jamais un bouton hors de la fenêtre.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
