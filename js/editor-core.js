@@ -24,10 +24,13 @@ const EditorCore = (function () {
   }
 
   // clientWidth inclut SON PROPRE padding (marge de page en Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en calque.
+  // Jamais négative : un éditeur masqué (Lecture, macro-modèle) a un clientWidth de 0 mais garde son padding calculé, la soustraction rendait donc une
+  // largeur négative que clampOverflowingTables prenait pour une vraie mesure et ramenait toutes les colonnes d'un tableau à 25 px. 0 veut dire « pas de
+  // mise en page, rien à mesurer ».
   function editorContentWidthPx(currentEditor) {
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
-    return rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0);
+    return Math.max(0, rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0));
   }
 
   // Toolbar contextuelle flottante, positionnée par @floating-ui/dom, ancrée dans document.body (évite tout souci de contexte d'empilement avec un ancêtre).

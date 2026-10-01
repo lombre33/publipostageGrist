@@ -160,6 +160,15 @@
     const showMacroSummary = currentMode === 'edit' && currentTypeModele === 'macro';
     editorContainer.style.display = showEditor ? 'block' : 'none';
     if (macroSummaryContainer) macroSummaryContainer.style.display = showMacroSummary ? 'block' : 'none';
+    // Un modèle chargé pendant que l'éditeur était masqué (Lecture, macro-modèle) n'a pas pu être mesuré : ses colonnes sont ajustées maintenant qu'il a une
+    // mise en page. Sans cela un tableau resté trop large pour la page ne rentrait qu'à la prochaine frappe. Ce n'est pas une modification de la personne :
+    // l'état « à enregistrer » reste celui d'avant, sinon un simple retour au Mode édition réécrirait le modèle à la prochaine passe d'auto-save (le chargement
+    // d'un modèle remet cet état à zéro en dernière ligne de loadTemplateIntoEditor, pour la même raison).
+    if (showEditor) {
+      const wasDirty = autosaveDirty;
+      Editor.refreshLayout();
+      if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
+    }
   }
 
   // forcedTypeModele : n'a d'effet que pour tpl=null (nouveau modèle vide, cf. onNew/onNewEmail) - un tpl existant porte déjà son propre typeModele

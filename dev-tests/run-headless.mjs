@@ -99,6 +99,7 @@ const NODE_SCRIPTS = {
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
+  tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
   englishTextsMouse: 'verify-english-texts-mouse.mjs', // vraie souris à 700x400, interface en anglais : les sept textes de l'audit F7, puis retour au français par Réglages
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage

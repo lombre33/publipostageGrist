@@ -182,8 +182,12 @@ const Editor = (function () {
           const cellPos = pos + 1 + rowOffset + 1 + cellOffset;
           const dom = view.nodeDOM(cellPos);
           if (!dom || !dom.getBoundingClientRect) return;
+          // Éditeur masqué (Lecture, macro-modèle) : la largeur mesurée vaut 0 et geler la colonne dessus la ramènerait au plancher de 25 px ci-dessous.
+          // Rejoué quand l'éditeur redevient visible (refreshLayout).
+          const renderedWidth = dom.getBoundingClientRect().width;
+          if (!(renderedWidth > 0)) return;
           const span = cellNode.attrs.colspan || 1;
-          const widthPx = Math.max(DEFAULT_COL_PX, Math.round(dom.getBoundingClientRect().width / span));
+          const widthPx = Math.max(DEFAULT_COL_PX, Math.round(renderedWidth / span));
           if (!tr) tr = state.tr;
           tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cellNode.attrs, { colwidth: Array(span).fill(widthPx) }));
         });
@@ -200,6 +204,8 @@ const Editor = (function () {
     const editorContainer = document.getElementById('editor-container');
     if (!editorContainer || !editorContainer.classList.contains('a4-preview')) return;
     const containerWidth = EditorCore.editorContentWidthPx(currentEditor);
+    // 0 : éditeur masqué (Lecture, macro-modèle), rien à mesurer - les largeurs restent celles du modèle. Rejoué quand l'éditeur redevient visible
+    // (refreshLayout). Calculé sur une largeur négative, le facteur ci-dessous ramenait toutes les colonnes à 25 px.
     if (!containerWidth) return;
     const { state } = currentEditor;
     let tr = null;
@@ -471,8 +477,11 @@ const Editor = (function () {
   // Reste ce que CSS ne peut pas faire : la pagination affichée dépend de la hauteur de contenu d'une page, donc des marges haut/bas - sans ce
   // recalcul, les bandes de couture restaient figées sur la géométrie des marges PRÉCÉDENTES (le dispatch d'une transaction vide qui tenait lieu de
   // rafraîchissement ici ne déclenchait ni onUpdate ni la moindre réconciliation de NodeView : il ne servait à rien).
+  // Rappelé aussi chaque fois que l'éditeur redevient visible (js/main.js:syncEditorVisibilityForMode) : un modèle chargé pendant qu'il était masqué (Lecture,
+  // macro-modèle) n'a pu ni geler ses colonnes automatiques ni ramener un tableau trop large dans la page, ces deux mesures exigeant une mise en page réelle.
   function refreshLayout() {
     if (!editor) return;
+    backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     HeaderFooterPreview.schedulePaginationRecompute();
   }

@@ -136,6 +136,116 @@
     },
   });
 
+  // --- Largeurs de colonnes quand l'éditeur est masqué (Mode lecture, macro-modèle ouvert) ---
+  // Bug du 01/10 : charger un modèle, ou changer les marges, pendant que #editor-container est en display:none ramenait toutes les colonnes de ses tableaux à
+  // 25 px en Aperçu A4 : la largeur de page mesurée d'un éditeur sans mise en page était négative (clientWidth 0 moins le padding des marges) et
+  // clampOverflowingTables en tirait un facteur négatif. Le parcours complet, à la vraie souris, est dans dev-tests/verify-table-widths-mouse.mjs ; ici, les
+  // fonctions de js/editor.js et de js/editor-core.js une à une, éditeur masqué en direct.
+  const rowOf = widths => '<tr>' + widths.map(w => '<td' + (w ? ` colwidth="${w}"` : '') + '><p>x</p></td>').join('') + '</tr>';
+  const tableSeed = widths => '<p>Avant</p><table><tbody>' + rowOf(widths) + rowOf(widths) + '</tbody></table><p>Après</p>';
+  // Largeurs de la première ligne lues dans le document (ce qui s'enregistre), pas dans le DOM : masqué, l'éditeur n'a aucune mesure.
+  function firstRowWidths() {
+    const t = new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelector('table');
+    return t ? Array.from(t.rows[0].cells).map(c => c.getAttribute('colwidth') || '-') : null;
+  }
+  // Aperçu A4 posé comme chez Antoine (case cochée d'office), éditeur masqué le temps de `during`, tout remis ensuite.
+  async function withEditorHidden(h, during) {
+    const container = document.getElementById('editor-container');
+    const displayBefore = container.style.display;
+    h.setA4Preview(true);
+    container.style.display = 'none';
+    try { return await during(); }
+    finally { container.style.display = displayBefore; h.setA4Preview(false); }
+  }
+
+  cases.push({
+    id: 'table_content_width_is_zero_when_editor_hidden',
+    description: 'EditorCore.editorContentWidthPx rend 0, jamais une largeur négative, quand l\'éditeur est masqué (Lecture, macro-modèle) ; une vraie largeur quand il est affiché',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      let visible, hidden;
+      try {
+        visible = EditorCore.editorContentWidthPx(EditorCore.getEditor());
+        hidden = await withEditorHidden(h, async () => EditorCore.editorContentWidthPx(EditorCore.getEditor()));
+      } finally { h.setA4Preview(false); }
+      return { pass: visible > 100 && hidden === 0, notes: 'affiché=' + visible + ' masqué=' + hidden };
+    },
+  });
+
+  cases.push({
+    id: 'table_widths_kept_when_template_loads_in_hidden_editor',
+    description: 'Un modèle à tableau chargé pendant que l\'éditeur est masqué (Aperçu A4) garde les largeurs de ses colonnes, au chargement et une fois l\'éditeur de retour',
+    run: async (h) => {
+      await h.resetEditor();
+      let whileHidden;
+      await withEditorHidden(h, async () => { Editor.setHTML(tableSeed([200, 150])); await h.sleep(150); whileHidden = firstRowWidths(); });
+      await h.sleep(150);
+      const after = firstRowWidths();
+      return { pass: whileHidden.join() === '200,150' && after.join() === '200,150', notes: 'masqué=' + whileHidden + ' de retour=' + after };
+    },
+  });
+
+  cases.push({
+    id: 'table_widths_kept_when_layout_refreshed_in_hidden_editor',
+    description: 'Editor.refreshLayout (marges changées depuis Réglages) éditeur masqué ne touche pas aux largeurs des colonnes',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(tableSeed([200, 150]));
+      await h.sleep(150);
+      let whileHidden;
+      await withEditorHidden(h, async () => { Editor.refreshLayout(); await h.sleep(150); whileHidden = firstRowWidths(); });
+      return { pass: whileHidden.join() === '200,150', notes: 'masqué=' + whileHidden };
+    },
+  });
+
+  cases.push({
+    id: 'table_auto_columns_not_frozen_at_floor_in_hidden_editor',
+    description: 'Colonnes automatiques d\'un modèle chargé éditeur masqué : pas figées à 25 px par une mesure à zéro ; figées à leur largeur affichée dès que l\'éditeur redevient visible (refreshLayout)',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      let whileHidden;
+      try {
+        await withEditorHidden(h, async () => { Editor.setHTML(tableSeed([200, 0, 0])); await h.sleep(150); whileHidden = firstRowWidths(); });
+        h.setA4Preview(true);
+        Editor.refreshLayout();
+        await h.sleep(150);
+        const shown = firstRowWidths();
+        return {
+          pass: whileHidden.join() === '200,-,-' && shown[0] === '200' && shown.slice(1).every(w => Number(w) > 40),
+          notes: 'masqué=' + whileHidden + ' affiché=' + shown,
+        };
+      } finally { h.setA4Preview(false); }
+    },
+  });
+
+  cases.push({
+    id: 'table_wide_table_clamped_once_editor_is_shown',
+    description: 'Tableau plus large que la page chargé éditeur masqué : largeurs du modèle gardées tant qu\'il est masqué, ramené dans la page (jamais à 25 px) dès que l\'éditeur redevient visible - comme un chargement éditeur visible',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      try {
+        const pageWidth = Math.floor(EditorCore.editorContentWidthPx(EditorCore.getEditor()));
+        Editor.setHTML(tableSeed([pageWidth, pageWidth]));
+        await h.sleep(150);
+        const visibleLoad = firstRowWidths();
+        let whileHidden;
+        await withEditorHidden(h, async () => { Editor.setHTML(tableSeed([pageWidth, pageWidth])); await h.sleep(150); whileHidden = firstRowWidths(); });
+        h.setA4Preview(true);
+        Editor.refreshLayout();
+        await h.sleep(150);
+        const shown = firstRowWidths();
+        const total = shown.reduce((s, w) => s + Number(w), 0);
+        return {
+          pass: whileHidden.join() === pageWidth + ',' + pageWidth && total <= pageWidth + 3 && shown.every(w => Number(w) > 100) && shown.join() === visibleLoad.join(),
+          notes: 'page=' + pageWidth + ' chargé visible=' + visibleLoad + ' masqué=' + whileHidden + ' affiché=' + shown,
+        };
+      } finally { h.setA4Preview(false); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.tables = cases;
 })();
