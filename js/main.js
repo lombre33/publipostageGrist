@@ -1442,7 +1442,8 @@
   // obligatoire, sortie du mode en-tête/pied). Posé en capture sur `document` pour marcher où que soit le focus (éditeur TipTap, champ de nom, aperçu de
   // template), et preventDefault() est indispensable : sans lui le navigateur ouvre sa propre boîte « Enregistrer la page », y compris dans l'iframe du
   // widget Grist. Neutralisé pendant qu'une modale est ouverte : Ctrl+S y enregistrerait un modèle que l'utilisateur est justement en train de remplacer.
-  // Volontairement le SEUL raccourci applicatif ajouté ici - le reste du périmètre clavier est encore à cadrer.
+  // Les autres touches du widget, et celle-ci quand on la change dans Réglages > Raccourcis, sont à js/shortcuts.js : il passe avant ce gestionnaire (chargé plus tôt, même
+  // phase de capture) et arrête Ctrl+S une fois la touche d'Enregistrer changée.
   function wireSaveShortcut() {
     const anyModalOpen = () => Array.prototype.some.call(
       document.querySelectorAll('#link-rules-modal, #link-config-modal, #template-gallery-modal, #template-preview-modal, #settings-modal, #template-organize-modal'),
@@ -1456,14 +1457,14 @@
     }, true);
   }
 
-  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) : impossible à écrire dans index.html, posé ici sur le titre du menu du bouton
-  // Enregistrer (qui remplace son info-bulle : un bouton à menu n'a pas de data-tip, les deux se superposeraient) et sur son aria-label. Re-appliqué à chaque
-  // changement de langue, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
+  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) et de la touche choisie dans Réglages > Raccourcis (js/shortcuts.js ; '' quand elle a été
+  // retirée) : impossible à écrire dans index.html, posé ici sur le titre du menu du bouton Enregistrer (qui remplace son info-bulle : un bouton à menu n'a pas de data-tip, les
+  // deux se superposeraient) et sur son aria-label. Re-appliqué à chaque changement de langue et de touche, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
   function decorateSaveButtonShortcut() {
     const btn = document.getElementById('btn-save');
     if (!btn) return;
-    const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
-    const label = `${I18n.t('toolbar.save')} (${isMac ? '⌘S' : 'Ctrl+S'})`;
+    const key = Shortcuts.label('save');
+    const label = key ? `${I18n.t('toolbar.save')} (${key})` : I18n.t('toolbar.save');
     btn.setAttribute('aria-label', label);
     const menuTitle = document.getElementById('v2-save-flyout-label');
     if (menuTitle) menuTitle.textContent = label;
@@ -1770,6 +1771,7 @@
     wirePageFitZoom();
     decorateSaveButtonShortcut();
     I18n.onChange(decorateSaveButtonShortcut);
+    Shortcuts.onChange(decorateSaveButtonShortcut);
     // Le message « Modifications non enregistrées » dure tant que rien n'est enregistré : il suit un changement de langue au lieu de rester dans l'ancienne.
     I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     Variables.initFilenameInput(pdfFilenameInput);

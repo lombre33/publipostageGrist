@@ -376,18 +376,20 @@ const MainToolbar = (function () {
     const label = document.getElementById('v2-btn-callout-label');
     if (label) label.textContent = I18n.t(inside ? 'insert.callout.rowEdit' : 'insert.callout.row');
   }
-  // La loupe (js/find-replace.js) : le raccourci dépend de la plateforme (Ctrl+F ou ⌘F), posé sur l'infobulle et l'aria-label, réécrit à chaque changement de langue.
+  // La loupe (js/find-replace.js) : sa touche (Ctrl+F, ⌘F selon la plateforme, ou celle qu'on a choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
+  // réécrits à chaque changement de langue ou de touche ; sans touche, sans parenthèses.
   function decorateFindShortcut() {
     const button = document.getElementById('v2-btn-find');
     if (!button) return;
-    const label = FindReplace.findShortcutLabel();
-    button.setAttribute('data-tip', I18n.t('find.tip') + ' (' + label + ')');
-    button.setAttribute('aria-label', I18n.t('find.button.aria') + ' (' + label + ')');
+    const label = Shortcuts.label('find');
+    const suffix = label ? ' (' + label + ')' : '';
+    button.setAttribute('data-tip', I18n.t('find.tip') + suffix);
+    button.setAttribute('aria-label', I18n.t('find.button.aria') + suffix);
   }
   function decorateLinkShortcut() {
     const label = LinkDialog.shortcutLabel();
     const button = document.getElementById('v2-btn-link');
-    if (button) button.setAttribute('aria-label', I18n.t('insert.link.aria') + ' (' + label + ')');
+    if (button) button.setAttribute('aria-label', I18n.t('insert.link.aria') + (label ? ' (' + label + ')' : ''));
     const kbd = document.getElementById('v2-row-link-kbd');
     if (kbd) kbd.textContent = label;
   }
@@ -460,8 +462,10 @@ const MainToolbar = (function () {
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
     decorateLinkShortcut();
     I18n.onChange(decorateLinkShortcut);
+    Shortcuts.onChange(decorateLinkShortcut);
     decorateFindShortcut();
     I18n.onChange(decorateFindShortcut);
+    Shortcuts.onChange(decorateFindShortcut);
     bind('v2-btn-find', () => FindReplace.toggle());
     I18n.onChange(() => relabelCallout(Callout.isInside(editor)));
     // Insère juste le caractère déclencheur : @tiptap/suggestion (Variables.createExtension) surveille le document, pas les frappes clavier - l'inséré

@@ -541,6 +541,24 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sous une marque code. Retour arrière juste après l'expansion rend ce qui avait été tapé (« §ub »). Les marques en cours (gras, couleur…) sont gardées, un texte sur plusieurs lignes
   s'écrit avec un saut de ligne par ligne, et en suivi des modifications l'expansion n'est qu'une insertion. Le caractère se relit à chaque frappe : le changer dans Réglages vaut tout de
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
+- Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
+  les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
+  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (50, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
+  n'est coupé à 700 px), la touche dans un bouton de 112 px au moins (« Aucune » en italique quand il n'y en a pas), « Par défaut » à droite, grisé tant que la touche est celle d'origine
+  ; « Tout remettre par défaut » en haut à droite demande confirmation. Un clic sur la touche l'écoute (« Tapez la touche… », fond `--accent-soft`) : la combinaison tapée est prise,
+  Échap abandonne sans fermer la fenêtre, Retour arrière retire la touche. Une combinaison refusée dit pourquoi dans un message sous la touche, dans sa colonne et jamais sous le nom de
+  l'action, en `--text` avec un filet rouge, et l'écoute continue. Refus : une touche déjà prise (le nom de l'action est dit), une touche seule, Ctrl+Alt (c'est AltGr), Ctrl+lettre sur
+  Mac, les touches que le navigateur ou l'éditeur gardent (Ctrl+R, Ctrl+N…).
+- Les touches (même demande) : chaque action fait ce que fait son bouton - elle presse le bouton de la barre, avec le même geste que la souris (click, ou mousedown pour la couleur du
+  texte, le surlignage et la taille de police), donc avec ses gardes : grisé par les droits, par le mode ou en Lecture, désactivé ou masqué, une touche ne fait jamais ce qu'un clic ne
+  peut pas. Une touche d'origine que l'éditeur traite déjà (Ctrl+B, Ctrl+K, Ctrl+Z…) reste à l'éditeur tant qu'on n'y touche pas ; une fois changée, l'ancienne ne fait plus rien (sauf
+  dans un champ de saisie, où elle garde son sens de texte ; sous Windows et Linux les touches Ctrl+Alt de l'éditeur, comme Ctrl+Alt+C, restent actives : c'est AltGr). Rechercher (Ctrl+F) et Rechercher et remplacer (Ctrl+H, ⌘⇧H sur Mac) sont ceux de la barre de recherche
+  (`js/find-replace.js`) : changés, la nouvelle touche l'ouvre sans la refermer quand elle l'est déjà (la loupe, elle, la ferme) et l'infobulle de la loupe dit la touche choisie. Aucune action ne
+  part fenêtre ouverte ni pendant une saisie en cours (IME) ; une touche enfoncée ne bascule qu'une fois (la taille de police, les retraits, annuler et rétablir se répètent). Les choix
+  sont par navigateur (`pp_shortcuts`), comme la langue et le thème ; les touches ne marchent que le curseur dans le widget. Sur Mac, ⌘ remplace Ctrl et les touches s'écrivent ⌃⌥⇧⌘. La
+  touche se montre là où le bouton se nomme : dans son infobulle (« Gras (Ctrl+B) », la touche après le texte, entière dans la fenêtre), à droite de la ligne d'un menu (Citation, Titre
+  1…), après le titre d'un menu (« Exporter en PDF (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
+  s'ajoute à la liste (`ACTIONS` de `js/shortcuts.js`, avec son nom français et anglais) et au scénario « la touche fait ce que fait la souris ».
 
 ## 4. Spécifique à SlidesPlus
 

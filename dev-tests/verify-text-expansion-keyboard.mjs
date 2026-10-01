@@ -193,6 +193,8 @@ async function click(selector, wait = 150) { await page.click(selector, { timeou
 async function openShortcutsTab() {
   await click('#v2-btn-settings', 250);
   await click('#settings-modal .settings-tab[data-settings-tab="shortcuts"]', 300);
+  // L'onglet s'ouvre sur les touches du clavier (js/shortcuts-panel.js) : les abréviations sont derrière le commutateur.
+  await click('#settings-switch-expansion', 200);
 }
 async function closeSettings() { await click('#settings-close', 250); }
 

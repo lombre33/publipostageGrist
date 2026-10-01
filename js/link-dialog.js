@@ -9,8 +9,9 @@
 const LinkDialog = (function () {
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
   const modKey = () => (isMac() ? '⌘' : 'Ctrl');
-  // Même écriture que l'infobulle de Enregistrer (decorateSaveButtonShortcut dans js/main.js) : ⌘K sur macOS, Ctrl+K ailleurs.
-  const shortcutLabel = () => (isMac() ? '⌘K' : 'Ctrl+K');
+  // Même écriture que l'infobulle de Enregistrer (decorateSaveButtonShortcut dans js/main.js) : ⌘K sur macOS, Ctrl+K ailleurs, ou la touche choisie dans Réglages > Raccourcis
+  // (js/shortcuts.js ; '' quand elle a été retirée).
+  const shortcutLabel = () => (typeof Shortcuts !== 'undefined' ? Shortcuts.label('link') : (isMac() ? '⌘K' : 'Ctrl+K'));
 
   // === Normalisation de l'adresse =========================================================================================================================
   // Trois familles seulement (https/http, mailto, tel) : l'adresse saisie finit dans un href qui s'ouvre d'un clic en Lecture et dans les exports, un autre schéma

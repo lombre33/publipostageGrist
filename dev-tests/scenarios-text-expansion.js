@@ -100,6 +100,7 @@
       const afterLoad = stub().countActions('AddTable', TABLE);
       document.getElementById('v2-btn-settings').click();
       document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click();
+      if (window.ShortcutsPanel) ShortcutsPanel.showView('expansion'); // l'onglet s'ouvre sur les touches du clavier depuis js/shortcuts-panel.js
       await sleep(300);
       const afterTab = stub().countActions('AddTable', TABLE);
       closeSettings();
@@ -493,6 +494,7 @@
       const opened = !!box && box.style.display !== 'none' && box.querySelectorAll('.ex-item').length === 2;
       document.getElementById('v2-btn-settings').click();
       document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click();
+      if (window.ShortcutsPanel) ShortcutsPanel.showView('expansion'); // l'onglet s'ouvre sur les touches du clavier depuis js/shortcuts-panel.js
       await sleep(300);
       // Un message d'erreur à l'écran : un doublon.
       document.getElementById('settings-expansion-abbr').value = 'ub';

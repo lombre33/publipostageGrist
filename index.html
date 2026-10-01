@@ -97,6 +97,7 @@
 <link rel="stylesheet" href="css/search-select.css?v=0.6">
 <link rel="stylesheet" href="css/access-rights.css?v=0.5">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.1">
+<link rel="stylesheet" href="css/shortcuts.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -474,7 +475,20 @@
         </p>
       </div>
       <div class="settings-panel" data-settings-panel="shortcuts" hidden>
-        <section class="settings-section" aria-labelledby="settings-expansion-title">
+        <div class="settings-switch" role="tablist" aria-label="Sections des raccourcis" data-i18n-aria="settings.switch.aria">
+          <button type="button" role="tab" class="settings-switch-btn active" id="settings-switch-keys" aria-selected="true" aria-controls="settings-keys-section" data-i18n="settings.switch.keys">Touches</button>
+          <button type="button" role="tab" class="settings-switch-btn" id="settings-switch-expansion" aria-selected="false" aria-controls="settings-expansion-section" tabindex="-1" data-i18n="settings.switch.expansion">Abréviations</button>
+        </div>
+        <section class="settings-section" id="settings-keys-section" role="tabpanel" aria-labelledby="settings-switch-keys">
+          <div class="settings-keys-head">
+            <h4 class="settings-section-title" id="settings-keys-title" data-i18n="settings.keys.title">Touches du clavier</h4>
+            <button type="button" id="settings-keys-reset-all" data-i18n="settings.keys.resetAll" disabled>Tout remettre par défaut</button>
+          </div>
+          <p class="settings-panel-intro" data-i18n="settings.keys.intro">Cliquez sur une touche, puis tapez la combinaison voulue. Échap annule, Retour arrière retire la touche.</p>
+          <div id="settings-keys-list"></div>
+          <p class="settings-access-hint" data-i18n="settings.keys.perBrowser">Les touches ne marchent que lorsque le curseur est dans le widget ; le navigateur garde pour lui Ctrl+N, Ctrl+T et Ctrl+W. Elles sont propres à ce navigateur, comme la langue et le thème.</p>
+        </section>
+        <section class="settings-section" id="settings-expansion-section" role="tabpanel" aria-labelledby="settings-switch-expansion" hidden>
           <div class="settings-expansion-head">
             <h4 class="settings-section-title" id="settings-expansion-title" data-i18n="settings.expansion.title">Abréviations</h4>
             <div class="settings-expansion-char-row">
@@ -539,7 +553,8 @@
 <script src="js/grist-api.js?v=0.86"></script>
 <script src="js/templates.js?v=0.79"></script>
 <script src="js/reader-mode.js?v=0.104"></script>
-<script src="js/i18n.js?v=0.68"></script>
+<script src="js/i18n.js?v=0.69"></script>
+<script src="js/shortcuts.js?v=0.1"></script>
 <script src="js/page-layout.js?v=0.6"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.10"></script>
@@ -552,7 +567,7 @@
 <script src="js/header-footer-preview.js?v=1.9"></script>
 <script src="js/editor-nodes.js?v=1.5"></script>
 <script src="js/floating-toolbars.js?v=0.21"></script>
-<script src="js/main-toolbar.js?v=1.00"></script>
+<script src="js/main-toolbar.js?v=1.01"></script>
 <script src="js/comments.js?v=0.7"></script>
 <script src="js/track-changes.js?v=0.5"></script>
 <script src="js/grid-editor.js?v=0.4"></script>
@@ -572,10 +587,11 @@
 <script src="js/modal-base.js?v=0.3"></script>
 <script src="js/dialogs.js?v=0.2"></script>
 <script src="js/external-images.js?v=0.1"></script>
-<script src="js/link-dialog.js?v=0.1"></script>
+<script src="js/link-dialog.js?v=0.2"></script>
 <script src="js/find-replace.js?v=0.1"></script>
 <script src="js/callout.js?v=0.2"></script>
 <script src="js/text-expansion.js?v=0.1"></script>
+<script src="js/shortcuts-panel.js?v=0.1"></script>
 <script src="js/variable-condition.js?v=0.9"></script>
 <script src="js/variable-linked-attrs.js?v=0.7"></script>
 <script src="js/loop-rules.js?v=0.6"></script>
@@ -590,6 +606,6 @@
 <script src="js/template-tree-select.js?v=0.12"></script>
 <script src="js/access-rights.js?v=0.3"></script>
 <script src="js/orientation-toggle.js?v=0.3"></script>
-<script src="js/main.js?v=0.84"></script>
+<script src="js/main.js?v=0.85"></script>
 </body>
 </html>
