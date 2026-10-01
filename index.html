@@ -82,7 +82,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.83">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.87">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.47">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.48">
 <link rel="stylesheet" href="css/grid.css?v=0.3">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.15">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.6">
@@ -96,6 +96,7 @@
 <link rel="stylesheet" href="css/callout.css?v=0.1">
 <link rel="stylesheet" href="css/search-select.css?v=0.6">
 <link rel="stylesheet" href="css/access-rights.css?v=0.5">
+<link rel="stylesheet" href="css/text-expansion.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -436,6 +437,7 @@
         <button type="button" class="settings-tab active" data-settings-tab="language" data-i18n="settings.tab.language">Langue</button>
         <button type="button" class="settings-tab" data-settings-tab="theme" data-i18n="settings.tab.theme">Thème</button>
         <button type="button" class="settings-tab" data-settings-tab="triggerKey" data-i18n="settings.tab.triggerKey">Déclencheur</button>
+        <button type="button" class="settings-tab" data-settings-tab="shortcuts" data-i18n="settings.tab.shortcuts">Raccourcis</button>
         <button type="button" class="settings-tab" data-settings-tab="pageMargins" data-i18n="settings.tab.pageMargins">Marges</button>
         <button type="button" class="settings-tab" data-settings-tab="access" data-i18n="settings.tab.access">Accès</button>
         <button type="button" class="settings-tab" data-settings-tab="credits" data-i18n="settings.tab.credits">Crédits</button>
@@ -470,6 +472,33 @@
           <span data-i18n="settings.triggerKey.reloadNotice">Rechargez la page pour appliquer ce changement.</span>
           <button type="button" id="settings-trigger-reload-btn" data-i18n="settings.triggerKey.reloadButton">Recharger maintenant</button>
         </p>
+      </div>
+      <div class="settings-panel" data-settings-panel="shortcuts" hidden>
+        <section class="settings-section" aria-labelledby="settings-expansion-title">
+          <div class="settings-expansion-head">
+            <h4 class="settings-section-title" id="settings-expansion-title" data-i18n="settings.expansion.title">Abréviations</h4>
+            <div class="settings-expansion-char-row">
+              <label for="settings-expansion-char" data-i18n="settings.expansion.char">Caractère déclencheur</label>
+              <input type="text" id="settings-expansion-char" maxlength="1" autocomplete="off" spellcheck="false" aria-describedby="settings-expansion-char-status">
+            </div>
+          </div>
+          <p class="settings-expansion-error" id="settings-expansion-char-status" role="status" hidden></p>
+          <p class="settings-panel-intro" id="settings-expansion-intro"></p>
+          <form class="settings-expansion-form" id="settings-expansion-form" novalidate>
+            <label for="settings-expansion-abbr" data-i18n="settings.expansion.abbreviation">Abréviation</label>
+            <input type="text" id="settings-expansion-abbr" maxlength="30" autocomplete="off" spellcheck="false" placeholder="ub">
+            <label for="settings-expansion-text" data-i18n="settings.expansion.text">Texte à écrire</label>
+            <textarea id="settings-expansion-text" rows="2" maxlength="2000" placeholder="université de Bordeaux" data-i18n-placeholder="settings.expansion.textPlaceholder"></textarea>
+            <p class="settings-expansion-error" id="settings-expansion-status" role="status" hidden></p>
+            <div class="settings-expansion-actions">
+              <button type="submit" id="settings-expansion-submit" data-i18n="settings.expansion.add">Ajouter</button>
+              <button type="button" id="settings-expansion-cancel" data-i18n="common.cancel" hidden>Annuler</button>
+            </div>
+          </form>
+          <ul class="settings-expansion-list" id="settings-expansion-list"></ul>
+          <p class="settings-access-hint" id="settings-expansion-empty" data-i18n="settings.expansion.empty">Aucune abréviation pour l'instant.</p>
+          <p class="settings-access-hint" data-i18n="settings.expansion.perPerson">Chaque personne a les siennes, enregistrées dans le document (table Publipostage_Abreviations).</p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="pageMargins" hidden>
         <p class="settings-panel-intro" data-i18n="settings.pageMargins.intro">Marges de page (mm) - propres à ce modèle, appliquées à l'aperçu et aux exports PDF/DOCX.</p>
@@ -507,10 +536,10 @@
   </div></div>
 </div>
 <script src="js/html-sanitize.js?v=0.3"></script>
-<script src="js/grist-api.js?v=0.85"></script>
+<script src="js/grist-api.js?v=0.86"></script>
 <script src="js/templates.js?v=0.79"></script>
 <script src="js/reader-mode.js?v=0.104"></script>
-<script src="js/i18n.js?v=0.67"></script>
+<script src="js/i18n.js?v=0.68"></script>
 <script src="js/page-layout.js?v=0.6"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
 <script src="js/variable-format.js?v=0.10"></script>
@@ -528,7 +557,7 @@
 <script src="js/track-changes.js?v=0.5"></script>
 <script src="js/grid-editor.js?v=0.4"></script>
 <script src="js/table-select.js?v=0.1"></script>
-<script src="js/editor.js?v=2.7"></script>
+<script src="js/editor.js?v=2.8"></script>
 <script src="js/export-common.js?v=0.4"></script>
 <script src="js/pdf-export-alt.js?v=0.4"></script>
 <script src="js/pdf-export.js?v=1.10"></script>
@@ -546,6 +575,7 @@
 <script src="js/link-dialog.js?v=0.1"></script>
 <script src="js/find-replace.js?v=0.1"></script>
 <script src="js/callout.js?v=0.2"></script>
+<script src="js/text-expansion.js?v=0.1"></script>
 <script src="js/variable-condition.js?v=0.9"></script>
 <script src="js/variable-linked-attrs.js?v=0.7"></script>
 <script src="js/loop-rules.js?v=0.6"></script>

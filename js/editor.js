@@ -249,7 +249,7 @@ const Editor = (function () {
     // des extensions plus bas) - chargés en parallèle plutôt qu'en 14 `await` séquentiels : un `import()` est une requête réseau vers esm.sh, la cascade
     // ajoutait jusqu'à 1-2s au démarrage sur une connexion lente/cache froid (audit de performance 2026-09-14).
     const [
-      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes },
+      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule },
       { StarterKit },
       { TextAlign },
       { TextStyle },
@@ -384,6 +384,7 @@ const Editor = (function () {
         trackChangesApi.ModificationMark,
         trackChangesApi.SuggestChangesBridge,
         Variables.createExtension(Extension, Suggestion),
+        TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
         LinkDialog.createExtension(Extension),
         // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf. wireEditor).
         FindReplace.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),

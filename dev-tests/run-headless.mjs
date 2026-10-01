@@ -93,6 +93,7 @@ const GROUPS = {
   layers: 'scenarios-layers', // ordre d'empilement des couches flottantes (js/layers.js, jetons --z-* ) : barres flottantes < menus < info-bulles < fenêtres, le dernier ouvert au-dessus, menu # sous la barre du tableau
   xlsx: 'scenarios-xlsx', // export Excel d'une grille (js/xlsx-export.js) : le .xlsx est dézippé et son OOXML lu (valeurs, formats, largeurs, fusions, liens, images, menu)
   externalImages: 'scenarios-external-images', // fenêtre qui liste les sites externes des images avant un export (js/external-images.js) : le module, un PDF et un Word, les lots, l'annulation
+  textExpansion: 'scenarios-text-expansion', // expansion de texte « §ub » (js/text-expansion.js) : abréviations par personne dans une table du document, règle de saisie, onglet Réglages > Raccourcis, contrastes
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -119,7 +120,7 @@ const NODE_SCRIPTS = {
   orientationMouse: 'verify-orientation-mouse.mjs', // bascule Portrait / Paysage d'un modèle classique : feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, clavier ; 700x400 clair et sombre
   pageFormatMouse: 'verify-page-format-mouse.mjs', // formats de page A3 à A6 à la vraie souris et au vrai clavier : menu du bouton Page tout entier dans le panneau, feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, curseur gardé, Tab, email grisé ; 700x400 clair et sombre
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
-  settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : six onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
+  settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : sept onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   templateMenuMouse: 'verify-template-menu-mouse.mjs', // liste des modèles (12,5 px, sans « Nouveau modèle », « Organiser » en haut à droite) et renommage sur place, 700x400 clair et sombre
@@ -137,6 +138,7 @@ const NODE_SCRIPTS = {
   chipCellMouse: 'verify-chip-cell-mouse.mjs',
   englishTextsMouse: 'verify-english-texts-mouse.mjs', // vraie souris à 700x400, interface en anglais : les sept textes de l'audit F7, puis retour au français par Réglages
   findReplaceMouse: 'verify-find-replace-mouse.mjs', // Rechercher / Remplacer (js/find-replace.js) à la vraie souris et au vrai clavier : loupe, barre de 700 px, Entrée / Maj+Entrée, options, Remplacer puis Ctrl+Z, Tout remplacer, suivi des modifications, Échap, Ctrl+F / Ctrl+H, Mode lecture ; 700x400 clair, sombre et anglais
+  textExpansionKeyboard: 'verify-text-expansion-keyboard.mjs', // expansion « §ub » à la vraie frappe et à la vraie souris, 700x400 : liste sous le curseur, Tab, Entrée, flèches, Échap, Retour arrière, liste à puces, bloc de code, onglet Réglages > Raccourcis, clair, sombre et anglais
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
   templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière

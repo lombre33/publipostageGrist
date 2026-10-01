@@ -2,7 +2,7 @@
 // Fenêtre Réglages à la VRAIE souris (page.mouse, Node/Playwright) et à la taille du panneau Grist d'Antoine (~700x400), en thème clair puis sombre, en
 // français puis en anglais - audit UX/UI du 2026-09-29, F2 : 360px pour six onglets (« Touche de déclenchement » sur deux lignes, « Marges de page » sur
 // trois, « Crédits » rogné) et, dans Accès, un contenu de 529px pour une fenêtre de 376px qui emportait « Fermer » 93px sous le bas du panneau.
-// Cible : 480px, six onglets sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
+// Cible : 480px, sept onglets (six avant « Raccourcis ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
 // Lancé par run-headless.mjs (groupe Node "settingsWindowMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-settings-window-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -160,7 +160,7 @@ const measure = page => page.evaluate(() => {
   const panel = box.querySelector('.settings-panel:not([hidden])');
   const panelStyle = panel ? getComputedStyle(panel) : null;
   // Ce qui fait défiler le contenu de l'onglet : le premier ancêtre du panneau (lui compris) à défilement vertical, dans le cadre. Depuis la base commune des
-  // fenêtres c'est la zone de contenu (.settings-body, qui porte les six panneaux) ; avant, c'était le panneau lui-même.
+  // fenêtres c'est la zone de contenu (.settings-body, qui porte les sept panneaux) ; avant, c'était le panneau lui-même.
   let scroller = panel;
   while (scroller && scroller !== box && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
   if (scroller === box) scroller = null;
@@ -213,8 +213,8 @@ async function runTheme(theme) {
       if (m.boxScroll.scrollHeight > m.boxScroll.clientHeight + 1) bad.boxScroll.push({ name, boxScroll: m.boxScroll });
       if (!(m.close.top >= m.box.top && m.close.bottom <= m.box.bottom && m.close.bottom <= m.vh && m.closeTouched)) bad.close.push({ name, close: m.close, box: m.box, vh: m.vh, touched: m.closeTouched });
     }
-    check(`${tag} - la fenêtre fait 480px de large sur les six onglets`, bad.size.length === 0, bad.size);
-    check(`${tag} - les six onglets tiennent sur une ligne, aucun libellé coupé, « Crédits » dans la fenêtre`, bad.tabs.length === 0, bad.tabs);
+    check(`${tag} - la fenêtre fait 480px de large sur les sept onglets`, bad.size.length === 0, bad.size);
+    check(`${tag} - les sept onglets tiennent sur une ligne, aucun libellé coupé, « Crédits » dans la fenêtre`, bad.tabs.length === 0, bad.tabs);
     check(`${tag} - la fenêtre tient dans le panneau (ni la page ni la fenêtre ne défilent)`, bad.fits.length === 0 && bad.boxScroll.length === 0, { fits: bad.fits, boxScroll: bad.boxScroll });
     check(`${tag} - « Fermer » reste entier dans la fenêtre et dans le panneau, et reçoit un vrai point de contact, sur chaque onglet`, bad.close.length === 0, bad.close);
 

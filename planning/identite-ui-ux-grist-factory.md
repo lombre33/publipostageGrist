@@ -519,6 +519,28 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Fin de document (demande d'Antoine du 01/10, « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide, un saut de
   page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur ; l'éditeur garde sa ligne finale (il faut pouvoir écrire à la suite).
+- Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
+  septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
+  onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
+  Abréviations » met sur une ligne son titre et le réglage « Caractère déclencheur » (un champ de 44 px, « § » par défaut, gardé par navigateur comme la touche des variables ; il refuse
+  une lettre, un chiffre, une espace, un délimiteur et le déclencheur des variables, en disant pourquoi, et reprend l'ancien caractère à la perte du focus), puis une phrase d'exemple, le
+  formulaire (« Abréviation », « Texte à écrire », « Ajouter » en bouton plein, « Annuler » seulement en modification, Ctrl+Entrée valide), la liste de la personne (l'abréviation en
+  gras, son texte coupé par « … », « Modifier » et « Supprimer » qui demande confirmation dans la fenêtre commune) et une ligne qui dit que chacun a les siennes. Une erreur de saisie
+  garde la couleur du texte (le rouge ne fait que 4,4:1 sur blanc) avec un filet rouge et se place sous le champ qu'elle concerne, jamais sous son libellé ni sous le titre : celle du
+  formulaire dans la colonne des champs, entre le texte et les boutons ; celle du caractère, dont le champ est au bord droit de la ligne du titre, alignée sur ce bord (texte à droite,
+  filet à droite). Les abréviations vivent dans la table `Publipostage_Abreviations` du document (`Utilisateur`, `Abreviation`, `Texte`) : une personne ne voit et ne change que les
+  siennes (sans identité Grist, les lignes à `Utilisateur` vide) ; la table n'est créée qu'à la première abréviation ajoutée et reste cachée du choix `#Variable`.
+- Abréviations dans l'éditeur (même demande) : taper le caractère déclencheur ouvre sous le curseur la liste des abréviations de la personne, dans le même langage que le panneau `#`
+  (fond de surface, liseré, ombre légère, ligne choisie sur `--surface-sunken`, texte en `--text`, jamais un gris discret qui n'atteindrait pas 4,5:1 sur la ligne choisie ; couche de
+  niveau `--z-menu`, remontée à chaque placement par `ViewportFit.placePopup` : elle passe devant la barre flottante d'un tableau et devant un menu déjà ouvert). Elle se
+  filtre à la frappe (abréviation entière, puis début, puis contenu, puis début d'un mot du texte) ; les flèches choisissent, Entrée et Tab valident, Échap la ferme sans rien changer, un
+  clic choisit (l'éditeur garde le focus). Entrée et Tab ne choisissent que si la liste est ouverte, et Maj, Ctrl, Alt et ⌘ gardent leur sens : sans liste, Entrée coupe le paragraphe et
+  Tab décale l'élément de liste ou passe à la colonne suivante comme avant (l'extension passe avant les autres, priorité 1000, pour que la liste ouverte gagne). Sans passer par la liste,
+  une abréviation entière suivie d'une espace (normale, insécable ou fine) ou d'une ponctuation (`. , ; : ! ? ) ] }` et `»`) est remplacée par son texte, le caractère tapé restant
+  derrière. Les majuscules de l'abréviation ne comptent pas ; une abréviation collée à une lettre (« mon§ub ») ou inconnue ne change rien ; rien ne se remplace dans un bloc de code ni
+  sous une marque code. Retour arrière juste après l'expansion rend ce qui avait été tapé (« §ub »). Les marques en cours (gras, couleur…) sont gardées, un texte sur plusieurs lignes
+  s'écrit avec un saut de ligne par ligne, et en suivi des modifications l'expansion n'est qu'une insertion. Le caractère se relit à chaque frappe : le changer dans Réglages vaut tout de
+  suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
 
 ## 4. Spécifique à SlidesPlus
 

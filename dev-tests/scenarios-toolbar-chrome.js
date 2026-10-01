@@ -345,13 +345,13 @@
   // était trop étroite pour ses six onglets, qui passaient sur deux lignes ; sur l'onglet Accès, « Fermer » sortait du panneau de 700x400 (il fallait
   // faire défiler la fenêtre entière, titre et onglets compris) ; et « Crédits » n'était plus atteignable. La mesure à la vraie souris, à 700x400, en
   // clair et en sombre, est dans verify-settings-window-mouse.mjs. Ce cas-ci garde ce que le harnais en page établit quelle que soit la taille de la
-  // fenêtre du navigateur : la largeur, les six onglets sur une ligne et sans être coupés, un seul panneau visible à la fois (un `display` posé sur
-  // .settings-panel battrait [hidden] et montrerait les six panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par la
+  // fenêtre du navigateur : la largeur, les sept onglets (six avant « Raccourcis ») sur une ligne et sans être coupés, un seul panneau visible à la fois (un `display` posé sur
+  // .settings-panel battrait [hidden] et montrerait les sept panneaux ensemble - piège déjà rencontré sur #v2-email-fields-row), le défilement porté par la
   // zone de contenu (.settings-body, celle de la base commune des fenêtres, qui contient le panneau affiché) et non par la fenêtre ni par les onglets, « Fermer »
   // sous cette zone et dans la fenêtre. Français et anglais : les libellés d'onglet sont dans les deux langues.
   cases.push({
-    id: 'settings_window_holds_six_tabs_on_one_row_and_only_the_panel_scrolls',
-    description: 'La fenêtre Réglages fait 480 px, ses six onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par la zone de contenu (le titre et les onglets n\'y sont pas) et « Fermer » reste sous elle, dans la fenêtre (audit du 2026-09-29, défaut F2)',
+    id: 'settings_window_holds_seven_tabs_on_one_row_and_only_the_panel_scrolls',
+    description: 'La fenêtre Réglages fait 480 px, ses sept onglets tiennent sur une ligne sans être coupés (français et anglais), un seul panneau s\'affiche à la fois, le défilement est porté par la zone de contenu (le titre et les onglets n\'y sont pas) et « Fermer » reste sous elle, dans la fenêtre (audit du 2026-09-29, défaut F2)',
     run: async (h) => {
       const modal = document.getElementById('settings-modal');
       const content = modal.querySelector('.settings-modal-content');

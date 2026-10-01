@@ -10,7 +10,7 @@ const GristAPI = (function () {
   // listTables() rend TOUTES les tables du document (grist-core WidgetFrame.ts, _grist_Tables sans filtre), elle
   // apparaissait donc dans l'autocomplétion # et les sélecteurs - invisible avec dev-tests/grist-stub.js, qui ne
   // liste jamais ses tables internes.
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires', 'Publipostage_Abreviations'];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   // Table interne pour getCurrentUserEmail() (chip "Email de l'utilisateur") - une colonne à formule déclenchée (capture qui a réellement déclenché le
   // calcul, `user.Email`), vidée après chaque lecture.
