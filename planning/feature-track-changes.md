@@ -683,6 +683,33 @@ modifications reste ici tant qu'il n'est pas intégré, pour éviter deux listes
   `SuiviModifications` réelle (les deux moitiés ci-dessus), plus un scénario `--preseed` dédié pour le
   démarrage avec suivi déjà présent.
 
+## Colonnes d'un tableau avec le suivi (2026-10-01, choix « Faire marcher » d'Antoine)
+
+« Colonne avant », « Colonne après » et « Supprimer la colonne » de la barre du tableau ne faisaient rien avec le suivi allumé
+(« Invalid content for node tableRow » : la ligne n'acceptait pas les marques de nœud que la bibliothèque pose sur les cases).
+Ils marchent maintenant, comme une frappe suggérée :
+
+- **La ligne accepte les marques** : `TrackedTableRow` (`js/editor.js`) = `TrackChanges.extendForTracking(GridEditor.withRowAttributes(TableRow))`.
+  Les marques `insertion` / `deletion` / `modification` se posent alors sur chaque case (`tr.addNodeMark`).
+- **Persistance** : une marque de nœud s'affiche en enveloppe (`<ins data-id>`, `<del data-id>`, `<span data-type="modification">`) autour du bloc, mais
+  l'analyseur HTML du navigateur sort `<ins>`, `<del>` et `<span>` d'un `<tr>` : l'enregistrement puis la réouverture
+  (`Editor.setHTML(Editor.getHTML())`, le vrai chemin de `loadTrackedDocument`) perdaient la colonne. Une case s'écrit donc avec ses marques EN ATTRIBUTS
+  (`data-tc-insertion="3"`, `data-tc-deletion="3"`, `data-tc-modification='{…}'`) par `TrackingDOMSerializer`, installé dans `schema.cached.domSerializer`
+  (`TrackChanges.installSerializer`) : `getHTML`, le presse-papiers et les brouillons d'en-tête / pied de page passent tous par lui. Les trois marques les relisent par une règle
+  `td[data-tc-…], th[data-tc-…]` à `consuming: false` (ProseMirror pose la marque sur la case parce que la ligne parente l'autorise). La vue vivante garde ses enveloppes,
+  mises en page par `display: contents` (`css/track-changes.css`) avec les teintes vert pâle / rouge pâle des cases.
+- **Largeurs hors suivi** : `backfillAutoColumnWidths` et `clampOverflowingTables` (`dispatchColumnWidthFix`, `js/editor.js`) écrivent avec `TrackChanges.skipTracking`.
+  Sans cela, ajouter une colonne à un tableau à largeurs fixées faisait écrire par le widget des dizaines de marques `modification` (largeur de chaque case), et la case
+  insérée perdait sa marque d'insertion (`modification` exclut `insertion`). Limite connue : « Tout refuser » sur une colonne ajoutée dans un tableau à largeurs fixées
+  laisse les autres colonnes aux largeurs rééquilibrées (Ctrl+Z, lui, rend le tableau exactement).
+- **Cellule fusionnée** : « Colonne avant / après » à travers une cellule `colspan` marche (le `colspan` devient une modification, les cases insérées sont marquées ;
+  accepter et refuser donnent le tableau voulu). « Supprimer la colonne » à travers elle abîmerait le tableau (`fixTables` de prosemirror-tables ajoute des cases de remplissage) :
+  le bouton est grisé avec le suivi allumé quand les colonnes sélectionnées croisent une cellule fusionnée (`Editor.selectedColumnsCrossMergedCell`, `aria-disabled` +
+  `table.colDelMerged`), jamais retiré.
+- **Pas corrigé ici (proposé à Antoine)** : une LIGNE ajoutée ou supprimée avec le suivi garde la même enveloppe entre `<tbody>` et `<tr>` (`tbody > ins > tr`) : elle s'affiche
+  en bande étroite et disparaît à la relecture, comme le faisaient les cases.
+- Tests : groupe `trackChanges` (`trackchanges_column_*`, 8 cas) et script Node `trackColumnsMouse` (`dev-tests/verify-track-columns-mouse.mjs`, 44 vérifications).
+
 ## Sources externes consultées (recherche du 2026-09-18)
 
 Accès direct à `tiptap.dev`, `prosemirror.net`, `support.getgrist.com` et `community.getgrist.com`

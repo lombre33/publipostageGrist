@@ -402,6 +402,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de travail, ou au-delà (sur la barre d'outils, hors du panneau), le fait défiler, d'autant plus vite qu'il s'éloigne, et la sélection suit la case qui arrive sous le bord ; les bandeaux
   restent collés. Règle générale : rien de flottant ne se pose sur les cases d'un tableau pendant qu'on y travaille ; une barre reste dans sa bande ou hors du plan de travail. Les boutons de la
   barre de la case se déclenchent aussi au clavier (Tab puis Entrée ou Espace), sans doubler le clic de la souris.
+- Colonnes d'un tableau avec le suivi des modifications (choix « Faire marcher » d'Antoine, 01/10) : « Colonne avant », « Colonne après » et « Supprimer la colonne » de la barre du tableau agissent comme
+  une frappe suggérée. Une colonne ajoutée reste dans le tableau, alignée case par case, teintée de vert pâle (texte `#146c48` sur `#e5f6ee`) ; une colonne supprimée reste, barrée et teintée de rouge pâle
+  (texte `#b42318` sur `#fbe9e9`) ; ces teintes sont des constantes, pas des jetons du thème : la page du document reste blanche en clair comme en sombre, et le texte y atteint 4,5:1 au moins. « Tout accepter »
+  et « Tout refuser » les résolvent, Ctrl+Z défait l'action en un seul geste, et l'enregistrement les garde : la marque s'écrit en attribut de la case (`data-tc-insertion`, `data-tc-deletion`,
+  `data-tc-modification`), jamais en `<ins>` ou `<del>` entre deux cases, que le navigateur écarterait du tableau à la relecture. Au-dessus d'une cellule fusionnée, « Supprimer la colonne » est grisé,
+  jamais retiré (`aria-disabled`, explication au survol) : la supprimer à travers une cellule fusionnée casserait le tableau ; « Colonne avant / après » reste actif et élargit la cellule.
+  Les largeurs que le widget règle tout seul (colonnes automatiques figées, tableau ramené dans la page) s'écrivent hors suivi : jamais une suggestion que personne n'a écrite.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »
@@ -467,8 +474,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Cartes posées à Antoine le 29/09, sans réponse à 21 h ce jour-là : « Commenter » en mode Lecture (recommandation : le
   griser) ; « Par personne » ou « Par ligne » pour les droits de lecture seule (fait « Par personne » en attendant) ;
   trois contrastes restants (message vert « lignes trouvées » à 3,65:1, bleu d'accent sur fond gris à 4,02:1 — onglet
-  actif des Réglages, « Modifier le lien » —, puces de la galerie à 4,39:1) ; les boutons de colonne d'un tableau en mode
-  suivi des modifications ; « [Email indisponible] » et « (aucun titre dans ce document) », restés en français
+  actif des Réglages, « Modifier le lien » —, puces de la galerie à 4,39:1) ; « [Email indisponible] » et « (aucun titre dans ce document) », restés en français
   (recommandation : traduire).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi.

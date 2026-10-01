@@ -608,6 +608,7 @@ const I18n = (function () {
     'table.colBefore': { fr: 'Colonne avant', en: 'Column before' },
     'table.colAfter': { fr: 'Colonne après', en: 'Column after' },
     'table.colDel': { fr: 'Supprimer la colonne', en: 'Delete column' },
+    'table.colDelMerged': { fr: 'Indisponible avec le suivi des modifications : une cellule fusionnée traverse cette colonne', en: 'Unavailable with track changes on: a merged cell runs across this column' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
     'twoColumns.resizeGrip': { fr: 'Redimensionner les colonnes', en: 'Resize columns' },

@@ -75,6 +75,11 @@ const FloatingToolbars = (function () {
     EditorCore.wireDropdownButton(document.getElementById('v2-btn-highlight-caret'), highlightPanel, captureSelection);
   }
 
+  // Avec le suivi, « Supprimer la colonne » n'est pas possible à travers une case fusionnée (cf. Editor.selectedColumnsCrossMergedCell).
+  function columnDeleteBlocked() {
+    return Editor.isTrackChangesOn() && Editor.selectedColumnsCrossMergedCell();
+  }
+
   // Toolbar de gestion de tableau : panneau flottant, visible seulement curseur dans une cellule, ancré sur le <table> réel.
   function wireTableFloatingToolbar() {
     const buttons = [
@@ -99,7 +104,7 @@ const FloatingToolbars = (function () {
         'row-del': () => editor.chain().focus().deleteRow().run(),
         'col-before': () => editor.chain().focus().addColumnBefore().run(),
         'col-after': () => editor.chain().focus().addColumnAfter().run(),
-        'col-del': () => editor.chain().focus().deleteColumn().run(),
+        'col-del': () => { if (!columnDeleteBlocked()) editor.chain().focus().deleteColumn().run(); },
         'table-del': () => editor.chain().focus().deleteTable().run(),
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
@@ -150,6 +155,14 @@ const FloatingToolbars = (function () {
       panel.show(tableEl);
       const tableDelBtn = panel.el.querySelector('button[data-action="table-del"]');
       if (tableDelBtn) tableDelBtn.classList.remove('v2-hf-locked');
+      // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle expliquant POURQUOI il est grisé ne s'afficherait pas.
+      const colDelBtn = panel.el.querySelector('button[data-action="col-del"]');
+      if (colDelBtn) {
+        const blocked = columnDeleteBlocked();
+        colDelBtn.classList.toggle('is-disabled', blocked);
+        colDelBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+        colDelBtn.title = I18n.t(blocked ? 'table.colDelMerged' : 'table.colDel');
+      }
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
       EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };

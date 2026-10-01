@@ -120,6 +120,7 @@ const NODE_SCRIPTS = {
   menuClickMouse: 'verify-menu-click-mouse.mjs', // un clic de souris sur « + », Enregistrer, Qualité PDF ou Titre ne les laisse plus ouverts ni ne prend le curseur du texte, 700x400
   leaveUnsavedMouse: 'verify-leave-unsaved-mouse.mjs', // quitter un modèle dont une modification attend : la question Enregistrer / Abandonner / Annuler (liste, « + », galerie), 700x400 clair, sombre et anglais
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
+  trackColumnsMouse: 'verify-track-columns-mouse.mjs', // « Colonne avant / après / Supprimer la colonne » avec le suivi des modifications : colonne alignée, teintée, barrée, Ctrl+Z, enregistrement puis réouverture, cellule fusionnée (suppression grisée), 700x400 clair et sombre
   layerImagesMouse: 'verify-layer-images-mouse.mjs', // images en calque d'un ancien modèle chargées éditeur masqué (macro-modèle, Mode lecture) : leur position de page se mesure au retour de l'éditeur, 700x400
   macroImagesMouse: 'verify-macro-images-mouse.mjs', // images en calque d'un macro-modèle (js/macro-templates.js, js/reader-mode.js, js/pdf-export.js) : chacune reste dans son courrier en Lecture et dans le PDF téléchargé par le vrai bouton, 700x400
   headerFooterMouse: 'verify-header-footer-mouse.mjs', // en-tête et pied de page vides (js/header-footer-preview.js) : clic dans la marge puis « Terminer » sans rien écrire, texte tapé, tout effacé, modèle déjà enregistré activé vide, 700x400

@@ -8,6 +8,15 @@
 const TrackChanges = (function () {
   const MARK_NAMES = ['insertion', 'deletion', 'modification'];
 
+  // Une marque de suivi posée sur une CASE de tableau (« Colonne avant / après », « Supprimer la colonne ») : ProseMirror l'écrit en <ins>/<del> autour du <td>,
+  // donc directement dans le <tr>. Le HTML enregistré ne peut pas garder cette forme : l'analyseur HTML du navigateur sort de la ligne tout élément étranger
+  // (« foster parenting »), la marque disparaissait à la réouverture et la colonne supprimée revenait comme si de rien n'était. Elle s'écrit donc en attribut de
+  // la case elle-même (data-tc-insertion="3"), relu par les règles parseHTML des marques plus bas. La marque `modification` (changement d'attribut : la largeur d'une
+  // case fusionnée qui gagne une colonne) y garde ses cinq valeurs, en JSON.
+  const CELL_NODE_TYPES = ['tableCell', 'tableHeader'];
+  const cellMarkAttribute = markName => 'data-tc-' + markName;
+  const cellMarkValue = mark => JSON.stringify(mark.type.name === 'modification' ? mark.attrs : mark.attrs.id);
+
   // Clé du plugin de la lib, gardée pour skipTracking() : createExtensions() est le seul endroit qui importe la lib. Null tant qu'il n'a pas tourné.
   let suggestKey = null;
 
@@ -80,7 +89,7 @@ const TrackChanges = (function () {
       transformToSuggestionTransaction,
     } = await import('@handlewithcare/prosemirror-suggest-changes');
     suggestKey = suggestChangesKey;
-    const { DOMParser: PMDOMParser } = await import('prosemirror-model');
+    const { DOMParser: PMDOMParser, DOMSerializer: PMDOMSerializer, Fragment: PMFragment } = await import('prosemirror-model');
     // Note vérifiée le 2026-09-20 (cf. prototype) : applySuggestionsInRange/revertSuggestionsInRange
     // existent dans le paquet npm source mais PAS dans le bundle ESM esm.sh réellement chargé ici -
     // les importer casserait le chargement du module ENTIER, silencieusement. applySuggestion/
@@ -99,7 +108,13 @@ const TrackChanges = (function () {
       inclusive: false,
       excludes: 'deletion modification insertion',
       addAttributes() { return { id: { default: null } }; },
-      parseHTML() { return [{ tag: 'ins', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) }]; },
+      parseHTML() {
+        return [
+          { tag: 'ins', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
+          // `consuming: false` : la règle de la case (td/th) s'applique ensuite, la marque se posant sur le nœud (cf. CELL_NODE_TYPES).
+          { tag: 'td[data-tc-insertion], th[data-tc-insertion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-insertion')) }) },
+        ];
+      },
       renderHTML({ HTMLAttributes }) { return ['ins', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
     });
     const DeletionMark = Mark.create({
@@ -108,7 +123,12 @@ const TrackChanges = (function () {
       inclusive: false,
       excludes: 'insertion modification deletion',
       addAttributes() { return { id: { default: null } }; },
-      parseHTML() { return [{ tag: 'del', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) }]; },
+      parseHTML() {
+        return [
+          { tag: 'del', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
+          { tag: 'td[data-tc-deletion], th[data-tc-deletion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-deletion')) }) },
+        ];
+      },
       renderHTML({ HTMLAttributes }) { return ['del', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
     });
     const ModificationMark = Mark.create({
@@ -121,9 +141,39 @@ const TrackChanges = (function () {
           attrName: { default: null }, previousValue: { default: null }, newValue: { default: null },
         };
       },
-      parseHTML() { return [{ tag: "span[data-type='modification']" }]; },
+      parseHTML() {
+        return [
+          { tag: "span[data-type='modification']" },
+          { tag: 'td[data-tc-modification], th[data-tc-modification]', consuming: false, getAttrs: el => JSON.parse(el.getAttribute('data-tc-modification')) },
+        ];
+      },
       renderHTML({ HTMLAttributes }) { return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'modification', 'data-id': JSON.stringify(HTMLAttributes.id) }), 0]; },
     });
+
+    // Sérialiseur du schéma (celui de editor.getHTML(), du presse-papiers, des brouillons d'en-tête) : une case qui porte une marque de suivi s'écrit avec la
+    // marque en attribut de la case au lieu d'un <ins>/<del> autour d'elle (cf. CELL_NODE_TYPES). Tout autre fragment passe tel quel par le sérialiseur d'origine.
+    class TrackingDOMSerializer extends PMDOMSerializer {
+      serializeFragment(fragment, options, target) {
+        const isTrackedCell = node => CELL_NODE_TYPES.includes(node.type.name) && node.marks.some(m => MARK_NAMES.includes(m.type.name));
+        let anyTrackedCell = false;
+        fragment.forEach(node => { if (isTrackedCell(node)) anyTrackedCell = true; });
+        if (!anyTrackedCell) return super.serializeFragment(fragment, options, target);
+        const bare = [];
+        fragment.forEach(node => bare.push(isTrackedCell(node) ? node.mark(node.marks.filter(m => !MARK_NAMES.includes(m.type.name))) : node));
+        const out = super.serializeFragment(PMFragment.fromArray(bare), options);
+        // Une case sérialisée = un élément : repli sur la forme d'origine si le compte n'y est pas, plutôt que d'écrire la marque sur le mauvais élément.
+        if (out.childNodes.length !== fragment.childCount) return super.serializeFragment(fragment, options, target);
+        let index = 0;
+        fragment.forEach(node => {
+          const el = out.childNodes[index++];
+          if (el.nodeType !== 1) return;
+          node.marks.forEach(m => { if (MARK_NAMES.includes(m.type.name)) el.setAttribute(cellMarkAttribute(m.type.name), cellMarkValue(m)); });
+        });
+        if (!target) return out;
+        target.appendChild(out);
+        return target;
+      }
+    }
 
     // Contournement d'un piège Tiptap 3.x (constaté en écrivant le prototype) : pour un appel DIRECT
     // (editor.commands.xxx(), pas une chaîne .chain()), Tiptap fournit un `dispatch` no-op et un
@@ -279,6 +329,10 @@ const TrackChanges = (function () {
       restoreSuggestModeIfNeeded,
       // Bascule du suivi hors de la barre (une grille l'éteint à l'ouverture) : même appel direct de la lib que restoreSuggestModeIfNeeded, jamais la commande.
       toggleSuggestMode: editor => toggleSuggestChanges(editor.state, editor.view.dispatch),
+      // À appeler une fois l'éditeur créé : DOMSerializer.fromSchema() relit schema.cached.domSerializer, tous les sérialiseurs du schéma passent donc par celui-ci.
+      installSerializer(schema) {
+        schema.cached.domSerializer = new TrackingDOMSerializer(PMDOMSerializer.nodesFromSchema(schema), PMDOMSerializer.marksFromSchema(schema));
+      },
     };
   }
 

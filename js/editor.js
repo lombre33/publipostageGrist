@@ -11,6 +11,7 @@ const Editor = (function () {
   // API renvoyée par TrackChanges.createExtensions() (js/track-changes.js), construite une fois dans
   // init() - isSuggestModeOn a besoin des fonctions de la lib, importées dynamiquement là-bas.
   let trackChangesApi = null;
+  let tableTools = null; // { selectedRect, isInTable } de prosemirror-tables, posés par init()
 
   function probeImageDimensions(url) {
     return new Promise((resolve, reject) => {
@@ -161,6 +162,9 @@ const Editor = (function () {
   function dispatchColumnWidthFix(currentEditor, tr, trigger) {
     if (trigger) tr.setMeta('appendedTransaction', trigger.getMeta('appendedTransaction') || trigger);
     else tr.setMeta('addToHistory', false);
+    // Avec le suivi, ces largeurs ne sont pas une modification de la personne mais le widget qui remet le tableau d'aplomb : suivies, elles posaient une marque
+    // « modification » sur chaque case, et sur la case d'une colonne ajoutée elle remplaçait la marque « insertion » (la colonne ne pouvait plus être refusée).
+    TrackChanges.skipTracking(tr);
     currentEditor.view.dispatch(tr);
   }
 
@@ -261,7 +265,7 @@ const Editor = (function () {
       { computePosition, offset, flip, shift, autoUpdate },
       { NodeSelection, TextSelection, EditorState, Plugin, PluginKey },
       { Decoration, DecorationSet },
-      { TableMap, CellSelection },
+      { TableMap, CellSelection, selectedRect, isInTable },
     ] = await Promise.all([
       import('@tiptap/core'),
       import('@tiptap/starter-kit'),
@@ -284,6 +288,7 @@ const Editor = (function () {
     ]);
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, TableMap, CellSelection });
+    tableTools = { selectedRect, isInTable };
     let EditorStateClass;
     EditorCore.setNodeSelectionClass(NodeSelection);
     EditorCore.setTextSelectionClass(TextSelection);
@@ -319,6 +324,8 @@ const Editor = (function () {
     trackChangesApi = await TrackChanges.createExtensions(Node, Mark, Extension, mergeAttributes);
     const TrackedDocument = TrackChanges.extendForTracking(Document);
     const TrackedTable = TrackChanges.extendForTracking(Table);
+    // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque CASE de la colonne, des enfants directs d'une ligne.
+    const TrackedTableRow = TrackChanges.extendForTracking(GridEditor.withRowAttributes(TableRow));
     const TrackedTableHeaderWithBg = TrackChanges.extendForTracking(TableHeaderWithBg);
     const TrackedTableCellWithBg = TrackChanges.extendForTracking(TableCellWithBg);
     const TrackedTwoColumnsColumn = TrackChanges.extendForTracking(TwoColumnsColumn);
@@ -377,7 +384,7 @@ const Editor = (function () {
         Variables.createExtension(Extension, Suggestion),
         LinkDialog.createExtension(Extension),
         TrackedTable.configure({ resizable: true }),
-        GridEditor.withRowAttributes(TableRow),
+        TrackedTableRow,
         TrackedTableHeaderWithBg,
         TrackedTableCellWithBg,
         TrackedTwoColumnsColumn,
@@ -395,6 +402,7 @@ const Editor = (function () {
       content: '',
     });
     EditorCore.setEditor(editor);
+    trackChangesApi.installSerializer(editor.schema);
     HeaderFooterPreview.setEditor(editor);
 
     // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay relit juste tiptapEl.parentElement) : porte le fond/liseré "page" en
@@ -518,6 +526,23 @@ const Editor = (function () {
     trackChangesApi.toggleSuggestMode(editor);
   }
 
+  // La ou les colonnes de la sélection sont-elles traversées par une case fusionnée en largeur ? Les supprimer revient à réduire la largeur de cette case ET à retirer les
+  // autres cases de la colonne ; avec le suivi, le premier changement s'applique tout de suite et le second seulement à l'acceptation. Entre les deux le tableau n'est plus
+  // rectangulaire et prosemirror-tables le « répare » en ajoutant des cases vides : le tableau accepté (ou refusé) n'a plus la forme voulue. La barre du tableau grise donc
+  // « Supprimer la colonne » dans ce cas (js/floating-toolbars.js). Ajouter une colonne à travers une case fusionnée, lui, se résout proprement.
+  function selectedColumnsCrossMergedCell() {
+    if (!editor || !tableTools || !tableTools.isInTable(editor.state)) return false;
+    const { map, left, right } = tableTools.selectedRect(editor.state);
+    // Chaque ligne, colonne par colonne (cellsInRect, lui, ne rend pas les cases qui commencent avant `left`).
+    for (let row = 0; row < map.height; row++) {
+      for (let col = left; col < right; col++) {
+        const cell = map.findCell(map.map[row * map.width + col]);
+        if (cell.left < left || cell.right > right) return true;
+      }
+    }
+    return false;
+  }
+
   function hasPendingTrackedChanges() {
     return !!editor && TrackChanges.hasPendingSuggestions(editor.state);
   }
@@ -548,6 +573,7 @@ const Editor = (function () {
     isTrackChangesOn,
     setTrackChanges,
     hasPendingTrackedChanges,
+    selectedColumnsCrossMergedCell,
     getSuiviModificationsForSave,
   };
 })();

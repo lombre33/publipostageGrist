@@ -232,6 +232,266 @@
     },
   });
 
+  // Avant le scénario du macro-modèle ci-dessous : celui-ci laisse l'application en mode macro, éditeur masqué (aucune mise en page, aucun focus possible), alors
+  // que les colonnes se mesurent sur l'éditeur affiché.
+  // === Colonnes d'un tableau avec le suivi (demande d'Antoine du 01/10, « Faire marcher ») ===
+  // « Colonne avant », « Colonne après » et « Supprimer la colonne » (barre flottante du tableau) ne faisaient rien quand le suivi était allumé : la ligne du tableau
+  // n'acceptait pas la marque que le suivi pose sur chaque case de la colonne (la transaction était refusée, console.warn « Invalid content for node tableRow »).
+  // Elles posent maintenant une marque d'insertion ou de suppression sur chaque case, dessinée en teinte verte ou rouge barrée, acceptée ou refusée par « Tout
+  // accepter » / « Tout refuser », annulée par Ctrl+Z, et enregistrée EN ATTRIBUT DE LA CASE (data-tc-insertion="3") : un <ins> / <del> posé autour du <td> dans le
+  // <tr> ne survit pas à l'analyseur HTML du navigateur, la suggestion disparaissait à la réouverture.
+  const TABLE_3X2 = '<table><tbody><tr><td><p>a1</p></td><td><p>b1</p></td><td><p>c1</p></td></tr><tr><td><p>a2</p></td><td><p>b2</p></td><td><p>c2</p></td></tr></tbody></table><p>fin</p>';
+  const TABLE_MERGED = '<table><tbody><tr><td colspan="2"><p>ab</p></td><td><p>c1</p></td></tr><tr><td><p>a2</p></td><td><p>b2</p></td><td><p>c2</p></td></tr></tbody></table><p>fin</p>';
+  const TABLE_FIXED_WIDTHS = '<table style="width: 600px;"><colgroup><col style="width: 200px;"><col style="width: 400px;"></colgroup><tbody><tr><td colspan="1" rowspan="1" colwidth="200"><p>Nom</p></td><td colspan="1" rowspan="1" colwidth="400"><p>Valeur 1</p></td></tr><tr><td colspan="1" rowspan="1" colwidth="200"><p>Date</p></td><td colspan="1" rowspan="1" colwidth="400"><p>Valeur 2</p></td></tr></tbody></table><p>fin</p>';
+
+  // HTML comparable : sans styles en ligne, sans <colgroup> (largeurs recalculées par le widget) ni colspan/rowspan à 1.
+  const plainHtml = html => html.replace(/ style="[^"]*"/g, '').replace(/<colgroup>.*?<\/colgroup>/, '').replace(/ colspan="1" rowspan="1"/g, '');
+  const cellRows = () => Array.from(document.querySelectorAll('.tiptap tr')).map(tr => Array.from(tr.querySelectorAll('td, th')));
+
+  // Un modèle tout neuf, suivi allumé ou non, avec le curseur dans la case qui porte `text`.
+  async function loadTable(h, html, text, tracking) {
+    await h.resetEditor();
+    await disableTrackChangesIfOn(h);
+    Editor.setHTML(html);
+    await h.sleep(200);
+    await placeInCell(h, text);
+    if (tracking) { Editor.setTrackChanges(true); await h.sleep(100); }
+  }
+  async function placeInCell(h, text) {
+    const ed = EditorCore.getEditor();
+    let pos = -1;
+    ed.state.doc.descendants((node, p) => { if (pos < 0 && node.isText && node.text === text) pos = p + 1; });
+    if (pos < 0) throw new Error('case « ' + text + ' » introuvable');
+    // Le focus d'abord : la barre du tableau se met à jour sur la transaction de sélection, et seulement si l'éditeur a déjà le focus.
+    ed.view.focus();
+    ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, pos)));
+    await h.sleep(150);
+  }
+  // La barre du tableau agit au mousedown (js/editor-core.js:createFloatingPanel), comme le fait la vraie souris.
+  async function pressTableButton(h, action) {
+    const btn = document.querySelector('.v2-floating-toolbar button[data-action="' + action + '"]');
+    if (btn) btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(250);
+    return btn;
+  }
+  // Chaque ligne : les cases se suivent bord à bord (aucune n'est sortie de la ligne, aucune n'est écrasée).
+  function rowsAreInLine(rows, columns) {
+    return rows.length > 0 && rows.every(cells => cells.length === columns
+      && cells.every((td, i) => { const r = td.getBoundingClientRect(); return r.width > 20 && (i === 0 || Math.abs(r.left - cells[i - 1].getBoundingClientRect().right) < 2); }));
+  }
+  const spans = rows => rows.map(cells => cells.map(td => { const r = td.getBoundingClientRect(); return Math.round(r.left) + '-' + Math.round(r.right); }).join(' | ')).join(' // ');
+  const isInsertedCell = td => td.parentElement.tagName === 'INS';
+  const isDeletedCell = td => td.parentElement.tagName === 'DEL';
+
+  cases.push({
+    id: 'trackchanges_column_buttons_add_a_marked_column_laid_out_in_line',
+    description: 'Suivi actif : « Colonne avant » et « Colonne après » ajoutent une colonne dont chaque case porte la marque d\'insertion (écrite en attribut de la case), teintée de vert, au bon rang, et alignée avec les autres colonnes',
+    run: async (h) => {
+      try {
+        const out = [];
+        for (const [action, expectedIndex] of [['col-before', 1], ['col-after', 2]]) {
+          await loadTable(h, TABLE_3X2, 'b1', true);
+          const btn = await pressTableButton(h, action);
+          const html = Editor.getHTML();
+          const rows = cellRows();
+          const inserted = rows.map(cells => cells.findIndex(isInsertedCell));
+          const tinted = rows.every(cells => { const td = cells.find(isInsertedCell); return !!td && getComputedStyle(td).backgroundColor === 'rgb(229, 246, 238)'; });
+          out.push({
+            action,
+            found: !!btn,
+            marked: (html.match(/<td[^>]* data-tc-insertion="\d+"/g) || []).length === 2,
+            noWrapperInRow: !/<\/td><ins|<tr><ins/.test(html),
+            index: inserted.every(i => i === expectedIndex),
+            inLine: rowsAreInLine(rows, 4),
+            tinted,
+            pending: Editor.hasPendingTrackedChanges(),
+            spans: spans(rows),
+          });
+        }
+        return { pass: out.every(o => Object.keys(o).every(k => k === 'action' || k === 'spans' || o[k] === true)), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_delete_button_marks_a_struck_tinted_column_and_keeps_it',
+    description: 'Suivi actif : « Supprimer la colonne » garde la colonne dans le tableau, chaque case marquée supprimée (attribut de la case), barrée et teintée de rouge, alignée avec les autres',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const btn = await pressTableButton(h, 'col-del');
+        const html = Editor.getHTML();
+        const rows = cellRows();
+        const deleted = rows.map(cells => cells.findIndex(isDeletedCell));
+        const struck = rows.every(cells => { const td = cells.find(isDeletedCell); return !!td && getComputedStyle(td).textDecorationLine.indexOf('line-through') !== -1 && getComputedStyle(td).backgroundColor === 'rgb(251, 233, 233)'; });
+        const textKept = html.indexOf('b1') !== -1 && html.indexOf('b2') !== -1;
+        const checks = {
+          found: !!btn,
+          marked: (html.match(/<td[^>]* data-tc-deletion="\d+"/g) || []).length === 2,
+          column: deleted.every(i => i === 1),
+          inLine: rowsAreInLine(rows, 3),
+          struck,
+          textKept,
+          pending: Editor.hasPendingTrackedChanges(),
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_accept_all_applies_and_reject_all_restores',
+    description: '« Tout accepter » rend réelle la colonne ajoutée et retire la colonne supprimée ; « Tout refuser » retire la colonne ajoutée et rend la colonne supprimée : plus aucune marque, tableau rectangulaire',
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const [name, action, resolveId, expectedCols] of [
+          ['addAccept', 'col-after', 'v2-btn-accept-all', 4], ['addReject', 'col-after', 'v2-btn-reject-all', 3],
+          ['delAccept', 'col-del', 'v2-btn-accept-all', 2], ['delReject', 'col-del', 'v2-btn-reject-all', 3],
+        ]) {
+          await loadTable(h, TABLE_3X2, 'b1', true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          await h.clickButton(resolveId);
+          await h.sleep(250);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1 && html.indexOf('<ins') === -1 && html.indexOf('<del') === -1;
+          const rectangular = cellRows().every(cells => cells.length === expectedCols);
+          const restored = expectedCols === 3 ? plainHtml(html) === before : true;
+          out[name] = clean && rectangular && restored;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_undo_and_redo',
+    description: 'Annuler défait une colonne ajoutée ou supprimée avec le suivi d\'un seul coup (tableau et marques tels qu\'avant), Rétablir la remet',
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const action of ['col-after', 'col-del']) {
+          await loadTable(h, TABLE_3X2, 'b1', true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          const pending = plainHtml(Editor.getHTML());
+          const ed = EditorCore.getEditor();
+          ed.commands.undo();
+          await h.sleep(150);
+          const undone = plainHtml(Editor.getHTML()) === before && !Editor.hasPendingTrackedChanges();
+          ed.commands.redo();
+          await h.sleep(150);
+          const redone = plainHtml(Editor.getHTML()) === pending && Editor.hasPendingTrackedChanges();
+          out[action] = undone && redone;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_suggestions_survive_the_html_round_trip',
+    description: 'Une colonne ajoutée et une colonne supprimée en attente se retrouvent à l\'identique après Editor.getHTML() puis Editor.setHTML() (le chemin de l\'enregistrement), et « Tout refuser » rend alors le tableau d\'origine',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        const original = plainHtml(Editor.getHTML());
+        await pressTableButton(h, 'col-after');
+        await placeInCell(h, 'c1');
+        await pressTableButton(h, 'col-del');
+        const html1 = Editor.getHTML();
+        const both = /data-tc-insertion/.test(html1) && /data-tc-deletion/.test(html1);
+        Editor.setHTML(html1);
+        await h.sleep(250);
+        const html2 = Editor.getHTML();
+        const same = html2 === html1;
+        const pending = Editor.hasPendingTrackedChanges();
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(250);
+        const restored = plainHtml(Editor.getHTML()) === original;
+        return { pass: both && same && pending && restored, notes: JSON.stringify({ both, same, pending, restored, html1, html2 }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_in_a_fixed_width_table_stays_a_rejectable_insertion',
+    description: 'Dans un tableau aux largeurs fixées, les largeurs que le widget recalcule après l\'ajout ne sont pas des suggestions : les cases ajoutées gardent leur marque d\'insertion (« Tout refuser » retire la colonne), aucune case ne reçoit de marque de modification, et Annuler rend les largeurs d\'origine',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_FIXED_WIDTHS, 'Nom', true);
+        await pressTableButton(h, 'col-after');
+        await h.sleep(500);
+        const html = Editor.getHTML();
+        const insertions = (html.match(/data-tc-insertion/g) || []).length;
+        const modifications = (html.match(/data-tc-modification/g) || []).length;
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(300);
+        const widthsBack = (Editor.getHTML().match(/colwidth="(\d+)"/g) || []).join(',') === 'colwidth="200",colwidth="400",colwidth="200",colwidth="400"';
+        EditorCore.getEditor().commands.redo();
+        await h.sleep(300);
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(300);
+        const twoColumns = cellRows().every(cells => cells.length === 2) && !Editor.hasPendingTrackedChanges();
+        return { pass: insertions === 2 && modifications === 0 && widthsBack && twoColumns, notes: JSON.stringify({ insertions, modifications, widthsBack, twoColumns }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_through_a_merged_cell_add_resolves_delete_is_greyed',
+    description: 'Une colonne ajoutée à travers une case fusionnée s\'accepte et se refuse proprement (colspan rendu à l\'identique au refus) ; « Supprimer la colonne » est grisé avec une info-bulle dans ce cas (aria-disabled) et ne fait rien, mais reste actif suivi coupé',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_MERGED, 'b2', true);
+        const before = plainHtml(Editor.getHTML());
+        const delBtn = () => document.querySelector('.v2-floating-toolbar button[data-action="col-del"]');
+        const greyed = !!delBtn() && delBtn().getAttribute('aria-disabled') === 'true' && delBtn().classList.contains('is-disabled') && delBtn().title.indexOf('fusionn') !== -1;
+        await pressTableButton(h, 'col-del');
+        const untouched = plainHtml(Editor.getHTML()) === before && !Editor.hasPendingTrackedChanges();
+        // Hors de la case fusionnée (colonne 3) : actif.
+        await placeInCell(h, 'c2');
+        const freeColumn = delBtn().getAttribute('aria-disabled') === 'false' && delBtn().title === 'Supprimer la colonne';
+        // Suivi coupé : actif aussi sous la case fusionnée.
+        Editor.setTrackChanges(false);
+        await placeInCell(h, 'b2');
+        const enabledUntracked = delBtn().getAttribute('aria-disabled') === 'false';
+        Editor.setTrackChanges(true);
+        await h.sleep(100);
+        // Ajout à travers la case fusionnée : accepté puis refusé.
+        const out = {};
+        for (const [name, resolveId] of [['accept', 'v2-btn-accept-all'], ['reject', 'v2-btn-reject-all']]) {
+          await loadTable(h, TABLE_MERGED, 'b2', true);
+          await pressTableButton(h, 'col-before');
+          await h.clickButton(resolveId);
+          await h.sleep(250);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1;
+          out[name] = clean && (name === 'accept' ? cellRows().map(c => c.length).join() === '2,4' && /colspan="3"/.test(html) : plainHtml(html) === before);
+        }
+        return { pass: greyed && untouched && freeColumn && enabledUntracked && out.accept && out.reject, notes: JSON.stringify({ greyed, untouched, freeColumn, enabledUntracked, out }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_column_commands_without_suivi_leave_no_trace',
+    description: 'Suivi coupé : les trois boutons de colonne agissent tout de suite, sans aucune marque ni attribut data-tc-* dans le HTML enregistré',
+    run: async (h) => {
+      try {
+        await loadTable(h, TABLE_3X2, 'b1', false);
+        await pressTableButton(h, 'col-after');
+        const afterAdd = cellRows().map(c => c.length).join();
+        await pressTableButton(h, 'col-del');
+        const afterDel = cellRows().map(c => c.length).join();
+        const html = Editor.getHTML();
+        const clean = html.indexOf('data-tc-') === -1 && html.indexOf('<ins') === -1 && html.indexOf('<del') === -1 && !Editor.hasPendingTrackedChanges();
+        return { pass: afterAdd === '4,4' && afterDel === '3,3' && clean, notes: JSON.stringify({ afterAdd, afterDel, clean }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",
