@@ -144,10 +144,49 @@ const ReaderMode = (function () {
     keepBlankLines(wrapper);
     return wrapper.innerHTML;
   }
+  // Une couture rejoue ce qui sépare deux feuilles PHYSIQUES, à leur vraie taille : le bas de la page qui finit (sa marge du bas, la bande de son pied : `foot`, avec le
+  // pied tout en haut, juste sous le texte), la gouttière du plan de travail, puis le haut de la page qui commence (la bande de son en-tête, sa marge du haut : `head`,
+  // avec l'en-tête à la moitié de la marge, comme dans le PDF). Même structure que l'éditeur (js/header-footer-preview.js:buildSeam), sans zones cliquables : la Lecture
+  // n'ouvre rien. Bas et haut de page transparents, la feuille blanche est derrière (`.v2-reader-paper`).
+  function buildSeam(opts) {
+    const { footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx } = opts;
+    const seam = document.createElement('div');
+    seam.className = 'v2-page-band ' + ((!footerText && !headerText) ? 'v2-page-break-line' : 'v2-page-seam');
+    const foot = document.createElement('div');
+    foot.className = 'v2-page-seam-foot';
+    foot.style.height = footAreaPx + 'px';
+    if (footerText) {
+      const f = document.createElement('div');
+      f.className = 'v2-page-band-footer';
+      f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages);
+      f.style.paddingTop = '0';
+      f.style.maxHeight = footAreaPx + 'px';
+      foot.appendChild(f);
+    }
+    const divider = document.createElement('div');
+    divider.className = 'v2-page-seam-divider';
+    if (!footerText && !headerText) {
+      const label = document.createElement('span'); label.className = 'v2-page-break-label'; label.textContent = 'Page ' + pageStarting;
+      divider.appendChild(label);
+    }
+    const head = document.createElement('div');
+    head.className = 'v2-page-seam-head';
+    head.style.height = headAreaPx + 'px';
+    if (headerText) {
+      const h = document.createElement('div');
+      h.className = 'v2-page-band-header';
+      h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages);
+      h.style.paddingTop = (topMarginPx / 2) + 'px';
+      h.style.maxHeight = headAreaPx + 'px';
+      head.appendChild(h);
+    }
+    seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);
+    return { seam, divider };
+  }
   // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
   // peuvent recouvrir un peu de texte pile à la limite - résidu assumé).
   async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
-    if (!container.classList.contains('a4-preview')) return;
+    if (!container.classList.contains('a4-preview')) return null;
     // `hfEnabled` remplace l'ancien `return` sec quand aucun en-tête/pied n'est configuré : le mode Lecture ne montrait alors AUCUNE frontière de page,
     // alors que l'éditeur y affiche son repère « Page N ». Un document sans en-tête/pied garde donc maintenant ses gouttières, mais pas d'espaceur de bord
     // (rien à y afficher - une bande blanche vide flotterait au-dessus et en dessous de la feuille).
@@ -171,26 +210,27 @@ const ReaderMode = (function () {
 
     // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus récent peut avoir déjà repeint `container` pendant l'attente, `wrapper` ne serait
     // alors plus attaché et insertBefore lèverait une exception.
-    if (!wrapper.isConnected) return;
+    if (!wrapper.isConnected) return null;
 
     // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de CETTE page n'a rien (page 1 sans en-tête
     // alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur, le contenu de l'en-tête à la
     // moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste sous le texte, là où le PDF le peint.
+    let edgeTopEl = null; let edgeBottomEl = null;
     if (topBandPx) {
-      const edgeTop = document.createElement('div');
-      edgeTop.className = 'v2-page-edge-spacer v2-page-edge-top';
-      edgeTop.innerHTML = headerForPage(1) ? PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages) : '';
-      edgeTop.style.height = topBandPx + 'px';
-      edgeTop.style.paddingTop = (mPx.top / 2) + 'px';
-      container.insertBefore(edgeTop, wrapper);
+      edgeTopEl = document.createElement('div');
+      edgeTopEl.className = 'v2-page-edge-spacer v2-page-edge-top';
+      edgeTopEl.innerHTML = headerForPage(1) ? PageLayout.resolvePageNumberBadges(headerForPage(1), 1, totalPages) : '';
+      edgeTopEl.style.height = topBandPx + 'px';
+      edgeTopEl.style.paddingTop = (mPx.top / 2) + 'px';
+      container.insertBefore(edgeTopEl, wrapper);
     }
     if (bottomBandPx) {
-      const edgeBottom = document.createElement('div');
-      edgeBottom.className = 'v2-page-edge-spacer v2-page-edge-bottom';
-      edgeBottom.innerHTML = footerForPage(totalPages) ? PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages) : '';
-      edgeBottom.style.height = (bottomBandPx + mPx.bottom) + 'px';
-      edgeBottom.style.marginTop = (-mPx.bottom) + 'px';
-      container.appendChild(edgeBottom);
+      edgeBottomEl = document.createElement('div');
+      edgeBottomEl.className = 'v2-page-edge-spacer v2-page-edge-bottom';
+      edgeBottomEl.innerHTML = footerForPage(totalPages) ? PageLayout.resolvePageNumberBadges(footerForPage(totalPages), totalPages, totalPages) : '';
+      edgeBottomEl.style.height = (bottomBandPx + mPx.bottom) + 'px';
+      edgeBottomEl.style.marginTop = (-mPx.bottom) + 'px';
+      container.appendChild(edgeBottomEl);
     }
 
     const overlay = document.createElement('div');
@@ -200,47 +240,140 @@ const ReaderMode = (function () {
     const styleEl = document.createElement('style');
     wrapper.appendChild(styleEl);
     const marginRules = [];
-    const wrapperOffsetTop = wrapper.offsetTop;
-    const wrapperOffsetLeft = wrapper.offsetLeft;
     const zoom = layoutZoom(wrapper);
-    // offsetWidth plutôt que le rectangle : déjà en pixels de mise en page, sans division ni erreur d'arrondi.
-    const wrapperWidth = wrapper.offsetWidth;
-    // Même modèle que l'aperçu éditeur (js/header-footer-preview.js:renderPaginationOverlay), au lieu des deux modèles divergents d'avant : une bande est
-    // créée pour CHAQUE frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied, comme dans l'éditeur - le mode Lecture n'en montrait alors
-    // aucune), elle COMMENCE à la frontière au lieu de finir dessus, et l'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier
-    // bloc de la page. Sans cette réserve, la gouttière recouvrirait les dernières lignes de la page qui finit.
+    // Positions lues sur les rectangles, jamais sur offsetTop/offsetLeft/offsetWidth (arrondis à l'entier : une page posée à 0,4 px près n'est plus au même endroit que
+    // le PDF à quelques dixièmes de point). Les rectangles sont en pixels écran, déjà multipliés par le zoom d'ajustement ; la bande, enfant du conteneur et zoomée
+    // comme la feuille, se place en pixels de mise en page depuis le coin du contenu défilant du conteneur.
+    const containerRect = container.getBoundingClientRect();
+    const toLayoutX = x => (x - containerRect.left - container.clientLeft + container.scrollLeft) / zoom;
+    const toLayoutY = y => (y - containerRect.top - container.clientTop + container.scrollTop) / zoom;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const wrapperLeft = toLayoutX(wrapperRect.left);
+    const wrapperWidth = wrapperRect.width / zoom;
+    // Feuilles entières (choix d'Antoine, 01/10), même modèle que l'aperçu éditeur (js/header-footer-preview.js:renderPaginationOverlay) : chaque page a sa hauteur
+    // réelle. Une bande est créée pour CHAQUE frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied) ; elle rejoue le bas de la page qui finit, la
+    // gouttière, le haut de la page qui commence. L'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier bloc de la page, avec, en plus, la
+    // place qui reste sous ce bloc jusqu'au bas du corps de la page (`remaining`, lu sur le DOM déjà mis en page : la page vaut alors exactement la hauteur utile).
+    // Sans cette réserve, la gouttière recouvrirait les dernières lignes de la page qui finit.
+    const footAreaPx = mPx.bottom + bottomBandPx;
+    const headAreaPx = mPx.top + topBandPx;
+    const wrapperPaddingTop = parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
+    // Haut du corps de la page courante depuis le haut de `.reader-content`, en pixels de mise en page (la première page : sa marge du haut).
+    let bodyTopRel = wrapperPaddingTop;
+    const pages = [{ top: toLayoutY((edgeTopEl || wrapper).getBoundingClientRect().top), bodyTop: toLayoutY(wrapperRect.top) + wrapperPaddingTop }];
     offsets.forEach((offset, i) => {
       const pageEnding = i + 1; const pageStarting = i + 2;
       const footerText = footerForPage(pageEnding);
       const headerText = headerForPage(pageStarting);
-      const seam = document.createElement('div');
-      if (!footerText && !headerText) {
-        seam.className = 'v2-page-band v2-page-break-line';
-        const label = document.createElement('span'); label.className = 'v2-page-break-label'; label.textContent = 'Page ' + pageStarting;
-        seam.appendChild(label);
-      } else {
-        seam.className = 'v2-page-band v2-page-seam';
-        if (footerText) { const f = document.createElement('div'); f.className = 'v2-page-band-footer'; f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages); seam.appendChild(f); }
-        const divider = document.createElement('div'); divider.className = 'v2-page-seam-divider'; seam.appendChild(divider);
-        if (headerText) { const h = document.createElement('div'); h.className = 'v2-page-band-header'; h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages); seam.appendChild(h); }
-      }
+      const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx: mPx.top });
       overlay.appendChild(seam);
-      seam.style.left = wrapperOffsetLeft + 'px';
+      seam.style.left = wrapperLeft + 'px';
       seam.style.width = wrapperWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height / zoom;
       const el = wrapperChildren[offset.afterIndex];
+      // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa propre position.
+      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) : `remaining` se rajoute
+      // à la main pour retrouver la vraie frontière.
+      const afterBottomScreen = el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom;
+      const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
+      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
       // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
       // `.reader-content > *:nth-child(N)` et écrasait silencieusement la réserve dès que le dernier bloc d'une page était un paragraphe - la
       // gouttière recouvrait alors une ligne de texte. Invisible avant, la règle n'étant posée que pour les sauts de page forcés, dont le bloc est
       // un <div class="page-break-marker">, jamais un <p>.
-      if (el) marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + offset.remainingPx) + 'px; }');
+      if (el) marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
       styleEl.textContent = marginRules.join('\n');
-      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) - il faut donc
-      // rajouter remainingPx à la main pour retrouver la vraie frontière.
-      const rootRect = wrapper.getBoundingClientRect();
-      const boundaryTop = el ? ((el.getBoundingClientRect().bottom - rootRect.top) / zoom + offset.remainingPx) : offset.top;
-      seam.style.top = (wrapperOffsetTop + boundaryTop) + 'px';
+      const seamTop = toLayoutY(afterBottomScreen) + remaining;
+      seam.style.top = seamTop + 'px';
+      bodyTopRel = afterBottomRel + remaining + seamHeight;
+      pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
+    });
+    // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le plancher ne gêne pas un
+    // contenu plus long).
+    marginRules.push('#reader-container .reader-content { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    styleEl.textContent = marginRules.join('\n');
+
+    // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, DERRIÈRE le corps (z-index -1 dans le conteneur, qui est
+    // un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière le texte » posée dans la bande de
+    // l'en-tête - le triangle d'un coin de la Fiche mission - n'est plus cachée par le fond blanc de l'espaceur, ce qu'elle était dès qu'un en-tête réservait sa
+    // bande. C'est aussi là que se peignent les copies de « Sur toutes les pages » (page-layer.js).
+    const backdrop = document.createElement('div');
+    backdrop.className = 'v2-reader-backdrop';
+    const paper = document.createElement('div');
+    paper.className = 'v2-reader-paper';
+    const paperTopScreen = (edgeTopEl || wrapper).getBoundingClientRect().top;
+    const paperBottomScreen = (edgeBottomEl || wrapper).getBoundingClientRect().bottom;
+    paper.style.left = wrapperLeft + 'px';
+    paper.style.width = wrapperWidth + 'px';
+    paper.style.top = toLayoutY(paperTopScreen) + 'px';
+    paper.style.height = ((paperBottomScreen - paperTopScreen) / zoom) + 'px';
+    backdrop.appendChild(paper);
+    // Les copies de « Sur toutes les pages » : la même couche que l'éditeur, posée sur la feuille (paintRepeatedCopies la remplit, une fois les images décalées par slot).
+    const layer = document.createElement('div');
+    layer.className = 'v2-page-layer';
+    layer.setAttribute('aria-hidden', 'true');
+    backdrop.appendChild(layer);
+    container.appendChild(backdrop);
+    wrapper.classList.add('v2-paper-backed');
+    return { offsets, pages, layer, zoom, toLayoutY, sheetLeft: wrapperLeft, sheetWidth: wrapperWidth, contentLeftPx: mPx.left };
+  }
+
+  // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
+  function pageOfChildIndex(offsets, index) { return offsets.filter(o => o.afterIndex < index).length; }
+
+  // Les feuilles ont leur taille réelle (« Pages entières ») : le haut du corps d'une page 2, 3... n'est plus là où l'ancienne mise en page compacte le posait. Une image en calque
+  // d'un modèle enregistré avant ce changement et posée sur l'une de ces pages garde son `top` d'alors, alors que sa grille page (le PDF et le Word la lisent) dit « tant de
+  // points depuis le haut du corps de SA page » : la Lecture se cale sur la grille, comme l'export. Rien ne change pour un modèle enregistré depuis (les deux s'accordent) ni pour
+  // la première page de chaque courrier (même géométrie qu'avant) ; dans un macro-modèle, la page se compte depuis la première page du courrier de l'image.
+  function placeGridImagesOnPages(wrapper, paged) {
+    const children = Array.from(wrapper.children);
+    const wrapperTop = paged.toLayoutY(wrapper.getBoundingClientRect().top);
+    let slotFirstPage = 0;
+    children.forEach((child, index) => {
+      if (child.matches('.page-break-marker[data-macro-slot]')) { slotFirstPage = pageOfChildIndex(paged.offsets, index + 1); return; }
+      const layered = child.matches(LAYER_IMAGE_SELECTOR) ? [child] : Array.from(child.querySelectorAll(LAYER_IMAGE_SELECTOR));
+      layered.forEach(img => {
+        const grid = PageLayer.gridOfEl(img);
+        if (!grid || grid.pageIndex < 1 || img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
+        const page = paged.pages[slotFirstPage + grid.pageIndex];
+        if (page) img.style.top = (page.bodyTop - wrapperTop + grid.topPt * PageLayer.PT_TO_PX) + 'px';
+      });
+    });
+  }
+
+  // « Sur toutes les pages » en Lecture : l'image d'origine reste à sa place (dans le corps), ses copies se peignent sur les autres feuilles à la même place de page. Un
+  // macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de SON courrier (js/pdf-export.js:slotPageRange), du saut de
+  // page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
+  function paintRepeatedCopies(wrapper, paged) {
+    const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src'));
+    if (!images.length) { paged.layer.textContent = ''; return; }
+    const children = Array.from(wrapper.children);
+    const markers = [];
+    children.forEach((child, index) => { if (child.matches('.page-break-marker[data-macro-slot]')) markers.push(index); });
+    const lastPage = paged.pages.length - 1;
+    const items = images.map(img => {
+      const grid = PageLayer.gridOfEl(img);
+      let fromPage = 0; let toPage = null;
+      if (markers.length) {
+        let host = img;
+        while (host && host.parentElement !== wrapper) host = host.parentElement;
+        const index = host ? children.indexOf(host) : -1;
+        if (index >= 0) {
+          const slot = markers.filter(m => m < index).length;
+          fromPage = slot === 0 ? 0 : pageOfChildIndex(paged.offsets, markers[slot - 1] + 1);
+          toPage = slot < markers.length ? pageOfChildIndex(paged.offsets, markers[slot]) : lastPage;
+        }
+      }
+      const rect = img.getBoundingClientRect();
+      return {
+        src: img.currentSrc || img.src, width: rect.width / paged.zoom, height: rect.height / paged.zoom, leftPt: grid.leftPt, topPt: grid.topPt,
+        opacity: img.style.opacity !== '' ? parseFloat(img.style.opacity) : 1, fromPage, toPage,
+        skipPage: PageLayer.pageIndexAt(paged.pages, paged.toLayoutY(rect.top + rect.height / 2)),
+      };
+    });
+    PageLayer.paintCopies(paged.layer, {
+      left: paged.sheetLeft, width: paged.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: paged.contentLeftPx, pages: paged.pages, items,
     });
   }
 
@@ -322,8 +455,9 @@ const ReaderMode = (function () {
     container.innerHTML = '';
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
-    await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
+    const paged = await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
     rebaseLayerImagesBySlot(wrapper);
+    if (paged) { placeGridImagesOnPages(wrapper, paged); paintRepeatedCopies(wrapper, paged); }
   }
   // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Marqueur recalculé en JS, jamais lu via
   // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas le texte peint - counter() n'est résolu qu'à la peinture).

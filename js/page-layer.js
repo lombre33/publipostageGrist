@@ -11,6 +11,7 @@
 const PageLayer = (function () {
   const SELECTOR = 'img.editor-image[data-layer="behind"][data-repeat="true"]';
   const finite = value => typeof value === 'number' && isFinite(value);
+  const PT_TO_PX = 96 / 72;
 
   // Attributs d'un nœud `editorImage` (ProseMirror) : la case n'a de sens que derrière le texte, et que si la place de la page est connue.
   function isRepeatedAttrs(attrs) {
@@ -41,5 +42,46 @@ const PageLayer = (function () {
     return { x: marginLeftPt + grid.leftPt, y: bodyTopPt + grid.topPt };
   }
 
-  return { SELECTOR, isRepeatedAttrs, isRepeatedEl, gridOfEl, collect, pagePositionPt };
+  // Page d'une ordonnée donnée (en pixels de mise en page, dans le repère de `pages`) : la dernière page qui commence au-dessus ; la gouttière entre deux feuilles revient à
+  // celle qui finit.
+  function pageIndexAt(pages, y) {
+    let found = 0;
+    pages.forEach((page, k) => { if (page.top <= y) found = k; });
+    return found;
+  }
+
+  // Peint les copies de la couche sur les pages d'un rendu écran (éditeur, Lecture) : une boîte rognée par page, de la taille de la feuille (ce qui sort de la page est coupé,
+  // comme dans le PDF), où chaque image est posée à sa place de grille - le même décalage depuis le coin du contenu de la page, page après page. Pas de copie sur la page
+  // où l'image d'origine se trouve déjà (`skipPage`) : c'est elle qui s'y montre, déplaçable. Tout est en pixels de mise en page, dans le repère de la couche (celui des
+  // bandes de pagination : le conteneur du rendu, zoom de la feuille compris).
+  //   spec = { left, width, pageHeight, contentLeft, pages: [{ top, bodyTop }], items: [{ src, width, height, leftPt, topPt, opacity, skipPage, fromPage, toPage }] }
+  function paintCopies(layerEl, spec) {
+    while (layerEl.firstChild) layerEl.removeChild(layerEl.firstChild);
+    spec.pages.forEach((page, k) => {
+      const here = spec.items.filter(item => k !== item.skipPage && k >= (item.fromPage || 0) && (item.toPage == null || k <= item.toPage));
+      if (!here.length) return;
+      const box = document.createElement('div');
+      box.className = 'v2-page-layer-page';
+      box.style.left = spec.left + 'px';
+      box.style.top = page.top + 'px';
+      box.style.width = spec.width + 'px';
+      box.style.height = spec.pageHeight + 'px';
+      here.forEach(item => {
+        const img = document.createElement('img');
+        img.className = 'v2-page-layer-copy';
+        img.alt = '';
+        img.draggable = false;
+        img.src = item.src;
+        img.style.left = (spec.contentLeft + item.leftPt * PT_TO_PX) + 'px';
+        img.style.top = (page.bodyTop - page.top + item.topPt * PT_TO_PX) + 'px';
+        img.style.width = item.width + 'px';
+        img.style.height = item.height + 'px';
+        if (item.opacity != null && item.opacity !== 1) img.style.opacity = String(item.opacity);
+        box.appendChild(img);
+      });
+      layerEl.appendChild(box);
+    });
+  }
+
+  return { SELECTOR, PT_TO_PX, isRepeatedAttrs, isRepeatedEl, gridOfEl, collect, pagePositionPt, pageIndexAt, paintCopies };
 })();

@@ -274,9 +274,10 @@ check('Enregistrer ce modèle : il est enregistré à plat', isClean(await saved
 //    ligne ou juste au-dessus de la première place le curseur dans le texte (le geste de qui veut continuer à écrire), il n'ouvre ni le pied ni l'en-tête.
 await page.evaluate(() => Editor.setHTML('<p>Corps du modèle</p>'));
 await settle();
-await page.evaluate(() => { document.getElementById('editor-container').scrollTop = 0; });
-await sleep(200);
-const margins = await page.evaluate(() => {
+// Les feuilles sont entières (« Pages entières ») : même pour une ligne, la feuille fait une page A4, plus haute que le panneau de 400 px. Le haut et le bas ne se voient pas ensemble :
+// chaque côté se mesure et se vise défilé à son bord.
+const scrollEditorTo = async where => { await page.evaluate(w => { const ec = document.getElementById('editor-container'); ec.scrollTop = w === 'bottom' ? ec.scrollHeight : 0; }, where); await sleep(250); };
+const measureMargins = () => page.evaluate(() => {
   const tip = document.querySelector('#editor-container .tiptap');
   const sheet = tip.parentElement;
   const z = parseFloat(getComputedStyle(sheet).zoom) || 1;
@@ -291,29 +292,38 @@ const margins = await page.evaluate(() => {
     headerZone: [hz.top, hz.bottom], footerZone: [fz.top, fz.bottom],
   };
 });
+await scrollEditorTo('top');
+const marginsTop = await measureMargins();
+await scrollEditorTo('bottom');
+const margins = await measureMargins();
 check('zones vides : la boîte de chaque zone est une bande de 24 px au bord de la feuille, pas toute la marge',
-  Math.abs((margins.headerZone[1] - margins.headerZone[0]) / margins.zoom - 24) < 1 && Math.abs((margins.footerZone[1] - margins.footerZone[0]) / margins.zoom - 24) < 1
-    && Math.abs(margins.headerZone[0] - margins.sheetTop) < 1 && Math.abs(margins.footerZone[1] - margins.sheetBottom) < 1, margins);
+  Math.abs((marginsTop.headerZone[1] - marginsTop.headerZone[0]) / marginsTop.zoom - 24) < 1 && Math.abs((margins.footerZone[1] - margins.footerZone[0]) / margins.zoom - 24) < 1
+    && Math.abs(marginsTop.headerZone[0] - marginsTop.sheetTop) < 1 && Math.abs(margins.footerZone[1] - margins.sheetBottom) < 1, { haut: marginsTop, bas: margins });
 const caretAt = () => page.evaluate(() => { const sel = EditorCore.getEditor().state.selection; return { from: sel.from, empty: sel.empty, end: EditorCore.getEditor().state.doc.content.size - 1, editingZone: Editor.isEditingHeaderFooter() }; });
-// Au milieu de l'air entre le texte et la bande du pied.
+// Au milieu de l'air entre le texte et la bande du pied (le bas de la feuille, défilée jusque-là).
 const belowY = (margins.contentBottom + margins.footerZone[0]) / 2;
-check('le point visé sous la dernière ligne est dans la marge, hors de la zone du pied', belowY > margins.contentBottom && belowY < margins.footerZone[0], { belowY, margins });
+check('le point visé sous la dernière ligne est dans la marge, hors de la zone du pied', belowY > margins.contentBottom && belowY < margins.footerZone[0] && belowY > 0 && belowY < HEIGHT, { belowY, margins });
 await page.mouse.move(margins.left, belowY); await sleep(120);
 check('survol de la marge sous le texte : la zone du pied ne s\'allume pas', await page.evaluate(() => !document.querySelector('#editor-container .v2-page-edge-bottom').classList.contains('v2-hf-zone-hover')));
 await page.mouse.click(margins.left, belowY); await sleep(300);
 const afterBelow = await caretAt();
 check('clic sous la dernière ligne : le curseur va à la fin du texte, le pied de page reste fermé', !afterBelow.editingZone && afterBelow.empty && afterBelow.from === afterBelow.end, afterBelow);
-const aboveY = (margins.headerZone[1] + margins.contentTop) / 2;
-check('le point visé au-dessus de la première ligne est dans la marge, hors de la zone de l\'en-tête', aboveY > margins.headerZone[1] && aboveY < margins.contentTop, { aboveY, margins });
-await page.mouse.move(margins.left, aboveY); await sleep(120);
+await scrollEditorTo('top');
+const marginsHead = await measureMargins();
+const aboveY = (marginsHead.headerZone[1] + marginsHead.contentTop) / 2;
+check('le point visé au-dessus de la première ligne est dans la marge, hors de la zone de l\'en-tête', aboveY > marginsHead.headerZone[1] && aboveY < marginsHead.contentTop && aboveY > 0 && aboveY < HEIGHT, { aboveY, margins: marginsHead });
+await page.mouse.move(marginsHead.left, aboveY); await sleep(120);
 check('survol de la marge au-dessus du texte : la zone de l\'en-tête ne s\'allume pas', await page.evaluate(() => !document.querySelector('#editor-container .v2-page-edge-top').classList.contains('v2-hf-zone-hover')));
-await page.mouse.click(margins.left, aboveY); await sleep(300);
+await page.mouse.click(marginsHead.left, aboveY); await sleep(300);
 const afterAbove = await caretAt();
 check('clic au-dessus de la première ligne : le curseur va au début du texte, l\'en-tête reste fermé', !afterAbove.editingZone && afterAbove.empty && afterAbove.from === 1, afterAbove);
 // Et la bande elle-même ouvre toujours la zone (milieu de la bande : déjà couvert plus haut par clickZone, ici au ras du bord de la feuille).
-await page.mouse.move(margins.left, margins.sheetBottom - 4); await sleep(120);
+await scrollEditorTo('bottom');
+const marginsEdge = await measureMargins();
+check('le bord bas de la feuille est dans le panneau', marginsEdge.sheetBottom - 4 > 0 && marginsEdge.sheetBottom - 4 < HEIGHT, marginsEdge);
+await page.mouse.move(marginsEdge.left, marginsEdge.sheetBottom - 4); await sleep(120);
 check('survol du bord bas de la feuille : la zone du pied s\'allume', await page.evaluate(() => document.querySelector('#editor-container .v2-page-edge-bottom').classList.contains('v2-hf-zone-hover')));
-await page.mouse.click(margins.left, margins.sheetBottom - 4); await sleep(350);
+await page.mouse.click(marginsEdge.left, marginsEdge.sheetBottom - 4); await sleep(350);
 check('clic au bord bas de la feuille : le pied de page s\'ouvre', await page.evaluate(() => Editor.isEditingHeaderFooter()));
 check('« Terminer » sans rien écrire : plus rien n\'est activé', await clickDone() && isClean(await hfData()), await hfData());
 

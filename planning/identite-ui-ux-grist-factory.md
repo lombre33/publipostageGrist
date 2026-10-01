@@ -586,6 +586,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   haut, le pied juste sous le texte, les pages se coupent aux mêmes lignes, et une image en calque tirée au coin de la feuille s'arrête au vrai bord (marge + bande), pas à la marge. Une
   zone vide ne prend aucune place mais reste cliquable dans la marge ; une zone ne prend jamais la souris (une image posée dans la marge garde son clic) : c'est un clic dans la marge, là
   où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume.
+- Pages entières (choix d'Antoine du 01/10, carte « Afficher chaque feuille à sa taille réelle dans l'éditeur et la Lecture ? » : « Pages entières », l'autre choix était « Garder compact ») : dans
+  l'éditeur et à la Lecture, chaque page est une feuille entière de son format, la dernière comprise. Un modèle d'une ligne montre une feuille entière, un saut de page forcé laisse sa page
+  entière, et la page 2 ne bouge pas quand on écrit sur la page 1 : une page a sa place (le haut de la page k est à k hauteurs de feuille et k gouttières du haut de la première), pas celle que
+  le texte lui laisse. Entre deux feuilles, la couture rend ce que l'on verrait sur le papier : le bas de la page qui finit (le pied sous le texte, la marge du bas), une gouttière grise, le haut
+  de la page qui commence (la marge du haut, l'en-tête à la moitié de cette marge). Le pied et l'en-tête de la couture s'ouvrent au clic ; le reste, marges et gouttière, ne prend aucun clic. À la
+  Lecture le papier blanc est un fond derrière tout (une image « derrière le texte » posée dans la bande de l'en-tête reste visible) ; dans l'éditeur le texte de l'en-tête et du pied passe
+  devant les images en calque, comme dans le PDF. « Sur toutes les pages » peint une copie de l'image à sa place de grille sur chaque page 2 et suivante, au même endroit que le PDF (0,3 pt près),
+  rognée au bord de sa page, sous le texte, sans jamais prendre la souris ; la page 1 garde l'image elle-même. Une image en calque se range par la feuille où elle est posée (et non par le
+  paragraphe qui la porte) : tirée de la page 1 sur la page 2, sa grille dit « page 2 » ; lâchée dans la gouttière, elle va au bord haut de la feuille suivante ; un modèle enregistré avant ce choix
+  retrouve ses images de la page 2 à la place que dit leur grille. Recalculer les pages ne déplace jamais le défilement de l'éditeur (`overflow-anchor: none`, et `.tiptap` garde sa hauteur le temps de la mesure).
 
 ## 4. Spécifique à SlidesPlus
 

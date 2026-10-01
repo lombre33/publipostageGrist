@@ -499,6 +499,7 @@ const Editor = (function () {
     clampOverflowingTables(editor);
     HeaderFooterPreview.renderPaginationOverlay();
     HeaderFooterPreview.migrateLegacyImagePositions();
+    HeaderFooterPreview.reconcileLayerImagesWithGrid();
     // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps).
     refreshVariableBadgeValidity();
     GristAPI.refreshSchema().then(refreshVariableBadgeValidity)
@@ -519,6 +520,7 @@ const Editor = (function () {
     // Les images en calque d'un ancien modèle chargé masqué n'ont pas pu recevoir leur position de page (cf. HeaderFooterPreview.migrateLegacyImagePositions) :
     // mesurées ici, une fois les largeurs de colonnes réglées, avec la mise en page que l'éditeur vient de retrouver.
     HeaderFooterPreview.migrateLegacyImagePositions();
+    HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true });
     HeaderFooterPreview.schedulePaginationRecompute();
     GridEditor.refresh();
   }
@@ -573,7 +575,8 @@ const Editor = (function () {
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData,
     setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
-    refreshPaginationPreview: HeaderFooterPreview.renderPaginationOverlay,
+    // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page se relit sur leur grille.
+    refreshPaginationPreview: () => { HeaderFooterPreview.renderPaginationOverlay(); HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true }); },
     refreshLayout,
     openFootnoteEditorAt,
     isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter,
