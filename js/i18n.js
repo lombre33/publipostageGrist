@@ -694,6 +694,9 @@ const I18n = (function () {
     'imgToolbar.inText': { fr: 'Au cœur du texte', en: 'In line with text' },
     'imgToolbar.front': { fr: 'Devant le texte', en: 'In front of text' },
     'imgToolbar.behind': { fr: 'Derrière le texte', en: 'Behind text' },
+    'imgToolbar.repeat': { fr: 'Sur toutes les pages', en: 'On every page' },
+    'imgToolbar.repeatNeedsBehind': { fr: 'Sur toutes les pages (pour une image derrière le texte)', en: 'On every page (for an image behind the text)' },
+    'imgToolbar.repeatNeedsPage': { fr: 'Sur toutes les pages (active l’Aperçu A4 pour placer l’image sur la page)', en: 'On every page (turn on the A4 preview to place the image on the page)' },
     'imgToolbar.delete': { fr: 'Supprimer', en: 'Delete' },
 
     // --- Toolbar flottante de tableau (js/editor.js:wireTableFloatingToolbar) ---

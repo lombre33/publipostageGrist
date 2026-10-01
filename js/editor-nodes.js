@@ -934,6 +934,9 @@ const EditorNodes = (function () {
           pageIndex: { default: null, parseHTML: el => (el.hasAttribute('data-page-index') ? parseInt(el.getAttribute('data-page-index'), 10) : null), renderHTML: noBareRender },
           pageLeftPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-left-pt') ? parseFloat(el.getAttribute('data-page-left-pt')) : null), renderHTML: noBareRender },
           pageTopPt: { default: null, parseHTML: el => (el.hasAttribute('data-page-top-pt') ? parseFloat(el.getAttribute('data-page-top-pt')) : null), renderHTML: noBareRender },
+          // « Sur toutes les pages » (js/page-layer.js) : l'image « derrière le texte » est peinte à la même place de chaque page. Posé par la barre flottante, effacé dès que
+          // l'image quitte « derrière le texte » ; sans grille page il ne produit rien (PageLayer.isRepeatedAttrs).
+          repeat: { default: false, parseHTML: el => el.getAttribute('data-repeat') === 'true', renderHTML: noBareRender },
           // Posés ensemble : transforment ce nœud en placeholder de #Variable Attachments (jamais de vraie image dans l'éditeur).
           varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
           varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
@@ -949,6 +952,7 @@ const EditorNodes = (function () {
         if (a.pageIndex != null) attrs['data-page-index'] = String(a.pageIndex);
         if (a.pageLeftPt != null) attrs['data-page-left-pt'] = String(a.pageLeftPt);
         if (a.pageTopPt != null) attrs['data-page-top-pt'] = String(a.pageTopPt);
+        if (a.repeat) attrs['data-repeat'] = 'true';
         if (a.varTable) {
           attrs['data-var-table'] = a.varTable;
           attrs['data-var-column'] = a.varColumn;
@@ -1010,6 +1014,7 @@ const EditorNodes = (function () {
             varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : '';
             const layered = attrs.layer !== 'normal';
             wrap.classList.toggle('editor-image-layered', layered);
+            wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
             if (layered) {
               wrap.style.position = 'absolute';
               wrap.style.left = (attrs.left || 0) + 'px';

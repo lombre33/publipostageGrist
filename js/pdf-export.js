@@ -287,6 +287,8 @@ const PdfExport = (function () {
         const pageTopPt = parseFloat(node.getAttribute('data-page-top-pt'));
         if (Number.isFinite(pageIndex) && Number.isFinite(pageLeftPt) && Number.isFinite(pageTopPt)) {
           image._pageGrid = { pageIndex, pageLeftPt, pageTopPt, macroSlot: node.getAttribute('data-macro-slot') };
+          // « Sur toutes les pages » (js/page-layer.js) : peinte en fond de CHAQUE page de son courrier, pas seulement de celle où elle a été posée (resolveNativePdfContent).
+          if (PageLayer.isRepeatedEl(node)) image._repeat = true;
         }
       }
     } else {
@@ -1658,8 +1660,16 @@ const PdfExport = (function () {
       content, info: { title: filename || 'publipostage' },
     };
     // Images « derrière » à position de page, au-delà de la 1re page (resolveNativePdfContent) : pdfmake appelle `background` page par page, 1-based.
-    const behindByPage = content._backgroundByPage;
-    if (behindByPage && Object.keys(behindByPage).length) doc.background = currentPage => behindByPage[currentPage] || null;
+    const behindByPage = content._backgroundByPage || {};
+    // Les images répétées (« Sur toutes les pages ») sur chaque page de leur courrier, avant celles d'une seule page : une copie par appel, pdfmake range ses mesures sur le nœud
+    // qu'il traite.
+    const repeatedLayer = content._repeatedLayer || [];
+    if (repeatedLayer.length || Object.keys(behindByPage).length) {
+      doc.background = currentPage => {
+        const nodes = repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image)).concat(behindByPage[currentPage] || []);
+        return nodes.length ? nodes : null;
+      };
+    }
     // pdfmake appelle header/footer par page au moment de peindre - "première page différente" se résout ici (currentPage === 1), pas dans
     // buildHeaderFooterPdfChunks qui se contente de préparer les 2 variantes.
     if (hf.enabled && (hf.header.default || hf.header.first)) {
@@ -1825,17 +1835,40 @@ const PdfExport = (function () {
       content._footnoteByPage = footnoteByPage;
       const behindByPage = {};
       content._backgroundByPage = behindByPage;
+      // « Sur toutes les pages » (js/page-layer.js) : les images répétées, chacune avec les pages (1-based) de son courrier ; buildNativeDocDefinition les peint en fond de chacune.
+      const repeatedLayer = [];
+      content._repeatedLayer = repeatedLayer;
+      // Un macro-modèle assemble ses courriers à la suite : le courrier d'une image répétée est le sien, de sa première page à celle d'avant le courrier suivant (le premier courrier
+      // n'a pas de saut de page marqué, son `macroSlot` est nul). Hors macro-modèle (aucun saut marqué) : toutes les pages.
+      const slotIds = Object.keys(slotStartPages).sort((a, b) => slotStartPages[a] - slotStartPages[b]);
+      const slotPageRange = slot => {
+        if (!slotIds.length) return { from: 1, to: Infinity };
+        if (slot == null || slotStartPages[slot] == null) return { from: 1, to: slotStartPages[slotIds[0]] };
+        const next = slotIds[slotIds.indexOf(slot) + 1];
+        return { from: slotStartPages[slot] + 1, to: next != null ? slotStartPages[next] : Infinity };
+      };
       (content._pendingImages || []).forEach((p, i) => {
         const layer = p.image._pendingLayer;
         const pageGrid = p.image._pageGrid;
+        const repeat = !!p.image._repeat;
         delete p.image._pendingImgNode;
         delete p.image._pendingLayer;
         delete p.image._pageGrid;
+        delete p.image._repeat;
         if (pageGrid) {
           // Position connue directement (capturée dans l'éditeur, Aperçu A4) - aucun ancrage/interpolation à faire, garantie de rendu identique à
           // l'éditeur. Seule inconnue restante : sur QUELLE page ce document (peut-être modifié depuis) place réellement ce contenu aujourd'hui - trouvée
           // via blockPageNumbers, jamais en reconstruisant une position depuis un ancrage textuel.
-          p.image.absolutePosition = { x: marginLeftPt + pageGrid.pageLeftPt, y: topMarginPt + pageGrid.pageTopPt };
+          p.image.absolutePosition = PageLayer.pagePositionPt({ leftPt: pageGrid.pageLeftPt, topPt: pageGrid.pageTopPt }, marginLeftPt, topMarginPt);
+          if (repeat) {
+            // Sortie du flux (comme une image à position de page, qui s'évade de son tableau ou de sa colonne) : elle ne dépend plus d'aucun bloc, elle est le fond de chaque page.
+            const flowArr = p.parentArray || content;
+            const flowIdx = flowArr.indexOf(p.image);
+            if (flowIdx !== -1) flowArr.splice(flowIdx, 1);
+            const range = slotPageRange(pageGrid.macroSlot);
+            repeatedLayer.push({ image: p.image, fromPage: range.from, toPage: range.to });
+            return;
+          }
           const targetPage = pageGrid.pageIndex + 1 + (slotStartPages[pageGrid.macroSlot] || 0);
           const candidateIdxs = blockPageNumbers.reduce((acc, pn, j) => { if (pn === targetPage) acc.push(j); return acc; }, []);
           // Page introuvable (document raccourci depuis le dernier positionnement de cette image, ex.) : repli sur la DERNIÈRE page connue plutôt que de

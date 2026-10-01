@@ -320,6 +320,8 @@ const DocxExport = (function () {
     }
     if (node.tagName === 'IMG') {
       if (node.hasAttribute('data-pdf-skip')) return [];
+      // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
+      if (PageLayer.isRepeatedEl(node)) return [];
       const imgData = await docxImageDataFrom(node);
       if (!imgData) return [];
       // docx.js régénère un compteur wp:docPr/id FRAIS (démarrant à 1) à chaque ImageRun plutôt que d'en partager un seul pour tout le document (bug de la
@@ -777,6 +779,23 @@ const DocxExport = (function () {
     } finally { detach(); }
   }
 
+  // « Sur toutes les pages » (js/page-layer.js) : un paragraphe de 1 pt qui porte, en ancres flottantes derrière le texte, chaque image répétée à sa place de la page - le même ancrage
+  // que dans le corps (docxFloatingOptionsFrom), mais placé dans l'en-tête, que Word répète sur chaque page. Un paragraphe neuf et des images neuves par en-tête : un en-tête
+  // ne partage rien avec un autre. Les numéros d'objet partent de 9000, hors de ceux du contenu de l'en-tête (headerFooterBlocksFrom recompte depuis 1).
+  async function repeatedLayerParagraph(images, ctx) {
+    const runs = [];
+    for (const img of images) {
+      const imgData = await docxImageDataFrom(img);
+      if (!imgData) continue;
+      layerObjectId += 1;
+      const floating = docxFloatingOptionsFrom(img, layerObjectId, ctx);
+      if (!floating) continue;
+      runs.push(new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: layerObjectId, name: '', description: '', title: '' }, floating }));
+    }
+    return runs.length ? new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: runs }) : null;
+  }
+  let layerObjectId = 9000;
+
   async function headerFooterBlocksFrom(html, ctx) {
     if (!html) return [];
     const root = document.createElement('div'); root.innerHTML = html;
@@ -788,6 +807,9 @@ const DocxExport = (function () {
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche (Antoine, 2026-10-01).
     ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
+    // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
+    const layerImages = PageLayer.collect(root);
+    layerObjectId = 9000;
     // Les bandes du PDF : sur toutes les pages dès qu'une variante a du contenu (la page 1 sans en-tête garde la marge des autres), rien sinon. Posées avant les
     // blocs : l'ancrage d'une image en calque compte la bande du haut.
     const hfOn = !!(headerFooterData && headerFooterData.enabled);
@@ -835,17 +857,23 @@ const DocxExport = (function () {
       titlePage: differentFirstPage,
     };
     const section = { properties: sectionProps, children: bodyBlocks.length ? bodyBlocks : [new docx.Paragraph('')] };
+    const headerBlocks = {};
     if (hfOn) {
-      const headerDefaultBlocks = await headerFooterBlocksFrom(zoneHtml('header', 'default'), ctx);
+      headerBlocks.default = await headerFooterBlocksFrom(zoneHtml('header', 'default'), ctx);
       const footerDefaultBlocks = await footerBlocksFor('default');
-      if (headerDefaultBlocks.length) section.headers = Object.assign({}, section.headers, { default: new docx.Header({ children: headerDefaultBlocks }) });
       if (footerDefaultBlocks.length) section.footers = Object.assign({}, section.footers, { default: new docx.Footer({ children: footerDefaultBlocks }) });
       if (differentFirstPage) {
-        const headerFirstBlocks = await headerFooterBlocksFrom(zoneHtml('header', 'first'), ctx);
+        headerBlocks.first = await headerFooterBlocksFrom(zoneHtml('header', 'first'), ctx);
         const footerFirstBlocks = await footerBlocksFor('first');
-        if (headerFirstBlocks.length) section.headers = Object.assign({}, section.headers, { first: new docx.Header({ children: headerFirstBlocks }) });
         if (footerFirstBlocks.length) section.footers = Object.assign({}, section.footers, { first: new docx.Footer({ children: footerFirstBlocks }) });
       }
+    }
+    // Chaque en-tête que Word peut montrer (celui de la première page aussi quand elle diffère) porte les images répétées ; sans en-tête du tout, il est créé pour elles.
+    for (const variant of zoneVariants) {
+      const blocks = headerBlocks[variant] || [];
+      const layerParagraph = layerImages.length ? await repeatedLayerParagraph(layerImages, ctx) : null;
+      if (layerParagraph) blocks.push(layerParagraph);
+      if (blocks.length) section.headers = Object.assign({}, section.headers, { [variant]: new docx.Header({ children: blocks }) });
     }
     const doc = { sections: [section], footnotes: ctx.footnotes };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };

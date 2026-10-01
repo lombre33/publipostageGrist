@@ -449,6 +449,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   curseur et Maj + flèche dans le texte gardent leurs flèches ; le curseur qui ARRIVE sur l'ancre d'une image en calque la traverse
   encore à la flèche suivante, sans la faire glisser (un clic sur l'image ou une action de sa barre flottante rendent les flèches à
   l'image). Le suivi des modifications n'y voit pas une suggestion : une position est de la mise en page, pas du contenu.
+- Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
+  les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
+  la Lecture, le PDF (fond de page) et le Word (ancre derrière le texte dans l'en-tête de chaque page, première page comprise ; un en-tête est créé quand il n'y en a pas). La place est celle de la
+  grille page de l'image, en points depuis le coin du contenu, bande de l'en-tête comprise : ajouter ou retirer un en-tête déplace donc un coin posé à ras de la feuille. Le bouton est grisé, jamais
+  retiré, hors du calque derrière le texte (image dans le texte ou devant, en-tête et pied, mode grille) et, sans Aperçu A4, tant que l'image n'a pas sa place de page ; son info-bulle dit pourquoi.
+  Passer devant ou dans le texte efface la case, et revenir derrière le texte ne la rend pas. Dans un macro-modèle chaque courrier a sa couche, sur ses pages, dans le PDF ; le Word n'a qu'un
+  en-tête : toutes les couches y valent pour tout le document, jusqu'aux sections par courrier. Le module `PageLayer` (`js/page-layer.js`) est la couche de page commune : le filigrane de
+  « Paysage et portrait » s'en servira, une couche et non deux.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

@@ -54,6 +54,8 @@ const Icons = (function () {
     layerNormal: '<path d="M4 6h6M4 18h16M4 12h6"/><rect x="12" y="9" width="8" height="6" rx="1"/>',
     layerFront: '<rect x="3" y="3" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="9" y="9" width="12" height="12" rx="1.5"/>',
     layerBehind: '<rect x="9" y="9" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="3" y="3" width="12" height="12" rx="1.5"/>',
+    // Deux feuilles l'une derrière l'autre, un triangle dans le coin de celle de devant : la même image dans le coin de chaque page.
+    layerRepeat: '<rect x="8" y="2.5" width="12" height="15" rx="1.5"/><path d="M5 7.5v11a2.5 2.5 0 0 0 2.5 2.5H16"/><path d="M8 2.5h6L8 8.5z" fill="currentColor" stroke="none"/>',
     highlight: '<path d="m8 15-4 4M15.5 4.5 19 8l-9 9-4.5-.5L5 12z"/>',
     fill: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
     caretDown: '<path d="M6 9l6 6 6-6"/>',

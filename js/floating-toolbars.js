@@ -188,6 +188,8 @@ const FloatingToolbars = (function () {
       `<button data-action="layer-front" title="${I18n.t('imgToolbar.front')}">${Icons.svg('layerFront')}</button>`,
       `<button data-action="layer-behind" title="${I18n.t('imgToolbar.behind')}">${Icons.svg('layerBehind')}</button>`,
       '<span class="v2-floating-sep"></span>',
+      `<button data-action="repeat" title="${I18n.t('imgToolbar.repeat')}" aria-pressed="false">${Icons.svg('layerRepeat')}</button>`,
+      '<span class="v2-floating-sep"></span>',
       `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
     ].join('');
 
@@ -245,6 +247,8 @@ const FloatingToolbars = (function () {
       const pos = editor.state.selection.from;
       if (node.attrs.layer === target) return;
       const patch = { layer: target };
+      // « Sur toutes les pages » n'existe que derrière le texte (js/page-layer.js) : la case s'efface avec le calque.
+      if (target !== 'behind') patch.repeat = false;
       if (target !== 'normal') {
         const dom = editor.view.nodeDOM(pos);
         const img = dom && dom.querySelector && dom.querySelector('img');
@@ -354,6 +358,29 @@ const FloatingToolbars = (function () {
       }
     });
 
+    // « Sur toutes les pages » (js/page-layer.js) : la case de l'image « derrière le texte ». Il lui faut la place de la page (grille page), connue dès que l'image a été positionnée
+    // dans l'Aperçu A4 ; une image plus ancienne la reçoit ici, mesurée sur le rendu comme au passage en calque.
+    const a4PreviewOn = () => document.getElementById('editor-container').classList.contains('a4-preview');
+    function repeatUnavailableReason(attrs) {
+      if (attrs.layer !== 'behind') return 'imgToolbar.repeatNeedsBehind';
+      if (HeaderFooterPreview.getHfMode() || GridEditor.isActive()) return 'imgToolbar.repeatNeedsBehind';
+      if (!PageLayer.isRepeatedAttrs(Object.assign({}, attrs, { repeat: true })) && !a4PreviewOn()) return 'imgToolbar.repeatNeedsPage';
+      return null;
+    }
+    function toggleRepeat() {
+      const node = selectedImageNode();
+      if (!node || repeatUnavailableReason(node.attrs)) return;
+      if (node.attrs.repeat) { updateSelectedImage({ repeat: false }); return; }
+      const patch = { repeat: true };
+      if (!PageLayer.isRepeatedAttrs(Object.assign({}, node.attrs, { repeat: true }))) {
+        const dom = editor.view.nodeDOM(editor.state.selection.from);
+        const grid = dom && HeaderFooterPreview.computePageGridPosition(dom);
+        if (!grid) return;
+        Object.assign(patch, grid);
+      }
+      updateSelectedImage(patch);
+    }
+
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const selNode = selectedImageNode();
       if (!selNode) return;
@@ -378,6 +405,7 @@ const FloatingToolbars = (function () {
         // Grillé aussi dans une grille (js/grid-editor.js) : une image y est posée sur sa case, à sa taille - jamais en calque.
         'layer-front': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('front'); },
         'layer-behind': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('behind'); },
+        repeat: toggleRepeat,
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -407,6 +435,17 @@ const FloatingToolbars = (function () {
       const setLockedBtn = (action, locked) => { const btn = panel.el.querySelector(`button[data-action="${action}"]`); if (btn) btn.classList.toggle('v2-hf-locked', !!locked); };
       setLockedBtn('layer-front', !!HeaderFooterPreview.getHfMode() || GridEditor.isActive());
       setLockedBtn('layer-behind', !!HeaderFooterPreview.getHfMode() || GridEditor.isActive());
+      // « Sur toutes les pages » : grisée (jamais retirée) tant que l'image n'est pas derrière le texte ; aria-disabled plutôt que disabled pour que l'info-bulle, qui dit
+      // pourquoi, reste affichée au survol.
+      const repeatBtn = panel.el.querySelector('button[data-action="repeat"]');
+      if (repeatBtn) {
+        const reason = repeatUnavailableReason(attrs);
+        repeatBtn.classList.toggle('is-active', !reason && !!attrs.repeat);
+        repeatBtn.classList.toggle('is-disabled', !!reason);
+        repeatBtn.setAttribute('aria-disabled', reason ? 'true' : 'false');
+        repeatBtn.setAttribute('aria-pressed', !reason && attrs.repeat ? 'true' : 'false');
+        repeatBtn.title = I18n.t(reason || 'imgToolbar.repeat');
+      }
     }
 
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
