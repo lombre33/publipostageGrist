@@ -101,7 +101,9 @@ const MainToolbar = (function () {
   }
   async function openImageVariablePicker(anchorEl) {
     await GristAPI.refreshSchema().catch(() => {});
-    const candidates = GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments');
+    // Les colonnes de la table de la page en tête (celles de la table parcourue par la zone répétée où est le curseur avant elles), comme la liste « # ».
+    const candidates = Variables.prioritizeTables(
+      GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments'), Variables.currentTables(editor));
     // La liste avec recherche d'abord ; la liste simple d'avant reste pour le message « aucune colonne » et quand le composant n'est pas disponible.
     if (candidates.length) {
       if (imageVarPickerBox) imageVarPickerBox.style.display = 'none';

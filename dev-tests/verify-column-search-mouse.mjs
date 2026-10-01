@@ -5,7 +5,8 @@
 // être rogné ni recouvert, ni que la molette fait défiler la liste et non la page. Sections lançables seules : node dev-tests/verify-column-search-mouse.mjs condition
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
-// à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non).
+// à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non ; section hashList et fin de
+// imagePicker : la table de la page en tête de la liste « # » et du menu Image).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -913,6 +914,94 @@ const SECTIONS = {
     await page.waitForTimeout(250);
     images = await inserted();
     check('image : un vrai clic ailleurs referme la liste sans rien insérer', await hostGone() && images.length === 2, images);
+
+    // La table de la page en tête (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la table en cours ») : la page sur CsSites, dont la
+    // table vient après CsPieces dans le schéma ; sa colonne Logo ouvre la liste, la frappe garde cet ordre, Entrée au vrai clavier insère cette colonne.
+    await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites'));
+    await page.waitForTimeout(150);
+    await putCursorAtEndOfFirstLine();
+    await openMenu();
+    const pageFirst = await panelInfo(scope);
+    check('image : la colonne de la table de la page (CsSites.Logo) ouvre la liste, avant les 12 colonnes de CsPieces, toutes gardées dans leur ordre',
+      !!pageFirst && pageFirst.rows.length === 13 && pageFirst.rows[0] === 'CsSites.Logo' && pageFirst.rows[1] === 'CsPieces.Photo_01' && pageFirst.rows[12] === 'CsPieces.Photo_12', pageFirst);
+    await page.keyboard.type('o');
+    await page.waitForTimeout(100);
+    const pageFirstTyped = await panelInfo(scope);
+    check('image : « o » tapé au clavier garde la table de la page en tête (CsSites.Logo, puis CsPieces.Photo_01 à 12)',
+      !!pageFirstTyped && pageFirstTyped.rows.length === 13 && pageFirstTyped.rows[0] === 'CsSites.Logo' && pageFirstTyped.rows[1] === 'CsPieces.Photo_01', pageFirstTyped);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    images = await inserted();
+    check('image : Entrée insère l’image de CsSites.Logo, la première ligne de la liste, et la referme',
+      images.length === 3 && images[2].key === 'CsSites.Logo' && await hostGone(), images);
+    await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers'));
+    await page.waitForTimeout(150);
+  },
+
+  // Liste « # » du corps (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la table en cours ») : à la vraie frappe à 700×400, les colonnes
+  // de la table de la page (CsDossiers, deuxième du schéma derrière CsAnnuaire) ouvrent la liste, avec ce qui est tapé comme sans ; au vrai clavier, les flèches et Entrée suivent
+  // l'ordre affiché. La limite de 50 clés (appliquée après le classement) et la zone répétée par une boucle sont dans les scénarios de la page (colsearch_hash_list_*).
+  async hashList() {
+    const box = '#autocomplete-box';
+    const listed = () => page.evaluate(sel => {
+      const el = document.querySelector(sel);
+      if (!el || el.style.display === 'none') return null;
+      const r = el.getBoundingClientRect();
+      return {
+        rows: Array.from(el.querySelectorAll('.ac-item')).map(i => i.textContent), selected: (el.querySelector('.ac-item.selected') || {}).textContent || null,
+        inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+      };
+    }, box);
+    const badgeKeys = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.key); });
+      return out;
+    });
+    await page.evaluate(() => Editor.setHTML('<p></p>'));
+    await page.waitForTimeout(250);
+    const paragraph = await hitTest('.tiptap p');
+    await page.mouse.click(paragraph.x, paragraph.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.type('#');
+    await page.waitForTimeout(250);
+    const opened = await listed();
+    const firstRow = await hitTest(box + ' .ac-item');
+    const dossiers = ['Titre', 'Statut', 'Responsable', 'Montant', 'Echeance', 'Actif'].map(c => 'CsDossiers.' + c);
+    check('« # » : la liste s’ouvre sur les colonnes de la table de la page (CsDossiers), avant celles de CsAnnuaire, première dans le schéma, puis des autres tables',
+      !!opened && JSON.stringify(opened.rows.slice(0, 6)) === JSON.stringify(dossiers) && opened.rows[6] === 'CsAnnuaire.NomPrenom' && opened.rows.length === 50, opened);
+    check('« # » : la liste est entière dans le panneau et sa première ligne (CsDossiers.Titre) est visible et au premier plan',
+      !!opened && opened.inside && firstRow.found && firstRow.inViewport && firstRow.onTop && opened.selected === 'CsDossiers.Titre', { opened: opened && { inside: opened.inside, selected: opened.selected }, firstRow });
+    await page.keyboard.type('re');
+    await page.waitForTimeout(150);
+    const typed = await listed();
+    // Ce que la règle donne pour « re » : les clés de la table de la page, puis celles des autres tables dans l'ordre du schéma (les sections d'avant laissent leurs tables).
+    const expectedTyped = await page.evaluate(() => {
+      const current = GristAPI.getCurrentTableId();
+      const keys = GristAPI.getAllVariables().filter(v => v.key.toLowerCase().includes('re'));
+      return keys.filter(v => v.table === current).concat(keys.filter(v => v.table !== current)).map(v => v.key).slice(0, 50);
+    });
+    check('« # » : « re » tapé garde la table de la page en tête (CsDossiers.Titre, CsDossiers.Responsable), puis CsAnnuaire et les autres tables dans l’ordre du schéma',
+      !!typed && JSON.stringify(typed.rows.slice(0, 3)) === JSON.stringify(['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && JSON.stringify(typed.rows) === JSON.stringify(expectedTyped), { typed, expectedTyped });
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(80);
+    const down = await listed();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(80);
+    const back = await listed();
+    check('« # » : la flèche bas descend d’une ligne dans l’ordre affiché (CsDossiers.Responsable), la flèche haut revient à la première',
+      !!down && down.selected === 'CsDossiers.Responsable' && !!back && back.selected === 'CsDossiers.Titre', { down: down && down.selected, back: back && back.selected });
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    const keys = await badgeKeys();
+    const closed = await listed();
+    check('« # » : Entrée insère la colonne de la table de la page en première ligne (CsDossiers.Titre) et ferme la liste', JSON.stringify(keys) === JSON.stringify(['CsDossiers.Titre']) && closed === null, { keys, closed });
+    await page.evaluate(() => {
+      const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
+      Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
+    });
+    await page.waitForTimeout(250);
   },
 
   // Valeurs possibles d'une colonne Choix ou Référence dans le champ Valeur d'une règle (Antoine, 2026-09-29 : « quand on indique une colonne à choix ou à référence,

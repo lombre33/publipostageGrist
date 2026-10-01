@@ -2502,6 +2502,205 @@
     },
   });
 
+  // === Les colonnes de la table en cours en tête d'une recherche de colonne (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la
+  // table en cours (et qui correspondent aux caractères tapés bien sûr) »). Les listes qui réunissent les colonnes de PLUSIEURS tables : la liste « # » du corps et des
+  // champs texte (js/variables.js:currentTables / prioritizeTables), le menu « Image depuis une variable » de la barre (js/main-toolbar.js) et la liste à plat de la
+  // colonne d'une règle (js/condition-fields.js:appendAllTablesOptions, déjà classée ainsi : verrouillée ici). « Table en cours » = la table de la page ; dans une zone
+  // répétée par une boucle, la table parcourue passe avant elle. Chaque table garde l'ordre de ses colonnes, les autres tables celui du schéma. ===
+  const acBox = () => document.getElementById('autocomplete-box');
+  const acListed = () => (acBox() && acBox().style.display !== 'none' ? Array.from(acBox().querySelectorAll('.ac-item')).map(item => item.textContent) : null);
+  // Tape `text` dans le paragraphe `target` du corps et rend les clés que propose la liste « # » (null = fermée), puis la ferme.
+  async function hashList(h, target, text) {
+    await h.focusInElement(target);
+    await h.typeText(text);
+    await h.sleep(70);
+    const items = acListed();
+    document.querySelector('.tiptap').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await h.sleep(40);
+    return items;
+  }
+  async function emptyParagraph(h) { Editor.setHTML('<p></p>'); await h.sleep(40); return document.querySelector('.tiptap p'); }
+  const keysOf = (table, columns) => columns.map(column => table + '.' + column);
+  const DOSSIERS_KEYS = keysOf('CsDossiers', ['Titre', 'Statut', 'Responsable', 'Montant', 'Echeance', 'Actif']);
+  const LIGNES_KEYS = keysOf('CsLignes', ['Facture', 'Designation', 'Qte', 'Montant', 'Presence']);
+  const sameKeys = (got, expected) => JSON.stringify(got) === JSON.stringify(expected);
+  // Ce que doit rendre la liste « # » pour `query`, par la règle écrite à part : les clés des tables de `firstTables` (dans cet ordre), puis celles de toutes les autres
+  // tables dans l'ordre du schéma, chaque table gardant l'ordre de ses colonnes. Les cas précédents du groupe laissent leurs tables dans le document factice : les
+  // attentes littérales portent sur le début de la liste, cette règle sur tout le reste.
+  function rankedKeys(query, firstTables) {
+    const wanted = query.toLowerCase();
+    const rank = variable => { const at = firstTables.indexOf(variable.table); return at === -1 ? firstTables.length : at; };
+    return GristAPI.getAllVariables().filter(variable => variable.key.toLowerCase().includes(wanted))
+      .map((variable, index) => ({ key: variable.key, index, rank: rank(variable) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(entry => entry.key);
+  }
+  const startsWith = (got, expected) => !!got && sameKeys(got.slice(0, expected.length), expected);
+  // Tables de plus, retirées ensuite (le seed d'un autre cas ne les connaît pas) ; la page revient sur CsDossiers.
+  async function dropTables(h, tables) {
+    const stub = window.__gristStub;
+    tables.forEach(table => { stub.state.tables.splice(stub.state.tables.indexOf(table), 1); delete stub.state.columns[table]; delete stub.state.rows[table]; });
+    stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    await GristAPI.refreshSchema();
+    await h.sleep(50);
+  }
+  // CsGrande (60 colonnes « Zz01 »…) puis CsFin (« Zz1 » à « Zz3 »), la table de la page : la dernière du schéma, derrière plus de 50 clés d'une autre table. Aucune autre
+  // colonne du document factice ne contient « zz » : la frappe « zz » ne retient que ces deux tables.
+  async function withPageAtTheEnd(h, run) {
+    const stub = window.__gristStub;
+    const many = {};
+    for (let i = 1; i <= 60; i++) many['Zz' + String(i).padStart(2, '0')] = 'Text';
+    stub.setVariables('CsGrande', many);
+    stub.setVariables('CsFin', { Zz1: 'Text', Zz2: 'Text', Zz3: 'Text', Statut: 'Text' });
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Zz1: 'a', Zz2: 'b', Zz3: 'c', Statut: 's' }, 'CsFin');
+    await h.sleep(50);
+    try { return await run(); } finally { await dropTables(h, ['CsGrande', 'CsFin']); }
+  }
+
+  cases.push({
+    id: 'colsearch_hash_list_puts_the_columns_of_the_page_table_first_and_cuts_the_list_after_that',
+    description: 'Liste « # » du corps : les colonnes de la table de la page viennent en tête (sa table n’est pourtant pas la première du schéma), puis celles des autres tables dans l’ordre du schéma, avec ce qui est tapé comme sans ; la limite de 50 clés s’applique APRÈS ce classement (la table de la page, dernière du schéma derrière 60 colonnes d’une autre table, n’est plus écartée)',
+    run: async (h) => {
+      await seed(h);
+      const schema = GristAPI.getTables().slice();
+      const page = GristAPI.getCurrentTableId();
+      const all = await hashList(h, await emptyParagraph(h), '#');
+      const typed = await hashList(h, await emptyParagraph(h), '#re');
+      const capped = await withPageAtTheEnd(h, async () => hashList(h, await emptyParagraph(h), '#zz'));
+      const pass = page === 'CsDossiers' && schema.indexOf(page) > 0
+        && startsWith(all, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(all, rankedKeys('', [page]).slice(0, 50))
+        && startsWith(typed, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(typed, rankedKeys('re', [page]).slice(0, 50))
+        && !!capped && capped.length === 50 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[49] === 'CsGrande.Zz47';
+      return { pass, notes: JSON.stringify({ page, schema, all, typed, expectedAll: rankedKeys('', [page]).slice(0, 50), expectedTyped: rankedKeys('re', [page]).slice(0, 50), capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_in_a_repeated_zone_puts_the_looped_table_then_the_page_table_then_the_others',
+    description: 'Liste « # » dans une zone répétée par une boucle (une ligne de tableau sur CsLignes) : les colonnes de la table parcourue d’abord, puis celles de la table de la page, puis les autres tables dans l’ordre du schéma, avec ce qui est tapé comme sans ; hors de la zone, la table de la page ouvre la liste',
+    run: async (h) => {
+      await seed(h);
+      const zone = async () => {
+        Editor.setHTML('<table><tbody>'
+          + '<tr><th><p>Désignation</p></th><th><p>Qté</p></th></tr>'
+          + `<tr><td><p>${loopBadgeHtml('CsLignes', 'Designation', { repeat: 'row', table: 'CsLignes', empty: 'header' })}</p></td><td><p></p></td></tr>`
+          + '</tbody></table><p>Fin</p>');
+        await h.sleep(60);
+        return document.querySelectorAll('.tiptap tr')[1].children[1].querySelector('p');
+      };
+      const inRow = await hashList(h, await zone(), '#');
+      const inRowTyped = await hashList(h, await zone(), '#re');
+      // Espace avant # : @tiptap/suggestion n'ouvre la liste qu'en début de ligne ou après une espace.
+      await zone();
+      const outside = await hashList(h, document.querySelector('.tiptap > p:last-child'), ' #');
+      const pass = startsWith(inRow, LIGNES_KEYS.concat(DOSSIERS_KEYS, 'CsAnnuaire.NomPrenom')) && sameKeys(inRow, rankedKeys('', ['CsLignes', 'CsDossiers']).slice(0, 50))
+        && startsWith(inRowTyped, ['CsLignes.Facture', 'CsLignes.Presence', 'CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(inRowTyped, rankedKeys('re', ['CsLignes', 'CsDossiers']).slice(0, 50))
+        && startsWith(outside, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(outside, rankedKeys('', ['CsDossiers']).slice(0, 50));
+      return { pass, notes: JSON.stringify({ inRow, inRowTyped, outside, expected: rankedKeys('re', ['CsLignes', 'CsDossiers']) }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_text_fields_hash_list_puts_the_columns_of_the_page_table_first_and_cuts_the_list_after_that',
+    description: 'Les champs texte qui ont la liste « # » (Nom de fichier PDF, À du mode email) : même classement que le corps — la table de la page d’abord, les autres dans l’ordre du schéma, la limite de 50 clés après ; une saisie « Table.Colonne. » (colonnes de la ligne qu’une Référence désigne) reste la liste de cette seule table',
+    run: async (h) => {
+      await seed(h);
+      // Comme le navigateur à chaque frappe : la valeur posée, le curseur à la fin, l'évènement input ; la liste lue puis refermée.
+      const textList = async (id, value) => {
+        const input = document.getElementById(id);
+        input.value = value;
+        input.setSelectionRange(value.length, value.length);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await h.sleep(40);
+        const items = acListed();
+        press(input, 'Escape');
+        input.value = '';
+        await h.sleep(20);
+        return items;
+      };
+      const pdf = await textList('pdf-filename-template', 'Suivi_#');
+      const to = await textList('v2-email-to', '#re');
+      const path = await textList('pdf-filename-template', '#CsDossiers.Responsable.');
+      const capped = await withPageAtTheEnd(h, () => textList('pdf-filename-template', '#zz'));
+      const pass = startsWith(pdf, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(pdf, rankedKeys('', ['CsDossiers']).slice(0, 50))
+        && startsWith(to, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(to, rankedKeys('re', ['CsDossiers']).slice(0, 50))
+        && sameKeys(path, keysOf('CsDossiers', ['Responsable.NomPrenom', 'Responsable.Telephone', 'Responsable.Naissance']))
+        && !!capped && capped.length === 50 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[49] === 'CsGrande.Zz47';
+      return { pass, notes: JSON.stringify({ pdf, to, path, capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_image_menu_puts_the_attachment_columns_of_the_page_table_first_and_those_of_the_repeated_zone_before_them',
+    description: 'Menu « Image depuis une variable » : les colonnes Pièces jointes de la table de la page en tête (sa table vient pourtant après CsPieces dans le schéma), les autres dans l’ordre du schéma, avec ce qui est tapé comme sans ; dans une zone répétée par une boucle, celles de la table parcourue passent avant elles',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      stub.setVariables('CsAlbums', { Titre: 'Text', Couverture: 'Attachments' });
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites');
+      await h.sleep(50);
+      let out;
+      try {
+        const rowsAfterOpening = async (typed) => {
+          const panel = await openImagePicker(h);
+          if (!panel) return null;
+          if (typed) { setInput(inputOf(panel), typed); await h.sleep(20); }
+          const rows = rowsOf(panel);
+          press(inputOf(panel), 'Escape');
+          await h.sleep(60);
+          return rows;
+        };
+        const inText = await rowsAfterOpening();
+        const inTextTyped = await rowsAfterOpening('o');
+        // Le curseur dans la zone : une ligne de tableau répétée sur CsAlbums.
+        Editor.setHTML('<table><tbody>'
+          + '<tr><th><p>Titre</p></th><th><p>Image</p></th></tr>'
+          + `<tr><td><p>${loopBadgeHtml('CsAlbums', 'Titre', { repeat: 'row', table: 'CsAlbums', empty: 'header' })}</p></td><td><p></p></td></tr>`
+          + '</tbody></table><p>Fin</p>');
+        await h.sleep(60);
+        await h.focusInElement(document.querySelectorAll('.tiptap tr')[1].children[1].querySelector('p'));
+        const inZone = await rowsAfterOpening();
+        out = { page: GristAPI.getCurrentTableId(), schema: GristAPI.getTables().slice(-3), inText, inTextTyped, inZone, images: imageNodes(ed).length };
+      } finally { await dropTables(h, ['CsAlbums']); }
+      const pass = out.page === 'CsSites'
+        && sameKeys(out.inText, ['CsSites.Logo', 'CsPieces.Photo', 'CsPieces.Plan', 'CsAlbums.Couverture'])
+        && sameKeys(out.inTextTyped, ['CsSites.Logo', 'CsPieces.Photo', 'CsAlbums.Couverture'])
+        && sameKeys(out.inZone, ['CsAlbums.Couverture', 'CsSites.Logo', 'CsPieces.Photo', 'CsPieces.Plan']) && out.images === 0;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_rule_column_search_keeps_the_columns_of_the_page_table_first_in_the_condition_and_the_macro_model',
+    description: 'La liste à plat de la colonne d’une règle (condition d’une bulle, macro-modèle) garde les colonnes de la table de la page (nom nu) avant celles des autres tables (« Table.Colonne ») quand on tape : « date » trouve Echeance (la page) avant CsAnnuaire.Naissance, dont la table est pourtant la première du schéma',
+    run: async (h) => {
+      await seed(h);
+      const advanced = I18n.t('macro.modal.columnAdvanced');
+      const date = hintOf('macro.modal.typeDate');
+      const found = async trigger => ({
+        date: (await searchList(h, trigger, 'date', 'Escape')).filter(row => row !== advanced),
+        mont: (await searchList(h, trigger, 'mont', 'Escape')).filter(row => row !== advanced),
+      });
+      const modal = await openConditionWindow(h);
+      const condition = await found(triggerIn(modal));
+      dismiss(modal);
+      await h.sleep(30);
+      let macro;
+      try {
+        await openMacroWindow(h);
+        macro = await found(macroColumnTrigger());
+      } finally {
+        await closeMacroWindow(h);
+      }
+      const expected = {
+        date: ['Echeance' + date, 'CsAnnuaire.Naissance' + date],
+        mont: ['Montant' + hintOf('macro.modal.typeNumeric'), 'CsLignes.Montant' + hintOf('macro.modal.typeNumeric')],
+      };
+      const pass = sameKeys(condition, expected) && sameKeys(macro, expected) && GristAPI.getTables().indexOf('CsAnnuaire') < GristAPI.getTables().indexOf('CsDossiers');
+      return { pass, notes: JSON.stringify({ condition, macro }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.columnSearch = cases;
 })();

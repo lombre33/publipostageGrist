@@ -68,9 +68,26 @@ const Variables = (function () {
     return acBox;
   }
 
+  // Tables « en cours », la plus proche d'abord : celle que parcourt la zone répétée où est le curseur (js/variable-loop.js:loopTableAt ; `editor` absent hors de
+  // l'éditeur, nom du fichier PDF), puis celle de la page. Vide tant que la page n'a pas de table.
+  function currentTables(editor) {
+    const loopTable = editor ? VariableLoop.loopTableAt(editor.state, editor.state.selection.from) : null;
+    return [loopTable, GristAPI.getCurrentTableId()].filter((table, index, all) => table && all.indexOf(table) === index);
+  }
+  // `items` ({ table, … }) avec les colonnes des tables « en cours » en tête (demande d'Antoine du 2026-10-01 : dans une recherche de colonne, les noms de la table
+  // en cours passent avant ceux des autres tables) : chaque table de `tables` dans cet ordre, puis les autres ; l'ordre d'origine est gardé dans chaque groupe.
+  // À appliquer AVANT toute limite de longueur, sans quoi une table qui vient tard dans le schéma voit ses colonnes écartées par celles des tables d'avant.
+  function prioritizeTables(items, tables) {
+    const groups = tables.map(() => []);
+    const others = [];
+    items.forEach(item => { const rank = tables.indexOf(item.table); (rank === -1 ? others : groups[rank]).push(item); });
+    return [].concat(...groups, others);
+  }
+
   // Source des items selon l'onglet actif - centralisé pour être appelé à la fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur
   // un onglet.
-  // `editor` (facultatif) : dans une zone répétée par une boucle (js/variable-loop.js:loopTableAt), les colonnes de la table parcourue viennent en tête.
+  // `editor` (facultatif) : les colonnes de la table de la page viennent en tête ; dans une zone répétée par une boucle (js/variable-loop.js:loopTableAt), celles de la
+  // table parcourue passent avant elles.
   function computeItems(query, editor) {
     const q = (query || '').toLowerCase();
     if (activeTab === 'chips') {
@@ -84,12 +101,7 @@ const Variables = (function () {
     }
     const all = GristAPI.getAllVariables();
     const found = all.filter(v => v.key.toLowerCase().includes(q));
-    const loopTable = editor ? VariableLoop.loopTableAt(editor.state, editor.state.selection.from) : null;
-    if (loopTable) {
-      const first = found.filter(v => v.table === loopTable);
-      return first.concat(found.filter(v => v.table !== loopTable)).slice(0, 50);
-    }
-    return found.slice(0, 50);
+    return prioritizeTables(found, currentTables(editor)).slice(0, 50);
   }
 
   function currentTabEl(tabName) {
@@ -275,8 +287,9 @@ const Variables = (function () {
     }
     const query = match[1].toLowerCase();
     const all = GristAPI.getAllVariables();
-    // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie filtre les clés « Table.Colonne ».
-    const items = (pathItems(match[1]) || all.filter(v => v.key.toLowerCase().includes(query))).slice(0, 50);
+    // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie filtre les clés « Table.Colonne », celles de la
+    // table de la page d'abord.
+    const items = (pathItems(match[1]) || prioritizeTables(all.filter(v => v.key.toLowerCase().includes(query)), currentTables())).slice(0, 50);
     // Une clé tapée en entier, seule proposition : rien à compléter (clé tapée à la main, curseur qui revient derrière une variable posée) - la liste restait fermée
     // là tant que le point la fermait.
     if (!items.length || (items.length === 1 && items[0].key.toLowerCase() === query)) { hide(); filenameInputState = null; return; }
@@ -928,9 +941,10 @@ const Variables = (function () {
   // resolveRawValue exposé pour js/condition-rules.js (évaluation de conditions sur une valeur brute, non formatée - même/cross-table via le même mécanisme
   // que #Variable). ensureLinkConfigured/editLinkRule/describeLinkVia/resolveLinkedRows/formatValue/cellValue : fenêtres de condition et d'autres attributs d'une
   // variable (js/variable-condition.js, js/variable-linked-attrs.js), même liaison entre tables que l'insertion d'une #Variable. zeroHidden : la barre flottante
-  // d'une bulle nombre (js/floating-toolbars.js) lit la même règle que le rendu.
+  // d'une bulle nombre (js/floating-toolbars.js) lit la même règle que le rendu. currentTables/prioritizeTables : le menu Image de la barre (js/main-toolbar.js) classe
+  // ses colonnes comme la liste « # ».
   return {
     createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, zeroHidden, cellValue, currentTables, prioritizeTables,
   };
 })();

@@ -214,7 +214,7 @@ affiché et choisi (choix « Griser » d'Antoine, 01/10). La colonne d'une règl
 son choix « À plat » du même jour pour la condition) sont UNE seule liste qui réunit celles de toutes les tables, sans
 intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une table pas encore
 liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente), et le lien d'une table liée se lit
-sous la règle une fois la colonne choisie ; « Autre (colonne d'une autre table…) » reste en bas.
+sous la règle une fois la colonne choisie ; « Autre (colonne d'une autre table…) » reste en bas. Dans toute recherche de colonne qui réunit plusieurs tables (cette liste à plat, la liste « # » du corps et des champs texte, le menu « Image depuis une variable »), les colonnes de la **table en cours** viennent en tête, avant celles des autres tables, avec ou sans lettres tapées (demande d'Antoine du 01/10) : c'est la table de la page ; dans une zone répétée par une boucle, celle que la zone parcourt passe avant elle ; chaque table garde l'ordre de ses colonnes, les autres tables celui du schéma, et la limite de 50 clés de la liste « # » s'applique après ce classement.
 
 ### Le panneau de référence : 700×400
 Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : tout doit y tenir et s'y manier à la souris.
