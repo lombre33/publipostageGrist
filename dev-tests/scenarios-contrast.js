@@ -547,6 +547,79 @@
     },
   });
 
+  // Zones d'en-tête / pied de page : le survol (:hover) ne se joue pas depuis la page, donc on lit ce que la règle de survol déclare dans la feuille de
+  // style (fond, couleur) et on le fait calculer par le navigateur, posé sur la vraie page blanche comme le fait la zone.
+  function declaredOnHover(selectorTail, prop) {
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules;
+      try { rules = Array.from(sheet.cssRules); } catch (e) { continue; }
+      for (const rule of rules) {
+        if (!rule.selectorText || !rule.selectorText.endsWith(selectorTail)) continue;
+        const value = rule.style.getPropertyValue(prop);
+        if (value) return value;
+      }
+    }
+    return null;
+  }
+  const paperSheet = () => document.querySelector('#editor-container .v2-page-sheet');
+  // Page blanche de l'éditeur (le fond blanc du `.v2-page-sheet` réel, dans les deux thèmes) ; à défaut, une page blanche fabriquée.
+  function onPaper(markup, fn) {
+    const sheet = paperSheet();
+    const host = document.createElement('div');
+    host.innerHTML = markup;
+    if (!sheet) host.style.background = '#fff';
+    (sheet || document.body).appendChild(host);
+    try { return fn(host.firstElementChild); } finally { host.remove(); }
+  }
+  function computedFromDeclaration(prop, value) {
+    return onPaper('<div style="position:absolute;width:1px;height:1px"></div>', probe => {
+      probe.style.setProperty(prop, value);
+      const cs = getComputedStyle(probe);
+      return parseColor(prop === 'color' ? cs.color : cs.backgroundColor);
+    });
+  }
+  function hoverBand(selectorTail) {
+    const value = declaredOnHover(selectorTail, 'background');
+    const band = value && computedFromDeclaration('background', value);
+    return band ? over(band, onPaper('<div></div>', backgroundOf)) : null;
+  }
+
+  cases.push({
+    id: 'contrast_header_footer_ghost_text_reaches_4_5_on_the_band_the_hovered_zone_paints',
+    description: '« Ajouter un en-tête / pied de page » (texte fantôme d’une zone vide, visible au survol) : 4,5:1 au moins sur le fond teinté que la zone prend au survol, en clair et en sombre',
+    run: async () => {
+      const byTheme = inBothThemes(() => {
+        const band = hoverBand('.v2-hf-zone-empty:hover');
+        const ghost = withProbe('<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> Ajouter un en-tête</span>', el => colorOf(el));
+        return { 'texte fantôme sur le fond de survol': band ? round2(ratio(over(ghost, band), band)) : 0 };
+      });
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
+  cases.push({
+    id: 'contrast_faint_text_on_the_white_paper_reaches_4_5_at_rest_and_on_the_hovered_zone_in_light_and_dark',
+    description: 'Texte discret posé sur la page blanche (texte d’attente de l’éditeur vide, contenu d’un en-tête ou d’un pied rempli, tâche cochée de la Lecture) : 4,5:1 au moins, y compris au survol de la zone teintée ; la page reste blanche en sombre',
+    run: async () => {
+      const byTheme = inBothThemes(() => {
+        const out = {};
+        out['texte d’attente de l’éditeur vide'] = onPaper('<div class="tiptap"><p class="is-editor-empty" data-placeholder="x"></p></div>', el => round2(textRatio(el.firstElementChild, '::before')));
+        out['tâche cochée de la Lecture'] = onPaper('<div class="reader-content"><ul data-type="taskList"><li data-checked="true"><div>x</div></li></ul></div>', el => round2(textRatio(el.querySelector('li > div'))));
+        const body = onPaper('<div class="v2-hf-zone-body">x</div>', el => ({ rest: round2(textRatio(el)), color: colorOf(el) }));
+        out['contenu d’un en-tête rempli, au repos'] = body.rest;
+        // Au survol : le fond de la règle de survol, et la couleur que sa règle déclare pour le contenu (à défaut, celle du repos).
+        const band = hoverBand('.v2-hf-zone-filled:hover');
+        const declared = declaredOnHover('.v2-hf-zone-filled:hover .v2-hf-zone-body', 'color');
+        const hoverColor = (declared && computedFromDeclaration('color', declared)) || body.color;
+        out['contenu d’un en-tête rempli, au survol'] = band ? round2(ratio(over(hoverColor, band), band)) : 0;
+        return out;
+      });
+      const bad = failing(byTheme, 4.5);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

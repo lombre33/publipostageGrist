@@ -55,6 +55,8 @@ Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes cla
 | **Accent** (unique) : liens, états actifs, focus ; survol | `--accent`, `--accent-hover` | `#2f6fed`, `#2558c4` | `#5b91f5`, `#74a3f7` |
 | Accent plein (fond d'un bouton à texte blanc) ; survol | `--accent-solid`, `--accent-solid-hover` | `#2f6fed`, `#2558c4` | identiques au clair |
 | Accent doux : fond, bord | `--accent-soft`, `--accent-soft-border` | `#e8f0fe`, `#c7dbfd` | `#24324b`, `#35507d` |
+| Texte d'accent sur fond teinté ; réussite (texte, fond) | `--accent-ink` ; `--good`, `--good-soft` | `#2558c4` ; `#146c48`, `#e5f6ee` | `#74a3f7` ; `#6fd3a3`, `#163326` |
+| Texte discret posé sur la page blanche (éditeur, Lecture) | `--paper-text-faint` | `#667085` | identique au clair |
 | Danger ; fond doux | `--danger`, `--danger-soft` | `#d84343`, `#fbe9e9` | `#f08a8a`, `#3a2426` |
 | Voile derrière les fenêtres | `--pp-scrim` | `rgba(15, 23, 42, .45)` | `rgba(3, 6, 12, .62)` |
 | Rayon d'angle | `--radius-sm` | 7 px sur les contrôles (boutons, champs, lignes de liste), 8 px sur le cadre des fenêtres, rond pour les pastilles et le logo : coins arrondis partout, jamais carrés | idem |
@@ -74,6 +76,12 @@ boutons pleins à 3,08:1 en sombre). Règles à suivre :
 - Une règle neuve qui pose une couleur de texte, de fond de bouton ou de focus prend ces jetons. Le groupe de tests
   `contrast` mesure la couleur calculée sur l'élément réel, fond composé, en clair puis en sombre ; un nouveau bouton
   plein s'ajoute à sa liste.
+- Un texte d'accent posé sur un fond teinté (`--accent-soft`, `--surface-sunken`) prend `--accent-ink`, jamais `--accent`
+  (3,97 à 4,43:1 sur ces fonds) : c'est le cas du texte fantôme « Ajouter un en-tête / pied de page », visible au survol
+  sur le fond de sa zone. Un message de réussite prend `--good` sur `--good-soft`.
+- La page (éditeur, Lecture) reste blanche dans les deux thèmes : un texte discret posé dessus prend `--paper-text-faint`,
+  jamais `--text-faint`, qui s'éclaircit en sombre (2,46:1 sur blanc). Une zone qui prend le fond teinté du thème au
+  survol (en-tête et pied de page remplis) y reprend le gris du thème.
 
 ### Deux polices, jamais mélangées : chrome vs contenu produit
 Un principe distinctif, présent dès l'origine sur Publipostage+ et à reproduire sur tout widget qui génère un

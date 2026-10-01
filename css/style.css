@@ -14,6 +14,9 @@
   --text: #1b2430;
   --text-muted: #667085;
   --text-faint: #667085;
+  /* Texte discret posé sur la page blanche (éditeur, Lecture) : la page reste blanche en sombre, ce gris ne s'y éclaircit donc pas (--text-faint sombre sur blanc : 2,46:1 ;
+     celui-ci : 4,97:1). Défini ici seulement, les blocs sombres ne le redéfinissent pas. */
+  --paper-text-faint: #667085;
   --accent: #2f6fed;
   --accent-hover: #2558c4;
   /* Fond des boutons pleins à texte blanc : le même bleu dans les deux thèmes (blanc dessus : 4,55:1). --accent, éclairci en sombre pour se lire sur
