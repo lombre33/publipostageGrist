@@ -1465,6 +1465,8 @@ const PdfExport = (function () {
   }
   async function htmlToPdfContent(html, isTopLevel, availableWidthPt) {
     const root = document.createElement('div'); root.innerHTML = html || '';
+    // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche (Antoine, 2026-10-01).
+    if (isTopLevel) ReaderMode.trimTrailingBlankBlocks(root);
     insertTrailingBreaksForEmptyBlocks(root);
     let headingMarkers = null;
     if (isTopLevel) {

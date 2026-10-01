@@ -383,6 +383,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
   portrait — rien de tel dans le PDF ni le Word. La pagination, la Lecture, le PDF, le Word et l'impression navigateur
   suivent la page dans son sens ; la galerie de modèles reste en portrait.
+- Fin de document (demande d'Antoine du 01/10, « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide, un saut de
+  page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
+  Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur ; l'éditeur garde sa ligne finale (il faut pouvoir écrire à la suite).
 
 ## 4. Spécifique à SlidesPlus
 

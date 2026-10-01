@@ -43,6 +43,7 @@ apparaît) :
 | `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) ; le texte du numéro de page (`pageNumberText`, `resolvePageNumberBadges`) sert aussi à l'aperçu paginé, au mode Lecture et au PDF : **+ `headerFooter`** (scénario `hf_page_numbers_resolved_in_editor_preview_and_reader`) **et `pdfBatch`** |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
 | `js/orientation-toggle.js` (liste `TYPES`), l'orientation dans `js/page-layout.js` (`pageSizePtFor`, `pageSizeTwipFor`, `--pp-page-width`, `pp:pageLayoutChanged`), et tout code qui lit la taille de la page dans `js/pdf-export.js` (`pageWidthPt`, `pageHeightPt`), `js/pdf-export-alt.js` (`@page`), `js/docx-export.js` (`pageWidthTwip`, section), `js/header-footer-preview.js` (`recaptureLayeredImageGrids`, hauteur de page), `js/reader-mode.js`, `js/settings.js` (plafond des marges), `js/main.js` (`applyPageFitZoom`, `onPageLayoutChanged`, `layerGridsStale`), `css/editor-v2.css` (`--pp-page-width`, `--pp-col-left`) | **Toujours `orientation` ET le script Node `orientationMouse`** (la page en paysage à l'écran, en Lecture, dans le PDF, le Word et l'impression navigateur ; le script clique le vrai bouton à 700×400, clair et sombre, et mesure la feuille aux pixels) **+ `toolbarChrome` et `autosave`** (le bouton, son état grisé, l'enregistrement de l'orientation seule) **+ `pageLayout`, `pdfFidelity`, `pdfGroundTruth`, `readModeFidelity`, `docx`, `docxImages`** (le portrait doit rester identique à l'ancien rendu) |
+| `ReaderMode.trimTrailingBlankBlocks` (`js/reader-mode.js`) et ses trois appels : `render` de la Lecture, `htmlToPdfContent` de `js/pdf-export.js` (flux principal), `buildDocxDocument` de `js/docx-export.js` (+ le paragraphe de 1 pt derrière un dernier tableau) | **Toujours `blankLastPage`** (page blanche en fin de document) + `readModeFidelity`, `pdfFidelity`, `pdfGroundTruth`, `docx`, `pdfBatch`, et `twoColumns`, `tables`, `pageBreakToc` pour ce qui précède une fin de document |
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
 | `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
@@ -647,6 +648,24 @@ portrait rend comme avant. `--pp-page-width` vaut 793,71 px en portrait - la val
   les marges) : le tableau déborde de la feuille à l'écran jusqu'à la sortie du suivi, les exports le ramènent à la page. Suivi coupé, repasser en portrait réduit
   les colonnes (240 px au lieu de 300) et le retour en paysage ne les rend pas.
 - Une image plus large que la page déborde du PDF et du Word, en portrait comme en paysage (défaut d'avant, sans rapport avec l'orientation : aucun scénario ne le fige).
+
+**Page blanche en fin de document** (01/10, `scenarios-blank-last-page.js`, groupe `blankLastPage`, 11 scénarios) : une dernière ligne vide ne s'imprime pas,
+mais elle occupe une ligne ; quand le texte arrive à la marge du bas elle n'y tient plus et la mise en page ouvre une page pour elle seule (« Page 2 » vide en
+Lecture, page sans texte dans le PDF). Elle est toujours là derrière un dernier tableau ou une dernière zone à deux colonnes (ProseMirror ajoute un paragraphe
+final), et dès qu'on tape une Entrée de trop. `ReaderMode.trimTrailingBlankBlocks` retire ces blocs de la FIN du document (paragraphe, zone à deux colonnes ou saut
+de page sans texte, image, tableau, liste, citation, encadré, note ni numéro de page ; un titre n'en est jamais un) et les lignes vides au bas des colonnes d'une
+dernière zone ; les lignes vides du milieu gardent leur hauteur, le premier bloc reste toujours. Appelée par `ReaderMode.render` (après la résolution des bulles, avant
+`keepBlankLines`), par `htmlToPdfContent` (flux principal seulement : ni colonnes, ni encadrés, ni en-têtes et pieds) et par `buildDocxDocument` (qui ajoute un
+paragraphe de 1 pt derrière un dernier tableau, zone à deux colonnes comprise, que Word exige).
+- La capacité d'une page est MESURÉE (dichotomie sur `lines(n)`, chaque essai est un vrai rendu), jamais écrite en dur : elle vaut 52 lignes sans en-tête ni pied dans les deux
+  moteurs, mais 45 dans le PDF et 46 dans la Lecture avec un en-tête et un pied. Chaque moteur est comparé à SA référence (le même document sans le vide de fin), jamais à l'autre :
+  la Lecture ignore les marges des blocs (`margin: 6px 0` d'une zone) et tient une ligne de plus que le PDF avec en-tête et pied, un écart d'avant sans rapport avec ces pages blanches.
+- Une page blanche du PDF = aucune ligne du corps ni image sur la page pdf.js ; le texte d'en-tête et de pied est peint sur CHAQUE page et ne compte pas (`HEADER_FOOTER_TEXT`).
+  Lecture : une frontière `.v2-page-break-line` (sans en-tête ni pied) ou `.v2-page-seam` (avec) par changement de page. Word : le XML de `word/document.xml`.
+- Dix des onze scénarios échouent sur l'ancien code ; le onzième (`blank_page_header_and_footer_zones_keep_their_blank_lines`) est un garde-fou qui passe aussi : `ReaderMode.preview`
+  sert aussi aux zones d'en-tête et de pied, ils ne sont pas rognés. Non vérifié dans un vrai Word ni un vrai lecteur PDF.
+- Hors de ce lot : l'éditeur garde sa ligne finale (il faut pouvoir écrire à la suite) et son repère « Page 2 » peut encore tomber sur des lignes vides saisies au bas d'une page ; l'impression
+  navigateur et les qualités raster (`js/pdf-export-alt.js`, désactivées dans l'interface) ne rognent pas.
 
 **Piège de mesure propre à cette suite** : comparer des mm entre 4 moteurs de rendu différents
 (navigateur, pdfmake, docx.js) accumule de l'arrondi à chaque conversion - les tolérances des

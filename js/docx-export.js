@@ -731,6 +731,8 @@ const DocxExport = (function () {
 
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
+    // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche (Antoine, 2026-10-01).
+    ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
     // Hôte de mesure hors-écran le temps du parcours : measuredColumnWidthsPx a besoin d'un rendu réel, jamais possible sur un <div> détaché du document.
     const detachMeasureHost = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
@@ -739,6 +741,11 @@ const DocxExport = (function () {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
       bodyBlocks = await blocksFromContainer(root, ctx, true);
     } finally { detachMeasureHost(); }
+    // Word veut un paragraphe après un tableau placé en fin de document (tableau, zone deux colonnes et encadré en sont) : réduit à 1 pt, celui-ci ne rouvre pas
+    // une page blanche quand le tableau touche la marge du bas, ce que faisait le paragraphe vide d'une ligne de l'éditeur.
+    if (bodyBlocks.length && bodyBlocks[bodyBlocks.length - 1] instanceof docx.Table) {
+      bodyBlocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
+    }
 
     const differentFirstPage = !!(headerFooterData && headerFooterData.enabled && headerFooterData.differentFirstPage);
     const sectionProps = {

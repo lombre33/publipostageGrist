@@ -90,6 +90,15 @@ de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles
 **Reste ouvert** : les autres formats (A1 à A6), pour lesquels il suffira de faire dépendre ces trois fonctions d'un format enregistré - les consommateurs ne
 changent pas - et l'orientation d'un macro-modèle (qui impose ses propres marges à tout ce qu'il assemble).
 
+## Fin de document sans contenu
+
+**Livré le 01/10** (demande d'Antoine : « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide ne s'imprime pas mais occupe une
+ligne, et quand le texte arrive à la marge du bas elle ouvrait une page entière pour elle seule. `ReaderMode.trimTrailingBlankBlocks` (`js/reader-mode.js`) retire de la FIN du document les
+paragraphes, zones à deux colonnes et sauts de page sans rien à montrer (texte, image, tableau, liste, citation, encadré, note, numéro de page) et les lignes vides au bas des colonnes d'une
+dernière zone ; la Lecture (`render`), le PDF (`htmlToPdfContent`, flux principal) et le Word (`buildDocxDocument`, qui garde un paragraphe de 1 pt derrière un dernier tableau) l'appellent.
+**Reste ouvert** : le repère « Page 2 » de l'éditeur ne suit pas (il montre encore des lignes vides saisies au bas d'une page), et l'impression navigateur et les qualités raster
+(`js/pdf-export-alt.js`, désactivées dans l'interface) ne rognent pas.
+
 ## QR code / code-barres
 
 Génération pure client-side, plusieurs librairies légères existent (ex. `qrcode`/`qrcode-generator`

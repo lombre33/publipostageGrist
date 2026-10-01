@@ -95,6 +95,33 @@ const ReaderMode = (function () {
       block.appendChild(filler);
     });
   }
+  // Fin de document sans rien à montrer (Antoine, 2026-10-01 : « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page »). Une
+  // dernière ligne vide - Entrée de trop, ou le paragraphe que l'éditeur laisse toujours derrière un tableau ou une zone deux colonnes - ne s'imprime pas, mais
+  // quand le texte arrive à la marge du bas elle n'y tient plus et ouvre une page blanche : en Lecture, dans le PDF et dans le Word. Ces blocs sont donc retirés
+  // de la FIN du document (ceux du milieu gardent leur ligne, cf. keepBlankLines), ainsi que les lignes vides au bas des colonnes d'une dernière zone deux
+  // colonnes : sans cadre ni fond à l'impression, elles ne font que la rallonger. Appelée sur le HTML déjà résolu (une bulle vide ou masquée ne laisse que
+  // son paragraphe). « Rien à montrer » = un paragraphe, une zone deux colonnes ou un saut de page sans texte, image, tableau, liste, citation, encadré, note
+  // ni numéro de page ; un titre n'en est jamais un (sa numérotation s'écrit même sans texte). Le premier bloc reste toujours : un modèle vide garde sa ligne.
+  const VISIBLE_CONTENT = 'img, svg, canvas, video, audio, iframe, object, embed, input, table, hr, ul, ol, pre, blockquote, .callout, .toc-marker, .footnote-ref-marker, .page-number-badge';
+  function hasNothingToShow(el) {
+    if (el.classList.contains('page-break-marker')) return true;
+    if (el.tagName !== 'P' && !el.classList.contains('two-columns-zone')) return false;
+    return !el.textContent.replace(/[\s\u00a0\u200b]/g, '') && !el.querySelector(VISIBLE_CONTENT);
+  }
+  // Ce qui ne compte pas comme bloc en fin de document : espaces entre deux balises, commentaires, <style> et réglage de la numérotation des titres.
+  function isDocumentFurniture(node) {
+    if (node.nodeType === Node.ELEMENT_NODE) return node.tagName === 'STYLE' || node.classList.contains('heading-numbering-config');
+    return node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim());
+  }
+  function trimTrailingBlankBlocks(root) {
+    const blocks = Array.from(root.childNodes).filter(node => !isDocumentFurniture(node));
+    while (blocks.length > 1 && blocks[blocks.length - 1].nodeType === Node.ELEMENT_NODE && hasNothingToShow(blocks[blocks.length - 1])) root.removeChild(blocks.pop());
+    const last = blocks[blocks.length - 1];
+    if (!last || last.nodeType !== Node.ELEMENT_NODE || !last.classList.contains('two-columns-zone')) return;
+    last.querySelectorAll(':scope > .two-columns-column').forEach(column => {
+      while (column.children.length > 1 && column.lastElementChild.tagName === 'P' && hasNothingToShow(column.lastElementChild)) column.removeChild(column.lastElementChild);
+    });
+  }
   // #Variable d'un fragment d'en-tête/pied - même résolution que le corps (badges .var-badge remplacés par leur valeur réelle), avec le VRAI enregistrement
   // Grist affiché en mode Lecture.
   async function resolveHeaderFooterZone(html, tableId, record) {
@@ -256,6 +283,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
+    trimTrailingBlankBlocks(wrapper);
     keepBlankLines(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Variables déjà résolues (texte des titres définitif) : peut construire le sommaire maintenant, avant le swap DOM final ci-dessous.
@@ -463,5 +491,5 @@ const ReaderMode = (function () {
     result += filenameTemplate.slice(lastEnd);
     return result;
   }
-  return { render, preview, resolveFilename };
+  return { render, preview, resolveFilename, trimTrailingBlankBlocks };
 })();
