@@ -741,9 +741,11 @@ const inheritNone = await inheritState();
 check('variable sans condition : la ligne « Reprendre la condition d’affichage » n’est pas montrée', inheritNone.missing || !inheritNone.shown, inheritNone);
 await cancelLinkedWindow();
 
-// Nombres : « Si la valeur vaut zéro » (demande d'Antoine 2026-09-30). La barre d'une bulle Numérique gagne un menu : à la vraie souris et à 700x400 il est
-// atteignable et non recouvert, un vrai choix au clavier pose {zero:'hide'} SANS activer la mise en forme des nombres, les autres réglages le gardent, la barre
-// reste ouverte, et dans une fenêtre étroite la barre passe à la ligne au lieu de déborder du panneau.
+// Nombres (demandes d'Antoine du 2026-09-30 « Si la valeur vaut zéro », puis du 2026-10-01 : une icône en bascule, 0 masqué par défaut, écriture FR par défaut).
+// La barre d'une bulle Numérique a un bouton en bascule pour le zéro - 0 barré et enfoncé : le zéro ne s'écrit pas (le défaut) ; 0 et relâché : la bulle l'affiche. À la
+// vraie souris et à 700x400 : il est atteignable et non recouvert ; un vrai clic pose {zero:'show'} SANS activer la mise en forme des nombres, les autres réglages le
+// gardent, la barre reste ouverte ; la Lecture écrit ce que la barre annonce (FR allumé : « 1 200 » ; zéro masqué : rien, sans avoir recliqué sur rien) ; et dans une
+// fenêtre étroite la barre passe à la ligne au lieu de déborder du panneau.
 const NUM_BADGE = '.tiptap .var-badge[data-column="Montant"]';
 async function openNumberBar() {
   await page.evaluate(() => {
@@ -756,6 +758,12 @@ async function openNumberBar() {
   await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(600);
 }
+// Reclique la bulle déjà là (sans refaire le modèle : son format est gardé), pour rouvrir sa barre.
+async function reselectNumberBadge() {
+  const box = await hitTest(NUM_BADGE);
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(500);
+}
 const numberFormat = () => page.evaluate(() => {
   let format = null;
   EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') format = n.attrs.format || null; });
@@ -766,28 +774,52 @@ const numberBar = () => page.evaluate(() => {
   if (!bar) return null;
   const r = bar.getBoundingClientRect();
   const panel = bar.querySelector('[data-var-panel="number"]');
-  const zero = bar.querySelector('select[data-role="num-zero"]');
-  return { left: r.left, right: r.right, height: r.height, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, panelShown: !!panel && !panel.hidden, zero: zero ? zero.value : null };
+  const zero = bar.querySelector('button[data-action="num-zero"]');
+  return {
+    left: r.left, right: r.right, height: r.height, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, panelShown: !!panel && !panel.hidden,
+    zeroPressed: zero ? zero.getAttribute('aria-pressed') : null, zeroActive: zero ? zero.classList.contains('is-active') : null, zeroSlash: zero ? (() => { const path = zero.querySelector('svg path'); return !!path && path.getAttribute('display') !== 'none'; })() : null,
+    menus: bar.querySelectorAll('select[data-role="num-zero"]').length,
+  };
 });
-// Choix dans le menu comme une personne : clic sur le menu, touche fléchée, Entrée (la liste native n'est pas dans le DOM).
-async function chooseZero(arrow) {
-  const menu = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
-  if (!menu.found) return;
-  await page.mouse.click(menu.x, menu.y);
-  await page.waitForTimeout(150);
-  await page.keyboard.press(arrow);
-  await page.keyboard.press('Enter');
+// Bascule du zéro comme une personne : un vrai clic sur le bouton.
+async function clickZero() {
+  const button = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-zero"]');
+  if (button.found) await page.mouse.click(button.x, button.y);
   await page.waitForTimeout(250);
+  return button;
+}
+const fireDossier = montant => page.evaluate(m => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: m }, 'VcDossiers'), montant);
+// Ce que la Lecture écrit pour la bulle : un clic dans le texte referme d'abord la barre (sinon elle reste affichée par-dessus les boutons du mode : défaut déjà là, hors de
+// ce test), puis le bouton Lecture à la vraie souris, puis le retour à l'édition en glissant d'abord vers le bouton (l'info-bulle du bouton Lecture, encore sous le pointeur,
+// couvrirait sinon son voisin).
+async function readBubbleInReaderMode() {
+  const paragraph = await page.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; });
+  await page.mouse.click(paragraph.x, paragraph.y);
+  await page.waitForTimeout(300);
+  const readButton = await hitTest('#btn-mode-read');
+  if (readButton.found) await page.mouse.click(readButton.x, readButton.y);
+  await page.waitForTimeout(900);
+  const text = await page.evaluate(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return e ? e.textContent : null; });
+  let editButton = await hitTest('#btn-mode-edit');
+  if (editButton.found) {
+    await page.mouse.move(editButton.x - 6, editButton.y, { steps: 2 });
+    await page.mouse.move(editButton.x, editButton.y, { steps: 3 });
+    await page.waitForTimeout(200);
+    editButton = await hitTest('#btn-mode-edit');
+    await page.mouse.click(editButton.x, editButton.y);
+  }
+  await page.waitForTimeout(500);
+  const backToEdit = await page.evaluate(() => getComputedStyle(document.getElementById('editor-container')).display !== 'none');
+  return { text, readButton, backToEdit };
 }
 
 await openNumberBar();
-const zeroMenu = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
-const zeroOptions = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-varfmt-toolbar select[data-role="num-zero"] option')).map(o => o.textContent));
+const zeroButton = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-zero"]');
 const barAt700 = await numberBar();
-check('clic sur une bulle Numérique : le menu « Si la valeur vaut zéro » est dans la barre, visible et non recouvert à 700x400', zeroMenu.found && zeroMenu.inViewport && zeroMenu.onTop, zeroMenu);
-check('... avec les deux choix « Afficher 0 » (par défaut) et « Ne rien afficher »', JSON.stringify(zeroOptions) === JSON.stringify(['Afficher 0', 'Ne rien afficher']) && barAt700 && barAt700.zero === 'show', { zeroOptions, barAt700 });
+check('clic sur une bulle Numérique : le bouton du zéro est dans la barre, visible et non recouvert à 700x400', zeroButton.found && zeroButton.inViewport && zeroButton.onTop, zeroButton);
+check('... enfoncé avec un 0 barré tant que rien n\'est réglé (le zéro ne s\'écrit pas, c\'est le défaut), et plus de menu', !!barAt700 && barAt700.zeroPressed === 'true' && barAt700.zeroActive && barAt700.zeroSlash && barAt700.menus === 0, barAt700);
 check('... et la barre reste sur une seule ligne, dans le panneau', !!barAt700 && barAt700.height < 50 && barAt700.left >= 0 && barAt700.right <= barAt700.viewport + 0.5 && barAt700.docOverflowX <= 0, barAt700);
-check('bulle sans mise en forme : le menu n\'en crée pas (format encore vide)', (await numberFormat()) === null);
+check('bulle sans mise en forme : le bouton n\'en crée pas (format encore vide)', (await numberFormat()) === null);
 
 // Retour d'Antoine du 2026-10-01 : pour un nombre sans réglage la barre montre FR allumé, et la Lecture doit déjà écrire les espaces des milliers - sans qu'il
 // ait à recliquer sur FR. La valeur de la page est 1200 (VcDossiers, ligne 1).
@@ -796,54 +828,50 @@ const litAtStart = await page.evaluate(() => {
   return { fr: lit('fr'), us: lit('us'), none: lit('none') };
 });
 check('bulle sans mise en forme : la barre montre FR allumé (US et « — » éteints)', litAtStart.fr && !litAtStart.us && !litAtStart.none, litAtStart);
-// Un clic dans le texte referme la barre avant de passer en Lecture (sinon elle reste affichée par-dessus les boutons du mode : défaut déjà là, hors de ce test).
-const paragraph = await page.evaluate(() => { const r = document.querySelector('.tiptap p').getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2 }; });
-await page.mouse.click(paragraph.x, paragraph.y);
-await page.waitForTimeout(300);
-const readButton = await hitTest('#btn-mode-read');
-if (readButton.found) await page.mouse.click(readButton.x, readButton.y);
-await page.waitForFunction(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return !!e && e.textContent.trim() !== ''; }, null, { timeout: 5000 }).catch(() => {});
-const readText = await page.evaluate(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return e ? e.textContent : null; });
-check('Lecture, bouton cliqué à la vraie souris : ce nombre s\'écrit « 1 200 » (espace insécable) sans avoir recliqué sur FR', readButton.found && readText === '1\u00a0200', { readButton, readText });
-// Retour à l'édition : la souris glisse d'abord vers le bouton (l'info-bulle du bouton Lecture, encore sous le pointeur, couvrirait sinon son voisin).
-let editButton = await hitTest('#btn-mode-edit');
-if (editButton.found) {
-  await page.mouse.move(editButton.x - 6, editButton.y, { steps: 2 });
-  await page.mouse.move(editButton.x, editButton.y, { steps: 3 });
-  await page.waitForTimeout(200);
-  editButton = await hitTest('#btn-mode-edit');
-  await page.mouse.click(editButton.x, editButton.y);
-}
-await page.waitForTimeout(500);
-const backToEdit = await page.evaluate(() => getComputedStyle(document.getElementById('editor-container')).display !== 'none');
-check('... et le bouton Édition, à la vraie souris, ramène l\'éditeur', backToEdit, editButton);
-await openNumberBar();
+const readNumber = await readBubbleInReaderMode();
+check('Lecture, bouton cliqué à la vraie souris : ce nombre s\'écrit « 1 200 » (espace insécable) sans avoir recliqué sur FR', readNumber.readButton.found && readNumber.text === '1 200', readNumber);
+check('... et le bouton Édition, à la vraie souris, ramène l\'éditeur', readNumber.backToEdit, readNumber);
 
-await chooseZero('ArrowDown');
-const hidden = await numberFormat();
-const barHidden = await numberBar();
-check('vrai choix « Ne rien afficher » : la bulle porte {zero:"hide"} seul, sans activer la mise en forme des nombres', !!hidden && JSON.stringify(hidden) === '{"zero":"hide"}', hidden);
-check('... la barre reste ouverte sur le panneau des nombres et le menu affiche « Ne rien afficher »', !!barHidden && barHidden.panelShown && barHidden.zero === 'hide', barHidden);
+// Zéro : par défaut la Lecture n'écrit rien, comme le bouton enfoncé l'annonce ; un vrai clic sur le bouton fait écrire le 0.
+await fireDossier(0);
+await page.waitForTimeout(250);
+await reselectNumberBadge();
+const zeroDefaultBar = await numberBar();
+const readZeroHidden = await readBubbleInReaderMode();
+check('valeur 0, bulle sans réglage (bouton enfoncé) : la Lecture n\'écrit rien', !!zeroDefaultBar && zeroDefaultBar.zeroPressed === 'true' && readZeroHidden.readButton.found && readZeroHidden.text === '', { zeroDefaultBar, readZeroHidden });
 
+await reselectNumberBadge();
+await clickZero();
+const shown = await numberFormat();
+const barShown = await numberBar();
+check('vrai clic sur le bouton : la bulle porte {zero:"show"} seul, sans activer la mise en forme des nombres', !!shown && JSON.stringify(shown) === '{"zero":"show"}', shown);
+check('... la barre reste ouverte sur le panneau des nombres, le bouton est relâché et montre un 0 sans barre', !!barShown && barShown.panelShown && barShown.zeroPressed === 'false' && !barShown.zeroActive && !barShown.zeroSlash, barShown);
+const readZeroShown = await readBubbleInReaderMode();
+check('valeur 0, bouton relâché : la Lecture écrit « 0 »', readZeroShown.readButton.found && readZeroShown.text === '0', readZeroShown);
+
+await reselectNumberBadge();
 const styleFr = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-style:fr"]');
 check('le bouton FR voisin est atteignable', styleFr.found && styleFr.inViewport && styleFr.onTop, styleFr);
 if (styleFr.found) await page.mouse.click(styleFr.x, styleFr.y);
 await page.waitForTimeout(250);
-const frHidden = await numberFormat();
-check('vrai clic sur FR : le style est posé et le réglage zéro est gardé', !!frHidden && frHidden.type === 'number' && frHidden.style === 'fr' && frHidden.zero === 'hide', frHidden);
+const frShown = await numberFormat();
+check('vrai clic sur FR : le style est posé et le réglage zéro est gardé', !!frShown && frShown.type === 'number' && frShown.style === 'fr' && frShown.zero === 'show', frShown);
 
-await chooseZero('ArrowUp');
-const shownAgain = await numberFormat();
-check('vrai choix « Afficher 0 » : le réglage zéro disparaît, FR reste', !!shownAgain && shownAgain.type === 'number' && shownAgain.style === 'fr' && !('zero' in shownAgain), shownAgain);
+await clickZero();
+const hiddenAgain = await numberFormat();
+const barHiddenAgain = await numberBar();
+check('second vrai clic : le réglage zéro disparaît (retour au défaut), FR reste, le bouton est de nouveau enfoncé', !!hiddenAgain && hiddenAgain.type === 'number' && hiddenAgain.style === 'fr' && !('zero' in hiddenAgain)
+  && !!barHiddenAgain && barHiddenAgain.zeroPressed === 'true' && barHiddenAgain.zeroSlash, { hiddenAgain, barHiddenAgain });
+await fireDossier(1200);
 
-// Panneau étroit : la barre nombre (~530 px avec le menu) passe à la ligne, ne dépasse pas la fenêtre, le menu reste atteignable.
+// Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(300);
 await openNumberBar();
 const barNarrow = await numberBar();
-const zeroNarrow = await hitTest('.v2-varfmt-toolbar.visible select[data-role="num-zero"]');
+const zeroNarrow = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-zero"]');
 check('fenêtre de 360 px : la barre nombre reste dans la fenêtre et ne fait pas défiler la page', !!barNarrow && barNarrow.left >= 0 && barNarrow.right <= barNarrow.viewport + 0.5 && barNarrow.docOverflowX <= 0, barNarrow);
-check('... et le menu « Si la valeur vaut zéro » y reste atteignable', zeroNarrow.found && zeroNarrow.inViewport && zeroNarrow.onTop, zeroNarrow);
+check('... et le bouton du zéro y reste atteignable', zeroNarrow.found && zeroNarrow.inViewport && zeroNarrow.onTop, zeroNarrow);
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 

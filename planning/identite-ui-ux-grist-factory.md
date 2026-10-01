@@ -270,6 +270,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   anglaise) et le document écrit déjà ainsi — espace insécable entre les milliers, virgule (choix d'Antoine du 01/10) ;
   ce que la barre annonce est ce qui s'applique, sans avoir à recliquer. « — » écrit sans séparateur de milliers. Les
   champs texte (Objet, À, Cc, Cci, nom du PDF) gardent le nombre tel que Grist le stocke.
+- Zéro d'un nombre : par défaut, un vrai zéro d'une colonne Numérique ou Entier ne s'écrit pas en Lecture, en PDF ni en
+  Word (choix d'Antoine du 01/10, modèles déjà enregistrés compris) ; la barre de la bulle a un seul bouton en bascule,
+  icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
+  une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

@@ -346,7 +346,7 @@ const FloatingToolbars = (function () {
       '<span class="v2-floating-sep"></span>',
       `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
       '<span class="v2-floating-sep"></span>',
-      `<select data-role="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}"><option value="show">${I18n.t('varFmt.zeroShow')}</option><option value="hide">${I18n.t('varFmt.zeroHide')}</option></select>`,
+      `<button data-action="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}" aria-pressed="true">${Icons.svg('zeroToggle')}</button>`,
       '</div>',
       '<div data-var-panel="date" hidden>',
       '<span class="v2-varfmt-seg">',
@@ -398,6 +398,16 @@ const FloatingToolbars = (function () {
         return;
       }
       if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
+      // Bascule du zéro : enfoncé (0 barré), le zéro ne s'écrit pas - c'est l'écriture par défaut -, relâché la bulle l'affiche (`zero: 'show'`). SANS `type: 'number'`, pour ne pas
+      // poser de style à la place de celui que la barre annonce déjà (FR, ou US en interface anglaise) ; revenir à l'écriture par défaut retire la clé, et une bulle sans autre
+      // réglage retrouve un format vide.
+      if (action === 'num-zero') {
+        const hidden = Variables.zeroHidden(node.attrs.format, GristAPI.getColumnType(node.attrs.table, node.attrs.column));
+        const next = Object.assign({}, node.attrs.format);
+        if (hidden) next.zero = 'show'; else delete next.zero;
+        setSelectedBadgeFormat(Object.keys(next).length ? next : null);
+        return;
+      }
       if (action === 'num-words') {
         const current = node.attrs.format || {};
         updateSelectedBadge({ type: 'number', words: !current.words });
@@ -422,14 +432,6 @@ const FloatingToolbars = (function () {
       if (!node) return;
       if (role === 'num-decimals') { updateSelectedBadge({ type: 'number', decimals: value === '' ? null : parseInt(value, 10) }); return; }
       if (role === 'num-currency') { updateSelectedBadge({ type: 'number', currency: value.trim() }); return; }
-      // « Si la valeur vaut zéro » : SANS `type: 'number'`, pour que choisir seulement cela ne pose pas de style à la place de celui que la barre annonce déjà (FR, ou US
-      // en interface anglaise) ; revenir à « Afficher 0 » retire la clé, et une bulle sans autre réglage retrouve un format vide.
-      if (role === 'num-zero') {
-        const next = Object.assign({}, node.attrs.format);
-        if (value === 'hide') next.zero = 'hide'; else delete next.zero;
-        setSelectedBadgeFormat(Object.keys(next).length ? next : null);
-        return;
-      }
       if (role === 'date-preset') { updateSelectedBadge({ type: 'date', preset: value }); return; }
     }
 
@@ -468,8 +470,17 @@ const FloatingToolbars = (function () {
       if (decimalsSelect && document.activeElement !== decimalsSelect) decimalsSelect.value = (format.type === 'number' && format.decimals != null) ? String(format.decimals) : '';
       const currencyInput = panel.el.querySelector('input[data-role="num-currency"]');
       if (currencyInput && document.activeElement !== currencyInput) currencyInput.value = (format.type === 'number' && format.currency) ? format.currency : '';
-      const zeroSelect = panel.el.querySelector('select[data-role="num-zero"]');
-      if (zeroSelect && document.activeElement !== zeroSelect) zeroSelect.value = format.zero === 'hide' ? 'hide' : 'show';
+      // Même règle que le rendu (Variables.zeroHidden) : la barre montre ce que le document écrit - bouton enfoncé et 0 barré tant que le zéro ne s'écrit pas. Le trait
+      // du 0 se cache par son attribut `display` : remplacer le SVG pendant le mousedown détacherait la cible du clic, que le filet de editor-core.js (clic hors de la barre
+      // = on ferme) prendrait alors pour un clic ailleurs.
+      const zeroBtn = panel.el.querySelector('button[data-action="num-zero"]');
+      if (zeroBtn) {
+        const zeroOff = Variables.zeroHidden(format, GristAPI.getColumnType(node.attrs.table, node.attrs.column));
+        setActive('num-zero', zeroOff);
+        zeroBtn.setAttribute('aria-pressed', zeroOff ? 'true' : 'false');
+        const slash = zeroBtn.querySelector('svg path');
+        if (slash) slash.setAttribute('display', zeroOff ? 'inline' : 'none');
+      }
       const dateSelect = panel.el.querySelector('select[data-role="date-preset"]');
       if (dateSelect && document.activeElement !== dateSelect) dateSelect.value = (format.type === 'date' && format.preset) ? format.preset : VariableFormat.DATE_PRESETS[0].key;
       const isDate = format.type === 'date';

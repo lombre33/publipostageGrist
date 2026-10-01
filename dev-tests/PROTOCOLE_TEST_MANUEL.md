@@ -368,19 +368,21 @@ exerce le VRAI clic natif.
 
 ### Protocole (à rejouer après tout changement dans `js/floating-toolbars.js` ou `js/editor-core.js`)
 1. Insérer une `#Variable` sur une colonne Nombre, la sélectionner (clic dessus) — la barre
-   flottante FR/US/—/décimales/devise/lettres/« Si la valeur vaut zéro » doit apparaître au-dessus.
+   flottante FR/US/—/décimales/devise/lettres et le bouton du zéro (un « 0 » qui devient « Ø » barré quand
+   il est enfoncé) doit apparaître au-dessus.
    Sans toucher à la barre, passer en Lecture : le nombre doit déjà s'écrire avec les espaces des
    milliers (« 1 234,5 ») - le FR allumé dans la barre est le réglage réellement appliqué, il ne
    faut pas avoir à recliquer dessus. Le même nombre exporté en PDF s'écrit pareil, sans case vide
-   à la place de l'espace.
+   à la place de l'espace. Le bouton du zéro est enfoncé (« Ø ») tant que rien n'est réglé : une ligne
+   dont la valeur est 0 n'écrit rien à la place de la bulle en Lecture et à l'export.
 2. Cliquer le sélecteur "nb décimales" et choisir une valeur (ex. "2") — le menu déroulant doit
    rester ouvert le temps du choix (pas de fermeture "flash"), la barre doit rester affichée
    ENSUITE, et le nombre de décimales doit bien s'appliquer (vérifiable en rebasculant en mode
    Lecture avec une ligne Grist réelle, ou en rouvrant la bulle).
-3. Même vérification pour le champ "Devise" (taper un symbole), pour le menu « Si la valeur vaut
-   zéro » (choisir « Ne rien afficher » : la barre reste affichée, et en mode Lecture une ligne dont
-   la valeur est 0 n'écrit rien à la place de la bulle) et, sur une colonne Date, le sélecteur
-   "format de date".
+3. Même vérification pour le champ "Devise" (taper un symbole), pour le bouton du zéro (le cliquer :
+   la barre reste affichée, le bouton se relâche et redevient « 0 », et en mode Lecture une ligne dont
+   la valeur est 0 écrit « 0 » ; le recliquer : le bouton se renfonce et la Lecture n'écrit plus rien)
+   et, sur une colonne Date, le sélecteur "format de date".
 4. Cliquer ensuite AILLEURS dans la page (hors de l'éditeur et hors de la barre flottante, ex. le
    nom du modèle) — la barre doit bien se refermer (ne pas rester affichée indéfiniment - garde-fou
    contre une sur-correction du Bug 5).

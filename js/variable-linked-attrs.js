@@ -239,9 +239,10 @@ const VariableLinkedAttrs = (function () {
 
   function displayValue(table, rows, col) {
     if (GristAPI.getColumnType(table, col) === 'Attachments') return I18n.t('varLinked.attachmentValue');
-    // Même lecture que la bulle insérée (Variables.cellValue) : la valeur affichée d'une Référence, jamais son id.
+    // Même lecture que la bulle insérée (Variables.cellValue) : la valeur affichée d'une Référence, jamais son id. Un 0 reste visible : c'est la donnée de la ligne,
+    // que la bulle insérée n'écrira pas par défaut (Variables.zeroHidden).
     const values = rows.map(r => Variables.cellValue(table, col, r));
-    return Variables.formatValue(values.length === 1 ? values[0] : values, null, table, col);
+    return Variables.formatValue(values.length === 1 ? values[0] : values, null, table, col, { keepZero: true });
   }
   // Valeurs de la ligne du niveau affiché pour la ligne sélectionnée dans Grist - même recherche que la résolution des bulles (Variables.resolveRows :
   // règle de liaison puis références du chemin), donc ce que les attributs afficheront en lecture.
