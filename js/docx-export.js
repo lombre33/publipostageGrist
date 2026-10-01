@@ -196,8 +196,11 @@ const DocxExport = (function () {
     }
     const data = await blob.arrayBuffer();
     // Largeur déjà posée par l'éditeur (même convention que pdfImageFromNode, js/pdf-export.js) ; hauteur déduite du ratio intrinsèque réel (docx exige les
-    // deux dimensions, contrairement à pdfmake qui sait déduire la hauteur d'une largeur seule).
-    const widthPx = parseFloat(img.style.width) || 320;
+    // deux dimensions, contrairement à pdfmake qui sait déduire la hauteur d'une largeur seule). Une image dans le texte est ramenée à la largeur de ce qui la
+    // contient, comme dans l'éditeur (ExportCommon.shownImageWidthPx) ; une image en calque garde sa taille réglée.
+    const styleWidthPx = parseFloat(img.style.width) || 320;
+    const layer = img.getAttribute('data-layer');
+    const widthPx = (layer === 'front' || layer === 'behind') ? styleWidthPx : ExportCommon.shownImageWidthPx(img, styleWidthPx);
     const ratio = await new Promise(resolve => {
       const probe = new Image();
       probe.onload = () => resolve((probe.naturalHeight && probe.naturalWidth) ? probe.naturalHeight / probe.naturalWidth : 0.75);

@@ -252,7 +252,12 @@ const PdfExport = (function () {
   const attachPdfMeasureHost = (root, widthPx) => ExportCommon.attachMeasureHost(root, widthPx || CONTENT_WIDTH_PX, 'pdf-measure-host');
 
   function pdfImageFromNode(node) {
-    const widthPx = parseFloat(node.style.width) || 320;
+    const layer = node.getAttribute('data-layer') || 'normal';
+    const layered = layer !== 'normal' && node.style.position === 'absolute';
+    const styleWidthPx = parseFloat(node.style.width) || 320;
+    // Image dans le texte : ramenée à la largeur de ce qui la contient, comme dans l'éditeur (ExportCommon.shownImageWidthPx) - sans cela, une image réglée plus
+    // large que la page, la case ou la colonne sortait en entier et dépassait le bord. Une image en calque garde sa taille réglée.
+    const widthPx = layered ? styleWidthPx : ExportCommon.shownImageWidthPx(node, styleWidthPx);
     const image = { image: node.getAttribute('src') };
     // Image liée à une #Variable Attachments : boîte width×height fixe, mais chaque ligne Grist y insère une image de ratio différent - `fit` (pdfmake) la
     // met à l'échelle sans la déformer. `width` reste posé en plus (jamais lu par pdfmake ici, mais lu par le bracketing d'image en calque, sinon NaN).
@@ -263,8 +268,7 @@ const PdfExport = (function () {
     }
     const opacity = parseFloat(node.style.opacity);
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
-    const layer = node.getAttribute('data-layer') || 'normal';
-    if (layer !== 'normal' && node.style.position === 'absolute') {
+    if (layered) {
       // Position réelle résolue plus tard par ancrage/interpolation (une formule directe depuis le pixel `top` n'a aucune notion de pagination PDF). Garde
       // une référence au nœud DOM réel (encore attaché à l'hôte de mesure) pour mesurer sa position par rapport aux blocs de texte voisins.
       image._pendingImgNode = node;
@@ -998,22 +1002,50 @@ const PdfExport = (function () {
     const pageWidthPt = availableWidthPt != null ? availableWidthPt : CONTENT_WIDTH_PT;
     const gapPt = 12 * PX_TO_PT; // css/editor-v2.css: margin 0 12px 8px 0 (et son miroir)
     const imageWidthPt = floatImg.width;
-    const remainingWidthPt = Math.max(40, pageWidthPt - imageWidthPt - gapPt);
+    const MIN_BESIDE_PT = 40;
+    const roomBesidePt = pageWidthPt - imageWidthPt - gapPt;
+    const remainingWidthPt = Math.max(MIN_BESIDE_PT, roomBesidePt);
     const makeColumns = (besideContent) => {
       const textCol = { width: remainingWidthPt, stack: besideContent.length ? besideContent : [{ text: ' ' }] };
       const imgCol = { width: imageWidthPt, stack: [floatImg] };
       return { columns: align === 'right' ? [textCol, imgCol] : [imgCol, textCol], columnGap: gapPt };
     };
-    const fallback = () => {
+    // Image presque aussi large que la zone de texte (typiquement une image réglée trop large, ramenée à la largeur disponible) : rien ne tient à côté, le texte passe
+    // dessous dans l'éditeur comme dans la Lecture. Texte d'avant l'image, image, texte d'après, l'un sous l'autre et sans colonnes : une colonne de texte de 40 pt ferait
+    // déborder l'ensemble du bord de la page. `beforeRuns` / `afterRuns` : le texte de part et d'autre de l'image (ou rien).
+    const stacked = (beforeRuns, afterRuns) => {
+      const textBlock = textRuns => {
+        const textBlockObj = { text: textRuns, margin: [0, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+        if (textAlign) textBlockObj.alignment = textAlign;
+        return textBlockObj;
+      };
+      floatImg.alignment = align;
+      floatImg.margin = [0, 2, 0, 4];
+      const stackedBlocks = [];
+      if (beforeRuns && beforeRuns.length) stackedBlocks.push(textBlock(beforeRuns));
+      stackedBlocks.push(floatImg);
+      if (afterRuns && afterRuns.length) stackedBlocks.push(textBlock(afterRuns));
+      if (pageBreakBefore) stackedBlocks[0].pageBreak = 'before';
+      return stackedBlocks;
+    };
+    // `splitIndex` : rang du premier mot situé sous l'image dans le rendu mesuré (ce qui précède est au-dessus), inconnu quand l'image n'a pas de nœud à mesurer -
+    // le texte est alors placé sous l'image.
+    const fallback = splitIndex => {
+      if (roomBesidePt < MIN_BESIDE_PT) {
+        if (splitIndex == null || splitIndex <= 0) return stacked(null, runs);
+        if (splitIndex >= words.length) return stacked(runs, null);
+        const cut = { textNode: words[splitIndex].textNode, offset: words[splitIndex].start };
+        return stacked(extractRunsBetween(node, null, cut), extractRunsBetween(node, cut, null));
+      }
       const textBlock = { text: runs, lineHeight: LINE_HEIGHT_RATIO };
       if (textAlign) textBlock.alignment = textAlign;
       const block = makeColumns([textBlock]);
       if (pageBreakBefore) block.pageBreak = 'before';
       return block;
     };
+    const words = imgNode ? collectWords(node) : [];
     if (!imgNode) return fallback();
 
-    const words = collectWords(node);
     const imgRect = imgNode.getBoundingClientRect();
     // Tolérance généreuse (pas 0.5px) sur les deux frontières : une frontière stricte au demi-pixel s'est avérée trop fragile (sous-pixels de rendu qui
     // varient d'un navigateur à l'autre). ~20% d'une hauteur de ligne à 10.5pt.
@@ -1025,7 +1057,7 @@ const PdfExport = (function () {
     // vers le bas plutôt que de classer "en dessous" trop de lignes.
     let besideEnd = words.length;
     for (let w = besideStart; w < words.length; w += 1) { if (words[w].top >= imgRect.bottom + BOUNDARY_TOLERANCE_PX) { besideEnd = w; break; } }
-    if (besideStart === besideEnd) return fallback(); // rien de mesurable à côté (cas dégénéré)
+    if (besideStart === besideEnd) return fallback(besideStart); // rien de mesurable à côté (cas dégénéré)
     // Regroupe des mots consécutifs (même Y à 2px près) en lignes - permet de calculer un étirement justify précis ligne par ligne (buildJustifiedLine).
     const groupIntoLines = wordsSlice => {
       const lines = [];

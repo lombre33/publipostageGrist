@@ -493,6 +493,25 @@ impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur l
 
 ---
 
+## 16. Image plus large que sa place, dans le PDF et le Word
+
+**Couverture automatisée** : groupe `imageWide` (`scenarios-image-wide.js`, 8 cas : image dans le texte, dans une case de tableau, dans une colonne d'une zone à deux colonnes, centrée,
+habillage gauche et droite aussi larges que la page, image qui tient, format A5 et marges de 30 mm), script Node `wideImagesMouse` (Lecture, PDF et Word à la vraie souris, à 700×400).
+La référence est la largeur que l'éditeur donne à l'image (`max-width: 100%`, proportions gardées) ; le PDF est lu par pdf.js, le Word dans `word/document.xml`.
+**Non couvert** : le rendu réel dans Word (seules la taille de l'image et la page du fichier sont lues), le texte placé à côté d'une image ancrée aussi large que la page, un vrai lecteur PDF.
+
+### Protocole
+1. Dans un modèle A4 portrait, insérer une image (un grand fichier) puis tirer sa poignée bien au-delà du bord droit de la feuille : l'éditeur la garde dans la zone de texte, proportions
+   gardées. Mode Lecture : même largeur. « Exporter en PDF » et « Exporter en DOCX » : l'image occupe la même largeur, ses bords restent dans les marges, elle n'est ni rognée ni déformée.
+2. Même essai avec l'image centrée (elle reste centrée, entre les marges), dans une case de tableau étroite, puis dans une colonne d'une zone à deux colonnes : elle suit la case ou la colonne.
+3. Image à habillage gauche ou droite réglée plus large que la zone de texte : le texte passe dessous (éditeur et Lecture), le PDF fait pareil, le Word aussi (à regarder dans Word : non vérifié ici).
+4. Une image plus petite que sa place garde exactement sa taille réglée, en portrait comme en paysage. Passer en A5 ou réduire les marges : l'image qui tenait en A4 est ramenée à la
+   nouvelle zone de texte, dans l'éditeur, le PDF et le Word.
+5. Une image en calque (devant ou derrière le texte) garde sa taille réglée : elle n'est pas ramenée (son placement relève de « Position des images »).
+6. Écart connu : une image à habillage réglée plus large que la page mesure 707 px dans l'éditeur (la marge de 12 px du flottement) et 719 px dans la Lecture, le PDF et le Word.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

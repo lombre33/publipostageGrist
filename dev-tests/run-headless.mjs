@@ -95,6 +95,7 @@ const GROUPS = {
   externalImages: 'scenarios-external-images', // fenêtre qui liste les sites externes des images avant un export (js/external-images.js) : le module, un PDF et un Word, les lots, l'annulation
   textExpansion: 'scenarios-text-expansion', // expansion de texte « §ub » (js/text-expansion.js) : abréviations par personne dans une table du document, règle de saisie, onglet Réglages > Raccourcis, contrastes
   shortcuts: 'scenarios-shortcuts', // raccourcis clavier personnalisables (js/shortcuts.js, js/shortcuts-panel.js) : combinaisons, touches de départ, une touche changée libère l'ancienne, refus, boutons grisés, infobulles, liste des Réglages, contrastes
+  imageWide: 'scenarios-image-wide', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : la largeur que l'éditeur montre, dans le corps, une case, une colonne, centrée, flottante, selon le format de page
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -134,6 +135,7 @@ const NODE_SCRIPTS = {
   trackColumnsMouse: 'verify-track-columns-mouse.mjs', // « Colonne avant / après / Supprimer la colonne » avec le suivi des modifications : colonne alignée, teintée, barrée, Ctrl+Z, enregistrement puis réouverture, cellule fusionnée (suppression grisée), 700x400 clair et sombre
   layerImagesMouse: 'verify-layer-images-mouse.mjs', // images en calque d'un ancien modèle chargées éditeur masqué (macro-modèle, Mode lecture) : leur position de page se mesure au retour de l'éditeur, 700x400
   macroImagesMouse: 'verify-macro-images-mouse.mjs', // images en calque d'un macro-modèle (js/macro-templates.js, js/reader-mode.js, js/pdf-export.js) : chacune reste dans son courrier en Lecture et dans le PDF téléchargé par le vrai bouton, 700x400
+  wideImagesMouse: 'verify-wide-images-mouse.mjs', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : au vrai clic à 700x400, le PDF et le Word téléchargés sont relus, chaque image a la largeur que l'éditeur lui montre
   headerFooterMouse: 'verify-header-footer-mouse.mjs', // en-tête et pied de page vides (js/header-footer-preview.js) : clic dans la marge puis « Terminer » sans rien écrire, texte tapé, tout effacé, modèle déjà enregistré activé vide, 700x400
   tableWidthsMouse: 'verify-table-widths-mouse.mjs', // largeurs de colonnes quand on change de modèle éditeur masqué (macro-modèle, Mode lecture), Aperçu A4, 700x400
   chipCellMouse: 'verify-chip-cell-mouse.mjs',

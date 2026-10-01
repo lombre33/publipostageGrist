@@ -96,6 +96,16 @@ const ExportCommon = (function () {
     return (node.textContent || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/\t/g, '    '));
   }
 
+  // Largeur, en px, à laquelle l'éditeur montre une image dans le texte : `.tiptap img.editor-image { max-width: 100% }` (css/editor-v2.css) la ramène à la largeur de ce qui la
+  // contient (page, case de tableau, colonne), proportions gardées (`height: auto`), même quand la largeur réglée (`styleWidthPx`, le style de l'image) est plus grande.
+  // L'hôte de mesure (attachMeasureHost) porte la classe .tiptap : la boîte que le navigateur y pose est celle de l'éditeur, le PDF et le Word la reprennent au lieu de la
+  // largeur réglée. Un nœud détaché de la page n'a aucune boîte (largeur 0) : il garde la largeur réglée.
+  function shownImageWidthPx(imgNode, styleWidthPx) {
+    if (!imgNode || !imgNode.isConnected) return styleWidthPx;
+    const shown = imgNode.getBoundingClientRect().width;
+    return shown > 0 && shown < styleWidthPx ? shown : styleWidthPx;
+  }
+
   // Mesures d'un encadré (js/callout.js) en pixels, prises sur son CSS réel (css/callout.css) quand il est dans le document : barre de gauche, marges intérieures et extérieures, icône
   // (le ::before). Les valeurs de css/callout.css servent de repli pour un nœud détaché de la page. Partagé par le PDF et le Word, pour qu'ils dessinent la même boîte.
   function calloutMetricsPx(node) {
@@ -111,5 +121,5 @@ const ExportCommon = (function () {
     };
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
 })();
