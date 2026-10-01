@@ -53,6 +53,9 @@ const ReaderMode = (function () {
   // Un bloc qui ne tient pas passe entier à la page suivante, sauf s'il est de ceux que l'export coupe et que sa plus grande partie tient dans la place restante :
   // il reste alors sur sa page et le repère tombe derrière lui. Le déplacer en entier revient à se tromper de tout ce qui tenait dans la page (un tableau ou une
   // zone 2 colonnes qui déborde de ~30 px envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde, alors que l'export coupe au pixel.
+  // Un tableau de premier niveau fait exception à la première phrase : il se coupe ENTRE deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les lignes qui ne
+  // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Un
+  // tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes...) garde la règle ci-dessus.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = layoutZoom(rootEl);
@@ -65,6 +68,14 @@ const ReaderMode = (function () {
       if (child.classList.contains('page-break-marker')) {
         offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
+        return;
+      }
+      const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx) : null;
+      if (cuttable) {
+        const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);
+        if (tablePlan.blockBreakBefore) offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
+        tablePlan.cuts.forEach(rowIndex => offsets.push({ top: top + cuttable.segs.slice(0, rowIndex).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
+        consumed = tablePlan.consumedAfter;
         return;
       }
       const staysOnPage = isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
@@ -260,6 +271,8 @@ const ReaderMode = (function () {
     // Haut du corps de la page courante depuis le haut de `.reader-content`, en pixels de mise en page (la première page : sa marge du haut).
     let bodyTopRel = wrapperPaddingTop;
     const pages = [{ top: toLayoutY((edgeTopEl || wrapper).getBoundingClientRect().top), bodyTop: toLayoutY(wrapperRect.top) + wrapperPaddingTop }];
+    // Tableaux coupés entre deux lignes : pour chacun (rang de son bloc), les bandes de sa hauteur à rogner (cf. TablePageCut.clipRule).
+    const tableStrips = new Map();
     offsets.forEach((offset, i) => {
       const pageEnding = i + 1; const pageStarting = i + 2;
       const footerText = footerForPage(pageEnding);
@@ -272,16 +285,37 @@ const ReaderMode = (function () {
       const el = wrapperChildren[offset.afterIndex];
       // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa propre position.
       // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) : `remaining` se rajoute
-      // à la main pour retrouver la vraie frontière.
-      const afterBottomScreen = el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom;
+      // à la main pour retrouver la vraie frontière. Coupure ENTRE DEUX LIGNES d'un tableau (même principe que l'éditeur, js/header-footer-preview.js) : le bas de la page qui
+      // finit est celui de la ligne qui précède celle qui ouvre la page, non celui du tableau entier.
+      const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
+      const rowAbove = tableRows[offset.rowIndex - 1] || null;
+      const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
+      const afterBottomScreen = rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom);
       const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      if (rowOpening) {
+        // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est rogné sur cette hauteur
+        // (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond ni les traits verticaux des cases. Le trait du haut
+        // de la ligne, rogné avec le reste, est redessiné au bord bas de la bande (css/editor-v2.css).
+        const restingPad = TablePageCut.restingPadTop(rowOpening);
+        marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining));
+        const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
+        if (!tableStrips.has(offset.afterIndex)) tableStrips.set(offset.afterIndex, []);
+        tableStrips.get(offset.afterIndex).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
+        const tableRect = el.getBoundingClientRect();
+        const cap = document.createElement('div');
+        cap.className = 'v2-page-seam-cap';
+        cap.style.left = ((tableRect.left - wrapperRect.left) / zoom) + 'px';
+        cap.style.width = (tableRect.width / zoom) + 'px';
+        seam.appendChild(cap);
+      } else if (el) {
+        // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
+        // `.reader-content > *:nth-child(N)` et écrasait silencieusement la réserve dès que le dernier bloc d'une page était un paragraphe - la
+        // gouttière recouvrait alors une ligne de texte. Invisible avant, la règle n'étant posée que pour les sauts de page forcés, dont le bloc est
+        // un <div class="page-break-marker">, jamais un <p>.
+        marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
+      }
       // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-      // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
-      // `.reader-content > *:nth-child(N)` et écrasait silencieusement la réserve dès que le dernier bloc d'une page était un paragraphe - la
-      // gouttière recouvrait alors une ligne de texte. Invisible avant, la règle n'étant posée que pour les sauts de page forcés, dont le bloc est
-      // un <div class="page-break-marker">, jamais un <p>.
-      if (el) marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
       styleEl.textContent = marginRules.join('\n');
       const seamTop = toLayoutY(afterBottomScreen) + remaining;
       seam.style.top = seamTop + 'px';
@@ -291,6 +325,7 @@ const ReaderMode = (function () {
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le plancher ne gêne pas un
     // contenu plus long).
     marginRules.push('#reader-container .reader-content { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
 
     // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, DERRIÈRE le corps (z-index -1 dans le conteneur, qui est

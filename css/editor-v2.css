@@ -421,6 +421,11 @@
 /* Coupure de page automatique SANS en-tête/pied configuré (reste visible dès "beaucoup de lignes", pas seulement avec en-tête/pied ou saut forcé) - la même couture,
    avec le simple repère "— Page N —" dans la gouttière. */
 .v2-page-break-label { font-size: 10px; font-weight: 600; color: #9aa2ad; white-space: nowrap; }
+/* Couture posée ENTRE DEUX LIGNES d'un tableau (js/header-footer-preview.js:addTableSeamCaps, js/reader-mode.js) : le tableau est rogné (js/table-page-cut.js:clipRule) sous la
+   dernière ligne de la page qui finit, jusqu'au bas de la bande, pour que la réserve et les marges de la couture, transparentes, ne montrent ni le fond ni les traits
+   verticaux des cases de la ligne descendue. Le trait du haut de cette ligne est dans la partie rognée : un filet de 1 px, au bord bas de la bande et de la largeur du
+   tableau, le redessine. Le gris des cases (#b8c0c9) : la page reste blanche dans les deux thèmes. */
+.v2-page-seam-cap { position: absolute; bottom: 0; height: 1px; background: #b8c0c9; pointer-events: none; }
 
 #v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }

@@ -57,6 +57,9 @@ const PdfExport = (function () {
   // Bande fixe (pas dynamique par page - pdfmake ne le permet pas) réservée en pied de page pour ~4 lignes de note à 8pt ; un empilement extrême de notes
   // très longues sur une page peut la déborder (limite assumée).
   const FOOTNOTE_BAND_PT = 4 * 8 * 1.15 + 8; // ≈ 4 lignes à 8pt + le filet séparateur
+  // Hauteur utile d'une page (pt), marges, bandes d'en-tête et de pied et bande des notes déduites : posée une fois par passage dans resolveNativePdfContent, lue par tableFrom pour
+  // savoir si les lignes d'un tableau tiennent dans une page. 0 tant qu'elle n'est pas posée : aucun tableau n'est alors gardé en lignes entières.
+  let tablePageHeightPt = 0;
   // left/top d'une image en calque sont relatifs au padding de `.tiptap` (= marge de page en Aperçu A4), mais l'hôte de mesure PDF a un padding nul -
   // soustrait une seule fois avant toute comparaison/interpolation. Deux valeurs séparées (pas une seule) depuis que les marges peuvent être asymétriques.
   let A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
@@ -585,7 +588,7 @@ const PdfExport = (function () {
     return result;
   }
 
-  function tableFrom(node, pageBreakBefore, rootRect) {
+  function tableFrom(node, pageBreakBefore, rootRect, inMainFlow) {
     const rows = Array.from(node.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
     const cellsOf = row => Array.from(row.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
@@ -691,8 +694,18 @@ const PdfExport = (function () {
       while (output.length < columnCount) output.push({ text: ' ', border: [true, true, true, true] });
       return output.slice(0, columnCount);
     });
+    // Une ligne de tableau ne se coupe jamais entre deux pages (Antoine, 01/10 : « un tableau ne se coupe pas au moment du saut de page ») : elle passe en entier à la page
+    // suivante quand elle ne tient pas, comme dans l'éditeur et la Lecture (js/table-page-cut.js) et dans le Word (cantSplit). Seulement pour un tableau du texte courant dont
+    // toutes les lignes tiennent dans une page : avec dontBreakRows, pdfmake fait DISPARAÎTRE une ligne plus haute que la page. Les autres gardent leurs lignes coupées entre deux
+    // lignes de texte, comme avant (et comme l'éditeur, qui les garde d'une pièce). Pas non plus un tableau qui porte une image en calque : avec dontBreakRows, pdfmake note les
+    // positions (`positions[].left` / `.top`) du texte de ses cases dans la ligne en cours de rangement, sans le décalage de la colonne ni le rembourrage de la case (mesuré : 28 au lieu de
+    // 383,7 pt dans la 3e colonne), et l'ancrage d'une image en calque ancienne (sans grille de page) se lit dessus - elle partait à gauche de la page.
+    const cutRows = TablePageCut.rowsOf(node);
+    const hasLayeredImage = Array.from(node.querySelectorAll('img')).some(img => (img.getAttribute('data-layer') || 'normal') !== 'normal' && img.style.position === 'absolute');
+    const keepRowsWhole = !!cutRows && !isGrid && !!inMainFlow && !hasLayeredImage && tablePageHeightPt > 0 && !(node.parentElement && node.parentElement.closest('td, th, li, blockquote, .callout, .two-columns-column'))
+      && TablePageCut.rowsFit(cutRows.map(row => row.getBoundingClientRect().height * PX_TO_PT), tablePageHeightPt);
     const table = {
-      table: Object.assign({ headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}),
+      table: Object.assign({ headerRows: 0, widths, body: body.length ? body : [[{ text: ' ' }].concat(Array(Math.max(0, columnCount - 1)).fill({}))] }, isGrid && body.length ? { heights: gridRowAreaPt } : {}, keepRowsWhole ? { dontBreakRows: true } : {}),
       layout: {
         hLineWidth: () => 0.5, vLineWidth: () => 0.5, hLineColor: () => '#777777', vLineColor: () => '#777777',
         paddingLeft: () => cellPadLeftPt, paddingRight: () => cellPadRightPt, paddingTop: () => cellPadTopPt, paddingBottom: () => cellPadBottomPt,
@@ -1239,7 +1252,7 @@ const PdfExport = (function () {
 
   function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
     const tag = node.tagName.toUpperCase();
-    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect)];
+    if (tag === 'TABLE') return [tableFrom(node, pageBreakBefore, rootRect, availableWidthPt == null)];
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     if (tag === 'P' || tag === 'DIV') {
@@ -1774,6 +1787,8 @@ const PdfExport = (function () {
   // S'il y a un sommaire et/ou des images en calque en attente, une 1ère passe de mesure (.getBuffer(), jamais montrée) donne les vraies page/position des
   // blocs-ancre : le contenu est reconstruit (numéros de page dans le sommaire ; images relocalisées à côté de leur ancre - pdfmake peint sur la page courante).
   async function resolveNativePdfContent(inlinedHtml, filename, headerFooterChunks) {
+    // Hauteur utile d'une page pour tableFrom (lignes de tableau gardées entières) : la bande des notes est déduite par prudence, qu'il y ait des notes ou non.
+    tablePageHeightPt = pageHeightPt - marginTopPt - marginBottomPt - ((headerFooterChunks && headerFooterChunks.topExtraPt) || 0) - ((headerFooterChunks && headerFooterChunks.bottomExtraPt) || 0) - FOOTNOTE_BAND_PT;
     let content = await htmlToPdfContent(inlinedHtml, true);
     const hasToc = (content._tocBlocks || []).length > 0;
     const hasPendingImages = (content._pendingImages || []).length > 0;

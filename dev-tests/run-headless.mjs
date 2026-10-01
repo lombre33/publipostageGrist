@@ -89,6 +89,7 @@ const GROUPS = {
   calloutSignature: 'scenarios-callout-signature',
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
   blankLastPage: 'scenarios-blank-last-page',
+  tablePageCut: 'scenarios-table-page-cut', // un tableau se coupe entre deux lignes au saut de page (js/table-page-cut.js) : règle, couture de l'éditeur et de la Lecture, PDF relu par pdf.js, Word
   findReplace: 'scenarios-find-replace', // Rechercher / Remplacer (js/find-replace.js) : moteur, panneau, loupe, remplacement en une étape d'annulation, mode suivi, textes FR / EN, contrastes
   layers: 'scenarios-layers', // ordre d'empilement des couches flottantes (js/layers.js, jetons --z-* ) : barres flottantes < menus < info-bulles < fenêtres, le dernier ouvert au-dessus, menu # sous la barre du tableau
   imageParity: 'scenarios-image-parity', // bande d'en-tête et de pied sur le PDF : même origine du corps, même coin de feuille, mêmes coupures de page et mêmes marges dans l'éditeur, la Lecture, le PDF et le Word
@@ -154,6 +155,7 @@ const NODE_SCRIPTS = {
   findReplaceMouse: 'verify-find-replace-mouse.mjs', // Rechercher / Remplacer (js/find-replace.js) à la vraie souris et au vrai clavier : loupe, barre de 700 px, Entrée / Maj+Entrée, options, Remplacer puis Ctrl+Z, Tout remplacer, suivi des modifications, Échap, Ctrl+F / Ctrl+H, Mode lecture ; 700x400 clair, sombre et anglais
   textExpansionKeyboard: 'verify-text-expansion-keyboard.mjs', // expansion « §ub » à la vraie frappe et à la vraie souris, 700x400 : liste sous le curseur, Tab, Entrée, flèches, Échap, Retour arrière, liste à puces, bloc de code, onglet Réglages > Raccourcis, clair, sombre et anglais
   shortcutsKeyboard: 'verify-shortcuts-keyboard.mjs', // raccourcis clavier à la vraie frappe et à la vraie souris, 700x400 : touches de départ, changer / retirer / rendre une touche, refus sous la touche, Tab et Entrée, liste de 48 lignes qui défile, infobulles et lignes de menu, clair, sombre, anglais et mode Mac
+  tableCutMouse: 'verify-table-page-cut-mouse.mjs', // tableau coupé entre deux lignes au saut de page (js/table-page-cut.js) à la vraie souris, 700x400 clair et sombre : bande sur le haut d'une ligne, clic, frappe, flèches, Tab, Lecture, PDF relu par pdf.js
   codeHygiene: 'verify-code-hygiene.mjs', // Node pur, sans navigateur : clés i18n, variables CSS et règles CSS sans usage
   templateOrganizerUnit: 'unit-template-organizer.mjs', // Node pur (vm) : logique de l'arbre de rangement, js/template-organizer.js
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière

@@ -611,6 +611,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   rognée au bord de sa page, sous le texte, sans jamais prendre la souris ; la page 1 garde l'image elle-même. Une image en calque se range par la feuille où elle est posée (et non par le
   paragraphe qui la porte) : tirée de la page 1 sur la page 2, sa grille dit « page 2 » ; lâchée dans la gouttière, elle va au bord haut de la feuille suivante ; un modèle enregistré avant ce choix
   retrouve ses images de la page 2 à la place que dit leur grille. Recalculer les pages ne déplace jamais le défilement de l'éditeur (`overflow-anchor: none`, et `.tiptap` garde sa hauteur le temps de la mesure).
+- Tableau au saut de page (demande d'Antoine du 01/10, « un tableau ne se coupe pas au moment du saut de page », modèle « Annexe 7 : Fiche mission ») : un tableau se coupe ENTRE deux
+  lignes, jamais au milieu d'une ligne, dans l'éditeur, en Lecture, en PDF et en Word. La ligne qui ne tient pas dans la place restante ouvre la page suivante avec tout ce qui la suit ; si même la
+  première ne tient pas, le tableau entier passe. Dans l'éditeur et en Lecture, chaque page est une feuille entière (« Pages entières ») : la page qui finit garde sa place libre sous sa dernière ligne, puis vient la bande de saut de page,
+  et la ligne qui ouvre la page commence juste sous la bande. Le tableau est rogné sur cette place libre et sur les marges de la couture, qui restent blanches (ni le fond ni les traits verticaux
+  des cases n'y passent) : ses bordures se ferment sous la dernière ligne de la page qui finit et se rouvrent au bas de la bande par un seul filet de 1 px, et le texte de la ligne reste cliquable sous la bande. L'éditeur affiche les noms des
+  variables, plus longs que leurs valeurs : il peut couper une ligne plus tôt que la Lecture et le PDF, qui coupent à moins d'une ligne l'un de l'autre. Une ligne plus haute que 90 % de la page,
+  des cases fusionnées sur plusieurs lignes, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image en calque (PDF) et une ligne proposée en suivi des
+  modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
+  enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
 
 ## 4. Spécifique à SlidesPlus
 

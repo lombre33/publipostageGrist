@@ -492,7 +492,9 @@ const DocxExport = (function () {
           shading: cellShadingFrom(cell),
         }));
       }
-      tableRows.push(new docx.TableRow({ children: tableCells }));
+      // cantSplit : une ligne ne se coupe pas entre deux pages, elle passe en entier à la suivante (comme dans l'éditeur, la Lecture et le PDF, js/table-page-cut.js). Word
+      // la coupe quand même si elle est plus haute que la page.
+      tableRows.push(new docx.TableRow({ children: tableCells, cantSplit: true }));
     }
     // columnWidths pilote le <w:tblGrid> (déclaration structurelle des colonnes) - SANS lui, docx.js retombe sur son propre défaut interne
     // (100 twips/colonne, vérifié dans son bundle), incohérent avec les largeurs réelles posées ci-dessus sur chaque TableCell.width. Un <w:tblGrid> qui ne
