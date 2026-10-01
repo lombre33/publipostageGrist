@@ -23,7 +23,6 @@ const ReaderMode = (function () {
   // === Aperçu paginé réel - mode Lecture === Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt qu'importé (pas de mécanisme de module
   // entre scripts classiques). Plus simple ici : contenu statique déjà résolu, pas de débounce nécessaire.
   const PT_TO_PX = 96 / 72;
-  const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   // Mêmes valeurs que le padding de .reader-content en Aperçu A4 (css/editor-v2.css), mais lues à chaud depuis js/page-layout.js : codées en dur
   // (37.33px / 719.04px), elles ignoraient les marges propres au modèle et paginaient le mode Lecture comme un modèle à 28pt de marge.
   function marginsPx() { return PageLayout.getMarginsPx(); }
@@ -143,7 +142,7 @@ const ReaderMode = (function () {
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const mPx = marginsPx();
-    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
+    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
 

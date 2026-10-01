@@ -131,6 +131,7 @@
     Editor.exitHeaderFooterModeIfActive();
     GridEditor.setActive(false);
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+    layerGridsStale = false;
     Editor.setHTML('');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
@@ -151,6 +152,7 @@
     Comments.loadForTemplate(tpl ? tpl.id : null).catch(e => console.error('[main] chargement des commentaires impossible', e));
     MacroEditor.showSummary(tpl);
     syncEditorVisibilityForMode();
+    applyPageFitZoomToBoth();
     if (currentMode === 'read') renderReader();
     syncDefaultTemplateButton();
     OrientationToggle.sync(currentTypeModele);
@@ -176,6 +178,8 @@
       const wasDirty = autosaveDirty;
       Editor.refreshLayout();
       if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
+      // Orientation changée pendant que l'éditeur était masqué : la grille page des images en calque est recapturée maintenant qu'il a une mise en page.
+      recaptureStaleLayerGrids();
     }
   }
 
@@ -193,6 +197,7 @@
     // Marges posées AVANT setHTML : les zones 2-colonnes en mode mm calculent --layout-left dès leur toute première construction (par setHTML) à partir
     // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+    layerGridsStale = false; // les grilles d'un modèle chargé sont celles de SA propre orientation
     Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
@@ -228,6 +233,9 @@
     GridEditor.setActive(GridEditor.isGridType(currentTypeModele));
     if (macroSummaryContainer) macroSummaryContainer.style.display = 'none';
     syncEditorVisibilityForMode();
+    // Le facteur d'ajustement dépend de la largeur de la page du NOUVEAU modèle (portrait ou paysage), et le conteneur garde sa taille : l'observateur de
+    // redimensionnement (wirePageFitZoom) ne le recalculerait pas. Posé avant les rafraîchissements qui suivent (pagination, Lecture).
+    applyPageFitZoomToBoth();
     // Editor.setHTML() plus haut a déjà déclenché un premier rendu de l'aperçu paginé (onUpdate ->
     // schedulePaginationRecompute) AVANT que setEmailMode ci-dessus ne soit posé - sans ce rafraîchissement
     // explicite, les zones de marge cliquables garderaient l'état verrouillé/déverrouillé du modèle
@@ -1091,6 +1099,7 @@
     // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
     refreshPageFitZoom();
     Editor.refreshPaginationPreview();
+    recaptureStaleLayerGrids();
   }
 
   // Rappelée à chaque changement de modèle (loadTemplateIntoEditor, loadMacroIntoEditor) : seul le passage d'une grille à un autre type (ou l'inverse) change la
@@ -1144,7 +1153,6 @@
   // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de MIN_FIT_ZOOM, sous
   // lequel le texte deviendrait illisible - le défilement horizontal reprend alors la main, comme avant. Aucun contrôle ajouté dans la barre d'outils :
   // quand la feuille tient déjà, le facteur vaut 1 et rien ne change.
-  const A4_SHEET_WIDTH_PX = 793.71; // même valeur que .v2-page-sheet / .reader-content en Aperçu A4 (css/editor-v2.css)
   const MIN_FIT_ZOOM = 0.5;
   function applyPageFitZoom(container) {
     if (!container) return;
@@ -1153,7 +1161,9 @@
     const cs = getComputedStyle(container);
     const available = container.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
     if (!(available > 0)) return;
-    const raw = available / A4_SHEET_WIDTH_PX;
+    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en portrait, 1122.52px en
+    // paysage. Lue à chaque calcul, elle change avec l'orientation du modèle.
+    const raw = available / PageLayout.getSheetWidthPx();
     const zoom = raw >= 1 ? 1 : Math.max(MIN_FIT_ZOOM, raw);
     // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
     const next = String(Math.round(zoom * 1000) / 1000);
@@ -1162,12 +1172,42 @@
     return true;
   }
 
+  // Pose le facteur sur les deux conteneurs SANS rafraîchir quoi que ce soit : pour les appelants qui rafraîchissent eux-mêmes juste après (chargement d'un
+  // modèle, changement d'orientation). Rend true si l'un des deux a changé.
+  function applyPageFitZoomToBoth() {
+    const editorChanged = applyPageFitZoom(editorContainer);
+    const readerChanged = applyPageFitZoom(readerContainer);
+    return !!(editorChanged || readerChanged);
+  }
+
   function refreshPageFitZoom() {
     const editorChanged = applyPageFitZoom(editorContainer);
     const readerChanged = applyPageFitZoom(readerContainer);
     // Les bandes de pagination sont positionnées à partir de mesures réelles : un changement de facteur les rend caduques tant qu'on n'a pas recalculé.
     if (editorChanged && currentMode === 'edit') Editor.refreshPaginationPreview();
     if (readerChanged && currentMode === 'read') renderReader();
+  }
+
+  // Vrai quand l'orientation a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un macro-modèle) ou sans
+  // Aperçu A4 (pas de pagination, donc pas de grille page) : la grille page des images en calque reste à recapturer (cf. onPageLayoutChanged).
+  let layerGridsStale = false;
+  // Recapture en attente, dès que l'éditeur peut la mesurer (retour en Édition, Aperçu A4 rallumé). Elle vient d'un geste de la personne (le changement
+  // d'orientation) : si elle a modifié le document, l'enregistrement automatique la reprend - un enregistrement a pu partir entre-temps.
+  function recaptureStaleLayerGrids() {
+    if (!layerGridsStale || currentMode !== 'edit' || currentTypeModele === 'macro' || !editorContainer.classList.contains('a4-preview')) return;
+    layerGridsStale = false;
+    if (HeaderFooterPreview.recaptureLayeredImageGrids()) markAutosaveDirty();
+  }
+  // Après un changement d'orientation : le facteur d'ajustement (calculé sur la largeur de la page) d'abord, puis tout ce qui se mesure avec lui - colonnes des
+  // tableaux et pagination de l'éditeur, repagination de la Lecture. Les marges gardent leurs millimètres : seule la page change de forme.
+  function onPageLayoutChanged() {
+    applyPageFitZoomToBoth();
+    Editor.refreshLayout();
+    // La page a changé de hauteur : la grille page de chaque image en calque (lue par le PDF et le Word) est recapturée sur le rendu réel de l'éditeur. Masqué
+    // (Lecture) ou sans Aperçu A4, il n'a pas de mise en page à mesurer : la recapture attend qu'il le puisse (syncEditorVisibilityForMode, wireA4PreviewToggle).
+    layerGridsStale = true;
+    recaptureStaleLayerGrids();
+    if (currentMode === 'read') renderReader();
   }
 
   function wirePageFitZoom() {
@@ -1425,6 +1465,8 @@
     // Émis par js/settings.js à chaque saisie dans les 4 champs de marge (onglet Réglages) - sans lui, changer uniquement les marges sans toucher au
     // texte ne marquait jamais le brouillon "modifié" et l'auto-save ne l'enregistrait donc jamais.
     document.addEventListener('pp:marginsChanged', markAutosaveDirty);
+    // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur ET de hauteur. Le bouton ne rafraîchit rien lui-même.
+    document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);
     GristAPI.onRecord(async function (record, tableId) {
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();

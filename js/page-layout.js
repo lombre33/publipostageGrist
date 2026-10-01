@@ -9,6 +9,12 @@ const PageLayout = (function () {
   const A4_HEIGHT_MM = 297;
   const PORTRAIT = 'portrait';
   const LANDSCAPE = 'landscape';
+  const A4_WIDTH_PT = 595.28;
+  const A4_HEIGHT_PT = 841.89;
+  const A4_WIDTH_TWIP = 11906;
+  const A4_HEIGHT_TWIP = 16838;
+  // Largeur de la feuille A4 portrait à l'écran, telle que css/editor-v2.css l'écrivait avant l'orientation (210 mm à 96 dpi, arrondis au centième vers le haut).
+  const PORTRAIT_SHEET_WIDTH_PX = 793.71;
   const MM_TO_PT = 72 / 25.4; // ~2.8346
   const MM_TO_TWIP = 1440 / 25.4; // ~56.6929
   const PT_TO_PX = 96 / 72;
@@ -66,11 +72,34 @@ const PageLayout = (function () {
     applyToPreviewCss();
   }
 
+  // Dimensions de la page selon une orientation donnée, sans état : les exporteurs reçoivent l'orientation avec leurs marges (getMarginsPt / getMarginsTwip) et
+  // en déduisent la page sans connaître l'état courant de ce module. Les valeurs sont celles de pdfmake (A4 = 595.28 x 841.89 pt) et de Word (11906 x 16838
+  // twips), pas des conversions de 210 x 297 mm : un modèle portrait garde ainsi des largeurs de contenu identiques, au centième de point, à celles d'avant.
+  function pageSizePtFor(orientation) {
+    return orientation === LANDSCAPE ? { width: A4_HEIGHT_PT, height: A4_WIDTH_PT } : { width: A4_WIDTH_PT, height: A4_HEIGHT_PT };
+  }
+  function pageSizeTwipFor(orientation) {
+    return orientation === LANDSCAPE ? { width: A4_HEIGHT_TWIP, height: A4_WIDTH_TWIP } : { width: A4_WIDTH_TWIP, height: A4_HEIGHT_TWIP };
+  }
+
   function getOrientation() { return marginsDraft.orientation; }
   function isLandscape() { return marginsDraft.orientation === LANDSCAPE; }
   // Change l'orientation en gardant les 4 marges (re-bornées pour la nouvelle page). Ne touche ni à l'aperçu, ni à la pagination, ni aux exports : l'appelant
   // rafraîchit ce qu'il affiche (Editor.refreshLayout) et marque le brouillon modifié (événement pp:marginsChanged, cf. js/settings.js).
-  function setOrientation(orientation) { setMarginsMm(Object.assign({}, marginsDraft, { orientation: normalizeOrientation(orientation) })); }
+  // Largeur de la feuille à l'écran (px CSS) : celle que `--pp-page-width` donne à la feuille de l'éditeur, à celle de la Lecture et aux espaceurs d'en-tête et de
+  // pied (css/editor-v2.css), et que js/main.js lit pour le facteur d'ajustement. En portrait c'est la valeur d'avant l'orientation (793.71), PAS
+  // getPageSizePx().width (793.7008) : le portrait garde sa feuille et son facteur d'ajustement exactement tels qu'ils étaient. En paysage, 297 mm au centième.
+  function getSheetWidthPx() { return marginsDraft.orientation === LANDSCAPE ? Math.round(getPageSizePx().width * 100) / 100 : PORTRAIT_SHEET_WIDTH_PX; }
+
+  // `pp:pageLayoutChanged` : émis seulement quand l'orientation CHANGE réellement (pas à chaque setMarginsMm : charger un modèle l'appelle alors que l'éditeur
+  // contient encore le modèle précédent, et js/main.js rafraîchit lui-même juste après avoir posé le nouveau). js/main.js y rafraîchit le facteur
+  // d'ajustement, la pagination, la grille des images en calque et la Lecture - le bouton (js/orientation-toggle.js) ne rafraîchit rien lui-même.
+  function setOrientation(orientation) {
+    const next = normalizeOrientation(orientation);
+    if (next === marginsDraft.orientation) return;
+    setMarginsMm(Object.assign({}, marginsDraft, { orientation: next }));
+    document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged', { detail: { orientation: next } }));
+  }
 
   // Page courante (orientation comprise) dans chaque unité des moteurs : mm, pt (pdfmake), px CSS (aperçu, pagination), twip (docx).
   function getPageSizeMm() { return pageSizeMm(marginsDraft.orientation); }
@@ -82,9 +111,11 @@ const PageLayout = (function () {
   function getContentHeightMm() { return getPageSizeMm().height - marginsDraft.top - marginsDraft.bottom; }
   function getColumnGapMm() { return COLUMN_GAP_PX / MM_TO_PX; }
 
+  // `orientation` voyage avec les marges : c'est l'objet que js/main.js passe tel quel aux exporteurs (exportCurrentRecord, export en lot), qui n'ont donc
+  // aucun autre canal pour apprendre que la page est en paysage.
   function getMarginsPt() {
     const m = marginsDraft;
-    return { top: m.top * MM_TO_PT, right: m.right * MM_TO_PT, bottom: m.bottom * MM_TO_PT, left: m.left * MM_TO_PT };
+    return { top: m.top * MM_TO_PT, right: m.right * MM_TO_PT, bottom: m.bottom * MM_TO_PT, left: m.left * MM_TO_PT, orientation: m.orientation };
   }
 
   // Marges en pixels CSS - même conversion que applyToPreviewCss ci-dessous. Consommées par les deux moteurs de pagination à l'écran
@@ -99,6 +130,7 @@ const PageLayout = (function () {
     return {
       top: Math.round(m.top * MM_TO_TWIP), right: Math.round(m.right * MM_TO_TWIP),
       bottom: Math.round(m.bottom * MM_TO_TWIP), left: Math.round(m.left * MM_TO_TWIP),
+      orientation: m.orientation,
     };
   }
 
@@ -113,6 +145,8 @@ const PageLayout = (function () {
     root.setProperty('--pp-margin-right', px.right + 'px');
     root.setProperty('--pp-margin-bottom', px.bottom + 'px');
     root.setProperty('--pp-margin-left', px.left + 'px');
+    // Largeur de la feuille : 793.71px en portrait (la valeur d'avant l'orientation, que css/editor-v2.css garde aussi en repli avant ce premier appel), 1122.52px en paysage.
+    root.setProperty('--pp-page-width', getSheetWidthPx() + 'px');
   }
 
   // Texte d'un numéro de page pour l'un des trois formats du badge .page-number-badge (data-format : 'n', 'page-n', 'n-slash-total'). Pure. Source unique :
@@ -136,7 +170,7 @@ const PageLayout = (function () {
   return {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE,
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
-    getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip,
+    getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     pageNumberText, resolvePageNumberBadges,
   };
 })();

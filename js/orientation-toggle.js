@@ -1,13 +1,14 @@
 // Bascule portrait / paysage de la page - bouton de la barre du haut, à côté d'Aperçu A4. Ne fait que poser PageLayout.setOrientation (js/page-layout.js) et
 // prévenir l'enregistrement automatique (pp:marginsChanged, comme l'onglet Marges des Réglages) : chaque moteur qui montre ou produit une page (aperçu,
-// pagination, Lecture, PDF, Word, Excel) relit l'orientation à PageLayout, rien n'est rafraîchi d'ici.
+// pagination, Lecture, PDF, Word, Excel) relit l'orientation à PageLayout, rien n'est rafraîchi d'ici : le changement d'orientation est annoncé par
+// PageLayout (pp:pageLayoutChanged), que js/main.js écoute pour réajuster l'éditeur, la pagination, la grille des images en calque et la Lecture.
 // Une icône = une fonction : l'icône montre la page telle qu'elle est (haute en portrait, large en paysage), le bouton est allumé en paysage.
 const OrientationToggle = (function () {
   const BUTTON_ID = 'btn-page-orientation';
   // Types de modèle (colonne TypeModele) dont les moteurs suivent l'orientation de PageLayout. Le bouton est grisé pour tous les autres : un réglage qui
   // ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ICI, quand ses moteurs suivent - sans toucher
   // js/main.js.
-  const TYPES = [];
+  const TYPES = ['document'];
   let currentType = 'document';
   let isReadOnly = () => false;
   let busy = false;

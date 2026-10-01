@@ -189,9 +189,9 @@ const HeaderFooterPreview = (function () {
     pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
   }
 
-  // Constantes dupliquées depuis pdf-export.js (A4 = 595.28×841.89pt, marge 28pt, 1pt = 96/72px) : pas de module partagé entre les deux fichiers.
+  // Constante dupliquée depuis pdf-export.js (1pt = 96/72px) : pas de module partagé entre les deux fichiers. La hauteur de page, elle, vient de PageLayout
+  // à chaque appel (841.89pt en portrait, 595.28pt en paysage) : elle change à chaud avec l'orientation du modèle.
   const PT_TO_PX = 96 / 72;
-  const A4_PAGE_HEIGHT_PX = 841.89 * PT_TO_PX;
   // Marges de page RÉELLES du modèle courant (js/page-layout.js) - lues à chaque appel, jamais figées en constante : elles changent à chaud depuis
   // l'onglet Réglages. Avant ce correctif, 37.33px (= 28pt) et 719.04px étaient codés en dur ici, si bien que la pagination affichée à l'écran (bandes
   // de couture, "Saut de page") et la grille de page qui ancre les images en calque ignoraient PUREMENT ET SIMPLEMENT les marges du modèle : un modèle
@@ -356,7 +356,7 @@ const HeaderFooterPreview = (function () {
     const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
     const mPx = marginsPx();
-    const pageContentHeightPx = Math.max(50, A4_PAGE_HEIGHT_PX - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
+    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
     return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx };
   }
 
@@ -482,6 +482,39 @@ const HeaderFooterPreview = (function () {
     editor.view.dispatch(tr);
   }
 
+  // Après un changement d'orientation : la page change de hauteur, donc la page sur laquelle tombe chaque bloc, et la position de chaque image en calque
+  // sur SA page. La grille page (data-page-index/left/top-pt) a été capturée dans l'ancienne géométrie et c'est elle que lisent le PDF et le Word - sans cette
+  // recapture, une image sortait dans l'export sur une page que l'éditeur ne lui montre plus. Même mesure que migrateLegacyImagePositions (qui ne traite que
+  // les images SANS grille), pour toutes celles qui en ont une, en UNE transaction hors historique (changer d'orientation n'est pas annulable par Annuler, la
+  // recapture non plus) et sans toucher à la sélection (patchNodeAndReselect sélectionnerait chaque image tour à tour). Rend true si elle a modifié le document.
+  function recaptureLayeredImageGrids() {
+    if (!editor || !document.getElementById('editor-container').classList.contains('a4-preview')) return false;
+    const targets = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'editorImage' && node.attrs.layer !== 'normal' && node.attrs.pageIndex != null) targets.push(pos);
+    });
+    if (!targets.length) return false;
+    // Toutes les mesures d'abord, les transactions ensuite : chacune pourrait sinon redessiner un nœud pendant qu'on mesure le suivant.
+    const patches = [];
+    targets.forEach(pos => {
+      const dom = editor.view.nodeDOM(pos);
+      const current = editor.state.doc.nodeAt(pos);
+      if (!dom || !current) return;
+      const grid = computePageGridPosition(dom);
+      if (!grid) return;
+      // computePageGridPosition peut avoir repoussé `dom` jusqu'au bord physique de la page : left/top stockés suivent la position corrigée.
+      patches.push({ pos, attrs: Object.assign({}, current.attrs, grid, { left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) }) });
+    });
+    if (!patches.length) return false;
+    const tr = editor.state.tr;
+    patches.forEach(p => tr.setNodeMarkup(p.pos, undefined, p.attrs));
+    tr.setMeta('addToHistory', false);
+    // Suivi des modifications actif : cette recapture n'est pas une modification de la personne, elle ne doit pas ressortir comme une suggestion.
+    TrackChanges.skipTracking(tr);
+    editor.view.dispatch(tr);
+    return true;
+  }
+
   function renderPaginationOverlay() {
     const container = document.getElementById('editor-container');
     const tiptapEl = editor && editor.view && editor.view.dom;
@@ -568,6 +601,6 @@ const HeaderFooterPreview = (function () {
     setEditor, setEmailMode, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
     enterHeaderFooterMode, exitHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter,
     getHeaderFooterData, setHeaderFooterData, renderHfPill,
-    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions,
+    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, recaptureLayeredImageGrids,
   };
 })();

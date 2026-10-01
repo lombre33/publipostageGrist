@@ -564,7 +564,7 @@ window.TestHelpers = (function () {
     const pgMar = sect.getElementsByTagName('w:pgMar')[0];
     const num = (el, a) => (el && el.getAttribute(a) !== null ? Number(el.getAttribute(a)) : null);
     return {
-      widthTwip: num(pgSz, 'w:w'), heightTwip: num(pgSz, 'w:h'),
+      widthTwip: num(pgSz, 'w:w'), heightTwip: num(pgSz, 'w:h'), orient: pgSz ? pgSz.getAttribute('w:orient') : null,
       margins: { top: num(pgMar, 'w:top'), right: num(pgMar, 'w:right'), bottom: num(pgMar, 'w:bottom'), left: num(pgMar, 'w:left'), header: num(pgMar, 'w:header'), footer: num(pgMar, 'w:footer') },
       // CT_OnOff : la PRÉSENCE de la balise vaut `true`, sauf w:val="false" explicite (ce que docx.js écrit quand l'option est désactivée). Tester la
       // seule présence rendrait "première page différente" toujours actif.

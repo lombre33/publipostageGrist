@@ -403,8 +403,9 @@
   });
 
   // --- Bascule portrait / paysage (js/orientation-toggle.js, bouton #btn-page-orientation à côté d'Aperçu A4) ---
-  // Le bouton ne s'allume que pour les types listés dans OrientationToggle.TYPES (vide à la livraison : aucun moteur ne suit encore l'orientation d'un
-  // modèle) ; ces cas y mettent un type le temps d'un scénario et remettent la liste, l'orientation et la langue d'origine.
+  // Le bouton ne s'allume que pour les types listés dans OrientationToggle.TYPES (les modèles classiques, depuis que l'éditeur, la Lecture, le PDF et le
+  // Word suivent l'orientation) ; ces cas règlent la liste le temps d'un scénario (vide pour simuler « aucun type accepté ») et remettent la liste,
+  // l'orientation et la langue d'origine.
   const orientationButton = () => document.getElementById('btn-page-orientation');
   const maskImageOf = el => { const cs = getComputedStyle(el, '::before'); return cs.webkitMaskImage || cs.maskImage || ''; };
   async function restoreOrientationState(typesBefore) {

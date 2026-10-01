@@ -42,6 +42,7 @@ apparaît) :
 | `js/header-footer-preview.js` | `headerFooter`, `pageBreakToc` (pagination partagée), **+ `pageLayout`** (la hauteur de page dépend des marges du modèle) ; pour `computePageGridPosition` et `migrateLegacyImagePositions` (position de page des images en calque d'un ancien modèle, éditeur masqué) : **+ `images` et le script Node `layerImagesMouse`** ; `migrateLegacyImagePositions` écrit sa position hors suivi et hors historique (`TrackChanges.skipTracking` de `js/track-changes.js`, qui n'a pas d'autre ligne ici) : **+ `trackChanges`** et les cas `image_legacy_layer_track_changes_*` du groupe `images` (suivi actif : une seule image après l'ouverture, chaque `refreshLayout` et chaque aller-retour Lecture / Édition, sans suggestion en attente ; un modèle déjà abîmé ne grossit plus et « Tout refuser » rend l'image d'origine) ; pour `exitHeaderFooterMode`, `setHeaderFooterData` et `dropEmptyZones` (ce qui reste « activé » une fois « Terminer » cliqué ou un modèle ouvert) : **+ le script Node `headerFooterMouse`** |
 | `js/page-layout.js`, `js/settings.js` (onglet Marges) | **Toujours `pageLayout`** + `pdfFidelity`, `readModeFidelity` et `docx` (la largeur de contenu est consommée par les trois, cf. `<w:pgMar>` pour l'export DOCX) ; le texte du numéro de page (`pageNumberText`, `resolvePageNumberBadges`) sert aussi à l'aperçu paginé, au mode Lecture et au PDF : **+ `headerFooter`** (scénario `hf_page_numbers_resolved_in_editor_preview_and_reader`) **et `pdfBatch`** |
 | `js/reader-mode.js` | `images` (cas mode Lecture), `pageBreakToc` (cas mode Lecture) |
+| `js/orientation-toggle.js` (liste `TYPES`), l'orientation dans `js/page-layout.js` (`pageSizePtFor`, `pageSizeTwipFor`, `--pp-page-width`, `pp:pageLayoutChanged`), et tout code qui lit la taille de la page dans `js/pdf-export.js` (`pageWidthPt`, `pageHeightPt`), `js/pdf-export-alt.js` (`@page`), `js/docx-export.js` (`pageWidthTwip`, section), `js/header-footer-preview.js` (`recaptureLayeredImageGrids`, hauteur de page), `js/reader-mode.js`, `js/settings.js` (plafond des marges), `js/main.js` (`applyPageFitZoom`, `onPageLayoutChanged`, `layerGridsStale`), `css/editor-v2.css` (`--pp-page-width`, `--pp-col-left`) | **Toujours `orientation` ET le script Node `orientationMouse`** (la page en paysage à l'écran, en Lecture, dans le PDF, le Word et l'impression navigateur ; le script clique le vrai bouton à 700×400, clair et sombre, et mesure la feuille aux pixels) **+ `toolbarChrome` et `autosave`** (le bouton, son état grisé, l'enregistrement de l'orientation seule) **+ `pageLayout`, `pdfFidelity`, `pdfGroundTruth`, `readModeFidelity`, `docx`, `docxImages`** (le portrait doit rester identique à l'ancien rendu) |
 | `js/main-toolbar.js` | `formatting`, `lists` |
 | `js/heading-numbering.js` | `pageBreakToc` (numérotation/sommaire) |
 | `css/editor-v2.css`, `css/style.css` | Dépend de la règle touchée - au minimum `images` + `twoColumns` + `tables` si la règle touche `.two-columns-*`/`table td`/`.reader-content`, sinon le groupe visuellement concerné |
@@ -611,6 +612,41 @@ contenu 719 px), page échangée en mm, pt, px et twip, orientation conservée q
 Réglages) et marges re-bornées pour la page de la nouvelle orientation, enregistrement par `Templates.save` puis rechargement par
 `Templates.loadAll`, et un ancien `Margins` sans la clé qui se recharge en portrait avec ses marges. Ils ne mesurent ni l'aperçu,
 ni la pagination, ni les exports : chaque moteur qui se branche à l'orientation a ses propres scénarios.
+
+**Orientation des modèles classiques** (01/10, `scenarios-orientation.js`, groupe `orientation`, 21 scénarios ;
+`verify-orientation-mouse.mjs`, script Node `orientationMouse`) : le format A4 était écrit en dur à sept endroits
+(793,71 px, 841,89 pt, 11 906 × 16 838 twips...), chaque scénario vérifie donc un étage DIFFÉRENT et toujours que le
+paysage donne le même résultat à l'écran et à l'export - un étage oublié se verrait comme une page de 297 mm découpée dans un
+PDF de 210 mm, ou un tableau Word plus étroit que la page. Étages couverts : feuille de l'éditeur et de la Lecture (largeur
+`--pp-page-width`, espaceurs d'en-tête et de pied), pagination de l'éditeur et de la Lecture (même hauteur de page, deux moteurs),
+facteur d'ajustement à la largeur du panneau, enregistrement avec le modèle et rechargement (un ancien `Margins` sans orientation,
+un nouveau modèle et un macro-modèle restent en portrait), PDF (page, largeur de texte, nombre de pages, tableau), Word
+(`w:orient`, marges identiques, tableau et zone à deux colonnes), colonne gauche de 200 mm réglée en paysage puis repassée en
+portrait (à l'écran, dans le PDF et dans le Word : elle ne rend jamais la colonne droite négative, le réglage revient en paysage),
+image en calque qui suit son texte sur une autre page (suivi des modifications actif, sans que la recapture devienne une suppression +
+insertion à accepter ou refuser ; Aperçu A4 coupé ou Lecture, recapturée au retour), plafond des marges dans Réglages, impression navigateur et qualités raster,
+et le vrai bouton avec la liste de types livrée (actif pour un modèle classique, grisé pour un email).
+
+Les scénarios passent par `toggle()` (en haut du fichier) : `PageLayout.setOrientation()` puis `pp:marginsChanged`, les deux gestes
+du bouton. Le rafraîchissement (facteur d'ajustement, pagination, Lecture, grille des images en calque) est celui de `js/main.js`,
+écouteur de `pp:pageLayoutChanged` - le même chemin qu'au clic. Deux garde-fous de non-régression passent aussi sur l'ancien code
+(`orient_legacy_margins_without_orientation_load_as_portrait`, `orient_pdf_portrait_unchanged_without_orientation`) : un modèle
+portrait rend comme avant. `--pp-page-width` vaut 793,71 px en portrait - la valeur que `css/editor-v2.css` écrivait en dur, pas les
+793,7008 px de 210 mm (`PageLayout.getSheetWidthPx`) - et 1 122,52 px en paysage ; le facteur d'ajustement du portrait reste celui d'avant au millième.
+
+**Pièges propres à l'orientation** :
+- `pdfmake` remplace chaque largeur de colonne par un objet `{ width, ... }` après la mise en page : lire `typeof w === 'number' ? w : w.width`.
+- Un tableau Word mesuré dans le navigateur dépasse la largeur de contenu de ~50 twips, en portrait aussi (arrondi au pixel) : tolérance de 100.
+- Les grilles `data-page-index / left / top-pt` d'une image en calque sont celles que lisent le PDF et le Word : un changement d'orientation les
+  recapture (`HeaderFooterPreview.recaptureLayeredImageGrids`, une transaction hors historique) ; éditeur masqué (Lecture) ou sans Aperçu A4, la recapture attend
+  (`layerGridsStale` et `recaptureStaleLayerGrids` de `js/main.js`) le retour en Édition ou l'Aperçu A4 rallumé (scénario `orient_layered_grid_is_recaptured_once_the_editor_can_measure_again`).
+  Suivi des modifications actif, cette transaction passe par `TrackChanges.skipTracking` (`js/track-changes.js`) : sans elle la lib la transforme en suppression +
+  insertion de l'image (scénario `orient_with_track_changes_on_the_grid_recapture_is_not_a_suggestion`). `migrateLegacyImagePositions` (chargement d'un ancien modèle) n'a pas
+  cette protection : à suivi actif, la grille qu'elle capture ressort en suggestion (défaut d'avant, proposé à Antoine, non corrigé ici).
+- Suivi actif, la correction de largeur d'un tableau trop large (`clampOverflowingTables`) est refusée par la lib (« Invalid content for node tableRow », déjà vrai pour
+  les marges) : le tableau déborde de la feuille à l'écran jusqu'à la sortie du suivi, les exports le ramènent à la page. Suivi coupé, repasser en portrait réduit
+  les colonnes (240 px au lieu de 300) et le retour en paysage ne les rend pas.
+- Une image plus large que la page déborde du PDF et du Word, en portrait comme en paysage (défaut d'avant, sans rapport avec l'orientation : aucun scénario ne le fige).
 
 **Piège de mesure propre à cette suite** : comparer des mm entre 4 moteurs de rendu différents
 (navigateur, pdfmake, docx.js) accumule de l'arrondi à chaque conversion - les tolérances des

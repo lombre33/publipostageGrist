@@ -32,13 +32,16 @@ const DocxExport = (function () {
   // 1 twip = 1/20 pt = 1/1440 pouce. Page A4 + marges alignées sur PAGE_MARGIN_PT de pdf-export.js (28pt = 560 twips) - pas une obligation technique, juste
   // une cohérence visuelle bienvenue entre les deux exports.
   const TWIPS_PER_PT = 20;
-  const A4_WIDTH_TWIP = 11906;
-  const A4_HEIGHT_TWIP = 16838;
   const HF_DISTANCE_TWIP = 20 * TWIPS_PER_PT;
   // Marges de page (twip) - variables de module plutôt que des constantes : réglées par setPageMarginsTwip() une fois par export, à partir des marges du
   // modèle courant (js/page-layout.js). 28pt (560 twip) sur les 4 côtés = comportement d'avant PageLayout, repli si l'appelant ne fournit aucune marge.
   let marginTopTwip = 560, marginRightTwip = 560, marginBottomTwip = 560, marginLeftTwip = 560;
-  let CONTENT_WIDTH_TWIP = A4_WIDTH_TWIP - marginLeftTwip - marginRightTwip;
+  // Page courante : A4 portrait (11906 x 16838 twips) par défaut, en paysage quand PageLayout.getMarginsTwip() joint l'orientation aux marges. Les dimensions
+  // viennent de PageLayout.pageSizeTwipFor, toujours rendues dans le sens de la page (largeur 16838 en paysage) - buildDocxDocument les redonne à docx.js
+  // en portrait + drapeau d'orientation, car docx.js échange lui-même largeur et hauteur dès qu'il voit LANDSCAPE.
+  let pageOrientation = 'portrait';
+  let pageWidthTwip = 11906;
+  let CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
 
   function setPageMarginsTwip(marginsTwip) {
     const m = marginsTwip || {};
@@ -46,7 +49,9 @@ const DocxExport = (function () {
     marginRightTwip = Number.isFinite(m.right) ? m.right : 560;
     marginBottomTwip = Number.isFinite(m.bottom) ? m.bottom : 560;
     marginLeftTwip = Number.isFinite(m.left) ? m.left : 560;
-    CONTENT_WIDTH_TWIP = A4_WIDTH_TWIP - marginLeftTwip - marginRightTwip;
+    pageOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
+    pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation).width;
+    CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
   }
   const DEFAULT_HALF_PT = 21; // 10.5pt - doit correspondre à DEFAULT_FONT_SIZE, js/pdf-export.js
   // *2 (demi-points) des mêmes tailles que HEADING_SIZES, js/pdf-export.js - `heading:` (style Word natif) fixe déjà une taille par défaut, mais on la
@@ -404,6 +409,8 @@ const DocxExport = (function () {
   const PX_TO_TWIP = 15; // 1440 twips/pouce ÷ 96px/pouce
   const GAP_PX = 16; // gouttière entre les 2 colonnes d'une zone twoColumnsZone - même valeur que PageLayout.COLUMN_GAP_PX (`gap: 16px`, css/editor-v2.css)
   const MM_TO_TWIP = 1440 / 25.4; // même conversion que PageLayout.MM_TO_TWIP, js/page-layout.js (pas de dépendance croisée, simple constante dupliquée)
+  // Plancher de chaque colonne d'une zone 2-colonnes : 10 mm, comme la saisie en mm de js/editor-nodes.js (commitMm) et le plancher CSS de css/editor-v2.css.
+  const MIN_ZONE_COLUMN_TWIP = Math.round(10 * MM_TO_TWIP);
   // Repli si le tableau n'est pas dans le DOM attaché au moment de l'appel (ex. zone en-tête/pied - hors périmètre de la mesure, cf. buildDocxDocument) :
   // répartition à parts égales, exactement comme la V1.
   function equalColumnWidthsTwip(columnCount) { return new Array(columnCount).fill(Math.floor(CONTENT_WIDTH_TWIP / columnCount)); }
@@ -468,6 +475,11 @@ const DocxExport = (function () {
     // Colonne SÉPARATRICE, vide et sans bordure, à la largeur exacte de la gouttière CSS (`gap: 16px`, css/editor-v2.css). Sans elle, la colonne droite
     // récupérait toute la place restante : le DOCX rendait 90mm là où l'éditeur et le PDF rendent 85.8mm, et les deux colonnes se touchaient dans Word.
     const gapTwip = Math.round(GAP_PX * PX_TO_TWIP);
+    // Une largeur en mm réglée pour une page plus large (paysage, ou marges plus petites) peut dépasser la page d'aujourd'hui : la colonne droite devenait
+    // NÉGATIVE et docx.js refusait l'export entier ("Invalid value '-793' ... Must be a positive integer"). Même plancher que l'écran (css/editor-v2.css) :
+    // chaque colonne garde au moins 10 mm.
+    const minTwip = Math.min(MIN_ZONE_COLUMN_TWIP, Math.floor((CONTENT_WIDTH_TWIP - gapTwip) / 2));
+    leftTwip = Math.max(minTwip, Math.min(CONTENT_WIDTH_TWIP - gapTwip - minTwip, leftTwip));
     const rightTwip = CONTENT_WIDTH_TWIP - leftTwip - gapTwip;
     const widths = [leftTwip, gapTwip, rightTwip];
     const cells = [];
@@ -731,7 +743,12 @@ const DocxExport = (function () {
     const differentFirstPage = !!(headerFooterData && headerFooterData.enabled && headerFooterData.differentFirstPage);
     const sectionProps = {
       page: {
-        size: { width: A4_WIDTH_TWIP, height: A4_HEIGHT_TWIP },
+        // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les ré-échangerait
+        // (page portrait étiquetée paysage). Toujours le A4 portrait ici, l'orientation seule dit le sens.
+        size: Object.assign(
+          { width: PageLayout.pageSizeTwipFor('portrait').width, height: PageLayout.pageSizeTwipFor('portrait').height },
+          pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}
+        ),
         margin: { top: marginTopTwip, bottom: marginBottomTwip, left: marginLeftTwip, right: marginRightTwip, header: HF_DISTANCE_TWIP, footer: HF_DISTANCE_TWIP },
       },
       titlePage: differentFirstPage,

@@ -434,6 +434,36 @@ exerce le VRAI clic natif.
 
 ---
 
+## 14. Orientation de la page (portrait / paysage)
+
+**Couverture automatisée** : groupe `orientation` (`scenarios-orientation.js`, 21 cas : feuille et pagination de l'éditeur et de la Lecture, facteur
+d'ajustement, enregistrement avec le modèle, PDF, Word, colonne à deux colonnes trop large, image en calque (suivi des modifications, Aperçu A4 coupé et Lecture compris), plafond des marges,
+impression navigateur), script
+Node `orientationMouse` (vrai clic, Entrée et Espace à 700×400, clair et sombre), cas `toolbar_orientation_*` et `autosave_saves_an_orientation_change_alone`.
+**Non couvert** : le rendu réel dans Word (seul le XML de la section, `w:orient`, est vérifié), un vrai lecteur PDF, la boîte d'impression d'un navigateur.
+
+### Protocole
+1. Ouvrir un modèle classique de plusieurs pages (texte, un tableau, une zone à deux colonnes, une image en calque), cliquer le bouton Portrait / Paysage (juste
+   après Aperçu A4) : la feuille s'élargit, les sauts de page se recalculent, l'icône montre une page large et le bouton s'allume. En Lecture : même feuille, mêmes sauts.
+2. Exporter en PDF : le lecteur PDF annonce 297 × 210 mm, le texte et le tableau occupent toute la largeur, l'image en calque reste sur la page de son texte, l'en-tête et
+   le pied de page se placent sur la page paysage. Même résultat pour « Exporter toutes les lignes » (ZIP et PDF unique).
+3. Exporter en Word, ouvrir le fichier dans Word : Mise en page > Orientation indique Paysage, les marges sont celles du modèle, le tableau et la zone à deux colonnes
+   remplissent la largeur.
+4. Repasser en portrait : la feuille, les sauts de page et les exports sont exactement ceux d'avant ; une colonne réglée à 200 mm en paysage ne laisse pas la colonne
+   droite à zéro en portrait (dix millimètres au moins) et retrouve ses 200 mm en repassant en paysage.
+5. Enregistrer, recharger la page du document Grist : le modèle revient en paysage ; un modèle enregistré avant ce réglage reste en portrait.
+6. Un email et un macro-modèle : le bouton est visible et grisé (info-bulle « pas disponible pour ce modèle »), un clic ne change rien ; le PDF d'un macro-modèle
+   est en portrait même si un modèle qu'il assemble est en paysage.
+7. À 700 px de panneau, la feuille paysage est réduite à la largeur du panneau (facteur 0,60 contre 0,85 en portrait) : le texte est plus petit à l'écran, pas dans
+   le PDF ni le Word.
+8. Suivi des modifications activé, changer d'orientation sur un modèle qui a une image en calque : aucune suggestion (ni suppression ni insertion) n'apparaît, l'image
+   reste sur la page de son texte. Un tableau plus large que la page portrait n'est pas réduit tant que le suivi est actif (limite connue de la bibliothèque) ; les exports le
+   ramènent à la page.
+9. Aperçu A4 décoché (ou Mode lecture), changer d'orientation, puis rallumer l'Aperçu A4 (ou revenir en Mode édition) : l'image en calque est alors sur la page de son
+   texte, dans l'éditeur comme dans le PDF.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

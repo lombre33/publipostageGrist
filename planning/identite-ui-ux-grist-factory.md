@@ -374,6 +374,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Feuille A4 : dans un panneau étroit, la page est réduite à la largeur disponible par un `zoom` CSS (`--pp-fit-zoom` : à
   700 px de panneau, 794 px de mise en page passent à 672 px) — à l'écran seulement. Les coupures de ligne de l'éditeur
   sont celles d'un grand panneau ; les PDF sont identiques quelle que soit la taille du panneau.
+- Orientation de la page (demande d'Antoine du 01/10, « une bascule paysage et portrait… également pour les modèles
+  classiques ») : le bouton Portrait / Paysage de la barre, juste après Aperçu A4, montre la page telle qu'elle est (haute en
+  portrait, large en paysage) et s'allume en paysage. Il n'est actif que pour les modèles classiques ; pour un email et un
+  macro-modèle il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
+  `orientation` de la colonne `Margins`, absente = portrait) ; changer d'orientation garde les quatre marges en millimètres.
+  La feuille paysage (297 × 210 mm, 1 122,52 px de mise en page) est ramenée à la largeur du panneau par le même `zoom` : à
+  700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
+  portrait — rien de tel dans le PDF ni le Word. La pagination, la Lecture, le PDF, le Word et l'impression navigateur
+  suivent la page dans son sens ; la galerie de modèles reste en portrait.
 
 ## 4. Spécifique à SlidesPlus
 

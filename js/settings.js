@@ -75,9 +75,14 @@ const Settings = (function () {
     // déjà à la valeur retenue n'est pas réécrit - réécrire pendant la frappe déplacerait le curseur.
     function syncMarginInputs() {
       const margins = PageLayout.getMarginsMm();
+      // Plafond de chaque champ = dimension de la page dans son sens, moins la surface imprimable minimale (index.html garde les valeurs du portrait : 277 en
+      // haut/bas, 190 à gauche/droite). En paysage les deux paires s'échangent - sans cela le sélecteur plafonnait à 190 un côté qui peut aller à 277.
+      const page = PageLayout.getPageSizeMm();
+      const maxBySide = { top: page.height, bottom: page.height, left: page.width, right: page.width };
       Object.keys(marginInputs).forEach(side => {
         const input = marginInputs[side];
         if (!input) return;
+        input.max = Math.floor(maxBySide[side] - PageLayout.MIN_CONTENT_MM);
         const rounded = Math.round(margins[side] * 10) / 10;
         if (parseFloat(input.value) !== rounded) input.value = rounded;
       });

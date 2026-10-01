@@ -82,6 +82,14 @@ multi-format nécessite de transformer ces constantes en PARAMÈTRES (par modèl
 fois qu'on s'y attaque réellement (pas juste "changer une variable pageSize"), tant les 3 étages de
 rendu (éditeur/lecture/PDF) dépendent tous indépendamment de la même hypothèse A4-portrait aujourd'hui.
 
+**Orientation livrée le 01/10 pour les modèles classiques** : `js/page-layout.js` porte l'orientation (clé `orientation` de la colonne `Margins`, absente =
+portrait) et reste la seule source des dimensions de la page (`getPageSize*`, `pageSizePtFor`, `pageSizeTwipFor`) ; la feuille et la pagination de l'éditeur
+et de la Lecture, le PDF (aussi en lot), le Word et l'impression navigateur les lisent. Le A4 portrait n'est plus écrit en dur que dans `js/page-layout.js`, dans les
+valeurs initiales de `js/pdf-export.js` et `js/docx-export.js` (remplacées à chaque export), dans le repli CSS du portrait (`--pp-page-width`) et dans l'aperçu
+de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles classiques ; un email et un macro-modèle restent en portrait.
+**Reste ouvert** : les autres formats (A1 à A6), pour lesquels il suffira de faire dépendre ces trois fonctions d'un format enregistré - les consommateurs ne
+changent pas - et l'orientation d'un macro-modèle (qui impose ses propres marges à tout ce qu'il assemble).
+
 ## QR code / code-barres
 
 Génération pure client-side, plusieurs librairies légères existent (ex. `qrcode`/`qrcode-generator`

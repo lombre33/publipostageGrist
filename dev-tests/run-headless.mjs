@@ -57,6 +57,7 @@ const GROUPS = {
   pdfGroundTruth: 'scenarios-pdf-ground-truth',
   readModeFidelity: 'scenarios-readmode-fidelity',
   pageLayout: 'scenarios-pagelayout',
+  orientation: 'scenarios-orientation',
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
   comments: 'scenarios-comments',
@@ -102,6 +103,7 @@ const NODE_SCRIPTS = {
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
+  orientationMouse: 'verify-orientation-mouse.mjs', // bascule Portrait / Paysage d'un modèle classique : feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, clavier ; 700x400 clair et sombre
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
   settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : six onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
   columnSearchMouse: 'verify-column-search-mouse.mjs',
