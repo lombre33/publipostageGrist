@@ -159,6 +159,16 @@ const autoState = (page) => page.evaluate(() => {
     open: getComputedStyle(document.getElementById('v2-save-flyout')).display, focus: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : null };
 });
 const names = (page) => page.evaluate(() => window.__gristStub.state.rows.Publipostage_Modeles.Nom.slice());
+// L'aspect du bouton Enregistrer : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé (retour d'Antoine du 01/10). Les couleurs attendues se lisent sur les
+// jetons du thème en cours (--accent-solid, --solid-neutral), pas en dur : clair et sombre passent par le même contrôle.
+const saveLook = (page) => page.evaluate(() => {
+  const b = document.getElementById('btn-save'), cs = getComputedStyle(b), r = b.getBoundingClientRect();
+  const token = (v) => { const p = document.createElement('i'); p.style.background = v; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; };
+  return { off: b.classList.contains('is-autosave-off'), bg: cs.backgroundColor, color: cs.color, glyph: getComputedStyle(b, '::before').backgroundColor, border: cs.borderTopColor,
+    blue: token('var(--accent-solid)'), neutral: token('var(--solid-neutral)'), neutralHover: token('var(--solid-neutral-hover)'), neutralBorder: token('var(--solid-neutral-border)'),
+    w: Math.round(r.width), h: Math.round(r.height) };
+});
+const WHITE = 'rgb(255, 255, 255)';
 const contentOf = (page, name) => page.evaluate((n) => { const m = window.__gristStub.state.rows.Publipostage_Modeles; const i = m.Nom.indexOf(n); return i === -1 ? null : String(m.Contenu[i]); }, name);
 const updates = (page) => page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
 const statusOf = (page) => page.evaluate(() => document.getElementById('status-msg').textContent);
@@ -211,6 +221,8 @@ for (const theme of ['light', 'dark']) {
   }));
   check(`${T} : plus de bouton « Enregistrer sous » ni de bascule dans la barre, et Enregistrer n’a plus d’info-bulle qui se superposerait au menu`, !bar.oldSaveAs && !bar.oldToggle && !bar.tip && bar.saveInGroup === 'v2-save-group', bar);
   check(`${T} : l’enregistrement automatique est coché au départ, sans rien dans localStorage (activé par défaut)`, bar.checked === 'true' && bar.stored === null, bar);
+  const onLook = await saveLook(page);
+  check(`${T} : enregistrement automatique allumé, le bouton Enregistrer est bleu et blanc (fond --accent-solid, glyphe blanc), sans la classe du noir et blanc`, !onLook.off && onLook.bg === onLook.blue && onLook.glyph === WHITE && onLook.color === WHITE, onLook);
   check(`${T} : au repos le menu est fermé`, !(await flyOpen(page)) && (await expandedOf(page)) !== 'true');
   await hoverSave(page);
   const look = await page.evaluate(() => {
@@ -234,7 +246,14 @@ for (const theme of ['light', 'dark']) {
   const off = await autoState(page);
   check(`${T} : un vrai clic sur « Enregistrement automatique » la décoche : coche disparue, choix gardé, dit dans le coin d’état`, off.checked === 'false' && off.tick === 'hidden' && off.stored === 'false' && /désactivé/.test(off.status), off);
   check(`${T} : ... le menu reste ouvert sous la souris et aucune ligne n’a pris le focus`, off.open === 'flex' && !/^v2-btn-|^btn-save$/.test(off.focus || ''), off);
+  const offLook = await saveLook(page);
+  check(`${T} : ... le bouton Enregistrer passe au noir et blanc classique (fond --solid-neutral, glyphe blanc, bordure du thème), sans changer de taille`, offLook.off && offLook.bg === offLook.neutral && offLook.bg !== offLook.blue && offLook.glyph === WHITE && offLook.color === WHITE && offLook.border === offLook.neutralBorder && offLook.w === onLook.w && offLook.h === onLook.h, { onLook, offLook });
   await page.screenshot({ path: SHOTS + `/menu-decoche-${theme}.png`, clip: { x: 0, y: 0, width: 700, height: 150 } });
+  await away(page);
+  await hoverSave(page);
+  const offHover = await saveLook(page);
+  check(`${T} : ... survolé, il s’éclaircit (--solid-neutral-hover) et le glyphe reste blanc`, offHover.off && offHover.bg === offHover.neutralHover && offHover.glyph === WHITE, offHover);
+  await page.screenshot({ path: SHOTS + `/bouton-noir-${theme}.png`, clip: { x: 0, y: 0, width: 400, height: 60 } });
   await away(page);
 
   // 3) éteint : un clic sur Enregistrer est le seul à écrire, et le curseur reste dans le texte
@@ -278,6 +297,8 @@ for (const theme of ['light', 'dark']) {
   await clickMenuRow(page, '#v2-btn-autosave');
   const on = await autoState(page);
   check(`${T} : un second clic la recoche : coche revenue, choix gardé`, on.checked === 'true' && on.tick === 'visible' && on.stored === 'true', on);
+  const onAgain = await saveLook(page);
+  check(`${T} : ... et le bouton Enregistrer redevient bleu et blanc`, !onAgain.off && onAgain.bg === onAgain.blue && onAgain.glyph === WHITE, onAgain);
   await away(page);
   await page.waitForTimeout(3400);
   check(`${T} : ... la modification faite pendant la coupure (« beta ») est enregistrée toute seule au tick suivant`, ((await contentOf(page, 'Contrat de vente')) || '').includes('alpha beta'), await contentOf(page, 'Contrat de vente'));
@@ -352,13 +373,24 @@ for (const theme of ['light', 'dark']) {
   if (theme === 'light') {
     await clickMenuRow(page, '#v2-btn-autosave');
     await away(page);
+    // Sonde posée avant le rechargement : l'aspect du bouton à la fin du chargement des scripts (DOMContentLoaded), avant que Grist ait répondu à quoi que ce soit.
+    await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+      const b = document.getElementById('btn-save');
+      window.__saveOffAtDomReady = !!b && b.classList.contains('is-autosave-off');
+    }));
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
     const reloaded = await autoState(page);
     check('clair : après un rechargement de la page, « Enregistrement automatique » est toujours décochée (choix gardé par navigateur)', reloaded.checked === 'false' && reloaded.tick === 'hidden' && reloaded.stored === 'false', reloaded);
+    const reloadedLook = await saveLook(page);
+    check('clair : ... et le bouton Enregistrer est noir et blanc dès le premier affichage (pas bleu le temps d’un clic)', reloadedLook.off && reloadedLook.bg === reloadedLook.neutral, reloadedLook);
+    const offAtDomReady = await page.evaluate(() => window.__saveOffAtDomReady);
+    check('clair : ... il l’est déjà quand les scripts ont fini de se charger, sans attendre la réponse de Grist (pas bleu pendant tout le chargement)', offAtDomReady === true, offAtDomReady);
     await clickMenuRow(page, '#v2-btn-autosave');
     await away(page);
     check('clair : un clic la recoche (état de départ rétabli)', (await autoState(page)).checked === 'true');
+    const recheckedLook = await saveLook(page);
+    check('clair : ... et le bouton Enregistrer est de nouveau bleu et blanc', !recheckedLook.off && recheckedLook.bg === recheckedLook.blue, recheckedLook);
     await page.evaluate(() => I18n.setLang('en'));
     await page.waitForTimeout(300);
     await hoverSave(page);

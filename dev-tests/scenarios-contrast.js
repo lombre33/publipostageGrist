@@ -154,6 +154,33 @@
   });
 
   cases.push({
+    id: 'contrast_save_button_black_and_white_state_keeps_a_white_glyph_at_4_5_at_rest_and_hovered_in_light_and_dark',
+    description: 'Bouton Enregistrer, enregistrement automatique coupé (noir et blanc classique, js/main.js:wireSaveMenu) : glyphe blanc sur le fond noir 4,5:1 au moins, au repos et survolé (jeton --solid-neutral-hover), en clair et en sombre ; le glyphe dessiné est bien de la couleur du texte',
+    run: async () => {
+      const btn = document.getElementById('btn-save');
+      const had = btn.classList.contains('is-autosave-off');
+      btn.classList.add('is-autosave-off');
+      try {
+        const byTheme = inBothThemes(() => {
+          const text = parseColor(getComputedStyle(btn).color);
+          const white = { r: 255, g: 255, b: 255, a: 1 };
+          const fill = parseColor(getComputedStyle(btn).backgroundColor);
+          const hoverFill = parseColor(withProbe('<i style="display:block;background:var(--solid-neutral-hover)"></i>', e => getComputedStyle(e).backgroundColor));
+          return {
+            'glyphe sur le fond noir': round2(ratio(text, over(fill, white))),
+            'glyphe sur le fond survolé': round2(ratio(text, over(hoverFill, white))),
+          };
+        });
+        const sameGlyph = getComputedStyle(btn).color === getComputedStyle(btn, '::before').backgroundColor;
+        const bad = failing(byTheme, 4.5);
+        return { pass: bad.length === 0 && sameGlyph, notes: JSON.stringify({ bad, sameGlyph, byTheme }) };
+      } finally {
+        if (!had) btn.classList.remove('is-autosave-off');
+      }
+    },
+  });
+
+  cases.push({
     id: 'contrast_field_hint_text_reaches_4_5_in_dark_and_light_keeps_browser_default',
     description: 'Texte d’aide d’un champ (« Rechercher un modèle… ») : 4,5:1 au moins sur le fond du champ, en clair et en sombre',
     run: async () => {

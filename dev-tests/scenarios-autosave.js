@@ -721,6 +721,75 @@
     }),
   });
 
+  // Aspect du bouton Enregistrer (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé (js/main.js:wireSaveMenu pose la classe
+  // `is-autosave-off`, css/style.css les couleurs). Le choix est par navigateur : un AUTRE onglet qui le change (évènement `storage`, jamais envoyé à la page qui écrit) se voit ici
+  // aussi, sans rechargement. Les couleurs attendues se lisent sur les jetons du thème en cours, clair puis sombre ; les transitions du bouton sont coupées le temps de la mesure.
+  cases.push({
+    id: 'autosave_save_button_is_blue_and_white_with_autosave_on_black_and_white_with_it_off_in_both_themes_and_follows_another_tab',
+    description: "Le bouton Enregistrer est bleu et blanc (fond --accent-solid, glyphe blanc) enregistrement automatique allumé, noir et blanc classique (fond --solid-neutral, glyphe blanc) coupé, sans changer de taille, en clair et en sombre ; un autre onglet qui change le choix (évènement storage) le fait suivre à la ligne du menu, au bouton et au coin d'état, une autre clé du stockage ne fait rien",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'Bouton noir', '<p>Contenu</p>');
+      if (!id) return { pass: false, notes: 'modèle non créé' };
+      const html = document.documentElement;
+      const themeBefore = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
+      const btn = document.getElementById('btn-save');
+      const token = (v) => { const p = document.createElement('i'); p.style.background = v; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; };
+      const look = () => { const cs = getComputedStyle(btn), r = btn.getBoundingClientRect(); return { off: btn.classList.contains('is-autosave-off'), bg: cs.backgroundColor, color: cs.color, glyph: getComputedStyle(btn, '::before').backgroundColor, w: Math.round(r.width), h: Math.round(r.height) }; };
+      const WHITE = 'rgb(255, 255, 255)';
+      const otherTab = (value, key) => { try { localStorage.setItem('pp_autosave_enabled', value); } catch (e) { /* stockage indisponible */ } window.dispatchEvent(new StorageEvent('storage', { key: key === undefined ? 'pp_autosave_enabled' : key, newValue: value })); };
+      try {
+        const themes = {};
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          await ensureAutosave(h, true);
+          const on = look(), blue = token('var(--accent-solid)');
+          await ensureAutosave(h, false);
+          const off = look(), neutral = token('var(--solid-neutral)');
+          themes[theme] = {
+            on, off, blue, neutral,
+            ok: !on.off && on.bg === blue && on.glyph === WHITE && on.color === WHITE && off.off && off.bg === neutral && off.bg !== blue && off.glyph === WHITE && off.color === WHITE && off.w === on.w && off.h === on.h,
+          };
+          await ensureAutosave(h, true);
+        }
+        if (themeBefore === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', themeBefore);
+        // Un autre onglet éteint puis rallume : la ligne du menu, le bouton, le coin d'état. Une autre clé du stockage est ignorée.
+        otherTab('false');
+        const offFromOther = { off: btn.classList.contains('is-autosave-off'), checked: autoRow().getAttribute('aria-checked') };
+        otherTab('true');
+        const onFromOther = { off: btn.classList.contains('is-autosave-off'), checked: autoRow().getAttribute('aria-checked') };
+        try { localStorage.setItem('pp_autosave_enabled', 'false'); } catch (e) { /* idem */ }
+        window.dispatchEvent(new StorageEvent('storage', { key: 'une_autre_cle', newValue: 'x' }));
+        const otherKey = { off: btn.classList.contains('is-autosave-off'), checked: autoRow().getAttribute('aria-checked') };
+        window.dispatchEvent(new StorageEvent('storage', { key: null }));
+        const cleared = { off: btn.classList.contains('is-autosave-off'), checked: autoRow().getAttribute('aria-checked') };
+        otherTab('true');
+        // Une modification en attente quand l'autre onglet éteint : le coin d'état le dit tout de suite. Si le passage de l'enregistrement automatique (2,5 s) tombe entre la frappe
+        // et l'évènement, la frappe est déjà en base : on recommence (trois essais au plus).
+        let pending = null;
+        for (let attempt = 1; attempt <= 3 && !pending; attempt++) {
+          await ensureAutosave(h, true);
+          await h.focusAtEnd();
+          await h.typeText(' x' + attempt);
+          otherTab('false');
+          const status = statusNow();
+          if (UNSAVED_RE.test(status.text)) pending = { attempt, status };
+        }
+        const pass = themes.light.ok && themes.dark.ok
+          && offFromOther.off && offFromOther.checked === 'false' && !onFromOther.off && onFromOther.checked === 'true'
+          && !otherKey.off && otherKey.checked === 'true' && cleared.off && cleared.checked === 'false' && !!pending;
+        return { pass, notes: JSON.stringify({ themes, offFromOther, onFromOther, otherKey, cleared, pending }) };
+      } finally {
+        if (themeBefore === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', themeBefore);
+        noMotion.remove();
+        await ensureAutosave(h, true);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosave = cases;
 })();

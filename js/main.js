@@ -586,6 +586,13 @@
     try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* choix non persisté, reste actif pour cette session */ }
   }
 
+  // Aspect du bouton Enregistrer d'après ce réglage (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé. Posé dès
+  // le début d'init(), avant toute attente de Grist, pour que le bouton ne reste pas bleu le temps du chargement chez qui a coupé l'enregistrement automatique.
+  function syncSaveButtonLook() {
+    const saveBtn = document.getElementById('btn-save');
+    if (saveBtn) saveBtn.classList.toggle('is-autosave-off', !isAutosaveEnabled());
+  }
+
   function markAutosaveDirty() { autosaveDirty = true; updateSaveStatus(); }
 
   function resetAutosaveState(tpl) {
@@ -717,7 +724,11 @@
       if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
     };
     saveBtn.addEventListener('click', onSave);
-    const syncAutosaveRow = () => { if (autosaveRow) autosaveRow.setAttribute('aria-checked', isAutosaveEnabled() ? 'true' : 'false'); };
+    // La coche du menu et l'aspect du bouton disent le même état (retour d'Antoine du 01/10).
+    const syncAutosaveRow = () => {
+      if (autosaveRow) autosaveRow.setAttribute('aria-checked', isAutosaveEnabled() ? 'true' : 'false');
+      syncSaveButtonLook();
+    };
     const toggleAutosave = () => {
       const enabled = !isAutosaveEnabled();
       setAutosaveEnabled(enabled);
@@ -743,6 +754,13 @@
     wireRow(saveAsRow, (viaKeyboard) => { if (viaKeyboard) saveBtn.focus(); onSaveAs(); });
     wireRow(autosaveRow, toggleAutosave);
     syncAutosaveRow();
+    // Le choix est par navigateur : un autre onglet (ou un autre widget du même document) qui le change se voit ici aussi, sans attendre un rechargement. L'évènement ne part que dans
+    // les AUTRES pages ; `key` vaut null quand tout le stockage est vidé.
+    window.addEventListener('storage', (event) => {
+      if (event.key !== null && event.key !== AUTOSAVE_ENABLED_STORAGE) return;
+      syncAutosaveRow();
+      if (autosaveDirty) updateSaveStatus();
+    });
   }
 
   function wireAutosaveConflictBanner() {
@@ -1573,6 +1591,7 @@
   }
 
   async function init() {
+    syncSaveButtonLook();
     wireAccessLockGuard();
     try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().

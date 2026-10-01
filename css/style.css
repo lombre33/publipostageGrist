@@ -27,6 +27,11 @@
   --good: #146c48;
   --good-soft: #e5f6ee;
   --good-soft-border: #bfe6d3;
+  /* Bouton Enregistrer quand l'enregistrement automatique est coupé : noir et blanc classique (glyphe blanc dessus : 15,5:1), là où l'enregistrement automatique actif le garde bleu.
+     En sombre le fond reste noir, plus foncé que la barre, cerné par la bordure des boutons. Survol : plus clair, le glyphe reste à plus de 9:1. */
+  --solid-neutral: #1b2430;
+  --solid-neutral-hover: #3b4558;
+  --solid-neutral-border: #1b2430;
   --accent-soft: #e8f0fe;
   --accent-soft-border: #c7dbfd;
   --danger: #d84343;
@@ -65,6 +70,9 @@
   --good: #6fd3a3;
   --good-soft: #163326;
   --good-soft-border: #2c5c45;
+  --solid-neutral: #0b0f16;
+  --solid-neutral-hover: #262e3c;
+  --solid-neutral-border: #465166;
   --danger: #f08a8a;
   --danger-soft: #3a2426;
   --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
@@ -92,6 +100,9 @@
     --good: #6fd3a3;
     --good-soft: #163326;
     --good-soft-border: #2c5c45;
+    --solid-neutral: #0b0f16;
+    --solid-neutral-hover: #262e3c;
+    --solid-neutral-border: #465166;
     --danger: #f08a8a;
     --danger-soft: #3a2426;
     --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
@@ -150,6 +161,9 @@ body { display:flex; flex-direction:column; }
    générique + type "button" s'annuleraient sinon en cas d'égalité). */
 #toolbar-top #btn-save { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-save:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
+/* Enregistrement automatique coupé (js/main.js:wireSaveMenu, retour d'Antoine du 01/10) : noir et blanc classique ; le bleu, lui, dit « enregistrement automatique actif ». */
+#toolbar-top #btn-save.is-autosave-off { background: var(--solid-neutral); border-color: var(--solid-neutral-border); color: #fff; box-shadow: 0 1px 2px rgba(20,28,46,.35); }
+#toolbar-top #btn-save.is-autosave-off:hover { background: var(--solid-neutral-hover); border-color: var(--solid-neutral-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
 #toolbar-top #btn-export-pdf { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
