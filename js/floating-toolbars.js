@@ -135,6 +135,7 @@ const FloatingToolbars = (function () {
       + gridButton('cell-merge', 'cellMerge', I18n.t('table.cellMerge'))
       + gridButton('cell-split', 'cellSplit', I18n.t('table.cellSplit'))
       + '<span class="v2-floating-sep"></span>'
+      + `<button data-action="caption" title="${I18n.t('caption.addTable')}" aria-label="${I18n.t('caption.addTable')}">${Icons.svg('caption')}</button>`
       + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
       + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
       + '</button>'
@@ -164,6 +165,7 @@ const FloatingToolbars = (function () {
           bordersPanel.show(btn, menuPlacement());
           EditorCore.setOpenDropdownPanel(bordersPanel, btn);
         },
+        caption: () => Caption.run(editor, 'table'),
         'fill-open': () => {
           const btn = document.getElementById('v2-table-fill-btn');
           if (EditorCore.getOpenDropdownPanel() === fillPanel) { EditorCore.closeDropdownPanel(); return; }
@@ -211,6 +213,8 @@ const FloatingToolbars = (function () {
     };
     const syncGridButtons = () => {
       setLocked('table-del', true);
+      // Pas de légende dans une grille : le bouton reste dans la barre, grisé, avec sa raison pour info-bulle (js/caption.js).
+      Caption.syncButton(gridButtonOf('caption'), editor, 'table');
       setLocked('cell-merge', !GridEditor.canMerge(editor));
       setLocked('cell-split', !GridEditor.canSplit(editor));
       const align = GridEditor.selectedVerticalAlign(editor);
@@ -266,6 +270,7 @@ const FloatingToolbars = (function () {
         rowDelBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
         rowDelBtn.title = I18n.t(blocked ? 'table.rowDelMerged' : 'table.rowDel');
       }
+      Caption.syncButton(panel.el.querySelector('button[data-action="caption"]'), editor, 'table');
       const cellAttrs = editor.getAttributes('tableCell').backgroundColor ? editor.getAttributes('tableCell') : editor.getAttributes('tableHeader');
       EditorCore.setColorBar('v2-table-fill-bar', cellAttrs.backgroundColor || null);
     };
@@ -292,6 +297,8 @@ const FloatingToolbars = (function () {
       `<button data-action="layer-behind" title="${I18n.t('imgToolbar.behind')}">${Icons.svg('layerBehind')}</button>`,
       '<span class="v2-floating-sep"></span>',
       `<button data-action="repeat" title="${I18n.t('imgToolbar.repeat')}" aria-pressed="false">${Icons.svg('layerRepeat')}</button>`,
+      '<span class="v2-floating-sep"></span>',
+      `<button data-action="caption" title="${I18n.t('caption.addImage')}" aria-label="${I18n.t('caption.addImage')}">${Icons.svg('caption')}</button>`,
       '<span class="v2-floating-sep"></span>',
       `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
     ].join('');
@@ -504,6 +511,8 @@ const FloatingToolbars = (function () {
         'layer-front': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('front'); },
         'layer-behind': () => { if (!HeaderFooterPreview.getHfMode() && !GridEditor.isActive()) setLayer('behind'); },
         repeat: toggleRepeat,
+        // Légende (js/caption.js) : pose la légende sous l'image et y met le curseur, ou y ramène le curseur ; grisé (cf. syncState) pour une image en calque ou habillée.
+        caption: () => Caption.run(editor, 'image'),
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -544,6 +553,7 @@ const FloatingToolbars = (function () {
         repeatBtn.setAttribute('aria-pressed', !reason && attrs.repeat ? 'true' : 'false');
         repeatBtn.title = I18n.t(reason || 'imgToolbar.repeat');
       }
+      Caption.syncButton(panel.el.querySelector('button[data-action="caption"]'), editor, 'image');
     }
 
     // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.

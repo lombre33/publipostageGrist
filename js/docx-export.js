@@ -137,6 +137,8 @@ const DocxExport = (function () {
     // Lien : couleur et soulignement de lien ; la couleur d'un <span> posé DEDANS (css('color') plus bas) l'emporte, comme `.tiptap a` face à un texte coloré.
     if (tag === 'A' && HtmlSanitize.safeLinkHref(node.getAttribute('href'))) { out.color = LINK_COLOR_HEX; out.underline = { type: 'single' }; }
     if (tag === 'PRE') { out.font = CODE_FONT; out.size = CODE_HALF_PT; out.color = CODE_TEXT_HEX; }
+    // Légende (js/caption.js) : un paragraphe `data-caption` est en petit, italique, gris - la base de ses runs ; la taille ou la couleur d'un <span> posé dedans l'emportent plus bas, comme dans l'éditeur.
+    if (tag === 'P' && node.hasAttribute('data-caption')) { out.italics = true; out.size = Math.round(Caption.SIZE_PT * 2); out.color = Caption.COLOR.replace('#', '').toUpperCase(); }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') out.strike = true;
     if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true;
     if (css('font-style') === 'italic') out.italics = true;

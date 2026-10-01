@@ -275,12 +275,14 @@ async function runTheme(theme) {
 
   // ---------- 1) La barre, curseur dans la première case ----------
   await clickGrid(page, 1, 1);
-  const SHOWN = ['row-before', 'row-after', 'row-del', 'col-before', 'col-after', 'col-del', 'table-del', 'cell-merge', 'cell-split', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
+  const SHOWN = ['row-before', 'row-after', 'row-del', 'col-before', 'col-after', 'col-del', 'table-del', 'cell-merge', 'cell-split', 'caption', 'fill-open', 'borders-open', 'valign-top', 'valign-middle', 'valign-bottom'];
   let bar = await barState(page);
-  check(`${label} - la barre de la case porte ses 14 boutons dans l'ordre Lignes, Colonnes, Fusion, Fond, Bordures, Alignement vertical, tous dans la bande, sur une seule ligne à ${WIDTH} px`,
+  check(`${label} - la barre de la case porte ses 15 boutons dans l'ordre Lignes, Colonnes, Fusion, Légende, Fond, Bordures, Alignement vertical, tous dans la bande, sur une seule ligne à ${WIDTH} px`,
     !!bar && bar.dockShown && bar.order.join() === SHOWN.join() && SHOWN.every(a => bar.buttons[a].inside) && bar.height <= 34 && bar.dockHeight <= 40, { order: bar && bar.order, height: bar && bar.height, dock: bar && bar.dockHeight });
   check(`${label} - « Fusionner les cases », « Scinder la case » et « Supprimer le tableau » sont grisés (pas retirés) quand une seule case est choisie`,
     !!bar && ['cell-merge', 'cell-split', 'table-del'].every(a => bar.buttons[a].locked && bar.buttons[a].shown && bar.buttons[a].opacity < 0.5) && !['row-before', 'col-after', 'fill-open', 'valign-top'].some(a => bar.buttons[a].locked), bar && bar.buttons);
+  check(`${label} - « Légende » est grisée (pas retirée) dans la barre de la case, avec sa raison pour nom : une grille n'a pas de légende`,
+    !!bar && !!bar.buttons.caption && bar.buttons.caption.shown && bar.buttons.caption.opacity < 0.5 && bar.buttons.caption.title === 'Pas de légende dans une grille', bar && bar.buttons.caption);
   check(`${label} - au départ chaque case est au milieu : « Aligner au milieu » est enfoncé, ni le haut ni le bas`,
     !!bar && bar.buttons['valign-middle'].active && bar.buttons['valign-middle'].pressed === 'true' && !bar.buttons['valign-top'].active && bar.buttons['valign-top'].pressed === 'false' && !bar.buttons['valign-bottom'].active, bar && bar.buttons);
   const contrast = await page.evaluate(([on, off]) => {
@@ -466,8 +468,8 @@ async function runTheme(theme) {
     const seps = Array.from(bar.querySelectorAll('.v2-floating-sep')).filter(s => getComputedStyle(s).display !== 'none').length;
     return { floating: !bar.classList.contains('docked') && bar.parentElement === document.body, visible: bar.classList.contains('visible'), shown, seps, delGrey: del.classList.contains('v2-hf-locked') };
   });
-  check(`${label} - tableau de document : la barre flotte comme avant, avec ses 8 boutons (lignes, colonnes, tableau, fond) et ni fusion ni alignement vertical`,
-    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,fill-open' && !classic.delGrey, classic);
+  check(`${label} - tableau de document : la barre flotte comme avant, avec ses 9 boutons (lignes, colonnes, tableau, légende, fond) et ni fusion ni alignement vertical`,
+    !!classic && classic.floating && classic.visible && classic.shown.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,caption,fill-open' && !classic.delGrey, classic);
 
   await context.close();
 }

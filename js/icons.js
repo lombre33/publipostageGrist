@@ -31,6 +31,8 @@ const Icons = (function () {
     table: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 10h18M9 10v10"/>',
     twoColumns: '<rect x="3" y="5" width="8" height="14" rx="1"/><rect x="13" y="5" width="8" height="14" rx="1"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-4 4-3-3-6 6"/>',
+    // Légende : un cadre large (l'image ou le tableau) et, dessous, deux lignes de texte alignées à gauche (un cadre plus haut, avec un pied centré, se lisait comme un écran).
+    caption: '<rect x="3" y="3" width="18" height="9" rx="1.5"/><path d="M3 16.5h18M3 20.5h11"/>',
     // Page + ligne de coupe pointillée : l'ancienne icône (carré divisé en 4) ne voulait rien dire de précis.
     pageBreak: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16" stroke-dasharray="2 2"/><path d="M2.5 12h1.5M20 12h1.5"/>',
     // Pastille du numéro d'une ligne de grille qui porte un saut de page : deux pages face à face, la coupure en tirets entre elles.

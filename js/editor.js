@@ -336,6 +336,8 @@ const Editor = (function () {
     // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur ses enfants.
     const TrackedCallout = TrackChanges.extendForTracking(Callout.createNode(Node, mergeAttributes));
     const TrackedConditionalText = TrackChanges.extendForTracking(ConditionalText);
+    // Légende (js/caption.js) : un attribut du paragraphe, plus le texte d'attente de la légende vide où se trouve le curseur.
+    const CaptionExtension = Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet });
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
@@ -400,6 +402,7 @@ const Editor = (function () {
         TrackedCallout,
         TrackedConditionalText,
         ConditionalCheckboxNode,
+        CaptionExtension,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,

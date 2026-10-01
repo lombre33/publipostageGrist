@@ -257,6 +257,14 @@ const I18n = (function () {
     'qr.preview.unavailable': { fr: 'QR code indisponible : la bibliothèque n’a pas pu se charger.', en: 'QR code unavailable: the library could not be loaded.' },
     'qr.doc.unavailable': { fr: '[QR code indisponible]', en: '[QR code unavailable]' },
     'qr.doc.tooLong': { fr: '[QR code : texte trop long]', en: '[QR code: text too long]' },
+    // --- Légende sous une image ou un tableau (js/caption.js) : le bouton des barres flottantes, le texte d'attente de la légende vide et les raisons du grisage ---
+    'caption.placeholder': { fr: 'Légende…', en: 'Caption…' },
+    'caption.addImage': { fr: 'Ajouter une légende sous l’image', en: 'Add a caption under the image' },
+    'caption.addTable': { fr: 'Ajouter une légende sous le tableau', en: 'Add a caption under the table' },
+    'caption.goTo': { fr: 'Aller à la légende', en: 'Go to the caption' },
+    'caption.imageLayer': { fr: 'Pas de légende pour une image devant ou derrière le texte', en: 'No caption for an image in front of or behind the text' },
+    'caption.imageFloat': { fr: 'Pas de légende pour une image à gauche ou à droite : le texte l’habille', en: 'No caption for an image on the left or right: the text wraps around it' },
+    'caption.gridLocked': { fr: 'Pas de légende dans une grille', en: 'No caption in a grid' },
     // --- Fenêtre du lien (js/link-dialog.js) : « hyperlink » et pas « link », préfixe déjà pris par les tables liées (linkRules, linkConfig) ---
     'hyperlink.title.new': { fr: 'Insérer un lien', en: 'Insert a link' },
     'hyperlink.title.edit': { fr: 'Modifier le lien', en: 'Edit the link' },

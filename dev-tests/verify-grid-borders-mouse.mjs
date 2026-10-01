@@ -325,7 +325,7 @@ async function runTheme(theme) {
   const order = bar ? bar.order : [];
   check(`${label} - le bouton « Bordures » est dans la barre de la case, entre le fond et l'alignement vertical, dans la bande, actif`,
     !!chip && chip.shown && chip.inside && !chip.locked && chip.title === 'Bordures' && order.indexOf('borders-open') === order.indexOf('fill-open') + 1 && order.indexOf('valign-top') === order.indexOf('borders-open') + 1, { chip, order });
-  check(`${label} - la barre, avec le bouton de plus, tient toujours sur une seule ligne à ${WIDTH} px`, !!bar && bar.height <= 34 && bar.dockHeight <= 40 && bar.order.length === 14, bar && { height: bar.height, dock: bar.dockHeight, n: bar.order.length });
+  check(`${label} - la barre, avec le bouton de plus, tient toujours sur une seule ligne à ${WIDTH} px`, !!bar && bar.height <= 34 && bar.dockHeight <= 40 && bar.order.length === 15, bar && { height: bar.height, dock: bar.dockHeight, n: bar.order.length });
 
   // ---------- 2) Le menu s'ouvre sous la bande, tout est sous le pointeur ----------
   await realClick(page, button('borders-open'));
@@ -464,7 +464,7 @@ async function runTheme(theme) {
     if (!bar) return null;
     return Array.from(bar.querySelectorAll('button[data-action]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0).map(b => b.dataset.action);
   });
-  check(`${label} - tableau de document : la barre n'a pas de bouton « Bordures » (ni de fusion, ni d'alignement vertical)`, !!classic && !classic.includes('borders-open') && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,fill-open', classic);
+  check(`${label} - tableau de document : la barre n'a pas de bouton « Bordures » (ni de fusion, ni d'alignement vertical)`, !!classic && !classic.includes('borders-open') && classic.join() === 'row-before,row-after,row-del,col-before,col-after,col-del,table-del,caption,fill-open', classic);
 
   await context.close();
 }

@@ -89,6 +89,7 @@ const GROUPS = {
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
+  caption: 'scenarios-caption', // légende sous une image ou un tableau (js/caption.js) : attribut `data-caption`, boutons des barres flottantes, grisage, tableau / case / colonne, texte d'attente, suivi, style de l'éditeur et de la Lecture, PDF, Word, e-mail
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
   blankLastPage: 'scenarios-blank-last-page', // page blanche en fin de document : Lecture, PDF, Word, et le repère « Page 2 » de l'éditeur (js/header-footer-preview.js:trailingBlankStart)
   tablePageCut: 'scenarios-table-page-cut', // un tableau se coupe entre deux lignes au saut de page (js/table-page-cut.js) : règle, couture de l'éditeur et de la Lecture, PDF relu par pdf.js, Word
@@ -116,6 +117,7 @@ const NODE_SCRIPTS = {
   varBoolMouse: 'verify-var-bool-mouse.mjs', // barre d'une bulle Oui / Non à la vraie souris : quatre boutons atteignables, bouton enfoncé, Lecture mesurée aux pixels d'une vraie capture ; 700x400 clair, sombre et anglais
   condTextMouse: 'verify-cond-text-mouse.mjs', // bloc de texte conditionnel à la vraie souris : liste « # » et Chips, étiquette et barre (icônes grisées aux pixels), fenêtre de condition, blocs emboîtés, texte entouré, Lecture ; 700x400 clair et sombre
   condCheckboxMouse: 'verify-cond-checkbox-mouse.mjs', // case conditionnelle à la vraie souris : liste « # » et Chips, UN clic pose la puce et ouvre sa barre (icônes grisées aux pixels), fenêtre de condition, colonne étroite, Lecture mesurée aux pixels ; 700x400 clair, sombre et anglais
+  captionMouse: 'verify-caption-mouse.mjs', // légende sous une image ou un tableau à la vraie souris et au vrai clavier : barre de l'image et du tableau, bouton « Légende » (actif, grisé), texte d'attente, frappe, Entrée, Ctrl+Z, Retour arrière ; 700x400 clair, sombre et anglais
   modalBaseMouse: 'verify-modal-base-mouse.mjs', // base commune des fenêtres (js/modal-base.js) : Condition, Autres attributs, Boucle - titre et boutons fixes, Tab, Échap
   modalPagesMouse: 'verify-modal-pages-mouse.mjs', // même base, lot 2 : les sept fenêtres d'index.html (Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser, Galerie, Aperçu)
   dialogsMouse: 'verify-dialogs-mouse.mjs', // saisies et confirmations (js/dialogs.js) à la place de prompt/confirm : au-dessus des autres fenêtres, Tab, Échap, focus rendu

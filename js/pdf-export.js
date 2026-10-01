@@ -164,6 +164,8 @@ const PdfExport = (function () {
       addDecoration(out, 'underline');
     }
     if (tag === 'PRE') { out.font = CODE_FONT; out.fontSize = CODE_FONT_SIZE; out.color = CODE_TEXT_COLOR; out.preserveLeadingSpaces = true; }
+    // Légende (js/caption.js) : un paragraphe `data-caption` est en petit, italique, gris - la base de ses runs ; la taille ou la couleur d'un <span> posé dedans l'emportent plus bas, comme dans l'éditeur.
+    if (tag === 'P' && node.hasAttribute('data-caption')) { out.italics = true; out.fontSize = Caption.SIZE_PT; out.color = Caption.COLOR; }
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') addDecoration(out, 'lineThrough');
     if (css('font-weight') && /bold|[6-9]00/i.test(css('font-weight'))) out.bold = true;
     if (css('font-style') === 'italic') out.italics = true;
@@ -554,6 +556,7 @@ const PdfExport = (function () {
       const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
       obj = { text, margin: [isLi ? measureIndentPt(node, 'box') : 0, 0, 0, 0] };
       if (align) obj.alignment = align;
+      if (!runs.length && node.tagName === 'P' && node.hasAttribute('data-caption')) obj.fontSize = Caption.SIZE_PT;
     }
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
@@ -1370,6 +1373,8 @@ const PdfExport = (function () {
     // droite = spaceWidthPt() : compense white-space:break-spaces.
     const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
     const align = alignment(node); if (align) block.alignment = align;
+    // Une légende vide garde sa hauteur de petite ligne, comme dans l'éditeur (le bloc de repli `text: ' '` n'a aucun run qui porte la taille).
+    if (!runs.length && tag === 'P' && node.hasAttribute('data-caption')) block.fontSize = Caption.SIZE_PT;
     if (/^H[1-6]$/.test(tag)) {
       block.bold = true;
       const marker = (headingMarkers && headingMarkers.get(node)) || '';

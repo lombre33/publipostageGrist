@@ -488,6 +488,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Passer devant ou dans le texte efface la case, et revenir derrière le texte ne la rend pas. Dans un macro-modèle chaque courrier a sa couche, sur ses pages, dans le PDF ; le Word n'a qu'un
   en-tête : toutes les couches y valent pour tout le document, jusqu'aux sections par courrier. Le module `PageLayer` (`js/page-layer.js`) est la couche de page commune : le filigrane de
   « Paysage et portrait » s'y appuie (règle « Filigrane » plus bas), une couche et non deux.
+- Légende (demande d'Antoine du 01/10, « la légende sous une image ou un tableau ») : un bouton « Légende » dans la barre flottante de l'image (avant « Supprimer ») et dans celle du tableau (avant la couleur de fond),
+  jamais une icône de plus dans la barre du haut. Sans légende, il en pose une, vide, juste sous le bloc (sous le paragraphe qui porte l'image, avant le paragraphe suivant, dans la même case ou la même colonne) et y met le
+  curseur, avec « Légende… » (« Caption… ») en gris sur la feuille (4,5:1 au moins) ; avec une légende, il est actif (« Aller à la légende ») et y ramène le curseur à la fin, jamais un retrait. Il est grisé, jamais retiré, avec
+  sa raison pour nom, pour une image devant ou derrière le texte, une image à gauche ou à droite (le texte l'habille : pas de « dessous ») et dans une grille. La légende est un paragraphe ordinaire marqué `data-caption`, pas
+  un nouveau bloc : 12 px (9 pt), italique, gris #595959 (7:1 sur la feuille, qui reste blanche en sombre), sans marge ; elle reprend l'alignement d'une image centrée ou du paragraphe de l'image ; un texte qui porte sa
+  taille ou sa couleur la garde ; Entrée à sa fin ouvre un paragraphe ordinaire. Même rendu dans l'éditeur, la Lecture, le PDF et le Word, une ligne comme une autre dans l'e-mail. Retour arrière dans une légende vide la
+  retire ; en suivi des modifications la pose est une insertion suivie et le curseur arrive dans la légende.
+  La barre de l'image garde sa largeur d'avant le bouton (511 px) : la glissière d'opacité passe à 97 px pour lui faire place. À ~700 px, image tout en haut de la page, une barre plus large recouvre
+  « Tout accepter » dans la bande du suivi des modifications et le vrai clic n'y arrive plus ; tout bouton de plus dans cette barre rend de même sa largeur à un autre élément de la barre.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
