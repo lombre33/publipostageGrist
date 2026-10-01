@@ -503,6 +503,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   `data-tc-modification`), jamais en `<ins>` ou `<del>` entre deux cases, que le navigateur écarterait du tableau à la relecture. Au-dessus d'une cellule fusionnée, « Supprimer la colonne » est grisé,
   jamais retiré (`aria-disabled`, explication au survol) : la supprimer à travers une cellule fusionnée casserait le tableau ; « Colonne avant / après » reste actif et élargit la cellule.
   Les largeurs que le widget règle tout seul (colonnes automatiques figées, tableau ramené dans la page) s'écrivent hors suivi : jamais une suggestion que personne n'a écrite.
+- Texte inséré et texte supprimé du suivi des modifications (choix « Aligner » d'Antoine, 01/10) : le texte suggéré prend les teintes des cases d'une colonne suivie, constantes dans les deux thèmes. Inséré :
+  `#146c48` sur `#e5f6ee` (5,7:1), avec son filet vert au bas. Supprimé : barré, `#b42318` sur `#fbe9e9` (5,6:1). Jamais les jetons du thème (`--danger`, `--danger-soft`) : en sombre ils posaient
+  une pastille foncée sur la page, qui reste blanche, et le rouge d'avant n'avait que 3,7:1 en clair.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »

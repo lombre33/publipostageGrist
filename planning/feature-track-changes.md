@@ -710,6 +710,13 @@ Ils marchent maintenant, comme une frappe suggérée :
   en bande étroite et disparaît à la relecture, comme le faisaient les cases.
 - Tests : groupe `trackChanges` (`trackchanges_column_*`, 8 cas) et script Node `trackColumnsMouse` (`dev-tests/verify-track-columns-mouse.mjs`, 44 vérifications).
 
+## Couleurs du texte inséré et supprimé (2026-10-01, choix « Aligner » d'Antoine)
+
+Le texte supprimé prenait `--danger` sur `--danger-soft` (3,7:1 en clair) et, en thème sombre, la pastille foncée de ces deux jetons sur la page, qui reste blanche. Les règles
+`.tiptap ins[data-id]` et `.tiptap del[data-id]` (`css/track-changes.css`) prennent maintenant les teintes constantes des cases d'une colonne suivie, les mêmes dans les deux thèmes :
+texte inséré `#146c48` sur `#e5f6ee` (5,7:1, filet vert au bas), texte supprimé barré `#b42318` sur `#fbe9e9` (5,6:1). La marque « modification » (soulignement pointillé
+`--accent`) n'a pas changé. Test : `contrast_track_changes_text_reaches_4_5_with_the_column_tints_in_light_and_dark` (groupe `contrast`).
+
 ## Sources externes consultées (recherche du 2026-09-18)
 
 Accès direct à `tiptap.dev`, `prosemirror.net`, `support.getgrist.com` et `community.getgrist.com`

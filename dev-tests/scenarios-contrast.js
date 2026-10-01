@@ -620,6 +620,29 @@
     },
   });
 
+  // Texte inséré et texte supprimé du suivi des modifications (demande d'Antoine du 01/10, carte « Rendre lisibles les couleurs du texte inséré et supprimé du suivi ? », réponse
+  // « Aligner ») : les teintes des cases d'une colonne suivie (css/track-changes.css), écrites en dur donc les mêmes en clair et en sombre - la page reste blanche en thème
+  // sombre. Avant : le texte supprimé prenait --danger sur --danger-soft (3,7:1 en clair) et, en sombre, la pastille foncée de ces deux jetons sur la page blanche.
+  cases.push({
+    id: 'contrast_track_changes_text_reaches_4_5_with_the_column_tints_in_light_and_dark',
+    description: 'Suivi des modifications : le texte inséré (vert) et le texte supprimé (rouge, barré) ont 4,5:1 au moins sur leur fond, les teintes d\'une colonne suivie, identiques en clair et en sombre (pas de pastille foncée sur la page blanche)',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>Garder <ins data-id="1">ajout</ins> et <del data-id="2">retrait</del> fin.</p>');
+      await h.sleep(150);
+      const ins = document.querySelector('.tiptap ins[data-id]');
+      const del = document.querySelector('.tiptap del[data-id]');
+      if (!ins || !del) return { pass: false, notes: 'marques introuvables dans l\'éditeur : ins=' + !!ins + ' del=' + !!del };
+      const paint = el => { const cs = getComputedStyle(el); return cs.color + ' sur ' + cs.backgroundColor + (cs.textDecorationLine.indexOf('line-through') !== -1 ? ' barré' : ''); };
+      const byTheme = inBothThemes(() => ({ 'texte inséré': round2(textRatio(ins)), 'texte supprimé': round2(textRatio(del)) }));
+      const painted = inBothThemes(() => ({ ins: paint(ins), del: paint(del) }));
+      const bad = failing(byTheme, 4.5);
+      const sameInBoth = painted.light.ins === painted.dark.ins && painted.light.del === painted.dark.del;
+      const columnTints = painted.light.ins === 'rgb(20, 108, 72) sur rgb(229, 246, 238)' && painted.light.del === 'rgb(180, 35, 24) sur rgb(251, 233, 233) barré';
+      return { pass: bad.length === 0 && sameInBoth && columnTints, notes: JSON.stringify({ bad, sameInBoth, columnTints, byTheme, painted }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();
