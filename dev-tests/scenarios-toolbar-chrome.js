@@ -411,13 +411,14 @@
   async function restoreOrientationState(typesBefore) {
     OrientationToggle.TYPES.splice(0, OrientationToggle.TYPES.length, ...typesBefore);
     PageLayout.setOrientation('portrait');
+    PageLayout.setFormat('A4');
     I18n.setLang('fr');
     OrientationToggle.sync();
   }
 
   cases.push({
     id: 'toolbar_orientation_button_next_to_a4_and_grayed_when_the_type_does_not_follow_it',
-    description: 'Le bouton d\'orientation est à côté d\'Aperçu A4, visible et grisé (jamais retiré) pour un document et un email tant que leur type n\'est pas accepté, avec son info-bulle dans les deux langues ; cliquer ne change rien',
+    description: 'Le bouton d\'orientation est à côté d\'Aperçu A4, visible et grisé (jamais retiré) pour un document et un email tant que leur type n\'est pas accepté, avec son libellé (aria-label, sans data-tip) dans les deux langues ; cliquer ne change rien',
     run: async (h) => {
       const typesBefore = OrientationToggle.TYPES.slice();
       const problems = [];
@@ -433,14 +434,16 @@
           if (!btn) { problems.push(name + ' : bouton absent'); continue; }
           const rect = btn.getBoundingClientRect();
           if (!(rect.width > 0 && rect.height > 0) || getComputedStyle(btn).display === 'none') problems.push(name + ' : bouton masqué');
-          if (!btn.previousElementSibling || btn.previousElementSibling.id !== 'v2-a4-toggle') problems.push(name + ' : pas juste après Aperçu A4');
+          const pageGroup = btn.closest('#v2-page-group');
+          if (!pageGroup || !pageGroup.previousElementSibling || pageGroup.previousElementSibling.id !== 'v2-a4-toggle') problems.push(name + ' : pas juste après Aperçu A4');
           if (!btn.disabled) problems.push(name + ' : pas grisé (disabled)');
           if (parseFloat(getComputedStyle(btn).opacity) > 0.5) problems.push(name + ' : opacité ' + getComputedStyle(btn).opacity);
           for (const lang of ['fr', 'en']) {
             I18n.setLang(lang);
             await h.sleep(30);
             const want = I18n.t('toolbar.orientation.unavailable');
-            if (btn.getAttribute('aria-label') !== want || btn.getAttribute('data-tip') !== want) problems.push(name + '/' + lang + ' : info-bulle « ' + btn.getAttribute('data-tip') + ' » au lieu de « ' + want + ' »');
+            if (btn.getAttribute('aria-label') !== want) problems.push(name + '/' + lang + ' : libellé (aria-label) « ' + btn.getAttribute('aria-label') + ' » au lieu de « ' + want + ' »');
+            if (btn.hasAttribute('data-tip')) problems.push(name + '/' + lang + ' : le bouton d\'un menu au survol porte un data-tip');
           }
           I18n.setLang('fr');
           btn.click();
@@ -472,17 +475,19 @@
         await goToNewDocument(h);
         await h.sleep(60);
         const btn = orientationButton();
-        const state = () => ({ page: PageLayout.getOrientation(), data: btn.dataset.orientation, pressed: btn.getAttribute('aria-pressed'), active: btn.classList.contains('active'), label: btn.getAttribute('data-tip'), disabled: btn.disabled, mask: maskImageOf(btn) });
+        const state = () => ({ page: PageLayout.getOrientation(), data: btn.dataset.orientation, pressed: btn.getAttribute('aria-pressed'), active: btn.classList.contains('active'), label: btn.getAttribute('aria-label'), tip: btn.hasAttribute('data-tip'), disabled: btn.disabled, mask: maskImageOf(btn) });
         const before = state();
         if (before.disabled) problems.push('grisé alors que le type est accepté');
         if (before.page !== 'portrait' || before.data !== 'portrait' || before.pressed !== 'false' || before.active) problems.push('état de départ : ' + JSON.stringify(before));
-        if (before.label !== I18n.t('toolbar.orientation.portrait')) problems.push('info-bulle de départ : ' + before.label);
+        if (before.label !== I18n.t('toolbar.orientation.portrait', { format: 'A4' })) problems.push('libellé (aria-label) de départ : ' + before.label);
+        // Bouton d'un menu au survol : pas de data-tip (il se retirerait dès l'ouverture du menu, css/toolbar-v2.css), comme Qualité PDF et Exporter.
+        if (before.tip) problems.push('le bouton d\'un menu au survol porte un data-tip');
         if (before.mask.indexOf("width='12' height='18'") === -1) problems.push('icône de départ : pas une page haute');
         await h.clickButton('btn-page-orientation');
         await h.sleep(60);
         const landscape = state();
         if (landscape.page !== 'landscape' || landscape.data !== 'landscape' || landscape.pressed !== 'true' || !landscape.active) problems.push('après le clic : ' + JSON.stringify(landscape));
-        if (landscape.label !== I18n.t('toolbar.orientation.landscape')) problems.push('info-bulle en paysage : ' + landscape.label);
+        if (landscape.label !== I18n.t('toolbar.orientation.landscape', { format: 'A4' })) problems.push('libellé (aria-label) en paysage : ' + landscape.label);
         if (landscape.mask.indexOf("width='18' height='12'") === -1) problems.push('icône en paysage : pas une page large');
         if (PageLayout.getPageSizeMm().width !== 297) problems.push('PageLayout n\'a pas la page en paysage');
         if (signals !== 1) problems.push(signals + ' signal(aux) pp:marginsChanged après un clic (1 attendu)');

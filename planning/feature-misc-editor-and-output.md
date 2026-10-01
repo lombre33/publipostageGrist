@@ -87,8 +87,12 @@ portrait) et reste la seule source des dimensions de la page (`getPageSize*`, `p
 et de la Lecture, le PDF (aussi en lot), le Word et l'impression navigateur les lisent. Le A4 portrait n'est plus écrit en dur que dans `js/page-layout.js`, dans les
 valeurs initiales de `js/pdf-export.js` et `js/docx-export.js` (remplacées à chaque export), dans le repli CSS du portrait (`--pp-page-width`) et dans l'aperçu
 de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles classiques ; un email et un macro-modèle restent en portrait.
-**Reste ouvert** : les autres formats (A1 à A6), pour lesquels il suffira de faire dépendre ces trois fonctions d'un format enregistré - les consommateurs ne
-changent pas - et l'orientation d'un macro-modèle (qui impose ses propres marges à tout ce qu'il assemble).
+**Formats A3, A4, A5 et A6 livrés le 01/10** (suite du même fil) : `PageLayout.FORMATS` est la seule table des dimensions (mm, pt de pdfmake, twips de Word, nom pdfmake / jsPDF) ; le
+format s'enregistre avec le sens et les marges (clé `format` de la colonne `Margins`, absente ou inconnue = A4) et se choisit dans le menu au survol du bouton Portrait / Paysage
+(`js/orientation-toggle.js`, aucune icône de plus dans la barre). Les trois fonctions de dimensions prennent le format comme le sens, les consommateurs (éditeur, Lecture, facteur
+d'ajustement, PDF, PDF en lot, Word, impression navigateur, qualités raster, plafonds de Réglages) n'ont rien d'autre appris. Un format de plus est une ligne de `FORMATS`.
+**Reste ouvert** : d'autres formats (Lettre US, Légal US, A2, A1, ISO B...) sur carte à Antoine, rien de codé avant son choix ; l'aperçu de la galerie et de l'arbre des modèles
+(toujours une feuille A4 portrait) ; l'orientation et le format d'un macro-modèle (qui impose ses propres marges à tout ce qu'il assemble ; Antoine a répondu « Oui » le 01/10, à faire).
 
 ## Fin de document sans contenu
 

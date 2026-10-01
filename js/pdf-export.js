@@ -43,9 +43,10 @@ const PdfExport = (function () {
   // footnoteCounter/footnoteEntries ci-dessous, réinitialisés une fois par passage racine). 28pt sur les 4 côtés = comportement d'avant PageLayout, repli
   // si l'appelant ne fournit aucune marge (compatibilité ascendante totale).
   let marginTopPt = 28, marginRightPt = 28, marginBottomPt = 28, marginLeftPt = 28;
-  // Page courante (pt) : A4 portrait par défaut, échangée en paysage par setPageMarginsPt() à partir de l'orientation que PageLayout.getMarginsPt() joint aux
-  // marges. Variables de module pour la même raison que les marges ci-dessus.
+  // Page courante (pt) : A4 portrait par défaut, au format et dans le sens que PageLayout.getMarginsPt() joint aux marges (setPageMarginsPt). Variables de
+  // module pour la même raison que les marges ci-dessus.
   let pageOrientation = 'portrait';
+  let pageFormat = 'A4';
   let pageWidthPt = 595.28, pageHeightPt = 841.89;
   // Notes de bas de page : collectées par inlineRuns à toute profondeur d'appel (cellule/colonne/corps) - variables de module plutôt qu'un paramètre
   // traversant tableFrom/twoColumnsFrom/cellLineToPdfObject. Remises à zéro à chaque buildPdfContentFromRoot racine (une fois par passe, cf. isTopLevel).
@@ -88,10 +89,11 @@ const PdfExport = (function () {
     marginRightPt = Number.isFinite(m.right) ? m.right : 28;
     marginBottomPt = Number.isFinite(m.bottom) ? m.bottom : 28;
     marginLeftPt = Number.isFinite(m.left) ? m.left : 28;
-    // Page en paysage : l'orientation voyage avec les marges (PageLayout.getMarginsPt). Absente (appel historique) = portrait. Les dimensions viennent de
+    // Sens et format de la page : ils voyagent avec les marges (PageLayout.getMarginsPt). Absents (appel historique) = A4 portrait. Les dimensions viennent de
     // PageLayout.pageSizePtFor pour qu'il n'y ait qu'un seul endroit où elles sont écrites.
     pageOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
-    const page = PageLayout.pageSizePtFor(pageOrientation);
+    pageFormat = PageLayout.normalizeFormat(m.format);
+    const page = PageLayout.pageSizePtFor(pageOrientation, pageFormat);
     pageWidthPt = page.width; pageHeightPt = page.height;
     A4_PREVIEW_PADDING_TOP_PX = marginTopPt / PX_TO_PT;
     A4_PREVIEW_PADDING_LEFT_PX = marginLeftPt / PX_TO_PT;
@@ -1550,7 +1552,7 @@ const PdfExport = (function () {
     const topMarginPt = marginTopPt + (hf.topExtraPt || 0);
     const bottomMarginPt = marginBottomPt + (hf.bottomExtraPt || 0) + (hasFootnotes ? FOOTNOTE_BAND_PT : 0);
     const doc = {
-      pageSize: 'A4', pageOrientation: pageOrientation,
+      pageSize: PageLayout.pdfPageNameFor(pageFormat), pageOrientation: pageOrientation,
       pageMargins: [marginLeftPt, topMarginPt, marginRightPt, bottomMarginPt],
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
@@ -1892,8 +1894,8 @@ const PdfExport = (function () {
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, currentTableId, record);
     // Qualités non-vectorielles : cf. js/pdf-export-alt.js (isolées, actuellement désactivées dans l'UI - encore peu robustes).
-    if (quality === 'browser-print') { await PdfExportAlt.exportViaBrowserPrint(resolvedHtml, filename, pageOrientation); return; }
-    if (quality === 'low' || quality === 'ultra') { await PdfExportAlt.exportViaRaster(resolvedHtml, filename, quality, pageOrientation); return; }
+    if (quality === 'browser-print') { await PdfExportAlt.exportViaBrowserPrint(resolvedHtml, filename, pageOrientation, pageFormat); return; }
+    if (quality === 'low' || quality === 'ultra') { await PdfExportAlt.exportViaRaster(resolvedHtml, filename, quality, pageOrientation, pageFormat); return; }
     // En-tête/pied de page : uniquement le chemin vectoriel natif - ni l'impression navigateur ni les qualités raster n'ont de notion de header/footer natif
     // de page.
     const resolvedHeaderFooterData = await ExportCommon.resolveHeaderFooterVariables(headerFooterData, currentTableId, record);

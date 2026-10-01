@@ -464,6 +464,31 @@ Node `orientationMouse` (vrai clic, Entrée et Espace à 700×400, clair et somb
 
 ---
 
+## 15. Format de la page (A3, A4, A5, A6)
+
+**Couverture automatisée** : groupe `pageFormat` (`scenarios-page-format.js`, 24 cas : table des dimensions, menu du bouton Page, feuille et pagination de l'éditeur et de la
+Lecture, facteur d'ajustement, enregistrement avec le modèle, marges et plafonds de Réglages, PDF, Word, tableau et zone à deux colonnes, image en calque, suivi des modifications,
+impression navigateur), script Node `pageFormatMouse` (survol et vrai clic sur les lignes du menu, Tab, Entrée et Espace, à 700×400, clair et sombre), cas `toolbar_orientation_*`.
+**Non couvert** : le rendu réel dans Word (seul `w:pgSz` du fichier est lu), un vrai lecteur PDF, la boîte d'impression d'un navigateur, l'impression réelle sur du papier A3 ou A6.
+
+### Protocole
+1. Survoler le bouton Portrait / Paysage (juste après Aperçu A4) : un menu s'ouvre sous la souris avec « Page », Portrait, Paysage, puis A3, A4, A5 et A6 avec leurs dimensions ;
+   Portrait et A4 sont cochés. Cliquer A5 : la feuille se rétrécit (148 mm de large), les sauts de page se recalculent, la case devient « Aperçu A5 », le menu se referme quand
+   la souris part et le curseur reste dans le texte.
+2. Exporter en PDF : le lecteur PDF annonce 148 × 210 mm, le texte et le tableau occupent toute la largeur, l'en-tête et le pied de page (avec le numéro) se placent en haut et en bas
+   de chaque page A5. Même résultat pour « Exporter toutes les lignes ». Refaire en A3 (297 × 420 mm) et en A6 (105 × 148 mm), puis en paysage.
+3. Exporter en Word, ouvrir le fichier dans Word : Mise en page > Taille indique A5 (ou A3, A6), les marges sont celles du modèle, le tableau et la zone à deux colonnes remplissent la largeur.
+4. Repasser en A4 : la feuille et les sauts de page sont exactement ceux d'avant. Les marges d'un petit format ont pu être réduites (elles ne reviennent pas toutes seules) et un
+   tableau trop large pour A5 a été réduit pour de bon : à vérifier et à noter.
+5. Enregistrer, recharger la page du document Grist : le modèle revient dans son format et son sens ; un modèle enregistré avant ce réglage reste en A4 portrait.
+6. Un email et un macro-modèle : le bouton et son menu sont visibles et grisés (titre « Page (pas disponible pour ce modèle) »), un clic sur une ligne ne change rien.
+7. À 700 px de panneau : A5 portrait tient sans réduction, A3 portrait est réduit (facteur 0,60), A3 paysage tombe au plancher de 0,5 et la zone d'édition défile horizontalement.
+8. Au clavier : Tab depuis Aperçu A4 arrive sur le bouton Page et ouvre son menu, passe par ses six lignes (trait de focus visible), Entrée ou Espace pose le format, Tab suivant
+   referme le menu et arrive sur Qualité PDF.
+9. Suivi des modifications activé, changer de format sur un modèle qui a une image en calque : aucune suggestion n'apparaît, l'image reste sur la page de son texte.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

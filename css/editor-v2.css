@@ -575,6 +575,9 @@
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
 }
 .v2-hover-row-check[aria-checked="true"]::after { visibility: visible; }
+/* Menu Page (#v2-page-flyout, js/orientation-toggle.js) : le nom de la ligne prend la place libre, les dimensions du format restent discrètes entre lui et la coche. */
+.v2-page-row-name { flex: 1; }
+.v2-page-row-size { font-size: 11px; color: var(--text-muted, #667085); }
 /* Bloc "Numérotation des titres" fusionné dans le flyout Titre - même .v2-segmented/.v2-segmented-btn que la pastille en-tête/pied, pour ne pas réinventer
    un 2ᵉ style de segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }

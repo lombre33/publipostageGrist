@@ -486,7 +486,7 @@
   const ACCESS_LOCK_CLASS = 'pp-access-locked';
   // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre droit).
   const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'v2-save-group', 'btn-delete', 'btn-link-rules',
-    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'btn-page-orientation'];
+    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'v2-page-group'];
   // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
@@ -1320,8 +1320,8 @@
     const cs = getComputedStyle(container);
     const available = container.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
     if (!(available > 0)) return;
-    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en portrait, 1122.52px en
-    // paysage. Lue à chaque calcul, elle change avec l'orientation du modèle.
+    // Largeur de la feuille = celle de .v2-page-sheet / .reader-content en Aperçu A4 (--pp-page-width, css/editor-v2.css) : 793.71px en A4 portrait, 1122.52px en
+    // A4 paysage, 559.37px en A5 portrait... Lue à chaque calcul, elle change avec le sens et le format du modèle.
     const raw = available / PageLayout.getSheetWidthPx();
     const zoom = raw >= 1 ? 1 : Math.max(MIN_FIT_ZOOM, raw);
     // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
@@ -1347,18 +1347,18 @@
     if (readerChanged && currentMode === 'read') renderReader();
   }
 
-  // Vrai quand l'orientation a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un macro-modèle) ou sans
+  // Vrai quand l'orientation ou le format a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un macro-modèle) ou sans
   // Aperçu A4 (pas de pagination, donc pas de grille page) : la grille page des images en calque reste à recapturer (cf. onPageLayoutChanged).
   let layerGridsStale = false;
   // Recapture en attente, dès que l'éditeur peut la mesurer (retour en Édition, Aperçu A4 rallumé). Elle vient d'un geste de la personne (le changement
-  // d'orientation) : si elle a modifié le document, l'enregistrement automatique la reprend - un enregistrement a pu partir entre-temps.
+  // d'orientation ou de format) : si elle a modifié le document, l'enregistrement automatique la reprend - un enregistrement a pu partir entre-temps.
   function recaptureStaleLayerGrids() {
     if (!layerGridsStale || currentMode !== 'edit' || currentTypeModele === 'macro' || !editorContainer.classList.contains('a4-preview')) return;
     layerGridsStale = false;
     if (HeaderFooterPreview.recaptureLayeredImageGrids()) markAutosaveDirty();
   }
-  // Après un changement d'orientation : le facteur d'ajustement (calculé sur la largeur de la page) d'abord, puis tout ce qui se mesure avec lui - colonnes des
-  // tableaux et pagination de l'éditeur, repagination de la Lecture. Les marges gardent leurs millimètres : seule la page change de forme.
+  // Après un changement d'orientation ou de format : le facteur d'ajustement (calculé sur la largeur de la page) d'abord, puis tout ce qui se mesure avec lui -
+  // colonnes des tableaux et pagination de l'éditeur, repagination de la Lecture. Les marges gardent leurs millimètres : seule la page change de forme.
   function onPageLayoutChanged() {
     applyPageFitZoomToBoth();
     Editor.refreshLayout();

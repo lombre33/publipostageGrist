@@ -132,7 +132,7 @@
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
       await sleep(3000); // plus d'un tick d'auto-save (2,5 s)
       const writesAfter = stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
-      const editIds = ['btn-mode-edit', 'v2-save-group', 'btn-delete', 'btn-organize-templates', 'v2-new-template-group', 'btn-link-rules', 'btn-page-orientation', 'v2-btn-bold', 'v2-btn-comment'];
+      const editIds = ['btn-mode-edit', 'v2-save-group', 'btn-delete', 'btn-organize-templates', 'v2-new-template-group', 'btn-link-rules', 'v2-page-group', 'v2-btn-bold', 'v2-btn-comment'];
       const greyed = editIds.filter(id => locked(id) && shown(id));
       const exportFree = !locked('v2-export-pdf-group') && !locked('v2-quality-group');
       const status = document.getElementById('status-msg').textContent;

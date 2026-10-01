@@ -9,9 +9,9 @@ const PdfExportAlt = (function () {
 
   // Passe par la boîte de dialogue d'impression native du navigateur plutôt que par un rendu canvas ou une image base64 : un <img> s'affiche sans CORS, seul
   // mode immunisé contre les images bloquées par CORS à l'export. Réutilise les vraies feuilles de style du projet (relinkées), pas un <style> recopié.
-  // `orientation` ('portrait' par défaut, 'landscape') : celle du modèle, transmise par js/pdf-export.js avec le reste de l'export. Ces deux chemins ignorent par
-  // ailleurs les marges du modèle (18 mm / 10 mm fixes) ; seul le sens de la page est suivi.
-  async function exportViaBrowserPrint(resolvedHtml, filename, orientation) {
+  // `orientation` ('portrait' par défaut, 'landscape') et `format` ('A4' par défaut) : ceux du modèle, transmis par js/pdf-export.js avec le reste de l'export. Ces deux
+  // chemins ignorent par ailleurs les marges du modèle (18 mm / 10 mm fixes) ; seuls le sens et le format de la page sont suivis.
+  async function exportViaBrowserPrint(resolvedHtml, filename, orientation, format) {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -35,7 +35,7 @@ const PdfExportAlt = (function () {
         '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (filename || 'publipostage') + '</title>' +
         stylesheetLinks +
         '<style>' +
-        '@page { size: A4' + (orientation === 'landscape' ? ' landscape' : '') + '; margin: 18mm; }' +
+        '@page { size: ' + PageLayout.pdfPageNameFor(format) + (orientation === 'landscape' ? ' landscape' : '') + '; margin: 18mm; }' +
         'body { margin: 0; }' +
         // Pagination d'impression - absente des feuilles de style du projet (non pertinente hors export), ajoutée ici seulement.
         '.page-break-marker { page-break-after: always; break-after: page; height: 0; margin: 0; border: 0; color: transparent; background: transparent; }' +
@@ -65,7 +65,7 @@ const PdfExportAlt = (function () {
 
   // Conteneur détaché pour les qualités raster (html2canvas + jsPDF via html2pdf.js). Classes 'tiptap reader-content' portées toutes les deux sur ce même
   // conteneur pour cumuler mise en page réelle et numérotation des titres. Le sommaire n'est pas résolu ici : html2canvas n'a aucune notion de "page".
-  function buildRasterContainerAndOptions(resolvedHtml, filename, quality, orientation) {
+  function buildRasterContainerAndOptions(resolvedHtml, filename, quality, orientation, format) {
     const container = document.createElement('div');
     container.style.padding = '20px';
     container.style.position = 'relative';
@@ -76,7 +76,7 @@ const PdfExportAlt = (function () {
     container.querySelectorAll('.page-break-marker').forEach(marker => { marker.innerHTML = ''; marker.style.border = '0'; marker.style.background = 'transparent'; marker.style.color = 'transparent'; marker.style.height = '0'; marker.style.margin = '0'; marker.style.pageBreakAfter = 'always'; marker.style.breakAfter = 'page'; });
     document.body.appendChild(container);
     const preset = getQualityPreset(quality);
-    const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: 'a4', orientation: orientation === 'landscape' ? 'landscape' : 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'] } };
+    const opt = { margin: 10, filename: (filename || 'publipostage') + '.pdf', image: preset.image, html2canvas: preset.html2canvas, jsPDF: Object.assign({ unit: 'mm', format: PageLayout.pdfPageNameFor(format).toLowerCase(), orientation: orientation === 'landscape' ? 'landscape' : 'portrait' }, preset.jsPDF || {}), pagebreak: { mode: ['css', 'legacy'] } };
     return { container, opt };
   }
 
@@ -90,9 +90,9 @@ const PdfExportAlt = (function () {
     return html2pdfPromise;
   }
 
-  async function exportViaRaster(resolvedHtml, filename, quality, orientation) {
+  async function exportViaRaster(resolvedHtml, filename, quality, orientation, format) {
     await ensureRasterLibLoaded();
-    const { container, opt } = buildRasterContainerAndOptions(resolvedHtml, filename, quality, orientation);
+    const { container, opt } = buildRasterContainerAndOptions(resolvedHtml, filename, quality, orientation, format);
     try { await window.html2pdf().set(opt).from(container).save(); } finally { document.body.removeChild(container); }
   }
 

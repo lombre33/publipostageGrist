@@ -214,7 +214,7 @@ async function runTheme(theme) {
   const btnState = () => page.evaluate(() => {
     const b = document.getElementById('btn-page-orientation');
     const cs = getComputedStyle(b, '::before');
-    return { disabled: b.disabled, pressed: b.getAttribute('aria-pressed'), data: b.dataset.orientation, tip: b.getAttribute('data-tip'), mask: cs.webkitMaskImage || cs.maskImage || '' };
+    return { disabled: b.disabled, pressed: b.getAttribute('aria-pressed'), data: b.dataset.orientation, label: b.getAttribute('aria-label'), mask: cs.webkitMaskImage || cs.maskImage || '' };
   });
   const before = await btnState();
   check(`${label} - le bouton d'orientation est entièrement dans le panneau, actif, non enfoncé, avec une page haute`,
@@ -239,7 +239,7 @@ async function runTheme(theme) {
   const landscape = await sheetOf(page, 'editor');
   const afterClick = await btnState();
   check(`${label} - vrai clic : le bouton s'enfonce, montre une page large et annonce le paysage dans son info-bulle`,
-    afterClick.pressed === 'true' && afterClick.data === 'landscape' && afterClick.mask.indexOf("width='18' height='12'") !== -1 && afterClick.tip !== before.tip, { before, afterClick });
+    afterClick.pressed === 'true' && afterClick.data === 'landscape' && afterClick.mask.indexOf("width='18' height='12'") !== -1 && afterClick.label !== before.label, { before, afterClick });
   check(`${label} - paysage : feuille de 1122.52px de mise en page, entièrement dans le panneau (facteur ${landscape && landscape.zoom.toFixed(3)} contre ${portrait.zoom.toFixed(3)}), page sans défilement horizontal`,
     !!landscape && landscape.landscape && within(landscape.layoutWidth, 1122.52, 1.5) && landscape.zoom < portrait.zoom
       && landscape.left >= landscape.container.left - 1 && landscape.right <= landscape.container.right + 1 && landscape.pageOverflowX <= 0, landscape);

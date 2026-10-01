@@ -36,10 +36,11 @@ const DocxExport = (function () {
   // Marges de page (twip) - variables de module plutôt que des constantes : réglées par setPageMarginsTwip() une fois par export, à partir des marges du
   // modèle courant (js/page-layout.js). 28pt (560 twip) sur les 4 côtés = comportement d'avant PageLayout, repli si l'appelant ne fournit aucune marge.
   let marginTopTwip = 560, marginRightTwip = 560, marginBottomTwip = 560, marginLeftTwip = 560;
-  // Page courante : A4 portrait (11906 x 16838 twips) par défaut, en paysage quand PageLayout.getMarginsTwip() joint l'orientation aux marges. Les dimensions
-  // viennent de PageLayout.pageSizeTwipFor, toujours rendues dans le sens de la page (largeur 16838 en paysage) - buildDocxDocument les redonne à docx.js
+  // Page courante : A4 portrait (11906 x 16838 twips) par défaut, au format et dans le sens que PageLayout.getMarginsTwip() joint aux marges. Les dimensions
+  // viennent de PageLayout.pageSizeTwipFor, toujours rendues dans le sens de la page (largeur 16838 en A4 paysage) - buildDocxDocument les redonne à docx.js
   // en portrait + drapeau d'orientation, car docx.js échange lui-même largeur et hauteur dès qu'il voit LANDSCAPE.
   let pageOrientation = 'portrait';
+  let pageFormat = 'A4';
   let pageWidthTwip = 11906;
   let CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
 
@@ -50,7 +51,8 @@ const DocxExport = (function () {
     marginBottomTwip = Number.isFinite(m.bottom) ? m.bottom : 560;
     marginLeftTwip = Number.isFinite(m.left) ? m.left : 560;
     pageOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
-    pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation).width;
+    pageFormat = PageLayout.normalizeFormat(m.format);
+    pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).width;
     CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
   }
   const DEFAULT_HALF_PT = 21; // 10.5pt - doit correspondre à DEFAULT_FONT_SIZE, js/pdf-export.js
@@ -772,9 +774,9 @@ const DocxExport = (function () {
     const sectionProps = {
       page: {
         // docx.js échange largeur et hauteur de lui-même quand l'orientation vaut LANDSCAPE : lui donner les dimensions déjà échangées les ré-échangerait
-        // (page portrait étiquetée paysage). Toujours le A4 portrait ici, l'orientation seule dit le sens.
+        // (page portrait étiquetée paysage). Toujours le portrait du format ici, l'orientation seule dit le sens.
         size: Object.assign(
-          { width: PageLayout.pageSizeTwipFor('portrait').width, height: PageLayout.pageSizeTwipFor('portrait').height },
+          { width: PageLayout.pageSizeTwipFor('portrait', pageFormat).width, height: PageLayout.pageSizeTwipFor('portrait', pageFormat).height },
           pageOrientation === 'landscape' ? { orientation: docx.PageOrientation.LANDSCAPE } : {}
         ),
         margin: { top: marginTopTwip, bottom: marginBottomTwip, left: marginLeftTwip, right: marginRightTwip, header: HF_DISTANCE_TWIP, footer: HF_DISTANCE_TWIP },

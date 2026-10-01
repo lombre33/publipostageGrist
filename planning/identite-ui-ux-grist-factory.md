@@ -419,6 +419,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
   portrait — rien de tel dans le PDF ni le Word. La pagination, la Lecture, le PDF, le Word et l'impression navigateur
   suivent la page dans son sens ; la galerie de modèles reste en portrait.
+- Format de la page (demande d'Antoine du 01/10, « un mode autre que A4 ? genre A3, A5, A6 » dans le fil de l'orientation) : le bouton Portrait / Paysage a un menu au survol, comme Qualité PDF
+  ou Titre, et la barre ne gagne aucune icône. Le menu a un titre « Page », les lignes Portrait et Paysage, un filet, puis A3, A4, A5 et A6 avec leurs dimensions (« 148 × 210 mm », en
+  gris discret, au moins 4,5:1) ; la coche dit le sens et le format courants. Le bouton garde son icône (la page telle qu'elle est) et son clic (tourner la page) ; il n'a pas
+  d'info-bulle, que l'ouverture du menu retirerait : son nom accessible dit « Page A5 en portrait (passer en paysage) ». La case « Aperçu A4 » devient « Aperçu A5 » (« A5 preview »). Un modèle
+  a un seul format, enregistré avec lui (clé `format` de la colonne `Margins`, absente ou inconnue = A4) ; changer de format garde le sens, re-borne les marges pour que la zone de texte garde
+  20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Email, macro-modèle et grille gardent le menu visible et grisé, titre
+  « Page (pas disponible pour ce modèle) ». À 700 px de panneau, A5 tient sans réduction, A3 portrait passe à 0,60 et A3 paysage tombe au plancher de 0,5 (la zone d'édition défile à
+  l'horizontale). La galerie et l'arbre des modèles montrent encore une feuille A4 portrait. D'autres formats (Lettre US...) ne s'ajoutent qu'après le choix d'Antoine.
 - Fin de document (demande d'Antoine du 01/10, « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page ») : une dernière ligne vide, un saut de
   page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur ; l'éditeur garde sa ligne finale (il faut pouvoir écrire à la suite).

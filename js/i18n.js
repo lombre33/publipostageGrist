@@ -56,11 +56,17 @@ const I18n = (function () {
     'toolbar.linkRules.aria': { fr: 'Tables liées (correspondance pour #Variable d’une autre table)', en: 'Linked tables (matching for #Variable from another table)' },
     'toolbar.modeEdit': { fr: 'Mode édition', en: 'Edit mode' },
     'toolbar.modeRead': { fr: 'Mode lecture', en: 'Read mode' },
-    'toolbar.a4.tip': { fr: 'Aperçu A4', en: 'A4 preview' },
-    'toolbar.a4.aria': { fr: 'Aperçu A4 — limite la largeur de l’éditeur à celle du contenu d’une page A4, pour que le texte se répartisse comme dans le PDF.', en: 'A4 preview — limits the editor width to that of an A4 page’s content, so text wraps the same way as in the PDF.' },
-    'toolbar.orientation.portrait': { fr: 'Page en portrait (passer en paysage)', en: 'Portrait page (switch to landscape)' },
-    'toolbar.orientation.landscape': { fr: 'Page en paysage (passer en portrait)', en: 'Landscape page (switch to portrait)' },
+    // {format} : le format de la page du modèle (A3, A4, A5, A6) - js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
+    'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },
+    'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },
+    'toolbar.orientation.portrait': { fr: 'Page {format} en portrait (passer en paysage)', en: '{format} page in portrait (switch to landscape)' },
+    'toolbar.orientation.landscape': { fr: 'Page {format} en paysage (passer en portrait)', en: '{format} page in landscape (switch to portrait)' },
     'toolbar.orientation.unavailable': { fr: 'Orientation de la page (pas disponible pour ce modèle)', en: 'Page orientation (not available for this template)' },
+    // Menu au survol du bouton Portrait / Paysage : sens, puis format.
+    'toolbar.page.label': { fr: 'Page', en: 'Page' },
+    'toolbar.page.unavailable': { fr: 'Page (pas disponible pour ce modèle)', en: 'Page (not available for this template)' },
+    'toolbar.page.portrait': { fr: 'Portrait', en: 'Portrait' },
+    'toolbar.page.landscape': { fr: 'Paysage', en: 'Landscape' },
     'toolbar.autosave.row': { fr: 'Enregistrement automatique', en: 'Auto-save' },
     // Mode grille (js/grid-editor.js) : infobulles des bandeaux A, B, C / 1, 2, 3.
     'grid.selectAll': { fr: 'Tout sélectionner', en: 'Select all' },
