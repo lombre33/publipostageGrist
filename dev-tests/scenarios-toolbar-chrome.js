@@ -502,6 +502,155 @@
     },
   });
 
+  // Menu « Enregistrer » (retours d'Antoine du 01/10, points 5 et 6) : « Enregistrer sous » apparaît SOUS le bouton Enregistrer, et la bascule de l'enregistrement
+  // automatique quitte la barre pour une ligne cochée du même menu. Ce que le harnais en page établit : la structure (plus aucun des deux anciens contrôles dans la
+  // barre, un seul groupe à menu, pas d'info-bulle qui se superposerait au menu), l'accessibilité des lignes, le geste du bouton (un clic enregistre, sans prendre le
+  // focus) et celui de « Enregistrer sous… » (copie sous le nom saisi). Le survol et le focus réels, à 700x400, sont dans verify-save-menu-mouse.mjs (saveMenuMouse).
+  cases.push({
+    id: 'save_menu_sits_under_the_save_button_and_replaces_the_two_old_controls',
+    description: 'Le bouton Enregistrer ouvre un menu : « Enregistrer sous… » et la ligne cochée « Enregistrement automatique » (cochée par défaut) y sont, et le bouton « Enregistrer sous » comme la bascule de la barre n\'existent plus ; le titre du menu porte le raccourci, le bouton n\'a plus d\'info-bulle qui se superposerait',
+    run: async (h) => {
+      const group = document.getElementById('v2-save-group');
+      const save = document.getElementById('btn-save');
+      const flyout = document.getElementById('v2-save-flyout');
+      const title = document.getElementById('v2-save-flyout-label');
+      const saveAs = document.getElementById('v2-btn-save-as');
+      const auto = document.getElementById('v2-btn-autosave');
+      const structure = !!group && !!save && !!flyout && save.parentElement === group && flyout.parentElement === group && group.classList.contains('v2-hover-group');
+      const gone = !document.getElementById('btn-save-as') && !document.getElementById('v2-autosave-toggle') && !document.getElementById('v2-toggle-autosave') && !document.querySelector('.autosave-toggle');
+      const noTip = !save.hasAttribute('data-tip');
+      const shortcut = /(Ctrl\+S|⌘S)/.test(save.getAttribute('aria-label') || '') && title.textContent === save.getAttribute('aria-label');
+      const rows = !!saveAs && !!auto && saveAs.getAttribute('role') === 'menuitem' && auto.getAttribute('role') === 'menuitemcheckbox' && saveAs.tabIndex === 0 && auto.tabIndex === 0
+        && saveAs.textContent.trim() === 'Enregistrer sous…' && auto.textContent.trim() === 'Enregistrement automatique' && flyout.getAttribute('role') === 'menu';
+      const checkedByDefault = auto.getAttribute('aria-checked') === 'true';
+      h.openFlyout('#v2-save-group');
+      const sb = save.getBoundingClientRect(), ar = saveAs.getBoundingClientRect(), cr = auto.getBoundingClientRect(), fr = flyout.getBoundingClientRect();
+      const below = ar.top >= sb.bottom - 1 && cr.top > ar.top && fr.left >= 0 && fr.right <= window.innerWidth;
+      const tick = getComputedStyle(auto, '::after');
+      const tickShown = tick.visibility === 'visible' && parseFloat(tick.width) > 0;
+      const reachable = (() => { const el = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2); return el === saveAs || saveAs.contains(el); })();
+      flyout.style.display = ''; flyout.style.opacity = ''; flyout.style.visibility = ''; flyout.style.pointerEvents = '';
+      const pass = structure && gone && noTip && shortcut && rows && checkedByDefault && below && tickShown && reachable;
+      return { pass, notes: JSON.stringify({ structure, gone, noTip, shortcut, rows, checkedByDefault, below, tickShown, reachable, aria: save.getAttribute('aria-label'), title: title.textContent }) };
+    },
+  });
+
+  cases.push({
+    id: 'save_button_one_click_saves_and_does_not_take_the_focus',
+    description: 'Un clic sur Enregistrer enregistre le modèle (un seul geste, aucun menu à ouvrir) et le bouton ne prend pas le focus (mousedown retenu) : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris partie',
+    run: async (h) => {
+      await goToNewDocument(h);
+      await h.sleep(30);
+      Editor.setHTML('<p>Un seul clic</p>');
+      const nameInput = document.getElementById('template-name');
+      nameInput.hidden = false;
+      nameInput.value = 'Un seul clic enregistre';
+      await h.focusAtEnd();
+      const save = document.getElementById('btn-save');
+      const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      save.dispatchEvent(down);
+      const focusKept = down.defaultPrevented;
+      save.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      save.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await h.sleep(500);
+      const rows = window.__gristStub.state.rows.Publipostage_Modeles;
+      const at = rows.Nom.indexOf('Un seul clic enregistre');
+      const stored = at !== -1 && String(rows.Contenu[at]).includes('Un seul clic');
+      const status = document.getElementById('status-msg').textContent;
+      const pass = focusKept && stored && /Enregistré à|Saved at/.test(status);
+      return { pass, notes: JSON.stringify({ focusKept, stored, status }) };
+    },
+  });
+
+  cases.push({
+    id: 'save_button_still_closes_the_rename_field_and_saves_the_typed_name',
+    description: 'Renommer puis cliquer Enregistrer : le champ de nom valide et se referme au clic (pas à l\'appui, où la barre se redessinerait sous la souris), le modèle est enregistré sous le nom tapé - retenir le focus sur le bouton ne doit pas laisser le champ ouvert',
+    run: async (h) => {
+      await goToNewDocument(h);
+      await h.sleep(30);
+      Editor.setHTML('<p>Renommage</p>');
+      const nameInput = document.getElementById('template-name');
+      nameInput.value = 'Avant renommage';
+      await h.clickButton('btn-save');
+      await h.sleep(500);
+      document.getElementById('btn-rename-template').click();
+      await h.sleep(50);
+      const opened = !nameInput.hidden && document.activeElement === nameInput;
+      nameInput.value = 'Après renommage';
+      const save = document.getElementById('btn-save');
+      const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      save.dispatchEvent(down);
+      // à l'appui : le focus reste où il est (le champ ne se referme pas sous la souris, sinon la barre se redessine avant le relâchement)
+      const heldOnMousedown = !nameInput.hidden && down.defaultPrevented;
+      save.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      save.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await h.sleep(600);
+      const closedOnClick = nameInput.hidden && document.activeElement !== nameInput;
+      const rows = window.__gristStub.state.rows.Publipostage_Modeles;
+      const saved = rows.Nom.includes('Après renommage') && !rows.Nom.includes('Avant renommage');
+      const pass = opened && heldOnMousedown && closedOnClick && saved;
+      return { pass, notes: JSON.stringify({ opened, heldOnMousedown, closedOnClick, saved, names: rows.Nom.slice(-3) }) };
+    },
+  });
+
+  cases.push({
+    id: 'save_as_row_copies_under_the_typed_name_and_the_keyboard_gets_the_focus_back',
+    description: '« Enregistrer sous… » du menu crée une copie sous le nom saisi (l\'original reste), n\'écrit rien si la saisie est annulée, et au clavier (Entrée ou Espace sur la ligne) le focus passe d\'abord sur le bouton Enregistrer, d\'où la fenêtre le lui rend à sa fermeture',
+    run: async (h) => {
+      await goToNewDocument(h);
+      await h.sleep(30);
+      Editor.setHTML('<p>Contenu à copier</p>');
+      const nameInput = document.getElementById('template-name');
+      nameInput.hidden = false;
+      nameInput.value = 'Original à copier';
+      await h.clickButton('btn-save');
+      await h.sleep(500);
+      const rows = () => window.__gristStub.state.rows.Publipostage_Modeles;
+      const originalId = Templates.getCurrentId();
+      const countOf = (name) => rows().Nom.filter(n => n === name).length;
+      const row = document.getElementById('v2-btn-save-as');
+      let focusWhenAsked = null;
+      const asked = h.stubDialogs({ prompt: () => { focusWhenAsked = document.activeElement && document.activeElement.id; return 'Copie du modèle'; } });
+      let afterClick, afterCancel, afterKey, titleAsked;
+      try {
+        h.openFlyout('#v2-save-group');
+        await h.clickButton('v2-btn-save-as');
+        await h.sleep(600);
+        afterClick = { copies: countOf('Copie du modèle'), originals: countOf('Original à copier'), select: document.getElementById('template-select').selectedOptions[0].textContent };
+        titleAsked = asked.asked[0] && asked.asked[0].title;
+        // saisie annulée : aucune écriture
+        Dialogs.prompt = async () => null;
+        const before = rows().Nom.length;
+        await h.clickButton('v2-btn-save-as');
+        await h.sleep(300);
+        afterCancel = { same: rows().Nom.length === before };
+        // clavier : Entrée sur la ligne focalisée (puis Espace)
+        Dialogs.prompt = async () => { focusWhenAsked = document.activeElement && document.activeElement.id; return 'Copie au clavier'; };
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await h.sleep(600);
+        afterKey = { copies: countOf('Copie au clavier'), focus: focusWhenAsked };
+        // Espace aussi, et une autre touche ne fait rien
+        Dialogs.prompt = async () => 'Copie à l\'espace';
+        row.focus();
+        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
+        await h.sleep(300);
+        const noneForA = countOf('Copie à l\'espace') === 0;
+        const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        row.dispatchEvent(space);
+        await h.sleep(600);
+        afterKey.space = { copies: countOf('Copie à l\'espace'), noneForA, scrollPrevented: space.defaultPrevented };
+      } finally {
+        asked.restore();
+        document.getElementById('v2-save-flyout').style.cssText = '';
+      }
+      const pass = afterClick.copies === 1 && afterClick.originals === 1 && /Copie du modèle/.test(afterClick.select) && afterCancel.same && afterKey.copies === 1
+        && afterKey.focus === 'btn-save' && afterKey.space.copies === 1 && afterKey.space.noneForA && afterKey.space.scrollPrevented
+        && /Enregistrer sous|Save as/.test(titleAsked || '') && originalId != null;
+      return { pass, notes: JSON.stringify({ afterClick, afterCancel, afterKey, titleAsked, originalId }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();

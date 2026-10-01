@@ -400,8 +400,8 @@
   // withExportLock, autosaveTick...) couvrent les raccourcis clavier et les appels directs. Seules les règles d'accès de Grist protègent les données.
   const ACCESS_LOCK_CLASS = 'pp-access-locked';
   // Tout ce qui modifie le modèle ou écrit dans Grist, en plus de la barre de mise en forme entière (#v2-toolbar, sauf Commenter qui suit son propre droit).
-  const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'btn-save', 'btn-save-as', 'btn-delete', 'btn-link-rules',
-    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-autosave-toggle', 'v2-pdf-filename-cluster', 'btn-page-orientation'];
+  const READ_ONLY_LOCKED_IDS = ['v2-new-template-group', 'btn-organize-templates', 'v2-save-group', 'btn-delete', 'btn-link-rules',
+    'btn-mode-edit', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'btn-page-orientation'];
   // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word et la création d'email : #v2-quality-group porte aussi les deux exports DOCX.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
@@ -555,7 +555,7 @@
   }
 
   async function autosaveTick() {
-    if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. v2-toggle-autosave) - aucun appel Grist tant que c'est le cas, pas seulement le
+    if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. wireSaveMenu) - aucun appel Grist tant que c'est le cas, pas seulement le
     // dernier enregistrement sauté : ni le polling de conflit ni l'écriture elle-même ne doivent tourner en arrière-plan pendant que c'est éteint.
     if (exportOperationInProgress) return; // évite toute contention Grist avec un export en cours
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
@@ -597,23 +597,55 @@
     autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
   }
 
-  // Bouton bascule (v2-toggle-autosave, façon v2-toggle-a4-preview) : la boucle setInterval tourne TOUJOURS une fois démarrée, seul autosaveTick()
-  // vérifie isAutosaveEnabled() en tout premier - décocher n'arrête donc pas un minuteur qu'il faudrait recréer à la réactivation, ça fait juste sauter
-  // le prochain tick, à un coût négligeable (une lecture localStorage toutes les 2.5s).
-  function wireAutosaveToggle() {
-    const toggle = document.getElementById('v2-toggle-autosave');
-    const label = toggle ? toggle.closest('.autosave-toggle') : null;
-    if (!toggle) return;
-    toggle.checked = isAutosaveEnabled();
-    if (label) label.classList.toggle('checked', toggle.checked);
-    toggle.addEventListener('change', () => {
-      setAutosaveEnabled(toggle.checked);
-      if (label) label.classList.toggle('checked', toggle.checked);
-      setStatus(I18n.t(toggle.checked ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
-      // Réactiver doit se comporter comme si on n'avait jamais coupé : un tick imminent ne doit pas croire qu'un DateModif jamais vérifié pendant la
-      // coupure est un conflit. resetAutosaveState() re-synchronise sur le modèle courant, exactement comme au chargement d'un modèle.
-      if (toggle.checked) resetAutosaveState(Templates.getCached().find(t => String(t.id) === String(Templates.getCurrentId())));
-    });
+  // Menu « Enregistrer » (retours d'Antoine du 01/10, points 5 et 6) : le bouton garde son geste - un clic, un enregistrement - et son survol ouvre dessous
+  // « Enregistrer sous… » (une copie) et la case « Enregistrement automatique » (activé par défaut), qui remplacent le bouton « Enregistrer sous » et la bascule qui
+  // occupaient la barre. Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
+  // - mousedown/preventDefault sur le bouton et sur les lignes : un clic à la souris ne déplace pas le focus. Sinon le bouton cliqué le gardait et son menu
+  //   (:focus-within) restait affiché une fois la souris partie (mesuré sur « + » et sur « Qualité PDF », où il l'est encore), et le curseur quittait le texte en cours.
+  //   Un champ de saisie (renommer, nom du PDF, objet de l'email...) valide pourtant à la perte du focus (commitAndClose du renommage) : on le lui fait perdre, comme
+  //   avant, mais au CLIC et non à l'appui - le nom validé peut être plus large, la barre se redessine et le bouton quitterait la souris avant le relâchement, le clic
+  //   serait perdu (relevé à la vraie souris : renommer puis cliquer Enregistrer n'enregistrait pas). Seul l'éditeur garde son focus.
+  // - tabindex="0" et Entrée/Espace sur les lignes : « Enregistrer sous » était un vrai bouton, atteignable au clavier ; des <span> ne le seraient pas. Le menu reste
+  //   ouvert tant que le focus est dedans. Au clavier, « Enregistrer sous… » met d'abord le focus sur le bouton : la fenêtre qu'elle ouvre le lui rend à sa fermeture, et
+  //   une ligne de menu refermée ne peut pas le recevoir.
+  // - La boucle setInterval de l'auto-save tourne TOUJOURS une fois démarrée, seul autosaveTick() vérifie isAutosaveEnabled() en tout premier : décocher ne l'arrête
+  //   pas (rien à recréer à la réactivation), ça fait juste sauter les ticks, à un coût négligeable (une lecture localStorage toutes les 2.5 s).
+  function wireSaveMenu() {
+    const saveBtn = document.getElementById('btn-save');
+    const saveAsRow = document.getElementById('v2-btn-save-as');
+    const autosaveRow = document.getElementById('v2-btn-autosave');
+    if (!saveBtn) return;
+    const holdFocus = (event) => event.preventDefault();
+    const blurTextField = () => {
+      const active = document.activeElement;
+      if (active && active !== document.body && !active.closest('.ProseMirror') && active.matches('input, textarea, select')) active.blur();
+    };
+    saveBtn.addEventListener('mousedown', holdFocus);
+    saveBtn.addEventListener('click', () => { blurTextField(); onSave(); });
+    const syncAutosaveRow = () => { if (autosaveRow) autosaveRow.setAttribute('aria-checked', isAutosaveEnabled() ? 'true' : 'false'); };
+    const toggleAutosave = () => {
+      const enabled = !isAutosaveEnabled();
+      setAutosaveEnabled(enabled);
+      syncAutosaveRow();
+      setStatus(I18n.t(enabled ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
+      // Réactiver ne remet RIEN à zéro : resetAutosaveState() effaçait aussi autosaveDirty, donc ce qui avait été tapé pendant la coupure n'était jamais enregistré
+      // (le coin d'état annonçait pourtant « Enregistré à… ») et un changement fait ailleurs pendant ce temps passait sans bandeau de conflit. Rien n'est à
+      // re-synchroniser : onSave et le chargement d'un modèle tiennent autosaveLastKnownDateModif à jour même éteint, le prochain tick enregistre ce qui est en
+      // attente comme si on n'avait jamais coupé, ou ouvre le bandeau si le modèle a changé ailleurs entre-temps.
+    };
+    const wireRow = (row, action) => {
+      if (!row) return;
+      row.addEventListener('mousedown', holdFocus);
+      row.addEventListener('click', () => { blurTextField(); action(false); });
+      row.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        action(true);
+      });
+    };
+    wireRow(saveAsRow, (viaKeyboard) => { if (viaKeyboard) saveBtn.focus(); onSaveAs(); });
+    wireRow(autosaveRow, toggleAutosave);
+    syncAutosaveRow();
   }
 
   function wireAutosaveConflictBanner() {
@@ -1126,15 +1158,17 @@
     }, true);
   }
 
-  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) : impossible à écrire dans index.html, posé ici sur l'infobulle et
-  // l'aria-label du bouton Enregistrer. Re-appliqué à chaque changement de langue, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
+  // Le libellé du raccourci dépend de la plateforme (⌘S sur macOS, Ctrl+S ailleurs) : impossible à écrire dans index.html, posé ici sur le titre du menu du bouton
+  // Enregistrer (qui remplace son info-bulle : un bouton à menu n'a pas de data-tip, les deux se superposeraient) et sur son aria-label. Re-appliqué à chaque
+  // changement de langue, sinon I18n.applyTranslations() le réécrirait sans le raccourci.
   function decorateSaveButtonShortcut() {
     const btn = document.getElementById('btn-save');
     if (!btn) return;
     const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
     const label = `${I18n.t('toolbar.save')} (${isMac ? '⌘S' : 'Ctrl+S'})`;
-    btn.setAttribute('data-tip', label);
     btn.setAttribute('aria-label', label);
+    const menuTitle = document.getElementById('v2-save-flyout-label');
+    if (menuTitle) menuTitle.textContent = label;
   }
 
   // Les sept fenêtres écrites dans index.html sont reprises par la base commune des fenêtres (js/modal-base.js) : Tab et Échap tenus dans la fenêtre du dessus
@@ -1400,8 +1434,6 @@
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     MacroEditor.wire(onMacroSaved);
     TemplateOrganizeModal.wire();
-    document.getElementById('btn-save').addEventListener('click', onSave);
-    document.getElementById('btn-save-as').addEventListener('click', onSaveAs);
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
     // Fonctions fléchées : sans elles, l'événement click arriverait comme premier argument (`merged`) et serait lu comme vrai.
@@ -1428,7 +1460,7 @@
     I18n.onChange(decorateSaveButtonShortcut);
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
-    wireAutosaveToggle();
+    wireSaveMenu();
     startAutosaveLoop();
     await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
     applyAccessRights();

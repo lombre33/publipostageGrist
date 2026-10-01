@@ -555,6 +555,19 @@
 #v2-toolbar .v2-hover-flyout .v2-menu-row.is-active { background: transparent; border-color: transparent; color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-menu-row-icon { display: inline-flex; flex: none; }
 .v2-menu-row-kbd { margin-left: auto; padding-left: 18px; font-size: 11px; font-weight: 400; color: var(--text-faint, #98a2b3); }
+/* Ligne de menu atteignable au clavier (tabindex="0" ; menu Enregistrer, js/main.js:wireSaveMenu) : un <span> ne reçoit pas le focus de lui-même, et le menu reste
+   affiché tant que le focus est dedans (:focus-within du groupe). Trait d'accent, comme le focus du reste de la barre. */
+.v2-hover-row:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
+/* Ligne à cocher (« Enregistrement automatique ») : la coche est à droite du libellé et ne se voit que si la ligne est cochée (aria-checked="true") ; le libellé reste
+   aligné à gauche comme dans les autres menus. Trait sans remplissage, en mask comme les autres icônes de la barre, à la couleur d'accent. */
+.v2-hover-row-check { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.v2-hover-row-check::after {
+  content: ''; flex: none; width: 13px; height: 13px; background-color: var(--accent, #2f6fed); visibility: hidden;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E");
+}
+.v2-hover-row-check[aria-checked="true"]::after { visibility: visible; }
 /* Bloc "Numérotation des titres" fusionné dans le flyout Titre - même .v2-segmented/.v2-segmented-btn que la pastille en-tête/pied, pour ne pas réinventer
    un 2ᵉ style de segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }

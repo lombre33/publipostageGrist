@@ -286,6 +286,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   normale, dossiers en demi-gras ; « Organiser » est un petit bouton dans l'en-tête fixe de la liste, en haut à droite, et
   non dans la barre ; pas de ligne « Nouveau modèle » dans la liste (le bouton « + » crée un modèle) ; renommer un modèle
   remplace son nom, sur place, par un champ de même largeur (pas de champ à côté de la liste).
+- Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
+  (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
+  d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
+  partie ; au clavier, Tab descend dans le menu. Réactiver l'enregistrement automatique n'efface pas ce qui a été tapé pendant la coupure.
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, réglages nombre/date) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

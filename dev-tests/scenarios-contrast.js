@@ -292,6 +292,42 @@
     },
   });
 
+  cases.push({
+    id: 'contrast_save_menu_texts_reach_4_5_tick_and_row_focus_ring_3_to_1',
+    description: 'Menu du bouton Enregistrer : titre et lignes 4,5:1 au moins sur le fond du menu ; coche de « Enregistrement automatique » et anneau de focus des lignes 3:1 ; en clair et en sombre',
+    run: async (h) => {
+      const flyout = h.openFlyout('#v2-save-group');
+      const title = document.getElementById('v2-save-flyout-label');
+      const saveAs = document.getElementById('v2-btn-save-as');
+      const auto = document.getElementById('v2-btn-autosave');
+      try {
+        const byTheme = inBothThemes(() => {
+          const bg = backgroundOf(flyout);
+          const out = {
+            'titre du menu': round2(textRatio(title)),
+            'ligne Enregistrer sous': round2(textRatio(saveAs)),
+            'ligne Enregistrement automatique': round2(textRatio(auto)),
+          };
+          const tick = parseColor(getComputedStyle(auto, '::after').backgroundColor);
+          out['coche (3:1)'] = tick ? round2(ratio(over(tick, bg), bg)) : 0;
+          saveAs.focus();
+          const ring = parseColor(getComputedStyle(saveAs).outlineColor);
+          out['anneau de focus (3:1)'] = saveAs.matches(':focus-visible') && ring ? round2(ratio(over(ring, bg), bg)) : 0;
+          saveAs.blur();
+          return out;
+        });
+        const low = [];
+        for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) {
+          const min = /3:1/.test(name) ? 3 : 4.5;
+          if (!(value >= min)) low.push(theme + ' ' + name + ' ' + value);
+        }
+        return { pass: low.length === 0, notes: JSON.stringify({ low, byTheme }) };
+      } finally {
+        flyout.style.cssText = '';
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

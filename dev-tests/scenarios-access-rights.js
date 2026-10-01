@@ -132,7 +132,7 @@
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
       await sleep(3000); // plus d'un tick d'auto-save (2,5 s)
       const writesAfter = stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
-      const editIds = ['btn-mode-edit', 'btn-save', 'btn-save-as', 'btn-delete', 'btn-organize-templates', 'v2-new-template-group', 'btn-link-rules', 'btn-page-orientation', 'v2-btn-bold', 'v2-btn-comment'];
+      const editIds = ['btn-mode-edit', 'v2-save-group', 'btn-delete', 'btn-organize-templates', 'v2-new-template-group', 'btn-link-rules', 'btn-page-orientation', 'v2-btn-bold', 'v2-btn-comment'];
       const greyed = editIds.filter(id => locked(id) && shown(id));
       const exportFree = !locked('v2-export-pdf-group') && !locked('v2-quality-group');
       const status = document.getElementById('status-msg').textContent;
@@ -166,7 +166,7 @@
         dialogs.restore();
       }
       const greyed = ['v2-export-pdf-group', 'v2-quality-group', 'btn-create-email'].filter(locked);
-      const editFree = !locked('btn-save') && !locked('btn-mode-edit') && !inReadMode();
+      const editFree = !locked('v2-save-group') && !locked('btn-mode-edit') && !inReadMode();
       await cleanup();
       const unlocked = !locked('v2-export-pdf-group') && !locked('v2-quality-group');
       const pass = applied && calls.length === 0 && greyed.length === 3 && editFree && unlocked;
@@ -183,7 +183,7 @@
       const lockedFirst = locked('btn-mode-edit') && inReadMode();
       // Même réglage, ligne modifiée comme par quelqu'un dans la grille : seule la relecture périodique (ici forcée) la voit.
       const second = await applyRights({ readOnly: false, export: false, comments: false });
-      const editBack = !locked('btn-mode-edit') && !locked('btn-save') && locked('v2-export-pdf-group');
+      const editBack = !locked('btn-mode-edit') && !locked('v2-save-group') && locked('v2-export-pdf-group');
       document.getElementById('btn-mode-edit').click();
       await sleep(300);
       const canEdit = !inReadMode();
@@ -214,7 +214,7 @@
         await sleep(500);
         rights = AccessRights.get();
         state = AccessRights.getStatus().state;
-        greyed = ['btn-save', 'v2-export-pdf-group', 'v2-btn-comment'].filter(locked);
+        greyed = ['v2-save-group', 'v2-export-pdf-group', 'v2-btn-comment'].filter(locked);
       } finally {
         grist.docApi.fetchTable = origFetch;
       }
@@ -449,7 +449,7 @@
       const read = inReadMode();
       const lockedInRead = barLocked();
       // Ce qui doit rester actif en Lecture : les modes, l'aperçu A4, les réglages, l'arbre des modèles, l'export, Enregistrer et Commenter.
-      const stillActiveIds = ['btn-mode-edit', 'btn-mode-read', 'v2-a4-toggle', 'v2-btn-settings', 'tts-trigger', 'v2-export-pdf-group', 'v2-quality-group', 'btn-create-email', 'btn-save', 'v2-btn-comment'];
+      const stillActiveIds = ['btn-mode-edit', 'btn-mode-read', 'v2-a4-toggle', 'v2-btn-settings', 'tts-trigger', 'v2-export-pdf-group', 'v2-quality-group', 'btn-create-email', 'v2-save-group', 'v2-btn-comment'];
       const wronglyGreyed = stillActiveIds.filter(id => locked(id));
       const docBefore = Editor.getHTML();
       const storedBefore = stored();

@@ -122,8 +122,6 @@
 .title-cluster { border-color: transparent; }
 .a4-toggle { border-color: transparent; background: transparent; }
 .a4-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
-.autosave-toggle { border-color: transparent; background: transparent; }
-.autosave-toggle:hover { border-color: var(--border-strong); background: var(--surface-sunken); }
 
 /* === Nom de fichier PDF masqué derrière un crayon (même geste que le renommage de modèle ci-dessus) - toujours replié au chargement d'un modèle, même si
    un nom y est déjà configuré (cf. js/main.js:wirePdfFilenameToggle/loadTemplateIntoEditor - UI de base clean par défaut, retour d'Antoine 2026-09-19). */

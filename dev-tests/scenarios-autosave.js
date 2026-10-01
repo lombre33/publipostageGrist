@@ -358,6 +358,76 @@
     },
   });
 
+  // Bascule de l'enregistrement automatique (retours d'Antoine du 01/10, point 6) : la bascule de la barre est devenue la ligne cochée « Enregistrement automatique » du
+  // menu du bouton Enregistrer (js/main.js:wireSaveMenu). Aucun scénario ne touchait la bascule jusque-là : ni son état au départ, ni qu'éteinte elle n'écrive plus
+  // rien. Les deux cas ci-dessous passent par la vraie ligne (clic, Entrée, Espace) et comptent les ÉCRITURES réelles, et laissent l'enregistrement automatique
+  // allumé en sortant - le choix est gardé dans localStorage, une bascule oubliée éteindrait tous les cas suivants.
+  const autoRow = () => document.getElementById('v2-btn-autosave');
+  const autoStored = () => { try { return localStorage.getItem('pp_autosave_enabled'); } catch (e) { return 'indisponible'; } };
+  async function ensureAutosave(h, on) {
+    if ((autoRow().getAttribute('aria-checked') === 'true') !== on) await h.clickButton('v2-btn-autosave');
+  }
+
+  cases.push({
+    id: 'autosave_row_is_checked_by_default_and_flips_with_click_enter_and_space',
+    description: "La ligne « Enregistrement automatique » est cochée au départ (activé par défaut) ; un clic, Entrée ou Espace la décochent puis la recochent, le choix est écrit dans localStorage et dit dans le coin d'état, une autre touche ne fait rien",
+    run: async (h) => {
+      const startedChecked = autoRow().getAttribute('aria-checked') === 'true' && autoStored() !== 'false';
+      await h.clickButton('v2-btn-autosave');
+      const afterClick = { checked: autoRow().getAttribute('aria-checked'), stored: autoStored(), status: document.getElementById('status-msg').textContent };
+      const key = (k) => { const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); autoRow().dispatchEvent(e); return e; };
+      const enter = key('Enter');
+      const afterEnter = { checked: autoRow().getAttribute('aria-checked'), stored: autoStored() };
+      key('a');
+      const afterOther = autoRow().getAttribute('aria-checked');
+      const space = key(' ');
+      const afterSpace = { checked: autoRow().getAttribute('aria-checked'), stored: autoStored() };
+      key(' ');
+      const afterSecondSpace = { checked: autoRow().getAttribute('aria-checked'), stored: autoStored() };
+      await ensureAutosave(h, true);
+      const pass = startedChecked && afterClick.checked === 'false' && afterClick.stored === 'false' && /désactivé|turned off/.test(afterClick.status)
+        && afterEnter.checked === 'true' && afterEnter.stored === 'true' && enter.defaultPrevented
+        && afterOther === 'true' && afterSpace.checked === 'false' && afterSpace.stored === 'false' && space.defaultPrevented
+        && afterSecondSpace.checked === 'true' && afterSecondSpace.stored === 'true';
+      return { pass, notes: JSON.stringify({ startedChecked, afterClick, afterEnter, afterOther, afterSpace, afterSecondSpace }) };
+    },
+  });
+
+  cases.push({
+    id: 'autosave_row_off_writes_nothing_until_checked_again_but_manual_save_still_works',
+    description: "Décochée, la ligne « Enregistrement automatique » arrête vraiment les écritures (deux ticks sans une seule) tandis qu'Enregistrer enregistre toujours en un clic ; recochée, la modification en attente part dans les ticks qui suivent",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'AutoSave éteint', '<p>Départ</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      const writes = () => stub().countActions('UpdateRecord', TABLE) + stub().countActions('AddRecord', TABLE);
+      const stored = () => String(stub().getRow(TABLE, id).Contenu);
+      try {
+        await h.clickButton('v2-btn-autosave'); // éteint
+        stub().clearActionLog();
+        await h.focusAtEnd();
+        await h.typeText(' éteint 1');
+        await waitTicks(h, 2);
+        const offWrites = writes();
+        const offStored = stored().includes('éteint 1');
+        await h.clickButton('btn-save'); // le geste manuel reste intact
+        await h.sleep(400);
+        const manualStored = stored().includes('éteint 1');
+        await h.focusAtEnd();
+        await h.typeText(' éteint 2');
+        await h.clickButton('v2-btn-autosave'); // rallumé avec une modification en attente
+        stub().clearActionLog();
+        await waitTicks(h, 2);
+        const onWrites = writes();
+        const onStored = stored().includes('éteint 2');
+        const pass = offWrites === 0 && !offStored && manualStored && onWrites >= 1 && onStored;
+        return { pass, notes: JSON.stringify({ offWrites, offStored, manualStored, onWrites, onStored }) };
+      } finally {
+        await ensureAutosave(h, true);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosave = cases;
 })();

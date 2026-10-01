@@ -253,14 +253,17 @@ async function stuckTooltip(width, height) {
   const away = { x: width / 2, y: height - 20 };
   await page.evaluate(() => { document.getElementById('template-name').value = 'Info-bulles'; });
 
+  // Enregistrer ouvre un menu au survol (depuis le 2026-10-01) et n'a donc plus d'info-bulle : ce qui ne doit pas rester affiché après un clic, souris partie, c'est ce
+  // menu (le bouton cliqué gardait le focus, donc son menu avec :focus-within ; le bouton ne prend plus le focus à la souris).
+  const saveMenuShown = () => page.evaluate(() => getComputedStyle(document.getElementById('v2-save-flyout')).display !== 'none');
   let c = await center('btn-save');
   await page.mouse.click(c.x, c.y);
   await page.waitForTimeout(400);
   await page.keyboard.press('Escape');
   await page.mouse.move(away.x, away.y);
   await page.waitForTimeout(700);
-  check('Enregistrer : clic puis Échap, souris partie -> son info-bulle ne reste pas affichée', await tipOpacity('btn-save') === 0,
-    { opacity: await tipOpacity('btn-save'), focus: await page.evaluate(() => document.activeElement && document.activeElement.id) });
+  check('Enregistrer : clic puis Échap, souris partie -> son menu ne reste pas affiché', !(await saveMenuShown()) && await page.evaluate(() => !document.getElementById('btn-save').hasAttribute('data-tip')),
+    { open: await saveMenuShown(), focus: await page.evaluate(() => document.activeElement && document.activeElement.id) });
 
   c = await center('btn-link-rules');
   await page.mouse.click(c.x, c.y);

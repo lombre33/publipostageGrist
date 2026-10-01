@@ -369,6 +369,12 @@ async function realHover(selector) {
   await page.mouse.move(c.x, c.y, { steps: 6 });
   await page.waitForTimeout(450);
 }
+// « Enregistrer sous… » est une ligne du menu du bouton Enregistrer (depuis le 2026-10-01) : survoler le bouton, puis cliquer la ligne. Le clic ne déplace pas le focus.
+async function openSaveAs() {
+  await realHover('#btn-save');
+  await realClick('#v2-btn-save-as');
+}
+const focusKey = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.tagName) : null; });
 const statusText = () => page.evaluate(() => document.getElementById('status-msg').textContent);
 // L'élément qui a le focus, et s'il porte le cadre de focus du clavier (:focus-visible) ; `outline` : ce que ce cadre dessine réellement.
 const active = () => page.evaluate(() => {
@@ -438,15 +444,16 @@ async function runSites(theme) {
   await realClick('#btn-save', 800);
   check(`${T}, enregistrer sous : le modèle de départ est enregistré`, (await templateNames()).includes(`Modèle ${T}`), await templateNames());
   const nBefore = (await templateNames()).length;
-  await realClick('#btn-save-as');
+  const focusBeforeSaveAs = await focusKey();
+  await openSaveAs();
   s = await state();
   expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau modèle »`, s,
     { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle :', message: null, value: '', buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
   await snap(`${T}-s2-enregistrer-sous`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
-  check(`${T}, enregistrer sous : Échap ne crée aucune copie, le focus revient au bouton`, (await templateNames()).length === nBefore && await focusIs('btn-save-as'), await templateNames());
-  await realClick('#btn-save-as');
+  check(`${T}, enregistrer sous : Échap ne crée aucune copie, le focus revient là où il était (la ligne du menu ne l'a jamais pris)`, (await templateNames()).length === nBefore && (await focusKey()) === focusBeforeSaveAs && focusBeforeSaveAs !== 'v2-btn-save-as', { names: await templateNames(), before: focusBeforeSaveAs, now: await focusKey() });
+  await openSaveAs();
   await page.keyboard.type(`Copie ${T}`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(900);
@@ -721,7 +728,7 @@ async function runEnglish() {
   await page.waitForTimeout(200);
   await page.evaluate(() => { Editor.setHTML('<p>Contract</p>'); document.getElementById('template-name').value = 'Template EN'; });
   await realClick('#btn-save', 800);
-  await realClick('#btn-save-as');
+  await openSaveAs();
   s = await state();
   expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save »`, s, { title: 'Save as (copy)', label: 'Name of the new template:', message: null, value: '', buttons: ['Cancel', 'Save'], focus: 'input' });
   await page.keyboard.press('Escape');
