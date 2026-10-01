@@ -943,9 +943,12 @@
       const keyboardFocus = keyboardFocusedElement();
       OrientationToggle.setBusy(true);
       controls.forEach(el => setExportControlLocked(el, true));
+      // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout (js/external-images.js).
+      ExternalImages.beginRun();
       try {
         await fn(...args);
       } finally {
+        ExternalImages.endRun();
         exportOperationInProgress = false;
         OrientationToggle.setBusy(false);
         controls.forEach(el => setExportControlLocked(el, false));
@@ -967,6 +970,8 @@
       await PdfExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), quality, Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
       setStatus(I18n.t('status.pdfGenerated'));
     } catch (e) {
+      // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
+      if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
       setStatus(I18n.t('status.pdfGenerationError'), true);
     }
@@ -1019,6 +1024,7 @@
       await DocxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsTwip());
       setStatus(I18n.t('status.docxGenerated'));
     } catch (e) {
+      if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
       setStatus(I18n.t('status.docxGenerationError'), true);
     }
@@ -1037,6 +1043,7 @@
       await XlsxExport.exportCurrentRecord(html, tableId, record, getPdfFilenameTemplate());
       setStatus(I18n.t('status.xlsxGenerated'));
     } catch (e) {
+      if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       console.error(e);
       setStatus(I18n.t('status.xlsxGenerationError'), true);
     }
@@ -1187,6 +1194,7 @@
     const usedNames = new Set();
     let ok = 0;
     let failed = 0;
+    let cancelled = false;
     for (let i = 0; i < rows.length; i++) {
       setStatus(I18n.t(cfg.progress, { current: i + 1, total: rows.length }));
       try {
@@ -1204,10 +1212,13 @@
         }
         ok++;
       } catch (e) {
+        // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
+        if (ExternalImages.isCancel(e)) { cancelled = true; break; }
         console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', rows[i].id, e);
         failed++;
       }
     }
+    if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
     if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
 
     setStatus(I18n.t(merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));

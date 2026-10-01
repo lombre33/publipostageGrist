@@ -529,6 +529,8 @@ const XlsxExport = (function () {
 
   // Un classeur d'une feuille pour un enregistrement : un export seul, ou un fichier de l'archive ZIP d'un lot.
   async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
+    // Une image d'un site externe est téléchargée à l'écriture du classeur : la fenêtre passe avant tout, comme pour le PDF et le Word (js/external-images.js).
+    await ExternalImages.confirmExport(htmlContent, null);
     await ensureExcelLibLoaded();
     const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
     const workbook = newWorkbook();
@@ -549,6 +551,7 @@ const XlsxExport = (function () {
     const usedNames = new Set();
     return {
       async appendRecord(htmlContent, tableId, record, filenameTemplate) {
+        await ExternalImages.confirmExport(htmlContent, null);
         const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
         const before = workbook.worksheets.length;
         try {

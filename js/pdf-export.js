@@ -1885,6 +1885,8 @@ const PdfExport = (function () {
 
   async function exportCurrentRecord(htmlContent, currentTableId, record, filenameTemplate, quality, headerFooterData, marginsPt) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
+    // Avant tout : une image d'un site externe est téléchargée (ou chargée par le navigateur) pour ce PDF - la fenêtre la liste et peut tout arrêter (js/external-images.js).
+    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, currentTableId, record);
@@ -1901,6 +1903,8 @@ const PdfExport = (function () {
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch) - réutilise la même paire ReaderMode.preview/
   // ExportCommon.resolveHeaderFooterVariables qu'exportCurrentRecord. Limité au vectoriel : 'browser-print' ouvre une boîte de dialogue par ligne, sans surveillance.
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
+    // Même fenêtre que pour un seul PDF ; dans un lot, un site déjà accepté n'est pas redemandé et un refus arrête tout le lot (ExternalImages.beginRun, js/main.js).
+    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
     await ensurePdfLibsLoaded();
     const resolvedHtml = await ReaderMode.preview(htmlContent, tableId, record);

@@ -510,6 +510,10 @@ const I18n = (function () {
     'confirm.mergedExportGrid': { fr: 'Générer un PDF par valeur de « {table} » ({count} {count|valeur|valeurs}) et les réunir dans un seul fichier PDF, chaque valeur commençant sur une nouvelle page ?', en: 'Generate one PDF per value of “{table}” ({count} {count|value|values}) and combine them into a single PDF file, each value starting on a new page?' },
     'confirm.batchExportXlsx': { fr: 'Générer un classeur Excel par valeur de « {table} » ({count} {count|valeur|valeurs}) et les regrouper dans une archive ZIP ?', en: 'Generate one Excel workbook per value of “{table}” ({count} {count|value|values}) and bundle them into a ZIP archive?' },
     'confirm.singleWorkbookExport': { fr: 'Générer un seul classeur Excel, avec une feuille par valeur de « {table} » ({count} {count|valeur|valeurs}) ?', en: 'Generate a single Excel workbook with one sheet per value of “{table}” ({count} {count|value|values})?' },
+    // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on l'annule.
+    'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
+    'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
+    'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
     'prompt.newTemplateName': { fr: 'Nom du nouveau modèle :', en: 'Name of the new template:' },
     'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist :', en: 'Name of the new Grist table:' },
 
