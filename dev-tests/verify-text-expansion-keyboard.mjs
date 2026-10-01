@@ -156,12 +156,26 @@ const pointOf = (text, at = 0.5) => page.evaluate(({ text, at }) => {
   }
   return null;
 }, { text, at });
-// Curseur à la fin du dernier paragraphe, par un vrai clic dans l'éditeur puis Ctrl+Fin.
+// Curseur à la fin du dernier bloc, par un vrai clic au milieu de ce bloc puis Ctrl+Fin. Pas à 20 px du haut de `.tiptap` : les 24 px du haut de la feuille sont la bande de l'en-tête
+// (js/header-footer-preview.js, depuis la bande commune de l'éditeur et du PDF) - un clic dessus ouvre l'en-tête, et la frappe suivante y irait au lieu du document. Si le clavier n'est
+// pas dans le document après le clic (en-tête ou pied ouvert, rien d'actif), le script s'arrête ici, sur la cause, plutôt que cinq contrôles plus loin.
 async function focusEnd() {
-  const box = await page.evaluate(() => { const r = document.querySelector('.tiptap').getBoundingClientRect(); return { x: r.left + 40, y: r.top + 20 }; });
+  const box = await page.evaluate(() => {
+    const root = document.querySelector('.tiptap');
+    const blocks = Array.from(root.children).filter(el => el.getBoundingClientRect().height > 0 && !el.classList.contains('ProseMirror-widget') && !el.classList.contains('ProseMirror-gapcursor'));
+    const last = blocks[blocks.length - 1] || root;
+    last.scrollIntoView({ block: 'nearest' });
+    const r = last.getBoundingClientRect();
+    return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 };
+  });
   await page.mouse.click(box.x, box.y);
   await page.keyboard.press('Control+End');
   await page.waitForTimeout(80);
+  const inDocument = await page.evaluate(() => {
+    const el = document.activeElement;
+    return !!el && !!el.closest && !!el.closest('.tiptap') && !HeaderFooterPreview.isEditingHeaderFooter();
+  });
+  if (!inDocument) throw new Error('focusEnd : après le clic, le clavier n\'est pas dans le document (en-tête ou pied ouvert ?)');
 }
 
 // Abréviations de la personne, posées par l'API du module (la table est créée à la première, comme pour une vraie personne).
