@@ -412,6 +412,41 @@
     },
   });
 
+  // « Remplacer » de la fenêtre « Autres attributs » (demande d'Antoine, 2026-10-01) sur la bulle qui porte la boucle d'une ligne de tableau : c'est la même bulle dont
+  // la colonne change, la boucle reste - une copie neuve la perdrait, et le tableau cesserait de répéter sa ligne sans que rien ne le dise.
+  cases.push({
+    id: 'loop_replace_from_linked_attributes_keeps_the_loop_of_the_row',
+    description: 'Autres attributs : « Remplacer » sur la bulle qui porte la boucle de la ligne du tableau met l’attribut coché à sa place sans perdre la boucle - la ligne se répète toujours, avec la nouvelle colonne - et un seul Annuler rend la bulle d’origine',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(linesTable('Designation'));
+      const ed = await selectBadge(h, 'LpLignes.Designation');
+      pressToolbarButton('var-linked');
+      await h.sleep(300);
+      const win = document.getElementById('var-linked-modal');
+      const replaceBtn = win && win.querySelector('button.var-linked-replace');
+      if (!replaceBtn) return { pass: false, notes: 'bouton « Remplacer » absent de la fenêtre Autres attributs' };
+      const input = win.querySelector('.var-linked-row[data-col="Montant"] input');
+      input.checked = true;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      replaceBtn.click();
+      await h.sleep(150);
+      const anchors = badgeNodes(ed).filter(b => b.node.attrs.loop);
+      const anchor = anchors.length === 1 ? anchors[0].node : null;
+      const keys = badgeNodes(ed).map(b => b.node.attrs.key);
+      const rows = rowTexts((await renderReader(Editor.getHTML())).querySelector('table'));
+      const fmt = v => Variables.formatValue(v, null, 'LpLignes', 'Montant');
+      ed.commands.undo();
+      await h.sleep(100);
+      const afterUndo = badgeNodes(ed).map(b => b.node.attrs.key);
+      const pass = !!anchor && anchor.attrs.key === 'LpLignes.Montant' && JSON.stringify(anchor.attrs.loop) === JSON.stringify(ROW_LOOP)
+        && JSON.stringify(keys) === JSON.stringify(['LpLignes.Montant', 'LpLignes.Qte', 'LpFactures.Numero'])
+        && JSON.stringify(rows) === JSON.stringify(['Désignation | Qté | Facture', `${fmt(180)} | 12 | F-2026-041`, `${fmt(1200)} | 1 | F-2026-041`, `${fmt(90)} | 1 | F-2026-041`])
+        && JSON.stringify(afterUndo) === JSON.stringify(['LpLignes.Designation', 'LpLignes.Qte', 'LpFactures.Numero']);
+      return { pass, notes: JSON.stringify({ anchor: anchor && anchor.attrs, keys, rows, afterUndo }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();

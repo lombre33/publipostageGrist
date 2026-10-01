@@ -794,7 +794,7 @@
         && inserted[1].key === 'VcAnnuaire.Telephone' && inserted[1].condition == null
         && reopened.shown && reopened.checked
         && english.info.text === 'Reuse the display condition' && english.info.text !== english.fr[0]
-        && english.info.title === 'Each inserted variable gets the same display condition as #VcAnnuaire.NomPrenom: Statut = Urgent. Untick to insert them without a condition.';
+        && english.info.title === 'Each variable inserted, or put in place of #VcAnnuaire.NomPrenom, gets the same display condition as #VcAnnuaire.NomPrenom: Statut = Urgent. Untick to place them without a condition.';
       return { pass, notes: JSON.stringify({ inserted, reopened, english }) };
     },
   });
@@ -817,6 +817,300 @@
       const conditions = badgeNodes(ed).map(b => b.node.attrs.condition);
       const pass = hiddenRow && conditions.length === 3 && conditions.every(c => c == null) && !html.includes('data-condition');
       return { pass, notes: JSON.stringify({ hiddenRow, conditions }) };
+    },
+  });
+
+  // === « Remplacer » : les attributs cochés se mettent à la place de la bulle (demande d'Antoine, 2026-10-01) ===
+  function replaceButton(modal) { return modal.querySelector('button.var-linked-replace'); }
+  const NO_REPLACE_BUTTON = { pass: false, notes: 'bouton « Remplacer » absent de la fenêtre Autres attributs' };
+  // Contenu du premier paragraphe : « #clé » pour une bulle, le texte sinon.
+  function sequence(ed) {
+    const seq = [];
+    ed.state.doc.firstChild.forEach(n => seq.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+    return seq;
+  }
+  function selectedBadgeKey(ed) {
+    const node = ed.state.selection.node;
+    return node && node.type.name === 'varBadge' ? node.attrs.key : null;
+  }
+  // Bulle avec les réglages qu'une copie neuve n'aurait pas : condition, format, boucle.
+  function configuredBadgeHtml(table, column, attrs) {
+    const attr = (name, value) => ` ${name}="${JSON.stringify(value).replace(/"/g, '&quot;')}"`;
+    let extra = '';
+    if (attrs.condition) extra += attr('data-condition', attrs.condition);
+    if (attrs.format) extra += attr('data-format', attrs.format);
+    return `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"${extra}></span>`;
+  }
+
+  cases.push({
+    id: 'varlinked_replace_puts_the_checked_attribute_in_place_of_the_badge',
+    description: 'Autres attributs : « Remplacer », entre « Annuler » et « Insérer », grisé tant que rien n’est coché, met l’attribut coché à la place de la bulle au lieu de l’ajouter après elle : le gras de la bulle reste, la bulle reste sélectionnée et l’éditeur reprend le focus, la lecture écrit le nouvel attribut, un seul Annuler rend l’ancienne bulle',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : <strong>${badgeHtml('VcAnnuaire', 'NomPrenom')}</strong> fin</p>`);
+      const ed = EditorCore.getEditor();
+      const original = sequence(ed);
+      const modal = await openLinked(h, 'NomPrenom');
+      const replaceBtn = replaceButton(modal);
+      if (!replaceBtn) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      const order = Array.from(modal.querySelectorAll('.var-modal-actions button')).map(b => (b === replaceBtn ? 'replace' : b.classList.contains('var-modal-primary') ? 'insert' : 'cancel'));
+      const disabledAtZero = replaceBtn.disabled;
+      tickLinked(modal, ['Telephone']);
+      const enabledAfterTick = !replaceBtn.disabled;
+      const label = replaceBtn.textContent;
+      const title = replaceBtn.title;
+      replaceBtn.click();
+      await h.sleep(150);
+      const seq = sequence(ed);
+      const marks = badgeNodes(ed)[0].node.marks.map(m => m.type.name);
+      const selected = selectedBadgeKey(ed);
+      const focused = document.querySelector('.tiptap').contains(document.activeElement);
+      const closed = !visible(modal);
+      const undone = ed.commands.undo();
+      await h.sleep(100);
+      const afterUndo = sequence(ed);
+      const marksAfterUndo = badgeNodes(ed)[0].node.marks.map(m => m.type.name);
+      ed.commands.redo();
+      await h.sleep(100);
+      const text = (await renderReader(Editor.getHTML())).querySelector('.reader-content').textContent;
+      const pass = JSON.stringify(order) === JSON.stringify(['cancel', 'replace', 'insert']) && disabledAtZero && enabledAfterTick
+        && label === I18n.t('varLinked.replace') && label === 'Remplacer' && title === I18n.t('varLinked.replaceTitle', { badge: '#VcAnnuaire.NomPrenom' })
+        && closed && JSON.stringify(seq) === JSON.stringify(['Responsable : ', '#VcAnnuaire.Telephone', ' fin']) && marks.includes('bold')
+        && selected === 'VcAnnuaire.Telephone' && focused
+        && undone && JSON.stringify(afterUndo) === JSON.stringify(original) && marksAfterUndo.includes('bold')
+        && text.includes('06 11 22 33 44') && !text.includes('Dupont Jean');
+      return { pass, notes: JSON.stringify({ order, disabledAtZero, enabledAfterTick, label, title, closed, seq, marks, selected, focused, undone, afterUndo, marksAfterUndo, text }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_with_several_attributes_is_one_undo_step',
+    description: 'Autres attributs : plusieurs attributs cochés puis « Remplacer » - le premier prend la place de la bulle (même bulle), les autres suivent séparés par une espace, dans l’ordre de la table ; un seul Annuler rend la bulle d’origine',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom')} fin</p>`);
+      const ed = EditorCore.getEditor();
+      const original = sequence(ed);
+      const modal = await openLinked(h, 'NomPrenom');
+      const replaceBtn = replaceButton(modal);
+      if (!replaceBtn) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      tickLinked(modal, ['Naissance', 'Telephone']);
+      replaceBtn.click();
+      await h.sleep(150);
+      const seq = sequence(ed);
+      const selected = selectedBadgeKey(ed);
+      const undone = ed.commands.undo();
+      await h.sleep(100);
+      const afterOneUndo = sequence(ed);
+      const pass = JSON.stringify(seq) === JSON.stringify(['Responsable : ', '#VcAnnuaire.Telephone', ' ', '#VcAnnuaire.Naissance', ' fin'])
+        && selected === 'VcAnnuaire.Telephone' && undone && JSON.stringify(afterOneUndo) === JSON.stringify(original);
+      return { pass, notes: JSON.stringify({ seq, selected, undone, afterOneUndo }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_keeps_the_condition_unless_the_reuse_box_is_unticked',
+    description: 'Autres attributs : la bulle qui remplace garde la condition d’affichage de l’ancienne (case « Reprendre la condition d’affichage » cochée d’office, la bulle reste masquée en lecture quand elle n’est pas remplie) ; décochée, elle n’en a plus',
+    run: async (h) => {
+      await seed(h);
+      const ed = EditorCore.getEditor();
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom', COND_URGENT)} fin</p>`);
+      let modal = await openLinked(h, 'NomPrenom');
+      if (!replaceButton(modal)) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      tickLinked(modal, ['Telephone']);
+      replaceButton(modal).click();
+      await h.sleep(150);
+      const kept = badgeNodes(ed).map(b => ({ key: b.node.attrs.key, condition: b.node.attrs.condition }));
+      const html = Editor.getHTML();
+      const shownBox = document.createElement('div');
+      shownBox.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_1, { Statut: 'Normal' }), 'VcDossiers');
+      await h.sleep(50);
+      const hiddenBox = document.createElement('div');
+      hiddenBox.innerHTML = await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord());
+      window.__gristStub.fireRecord(Object.assign({}, RECORD_1), 'VcDossiers');
+      await h.sleep(50);
+      // Case décochée : la bulle qui remplace n'a plus de condition.
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom', COND_URGENT)} fin</p>`);
+      modal = await openLinked(h, 'NomPrenom');
+      const box = inheritRow(modal).querySelector('input');
+      box.checked = false;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      tickLinked(modal, ['Telephone']);
+      replaceButton(modal).click();
+      await h.sleep(150);
+      const dropped = badgeNodes(ed).map(b => ({ key: b.node.attrs.key, condition: b.node.attrs.condition }));
+      const pass = kept.length === 1 && kept[0].key === 'VcAnnuaire.Telephone' && JSON.stringify(kept[0].condition) === JSON.stringify(COND_URGENT)
+        && shownBox.textContent.includes('06 11 22 33 44') && !/06 11|Dupont/.test(hiddenBox.textContent)
+        && dropped.length === 1 && dropped[0].key === 'VcAnnuaire.Telephone' && dropped[0].condition == null;
+      return { pass, notes: JSON.stringify({ kept, shown: shownBox.textContent, hidden: hiddenBox.textContent, dropped }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_keeps_the_format_only_for_a_column_of_the_same_kind',
+    description: 'Autres attributs : « Remplacer » garde le format nombre (ou date) de la bulle quand la nouvelle colonne est aussi un nombre (ou une date), et l’enlève pour une colonne d’un autre genre - un format date sur un texte écrirait n’importe quoi',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcAnnuaire', { NomPrenom: 'Text', Telephone: 'Text', Naissance: 'Date', Embauche: 'Date', Age: 'Int', Salaire: 'Numeric' });
+      stub.setRows('VcAnnuaire', [
+        { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44', Naissance: 631152000, Embauche: 1262304000, Age: 36, Salaire: 3200.5 },
+        { id: 8, NomPrenom: 'Martin Anne', Telephone: '06 55 66 77 88', Naissance: 662688000, Embauche: 1293840000, Age: 35, Salaire: 2800 },
+      ]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord(Object.assign({}, RECORD_1), 'VcDossiers');
+      await h.sleep(50);
+      const ed = EditorCore.getEditor();
+      const money = { type: 'number', style: 'fr', decimals: 2, currency: '€' };
+      const longDate = { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key, words: true };
+      async function replaceWith(from, format, to) {
+        Editor.setHTML(`<p>${configuredBadgeHtml('VcAnnuaire', from, { format })}</p>`);
+        const modal = await openLinked(h, from);
+        if (!replaceButton(modal)) { cancelLinked(modal); return null; }
+        tickLinked(modal, [to]);
+        replaceButton(modal).click();
+        await h.sleep(120);
+        const node = badgeNodes(ed)[0].node;
+        return { key: node.attrs.key, format: node.attrs.format };
+      }
+      const got = {
+        numberToInt: await replaceWith('Salaire', money, 'Age'),
+        numberToText: await replaceWith('Salaire', money, 'Telephone'),
+        numberToDate: await replaceWith('Salaire', money, 'Naissance'),
+        dateToDate: await replaceWith('Naissance', longDate, 'Embauche'),
+        dateToNumber: await replaceWith('Naissance', longDate, 'Salaire'),
+        textStaysPlain: await replaceWith('Telephone', null, 'Salaire'),
+      };
+      if (Object.values(got).some(v => !v)) return NO_REPLACE_BUTTON;
+      const pass = got.numberToInt.key === 'VcAnnuaire.Age' && JSON.stringify(got.numberToInt.format) === JSON.stringify(money)
+        && got.numberToText.key === 'VcAnnuaire.Telephone' && got.numberToText.format == null
+        && got.numberToDate.key === 'VcAnnuaire.Naissance' && got.numberToDate.format == null
+        && got.dateToDate.key === 'VcAnnuaire.Embauche' && JSON.stringify(got.dateToDate.format) === JSON.stringify(longDate)
+        && got.dateToNumber.key === 'VcAnnuaire.Salaire' && got.dateToNumber.format == null
+        && got.textStaysPlain.key === 'VcAnnuaire.Salaire' && got.textStaysPlain.format == null;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_drops_a_loop_that_belongs_to_another_table',
+    description: 'Autres attributs : une boucle ne suit que la table de sa bulle - une bulle d’une colonne Référence de la page qui porte encore une boucle (colonne devenue Référence depuis) la perd en passant à une colonne de la table référencée, au lieu de garder une boucle qui ne veut plus rien dire',
+    run: async (h) => {
+      await seed(h);
+      const loop = { repeat: 'inline', table: 'VcAnnuaire', via: { table: 'VcDossiers', column: 'Responsable' }, empty: 'blank' };
+      const html = badgeHtml('VcDossiers', 'Responsable').replace('<span ', `<span data-loop="${JSON.stringify(loop).replace(/"/g, '&quot;')}" data-loop-repeat="inline" `);
+      Editor.setHTML(`<p>${html}</p>`);
+      const ed = EditorCore.getEditor();
+      const before = badgeNodes(ed)[0].node.attrs.loop;
+      const modal = await openLinked(h, 'Responsable');
+      if (!replaceButton(modal)) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+      tickLinked(modal, ['Telephone']);
+      replaceButton(modal).click();
+      await h.sleep(150);
+      const node = badgeNodes(ed)[0].node;
+      const pass = !!before && node.attrs.key === 'VcAnnuaire.Telephone' && node.attrs.table === 'VcAnnuaire' && node.attrs.loop == null;
+      return { pass, notes: JSON.stringify({ before, attrs: node.attrs }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_insert_and_replace_do_nothing_when_the_badge_is_gone',
+    description: 'Autres attributs : si la bulle d’origine a été supprimée pendant le choix, ni « Insérer » ni « Remplacer » ne touchent au document - l’alerte le dit (rien inséré ni remplacé) et la fenêtre se ferme',
+    run: async (h) => {
+      await seed(h);
+      const ed = EditorCore.getEditor();
+      const realAlert = window.alert;
+      const alerts = [];
+      window.alert = message => { alerts.push(String(message)); };
+      const outcomes = {};
+      try {
+        for (const which of ['insert', 'replace']) {
+          Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom')} fin</p>`);
+          const modal = await openLinked(h, 'NomPrenom');
+          if (!replaceButton(modal)) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+          tickLinked(modal, ['Telephone']);
+          // La bulle disparaît pendant que la fenêtre est ouverte (elle garde sa position d'ouverture).
+          const found = badgeNodes(ed)[0];
+          ed.view.dispatch(ed.state.tr.delete(found.pos, found.pos + found.node.nodeSize));
+          (which === 'insert' ? modal.querySelector('.var-modal-primary') : replaceButton(modal)).click();
+          await h.sleep(100);
+          outcomes[which] = { text: ed.state.doc.textContent, badges: badgeNodes(ed).length, closed: !visible(modal) };
+        }
+      } finally {
+        window.alert = realAlert;
+      }
+      const pass = alerts.length === 2 && alerts.every(a => a === I18n.t('varLinked.insertLost') && a === 'La variable a été déplacée ou supprimée pendant le choix : rien n’a été inséré ni remplacé.')
+        && ['insert', 'replace'].every(k => outcomes[k] && outcomes[k].badges === 0 && outcomes[k].closed && outcomes[k].text === 'Responsable :  fin');
+      return { pass, notes: JSON.stringify({ alerts, outcomes }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_in_track_changes_mode_is_a_tracked_replacement',
+    description: 'Suivi des modifications actif : « Remplacer » ne déclenche aucun refus de transaction ; l’ancienne bulle reste sous <del>, la nouvelle est sous <ins>, et « Tout refuser » rend la bulle d’origine',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Responsable : ${badgeHtml('VcAnnuaire', 'NomPrenom')} fin</p>`);
+      const ed = EditorCore.getEditor();
+      const warnings = [];
+      const realWarn = console.warn;
+      console.warn = (...args) => { warnings.push(args.map(String).join(' ')); realWarn.apply(console, args); };
+      let result = null;
+      try {
+        if (!Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+        const modal = await openLinked(h, 'NomPrenom');
+        if (!replaceButton(modal)) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+        tickLinked(modal, ['Telephone']);
+        replaceButton(modal).click();
+        await h.sleep(200);
+        const html = Editor.getHTML();
+        // La bibliothèque de suivi remplace la sélection de la bulle par un curseur : la barre ne doit surtout pas rester ouverte sur la bulle barrée.
+        const selectedNode = ed.state.selection.node;
+        result = {
+          onDeletedBadge: !!selectedNode && selectedNode.marks.some(m => m.type.name === 'deletion'),
+          bar: toolbar().classList.contains('visible'),
+          pending: Editor.hasPendingTrackedChanges(),
+          keys: badgeNodes(ed).map(b => b.node.attrs.key),
+          hasDel: /<del[^>]*>(?:(?!<\/del>).)*NomPrenom/s.test(html),
+          hasIns: /<ins[^>]*>(?:(?!<\/ins>).)*Telephone/s.test(html),
+          html,
+        };
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(200);
+        result.afterReject = badgeNodes(ed).map(b => b.node.attrs.key);
+      } finally {
+        console.warn = realWarn;
+        if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+      }
+      const refused = warnings.filter(w => w.indexOf('transaction refusée') !== -1);
+      const pass = refused.length === 0 && !!result && result.pending && result.hasDel && result.hasIns && !result.onDeletedBadge
+        && JSON.stringify(result.afterReject) === JSON.stringify(['VcAnnuaire.NomPrenom']);
+      return { pass, notes: JSON.stringify({ refused, result }) };
+    },
+  });
+
+  cases.push({
+    id: 'varlinked_replace_speaks_english',
+    description: 'Interface en anglais : « Replace » avec son info-bulle, et la note sous la liste explique « Insert » et « Replace »',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badgeHtml('VcAnnuaire', 'NomPrenom')}</p>`);
+      const lang = I18n.getLang();
+      let english = null;
+      try {
+        I18n.setLang('en');
+        const modal = await openLinked(h, 'NomPrenom');
+        const replaceBtn = replaceButton(modal);
+        if (!replaceBtn) { cancelLinked(modal); return NO_REPLACE_BUTTON; }
+        english = { label: replaceBtn.textContent, title: replaceBtn.title, note: modal.querySelector('.var-linked-note').textContent };
+        cancelLinked(modal);
+      } finally {
+        I18n.setLang(lang);
+      }
+      const pass = english.label === 'Replace' && english.title === 'Replaces #VcAnnuaire.NomPrenom with the checked attributes instead of inserting them after it.'
+        && english.note.includes('“Insert” adds the checked attributes right after the variable, separated by a space; “Replace” puts them in its place.');
+      return { pass, notes: JSON.stringify(english) };
     },
   });
 

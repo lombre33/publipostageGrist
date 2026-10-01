@@ -39,7 +39,11 @@
 .var-modal-actions button:hover { background: var(--surface-sunken); }
 .var-modal-actions button.var-modal-primary { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
 .var-modal-actions button.var-modal-primary:hover { background: var(--accent-solid-hover); }
-.var-modal-actions button.var-modal-primary:disabled { opacity: .45; cursor: default; }
+.var-modal-actions button:disabled { opacity: .45; cursor: default; }
+.var-modal-actions button:disabled:not(.var-modal-primary):hover { background: var(--surface); }
+/* Autres attributs : Annuler, Remplacer et « Insérer N attributs » ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) - « Insérer » passe alors sur sa
+   propre ligne, à droite, au lieu de sortir de la fenêtre. Au-dessus, tout reste sur une ligne. */
+.var-linked-modal-content .var-modal-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
 .var-modal-actions button.var-modal-danger { border-color: transparent; background: transparent; color: var(--danger); padding: 0 4px; }
 .var-modal-actions button.var-modal-danger:hover { background: var(--danger-soft, #fbe9e9); }
 .var-modal-actions button[hidden] { display: none; }

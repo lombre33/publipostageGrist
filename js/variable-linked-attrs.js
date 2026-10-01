@@ -14,6 +14,10 @@
 //
 // Condition d'affichage (demande d'Antoine du 2026-09-29) : quand la variable d'origine en a une, chaque bulle insérée la reprend, par défaut - une ligne
 // « Reprendre la condition d'affichage », cochée, permet de les insérer sans. Une copie par bulle : elles se modifient ensuite chacune de leur côté.
+//
+// « Remplacer » (demande d'Antoine du 2026-10-01), à côté d'« Insérer » : les attributs cochés se mettent à la place de la bulle au lieu de s'ajouter après elle.
+// C'est la même bulle dont la colonne change : sa mise en forme du texte, sa boucle, sa condition et son format - quand la nouvelle colonne est du même genre,
+// nombre ou date - sont gardés, comme le fait la barre flottante pour chacun de ses réglages (EditorCore.patchNodeAndReselect, setNodeMarkup).
 const VariableLinkedAttrs = (function () {
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
@@ -99,11 +103,14 @@ const VariableLinkedAttrs = (function () {
     const spacer = el('span', 'var-modal-spacer');
     const cancelBtn = el('button');
     cancelBtn.type = 'button';
+    // Entre « Annuler » et « Insérer », qui reste le bouton principal : remplacer est le geste moins courant.
+    const replaceBtn = el('button', 'var-linked-replace');
+    replaceBtn.type = 'button';
     const insertBtn = el('button', 'var-modal-primary');
     insertBtn.type = 'button';
-    win.actions.append(spacer, cancelBtn, insertBtn);
+    win.actions.append(spacer, cancelBtn, replaceBtn, insertBtn);
     win.body.append(subtitle, inheritRow, path, filter, list, note);
-    refs = { title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, insertBtn };
+    refs = { title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, replaceBtn, insertBtn };
 
     filter.addEventListener('input', applyFilter);
     list.addEventListener('change', onPickChange);
@@ -114,6 +121,7 @@ const VariableLinkedAttrs = (function () {
       goTo(state.hops.concat(button.closest('.var-linked-row').dataset.col));
     });
     cancelBtn.addEventListener('click', close);
+    replaceBtn.addEventListener('click', replace);
     insertBtn.addEventListener('click', insert);
   }
 
@@ -125,12 +133,14 @@ const VariableLinkedAttrs = (function () {
     const index = pickIndex(state.hops, box.value);
     if (box.checked && index === -1) state.picks.push({ hops: state.hops.slice(), col: box.value });
     else if (!box.checked && index !== -1) state.picks.splice(index, 1);
-    syncInsertButton();
+    syncActionButtons();
   }
-  function syncInsertButton() {
+  // « Insérer » dit combien d'attributs il pose ; lui et « Remplacer » restent grisés tant que rien n'est coché.
+  function syncActionButtons() {
     const count = state ? state.picks.length : 0;
     refs.insertBtn.textContent = I18n.t('varLinked.insert', { count });
     refs.insertBtn.disabled = count === 0;
+    refs.replaceBtn.disabled = count === 0;
   }
   function applyFilter() {
     const q = refs.filter.value.trim().toLowerCase();
@@ -201,7 +211,7 @@ const VariableLinkedAttrs = (function () {
     noMatch.dataset.role = 'no-match';
     noMatch.hidden = true;
     list.appendChild(noMatch);
-    syncInsertButton();
+    syncActionButtons();
   }
 
   // Fil d'Ariane « Projet › Accompagnateur » : caché au niveau de la table de départ ; les niveaux au-dessus de celui affiché reviennent au clic (sauf
@@ -341,28 +351,75 @@ const VariableLinkedAttrs = (function () {
     inheritRow.title = I18n.t('varLinked.inheritTitle', { badge: Variables.triggerChar() + (state.node.attrs.key || ''), summary });
   }
 
-  function insert() {
-    if (!state || !state.picks.length) return;
-    const { editor, pos, node: original, base } = state;
+  // La bulle d'origine, toujours à sa position (la fenêtre garde celle de son ouverture), ou null - alerte, fenêtre fermée - si elle a été déplacée ou supprimée
+  // pendant le choix : rien n'est alors inséré ni remplacé.
+  function originalBadge() {
+    const { editor, pos, node: original } = state;
     const node = editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'varBadge' || node.attrs.table !== original.attrs.table || node.attrs.column !== original.attrs.column) {
-      console.warn('[VariableLinkedAttrs] bulle introuvable à sa position d\'origine - rien inséré.');
-      alert(I18n.t('varLinked.insertLost'));
-      close();
-      return;
-    }
+    if (node && node.type.name === 'varBadge' && node.attrs.table === original.attrs.table && node.attrs.column === original.attrs.column) return node;
+    console.warn('[VariableLinkedAttrs] bulle introuvable à sa position d\'origine - rien inséré ni remplacé.');
+    alert(I18n.t('varLinked.insertLost'));
+    close();
+    return null;
+  }
+  // Table et colonne (ou chemin) de la bulle d'un attribut coché.
+  function pickAttrs(pick) {
+    const column = pick.hops.concat(pick.col).join('.');
+    return { table: state.base, column, key: state.base + '.' + column };
+  }
+  // Contenu à poser pour ces attributs : une espace avant chaque bulle, qui reçoit une copie de la condition de `node` quand « Reprendre la condition d'affichage »
+  // est proposée et cochée.
+  function badgesContent(picks, node) {
     const inherits = !refs.inheritRow.hidden && refs.inheritBox.checked;
     const content = [];
-    orderedPicks().forEach(p => {
-      const column = p.hops.concat(p.col).join('.');
-      const attrs = { table: base, column, key: base + '.' + column };
+    picks.forEach(p => {
+      const attrs = pickAttrs(p);
       if (inherits) attrs.condition = inheritedCondition(node);
       content.push({ type: 'text', text: ' ' });
       content.push({ type: 'varBadge', attrs });
     });
+    return content;
+  }
+
+  function insert() {
+    if (!state || !state.picks.length) return;
+    const { editor, pos } = state;
+    const node = originalBadge();
+    if (!node) return;
+    const content = badgesContent(orderedPicks(), node);
     const insertAt = pos + node.nodeSize;
     close({ keepFocus: true });
     editor.chain().focus().insertContentAt(insertAt, content).run();
+  }
+
+  // Genre du format que porte une colonne : un format nombre n'a de sens que sur un nombre, un format date que sur une date (même répartition que la barre flottante,
+  // js/floating-toolbars.js:wireVariableFloatingToolbar).
+  function formatKind(type) {
+    if (type === 'Numeric' || type === 'Int') return 'number';
+    return type === 'Date' || type === 'DateTime' ? 'date' : null;
+  }
+  // « Remplacer » : la bulle d'origine prend la colonne du premier attribut coché, les autres cochés suivent, séparés par une espace, comme à l'insertion. Elle reste la
+  // même bulle : ses autres réglages restent (mise en forme du texte, boucle, condition, format), sauf ce qui ne vaut que pour l'ancienne colonne - le format d'un
+  // autre genre (une date sur un texte donnerait n'importe quoi), la boucle d'une autre table, la condition si on a décoché « Reprendre la condition d'affichage ».
+  // Une seule transaction : un seul Annuler rend l'ancienne bulle. La bulle reste sélectionnée, sa barre revient avec les réglages de sa nouvelle colonne.
+  function replace() {
+    if (!state || !state.picks.length) return;
+    const { editor, pos } = state;
+    const node = originalBadge();
+    if (!node) return;
+    const [first, ...others] = orderedPicks();
+    const attrs = Object.assign({}, node.attrs, pickAttrs(first));
+    if (!refs.inheritRow.hidden && !refs.inheritBox.checked) attrs.condition = null;
+    const oldKind = formatKind(GristAPI.getColumnType(node.attrs.table, node.attrs.column));
+    if (!oldKind || oldKind !== formatKind(GristAPI.getColumnType(attrs.table, attrs.column))) attrs.format = null;
+    if (attrs.table !== node.attrs.table) attrs.loop = null;
+    const after = pos + node.nodeSize;
+    const content = badgesContent(others, node);
+    close({ keepFocus: true });
+    const chain = editor.chain().command(({ tr }) => { tr.setNodeMarkup(pos, undefined, attrs); return true; });
+    if (content.length) chain.insertContentAt(after, content);
+    chain.setNodeSelection(pos).run();
+    editor.view.focus();
   }
 
   function close(opts) {
@@ -389,10 +446,12 @@ const VariableLinkedAttrs = (function () {
     if (!linked) { editor.view.focus(); return; }
     ensureModal();
     state = { editor, pos, node, base: t.base, refColumn: t.refColumn, minHops: t.minHops, hops: t.hops.slice(), picks: [] };
-    const { filter, cancelBtn } = refs;
+    const { filter, cancelBtn, replaceBtn } = refs;
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
     cancelBtn.textContent = I18n.t('common.cancel');
+    replaceBtn.textContent = I18n.t('varLinked.replace');
+    replaceBtn.title = I18n.t('varLinked.replaceTitle', { badge: Variables.triggerChar() + (node.attrs.key || '') });
     renderInheritOption();
     renderLevel();
     win.show(filter);

@@ -290,6 +290,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
+- Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
+  01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
+  colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
+  décochée) et son format quand la nouvelle colonne est du même genre (nombre ou date) restent ; un seul Annuler la
+  rend. Avec plusieurs attributs cochés, le premier prend la place de la bulle et les autres suivent, séparés par une
+  espace. Grisé tant que rien n'est coché, comme « Insérer ».
 - Écriture d'un nombre : tant qu'aucun réglage n'est posé, la barre d'une bulle nombre montre FR allumé (US en interface
   anglaise) et le document écrit déjà ainsi — espace insécable entre les milliers, virgule (choix d'Antoine du 01/10) ;
   ce que la barre annonce est ce qui s'applique, sans avoir à recliquer. « — » écrit sans séparateur de milliers. Les

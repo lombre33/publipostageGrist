@@ -741,6 +741,115 @@ const inheritNone = await inheritState();
 check('variable sans condition : la ligne « Reprendre la condition d’affichage » n’est pas montrée', inheritNone.missing || !inheritNone.shown, inheritNone);
 await cancelLinkedWindow();
 
+// 6 bis) « Remplacer » (demande d'Antoine du 2026-10-01), à la vraie souris à 700x400 : le bouton est entre « Annuler » et « Insérer », sur la même ligne, dans la fenêtre,
+// au premier plan, grisé tant que rien n'est coché ; un vrai clic le fait mettre l'attribut coché à la place de la bulle - qui reste sélectionnée, sa barre revenant à côté
+// d'elle - et un seul Ctrl+Z rend l'ancienne ; au clavier, Tab jusqu'à lui puis Entrée fait la même chose ; dans un panneau de 360 px les trois boutons ne tiennent pas côte à
+// côte : « Insérer » passe sur sa propre ligne, à droite, et rien ne sort de la fenêtre ni du panneau.
+const replaceState = () => page.evaluate(() => {
+  const modal = document.getElementById('var-linked-modal');
+  const actions = Array.from(modal.querySelectorAll('.var-modal-actions button'));
+  const rects = actions.map(b => b.getBoundingClientRect());
+  const content = modal.querySelector('.var-modal-content').getBoundingClientRect();
+  const replace = modal.querySelector('button.var-linked-replace');
+  return {
+    labels: actions.map(b => b.textContent), leftToRight: rects.every((r, i) => i === 0 || r.left >= rects[i - 1].right - 0.5),
+    inside: rects.every(r => r.left >= content.left - 0.5 && r.right <= content.right + 0.5), oneRow: new Set(rects.map(r => Math.round(r.top))).size === 1,
+    replaceDisabled: replace ? replace.disabled : null, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+    contentOverflowX: modal.querySelector('.var-modal-content').scrollWidth - modal.querySelector('.var-modal-content').clientWidth,
+    boxInViewport: content.left >= 0 && content.top >= 0 && content.right <= innerWidth + 0.5 && content.bottom <= innerHeight + 0.5,
+    rows: new Set(rects.map(r => Math.round(r.top))).size,
+  };
+});
+const paragraphSequence = () => page.evaluate(() => {
+  const out = [];
+  EditorCore.getEditor().state.doc.firstChild.forEach(n => out.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+  return out;
+});
+const SEQ_ORIGIN = ['Dossier suivi par ', '#VcAnnuaire.NomPrenom', ' jusqu’à la clôture.'];
+const SEQ_REPLACED = ['Dossier suivi par ', '#VcAnnuaire.Telephone', ' jusqu’à la clôture.'];
+await setOriginBubble(null);
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const replaceAtZero = await replaceState();
+check('« Remplacer » : trois boutons Annuler, Remplacer, Insérer de gauche à droite, sur une ligne, dans la fenêtre, page sans débordement, grisé tant que rien n’est coché',
+  JSON.stringify(replaceAtZero.labels.slice(0, 2)) === JSON.stringify(['Annuler', 'Remplacer']) && replaceAtZero.labels.length === 3 && replaceAtZero.labels[2].startsWith('Insérer')
+  && replaceAtZero.leftToRight && replaceAtZero.inside && replaceAtZero.oneRow && replaceAtZero.docOverflowX <= 0 && replaceAtZero.replaceDisabled === true, replaceAtZero);
+const replaceTelRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+if (replaceTelRow.found) await page.mouse.click(replaceTelRow.x, replaceTelRow.y);
+await page.waitForTimeout(80);
+const replaceBtn = await hitTest('#var-linked-modal .var-linked-replace');
+const replaceTitle = await page.evaluate(() => document.querySelector('#var-linked-modal .var-linked-replace').title);
+check('« Remplacer » est visible, au premier plan et actif après un clic sur la ligne Telephone ; son info-bulle dit ce qu’il fait',
+  replaceBtn.found && replaceBtn.inViewport && replaceBtn.onTop && (await replaceState()).replaceDisabled === false
+  && replaceTitle === 'Remplace #VcAnnuaire.NomPrenom par les attributs cochés, au lieu de les insérer après elle.', { replaceBtn, replaceTitle });
+if (replaceBtn.found) await page.mouse.click(replaceBtn.x, replaceBtn.y);
+await page.waitForTimeout(400);
+const afterReplace = await page.evaluate(() => {
+  const selected = EditorCore.getEditor().state.selection.node;
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  const badge = document.querySelector('.tiptap .var-badge[data-column="Telephone"]');
+  const b = badge && badge.getBoundingClientRect();
+  const r = bar && bar.getBoundingClientRect();
+  return {
+    windowClosed: document.getElementById('var-linked-modal').style.display === 'none',
+    selected: selected && selected.type.name === 'varBadge' ? selected.attrs.key : null,
+    focusInEditor: document.querySelector('.tiptap').contains(document.activeElement),
+    bar: r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null, badge: b ? { left: b.left, top: b.top, right: b.right, bottom: b.bottom } : null,
+  };
+});
+check('« Remplacer » (vrai clic) met #VcAnnuaire.Telephone à la place de #VcAnnuaire.NomPrenom, ferme la fenêtre et rend le focus à l’éditeur',
+  JSON.stringify(await paragraphSequence()) === JSON.stringify(SEQ_REPLACED) && afterReplace.windowClosed && afterReplace.focusInEditor, afterReplace);
+check('... la bulle reste sélectionnée et sa barre est de retour à côté d’elle (pas en haut à gauche)',
+  afterReplace.selected === 'VcAnnuaire.Telephone' && !!afterReplace.bar && !!afterReplace.badge && !(afterReplace.bar.left <= 9 && afterReplace.bar.top <= 9)
+  && afterReplace.bar.left <= afterReplace.badge.right && afterReplace.bar.right >= afterReplace.badge.left, afterReplace);
+await page.keyboard.press('Control+z');
+await page.waitForTimeout(250);
+check('un seul Ctrl+Z (vrai clavier) rend #VcAnnuaire.NomPrenom', JSON.stringify(await paragraphSequence()) === JSON.stringify(SEQ_ORIGIN), await paragraphSequence());
+
+// Au clavier : la fenêtre s'ouvre sur le filtre, la case se coche à la souris, puis Tab jusqu'à « Remplacer » (après « Annuler ») et Entrée.
+await setOriginBubble(null);
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const keyboardTelRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+if (keyboardTelRow.found) await page.mouse.click(keyboardTelRow.x, keyboardTelRow.y);
+await page.waitForTimeout(80);
+const focusedName = () => page.evaluate(() => {
+  const a = document.activeElement;
+  return a === document.querySelector('#var-linked-modal .var-linked-replace') ? 'replace' : a === document.querySelector('#var-linked-modal .var-modal-primary') ? 'insert'
+    : a && a.closest && a.closest('#var-linked-modal .var-modal-actions') ? 'cancel' : 'other';
+});
+const tabbedThrough = [];
+for (let i = 0; i < 14 && (await focusedName()) !== 'replace'; i++) { await page.keyboard.press('Tab'); tabbedThrough.push(await focusedName()); }
+check('Tab atteint « Remplacer » juste après « Annuler » et avant « Insérer »', (await focusedName()) === 'replace' && tabbedThrough[tabbedThrough.length - 2] === 'cancel', tabbedThrough);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(400);
+check('Entrée sur « Remplacer » (vrai clavier) remplace la bulle comme un clic',
+  JSON.stringify(await paragraphSequence()) === JSON.stringify(SEQ_REPLACED) && await page.evaluate(() => document.getElementById('var-linked-modal').style.display === 'none'), await paragraphSequence());
+
+// Panneau de 360 px : les trois boutons restent dans la fenêtre et atteignables, « Insérer » passe sur sa propre ligne, à droite.
+await setOriginBubble(null);
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(300);
+const narrowTelRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Telephone"] .var-linked-pick');
+if (narrowTelRow.found) await page.mouse.click(narrowTelRow.x, narrowTelRow.y);
+await page.waitForTimeout(80);
+const replaceNarrow = await replaceState();
+const replaceNarrowHit = await hitTest('#var-linked-modal .var-linked-replace');
+const insertNarrowHit = await hitTest('#var-linked-modal .var-modal-primary');
+check('360 px : Annuler, Remplacer et Insérer restent dans la fenêtre et dans le panneau, ni la fenêtre ni la page ne débordent sur le côté',
+  replaceNarrow.inside && replaceNarrow.docOverflowX <= 0 && replaceNarrow.contentOverflowX <= 0 && replaceNarrow.boxInViewport && replaceNarrowHit.found && replaceNarrowHit.inViewport
+  && replaceNarrowHit.onTop && insertNarrowHit.found && insertNarrowHit.inViewport && insertNarrowHit.onTop, { replaceNarrow, replaceNarrowHit, insertNarrowHit });
+check('360 px : « Insérer » passe sur sa propre ligne, alignée à droite avec « Remplacer » au lieu de sortir ; Annuler et Remplacer restent ensemble',
+  replaceNarrow.rows === 2 && insertNarrowHit.top > replaceNarrowHit.top && Math.abs(insertNarrowHit.right - replaceNarrowHit.right) < 1
+  && replaceNarrowHit.top === (await hitTest('#var-linked-modal .var-modal-actions button')).top, { replaceNarrow, replaceNarrowHit, insertNarrowHit });
+if (replaceNarrowHit.found) await page.mouse.click(replaceNarrowHit.x, replaceNarrowHit.y);
+await page.waitForTimeout(300);
+check('360 px : un vrai clic sur « Remplacer » remplace la bulle', JSON.stringify(await paragraphSequence()) === JSON.stringify(SEQ_REPLACED), await paragraphSequence());
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(250);
+
 // Nombres (demandes d'Antoine du 2026-09-30 « Si la valeur vaut zéro », puis du 2026-10-01 : une icône en bascule, 0 masqué par défaut, écriture FR par défaut).
 // La barre d'une bulle Numérique a un bouton en bascule pour le zéro - 0 barré et enfoncé : le zéro ne s'écrit pas (le défaut) ; 0 et relâché : la bulle l'affiche. À la
 // vraie souris et à 700x400 : il est atteignable et non recouvert ; un vrai clic pose {zero:'show'} SANS activer la mise en forme des nombres, les autres réglages le

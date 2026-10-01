@@ -394,6 +394,11 @@ exerce le VRAI clic natif.
    affichée (ni au-dessus de la bulle, ni en haut à gauche de la page par-dessus la barre du haut). Même
    résultat en allant sur « Lecture » au clavier (Tab jusqu'au bouton puis Entrée). Revenir en « Édition »,
    cliquer la bulle : sa barre se rouvre.
+7. Bulle d'une variable d'une autre table (ex. `#Annuaire.NomPrenom`, mise en gras, avec une condition d'affichage),
+   icône « Autres attributs », cocher un attribut, cliquer « Remplacer » (entre « Annuler » et « Insérer ») : la bulle
+   devient cet attribut sans rien perdre de son gras ni de sa condition, reste sélectionnée et sa barre revient à côté
+   d'elle ; un seul Ctrl+Z rend l'ancienne. « Insérer » ajoute toujours les attributs juste après la bulle. Avec le suivi
+   des modifications actif : l'ancienne bulle est barrée, la nouvelle soulignée, « Tout refuser » rend l'ancienne.
 
 ---
 
