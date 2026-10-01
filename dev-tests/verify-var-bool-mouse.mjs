@@ -273,7 +273,7 @@ async function runEnglish() {
   const reach = {};
   for (const style of STYLES) reach[style] = await hitTest(BOOL_BUTTON(style));
   check('anglais - la barre « Oui / Non » tient dans le panneau, le bouton « true / false » aussi, sans être coupé', bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.buttons[3].label === 'true / false' && bar.buttons[3].fits && STYLES.every(s => reach[s].found && reach[s].inViewport && reach[s].onTop), { bar, reach });
-  check('anglais - infobulles de la liste à cases et « Write true or false »', bar.buttons[1].title === 'Checkbox (classic)' && bar.buttons[2].title === 'Checkbox (accent, plain text)' && bar.buttons[3].title === 'Write true or false' && /^Checkbox \(accent/.test(bar.buttons[0].title), bar.buttons.map(b => b.title));
+  check('anglais - infobulles de la liste à cases et « Write true or false »', bar.buttons[1].title === 'Checkbox (classic)' && bar.buttons[2].title === 'Checkbox (accent, plain text)' && bar.buttons[3].title === 'Write true or false' && bar.buttons[0].title === 'Checkbox (accent, text struck through in a list)', bar.buttons.map(b => b.title));
   await clickSel(BOOL_BUTTON('classic'));
   check('anglais - un vrai clic sur la case classique règle la bulle', JSON.stringify(await formatOf('Actif')) === JSON.stringify({ type: 'bool', style: 'classic' }));
   await clickSel('#btn-mode-read');

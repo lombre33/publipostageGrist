@@ -4,8 +4,8 @@
 // (`accentStrike`, `classic`, `accentPlain`) écrivent une case ☑ / ☐ ; sans réglage - ou `text` - la bulle écrit « vrai » / « faux » (« true » / « false » en interface anglaise).
 // js/variables.js:formatValue est le seul point d'application : il rend le caractère ☑ / ☐ ; js/reader-mode.js le transforme en vraie case dessinée (`.resolved-checkbox`, couleur EN LIGNE) pour la
 // Lecture et pour tous les exports, qui lisent cette couleur et ce style en ligne (PDF : polices de cases js/pdf-fonts-boxes.js ; Word et Excel : police des symboles ; e-mail : « [x] » / « [ ] »).
-// « accent, texte barré » barre en plus, et grise, le texte qui suit une case cochée sur la même ligne - comme un item coché de la liste. Les champs texte (Objet, À, Cc, Cci, nom du PDF) et les
-// valeurs montrées comme donnée (attributs d'une ligne liée) gardent « true » / « false » comme avant.
+// Les deux styles « accent » dessinent la même case : le texte qui suit n'est jamais barré, le barré n'existe que dans la liste à cases (réponse d'Antoine, 01/10 : « Non, la case seule »). Les champs
+// texte (Objet, À, Cc, Cci, nom du PDF) et les valeurs montrées comme donnée (attributs d'une ligne liée) gardent « true » / « false » comme avant.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -61,8 +61,6 @@
   }
   const checkedOf = root => Array.from(root.querySelectorAll('.resolved-checkbox')).map(b => b.getAttribute('data-checked'));
   const rgb = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)).join(', ') + ')';
-  const struckTexts = root => Array.from(root.querySelectorAll('.resolved-struck')).map(e => e.textContent).join('').replace(/\s+/g, ' ').trim();
-  const hexOfRgb = c => '#' + (c.match(/\d+/g) || []).slice(0, 3).map(v => ('0' + (+v).toString(16)).slice(-2)).join('');
   // Rapport de contraste d'une couleur « #rrggbb » sur le blanc du papier.
   const contrastOnWhite = hex => {
     const lin = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
@@ -193,7 +191,7 @@
         fourButtonsInOrder: opened.visible && JSON.stringify(opened.actions) === JSON.stringify(['bool-style:accentStrike', 'bool-style:classic', 'bool-style:accentPlain', 'bool-style:text']),
         checklistIcons: icons.every(Boolean),
         wordsPressedByDefault: JSON.stringify(opened.state) === JSON.stringify([['accentStrike', 'false', false], ['classic', 'false', false], ['accentPlain', 'false', false], ['text', 'true', true]]),
-        labelsFr: opened.labels[3] === 'vrai / faux' && opened.titles[3] === 'Écrire vrai ou faux' && opened.titles[1] === 'Case à cocher (classique)' && opened.titles[2] === 'Case à cocher (accent, texte normal)' && opened.titles[0].indexOf('Case à cocher (accent') === 0,
+        labelsFr: opened.labels[3] === 'vrai / faux' && opened.titles[3] === 'Écrire vrai ou faux' && opened.titles[1] === 'Case à cocher (classique)' && opened.titles[2] === 'Case à cocher (accent, texte normal)' && opened.titles[0] === 'Case à cocher (accent, texte barré dans une liste)',
         classicSet: JSON.stringify(afterClassic.format) === JSON.stringify({ type: 'bool', style: 'classic' }) && afterClassic.visible && JSON.stringify(afterClassic.state.map(s => s[1])) === JSON.stringify(['false', 'true', 'false', 'false']),
         savedInTheTemplate: !!serialized && JSON.stringify(JSON.parse(serialized)) === JSON.stringify({ type: 'bool', style: 'classic' }),
         reopened: JSON.stringify(roundTrip) === JSON.stringify({ type: 'bool', style: 'classic' }) && afterReload[1][1] === 'true',
@@ -201,7 +199,7 @@
         styleReplacesTheWholeFormat: JSON.stringify(replaced) === JSON.stringify({ type: 'bool', style: 'classic' }),
         wordsRemoveTheSetting: backToWords.format === null && !stillSerialized && backToWords.state[3][1] === 'true',
         savedBoxShownPressed: legacy[2][1] === 'true' && legacy[3][1] === 'false',
-        english: en.label === 'true / false' && en.titles[3] === 'Write true or false' && en.titles[1] === 'Checkbox (classic)' && en.titles[2] === 'Checkbox (accent, plain text)' && en.aria[3] === en.titles[3],
+        english: en.label === 'true / false' && en.titles[3] === 'Write true or false' && en.titles[1] === 'Checkbox (classic)' && en.titles[2] === 'Checkbox (accent, plain text)' && en.titles[0] === 'Checkbox (accent, text struck through in a list)' && en.aria[3] === en.titles[3],
         backToFrench: frAgain.label === 'vrai / faux' && frAgain.title === 'Écrire vrai ou faux',
       };
       const failed = failedOf(checks);
@@ -258,44 +256,40 @@
     },
   });
 
-  // --- Le barré de « accent, texte barré » ---
+  // --- « accent, texte barré » : la case seule ---
   cases.push({
-    id: 'varbool_accent_strike_box_strikes_and_greys_the_text_after_it_on_the_same_line_when_checked',
-    description: 'Une case cochée du style « accent, texte barré » barre et grise (#667085) le texte qui la suit sur la même ligne (4,5:1 au moins sur blanc), jusqu’à un retour à la ligne, la case suivante ou la fin du paragraphe, comme un item coché de la liste ; une couleur déjà posée sur ce texte est gardée ; une case décochée, « classique » et « accent, texte normal » ne barrent rien ; le barré est en ligne dans le HTML des exports',
+    id: 'varbool_accent_strike_box_is_the_box_alone_the_text_after_it_is_never_struck',
+    description: 'Le style « accent, texte barré » d’une variable Oui / Non dessine la même case que « accent, texte normal » et ne barre rien (réponse d’Antoine du 01/10 : « Non, la case seule ») : le texte qui suit une case cochée, sur la même ligne, ne reçoit ni barré ni couleur, en Lecture comme dans le HTML des exports ; le barré n’existe que dans la liste à cases',
     run: async (h) => {
       await seed(h);
       const html = [
         `<p>${badge('Actif', bool('accentStrike'))} un <strong>deux</strong><br>trois</p>`,
         `<p>${badge('Actif', bool('accentStrike'))} quatre ${badge('Paye', bool('accentStrike'))} cinq</p>`,
+        `<p>${badge('Actif', bool('accentPlain'))} quatre ${badge('Paye', bool('accentPlain'))} cinq</p>`,
         `<p>${badge('Actif', bool('classic'))} six</p>`,
-        `<p>${badge('Actif', bool('accentPlain'))} sept</p>`,
-        `<p>${badge('Paye', bool('accentStrike'))} huit</p>`,
         `<p>${badge('Actif', bool('accentStrike'))} <span style="color: rgb(200, 0, 0)">neuf</span> dix</p>`,
-        `<p>${badge('Actif', bool('accentStrike'))}</p>`,
-        `<p>${badge('Actif')} onze</p>`,
       ].join('');
       const reader = await renderReader(html);
       const ps = Array.from(reader.querySelectorAll('.reader-content > p'));
-      const struck = ps.map(p => struckTexts(p));
       const lineThrough = el => getComputedStyle(el).textDecorationLine.indexOf('line-through') !== -1;
-      const firstStruck = ps[0].querySelector('.resolved-struck');
-      const nineSpan = Array.from(ps[5].querySelectorAll('.resolved-struck')).find(e => e.textContent.trim() === 'neuf');
-      const tenSpan = Array.from(ps[5].querySelectorAll('.resolved-struck')).find(e => e.textContent.trim() === 'dix');
-      const trois = Array.from(ps[0].childNodes).filter(n => n.nodeType === 3 && n.nodeValue.trim() === 'trois')[0];
+      const anyStruck = root => !!root.querySelector('.resolved-struck, [style*="line-through"]') || Array.from(root.querySelectorAll('*')).some(lineThrough);
       const exported = await previewBox(html);
-      const exportedStruck = Array.from(exported.querySelectorAll('p')).map(p => struckTexts(p));
-      const inline = exported.querySelector('.resolved-struck');
+      const sameBox = (a, b) => ['data-checked', 'aria-label', 'role', 'style'].every(k => a.getAttribute(k) === b.getAttribute(k)) && a.textContent === b.textContent;
+      const strike = ps[1] ? ps[1].querySelectorAll('.resolved-checkbox') : [];
+      const plain = ps[2] ? ps[2].querySelectorAll('.resolved-checkbox') : [];
+      const red = ps[4] ? Array.from(ps[4].querySelectorAll('span')).find(e => e.textContent.trim() === 'neuf') : null;
       const checks = {
-        sameLineUpToTheBreak: struck[0] === 'un deux' && !!trois && !trois.parentElement.closest('.resolved-struck'),
-        stopsAtTheNextBox: struck[1] === 'quatre',
-        otherStylesDoNotStrike: struck[2] === '' && struck[3] === '' && struck[4] === '' && struck[6] === '' && struck[7] === '',
-        greyAndLineThrough: !!firstStruck && lineThrough(firstStruck) && getComputedStyle(firstStruck).color === rgb('#667085'),
-        greyIsReadable: !!firstStruck && contrastOnWhite(hexOfRgb(getComputedStyle(firstStruck).color)) >= 4.5,
-        explicitColourKept: !!nineSpan && getComputedStyle(nineSpan).color === 'rgb(200, 0, 0)' && lineThrough(nineSpan) && !!tenSpan && getComputedStyle(tenSpan).color === rgb('#667085'),
-        exportsGetItInline: JSON.stringify(exportedStruck) === JSON.stringify(struck) && !!inline && /line-through/.test(inline.getAttribute('style')) && /#667085|rgb\(102, 112, 133\)/.test(inline.getAttribute('style')),
+        fivePlainParagraphs: ps.length === 5,
+        nothingIsStruck: ps.length === 5 && ps.every(p => !anyStruck(p)),
+        exportsStayPlain: !/line-through|resolved-struck/.test(exported.innerHTML),
+        onlyBoxesCarryInlineStyle: ps.slice(0, 4).every(p => Array.from(p.querySelectorAll('[style]')).every(e => e.classList.contains('resolved-checkbox'))),
+        sameBoxAsAccentPlain: strike.length === 2 && plain.length === 2 && sameBox(strike[0], plain[0]) && sameBox(strike[1], plain[1])
+          && strike[0].getAttribute('data-checkbox-style') === 'accentStrike' && plain[0].getAttribute('data-checkbox-style') === 'accentPlain',
+        checkedAndUncheckedStillDrawn: JSON.stringify(checkedOf(ps[1] || document.createElement('p'))) === JSON.stringify(['true', 'false']),
+        ownColourKept: !!red && getComputedStyle(red).color === 'rgb(200, 0, 0)' && !lineThrough(red),
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, struck, exportedStruck }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, paragraphs: ps.map(p => p.innerHTML.slice(0, 160)) }) };
     },
   });
 
@@ -340,7 +334,7 @@
   // --- PDF ---
   cases.push({
     id: 'varbool_pdf_paints_the_boxes_in_their_own_font_without_shifting_the_paragraph',
-    description: 'Le PDF écrit les cases dans deux polices à elles (js/pdf-fonts-boxes.js : accent et classique, les quatre graisses sur le même fichier) car celles du PDF n’ont pas ☑ / ☐ : les caractères sont peints (pdf.js), de la largeur d’un caractère, dans la couleur de la case ; un paragraphe qui commence par une case n’est pas décalé (le caractère poussé hors de la case ne compte pas dans le retrait) ; le texte qui suit une case cochée « accent, texte barré » est barré et gris, « vrai » et « faux » restent du texte',
+    description: 'Le PDF écrit les cases dans deux polices à elles (js/pdf-fonts-boxes.js : accent et classique, les quatre graisses sur le même fichier) car celles du PDF n’ont pas ☑ / ☐ : les caractères sont peints (pdf.js), de la largeur d’un caractère, dans la couleur de la case ; un paragraphe qui commence par une case n’est pas décalé (le caractère poussé hors de la case ne compte pas dans le retrait) ; le texte qui suit une case cochée « accent, texte barré » n’est pas barré, « vrai » et « faux » restent du texte',
     run: async (h) => {
       await seed(h);
       const row = (style, extra) => `<p>${badge('Actif', bool(style))} ${extra || 'Actif'} ${badge('Paye', bool(style))} Payé</p>`;
@@ -363,7 +357,7 @@
         glyphsAndColours: JSON.stringify(boxRuns.map(t => [t.text, String(t.color).toLowerCase()])) === JSON.stringify([[CHECKED, '#2f6fed'], [UNCHECKED, '#767676'], [CHECKED, '#222222'], [UNCHECKED, '#6b7684'], [CHECKED, '#2f6fed'], [UNCHECKED, '#767676']]),
         paintedInThePdf: painted.length === 6 && painted.every(i => i.width > 5 && i.width < 14),
         notShifted: blocks.length === 4 && !!title && !!firstBox && Math.abs(firstBox.x - title.x) <= 1.5 && blocks.every(b => !b.margin || b.margin[0] === 0),
-        strikeAfterTheCheckedBox: !!struckRun && String(struckRun.color).toLowerCase() === '#667085',
+        noStrikeAfterTheCheckedBox: !struckRun,
         wordsStayText: items.some(i => i.str === 'vrai') && items.some(i => i.str === 'faux'),
       };
       const failed = failedOf(checks);
@@ -390,7 +384,7 @@
   }
   cases.push({
     id: 'varbool_word_excel_and_email_carry_the_boxes',
-    description: 'Word : la case est un caractère ☑ / ☐ dans la police des symboles et sa couleur (le barré de « accent, texte barré » devient la mise en forme barrée grise du texte qui suit) ; Excel : la case d’une cellule est ☑ / ☐, police des symboles et couleur de la case ; e-mail : « [x] » / « [ ] » ; « vrai » et « faux » restent du texte dans les trois',
+    description: 'Word : la case est un caractère ☑ / ☐ dans la police des symboles et sa couleur (« accent, texte barré » ne barre pas le texte qui suit) ; Excel : la case d’une cellule est ☑ / ☐, police des symboles et couleur de la case ; e-mail : « [x] » / « [ ] » ; « vrai » et « faux » restent du texte dans les trois',
     run: async (h) => {
       await seed(h);
       const html = [
@@ -413,7 +407,7 @@
       const checks = {
         wordSymbols: symbol.length === 3 && symbol.every(r => r.font === 'Segoe UI Symbol' && !r.strike),
         wordColours: JSON.stringify(symbol.map(r => String(r.color).toUpperCase())) === JSON.stringify(['2F6FED', '222222', '6B7684']),
-        wordStrike: !!run('un').strike && String(run('un').color).toUpperCase() === '667085' && !run('deux').strike,
+        wordNoStrike: !run('un').strike && !run('deux').strike && String(run('un').color || '').toUpperCase() !== '667085',
         wordWords: run('huit').font !== 'Segoe UI Symbol' && paragraphs.some(p => /faux/.test(p.text)),
         excelBoxes: a1.text === CHECKED && b1.text === UNCHECKED && a2.text === CHECKED && b2.text === 'faux',
         excelFont: !!a1.font && a1.font.name === 'Segoe UI Symbol' && argb(a1) === 'FF2F6FED' && argb(b1) === 'FF767676' && argb(a2) === 'FF222222' && !!b2.font && b2.font.name !== 'Segoe UI Symbol',

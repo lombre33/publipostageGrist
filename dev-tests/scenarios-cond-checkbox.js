@@ -67,7 +67,6 @@
   // « true / false » de chaque case dessinée, dans l'ordre du document.
   const checkedOf = root => Array.from(root.querySelectorAll('.resolved-checkbox')).map(b => b.getAttribute('data-checked'));
   const stylesOf = root => Array.from(root.querySelectorAll('.resolved-checkbox')).map(b => b.getAttribute('data-checkbox-style'));
-  const struckTexts = root => Array.from(root.querySelectorAll('.resolved-struck')).map(e => e.textContent).join('').replace(/\s+/g, ' ').trim();
 
   function ed() { return EditorCore.getEditor(); }
   function chipNodes() {
@@ -269,24 +268,28 @@
   });
 
   cases.push({
-    id: 'condcb_accent_strike_box_strikes_the_text_after_it_only_when_checked',
-    description: 'Le style « accent, texte barré » d’une case conditionnelle barre et grise le texte qui la suit sur la même ligne quand la condition est remplie (comme la case d’une variable Oui / Non et un item coché de la liste) ; condition non remplie, « classique » et « accent, texte normal » ne barrent rien',
+    id: 'condcb_accent_strike_box_is_the_box_alone_the_text_after_it_is_never_struck',
+    description: 'Le style « accent, texte barré » d’une case conditionnelle dessine la même case que « accent, texte normal » et ne barre rien (réponse d’Antoine du 01/10 : « Non, la case seule », comme pour la variable Oui / Non) : le texte qui la suit, sur la même ligne, ne reçoit ni barré ni couleur, que la condition soit remplie ou non, en Lecture comme dans le HTML des exports',
     run: async (h) => {
       try {
         await seed(h);
         const html = `<p>${chip(COND_URGENT, 'accentStrike')} Pièce fournie</p><p>${chip(COND_NORMAL, 'accentStrike')} Pièce refusée</p><p>${chip(COND_URGENT, 'classic')} Classique</p><p>${chip(COND_URGENT, 'accentPlain')} Normal</p>`;
         const reader = await renderReader(html);
         const ps = Array.from(reader.querySelectorAll(':scope > p'));
-        const struck = ps.map(p => struckTexts(p));
+        const lineThrough = el => getComputedStyle(el).textDecorationLine.indexOf('line-through') !== -1;
+        const anyStruck = root => !!root.querySelector('.resolved-struck, [style*="line-through"]') || Array.from(root.querySelectorAll('*')).some(lineThrough);
         const exported = await previewBox(html);
-        const exportedStruck = Array.from(exported.querySelectorAll('p')).map(p => struckTexts(p));
+        const box = p => p.querySelector('.resolved-checkbox');
         const checks = {
-          checkedAccentStrikeStrikes: struck[0] === 'Pièce fournie',
-          othersDoNot: struck[1] === '' && struck[2] === '' && struck[3] === '',
-          exportsSeeIt: JSON.stringify(exportedStruck) === JSON.stringify(struck),
+          fourParagraphs: ps.length === 4,
+          nothingIsStruck: ps.length === 4 && ps.every(p => !anyStruck(p)),
+          exportsStayPlain: !/line-through|resolved-struck/.test(exported.innerHTML),
+          onlyBoxesCarryInlineStyle: ps.every(p => Array.from(p.querySelectorAll('[style]')).every(e => e.classList.contains('resolved-checkbox'))),
+          checkedBoxStillDrawn: ps.length === 4 && box(ps[0]).getAttribute('data-checked') === 'true' && box(ps[0]).getAttribute('data-checkbox-style') === 'accentStrike' && box(ps[1]).getAttribute('data-checked') === 'false',
+          sameBoxAsAccentPlain: ps.length === 4 && ['data-checked', 'aria-label', 'style'].every(k => box(ps[0]).getAttribute(k) === box(ps[3]).getAttribute(k)),
         };
         const failed = failedOf(checks);
-        return { pass: failed.length === 0, notes: JSON.stringify({ failed, struck, exportedStruck }) };
+        return { pass: failed.length === 0, notes: JSON.stringify({ failed, paragraphs: ps.map(p => p.innerHTML.slice(0, 160)) }) };
       } finally { closeReader(); }
     },
   });
@@ -710,7 +713,7 @@
   }
   cases.push({
     id: 'condcb_pdf_word_and_email_carry_the_box_of_each_row',
-    description: 'Les vrais fichiers suivent la condition de chaque ligne : le PDF peint la case (☑ ou ☐, dans la police de cases de son style et sa couleur), le Word l’écrit dans la police des symboles avec la couleur de son style (le barré de « accent, texte barré » vise le texte qui suit), l’e-mail écrit « [x] » ou « [ ] » ; le style de la case est celui des cases de la variable Oui / Non',
+    description: 'Les vrais fichiers suivent la condition de chaque ligne : le PDF peint la case (☑ ou ☐, dans la police de cases de son style et sa couleur), le Word l’écrit dans la police des symboles avec la couleur de son style (« accent, texte barré » ne barre pas le texte qui suit), l’e-mail écrit « [x] » ou « [ ] » ; le style de la case est celui des cases de la variable Oui / Non',
     run: async (h) => {
       await seed(h);
       const html = `<p>${chip(COND_URGENT, 'accentPlain')} Urgent</p><p>${chip(COND_NORMAL, 'classic')} Normal</p><p>${chip(COND_URGENT, 'accentStrike')} Barré</p>`;
@@ -733,10 +736,10 @@
         pdfBoxesRecordOne: JSON.stringify(out.one.boxes) === JSON.stringify([[CHECKED, 'PPBoxAccent', '#2f6fed'], [UNCHECKED, 'PPBoxClassic', '#6b7684'], [CHECKED, 'PPBoxAccent', '#2f6fed']]),
         pdfBoxesRecordTwo: JSON.stringify(out.two.boxes) === JSON.stringify([[UNCHECKED, 'PPBoxAccent', '#767676'], [CHECKED, 'PPBoxClassic', '#222222'], [UNCHECKED, 'PPBoxAccent', '#767676']]),
         pdfPaintsThem: JSON.stringify(out.one.painted) === JSON.stringify([CHECKED, UNCHECKED, CHECKED]) && JSON.stringify(out.two.painted) === JSON.stringify([UNCHECKED, CHECKED, UNCHECKED]),
-        pdfStrikesAfterTheCheckedStrikeBoxOnly: JSON.stringify(out.one.struck) === JSON.stringify(['Barré']) && out.two.struck.length === 0,
+        pdfStrikesNothing: out.one.struck.length === 0 && out.two.struck.length === 0,
         wordSymbols: JSON.stringify(out.one.word) === JSON.stringify([[CHECKED, 'Segoe UI Symbol', '2F6FED'], [UNCHECKED, 'Segoe UI Symbol', '6B7684'], [CHECKED, 'Segoe UI Symbol', '2F6FED']])
           && JSON.stringify(out.two.word) === JSON.stringify([[UNCHECKED, 'Segoe UI Symbol', '767676'], [CHECKED, 'Segoe UI Symbol', '222222'], [UNCHECKED, 'Segoe UI Symbol', '767676']]),
-        wordStrike: JSON.stringify(out.one.wordStruck) === JSON.stringify(['Barré']) && out.two.wordStruck.length === 0,
+        wordStrikesNothing: out.one.wordStruck.length === 0 && out.two.wordStruck.length === 0,
         email: out.one.mail.indexOf('[x] Urgent') !== -1 && out.one.mail.indexOf('[ ] Normal') !== -1 && out.two.mail.indexOf('[ ] Urgent') !== -1 && out.two.mail.indexOf('[x] Normal') !== -1,
       };
       const failed = failedOf(checks);

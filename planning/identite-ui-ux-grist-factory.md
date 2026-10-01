@@ -413,16 +413,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   écrit « vrai » ou « faux » dans la langue de l'interface et « vrai / faux » est le bouton enfoncé : choisir ce bouton retire le réglage
   du modèle (un seul état « sans réglage », pas de réglage « texte » à côté), comme « — » pour un nombre. Les trois autres posent
   `{ type: 'bool', style }` ; le bouton du style posé est enfoncé (`aria-pressed`, fond différent des trois autres). Dans la barre, ces trois
-  icônes sont à 20 px (à 15 px elles ne se lisent plus) ; l'infobulle de chaque case nomme son style, la première dit aussi qu'elle
-  barre le texte qui suit. En Lecture, au PDF, au Word, à l'Excel et à l'e-mail, la bulle devient une vraie case à cocher, de la
+  icônes sont à 20 px (à 15 px elles ne se lisent plus) ; l'infobulle de chaque case nomme son style, la première précise que le
+  barré ne vaut que pour une liste. En Lecture, au PDF, au Word, à l'Excel et à l'e-mail, la bulle devient une vraie case à cocher, de la
   taille de celle d'un item de liste (1,07 em, jamais plus haute que la ligne) : accent coché `#2f6fed`, accent décoché `#767676`,
   classique coché `#222222`, classique décoché `#6b7684` (4,5:1 au moins sur blanc, la page reste blanche en sombre) ; l'accent coché est
   une case pleine à coche blanche, la classique cochée un contour à coche de sa couleur, une case décochée un contour sur fond blanc ;
   son `aria-label` dit « Coché » ou « Décoché » (« Checked » / « Unchecked »). Le PDF peint ces cases dans
   deux polices maigres du widget (`js/pdf-fonts-boxes.js`, générée par `dev-tests/build-pdf-boxes-font.py`) parce que les polices
-  embarquées n'ont pas ☐ ni ☑ ; l'e-mail écrit « [x] » et « [ ] ». Le style « accent, texte barré » barre aussi le texte qui suit
-  une case cochée, jusqu'à la fin de la ligne, du bloc ou de la case suivante, dans le gris des textes discrets
-  (`--paper-text-faint`, `#667085`, 4,5:1) sauf si ce texte a déjà sa couleur ; une case décochée ne barre rien. Objet, À, Cc, Cci, nom
+  embarquées n'ont pas ☐ ni ☑ ; l'e-mail écrit « [x] » et « [ ] ». Les deux styles « accent » dessinent la même case : le texte
+  qui suit une case n'est jamais barré, le barré n'existe que dans la liste à cases (choix « la case seule » d'Antoine, 01/10). Objet, À, Cc, Cci, nom
   du PDF et attributs d'une ligne liée gardent « true » / « false » tels que Grist les stocke (aucune case dans un champ texte). Un
   réglage de format s'applique partout où celui d'une date s'applique : une colonne de boucle en tableau, une boucle dans la phrase, un
   en-tête ou un pied de page.
@@ -435,11 +434,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   passer à la ligne, et elle n'agrandit pas la ligne. Sa barre : les trois styles de case de la variable Oui / Non (mêmes icônes, mêmes noms, pas de « vrai / faux » : une case est
   toujours une case) et le bouton Condition, qui ouvre la même fenêtre que pour une bulle ou un bloc (mêmes colonnes, mêmes liens entre tables, Copier / Coller entre les trois) sous le
   titre « Condition de la case », avec « Cocher si » devant la combinaison de plusieurs règles et un aperçu qui dit si la case est cochée pour la ligne courante ; « Autres attributs »
-  et « Boucle » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur raison en info-bulle, jamais retirés. Une case neuve est « accent, texte normal » : « accent, texte barré »
-  barrerait « Pièce fournie » dès que la condition est remplie, ce que seul un choix dans la barre doit faire. Elle se lit cochée quand la condition est remplie pour la ligne affichée
+  et « Boucle » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur raison en info-bulle, jamais retirés. Une case neuve est « accent, texte normal » (les deux styles « accent »
+  dessinent la même case, rien n'est barré). Elle se lit cochée quand la condition est remplie pour la ligne affichée
   (pour la ligne du tour dans une zone répétée), décochée sinon, et décochée sans condition ou quand la condition ne se lit plus ; la case est celle de la variable Oui / Non (mêmes
-  couleurs, même nom accessible « Coché » / « Décoché ») en Lecture, PDF, Word, Excel et e-mail (« [x] » / « [ ] »), et le style « accent, texte barré » barre le texte qui suit quand
-  elle est cochée.
+  couleurs, même nom accessible « Coché » / « Décoché ») en Lecture, PDF, Word, Excel et e-mail (« [x] » / « [ ] »).
 - Barres flottantes d'une bulle, d'un tableau ou d'une image : ancrées dans l'éditeur, aucune n'est ouverte quand il est
   masqué (Lecture, résumé d'un macro-modèle), qu'on y passe à la souris ou au clavier (choix « Corriger » d'Antoine,
   01/10) ; elles ne recouvrent jamais la barre du haut. Un clic hors de l'éditeur et hors de la barre ferme celle d'une

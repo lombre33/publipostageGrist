@@ -9,8 +9,7 @@
 const ConditionalCheckbox = (function () {
   const TYPE = 'conditionalCheckbox';
   const SELECTOR = 'span.conditional-checkbox';
-  // Une case neuve est « accent, texte normal » : « accent, texte barré » barrerait le texte qui suit chaque fois que la condition est remplie (« ☑ Pièce fournie »), ce que seul un choix
-  // dans la barre de la case doit faire.
+  // Une case neuve est « accent, texte normal ». Les deux styles « accent » dessinent la même case : le texte qui suit n'est jamais barré, le barré n'existe que dans la liste à cases (Antoine, 01/10).
   const DEFAULT_STYLE = 'accentPlain';
   function styleOf(value) { return VariableFormat.isCheckboxStyle(value) ? value : DEFAULT_STYLE; }
 

@@ -137,7 +137,6 @@ const ReaderMode = (function () {
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); } catch (e) {}
     }));
     LoopRules.removeHiddenBlocks(wrapper);
-    strikeAfterCheckedBoxes(wrapper);
     // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
     // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
@@ -443,7 +442,6 @@ const ReaderMode = (function () {
     }));
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
-    strikeAfterCheckedBoxes(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
     trimTrailingBlankBlocks(wrapper);
@@ -588,44 +586,6 @@ const ReaderMode = (function () {
     span.textContent = text;
     return span;
   }
-  // Style « accent, texte barré » d'une case Oui / Non (comme un item coché de la liste à cases, js/main-toolbar.js:applyTaskListStyle) : le texte qui suit une case COCHÉE sur la même ligne - jusqu'à un
-  // retour à la ligne, la case suivante ou la fin du paragraphe - est barré et grisé. Posé EN LIGNE (`text-decoration`, `color`), comme tout texte barré ou coloré : c'est ce que lisent le PDF, le Word
-  // et l'Excel. Une couleur déjà posée sur ce texte est gardée (le PDF et le Word de la liste font de même). Appelé une fois les bulles remplacées, avant l'enregistrement du HTML des exports.
-  const STRUCK_COLOR = '#667085'; // --paper-text-faint (css/style.css) : le gris du texte discret posé sur la page blanche, 4,97:1 ; la Lecture le donne aussi à la tâche cochée de la liste
-  const LINE_ENDING_TAGS = /^(BR|P|LI|UL|OL|DIV|TABLE|TR|TD|TH|BLOCKQUOTE|H[1-6]|PRE)$/;
-  // Le nœud qui suit `node` dans l'ordre du document sans entrer dans `node` ; null au bord de `limit`.
-  function nextOutside(node, limit) {
-    while (node && node !== limit && !node.nextSibling) node = node.parentNode;
-    return node && node !== limit ? node.nextSibling : null;
-  }
-  function hasInlineColor(node, limit) {
-    for (let el = node.parentElement; el && el !== limit; el = el.parentElement) if (el.style && el.style.color) return true;
-    return false;
-  }
-  function strikeAfterCheckedBoxes(root) {
-    root.querySelectorAll('.resolved-checkbox[data-checked="true"][data-checkbox-style="accentStrike"]').forEach(box => {
-      const block = box.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, pre') || root;
-      const texts = [];
-      let node = nextOutside(box, block);
-      while (node) {
-        if (node.nodeType === 1) {
-          if (LINE_ENDING_TAGS.test(node.tagName) || node.classList.contains('resolved-checkbox')) break;
-          node = node.firstChild || nextOutside(node, block);
-          continue;
-        }
-        if (node.nodeType === 3 && node.nodeValue.trim()) texts.push(node);
-        node = nextOutside(node, block);
-      }
-      texts.forEach(text => {
-        const struck = document.createElement('span');
-        struck.className = 'resolved-struck';
-        struck.style.textDecoration = 'line-through';
-        if (!hasInlineColor(text, block)) struck.style.color = STRUCK_COLOR;
-        text.parentNode.insertBefore(struck, text);
-        struck.appendChild(text);
-      });
-    });
-  }
   // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
   // par GristAPI.hydrateAttachmentImages, appelé juste après.
   function attachmentImages(ids) {
@@ -712,7 +672,6 @@ const ReaderMode = (function () {
       badge.replaceWith(node);
     }));
     LoopRules.removeHiddenBlocks(wrapper);
-    strikeAfterCheckedBoxes(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);

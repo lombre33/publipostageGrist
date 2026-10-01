@@ -764,7 +764,7 @@ const I18n = (function () {
     'varFmt.boolUnchecked': { fr: 'Décoché', en: 'Unchecked' },
     'varFmt.boolTextButton': { fr: 'vrai / faux', en: 'true / false' },
     'varFmt.boolTextTitle': { fr: 'Écrire vrai ou faux', en: 'Write true or false' },
-    'varFmt.boolAccentStrike': { fr: 'Case à cocher (accent, texte qui suit barré)', en: 'Checkbox (accent, following text struck through)' },
+    'varFmt.boolAccentStrike': { fr: 'Case à cocher (accent, texte barré dans une liste)', en: 'Checkbox (accent, text struck through in a list)' },
 
     // --- Pastille flottante d'édition d'en-tête/pied (js/editor.js:renderHfPill) ---
     'hf.zoneHeader': { fr: 'En-tête', en: 'Header' },

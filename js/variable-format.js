@@ -242,7 +242,8 @@ const VariableFormat = (function () {
   // format = { type: 'bool', style } : 'text' écrit « vrai » / « faux » (« true » / « false » en anglais), c'est aussi l'écriture d'une bulle sans réglage ; 'accentStrike', 'classic' et
   // 'accentPlain' écrivent une case, cochée ou non - les trois styles de la liste à cases (`data-tasklist-style`, js/main-toolbar.js), au même nom pour que la barre de la bulle et celle de
   // la liste se ressemblent. Dans le texte que rend formatBool, la case est le caractère ☑ ou ☐ : ReaderMode.checkboxNode en fait une vraie case dessinée (`.resolved-checkbox`). Partout où
-  // seul du texte compte (champs Objet / À / Cc / Cci, nom du PDF, fenêtres), Variables.formatValue écrit « vrai » / « faux » à la place (option `rawNumbers`).
+  // seul du texte compte (champs Objet / À / Cc / Cci, nom du PDF, fenêtres), Variables.formatValue écrit « vrai » / « faux » à la place (option `rawNumbers`). Les deux styles « accent » dessinent la
+  // même case : le texte qui suit n'est jamais barré, le barré n'existe que dans la liste à cases (Antoine, 01/10 : « la case seule »).
   const BOOL_CHECKBOX_STYLES = ['accentStrike', 'classic', 'accentPlain'];
   const CHECKED_BOX = '☑';
   const UNCHECKED_BOX = '☐';
