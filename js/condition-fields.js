@@ -27,22 +27,6 @@ const ConditionFields = (function () {
 
   const ADVANCED_COLUMN_VALUE = '__advanced__';
 
-  // Remplace l'ancien <input type="text"> libre par un <select> des colonnes réelles de la table courante, plus une option "avancé" qui révèle un champ
-  // texte pour le cas rare cross-table ("Table.Colonne", cf. js/condition-rules.js:parseColumnRef) - jamais retiré, pour ne pas régresser sur une
-  // capacité déjà là (règle de non-régression du projet), juste sorti du chemin principal. `onTypeChange(type)` : notifie le champ valeur du type Grist
-  // de la colonne choisie (ou null), pour adapter son placeholder - le format attendu (ex. une date) est précisément ce qu'Antoine n'arrivait pas à
-  // deviner (2026-09-28). Renvoie `{ wrap, typeHint }` (pas juste un élément) : `typeHint` doit être placé par l'appelant en dehors de `wrap`, cf. son
-  // commentaire plus bas.
-  // Groupe « table » de la liste des colonnes en mode toutes tables (options.allTables) : la table de la page, puis chaque autre table avec l'état de son
-  // lien (maquette validée le 2026-09-28) - une colonne d'une table pas encore liée se choisit quand même, l'appelant ouvre alors la fenêtre de choix de
-  // la clé (options.onColumnChosen).
-  function tableGroupLabel(table, currentTableId) {
-    if (table === currentTableId) return I18n.t('varCond.group.current', { table });
-    const rule = GristAPI.getLinkRule(table);
-    if (!rule) return I18n.t('varCond.group.notLinked', { table });
-    if (rule.mode === 'singleton') return I18n.t('varCond.group.singleton', { table });
-    return I18n.t('varCond.group.linkedVia', { table, via: Variables.describeLinkVia(table, rule, currentTableId) });
-  }
   // Une colonne de la liste. `value` : « Colonne » (table de la page) ou « Table.Colonne », aussi son nom à l'écran ; son type Grist (celui que dit l'indication
   // sous le champ) est l'indice discret de la liste avec recherche - « Date de début (date) » - et permet de chercher « date » pour retrouver les dates. Le
   // texte de l'<option> reste « nom (indice) » : c'est celui de la liste native, si le composant de recherche n'est pas disponible. Exportée : le tri d'une
@@ -56,21 +40,20 @@ const ConditionFields = (function () {
     if (hint) o.dataset.hint = hint;
     parent.appendChild(o);
   }
-  // Colonnes de la table de la page en valeur NUE (même forme que les macro-modèles), celles des autres tables en "Table.Colonne" (parseColumnRef). Un groupe
-  // par table (fenêtre de condition) ; avec `flat`, toutes à la suite dans UNE seule liste, sans intitulé (macro-modèles, demande d'Antoine du 2026-10-01 :
-  // « pas besoin de séparer les colonnes de la table en cours et les autres, une seule dropdown avec recherche dynamique ») - la table se lit dans le nom
-  // de la colonne (« Annuaire.Service »), et se cherche avec lui.
-  function appendAllTablesOptions(select, currentTableId, flat) {
+  // Colonnes de la table de la page en valeur NUE (même forme que les macro-modèles), celles des autres tables en "Table.Colonne" (parseColumnRef), toutes à la
+  // suite dans UNE seule liste, sans intitulé de groupe (macro-modèles, demande d'Antoine du 2026-10-01 : « pas besoin de séparer les colonnes de la table en
+  // cours et les autres, une seule dropdown avec recherche dynamique » ; même liste dans la condition d'une bulle, choix « À plat » du même jour) : la table se
+  // lit dans le nom de la colonne (« Annuaire.Service »), et se cherche avec lui. L'état du lien d'une table n'est plus dans la liste : une colonne d'une table
+  // pas encore liée se choisit quand même, l'appelant ouvre alors la fenêtre de choix de la clé (options.onColumnChosen), et le lien d'une table liée se lit sous
+  // la règle une fois la colonne choisie.
+  function appendAllTablesOptions(select, currentTableId) {
     const tables = GristAPI.getTables().slice();
     const ordered = currentTableId && tables.indexOf(currentTableId) !== -1 ? [currentTableId].concat(tables.filter(t => t !== currentTableId)) : tables;
     ordered.forEach(table => {
-      const parent = flat ? select : document.createElement('optgroup');
-      if (!flat) parent.label = tableGroupLabel(table, currentTableId);
       // Sans les colonnes d'aide « gristHelper_… » (valeur affichée d'une Référence, cachées par Grist lui-même) : la Référence se compare déjà à sa
       // valeur affichée (js/variables.js:cellValue).
       GristAPI.getColumns(table).filter(c => c.indexOf('gristHelper_') !== 0)
-        .forEach(c => appendColumnOption(parent, table === currentTableId ? c : table + '.' + c, table, c));
-      if (!flat && parent.children.length) select.appendChild(parent);
+        .forEach(c => appendColumnOption(select, table === currentTableId ? c : table + '.' + c, table, c));
     });
   }
 
@@ -85,8 +68,14 @@ const ConditionFields = (function () {
     return Variables.ensureLinkConfigured({ table: ref.table });
   }
 
-  // `options` (facultatif, fenêtres de condition d'une variable et de macro-modèle) : { allTables: true } liste les colonnes de TOUTES les tables (cf.
-  // appendAllTablesOptions) au lieu de la seule table de la page, et { flat: true } en une seule liste sans groupes ; { onColumnChosen(ref, value) } est appelé
+  // Remplace l'ancien <input type="text"> libre par un <select> des colonnes réelles de la table courante, plus une option "avancé" qui révèle un champ
+  // texte pour le cas rare cross-table ("Table.Colonne", cf. js/condition-rules.js:parseColumnRef) - jamais retiré, pour ne pas régresser sur une
+  // capacité déjà là (règle de non-régression du projet), juste sorti du chemin principal. `onTypeChange(type)` : notifie le champ valeur du type Grist
+  // de la colonne choisie (ou null), pour adapter son placeholder - le format attendu (ex. une date) est précisément ce qu'Antoine n'arrivait pas à
+  // deviner (2026-09-28). Renvoie `{ wrap, typeHint }` (pas juste un élément) : `typeHint` doit être placé par l'appelant en dehors de `wrap`, cf. son
+  // commentaire plus bas.
+  // `options` (facultatif, fenêtres de condition d'une variable et de macro-modèle) : { allTables: true } liste les colonnes de TOUTES les tables en UNE seule
+  // liste sans groupes (cf. appendAllTablesOptions) au lieu de la seule table de la page ; { onColumnChosen(ref, value) } est appelé
   // avant d'adopter une colonne choisie dans la liste - `true` : adoptée tout de suite ; une promesse (ou false) qui ne résout pas vrai : la colonne précédente
   // est remise (ex. choix de la clé annulé pour une table pas encore liée, cf. ensureTableLinked). Sans options : les colonnes de la page seule. { table }
   // (fenêtre de boucle, js/variable-loop.js) : les colonnes de CETTE table seule, en valeur nue - le filtre d'une boucle porte sur les lignes parcourues
@@ -104,7 +93,7 @@ const ConditionFields = (function () {
     empty.textContent = I18n.t('macro.modal.columnChoosePlaceholder');
     select.appendChild(empty);
     if (opts.table) GristAPI.getColumns(opts.table).filter(c => c.indexOf('gristHelper_') !== 0).forEach(c => appendColumnOption(select, c, opts.table, c));
-    else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId(), !!opts.flat);
+    else if (opts.allTables) appendAllTablesOptions(select, GristAPI.getCurrentTableId());
     else { const tableId = GristAPI.getCurrentTableId(); currentTableColumns().forEach(c => appendColumnOption(select, c, tableId, c)); }
     const listed = Array.from(select.querySelectorAll('option')).map(o => o.value).filter(Boolean);
     const advancedOpt = document.createElement('option');

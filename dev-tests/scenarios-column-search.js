@@ -99,8 +99,8 @@
   function dismiss(modal) { if (visible(modal)) cancelButton(modal).click(); }
 
   cases.push({
-    id: 'colsearch_condition_column_is_a_searchable_list_with_groups_and_types',
-    description: 'Fenêtre de condition : le choix de colonne est un champ visible (le <select> est masqué), sa liste garde le choix « rien » en tête, un intitulé par table (page, liée, pas encore liée), le type derrière chaque colonne, et la saisie avancée en dernier',
+    id: 'colsearch_condition_column_is_a_searchable_flat_list_with_types',
+    description: 'Fenêtre de condition : le choix de colonne est un champ visible (le <select> est masqué), sa liste garde le choix « rien » en tête, puis les colonnes de la page en nom nu et celles des autres tables en « Table.Colonne », à la suite et SANS intitulé de groupe (ni <optgroup>, ni titre de table : l’état du lien n’y est plus), le type derrière chaque colonne, et la saisie avancée en dernier (choix « À plat » d’Antoine, 01/10)',
     run: async (h) => {
       await seed(h);
       const modal = await openConditionWindow(h);
@@ -114,24 +114,28 @@
       const panel = panelOf(trigger);
       const rows = rowsOf(panel);
       const heads = headersOf(panel);
+      const optgroups = select.querySelectorAll('optgroup').length;
       const opened = !panel.hidden && trigger.getAttribute('aria-expanded') === 'true';
       dismiss(modal);
-      const linkedHead = heads.find(t => t.indexOf('CsAnnuaire') === 0);
-      const contactsHead = heads.find(t => t.indexOf('CsContacts') === 0);
-      const pass = fieldWidth > 80 && selectWidth === 0 && closedText === I18n.t('macro.modal.columnChoosePlaceholder') && opened
-        && rows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && rows[rows.length - 1] === I18n.t('macro.modal.columnAdvanced')
-        && heads[0] === I18n.t('varCond.group.current', { table: 'CsDossiers' })
-        && !!linkedHead && linkedHead.indexOf('CsDossiers.Responsable') !== -1 && contactsHead === I18n.t('varCond.group.notLinked', { table: 'CsContacts' })
+      const placeholder = I18n.t('macro.modal.columnChoosePlaceholder');
+      const columns = rows.slice(1, -1);
+      const firstOther = columns.findIndex(r => r.indexOf('.') !== -1);
+      const pageColumns = firstOther === -1 ? columns : columns.slice(0, firstOther);
+      const otherColumns = firstOther === -1 ? [] : columns.slice(firstOther);
+      const pass = fieldWidth > 80 && selectWidth === 0 && closedText === placeholder && opened
+        && rows[0] === placeholder && rows[rows.length - 1] === I18n.t('macro.modal.columnAdvanced')
+        && heads.length === 0 && optgroups === 0
+        && pageColumns.length > 0 && pageColumns.every(r => r.indexOf('.') === -1) && otherColumns.length > 0 && otherColumns.every(r => r.indexOf('Cs') === 0 && r.indexOf('.') !== -1)
         && rows.includes('Titre') && rows.includes('Responsable' + hintOf('macro.modal.typeRef')) && rows.includes('Montant' + hintOf('macro.modal.typeNumeric'))
         && rows.includes('Echeance' + hintOf('macro.modal.typeDate')) && rows.includes('Actif' + hintOf('macro.modal.typeBool'))
         && rows.includes('CsAnnuaire.Naissance' + hintOf('macro.modal.typeDate')) && rows.includes('CsContacts.Role');
-      return { pass, notes: JSON.stringify({ fieldWidth, selectWidth, closedText, opened, heads, rows }) };
+      return { pass, notes: JSON.stringify({ fieldWidth, selectWidth, closedText, opened, heads, optgroups, rows }) };
     },
   });
 
   cases.push({
-    id: 'colsearch_condition_search_filters_rows_groups_and_keeps_advanced_entry',
-    description: 'Recherche au fil de la frappe dans la fenêtre de condition : les intitulés des tables sans résultat disparaissent, le type se cherche aussi, « rien » ne se propose pas pendant une recherche, la saisie avancée reste toujours en bas, et Entrée sans résultat ne la choisit pas',
+    id: 'colsearch_condition_search_filters_rows_and_keeps_advanced_entry',
+    description: 'Recherche au fil de la frappe dans la fenêtre de condition (liste à plat) : la table se cherche avec la colonne (« ann » retrouve les colonnes de CsAnnuaire), le type se cherche aussi, « rien » ne se propose pas pendant une recherche, aucun intitulé de groupe n’apparaît à aucun moment, la saisie avancée reste toujours en bas, et Entrée sans résultat ne la choisit pas',
     run: async (h) => {
       await seed(h);
       const modal = await openConditionWindow(h);
@@ -158,15 +162,15 @@
       const emptyGone = panel.querySelector('.ss-empty').hidden;
       const advanced = I18n.t('macro.modal.columnAdvanced');
       dismiss(modal);
-      const pass = steps.annuaire.heads.length === 1 && steps.annuaire.heads[0].indexOf('CsAnnuaire') === 0
-        && steps.annuaire.rows.slice(0, -1).every(r => r.indexOf('CsAnnuaire.') === 0) && steps.annuaire.rows[steps.annuaire.rows.length - 1] === advanced
+      const noHeads = Object.values(steps).every(step => step.heads.length === 0);
+      const pass = noHeads
+        && steps.annuaire.rows.length >= 3 && steps.annuaire.rows.slice(0, -1).every(r => r.indexOf('CsAnnuaire.') === 0) && steps.annuaire.rows[steps.annuaire.rows.length - 1] === advanced
         && !steps.annuaire.rows.includes(I18n.t('macro.modal.columnChoosePlaceholder'))
         && JSON.stringify(steps.date.rows) === JSON.stringify(['Echeance' + hintOf('macro.modal.typeDate'), 'CsAnnuaire.Naissance' + hintOf('macro.modal.typeDate'), advanced])
-        && steps.date.heads.length === 2
-        && JSON.stringify(steps.words.rows) === JSON.stringify(['CsContacts.Role', advanced]) && steps.words.heads.length === 1
-        && JSON.stringify(steps.none.rows) === JSON.stringify([advanced]) && steps.none.heads.length === 0
+        && JSON.stringify(steps.words.rows) === JSON.stringify(['CsContacts.Role', advanced])
+        && JSON.stringify(steps.none.rows) === JSON.stringify([advanced])
         && emptyShown && emptyAbovePinned && noActive && stillOpen && emptyGone
-        && steps.cleared.rows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && steps.cleared.heads.length === 5; // les cinq tables du jeu de données
+        && steps.cleared.rows[0] === I18n.t('macro.modal.columnChoosePlaceholder') && steps.cleared.rows.length > 20;
       return { pass, notes: JSON.stringify({ steps, emptyShown, emptyAbovePinned, noActive, stillOpen, emptyGone }) };
     },
   });
@@ -788,8 +792,8 @@
   });
 
   cases.push({
-    id: 'colsearch_long_grouped_list_scrolls_keeps_group_header_with_first_row',
-    description: 'Liste longue avec plusieurs tables : la liste défile dans son panneau, PageBas / ↑ gardent la ligne active à l’écran, et remonter sur la première ligne d’un groupe montre aussi son intitulé',
+    id: 'colsearch_long_flat_list_scrolls_and_keeps_the_active_row_visible',
+    description: 'Liste longue (40 colonnes d’une autre table, en plus des autres tables) dans la fenêtre de condition : la liste défile dans son panneau, PageBas / ↓ gardent la ligne active à l’écran, aucun intitulé de groupe, et la colonne d’une autre table se retrouve par son nom',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
@@ -814,16 +818,66 @@
       let allVisible = true;
       for (let i = 0; i < 30; i++) { press(input, i % 6 === 5 ? 'PageDown' : 'ArrowDown'); await h.sleep(5); allVisible = allVisible && visibleRow(); }
       const activeText = panel.querySelector('.ss-option.is-active').textContent;
-      // Remonter jusqu'à la première ligne du groupe de CsLarge : son intitulé doit se voir avec elle.
+      const headersWhileScrolling = headersOf(panel).length;
       setInput(input, 'cslarge.champ01');
       await h.sleep(10);
-      list.scrollTop = list.scrollHeight;
-      const firstRow = panel.querySelector('.ss-option');
-      const header = panel.querySelector('.ss-group');
-      const headerSeen = !!header && header.getBoundingClientRect().top >= list.getBoundingClientRect().top - 1;
+      const found = rowsOf(panel);
       dismiss(modal);
-      const pass = scrollable && allVisible && !!activeText && !!firstRow && headerSeen;
-      return { pass, notes: JSON.stringify({ scrollable, allVisible, activeText, headerSeen }) };
+      const pass = scrollable && allVisible && !!activeText && headersWhileScrolling === 0
+        && found.length === 2 && found[0] === 'CsLarge.Champ01' && found[1] === I18n.t('macro.modal.columnAdvanced');
+      return { pass, notes: JSON.stringify({ scrollable, allVisible, activeText, headersWhileScrolling, found }) };
+    },
+  });
+
+  // Le composant garde les groupes (<optgroup>) - plus aucun choix de colonne n'en utilise depuis le choix « À plat » d'Antoine du 01/10 (fenêtre de condition,
+  // macro-modèle) - : sa règle « la première ligne d'un groupe se montre avec son intitulé » reste vérifiée sur une liste fabriquée ici.
+  cases.push({
+    id: 'searchselect_group_header_comes_into_view_with_its_first_row',
+    description: 'Composant : dans une liste à groupes (<optgroup>), atteindre au clavier la première ligne d’un groupe montre aussi son intitulé, en descendant comme en remontant',
+    run: async (h) => {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:16px;top:16px;width:300px;z-index:5000';
+      const groups = ['Alpha', 'Bêta', 'Gamma'];
+      box.innerHTML = '<select>' + groups.map(g => '<optgroup label="' + g + '">'
+        + Array.from({ length: 12 }, (_, i) => '<option value="' + g + '.c' + i + '">' + g + '.c' + i + '</option>').join('') + '</optgroup>').join('') + '</select>';
+      document.body.appendChild(box);
+      const controller = SearchSelect.attach(box.querySelector('select'));
+      const out = {};
+      try {
+        controller.open();
+        await h.sleep(30);
+        const panel = controller.trigger.parentNode.querySelector('.ss-panel');
+        const input = inputOf(panel);
+        const list = panel.querySelector('.ss-list');
+        const activeName = () => { const row = panel.querySelector('.ss-option.is-active'); return row ? row.querySelector('.ss-name').textContent : null; };
+        const headerVisible = group => {
+          const node = Array.from(panel.querySelectorAll('.ss-group')).find(n => n.textContent === group);
+          if (!node) return false;
+          const r = node.getBoundingClientRect(), l = list.getBoundingClientRect();
+          return r.top >= l.top - 1 && r.bottom <= l.bottom + 1;
+        };
+        const goTo = async (target, key) => {
+          for (let i = 0; i < 60 && activeName() !== target; i++) { press(input, key); await h.sleep(5); }
+          return activeName() === target;
+        };
+        out.scrollable = list.scrollHeight > list.clientHeight;
+        out.headers = panel.querySelectorAll('.ss-group').length;
+        out.reachedBeta = await goTo('Bêta.c0', 'ArrowDown');
+        out.betaHeaderDown = headerVisible('Bêta');
+        out.reachedGamma = await goTo('Gamma.c0', 'ArrowDown');
+        out.gammaHeaderDown = headerVisible('Gamma');
+        out.backInBeta = await goTo('Bêta.c11', 'ArrowUp');
+        out.reachedBetaUp = await goTo('Bêta.c0', 'ArrowUp');
+        out.betaHeaderUp = headerVisible('Bêta');
+        out.reachedAlpha = await goTo('Alpha.c0', 'ArrowUp');
+        out.alphaHeaderUp = headerVisible('Alpha');
+      } finally {
+        controller.destroy();
+        box.remove();
+      }
+      const pass = out.scrollable && out.headers === 3 && out.reachedBeta && out.betaHeaderDown && out.reachedGamma && out.gammaHeaderDown
+        && out.backInBeta && out.reachedBetaUp && out.betaHeaderUp && out.reachedAlpha && out.alphaHeaderUp;
+      return { pass, notes: JSON.stringify(out) };
     },
   });
 
@@ -1260,6 +1314,31 @@
         && out.other.value === 'CsAnnuaire.Telephone' && out.other.shown === 'CsAnnuaire.Telephone' && !out.other.asked && out.other.advancedHidden
         && out.own.value === 'Statut' && out.own.shown === 'Statut';
       return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_condition_and_macro_rules_list_the_same_columns_in_the_same_order',
+    description: 'La colonne d’une règle se choisit dans la MÊME liste à plat dans la fenêtre de condition d’une bulle et dans celle du macro-modèle (mêmes lignes, même ordre, mêmes indices de type) : une seule façon de chercher une colonne, une seule liste à maintenir',
+    run: async (h) => {
+      await seed(h);
+      const condition = await (async () => {
+        const modal = await openConditionWindow(h);
+        const list = await readList(h, triggerIn(modal));
+        dismiss(modal);
+        await h.sleep(30);
+        return list;
+      })();
+      let macro;
+      try {
+        await openMacroWindow(h);
+        macro = await readList(h, macroColumnTrigger());
+      } finally {
+        await closeMacroWindow(h);
+      }
+      const pass = condition.headers === 0 && macro.headers === 0 && condition.rows.length > 20
+        && JSON.stringify(condition.rows) === JSON.stringify(macro.rows);
+      return { pass, notes: JSON.stringify({ condition: condition.rows.length, macro: macro.rows.length, onlyCondition: condition.rows.filter(r => !macro.rows.includes(r)), onlyMacro: macro.rows.filter(r => !condition.rows.includes(r)) }) };
     },
   });
 

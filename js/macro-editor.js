@@ -23,7 +23,7 @@ const MacroEditor = (function () {
   // seule liste avec recherche qui réunit celles de TOUTES les tables, à la suite et sans groupes (demande d'Antoine du 2026-10-01 : « trouver avec son nom la
   // colonne dans le champ de recherche, pas besoin de séparer les colonnes de la table en cours et les autres ») : celles de la page en nom nu, les autres en
   // « Table.Colonne ». Choisir une colonne d'une table pas encore liée ouvre la fenêtre de choix de la clé, qui l'enregistre ; Annuler remet la colonne précédente.
-  const COLUMN_FIELD_OPTIONS = { allTables: true, flat: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
+  const COLUMN_FIELD_OPTIONS = { allTables: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
 
   // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne (demande d'Antoine du 2026-09-29). Le <select> reste la source de la
   // valeur - et la liste native si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un

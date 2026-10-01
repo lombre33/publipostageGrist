@@ -259,7 +259,8 @@ const insidePanel = boxes => Object.values(boxes).every(b => b.l >= 0 && b.t >= 
 const cond = '#var-condition-modal';
 
 const SECTIONS = {
-  // Fenêtre « Condition d'affichage » : la capture d'Antoine du 2026-09-29, avec les colonnes de toutes les tables (intitulés de groupe).
+  // Fenêtre « Condition d'affichage » : la capture d'Antoine du 2026-09-29, avec les colonnes de toutes les tables en UNE seule liste à plat, sans intitulé de groupe
+  // (choix « À plat » d'Antoine, 2026-10-01 : la même liste que le macro-modèle).
   async condition() {
     const win = await openWindowFor('Titre', 'var-condition', cond);
     check('condition : fenêtre ouverte et entièrement dans le panneau', win.found && win.inViewport, win);
@@ -271,9 +272,9 @@ const SECTIONS = {
     await page.waitForTimeout(150);
     const open = await panelInfo(cond);
     check('condition : un vrai clic ouvre la liste, entièrement dans le panneau Grist, la zone de recherche a le focus', !!open && open.inside && open.searchFocused, open);
-    check('condition : le choix « rien » en tête, un intitulé par table, la saisie avancée en dernier, le type derrière les colonnes',
-      !!open && open.rows[0] === '— Choisir une colonne —' && open.rows[open.rows.length - 1] === 'Autre (colonne d\'une autre table…)' && open.heads.length === 6
-      && open.heads[0] === 'CsDossiers (table de la page)' && open.rows.includes('Responsable (référence)') && open.rows.includes('Actif (case à cocher)'), open);
+    check('condition : le choix « rien » en tête, les colonnes de la page puis celles des autres tables à la suite SANS intitulé de groupe, la saisie avancée en dernier, le type derrière les colonnes',
+      !!open && open.rows[0] === '— Choisir une colonne —' && open.rows[open.rows.length - 1] === 'Autre (colonne d\'une autre table…)' && open.heads.length === 0
+      && open.rows.includes('Titre') && open.rows.includes('Responsable (référence)') && open.rows.includes('Actif (case à cocher)') && open.rows.includes('CsAnnuaire.NomPrenom') && open.rows.includes('CsContacts.Role'), open);
     check('condition : la liste défile (colonnes nombreuses)', !!open && open.scrollable, open);
     const list = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-list');
     await page.mouse.move(list.x, list.y);
@@ -283,13 +284,13 @@ const SECTIONS = {
     const after = await windowState(cond);
     check('condition : molette réelle sur la liste : elle défile, ni la page, ni la fenêtre, ni le panneau ne bougent',
       wheeled.listScroll > 0 && after.docTop === 0 && after.boxScroll === before.boxScroll && after.boxTop === before.boxTop && wheeled.rect.top === open.rect.top, { before, after, wheeled });
-    // Frappe réelle : la liste se réduit, l'intitulé des autres tables disparaît, la saisie avancée reste atteignable.
+    // Frappe réelle : la liste se réduit aux colonnes qui répondent (la table se cherche avec la colonne), aucun intitulé, la saisie avancée reste atteignable.
     await page.keyboard.type('ann');
     await page.waitForTimeout(100);
     const typed = await panelInfo(cond);
     const pinned = await rowCenter(cond, 'Autre (colonne d\'une autre table…)');
-    check('condition : « ann » réduit la liste à la table CsAnnuaire (un seul intitulé), la saisie avancée reste visible et au premier plan',
-      !!typed && typed.heads.length === 1 && typed.rows.slice(0, -1).every(r => r.indexOf('CsAnnuaire.') === 0) && !!pinned && pinned.onTop && pinned.inViewport, { typed, pinned });
+    check('condition : « ann » réduit la liste aux colonnes de CsAnnuaire (la table se cherche avec la colonne, aucun intitulé), la saisie avancée reste visible et au premier plan',
+      !!typed && typed.heads.length === 0 && typed.rows.length >= 3 && typed.rows.slice(0, -1).every(r => r.indexOf('CsAnnuaire.') === 0) && !!pinned && pinned.onTop && pinned.inViewport, { typed, pinned });
     await page.keyboard.type('zzz');
     await page.waitForTimeout(100);
     const none = await panelInfo(cond);

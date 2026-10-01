@@ -1,7 +1,8 @@
 // Fenêtre « Condition d'affichage » d'une bulle #Variable (maquette validée par Antoine le 2026-09-28) : la variable n'apparaît en lecture et à l'export
 // que si la condition est remplie (évaluée par js/reader-mode.js avec ConditionRules.conditionHolds). Mêmes lignes Colonne / Opérateur / Valeur que les
-// macro-modèles (js/condition-fields.js, jamais recopiées ici), avec les colonnes de toutes les tables ; une colonne d'une table pas encore liée ouvre la
-// fenêtre existante de choix de la clé (js/variables.js:ensureLinkConfigured). Aperçu en direct pour déboguer : la ligne sélectionnée, puis combien de
+// macro-modèles (js/condition-fields.js, jamais recopiées ici), avec les colonnes de toutes les tables dans UNE seule liste avec recherche, sans groupes (choix
+// « À plat » d'Antoine, 2026-10-01) ; une colonne d'une table pas encore liée ouvre la fenêtre existante de choix de la clé
+// (js/variables.js:ensureLinkConfigured). Aperçu en direct pour déboguer : la ligne sélectionnée, puis combien de
 // lignes de la table remplissent la condition et la première d'entre elles. La condition vit dans l'attribut `condition` du nœud varBadge
 // (js/editor-nodes.js) : { mode: 'all'|'any', rules: [{ column, operator, value }] }. Ouverte depuis la barre flottante de la bulle
 // (js/floating-toolbars.js:wireVariableFloatingToolbar). « Copier » / « Coller » (demande d'Antoine, 2026-09-29) : la condition affichée dans la fenêtre
@@ -106,7 +107,7 @@ const VariableCondition = (function () {
   }
 
   // Colonne d'une table pas encore liée : la fenêtre de choix de la clé s'ouvre avant d'adopter la colonne (Annuler remet la précédente, via
-  // ConditionFields). Une fois liée, les libellés des groupes et l'indication de lien sont redessinés.
+  // ConditionFields). Une fois liée, l'indication de lien sous la règle et l'aperçu sont redessinés.
   async function ensureTableLinked(ref) {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!ref || !ref.table || !currentTableId || ref.table === currentTableId) return true;

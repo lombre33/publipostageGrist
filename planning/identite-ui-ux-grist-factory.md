@@ -196,11 +196,11 @@ Demande d'Antoine (29/09). Tout choix de colonne, de table ou de modèle passe p
 `<select>` reste la source de vérité, masqué ; une colonne s'affiche avec son type ; la valeur vide est grisée ; si le
 composant échoue, la liste native reste (`try/catch`). Le champ **Valeur** d'une règle sur une colonne à choix ou à
 référence (`attachValues`) est lui aussi une liste avec recherche des valeurs possibles, « Autre valeur… » toujours en
-bas. La colonne d'une règle de **macro-modèle** (demande d'Antoine du 01/10) est UNE seule liste qui réunit celles de toutes
-les tables, sans intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une
-table pas encore liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente) ; « Autre (colonne
-d'une autre table…) » reste en bas. La condition d'une bulle garde un intitulé par table, avec l'état de son lien (maquette
-du 28/09).
+bas. La colonne d'une règle de **macro-modèle** et celle de la **condition d'une bulle** (demande d'Antoine du 01/10, puis
+son choix « À plat » du même jour pour la condition) sont UNE seule liste qui réunit celles de toutes les tables, sans
+intitulé : celles de la page en nom nu, les autres en « Table.Colonne », retrouvées par leur nom ; une table pas encore
+liée ouvre la clé de correspondance par-dessus (Annuler remet la colonne précédente), et le lien d'une table liée se lit
+sous la règle une fois la colonne choisie ; « Autre (colonne d'une autre table…) » reste en bas.
 
 ### Le panneau de référence : 700×400
 Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : tout doit y tenir et s'y manier à la souris.
