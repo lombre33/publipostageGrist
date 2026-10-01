@@ -554,6 +554,14 @@ correctif, cf. commit `080842b`) :
 Les marges elles-mêmes (padding de page, `<w:pgMar>`/`pageMargins` pdfmake) sont testées par
 `margins_preview_padding`, `margins_pdf_page_margins`, `margins_docx_page_margins`.
 
+**Orientation de la page** (01/10, `js/page-layout.js`) : `getOrientation`, `isLandscape`, `setOrientation` et
+`getPageSizeMm/Pt/Px/Twip`, enregistrés dans la colonne `Margins` du modèle (clé `orientation` ; absente, c'est le
+portrait). Cinq scénarios `orientation_*` gardent l'API et son enregistrement : portrait inchangé sans réglage (A4 210 × 297,
+contenu 719 px), page échangée en mm, pt, px et twip, orientation conservée quand on retouche une marge (même geste que l'onglet
+Réglages) et marges re-bornées pour la page de la nouvelle orientation, enregistrement par `Templates.save` puis rechargement par
+`Templates.loadAll`, et un ancien `Margins` sans la clé qui se recharge en portrait avec ses marges. Ils ne mesurent ni l'aperçu,
+ni la pagination, ni les exports : chaque moteur qui se branche à l'orientation a ses propres scénarios.
+
 **Piège de mesure propre à cette suite** : comparer des mm entre 4 moteurs de rendu différents
 (navigateur, pdfmake, docx.js) accumule de l'arrondi à chaque conversion - les tolérances des
 assertions (`near(a, b, tol)`, en général 0.5 à 1mm) sont volontairement plus larges que pour une

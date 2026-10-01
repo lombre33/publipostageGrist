@@ -1,9 +1,14 @@
 // Marges de page par modèle - même esprit que HeaderFooterPreview (brouillon en mémoire, persistance déléguée à Templates.save), mais pour 4 nombres
 // (mm) plutôt que du contenu riche. Source de vérité unique pour la largeur de contenu, consommée par l'aperçu A4 (CSS), js/pdf-export.js et
 // js/docx-export.js - avant ce module, la même marge (28pt) était dupliquée indépendamment à ces 3 endroits.
+// Orientation de la page (portrait / paysage) : même brouillon, même colonne Margins de Templates (clé `orientation` du JSON, absente = portrait) - aucune
+// colonne Grist de plus, et un modèle enregistré avant ce réglage se recharge en portrait, à l'identique. Les dimensions de la page courante se lisent par
+// getPageSize*() et getContent*Mm() ; A4_WIDTH_MM / A4_HEIGHT_MM restent celles du A4 PORTRAIT.
 const PageLayout = (function () {
   const A4_WIDTH_MM = 210;
   const A4_HEIGHT_MM = 297;
+  const PORTRAIT = 'portrait';
+  const LANDSCAPE = 'landscape';
   const MM_TO_PT = 72 / 25.4; // ~2.8346
   const MM_TO_TWIP = 1440 / 25.4; // ~56.6929
   const PT_TO_PX = 96 / 72;
@@ -20,12 +25,21 @@ const PageLayout = (function () {
   const MIN_CONTENT_MM = 20;
 
   function emptyMargins() {
-    return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM };
+    return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM, orientation: PORTRAIT };
   }
 
   let marginsDraft = emptyMargins();
 
+  // Les 4 marges (mm) ET l'orientation : c'est cet objet que js/main.js passe tel quel à Templates.save (colonne Margins) et que Templates.loadAll
+  // rend dans `marginsMm` - l'orientation voyage donc avec les marges, sans appel de plus à aucun des trois sites d'enregistrement.
   function getMarginsMm() { return marginsDraft; }
+
+  // Toute valeur autre que 'landscape' (clé absente, JSON abîmé, ancienne version) est le portrait.
+  function normalizeOrientation(value) { return value === LANDSCAPE ? LANDSCAPE : PORTRAIT; }
+
+  function pageSizeMm(orientation) {
+    return orientation === LANDSCAPE ? { width: A4_HEIGHT_MM, height: A4_WIDTH_MM } : { width: A4_WIDTH_MM, height: A4_HEIGHT_MM };
+  }
 
   // Chaque côté est d'abord ramené dans [0, max], puis la PAIRE est réduite proportionnellement si elle dépasse - un résultat déterministe et indépendant
   // de l'ordre de saisie (contrairement à un rabot du seul dernier côté modifié, qui donnerait deux états différents pour les deux mêmes saisies).
@@ -38,19 +52,34 @@ const PageLayout = (function () {
     return [x, y];
   }
 
-  // data = { top, right, bottom, left } en mm, ou null/undefined (repli sur les marges par défaut). Toute clé manquante retombe individuellement sur le
-  // défaut plutôt que sur 0 - un objet partiel reste sûr à passer. Les valeurs sont bornées (cf. clampPair) : `getMarginsMm()` peut donc rendre autre
-  // chose que ce qui a été passé, et c'est cette valeur bornée qui fait foi partout (aperçu, exports, champs de l'onglet Réglages).
+  // data = { top, right, bottom, left, orientation } en mm, ou null/undefined (repli sur les marges par défaut, en portrait). Toute clé manquante retombe
+  // individuellement sur le défaut plutôt que sur 0 - un objet partiel reste sûr à passer (sans `orientation`, c'est le portrait). Les valeurs sont bornées
+  // (cf. clampPair, sur les dimensions de la page de CETTE orientation) : `getMarginsMm()` peut donc rendre autre chose que ce qui a été passé, et c'est cette
+  // valeur bornée qui fait foi partout (aperçu, exports, champs de l'onglet Réglages).
   function setMarginsMm(data) {
     const merged = data && typeof data === 'object' ? Object.assign(emptyMargins(), data) : emptyMargins();
-    const [left, right] = clampPair(merged.left, merged.right, A4_WIDTH_MM);
-    const [top, bottom] = clampPair(merged.top, merged.bottom, A4_HEIGHT_MM);
-    marginsDraft = { top, right, bottom, left };
+    const orientation = normalizeOrientation(merged.orientation);
+    const page = pageSizeMm(orientation);
+    const [left, right] = clampPair(merged.left, merged.right, page.width);
+    const [top, bottom] = clampPair(merged.top, merged.bottom, page.height);
+    marginsDraft = { top, right, bottom, left, orientation };
     applyToPreviewCss();
   }
 
-  function getContentWidthMm() { return A4_WIDTH_MM - marginsDraft.left - marginsDraft.right; }
-  function getContentHeightMm() { return A4_HEIGHT_MM - marginsDraft.top - marginsDraft.bottom; }
+  function getOrientation() { return marginsDraft.orientation; }
+  function isLandscape() { return marginsDraft.orientation === LANDSCAPE; }
+  // Change l'orientation en gardant les 4 marges (re-bornées pour la nouvelle page). Ne touche ni à l'aperçu, ni à la pagination, ni aux exports : l'appelant
+  // rafraîchit ce qu'il affiche (Editor.refreshLayout) et marque le brouillon modifié (événement pp:marginsChanged, cf. js/settings.js).
+  function setOrientation(orientation) { setMarginsMm(Object.assign({}, marginsDraft, { orientation: normalizeOrientation(orientation) })); }
+
+  // Page courante (orientation comprise) dans chaque unité des moteurs : mm, pt (pdfmake), px CSS (aperçu, pagination), twip (docx).
+  function getPageSizeMm() { return pageSizeMm(marginsDraft.orientation); }
+  function getPageSizePt() { const s = getPageSizeMm(); return { width: s.width * MM_TO_PT, height: s.height * MM_TO_PT }; }
+  function getPageSizePx() { const s = getPageSizeMm(); return { width: s.width * MM_TO_PX, height: s.height * MM_TO_PX }; }
+  function getPageSizeTwip() { const s = getPageSizeMm(); return { width: Math.round(s.width * MM_TO_TWIP), height: Math.round(s.height * MM_TO_TWIP) }; }
+
+  function getContentWidthMm() { return getPageSizeMm().width - marginsDraft.left - marginsDraft.right; }
+  function getContentHeightMm() { return getPageSizeMm().height - marginsDraft.top - marginsDraft.bottom; }
   function getColumnGapMm() { return COLUMN_GAP_PX / MM_TO_PX; }
 
   function getMarginsPt() {
@@ -105,8 +134,9 @@ const PageLayout = (function () {
   }
 
   return {
-    A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_MM,
+    A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE,
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
+    getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip,
     pageNumberText, resolvePageNumberBadges,
   };
 })();

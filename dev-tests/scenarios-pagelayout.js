@@ -288,5 +288,126 @@ window.EditorTestSuites.pageLayout = (function () {
         };
       },
     },
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Orientation de la page (portrait / paysage) : API de js/page-layout.js, enregistrée dans la colonne Margins du modèle. Ces scénarios ne touchent ni
+    // l'aperçu, ni la pagination, ni les exports : ils gardent l'API et son enregistrement, pour que chaque moteur puisse s'y brancher sans les redéfinir.
+    {
+      id: 'orientation_default_is_portrait_with_unchanged_dimensions',
+      description: 'Sans réglage, la page est en portrait et rend les mêmes dimensions qu\'avant (A4 210 × 297, largeur de contenu 719 px)',
+      async run(h) {
+        await setupA4(h, null);
+        const size = PageLayout.getPageSizeMm();
+        const px = PageLayout.getPageSizePx();
+        const contentPx = PageLayout.getContentWidthMm() * PX_PER_MM;
+        const ok = PageLayout.getOrientation() === 'portrait' && !PageLayout.isLandscape()
+          && size.width === PageLayout.A4_WIDTH_MM && size.height === PageLayout.A4_HEIGHT_MM
+          && near(px.width, 793.7, .1) && near(contentPx, 719.04, .1)
+          && PageLayout.getMarginsMm().orientation === 'portrait';
+        return { pass: ok, notes: 'orientation=' + PageLayout.getOrientation() + ' page=' + JSON.stringify(size) + ' contenu=' + contentPx.toFixed(2) + 'px' };
+      },
+    },
+    {
+      id: 'orientation_landscape_swaps_page_size_in_every_unit',
+      description: 'Le paysage échange largeur et hauteur de la page en mm, pt, px et twip, et les largeurs et hauteurs de contenu avec elles',
+      async run(h) {
+        await setupA4(h, { top: 30, right: 25, bottom: 20, left: 35 });
+        PageLayout.setOrientation('landscape');
+        const mm = PageLayout.getPageSizeMm();
+        const pt = PageLayout.getPageSizePt();
+        const px = PageLayout.getPageSizePx();
+        const twip = PageLayout.getPageSizeTwip();
+        const ok = PageLayout.getOrientation() === 'landscape' && PageLayout.isLandscape()
+          && mm.width === 297 && mm.height === 210
+          && near(pt.width, 841.89, .01) && near(pt.height, 595.28, .01)
+          && near(px.width, 1122.52, .01) && near(px.height, 793.7, .01)
+          && twip.width === 16838 && twip.height === 11906
+          && near(PageLayout.getContentWidthMm(), 297 - 35 - 25, .001) && near(PageLayout.getContentHeightMm(), 210 - 30 - 20, .001);
+        const m = PageLayout.getMarginsMm();
+        return { pass: ok && m.top === 30 && m.right === 25 && m.bottom === 20 && m.left === 35, notes: 'mm=' + JSON.stringify(mm) + ' pt=' + pt.width.toFixed(2) + 'x' + pt.height.toFixed(2) + ' twip=' + JSON.stringify(twip) + ' marges=' + JSON.stringify(m) };
+      },
+    },
+    {
+      id: 'orientation_survives_margin_edits_and_clamps_to_the_new_page',
+      description: 'Régler une marge garde l\'orientation ; une valeur inconnue ou absente retombe en portrait ; changer d\'orientation re-borne les marges',
+      async run(h) {
+        await setupA4(h, DEFAULT_MARGINS);
+        PageLayout.setOrientation('landscape');
+        // Même geste que l'onglet Réglages (js/settings.js) : l'objet courant, un côté modifié.
+        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { left: 40 }));
+        const keptByEdit = PageLayout.getOrientation() === 'landscape' && near(PageLayout.getMarginsMm().left, 40, .001);
+        PageLayout.setMarginsMm({ top: 10, right: 10, bottom: 10, left: 10 });
+        const missingKey = PageLayout.getOrientation();
+        PageLayout.setMarginsMm({ orientation: 'diagonal' });
+        const badValue = PageLayout.getOrientation();
+        PageLayout.setOrientation('nimporte quoi');
+        const badSet = PageLayout.getOrientation();
+        // 100 + 100 = 200 mm de haut et de bas : tient dans les 277 mm du portrait, pas dans les 190 mm utilisables du paysage (210 - 20).
+        PageLayout.setMarginsMm({ top: 100, right: 20, bottom: 100, left: 20 });
+        const portraitTop = PageLayout.getMarginsMm().top;
+        PageLayout.setOrientation('landscape');
+        const m = PageLayout.getMarginsMm();
+        const hgt = PageLayout.getContentHeightMm();
+        const ok = keptByEdit && missingKey === 'portrait' && badValue === 'portrait' && badSet === 'portrait'
+          && near(portraitTop, 100, .001) && near(m.top + m.bottom, 190, .001) && near(m.top / m.bottom, 1, .001) && near(hgt, PageLayout.MIN_CONTENT_MM, .001);
+        return { pass: ok, notes: 'apresEdition=' + keptByEdit + ' cleAbsente=' + missingKey + ' valeurInconnue=' + badValue + ' setInconnu=' + badSet + ' haut+bas paysage=' + (m.top + m.bottom).toFixed(2) + ' contenu=' + hgt.toFixed(2) };
+      },
+    },
+    {
+      id: 'orientation_saved_in_margins_column_and_reloaded',
+      description: 'L\'orientation s\'enregistre avec les marges (colonne Margins) et un modèle rechargé retrouve sa page en paysage',
+      async run(h) {
+        await setupA4(h, { top: 12, right: 14, bottom: 16, left: 18 });
+        const previousId = Templates.getCurrentId();
+        let savedId = null;
+        try {
+          PageLayout.setOrientation('landscape');
+          const saved = await Templates.save(null, 'PlOrientationPaysage', '<p>Contenu</p>', '', null, PageLayout.getMarginsMm(), 'document', null);
+          savedId = saved.id;
+          await Templates.loadAll();
+          const tpl = Templates.getCached().find(t => t.id === savedId);
+          const raw = await grist.docApi.fetchTable(Templates.TABLE_NAME);
+          const rawMargins = JSON.parse(raw.Margins[raw.id.indexOf(savedId)]);
+          PageLayout.setMarginsMm(null); // un autre modèle (neuf) est chargé entre-temps : portrait
+          const reset = PageLayout.getOrientation();
+          PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null); // même appel que js/main.js au chargement d'un modèle
+          const m = PageLayout.getMarginsMm();
+          const ok = !!tpl && tpl.marginsMm.orientation === 'landscape' && rawMargins.orientation === 'landscape'
+            && reset === 'portrait' && PageLayout.getOrientation() === 'landscape'
+            && near(m.top, 12, .001) && near(m.right, 14, .001) && near(m.bottom, 16, .001) && near(m.left, 18, .001);
+          return { pass: ok, notes: 'colonne=' + JSON.stringify(rawMargins) + ' rechargee=' + JSON.stringify(m) + ' apresModeleNeuf=' + reset };
+        } finally {
+          if (savedId) await Templates.remove(savedId);
+          await Templates.loadAll();
+          Templates.setCurrentId(previousId);
+        }
+      },
+    },
+    {
+      id: 'orientation_old_margins_json_without_key_loads_as_portrait',
+      description: 'Un modèle enregistré avant le réglage (Margins sans clé orientation) se recharge en portrait avec ses marges, à l\'identique',
+      async run(h) {
+        await setupA4(h, DEFAULT_MARGINS);
+        const previousId = Templates.getCurrentId();
+        let savedId = null;
+        try {
+          // Ce que les versions d'avant écrivaient : les quatre côtés, rien d'autre.
+          const saved = await Templates.save(null, 'PlOrientationAncien', '<p>Contenu</p>', '', null, { top: 10, right: 12, bottom: 14, left: 16 }, 'document', null);
+          savedId = saved.id;
+          await Templates.loadAll();
+          const tpl = Templates.getCached().find(t => t.id === savedId);
+          PageLayout.setOrientation('landscape'); // l'état laissé par le modèle précédent
+          PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+          const m = PageLayout.getMarginsMm();
+          const size = PageLayout.getPageSizeMm();
+          const ok = !!tpl && PageLayout.getOrientation() === 'portrait' && size.width === 210 && size.height === 297
+            && near(m.top, 10, .001) && near(m.right, 12, .001) && near(m.bottom, 14, .001) && near(m.left, 16, .001);
+          return { pass: ok, notes: 'orientation=' + PageLayout.getOrientation() + ' marges=' + JSON.stringify(m) + ' page=' + JSON.stringify(size) };
+        } finally {
+          if (savedId) await Templates.remove(savedId);
+          await Templates.loadAll();
+          Templates.setCurrentId(previousId);
+        }
+      },
+    },
   ];
 })();
