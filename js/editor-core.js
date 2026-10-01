@@ -89,7 +89,11 @@ const EditorCore = (function () {
       // la barre ne recouvre pas ses bandeaux (js/grid-editor.js:floatingOptions). Sans lui, rien ne change.
       show(referenceEl, options) {
         undock();
+        // À l'OUVERTURE seulement : show est rappelé à chaque transaction, panneau déjà affiché. Un menu (couleur, police) passe au-dessus de ceux déjà ouverts et de toute barre flottante ;
+        // une barre flottante garde l'ordre du DOM (celle d'une bulle ou d'une image reste au-dessus de celle du tableau que le même clic ouvre : Layers.raise la laisse, js/layers.js).
+        const opening = !el.classList.contains('visible');
         el.classList.add('visible');
+        if (opening) Layers.raise(el);
         const update = () => {
           const opts = (typeof options === 'function' ? options() : options) || {};
           floatingUi.computePosition(referenceEl, el, {
@@ -194,9 +198,12 @@ const EditorCore = (function () {
   // sans rien régler. scrollTop remis à 0 à chaque ouverture : sans ça, un défilement interne resterait
   // mémorisé à la fermeture (constaté par le coordinateur, comportement Chromium déjà rencontré pour
   // TemplateTreeSelect) et rouvrirait sur une portion du menu qui cache "Normal"/"Titre 1".
-  function positionFlyout(group) {
+  function positionFlyout(group, opening) {
     const flyout = group.querySelector(':scope > .v2-hover-flyout');
     if (!flyout) return;
+    // À l'OUVERTURE seulement (js/layers.js) : le menu passe au-dessus de l'existant - une barre flottante de tableau, un autre menu. Le navigateur renvoie un `mouseover` au groupe déjà ouvert dès que
+    // l'icône de son bouton est redessinée sous une souris au repos (l'alignement, à chaque frappe) : il ne doit pas repasser devant la liste # ouverte après lui.
+    if (opening) Layers.raise(flyout);
     flyout.style.left = '';
     const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
     if (overflowRight > 0) flyout.style.left = (-overflowRight) + 'px';
@@ -211,7 +218,7 @@ const EditorCore = (function () {
   function setGroupExpanded(group, expanded) {
     const trigger = group.querySelector(':scope > button');
     if (!trigger) return;
-    if (expanded) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group); }
+    if (expanded) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group, trigger.getAttribute('aria-expanded') !== 'true'); }
     trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   }
   document.addEventListener('mouseover', (event) => {

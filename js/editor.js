@@ -128,6 +128,7 @@ const Editor = (function () {
       box.style.top = '30%';
     }
     box.style.display = 'block';
+    Layers.raise(box); // au-dessus de ce qui est déjà ouvert (barre flottante du tableau ou de l'image), js/layers.js
     // setTimeout(...,0), pas un appel synchrone : le mousedown déclencheur fait reprendre le focus sur .tiptap par ProseMirror juste après le retour de cette
     // fonction - un focus() synchrone ici serait écrasé.
     setTimeout(() => { box._textarea.focus(); }, 0);

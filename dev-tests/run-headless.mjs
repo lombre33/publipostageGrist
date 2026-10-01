@@ -87,6 +87,7 @@ const GROUPS = {
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
   blankLastPage: 'scenarios-blank-last-page',
   findReplace: 'scenarios-find-replace', // Rechercher / Remplacer (js/find-replace.js) : moteur, panneau, loupe, remplacement en une étape d'annulation, mode suivi, textes FR / EN, contrastes
+  layers: 'scenarios-layers', // ordre d'empilement des couches flottantes (js/layers.js, jetons --z-* ) : barres flottantes < menus < info-bulles < fenêtres, le dernier ouvert au-dessus, menu # sous la barre du tableau
   xlsx: 'scenarios-xlsx', // export Excel d'une grille (js/xlsx-export.js) : le .xlsx est dézippé et son OOXML lu (valeurs, formats, largeurs, fusions, liens, images, menu)
   externalImages: 'scenarios-external-images', // fenêtre qui liste les sites externes des images avant un export (js/external-images.js) : le module, un PDF et un Word, les lots, l'annulation
 };
@@ -120,6 +121,7 @@ const NODE_SCRIPTS = {
   saveMenuMouse: 'verify-save-menu-mouse.mjs', // menu du bouton Enregistrer (Enregistrer sous…, enregistrement automatique coché), souris et clavier, 700x400 clair et sombre
   menuClickMouse: 'verify-menu-click-mouse.mjs', // un clic de souris sur « + », Enregistrer, Qualité PDF ou Titre ne les laisse plus ouverts ni ne prend le curseur du texte, 700x400
   leaveUnsavedMouse: 'verify-leave-unsaved-mouse.mjs', // quitter un modèle dont une modification attend : la question Enregistrer / Abandonner / Annuler (liste, « + », galerie), 700x400 clair, sombre et anglais
+  layersMouse: 'verify-layers-mouse.mjs', // ordre d'empilement des couches flottantes à la vraie souris et au vrai clavier : la liste # et les menus de la barre du haut au-dessus des barres du tableau, d'une image et d'une bulle, 700x400
   tableUndoKeyboard: 'verify-table-undo-keyboard.mjs',
   trackColumnsMouse: 'verify-track-columns-mouse.mjs', // « Colonne avant / après / Supprimer la colonne » avec le suivi des modifications : colonne alignée, teintée, barrée, Ctrl+Z, enregistrement puis réouverture, cellule fusionnée (suppression grisée), 700x400 clair et sombre
   layerImagesMouse: 'verify-layer-images-mouse.mjs', // images en calque d'un ancien modèle chargées éditeur masqué (macro-modèle, Mode lecture) : leur position de page se mesure au retour de l'éditeur, 700x400

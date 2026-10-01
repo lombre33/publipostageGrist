@@ -567,7 +567,8 @@ const FloatingToolbars = (function () {
       const block = selectedBlockNode();
       const node = block ? null : selectedVarBadgeNode();
       if (!block && !node) { panel.hide(); return; }
-      // Fenêtre de condition / d'autres attributs / de boucle ouverte sur cette bulle : la barre (z-index 2000) passerait par-dessus son voile.
+      // Fenêtre de condition / d'autres attributs / de boucle ouverte sur cette bulle : la barre reste masquée tant qu'elle l'est (règle d'Antoine) ; son niveau, sous les fenêtres, la
+      // cacherait de toute façon derrière le voile.
       if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen()) { panel.hide(); return; }
       // Bloc de texte conditionnel : pas de réglage nombre/date ni de séparateur, et la barre s'ancre sur l'étiquette du bloc (en haut à gauche), pas au milieu de sa largeur.
       const type = node ? GristAPI.getColumnType(node.attrs.table, node.attrs.column) : null;

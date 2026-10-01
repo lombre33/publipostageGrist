@@ -317,6 +317,7 @@ const TemplateTreeSelect = (function () {
     render();
     popup.classList.add('is-open');
     positionPopup();
+    Layers.raise(popup); // au-dessus d'une barre flottante de tableau ou d'image et des menus déjà ouverts (js/layers.js)
     trigger.setAttribute('aria-expanded', 'true');
     const rows = visibleRows();
     const selected = rows.find((r) => r.getAttribute('aria-selected') === 'true') || rows[0];

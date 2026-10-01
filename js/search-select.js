@@ -274,6 +274,8 @@ const SearchSelect = (function () {
       input.value = query;
       open = true;
       panel.hidden = false;
+      // Le menu sans champ (popup: true) est posé sur la page, au niveau des menus : au-dessus de ce qui est déjà ouvert (js/layers.js). Celui d'une fenêtre reste dans le sien.
+      if (opts.popup) Layers.raise(panel);
       trigger.setAttribute('aria-expanded', 'true');
       render();
       place();

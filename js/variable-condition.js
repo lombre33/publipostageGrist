@@ -421,7 +421,7 @@ const VariableCondition = (function () {
     refs.pasteBtn.textContent = I18n.t('varCond.clip.paste');
     refs.clipStatus.textContent = '';
     renderRules();
-    // La barre flottante (z-index 2000) passerait sinon par-dessus le voile de cette fenêtre (1990, sous la fenêtre de choix de la clé).
+    // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte (règle d'Antoine) ; elle est sous le voile de toute façon (--z-floating-toolbar, css/style.css).
     EditorCore.hideFloatingContextToolbars();
     win.show(() => refs.rulesBox.querySelector('select.macro-rule-column'));
     updateDebug();

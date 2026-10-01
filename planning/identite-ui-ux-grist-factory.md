@@ -184,6 +184,26 @@ sombre pour six d'entre elles, un titre qui sortait de l'écran, un clavier qui 
   Le réglage propre à la zone de contenu d'une fenêtre s'écrit avec deux classes (`.sa-fenetre .sa-liste`), sinon la
   règle de la base l'emporte.
 
+### Couches flottantes : le dernier menu ouvert est toujours au-dessus
+Règle d'Antoine du 01/10 (« le dernier menu qui s'ouvre doit toujours être au-dessus de l'existant », vue avec la liste `#`
+qui s'ouvrait sous la barre du tableau). Avant : chaque couche avait son `z-index` écrit en dur (barre flottante 2000, liste `#`
+1000, menus de la barre du haut 15, liste des modèles 40, info-bulles 50), sans aucun ordre entre elles. Une seule règle,
+posée une fois dans `js/layers.js` et trois jetons de `css/style.css`, pas menu par menu :
+- **Quatre niveaux, toujours dans cet ordre** : barres flottantes d'une sélection (tableau, image, bulle ; `--z-floating-toolbar`)
+  < menus, listes et popups (`--z-menu`) < info-bulles (`--z-tip`) < fenêtres (1990 et plus, section précédente). Une barre
+  flottante ne recouvre donc jamais un menu, et un menu ne recouvre jamais une fenêtre.
+- **Dans le niveau des menus, le dernier ouvert est dessus** : toute couche flottante appelle `Layers.raise(élément)` à son
+  OUVERTURE (ou à chaque placement d'un popup en cours d'usage, comme la liste `#`), jamais à chaque recalage d'un menu déjà
+  affiché, qui changerait de rang sans que rien ne s'ouvre. Le rang s'ajoute au niveau et ne le dépasse jamais.
+- **Les barres flottantes ne sont pas rangées entre elles** : un seul clic en ouvre souvent deux (une bulle ou un bloc dans
+  une case de tableau : la barre de la bulle, puis celle du tableau quand le focus arrive). Elles gardent l'ordre du DOM, la
+  plus précise (bulle, image, bloc) est créée après la plus générale (tableau) et reste dessus ; « la dernière ouverte
+  au-dessus » mettrait la barre du tableau sur les boutons de la bulle (vu au rejeu de `condTextMouse`, panneau de 360 px).
+- **Aucun `z-index` de 100 ou plus écrit en dur** dans une feuille de style, aucun `style.zIndex` hors `js/layers.js` :
+  `codeHygiene` le vérifie. Une nouvelle couche flottante prend le jeton de son niveau et appelle `Layers.raise` quand elle
+  s'ouvre ; elle se vérifie avec une barre de tableau, d'image ou de bulle affichée, au centre de chacune de ses lignes
+  (`layers`, `layersMouse`).
+
 ### Saisies et confirmations : des fenêtres du widget, plus de boîtes du navigateur
 Arbitré le 29/09 (« Saisies et confirmations », en ligne `aafa4e0`).
 - `Dialogs.prompt({title, label, message, value, confirmLabel})` (`js/dialogs.js`) rend le texte tapé, `null` si annulé,

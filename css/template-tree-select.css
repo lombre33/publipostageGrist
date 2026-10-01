@@ -67,7 +67,9 @@
    retombait sur l'Arial par défaut du body (css/style.css) - régression relevée par le coordinateur, mesure indépendante 2026-09-28. */
 /* font-size explicite, pour la même raison que font-family et color : le panneau, rattaché à <body>, héritait des 16 px du navigateur - les noms de modèles y faisaient 16 px, soit plus que le
    déclencheur (13 px) et que les menus au survol de la barre (12,5 px, .v2-hover-row) (retour d'Antoine, 2026-10-01 : « un peu gros, un peu gras, pas très sobre »). Même taille que ces menus. */
-.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: 40; font-family: var(--font-ui); font-size: 12.5px; color: var(--text); }
+/* z-index --z-menu (css/style.css) : la liste s'ouvre par-dessus une barre flottante de tableau ou d'image qui descendrait jusqu'à elle (40 la laissait dessous) ; openPopup la remonte au-dessus
+   des menus déjà ouverts (Layers.raise, js/layers.js). */
+.tts-popup { display: none; position: fixed; min-width: 220px; max-width: 340px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-float); padding: 4px; z-index: var(--z-menu); font-family: var(--font-ui); font-size: 12.5px; color: var(--text); }
 .tts-popup.is-open { display: block; }
 
 /* En-tête du panneau : il reste en haut quand la liste défile (sticky), titre à gauche et « Organiser mes modèles » en haut à droite (Antoine, 2026-10-01). Les marges négatives le font couvrir le

@@ -49,6 +49,13 @@
   --pp-page-gutter: #e4e8ef;
   /* Voile des modales - variabilisé pour que le thème sombre puisse l'assombrir. */
   --pp-scrim: rgba(15, 23, 42, .45);
+  /* Ordre d'empilement des couches flottantes (js/layers.js), de la plus basse à la plus haute : barres flottantes d'une sélection (tableau, image, bulle) < menus, listes et popups < info-bulles de
+     la barre du haut < fenêtres (css/modal-base.css, 1990 et plus). Un z-index en dur sur une couche flottante recrée le défaut d'où cela vient : le menu # s'ouvrait SOUS la barre du tableau (retour
+     d'Antoine, 2026-10-01). Dans un niveau de menus ou d'info-bulles, Layers.raise() met le dernier ouvert au-dessus de ceux déjà ouverts (z-index en ligne : niveau + rang) ; un niveau est large de 100. Les barres
+     flottantes ne sont pas rangées : l'ordre du DOM garde la plus précise (bulle, image) au-dessus de la plus générale (tableau), même quand un seul geste les ouvre toutes les deux. */
+  --z-floating-toolbar: 1500;
+  --z-menu: 1600;
+  --z-tip: 1800;
 }
 
 /* === Thème sombre === Ne concerne QUE le chrome de l'application (barre du haut, plan de travail autour de la page, modales, panneaux flottants). La PAGE
