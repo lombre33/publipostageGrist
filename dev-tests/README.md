@@ -1176,6 +1176,11 @@ balises `<script>`/`<link>` de `index.html`.
   de texte riche est dans `sharedStrings.xml` sous forme de passages `<r>`. Dans le contenu de test d'une case : une `<img>` brute est supprimée par l'éditeur sans
   `class="editor-image"` ; une liste de tâches s'écrit `<ul data-type="taskList"><li data-checked data-type="taskItem"><label>…</label><div><p>…` ; un surlignage est un
   `<span style="background-color:…">`, pas un `<mark>`, et l'éditeur n'écrit ni exposant ni indice.
+- **Un clic « dans le texte » à la vraie souris (script Node) peut tomber ailleurs que dans l'éditeur** : (1) un menu de la barre (Image, Page…) reste ouvert tant que la souris est dessus et recouvre
+  le premier paragraphe d'un modèle vide, juste sous la barre à 700×400 - la ligne du menu reçoit le clic et la frappe suivante part dans sa recherche : ranger la souris dans un coin
+  (`parkMouse` de `verify-column-search-mouse.mjs`) avant de cliquer, et vérifier au passage que le point visé est au premier plan (`hitTest(…).onTop`) ; (2) depuis la bande d'en-tête (20ccd35), la
+  bande d'un en-tête VIDE recouvre les 20 premiers px de `.tiptap` et son clic ouvre l'en-tête : un clic à `.tiptap` + 20 px de haut (ce que faisait `focusEnd` de `verify-shortcuts-keyboard.mjs`) place
+  le curseur dans la bande, pas dans le texte (le focus reste sur `BODY`, le mode d'en-tête s'ouvre) - viser un paragraphe (`.tiptap p`) plutôt qu'un décalage fixe depuis le bord de la feuille.
 
 ## Bugs de fond découverts en construisant/étendant cette suite
 

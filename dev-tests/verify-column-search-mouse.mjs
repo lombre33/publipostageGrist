@@ -186,6 +186,13 @@ async function clickBadge(column) {
   await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(250);
 }
+// Range la souris dans un coin du panneau, loin de la barre d'outils : un menu de la barre (Image, Page…) reste ouvert tant que la souris est dessus, et il recouvre alors le texte juste
+// dessous - le premier paragraphe d'un modèle vide se trouve sous le menu Image depuis que la bande d'un en-tête vide ne prend plus de place (20ccd35) -, si bien qu'un clic « dans le texte »
+// tombait sur la ligne du menu au lieu de l'éditeur.
+async function parkMouse() {
+  await page.mouse.move(WIDTH - 14, HEIGHT - 14);
+  await page.waitForTimeout(300);
+}
 async function openWindowFor(column, action, modalSelector) {
   await clickBadge(column);
   await clickCenter(`.v2-varfmt-toolbar.visible button[data-action="${action}"]`);
@@ -935,7 +942,7 @@ const SECTIONS = {
     check('image : Entrée insère l’image de CsSites.Logo, la première ligne de la liste, et la referme',
       images.length === 3 && images[2].key === 'CsSites.Logo' && await hostGone(), images);
     await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers'));
-    await page.waitForTimeout(150);
+    await parkMouse();
   },
 
   // Liste « # » du corps (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la table en cours ») : à la vraie frappe à 700×400, les colonnes
@@ -958,8 +965,9 @@ const SECTIONS = {
       return out;
     });
     await page.evaluate(() => Editor.setHTML('<p></p>'));
-    await page.waitForTimeout(250);
+    await parkMouse();
     const paragraph = await hitTest('.tiptap p');
+    check('« # » : le paragraphe vide, où le clic va tomber, est au premier plan (aucun menu de la barre resté ouvert dessus)', paragraph.found && paragraph.inViewport && paragraph.onTop, paragraph);
     await page.mouse.click(paragraph.x, paragraph.y);
     await page.waitForTimeout(150);
     await page.keyboard.type('#');
