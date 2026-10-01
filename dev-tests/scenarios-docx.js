@@ -82,6 +82,35 @@
       return { pass: !!(inner.bold && inner.italics), notes: JSON.stringify(runs.map(r => ({ t: r.text, b: r.bold, i: r.italics }))) };
     });
 
+  // « Erreur génération DOCX. » sur la Fiche mission d'Antoine (2026-10-01) : le modèle, collé de Word, porte des couleurs NOMMÉES (`color: black`, `color: red`) que le navigateur ne réécrit pas en
+  // rgb(). docx.js ne prend qu'un « RRGGBB » et levait « Invalid hex value 'BLACK'. Expected 6 digit hex value » : l'export ENTIER échouait pour une couleur de texte.
+  add('docx_run_color_forms',
+    'Toute forme de couleur CSS (nom, #f00, rgb() en %, hsl(), rgba()) sort en « RRGGBB » dans le Word, texte comme fond ; une valeur illisible, transparente ou « currentColor » laisse la couleur héritée, sans faire échouer l\'export',
+    async (h) => {
+      // [texte, style du run, couleur du parent (null = aucune), « RRGGBB » attendu]
+      const texts = [
+        ['nom-noir', 'color: black', null, '000000'], ['nom-rouge', 'color: red', null, 'FF0000'], ['nom-majuscules', 'color: ReD', null, 'FF0000'],
+        ['hex-court', 'color: #f00', null, 'FF0000'], ['hex-long', 'color: #00ff00', null, '00FF00'], ['rgb', 'color: rgb(138, 210, 254)', null, '8AD2FE'],
+        ['rgb-pourcents', 'color: rgb(100%, 0%, 0%)', null, 'FF0000'], ['hsl', 'color: hsl(120, 100%, 50%)', null, '00FF00'], ['rgba', 'color: rgba(255, 0, 0, 0.5)', null, 'FF0000'],
+        ['illisible', 'color: pas-une-couleur', '#0000ff', '0000FF'], ['transparent', 'color: transparent', '#0000ff', '0000FF'],
+        ['currentcolor', 'color: currentColor', '#0000ff', '0000FF'], ['inherit', 'color: inherit', '#0000ff', '0000FF'],
+      ];
+      // [texte, style du run, remplissage attendu (null = aucun fond)]
+      const fills = [
+        ['fond-jaune', 'background-color: yellow', 'FFFF00'], ['fond-rgb', 'background-color: rgb(138, 210, 254)', '8AD2FE'],
+        ['fond-transparent', 'background-color: transparent', null], ['fond-rgba-zero', 'background-color: rgba(0, 0, 0, 0)', null], ['fond-illisible', 'background-color: nope', null],
+      ];
+      const html = texts.map(([t, style, parent]) => '<p>' + (parent ? '<span style="color: ' + parent + '">' : '') + '<span style="' + style + '">' + t + '</span>' + (parent ? '</span>' : '') + '</p>').join('')
+        + fills.map(([t, style]) => '<p><span style="' + style + '">' + t + '</span></p>').join('');
+      const parts = await h.exportDocxParts(html);
+      const runs = [].concat(...h.docxParagraphs(parts.doc).map(p => p.runs));
+      const by = t => runs.find(r => r.text === t) || {};
+      const bad = [];
+      texts.forEach(([t, , , want]) => { if (by(t).color !== want) bad.push(t + ' color=' + by(t).color + ' (attendu ' + want + ')'); });
+      fills.forEach(([t, , want]) => { if (by(t).highlight !== want) bad.push(t + ' fond=' + by(t).highlight + ' (attendu ' + want + ')'); });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : texts.length + ' couleurs de texte et ' + fills.length + ' fonds en « RRGGBB »' };
+    });
+
   add('docx_default_font_size',
     'La taille par défaut du corps de texte est 10.5pt, la même que l\'éditeur et le PDF',
     async (h) => {
@@ -545,6 +574,47 @@
       await DocxExport.ensureDocxLibLoaded();
       const { filename } = await DocxExport.getDocxBlobForRecord('<p>a</p>', null, {}, 'contrat-fixe', null, null);
       return { pass: filename === 'contrat-fixe', notes: 'filename=' + JSON.stringify(filename) };
+    });
+
+  // --- Un modèle réel d'Antoine, de bout en bout (en dernier : il fixe la ligne courante de la page) ---
+  // Fiche mission d'Antoine (2026-10-01), l'« Annexe 7 » collée de Word : tableau à colonne d'étiquettes bleue, textes `color: black` et `color: red`, bulles à chemin de références sur plusieurs
+  // niveaux (personne -> service -> établissement) et une date, sur la ligne que grist.onRecord livre. Avant le correctif des couleurs, l'export s'arrêtait net sur « Invalid hex value 'BLACK' ».
+  add('docx_fiche_mission_named_colors_and_reference_paths',
+    'Un modèle collé de Word (couleurs nommées, fond de cellule) avec des bulles à chemin de références sur trois niveaux et une date s\'exporte en Word, valeurs résolues',
+    async (h) => {
+      const PAGE = 'FmOrdres';
+      const stub = window.__gristStub;
+      stub.setVariables('FmEtablissements', { Nom: 'Text' });
+      stub.setRows('FmEtablissements', [{ id: 1, Nom: 'Université de Bordeaux' }]);
+      stub.setVariables('FmServices', { Nom: 'Text', Etablissement: 'Ref:FmEtablissements', gristHelper_Display: 'Text' }, null, { Etablissement: 'gristHelper_Display' });
+      stub.setRows('FmServices', [{ id: 3, Nom: 'Laboratoire X', Etablissement: 1, gristHelper_Display: 'Université de Bordeaux' }]);
+      stub.setVariables('FmPersonnes', { Nom: 'Text', Email: 'Text', Naissance: 'Date', Service: 'Ref:FmServices', gristHelper_Display: 'Text' }, null, { Service: 'gristHelper_Display' });
+      stub.setRows('FmPersonnes', [{ id: 7, Nom: 'Dupont Jean', Email: 'jean.dupont@ex.fr', Naissance: 631152000, Service: 3, gristHelper_Display: 'Laboratoire X' }]);
+      stub.setVariables(PAGE, { Personne: 'Ref:FmPersonnes', Debut: 'Date', gristHelper_Display: 'Text' }, null, { Personne: 'gristHelper_Display' });
+      stub.setRows(PAGE, [{ id: 1, Personne: 7, Debut: 1790812800, gristHelper_Display: 'Dupont Jean' }]);
+      await GristAPI.refreshSchema();
+      const record = { id: 1, Personne: 'Dupont Jean', Debut: 1790812800 };
+      stub.fireRecord(Object.assign({}, record), PAGE);
+      await h.sleep(30);
+      const badge = column => '<span class="var-badge" contenteditable="false" data-table="' + PAGE + '" data-column="' + column + '" data-key="' + PAGE + '.' + column + '">#' + PAGE + '.' + column + '</span>';
+      const row = (label, value) => '<tr><td colspan="1" rowspan="1" colwidth="217" style="background-color: rgb(138, 210, 254);"><p style="text-align: center;"><span style="font-size: 12pt; color: black;">' + label
+        + '</span></p></td><td colspan="1" rowspan="1" colwidth="500"><p>' + value + '</p></td></tr>';
+      const html = '<h1 style="text-align: center;"><span style="font-family: &quot;Arial Black&quot;, sans-serif; font-size: 16pt;"><u>Annexe 7&nbsp;: Fiche mission</u></span></h1>'
+        + '<table style="width: 717px;"><colgroup><col style="width: 217px;"><col style="width: 500px;"></colgroup><tbody>'
+        + row('Nom et Prénom', badge('Personne')) + row('Adresse mail', badge('Personne.Email')) + row('Date de naissance', badge('Personne.Naissance'))
+        + row('Employeur', badge('Personne.Service.Etablissement') + '<br><br>') + row('Dates', 'Début : ' + badge('Debut'))
+        + '</tbody></table><p style="text-align: center;"><span style="font-size: 12pt; color: red;"><u>Rappel&nbsp;: </u></span><span style="font-size: 12pt; color: black;">Factures à transmettre.</span></p>';
+      await ExportCommon.ensureJsZipLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const noHeaderFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const { blob } = await DocxExport.getDocxBlobForRecord(html, PAGE, record, '', noHeaderFooter, null);
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const doc = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
+      const rows = Array.from(doc.getElementsByTagName('w:tr')).map(tr => Array.from(tr.getElementsByTagName('w:tc')).map(tc => tc.textContent));
+      const colors = h.docxParagraphs(doc).flatMap(p => p.runs.map(r => r.color));
+      const expected = [['Nom et Prénom', 'Dupont Jean'], ['Adresse mail', 'jean.dupont@ex.fr'], ['Date de naissance', '01/01/1990'], ['Employeur', 'Université de Bordeaux'], ['Dates', 'Début : 01/10/2026']];
+      const pass = JSON.stringify(rows) === JSON.stringify(expected) && colors.includes('000000') && colors.includes('FF0000');
+      return { pass, notes: JSON.stringify({ rows, couleurs: Array.from(new Set(colors)) }) };
     });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

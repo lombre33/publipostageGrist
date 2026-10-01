@@ -76,13 +76,31 @@ const DocxExport = (function () {
   const CODE_BOX_HEX = 'D0D7DE';
   const CODE_LINE_240THS = Math.round(240 * EDITOR_LINE_HEIGHT_RATIO / 1.1328);
 
+  // Couleur CSS -> « RRGGBB » (majuscules), la seule forme que docx.js accepte pour w:color et w:shd : toute autre chaîne lève « Invalid hex value » et fait échouer l'export ENTIER. Un texte
+  // collé de Word ou d'une page web garde ses couleurs NOMMÉES (« black », « red » : le navigateur ne les réécrit pas en rgb()), et « #f00 », « rgb(100%, 0%, 0%) » ou « hsl(...) » sont
+  // aussi des couleurs valides. C'est donc le navigateur qui lit la valeur, par le fillStyle d'un canevas (rend « #rrggbb », ou « rgba(r, g, b, a) » sous 100 % d'opacité). null quand ce
+  // n'est pas une couleur ou qu'elle est transparente : l'appelant garde alors la couleur héritée, jamais d'exception.
+  const cssColorHexCache = new Map();
+  let colorProbeContext;
+  function resolveCssColorHex(v) {
+    if (colorProbeContext === undefined) colorProbeContext = document.createElement('canvas').getContext('2d');
+    const ctx = colorProbeContext;
+    if (!ctx) return null;
+    // fillStyle ignore sans rien dire une valeur qui n'est pas une couleur : deux amorces distinctes séparent « illisible » (l'amorce revient telle quelle) d'une couleur qui vaut l'amorce.
+    ctx.fillStyle = '#000000'; ctx.fillStyle = v; const onBlack = String(ctx.fillStyle);
+    ctx.fillStyle = '#ffffff'; ctx.fillStyle = v; const onWhite = String(ctx.fillStyle);
+    if (onBlack !== onWhite) return null;
+    const opaque = onBlack.match(/^#([0-9a-f]{6})$/);
+    if (opaque) return opaque[1].toUpperCase();
+    const translucent = onBlack.match(/^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/);
+    if (!translucent || !(parseFloat(translucent[4]) > 0)) return null;
+    return translucent.slice(1, 4).map(n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
   function cssColorHex(value) {
-    if (!value) return null;
-    const v = value.trim();
-    const m = v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)$/i);
-    const hex = n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
-    if (m) return (hex(m[1]) + hex(m[2]) + hex(m[3])).toUpperCase();
-    return v.replace(/^#/, '').toUpperCase();
+    const v = String(value == null ? '' : value).trim().toLowerCase();
+    if (!v || /^(transparent|inherit|initial|unset|revert|currentcolor)$/.test(v)) return null;
+    if (!cssColorHexCache.has(v)) cssColorHexCache.set(v, resolveCssColorHex(v));
+    return cssColorHexCache.get(v);
   }
   function cssHalfPt(value, fallback) {
     const n = parseFloat(value);
@@ -117,8 +135,11 @@ const DocxExport = (function () {
     }
     if (css('font-size')) out.size = cssHalfPt(css('font-size'), DEFAULT_HALF_PT);
     if (css('font-family')) out.font = css('font-family').split(',')[0].trim().replace(/^["']|["']$/g, '');
-    if (css('color')) out.color = cssColorHex(css('color'));
-    if (css('background-color')) out.shading = { fill: cssColorHex(css('background-color')), type: docx.ShadingType.CLEAR };
+    // Une valeur qui n'est pas une couleur (ou transparente) laisse la couleur héritée telle quelle.
+    const color = css('color') && cssColorHex(css('color'));
+    if (color) out.color = color;
+    const fill = css('background-color') && cssColorHex(css('background-color'));
+    if (fill) out.shading = { fill, type: docx.ShadingType.CLEAR };
     return out;
   }
   function runOpts(style) {
