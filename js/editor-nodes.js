@@ -863,6 +863,17 @@ const EditorNodes = (function () {
             const pos = getPos();
             if (typeof pos === 'number') nodeEditor.chain().focus().setNodeSelection(pos).run();
           });
+          // Un clic dans le texte d'un bloc resté sélectionné (la fenêtre de condition se referme sur lui) ne déplaçait pas la sélection : le bloc sélectionné est déplaçable
+          // à la souris, et Chrome ne pose pas le curseur dans ce qui peut être glissé - ProseMirror ne le rattrape qu'à deux positions de la fin du bloc. Le cadre épousant
+          // son texte, la marge vide à droite de la ligne, qui y échappait, n'existe plus : le clic pose le curseur là où il tombe. Une bulle, une image, l'étiquette gardent
+          // leur propre clic.
+          dom.addEventListener('click', event => {
+            if (!dom.classList.contains('conditional-text-selected') || event.target.closest('[contenteditable="false"], .editor-image-view, hr')) return;
+            const hit = nodeEditor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+            if (!hit || !nodeEditor.state.doc.resolve(hit.pos).parent.inlineContent) return;
+            nodeEditor.commands.setTextSelection(hit.pos);
+            nodeEditor.view.focus();
+          });
           return {
             dom,
             contentDOM,

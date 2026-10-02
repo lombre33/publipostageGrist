@@ -1015,20 +1015,186 @@
     PageLayout.setMarginsMm({ top: halfMm, bottom: halfMm, left: PageLayout.DEFAULT_MARGIN_MM, right: PageLayout.DEFAULT_MARGIN_MM });
   }
 
+  const layoutWidth = el => el.getBoundingClientRect().width / sheetZoom();
+  const r1 = n => Math.round(n * 10) / 10;
+  const LONG = 'Un texte assez long pour passer à la ligne dans le cadre, comme à la Lecture et à l’export. '.repeat(10).trim();
+
+  // Un texte qui tient JUSTE sur une ligne dans la largeur d'un paragraphe hors bloc (une lettre de plus et il passe à la ligne) : « fits » et « over ». C'est là que
+  // le moindre écart de largeur entre l'éditeur et l'export se verrait (un cadre ajusté au texte qui le ferait passer à la ligne un cran trop tôt).
+  async function textsAroundOneLine(h) {
+    const heightOf = async text => { Editor.setHTML('<p>' + text + '</p>'); await h.sleep(30); return layoutHeight(h.tiptap().querySelector('p')); };
+    const oneLine = await heightOf('mot');
+    const words = n => Array.from({ length: n }, (_, i) => ['mot', 'un', 'chat', 'très', 'a'][i % 5]).join(' ');
+    let lo = 1, hi = 400;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (await heightOf(words(mid)) <= oneLine + 1) lo = mid; else hi = mid; }
+    let letters = 0;
+    while (letters < 40 && await heightOf(words(lo) + ' ' + 'x'.repeat(letters + 1)) <= oneLine + 1) letters++;
+    return { oneLine, fits: words(lo) + ' ' + 'x'.repeat(letters), over: words(lo) + ' ' + 'x'.repeat(letters + 1) };
+  }
+
   cases.push({
     id: 'condtext_frame_does_not_change_the_text_width_so_the_editor_wraps_like_the_export',
-    description: 'Le cadre pointillé n’occupe aucune largeur : un paragraphe dans un bloc, dans un bloc d’un bloc, a la même position et la même largeur qu’un paragraphe hors bloc (les retours à la ligne sont ceux de la Lecture et de l’export)',
+    description: 'Le bloc, même ajusté à son texte, ne change aucun retour à la ligne : un paragraphe dans un bloc, dans un bloc d’un bloc, passe à la ligne exactement là où le même paragraphe hors bloc (même position, même hauteur), pour un long texte, pour un texte qui tient juste sur une ligne et pour celui qui la dépasse d’une lettre',
     run: async (h) => {
       await seed(h);
-      Editor.setHTML('<p>Dehors</p>' + block('<p>Dedans</p>' + block('<p>Tout dedans</p>', COND_URGENT)) + '<p>Fin</p>');
-      await h.sleep(100);
-      const rect = text => { const p = Array.from(document.querySelectorAll('.tiptap p')).find(x => x.textContent === text); const r = p.getBoundingClientRect(); return { left: Math.round(r.left * 10) / 10, width: Math.round(r.width * 10) / 10 }; };
-      const outside = rect('Dehors');
-      const inside = rect('Dedans');
-      const deeper = rect('Tout dedans');
-      const same = (a, b) => Math.abs(a.left - b.left) <= 0.5 && Math.abs(a.width - b.width) <= 0.5;
-      const pass = same(outside, inside) && same(outside, deeper) && outside.width > 100;
-      return { pass, notes: JSON.stringify({ outside, inside, deeper }) };
+      const { oneLine, fits, over } = await textsAroundOneLine(h);
+      const results = {};
+      for (const [name, text] of [['long', LONG], ['fits', fits], ['over', over]]) {
+        Editor.setHTML('<p>' + text + '</p>' + block('<p>' + text + '</p>' + block('<p>' + text + '</p>', COND_URGENT)) + '<p>Fin</p>');
+        await h.sleep(100);
+        const paragraphs = Array.from(document.querySelectorAll('.tiptap p')).filter(p => p.textContent === text);
+        results[name] = paragraphs.map(p => { const r = p.getBoundingClientRect(); const z = sheetZoom(); return { left: r1(r.left / z), width: r1(r.width / z), height: r1(r.height / z) }; });
+      }
+      const same = (a, b) => Math.abs(a.left - b.left) <= 0.5 && Math.abs(a.height - b.height) <= 0.5;
+      const lines = (r, n) => Math.abs(r.height - n * oneLine) <= 1;
+      const [lo, li, ld] = results.long, [fo, fi, fd] = results.fits, [oo, oi, od] = results.over;
+      const pass = results.long.length === 3 && results.fits.length === 3 && results.over.length === 3
+        && same(lo, li) && same(lo, ld) && Math.round(lo.height / oneLine) >= 3 && Math.abs(lo.width - li.width) <= 0.5 && Math.abs(lo.width - ld.width) <= 0.5 && lo.width > 100
+        && same(fo, fi) && same(fo, fd) && lines(fo, 1) && lines(fi, 1) && lines(fd, 1) && fi.width <= fo.width + 0.5 && fd.width <= fo.width + 0.5
+        && same(oo, oi) && same(oo, od) && lines(oo, 2) && lines(oi, 2) && lines(od, 2) && Math.abs(oo.width - oi.width) <= 0.5 && Math.abs(oo.width - od.width) <= 0.5;
+      return { pass, notes: JSON.stringify({ oneLine, results }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_block_is_small_by_default_and_grows_with_its_text_and_line_breaks',
+    description: 'Un bloc de texte conditionnel est petit par défaut (vide : la largeur de son étiquette ; une valeur courte ne l’élargit pas) et son cadre s’agrandit à mesure qu’on y écrit : plus large avec le texte jusqu’à la largeur de la page, plus haut à chaque retour à la ligne',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Dehors</p>' + block('<p></p>', COND_URGENT) + '<p>Fin</p>');
+      await h.sleep(120);
+      const pageWidth = layoutWidth(h.tiptap().querySelector('p'));
+      const blockEl = () => h.tiptap().querySelector('.conditional-text');
+      const sizes = () => ({ w: r1(layoutWidth(blockEl())), h: r1(layoutHeight(blockEl())), tag: r1(layoutWidth(blockEl().querySelector('.conditional-text-tag'))) });
+      const typeAtEnd = async content => {
+        const { pos, node } = blockNodes()[0];
+        ed().chain().setTextSelection(pos + node.nodeSize - 2).insertContent(content).run();
+        await h.sleep(60);
+        return sizes();
+      };
+      const step = {};
+      step.empty = sizes();
+      step.value = await typeAtEnd('350 €');
+      step.sentence = await typeAtEnd(' à régler avant la fin du mois, sans autre formalité, merci');
+      step.wrapped = await typeAtEnd(' ' + LONG);
+      // Les retours à la ligne : un paragraphe de plus à chaque fois, le cadre s'allonge d'autant et suit le plus large.
+      Editor.setHTML('<p>Dehors</p>' + block('<p>Un</p>', COND_URGENT) + '<p>Fin</p>');
+      await h.sleep(120);
+      step.oneLine = sizes();
+      ed().chain().setTextSelection(blockNodes()[0].pos + blockNodes()[0].node.nodeSize - 2).splitBlock().insertContent('Deux lignes plus longues que la première').run();
+      await h.sleep(60);
+      step.twoLines = sizes();
+      ed().chain().splitBlock().insertContent('Trois').run();
+      await h.sleep(60);
+      step.threeLines = sizes();
+      const tagInside = blockEl().querySelector('.conditional-text-tag').getBoundingClientRect().right <= blockEl().getBoundingClientRect().right + 0.5;
+      const pass = step.empty.w <= pageWidth / 2 && Math.abs(step.empty.w - step.empty.tag) <= 1
+        && Math.abs(step.value.w - step.empty.w) <= 1
+        && step.sentence.w > step.value.w + 80 && step.sentence.w < pageWidth - 20
+        && Math.abs(step.wrapped.w - pageWidth) <= 1 && step.wrapped.h > step.sentence.h + 20
+        && step.oneLine.w <= pageWidth / 2
+        && step.twoLines.h >= step.oneLine.h + 15 && step.twoLines.w > step.oneLine.w + 50 && step.twoLines.w < pageWidth - 20
+        && step.threeLines.h >= step.twoLines.h + 15 && Math.abs(step.threeLines.w - step.twoLines.w) <= 1 && tagInside;
+      return { pass, notes: JSON.stringify({ pageWidth: r1(pageWidth), step }) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_block_keeps_the_page_width_when_the_export_places_its_content_on_it',
+    description: 'Un bloc ne s’ajuste à son texte que si l’export aligne ce texte de la même façon : texte centré, à droite ou justifié, image, tableau, ligne, code, encadré, zone 2 colonnes, saut de page, bloc emboîté qui en contient un, image flottante à gauche plus haut (bloc emboîté compris), ainsi que tableau, ligne, code, encadré, zone, saut de page et sommaire dans une citation, gardent toute la largeur de la page ; un texte à gauche, une liste, une citation, un titre et une image flottante à droite laissent le bloc petit',
+    run: async (h) => {
+      await seed(h);
+      const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const img = extra => '<img class="editor-image" src="' + png + '" style="width: 120px"' + (extra || '') + '>';
+      const fixtures = [
+        ['texte centré', 'full', block('<p style="text-align: center">Centré</p>', COND_URGENT)],
+        ['texte à droite', 'full', block('<p style="text-align: right">À droite</p>', COND_URGENT)],
+        ['texte justifié', 'full', block('<p style="text-align: justify">Justifié</p>', COND_URGENT)],
+        ['titre centré dans une liste de blocs', 'full', block('<p>Un</p><h2 style="text-align: center">Titre</h2>', COND_URGENT)],
+        ['image', 'full', block('<p>Texte ' + img() + '</p>', COND_URGENT)],
+        ['tableau', 'full', block('<table><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>', COND_URGENT)],
+        ['ligne', 'full', block('<p>Texte</p><hr>', COND_URGENT)],
+        ['code', 'full', block('<pre><code>code</code></pre>', COND_URGENT)],
+        ['encadré', 'full', block('<div class="callout" data-color="blue" data-icon="info"><p>Encadré</p></div>', COND_URGENT)],
+        ['zone 2 colonnes', 'full', block('<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p>G</p></div><div class="two-columns-column"><p>D</p></div></div>', COND_URGENT)],
+        ['saut de page', 'full', block('<p>Avant</p><div class="page-break-marker" contenteditable="false">Saut de page</div><p>Après</p>', COND_URGENT)],
+        ['sommaire (un bloc que la liste des enfants permis ne connaît pas)', 'full', block('<div class="toc-marker">Sommaire</div>', COND_URGENT)],
+        ['liste avec une image', 'full', block('<ul><li><p>Un ' + img() + '</p></li></ul>', COND_URGENT)],
+        ['bloc emboîté avec une image', 'full', block('<p>Dedans</p>' + block('<p>Tout ' + img() + '</p>', COND_URGENT))],
+        ['texte à gauche (explicite)', 'small', block('<p style="text-align: left">À gauche</p>', COND_URGENT)],
+        ['titre', 'small', block('<h2>Titre court</h2>', COND_URGENT)],
+        ['liste', 'small', block('<ul><li><p>Un</p></li><li><p>Deux</p></li></ul>', COND_URGENT)],
+        ['citation', 'small', block('<blockquote><p>Citation</p></blockquote>', COND_URGENT)],
+        ['bloc emboîté', 'small', block('<p>Dedans</p>' + block('<p>Tout dedans</p>', COND_URGENT))],
+        ['retour à la ligne dans le paragraphe', 'small', block('<p>Ligne un<br>Ligne deux un peu plus longue</p>', COND_URGENT)],
+      ];
+      const floating = side => '<p>' + img(' data-align="' + side + '"') + ' Logo flottant, puis du texte qui coule autour de lui sur plusieurs lignes pour que l’image soit encore là.</p>';
+      fixtures.push(['après une image flottante à gauche', 'full', floating('left') + block('<p>Court</p>', COND_URGENT)]);
+      fixtures.push(['après une image flottante à droite', 'small', floating('right') + block('<p>Court</p>', COND_URGENT)]);
+      // Le bloc intérieur (2e dans l'ordre du document), à un autre niveau que l'image flottante : lui aussi garde toute la largeur.
+      fixtures.push(['bloc emboîté après une image flottante à gauche (le bloc intérieur)', 'full', floating('left') + block('<p>Dedans</p>' + block('<p>Tout dedans</p>', COND_URGENT)), 1]);
+      // Un bloc de contenu dans une citation (le bloc n'a alors pour enfant direct que la citation) : il garde lui aussi toute la largeur.
+      const deeper = [['tableau', '<table><tbody><tr><td><p>A</p></td></tr></tbody></table>', 'table'], ['ligne', '<hr>', 'hr'], ['code', '<pre><code>code</code></pre>', 'pre'],
+        ['encadré', '<div class="callout" data-color="blue" data-icon="info"><p>Encadré</p></div>', '.callout'],
+        ['zone 2 colonnes', '<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p>G</p></div><div class="two-columns-column"><p>D</p></div></div>', '.two-columns-zone-outer'],
+        ['saut de page', '<div class="page-break-marker" contenteditable="false">Saut de page</div>', '.page-break-marker'], ['sommaire', '<div class="toc-marker">Sommaire</div>', '.toc-marker']];
+      deeper.forEach(([name, html, selector]) => fixtures.push([name + ' dans une citation', 'full', block('<blockquote><p>Avant</p>' + html + '</blockquote>', COND_URGENT), 0, 'blockquote ' + selector]));
+      const rows = [];
+      for (const [name, expected, html, index, mustContain] of fixtures) {
+        Editor.setHTML('<p>Dehors</p>' + html + '<p>Fin</p>');
+        await h.sleep(90);
+        const outside = layoutWidth(h.tiptap().querySelector('p'));
+        const target = h.tiptap().querySelectorAll('.conditional-text')[index || 0];
+        const width = layoutWidth(target);
+        const kept = !mustContain || !!target.querySelector(mustContain);
+        const ok = kept && (expected === 'full' ? Math.abs(width - outside) <= 0.5 : width < outside / 2);
+        rows.push({ name, expected, width: r1(width), outside: r1(outside), kept, ok });
+      }
+      return { pass: rows.every(r => r.ok), notes: rows.filter(r => !r.ok).length ? JSON.stringify(rows.filter(r => !r.ok)) : rows.length + ' contenus, tous comme prévu' };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_click_in_the_text_of_a_selected_block_puts_the_caret_there',
+    description: 'Un clic dans le texte d’un bloc resté sélectionné y pose le curseur (le bloc sélectionné est déplaçable à la souris : ProseMirror gardait sa sélection, et seule la marge vide à droite de la ligne y échappait, qui n’existe plus avec le cadre qui épouse le texte) ; une bulle ou l’étiquette gardent leur propre clic, et sans bloc sélectionné le clic ne change rien',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant</p>' + block('<p>Texte réservé aux dossiers urgents ' + badgeHtml('Titre') + '</p>', COND_URGENT) + '<p>Après</p>');
+      await h.sleep(120);
+      const paragraph = () => document.querySelector('.tiptap .conditional-text p');
+      const clickAt = (target, x, y) => target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y }));
+      const state = () => { const sel = ed().state.selection; return { node: sel.node ? sel.node.type.name : null, empty: sel.empty, text: sel.$from.parent.textContent.slice(0, 14), offset: sel.$from.parentOffset }; };
+      const middle = () => { const r = paragraph().getBoundingClientRect(); return { x: r.left + 60, y: r.top + r.height / 2 }; };
+      const results = {};
+      // 1) Bloc sélectionné, clic au milieu du texte : le curseur y est, le bloc n'est plus sélectionné.
+      ed().commands.setNodeSelection(blockNodes()[0].pos);
+      await h.sleep(60);
+      const m = middle();
+      clickAt(paragraph(), m.x, m.y);
+      await h.sleep(60);
+      results.textClick = Object.assign(state(), { selectedClass: !!document.querySelector('.conditional-text-selected') });
+      // 2) Bloc sélectionné, clic sur la bulle puis sur l'étiquette : la sélection n'est pas touchée (chacune a son propre clic).
+      ed().commands.setNodeSelection(blockNodes()[0].pos);
+      await h.sleep(60);
+      const badge = document.querySelector('.tiptap .conditional-text .var-badge').getBoundingClientRect();
+      clickAt(document.querySelector('.tiptap .conditional-text .var-badge'), badge.left + badge.width / 2, badge.top + badge.height / 2);
+      await h.sleep(40);
+      results.badgeClick = state();
+      const tag = document.querySelector('.tiptap .conditional-text-tag').getBoundingClientRect();
+      clickAt(document.querySelector('.tiptap .conditional-text-tag'), tag.left + tag.width / 2, tag.top + tag.height / 2);
+      await h.sleep(40);
+      results.tagClick = state();
+      // 3) Bloc non sélectionné (curseur dans « Avant »), même clic dans son texte : rien ne bouge, c'est ProseMirror qui s'en charge.
+      ed().commands.setTextSelection(3);
+      await h.sleep(60);
+      const m2 = middle();
+      clickAt(paragraph(), m2.x, m2.y);
+      await h.sleep(40);
+      results.unselectedClick = state();
+      const pass = results.textClick.node === null && results.textClick.empty && /^Texte réservé/.test(results.textClick.text) && results.textClick.offset > 3 && results.textClick.offset < 30 && !results.textClick.selectedClass
+        && results.badgeClick.node === 'conditionalText' && results.tagClick.node === 'conditionalText'
+        && results.unselectedClick.node === null && /^Avant/.test(results.unselectedClick.text) && results.unselectedClick.offset === 2;
+      return { pass, notes: JSON.stringify(results) };
     },
   });
 

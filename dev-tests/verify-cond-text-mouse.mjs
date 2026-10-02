@@ -274,10 +274,22 @@ async function runTheme(theme) {
   await page.waitForTimeout(250);
   let state = await editorState();
   check(`${label} - clic sur l'entrée : un bloc vide remplace « # », la liste se ferme`, state.blocks === 1 && /<div class="conditional-text"><p><\/p><\/div>/.test(state.html) && !(await hitTest(page, '#autocomplete-box')).inViewport, state);
+  // Petit par défaut : le bloc posé par le menu n'a que la largeur de son étiquette (rien d'autre à contenir), bien en deçà de la page ; il grandit avec la frappe.
+  const blockSize = () => page.evaluate(() => {
+    const b = document.querySelector('.tiptap .conditional-text');
+    const text = document.createRange(); text.selectNodeContents(b.querySelector('.conditional-text-content > p'));
+    return { blockW: b.getBoundingClientRect().width, tagW: b.querySelector('.conditional-text-tag').getBoundingClientRect().width, textW: text.getBoundingClientRect().width,
+      pageW: document.querySelector('.tiptap > p').getBoundingClientRect().width };
+  });
+  const emptyBlock = await blockSize();
+  check(`${label} - le bloc posé par le menu est petit : la largeur de son étiquette, bien en deçà de la page`, Math.abs(emptyBlock.blockW - emptyBlock.tagW) <= 1 && emptyBlock.blockW < emptyBlock.pageW / 2, emptyBlock);
   await page.keyboard.type('Texte réservé aux dossiers urgents');
   await page.waitForTimeout(100);
   state = await editorState();
   check(`${label} - la frappe qui suit va dans le bloc (curseur placé dedans)`, /<div class="conditional-text"><p>Texte réservé aux dossiers urgents<\/p><\/div>/.test(state.html), state.html);
+  const typedBlock = await blockSize();
+  check(`${label} - la frappe va avec le cadre : il épouse la plus large de l'étiquette et du texte, sans atteindre la largeur de la page`,
+    typedBlock.textW > 50 && Math.abs(typedBlock.blockW - Math.max(typedBlock.tagW, typedBlock.textW)) <= 1.5 && typedBlock.blockW < typedBlock.pageW - 20, typedBlock);
 
   await shot(page, `${theme}-3-bloc-rempli`);
   // 2) L'étiquette : visible, dans le panneau ; un vrai clic sélectionne le bloc et ouvre la barre des variables.
@@ -355,13 +367,21 @@ async function runTheme(theme) {
 
   await shot(page, `${theme}-7-bloc-avec-condition`);
   // 5) Un bloc dans le bloc : Entrée en fin de texte, bouton, Chips, entrée ; les deux étiquettes ne se recouvrent pas et le cadre intérieur reste dans l'extérieur.
-  const textEnd = await page.evaluate(() => {
-    const p = document.querySelector('.tiptap .conditional-text p');
-    const r = p.getBoundingClientRect();
-    return { x: Math.min(r.right - 4, innerWidth - 20), y: r.top + r.height / 2 };
+  // Le bloc est resté sélectionné (Enregistrer) : un vrai clic dans son texte y pose le curseur. Il ne le faisait pas (ProseMirror gardait la sélection du bloc, déplaçable
+  // à la souris), sauf dans la marge vide à droite de la ligne de l'ancien cadre pleine largeur, qui n'existe plus avec le cadre qui épouse le texte.
+  const insideText = await page.evaluate(() => {
+    const r = document.querySelector('.tiptap .conditional-text p').getBoundingClientRect();
+    return { x: r.left + 60, y: r.top + r.height / 2 };
   });
-  await realClick(page, textEnd);
+  await realClick(page, insideText);
+  const caret = await page.evaluate(() => {
+    const s = EditorCore.getEditor().state.selection;
+    return { node: s.node ? s.node.type.name : null, empty: s.empty, text: s.$from.parent.textContent, offset: s.$from.parentOffset, selected: !!document.querySelector('.conditional-text-selected') };
+  });
+  check(`${label} - un vrai clic dans le texte du bloc resté sélectionné y pose le curseur, le bloc n'est plus sélectionné`,
+    caret.node === null && caret.empty && /^Texte réservé/.test(caret.text) && caret.offset > 3 && caret.offset < caret.text.length - 3 && !caret.selected, caret);
   await page.keyboard.press('End');
+  await page.waitForTimeout(80);
   await page.keyboard.press('Enter');
   await realClick(page, await hitTest(page, '#v2-btn-insert-variable'));
   await page.waitForTimeout(250);

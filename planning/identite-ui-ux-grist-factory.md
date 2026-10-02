@@ -407,7 +407,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Bloc de texte conditionnel (demande d'Antoine du 01/10) : une ligne « Texte conditionnel » (« Conditional text ») de l'onglet Chips du menu des variables, jamais une nouvelle
   icône. Sans sélection, un bloc vide se pose à la place de « # » et le curseur s'y met ; avec du texte sélectionné, le bouton « Insérer une variable » ouvre la liste sur Chips,
   la ligne en surbrillance, et Entrée entoure le texte (qui n'est jamais remplacé par « # »). Le bloc contient des paragraphes, des listes, des tableaux, des variables
-  (conditionnelles comprises) et d'autres blocs, à toute profondeur. Il se délimite sans changer la largeur du texte (cadre en `outline`), dans la direction artistique des
+  (conditionnelles comprises) et d'autres blocs, à toute profondeur. Petit par défaut (demande d'Antoine du 02/10), il épouse son contenu : vide, il n'a que la largeur de son étiquette,
+  et son cadre s'agrandit à mesure qu'on écrit - plus large avec le texte jusqu'à la largeur de la page, plus haut à chaque retour à la ligne - sans jamais changer un retour à la
+  ligne par rapport à l'export ; un contenu que l'export place sur toute la largeur (texte centré, à droite ou justifié, image, tableau, ligne, code, encadré, zone 2 colonnes, saut
+  de page, image flottante à gauche plus haut) lui garde toute la largeur. Un clic dans le texte d'un bloc resté sélectionné y pose le curseur (une bulle, une image et l'étiquette gardent leur clic). Il se délimite sans changer la largeur du texte (cadre en `outline`), dans la direction artistique des
   bulles : fond `#eaf2ff`, texte `#12406b`, liseré `#b7cdf2` en pointillés, plus foncé (`#5b7fc0`) une fois la condition posée, anneau d'accent une fois sélectionné ; l'étiquette dit
   « Si Statut = Urgent » ou « Texte conditionnel · sans condition ». Un clic sur l'étiquette sélectionne le bloc et ouvre la barre flottante des variables : seule la condition
   d'affichage y sert (même fenêtre que pour une bulle, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs » et « Boucle » n'ont pas d'objet ici, grisés par
