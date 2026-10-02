@@ -7,6 +7,8 @@
 //     de cases reste (la mise en forme suivante, un Ctrl+C partent de la même sélection) ; un seul Annuler défait la dernière mise en forme sur toutes les cases ;
 //   - la « Citation » (menu au survol de l'icône chaîne) entoure le contenu des quatre cases, un second clic l'en sort ; « Retrait » emboîte les éléments de chaque liste des quatre cases
 //     sous le premier et « Retrait inverse » les sort de leur liste, les deux boutons (grisés avant) sont actifs dès que les cases ont une liste, un seul Annuler rend l'état d'avant ;
+//   - les touches d'origine de la citation et des listes (Ctrl+Maj+B, Ctrl+Maj+8 puces, Ctrl+Maj+7 numérotée) font la même chose que leur bouton sur les quatre cases (celles de l'éditeur ne traitent
+//     que la case de tête) : la sélection de cases reste, une seconde fois elles défont, un seul Annuler rend l'état d'avant ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
 // Lancé par run-headless.mjs (groupe Node « tableCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-cells-mouse.mjs
@@ -353,6 +355,31 @@ async function runTheme(colorScheme) {
   await page.waitForTimeout(200);
   state = await cellsState(page);
   check(`${label} - Ctrl+Maj+B une seconde fois : les quatre cases sortent de leur citation`, Object.values(state).every(s => !s.quote));
+
+  // Les touches d'origine des listes, Ctrl+Maj+8 (puces) et Ctrl+Maj+7 (numérotée) : celles de l'éditeur ne traitent que la case de tête ; au vrai clavier, sur la sélection de cases.
+  // 600 ms entre deux appuis : l'historique de ProseMirror groupe les gestes plus proches (un Annuler rendrait alors les deux).
+  for (const [chord, name, has] of [['Control+Shift+8', 'Ctrl+Maj+8', s => s.list], ['Control+Shift+7', 'Ctrl+Maj+7', s => s.ordered]]) {
+    await loadDoc(page, TABLE);
+    await dragCells(page, FROM, TO);
+    await page.keyboard.press(chord);
+    await page.waitForTimeout(600);
+    state = await cellsState(page);
+    check(`${label} - ${name} pose la liste dans les quatre cases sélectionnées, aucune autre`, INSIDE.every(k => has(state[k])) && OUTSIDE.every(k => !has(state[k])), { inside: INSIDE.map(k => [k, has(state[k])]), outside: OUTSIDE.filter(k => has(state[k])) });
+    const listKept = await selectedRect(page);
+    check(`${label} - ${name} : la sélection de cases reste`, sameRect(listKept, wantRect(FROM, TO)), show(listKept));
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(250);
+    state = await cellsState(page);
+    check(`${label} - ${name} : un seul Annuler retire la liste des quatre cases`, Object.values(state).every(s => !has(s)), INSIDE.map(k => [k, has(state[k])]));
+    await loadDoc(page, TABLE);
+    await dragCells(page, FROM, TO);
+    await page.keyboard.press(chord);
+    await page.waitForTimeout(300);
+    await page.keyboard.press(chord);
+    await page.waitForTimeout(250);
+    state = await cellsState(page);
+    check(`${label} - ${name} une seconde fois : la liste sort des quatre cases`, Object.values(state).every(s => !has(s)), INSIDE.map(k => [k, has(state[k])]));
+  }
 
   const LISTS = '<p>Avant</p><table><tbody>' + Array.from({ length: ROWS }, (_, r) => '<tr>' + Array.from({ length: COLS }, (_, c) => `<td><ul><li>a${r + 1}${c + 1}</li><li>b${r + 1}${c + 1}</li><li>c${r + 1}${c + 1}</li></ul></td>`).join('') + '</tr>').join('') + '</tbody></table><p>Après</p>';
   await loadDoc(page, LISTS);

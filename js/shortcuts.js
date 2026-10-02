@@ -189,9 +189,16 @@ const Shortcuts = (function () {
     return true;
   };
   const templatesList = () => { const el = document.querySelector('#v2-title-cluster .tts-trigger'); if (!usable(el)) return false; el.click(); return true; };
+  // « Liste numérotée » : la touche d'origine (Ctrl+Maj+7, celle de TipTap) bascule - elle pose la liste et la retire au second appui - alors que le bouton pose un style de numérotation. Sur une
+  // sélection de cases, où l'éditeur ne traiterait que la case de tête, elle bascule donc la liste dans chaque case (EditorCore.toggleList), sous les mêmes gardes que le bouton.
+  const toggleOrderedListInCells = () => {
+    if (typeof EditorCore === 'undefined' || !usable(byId('v2-btn-ordered-numeric'))) return false;
+    EditorCore.toggleList('orderedList', 'toggleOrderedList');
+    return true;
+  };
 
   // { id, group, label (clé i18n du nom), key (touche d'origine, '' = aucune), macKey (celle de macOS quand elle diffère), native (la touche d'origine est déjà traitée par l'éditeur,
-  // js/main.js ou js/find-replace.js), cells (sa touche d'origine, traitée par l'éditeur sur la seule case de tête d'une sélection de cases, passe par son bouton quand des cases sont sélectionnées), aliases (autres touches d'origine traitées de même), scope ('editor' = ne vaut pas dans un champ de saisie ; 'app' = vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de
+  // js/main.js ou js/find-replace.js), cells (sa touche d'origine, traitée par l'éditeur sur la seule case de tête d'une sélection de cases, passe par son bouton quand des cases sont sélectionnées - ou par la fonction que `cells` donne quand le bouton ne bascule pas comme la touche), aliases (autres touches d'origine traitées de même), scope ('editor' = ne vaut pas dans un champ de saisie ; 'app' = vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de
   // l'élément qui montre la touche : infobulle, ligne de menu ou titre de menu), aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), run }.
   const tip = id => '#' + id;
   const ACTIONS = [
@@ -219,8 +226,8 @@ const Shortcuts = (function () {
     { id: 'alignCenter', group: 'format', label: 'align.center', key: 'Mod+Shift+e', native: true, scope: 'editor', hint: tip('v2-btn-align-center'), run: click('v2-btn-align-center') },
     { id: 'alignRight', group: 'format', label: 'align.right', key: 'Mod+Shift+r', native: true, scope: 'editor', hint: tip('v2-btn-align-right'), run: click('v2-btn-align-right') },
     { id: 'alignJustify', group: 'format', label: 'align.justify', key: 'Mod+Shift+j', native: true, scope: 'editor', hint: tip('v2-btn-align-justify'), run: click('v2-btn-align-justify') },
-    { id: 'bulletList', group: 'format', label: 'shortcuts.action.bulletList', key: 'Mod+Shift+8', native: true, scope: 'editor', hint: '#v2-list-flyout .v2-hover-flyout-label', aria: tip('v2-btn-bullet'), run: click('v2-btn-bullet') },
-    { id: 'orderedList', group: 'format', label: 'shortcuts.action.orderedList', key: 'Mod+Shift+7', native: true, scope: 'editor', hint: tip('v2-btn-ordered-numeric'), run: click('v2-btn-ordered-numeric') },
+    { id: 'bulletList', group: 'format', label: 'shortcuts.action.bulletList', key: 'Mod+Shift+8', native: true, cells: true, scope: 'editor', hint: '#v2-list-flyout .v2-hover-flyout-label', aria: tip('v2-btn-bullet'), run: click('v2-btn-bullet') },
+    { id: 'orderedList', group: 'format', label: 'shortcuts.action.orderedList', key: 'Mod+Shift+7', native: true, cells: toggleOrderedListInCells, scope: 'editor', hint: tip('v2-btn-ordered-numeric'), run: click('v2-btn-ordered-numeric') },
     { id: 'outdent', group: 'format', label: 'indent.decrease', key: '', scope: 'editor', repeat: true, hint: tip('v2-btn-outdent'), run: click('v2-btn-outdent') },
     { id: 'indent', group: 'format', label: 'indent.increase', key: '', scope: 'editor', repeat: true, hint: tip('v2-btn-indent'), run: click('v2-btn-indent') },
     { id: 'sizeDown', group: 'format', label: 'font.sizeDecrease', key: '', scope: 'editor', repeat: true, aria: tip('v2-size-minus'), run: mouseDown('v2-size-minus') },
@@ -417,13 +424,15 @@ const Shortcuts = (function () {
     const owner = ownerOf(combo);
     if (owner) {
       // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de cases pour une action qui le demande
-      // (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes.
-      if (owner.native && !isCustomized(owner) && defaultOf(owner) === combo && !(owner.cells && onCellSelection())) return;
+      // (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes (ou la fonction que `cells` donne, quand le bouton ne fait pas comme la touche d'origine).
+      const originalKey = owner.native && !isCustomized(owner) && defaultOf(owner) === combo;
+      if (originalKey && !(owner.cells && onCellSelection())) return;
       if (modalOpen() || (owner.scope === 'editor' && inTextField())) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat && !owner.repeat) return;
-      try { owner.run(); } catch (e) { console.warn('[shortcuts] l’action « ' + owner.id + ' » a échoué', e); }
+      const action = originalKey && typeof owner.cells === 'function' ? owner.cells : owner.run;
+      try { action(); } catch (e) { console.warn('[shortcuts] l’action « ' + owner.id + ' » a échoué', e); }
       return;
     }
     // Une touche d'origine rendue ne fait plus ce qu'elle faisait - mais dans un champ de saisie autre que l'éditeur elle garde son sens de texte (Ctrl+Z y défait la frappe).

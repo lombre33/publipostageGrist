@@ -445,15 +445,8 @@ const MainToolbar = (function () {
     // Bouton principal du groupe survol - réapplique l'alignement qu'il montre actuellement (currentAlign, tenu à jour par syncToolbarState) ; les 4 boutons
     // ci-dessus vivent maintenant dans le panneau révélé au survol (cf. index.html .v2-hover-flyout), inchangés sinon.
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
-    // Une liste se pose dans TOUTES les cases d'une sélection de cases (EditorCore.runOnSelectedCells : la commande ne regarde sinon que la case de tête) ; l'état voulu est
-    // l'inverse de celui que le bouton montre (la case de tête) : enfoncé, un clic retire la liste de chaque case, sinon il la pose dans chacune.
-    const toggleList = (name, command) => {
-      const wanted = !editor.isActive(name);
-      EditorCore.runOnSelectedCells(
-        () => editor.chain().focus()[command]().run(),
-        chain => chain.command(({ state, commands }) => { if (EditorCore.isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
-    };
-    bind('v2-btn-bullet', () => toggleList('bulletList', 'toggleBulletList'));
+    // Une liste se pose dans TOUTES les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et Ctrl+Maj+7 : js/shortcuts.js).
+    bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));
     // Style d'une liste : crée la liste si le curseur n'y est pas encore (dans chaque case d'une sélection de cases), sinon change juste le style de la liste existante à cet endroit.
     const applyListStyle = (name, command, attrs) => EditorCore.runOnSelectedCells(
       () => {

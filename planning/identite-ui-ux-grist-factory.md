@@ -605,7 +605,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Ctrl+V dans une case remplit à partir d'elle (le tableau gagne les lignes qui manquent), et une valeur copiée d'une seule case, collée sur une sélection de cases, les remplit toutes.
   La citation entoure le contenu entier de chaque case d'UNE citation, ou l'en sort (l'état voulu est l'inverse de celui que montre le bouton, la case de tête) ; « Retrait » emboîte, dans chaque
   liste des cases, le deuxième élément et les suivants sous le premier (le premier d'une liste ne peut pas se décaler, comme dans une case seule) et « Retrait inverse » sort chaque liste de sa
-  liste ; ces deux boutons restent grisés (jamais retirés) tant qu'aucune case n'a de liste à décaler. Ctrl+Maj+B suit le bouton Citation.
+  liste ; ces deux boutons restent grisés (jamais retirés) tant qu'aucune case n'a de liste à décaler. Ctrl+Maj+B suit le bouton Citation ; Ctrl+Maj+8 et Ctrl+Maj+7 posent la liste dans chaque case, ou l'en retirent, comme sur une seule case.
 - Barre de la case d'une grille : fusion et alignement vertical (demande d'Antoine du 01/10, maquette « Barre »). De gauche à droite, séparés par un trait fin : Lignes (avant, après, supprimer), Colonnes (avant, après,
   supprimer), « Supprimer le tableau » (toujours grisé), Fusion (« Fusionner les cases », « Scinder la case »), Fond, Bordures, Alignement vertical (en haut, au milieu, en bas). Fusion, bordures et alignement n'existent que dans une grille :
   la barre d'un tableau de document reste celle d'avant. Rien ne disparaît, on grise : « Fusionner » ne s'allume que sur deux cases ou plus, « Scinder » que sur une case fusionnée ; les trois boutons d'alignement sont des

@@ -3,7 +3,8 @@
 // d'un coup, par contre j'ai l'impression que je ne peux pas faire d'édition dessus ? Le but serait de pouvoir mettre en forme et/ou C/C la sélection »). Le gras, l'italique, le
 // souligné, le barré et l'alignement parcouraient déjà les cases (les `ranges` de la sélection) ; la police, la taille, la couleur et le surlignage rétablissaient la
 // sélection en simple texte (la case de tête seule, la sélection de cases éteinte) et les listes ne regardaient que la case de tête. La citation et le retrait suivent (Antoine a choisi
-// « Étendre » sur la carte, 02/10) : la citation n'entourait que la case de tête, et les deux boutons du retrait restaient grisés. Les gestes à la vraie souris et au vrai clavier
+// « Étendre » sur la carte, 02/10) : la citation n'entourait que la case de tête, et les deux boutons du retrait restaient grisés ; les touches des listes (Ctrl+Maj+8 et Ctrl+Maj+7), elles aussi,
+// ne changeaient que la case de tête (autre « Étendre », 02/10). Les gestes à la vraie souris et au vrai clavier
 // (glisser, cliquer la barre, Ctrl+C / Ctrl+V à 700x400) sont dans dev-tests/verify-table-cells-mouse.mjs : ici les évènements sont synthétiques.
 (function () {
   const cases = [];
@@ -388,6 +389,69 @@
       await sleep(80);
       const cursor = allCells().filter(([r, c]) => cellInfo(r, c).quotes).map(([r, c]) => r + '' + c);
       return { pass: on.pass && keptOn && offOk && cursor.length === 1 && cursor[0] === '22', notes: JSON.stringify({ on, keptOn, off, cursor }) };
+    }),
+  });
+
+  // Les touches d'origine des listes (Ctrl+Maj+8 puces, Ctrl+Maj+7 numérotée) sont celles de TipTap, qui ne regarde que la case de tête : sur une sélection de cases elles posent la liste dans
+  // chacune ou l'en retirent (js/shortcuts.js, `cells`) ; avec un simple curseur elles restent à l'éditeur. Le chiffre est lu sur `event.code` (AZERTY) ; Maj se relâche ensuite, comme plus haut.
+  const pressCtrlShiftDigit = digit => {
+    const target = ed().view.dom, init = { bubbles: true, cancelable: true };
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: { 7: '&', 8: '*' }[digit], code: 'Digit' + digit, keyCode: 48 + digit, which: 48 + digit, ctrlKey: true, shiftKey: true, ...init }));
+    target.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16, which: 16, ...init }));
+  };
+  [[8, 'bulletList', 'Ctrl+Maj+8', 'à puces'], [7, 'orderedList', 'Ctrl+Maj+7', 'numérotée']].forEach(([digit, listName, label, kind]) => {
+    cases.push({
+      id: 'cells_list_shortcut_' + listName + '_puts_the_list_in_every_selected_cell_and_takes_it_out_of_all',
+      description: `${label} (liste ${kind}) avec quatre cases sélectionnées : chacune devient une liste (aucune autre case) et la sélection de cases reste ; un seul Annuler rend le geste ; une seconde fois la liste sort de toutes ; avec un simple curseur dans une case, la touche reste celle de l'éditeur (cette case seule) - avant, seule la case de tête changeait`,
+      run: async (h) => withTable(h, async () => {
+        await setCells();
+        await selectCells(...RECT);
+        pressCtrlShiftDigit(digit);
+        await sleep(80);
+        const on = verdict(RECT, i => i.lists.length === 1 && i.lists[0].name === listName && i.text.length > 0);
+        const keptOn = stillSelected(RECT);
+        await h.clickButton('v2-btn-undo');
+        await sleep(80);
+        const undone = allCells().every(([r, c]) => cellInfo(r, c).lists.length === 0);
+        await selectCells(...RECT);
+        pressCtrlShiftDigit(digit);
+        await sleep(80);
+        pressCtrlShiftDigit(digit);
+        await sleep(80);
+        const off = verdict(RECT, i => i.lists.length > 0);
+        const offOk = off.reached.every(v => v === false) && off.untouched.every(v => v === false);
+        const keptOff = stillSelected(RECT);
+        ed().chain().focus().setTextSelection(cellPos(2, 2) + 3).run();
+        await sleep(40);
+        pressCtrlShiftDigit(digit);
+        await sleep(80);
+        const cursor = allCells().filter(([r, c]) => cellInfo(r, c).lists.length).map(([r, c]) => r + '' + c);
+        return { pass: on.pass && keptOn && undone && offOk && keptOff && cursor.length === 1 && cursor[0] === '22', notes: JSON.stringify({ on, keptOn, undone, off, keptOff, cursor }) };
+      }),
+    });
+  });
+
+  // La case de tête commande (comme le bouton) : pas en liste à puces, elle les met toutes en liste à puces - la case qui était en liste numérotée change de type, aucune n'a deux listes ; et en
+  // Lecture les deux touches ne font rien, comme le bouton grisé (même garde `usable` que les autres actions : la fonction de « Liste numérotée » comprise).
+  cases.push({
+    id: 'cells_list_shortcuts_follow_the_head_cell_and_do_nothing_in_reading_mode',
+    description: 'Ctrl+Maj+8 avec la case de tête en liste numérotée : les quatre cases passent en liste à puces (aucune n\'a deux listes) ; en mode Lecture, avec des cases sélectionnées, les actions des deux touches répondent faux et ne changent rien au document',
+    run: async (h) => withTable(h, async () => {
+      await setCells((r, c) => (r === 1 && c === 1 ? [orderedList(listItem('x'))] : null));
+      await selectCells(...RECT);
+      pressCtrlShiftDigit(8);
+      await sleep(80);
+      const mixed = verdict(RECT, i => i.lists.length === 1 && i.lists[0].name === 'bulletList');
+      const keptMixed = stillSelected(RECT);
+      await selectCells(...RECT);
+      const before = docJson();
+      document.getElementById('btn-mode-read').click();
+      await sleep(250);
+      const reading = Shortcuts.ACTIONS.filter(a => a.id === 'bulletList' || a.id === 'orderedList').map(a => (typeof a.cells === 'function' ? a.cells() : a.run()));
+      const unchanged = docJson() === before;
+      document.getElementById('btn-mode-edit').click();
+      await sleep(250);
+      return { pass: mixed.pass && keptMixed && reading.length === 2 && reading.every(v => v === false) && unchanged, notes: JSON.stringify({ mixed, keptMixed, reading, unchanged }) };
     }),
   });
 

@@ -354,6 +354,15 @@ const EditorCore = (function () {
     for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === typeName) return true;
     return false;
   }
+  // Pose la liste `name` (bulletList, orderedList...) avec la commande `command` de TipTap, ou la retire : ce que font le bouton « Liste à puces » et les touches Ctrl+Maj+8 et Ctrl+Maj+7
+  // (js/shortcuts.js). Sur une sélection de cases, dans TOUTES les cases, l'état voulu étant l'inverse de celui que montre la case de tête : enfoncé, un appui retire la liste de chaque
+  // case, sinon il la pose dans chacune. Hors sélection de cases, la bascule de TipTap, inchangée.
+  function toggleList(name, command) {
+    const wanted = !editor.isActive(name);
+    return runOnSelectedCells(
+      () => editor.chain().focus()[command]().run(),
+      chain => chain.command(({ state, commands }) => { if (isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
+  }
 
   // ---- Citation et retrait d'une sélection de cases ----
   // `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de la seule case de tête, et les boutons du retrait se grisent (`can()` faux : le
@@ -445,6 +454,6 @@ const EditorCore = (function () {
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
-    isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,
+    toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,
   };
 })();
