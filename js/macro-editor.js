@@ -225,7 +225,13 @@ const MacroEditor = (function () {
     return stored ? { nomFichierPDF: stored.nomFichierPDF || '', headerFooter: stored.headerFooter, marginsMm: stored.marginsMm } : none;
   }
 
+  // Un seul enregistrement à la fois (même retour d'Antoine du 02/10 que js/main.js:onSave) : Grist lent, un deuxième clic sur « Enregistrer » pendant l'écriture d'un macro-modèle tout neuf
+  // en créait un deuxième sous le même nom, l'identifiant de la ligne n'arrivant qu'à la fin. La fenêtre se referme dès que la première écriture est revenue : le clic en trop est ignoré.
+  // Une écriture qui ne revient jamais (connexion perdue) ne bloque pas le bouton au-delà de SAVE_WATCHDOG_MS, comme celles de js/templates.js.
+  const SAVE_WATCHDOG_MS = 60000;
+  let savingSince = 0; // 0 : aucun enregistrement en cours
   async function save(onSaved) {
+    if (savingSince && Date.now() - savingSince < SAVE_WATCHDOG_MS) return;
     const nom = nameInput() ? nameInput().value.trim() : '';
     if (!nom) { alert(I18n.t('macro.modal.nameRequired')); return; }
     const macroSlots = collectSlotsForSave();
@@ -233,6 +239,7 @@ const MacroEditor = (function () {
     // qui garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
     const stored = editingId != null ? Templates.getCached().find(t => String(t.id) === String(editingId)) : null;
     const finalName = stored && Templates.sameName(nom, stored.nom) ? nom : Templates.uniqueName(nom, editingId);
+    const startedAt = savingSince = Date.now();
     try {
       const kept = settingsToKeep();
       const { id } = await Templates.save(editingId, finalName, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
@@ -241,6 +248,8 @@ const MacroEditor = (function () {
     } catch (e) {
       console.error('[MacroEditor] échec de l’enregistrement', e);
       alert(I18n.t('macro.modal.saveError'));
+    } finally {
+      if (savingSince === startedAt) savingSince = 0;
     }
   }
 

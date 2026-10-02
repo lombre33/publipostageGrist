@@ -425,6 +425,234 @@
     },
   });
 
+  // --- Un deuxième clic sur Enregistrer pendant l'écriture d'un modèle tout neuf (carte « Corriger » d'Antoine, 02/10) -----------------------------------------------------------------
+  // Grist lent : l'identifiant d'un modèle neuf n'arrive qu'à la fin de l'écriture. Un deuxième clic (ou Ctrl+S) pendant ce temps partait aussitôt, voyait toujours un modèle sans
+  // identifiant et créait une deuxième ligne, sous le même nom. Désormais il attend la fin du premier enregistrement (liste relue comprise) puis enregistre ce que l'écran montre alors,
+  // dans la même ligne (js/main.js:onSave) ; la fenêtre d'un macro-modèle ignore le clic en trop (js/macro-editor.js:save). L'enregistrement automatique est coupé : il n'écrit jamais
+  // dans un modèle sans identifiant, et ses écritures fausseraient le compte des actions.
+  const SLOW_WRITE = { fetchTable: 0, applyUserActions: 2500 };
+  const rowIdsNamed = (nom) => { const t = stub().state.rows[TABLE]; return t.id.filter((id, i) => t.Nom[i] === nom); };
+  const pressSaveShortcut = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
+  // Un modèle de départ enregistré d'abord : la table et ses colonnes existent, l'enregistrement qui suit ne fait plus que l'écriture de la ligne (c'est elle qui est lente ici).
+  async function baseTemplate(h, tag) {
+    return saveTemplate(h, 'Double clic base ' + tag, '<p>Base</p>');
+  }
+  // Un modèle tout neuf (« + »), nommé et rempli, prêt à être enregistré ; les compteurs du faux Grist repartent de zéro.
+  async function readyNewTemplate(h, nom, text) {
+    await newTemplate(h);
+    document.getElementById('template-name').value = nom;
+    await h.focusAtEnd();
+    await h.typeText(text);
+    stub().clearActionLog();
+    stub().resetInFlightStats();
+  }
+  const countsNow = () => ({ adds: stub().countActions('AddRecord', TABLE), updates: stub().countActions('UpdateRecord', TABLE), maxWrites: stub().state.maxInFlight.applyUserActions });
+  // Attend que les écritures attendues (`expected` : { adds, updates }) soient faites et revenues, et qu'une ligne de ce nom porte `expectedText`, puis laisse le temps à une écriture en
+  // trop de se montrer. Le code d'avant n'atteint jamais le compte de mises à jour : il sort au délai, c'est son verdict.
+  async function settleWrites(h, nom, expectedText, expected) {
+    const done = () => {
+      const counts = countsNow();
+      return counts.adds >= expected.adds && counts.updates >= expected.updates && inFlightNow() === 0 && rowIdsNamed(nom).some(id => contentOf(id).indexOf(expectedText) !== -1);
+    };
+    await waitUntil(h, done, 12000, 100);
+    await h.sleep(1500);
+    stub().setLatency(0);
+    await untilQuiet(h);
+  }
+
+  cases.push({
+    id: 'race_double_click_on_save_of_a_new_template_creates_one_row_and_the_follow_up_saves_the_latest_text',
+    description: "Deux clics sur Enregistrer d'un modèle tout neuf pendant que Grist écrit (2,5 s) : une seule ligne est créée, sous le nom tapé (jamais « (2) »), le deuxième clic attend la première écriture puis enregistre le texte tapé entre-temps dans la MÊME ligne, jamais deux écritures en même temps",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nom = 'Double clic neuf';
+      if (!await baseTemplate(h, 'neuf')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        await readyNewTemplate(h, nom, 'Premier texte');
+        stub().setLatency(SLOW_WRITE);
+        await h.clickButton('btn-save');
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        await h.sleep(600);
+        await h.focusAtEnd();
+        await h.typeText(' DEUXIÈME'); // tapé pendant que la première écriture dure encore
+        await h.clickButton('btn-save');
+        await settleWrites(h, nom, 'DEUXIÈME', { adds: 1, updates: 1 });
+        const ids = rowIdsNamed(nom);
+        const id = ids[0];
+        const counts = countsNow();
+        const content = id != null ? contentOf(id) : '';
+        const pass = ids.length === 1 && rowIdsNamed(nom + ' (2)').length === 0 && counts.adds === 1 && counts.updates === 1 && counts.maxWrites <= 1
+          && content.indexOf('Premier texte') !== -1 && content.indexOf('DEUXIÈME') !== -1
+          && Templates.getCurrentId() === id && selectEl().value === String(id) && document.getElementById('template-name').value === nom;
+        return { pass, notes: 'lignes de ce nom=' + JSON.stringify(ids) + ', « (2) »=' + rowIdsNamed(nom + ' (2)').length + ', créations=' + counts.adds + ', mises à jour=' + counts.updates + ', écritures simultanées au plus=' + counts.maxWrites + ', contenu=' + content + ', modèle courant=' + Templates.getCurrentId() + ', liste=' + selectEl().value };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_ctrl_s_and_clicks_during_a_new_template_write_make_one_follow_up_in_the_same_row',
+    description: "Plusieurs Ctrl+S et clics pendant l'écriture d'un modèle tout neuf : une seule ligne, un seul enregistrement de plus (ils n'en font qu'un, qui lit l'état au moment où il part), jamais deux écritures en même temps",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nom = 'Double clic raccourci';
+      if (!await baseTemplate(h, 'raccourci')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        await readyNewTemplate(h, nom, 'Premier texte');
+        stub().setLatency(SLOW_WRITE);
+        await h.clickButton('btn-save');
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        await h.sleep(300);
+        pressSaveShortcut();
+        await h.sleep(300);
+        await h.clickButton('btn-save');
+        await h.sleep(300);
+        await h.focusAtEnd();
+        await h.typeText(' DERNIER');
+        pressSaveShortcut(); // le dernier geste : l'enregistrement de plus lit l'écran quand il part, pas au moment de ce geste
+        await settleWrites(h, nom, 'DERNIER', { adds: 1, updates: 1 });
+        const ids = rowIdsNamed(nom);
+        const id = ids[0];
+        const counts = countsNow();
+        const content = id != null ? contentOf(id) : '';
+        const pass = ids.length === 1 && counts.adds === 1 && counts.updates === 1 && counts.maxWrites <= 1
+          && content.indexOf('Premier texte') !== -1 && content.indexOf('DERNIER') !== -1 && Templates.getCurrentId() === id;
+        return { pass, notes: 'lignes de ce nom=' + JSON.stringify(ids) + ', créations=' + counts.adds + ', mises à jour=' + counts.updates + ', écritures simultanées au plus=' + counts.maxWrites + ', contenu=' + content };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_double_click_while_the_first_save_waits_for_the_identification_creates_one_row',
+    description: "Deux clics sur Enregistrer d'un modèle tout neuf pendant l'attente de l'identification, avant que rien ne parte vers Grist : une seule ligne, comme pendant l'écriture",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nom = 'Double clic identification';
+      if (!await baseTemplate(h, 'identification')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        await readyNewTemplate(h, nom, 'Premier texte');
+        stub().setLatency({ fetchTable: 0, applyUserActions: 300 });
+        return await slowIdentification(h, async (state) => {
+          await h.clickButton('btn-save');
+          const waiting = await waitUntil(h, () => state.waiting, 3000, 20);
+          if (!waiting) return { pass: false, notes: "l'enregistrement n'attend pas l'identification, rien à vérifier" };
+          await h.sleep(300);
+          await h.clickButton('btn-save');
+          await settleWrites(h, nom, 'Premier texte', { adds: 1, updates: 1 });
+          const ids = rowIdsNamed(nom);
+          const counts = countsNow();
+          const pass = ids.length === 1 && counts.adds === 1 && counts.updates === 1 && counts.maxWrites <= 1 && Templates.getCurrentId() === ids[0];
+          return { pass, notes: 'lignes de ce nom=' + JSON.stringify(ids) + ', créations=' + counts.adds + ', mises à jour=' + counts.updates + ', écritures simultanées au plus=' + counts.maxWrites };
+        });
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_save_as_during_a_manual_save_still_makes_a_separate_copy_and_leaves_the_original_name',
+    description: "« Enregistrer sous… » choisi pendant qu'un Enregistrer écrit encore : la copie attend la fin de l'enregistrement puis crée sa propre ligne ; l'original garde son nom et son texte enregistré, la copie devient le modèle courant, jamais deux écritures en même temps",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nomA = 'Double clic copie original';
+      const nomCopy = 'Double clic copie faite';
+      const idA = await saveTemplate(h, nomA, '<p>Contenu A</p>');
+      if (!idA) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      const asked = h.stubDialogs({ prompt: () => nomCopy });
+      try {
+        await h.focusAtEnd();
+        await h.typeText(' modifié');
+        stub().clearActionLog();
+        stub().resetInFlightStats();
+        stub().setLatency(SLOW_WRITE);
+        await h.clickButton('btn-save'); // la mise à jour de A, en vol
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        await h.sleep(400);
+        await h.clickButton('v2-btn-save-as'); // la saisie répond tout de suite : la copie doit attendre la fin de l'écriture de A
+        await settleWrites(h, nomCopy, 'modifié', { adds: 1, updates: 1 });
+        const copies = rowIdsNamed(nomCopy);
+        const counts = countsNow();
+        const pass = copies.length === 1 && nameOf(idA) === nomA && contentOf(idA).indexOf('modifié') !== -1 && contentOf(copies[0]).indexOf('modifié') !== -1
+          && counts.adds === 1 && counts.updates === 1 && counts.maxWrites <= 1
+          && Templates.getCurrentId() === copies[0] && document.getElementById('template-name').value === nomCopy && rowIdsNamed(nomA).length === 1;
+        return { pass, notes: 'copies=' + JSON.stringify(copies) + ', original=' + nameOf(idA) + ' / ' + contentOf(idA) + ', créations=' + counts.adds + ', mises à jour=' + counts.updates + ', écritures simultanées au plus=' + counts.maxWrites + ', modèle courant=' + Templates.getCurrentId() };
+      } finally { asked.restore(); autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_a_save_that_never_returns_does_not_block_the_save_button_for_good',
+    description: "Un enregistrement dont Grist ne répond jamais ne bloque pas le bouton Enregistrer au-delà d'une minute : un clic passé ce délai part aussitôt et crée la ligne",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nom = 'Double clic sans réponse';
+      if (!await baseTemplate(h, 'sans réponse')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      const realSave = Templates.save;
+      const realNow = Date.now;
+      let hungCalls = 0;
+      try {
+        await readyNewTemplate(h, nom, 'Texte');
+        Templates.save = function () { hungCalls++; return new Promise(() => {}); }; // Grist ne répond jamais
+        await h.clickButton('btn-save');
+        await h.sleep(300);
+        Templates.save = realSave;
+        Date.now = () => realNow.call(Date) + 61000; // une minute plus tard
+        await h.clickButton('btn-save');
+        await settleWrites(h, nom, 'Texte', { adds: 1, updates: 0 });
+        const ids = rowIdsNamed(nom);
+        const pass = hungCalls === 1 && ids.length === 1 && Templates.getCurrentId() === ids[0];
+        return { pass, notes: 'appels sans réponse=' + hungCalls + ', lignes de ce nom=' + JSON.stringify(ids) + ', modèle courant=' + Templates.getCurrentId() };
+      } finally { Templates.save = realSave; Date.now = realNow; autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_double_click_on_the_save_button_of_a_new_macro_template_creates_one_macro_template',
+    description: "Deux clics sur « Enregistrer » dans la fenêtre d'un macro-modèle tout neuf pendant que Grist écrit : un seul macro-modèle est créé, le clic en trop est ignoré, la fenêtre se referme et il devient le modèle courant",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nom = 'Double clic macro';
+      if (!await baseTemplate(h, 'macro')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        h.openFlyout('#v2-new-template-group');
+        await h.clickButton('v2-btn-new-macro');
+        await h.sleep(150);
+        document.getElementById('macro-editor-name').value = nom;
+        stub().clearActionLog();
+        stub().resetInFlightStats();
+        stub().setLatency(SLOW_WRITE);
+        document.getElementById('macro-editor-save').click();
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        await h.sleep(600);
+        document.getElementById('macro-editor-save').click();
+        await waitUntil(h, () => rowIdsNamed(nom).length >= 1 && inFlightNow() === 0, 20000, 100);
+        await h.sleep(1500);
+        stub().setLatency(0);
+        await untilQuiet(h);
+        const ids = rowIdsNamed(nom);
+        const counts = countsNow();
+        const modal = document.getElementById('macro-editor-modal');
+        const closed = !modal || modal.style.display === 'none';
+        const pass = ids.length === 1 && rowIdsNamed(nom + ' (2)').length === 0 && counts.adds === 1 && counts.maxWrites <= 1 && closed && Templates.getCurrentId() === ids[0];
+        return { pass, notes: 'macro-modèles de ce nom=' + JSON.stringify(ids) + ', créations=' + counts.adds + ', écritures simultanées au plus=' + counts.maxWrites + ', fenêtre fermée=' + closed + ', modèle courant=' + Templates.getCurrentId() };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosaveRace = cases;
 })();

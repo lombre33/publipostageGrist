@@ -10,7 +10,9 @@
 //   4) un vrai conflit (quelqu'un d'autre a enregistré) reste signalé même Grist lent : bandeau visible dans la fenêtre, aucune écriture pendant le gel, la version de l'autre intacte, un
 //      vrai clic sur « Recharger la dernière version » la charge et le lève ;
 //   5) (carte « Corriger » d'Antoine, 02/10) un autre modèle choisi à la vraie souris, puis « Abandonner » à la vraie question, pendant qu'un Enregistrer lent écrit : à son retour l'écran, la
-//      liste et le modèle courant restent ceux du modèle choisi, et la frappe qui suit va dans SA ligne - jamais dans celle du modèle quitté.
+//      liste et le modèle courant restent ceux du modèle choisi, et la frappe qui suit va dans SA ligne - jamais dans celle du modèle quitté ;
+//   6) (carte « Corriger » d'Antoine, 02/10) un vrai double clic sur Enregistrer d'un modèle tout neuf, puis un clic, une vraie frappe et Ctrl+S pendant que Grist écrit (~2,5 s) : une seule
+//      ligne est créée, sous le nom tapé, le geste en trop attend la première écriture et enregistre ensuite le texte à jour dans la MÊME ligne, jamais deux écritures à la fois.
 // Lancé par run-headless.mjs (groupe Node "autosaveRaceMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-autosave-race-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -334,6 +336,71 @@ console.log("\n== 5) un autre modèle choisi à la vraie souris pendant qu'un En
   check('la frappe dans « Contrat de vente » va dans sa ligne ; « Bail habitation » garde son texte et son nom',
     stored && (await rowContent(page, 1)) === '<p>texte a modifié</p>' && (await rowName(page, 1)) === 'Bail habitation' && (await rowName(page, 2)) === 'Contrat de vente',
     { a: await rowContent(page, 1), b: await rowContent(page, 2), nameA: await rowName(page, 1), nameB: await rowName(page, 2) });
+  await page.context().close();
+}
+
+// === 6) un deuxième clic sur Enregistrer pendant l'écriture d'un modèle tout neuf ===
+console.log("\n== 6) un vrai double clic, puis clic + frappe + Ctrl+S, sur Enregistrer d'un modèle tout neuf pendant que Grist écrit (écriture ~2,5 s) ==");
+{
+  const rowsNamed = (page, nom) => page.evaluate((n) => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.filter((id, i) => t.Nom[i] === n); }, nom);
+  const actions = (page, type) => page.evaluate((ty) => window.__gristStub.countActions(ty, 'Publipostage_Modeles'), type);
+  const listed = (page, nom) => page.evaluate((n) => Array.from(document.getElementById('template-select').options).filter(o => o.textContent.replace(' ★', '').trim() === n).length, nom);
+  const currentId = (page) => page.evaluate(() => Templates.getCurrentId());
+  const page = await openPage();
+  await page.evaluate(() => { localStorage.setItem('pp_autosave_enabled', 'false'); }); // l'écriture lente est celle du bouton
+  // Un modèle de départ enregistré d'abord : la table et ses colonnes existent, l'enregistrement qui suit ne fait plus que l'écriture de la ligne.
+  await pickTemplate(page, 'Bail habitation');
+  await clickIntoText(page);
+  await page.keyboard.type(' base', { delay: 30 });
+  await realClick(page, '#btn-save', 600);
+  await untilQuiet(page);
+  // 6a) le double clic
+  await realClick(page, '#btn-new', 500);
+  check('un modèle tout neuf (sans identifiant) est à l\'écran', (await currentId(page)) === null, await currentId(page));
+  await clickIntoText(page);
+  await page.keyboard.type('Premier texte', { delay: 30 });
+  await page.evaluate(() => { document.getElementById('template-name').value = 'Double clic réel'; });
+  await page.evaluate(() => { window.__gristStub.clearActionLog(); window.__clicks = 0; document.getElementById('btn-save').addEventListener('click', () => { window.__clicks++; }, true); });
+  await setLatency(page, { fetchTable: 0, applyUserActions: 2500 });
+  const save = await rectOf(page, '#btn-save');
+  await page.mouse.move(save.x - 12, save.y, { steps: 2 }); await page.mouse.move(save.x, save.y, { steps: 3 });
+  await page.mouse.click(save.x, save.y, { clickCount: 2 }); // un vrai double clic : deux enfoncements, deux relâchements
+  check('le double clic a bien envoyé deux évènements click au bouton', (await page.evaluate(() => window.__clicks)) === 2, await page.evaluate(() => window.__clicks));
+  await waitFor(page, () => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
+  await page.waitForTimeout(1500); // une écriture en trop se montrerait ici
+  const maxA = await maxWrites(page); // avant setLatency(page, 0) : il remet ce compte à zéro
+  await setLatency(page, 0);
+  await untilQuiet(page);
+  let ids = await rowsNamed(page, 'Double clic réel');
+  check('une seule ligne est créée sous ce nom, jamais « (2) »', ids.length === 1 && (await rowsNamed(page, 'Double clic réel (2)')).length === 0, { ids, second: await rowsNamed(page, 'Double clic réel (2)') });
+  check('une création, une mise à jour (le deuxième clic enregistre après la première écriture), jamais deux écritures à la fois', (await actions(page, 'AddRecord')) === 1 && (await actions(page, 'UpdateRecord')) === 1 && maxA <= 1,
+    { adds: await actions(page, 'AddRecord'), updates: await actions(page, 'UpdateRecord'), max: maxA });
+  check('la ligne porte le texte tapé, la liste et le titre disent le même nom, une seule fois', ids.length === 1 && /Premier texte/.test(String(await rowContent(page, ids[0]))) && (await listed(page, 'Double clic réel')) === 1 && (await triggerLabel(page)) === 'Double clic réel',
+    { content: ids.length ? await rowContent(page, ids[0]) : null, listed: await listed(page, 'Double clic réel'), label: await triggerLabel(page) });
+  check('le modèle courant est cette ligne, le coin d\'état dit « Enregistré »', ids.length === 1 && (await currentId(page)) === ids[0] && /Enregistré|Saved/.test(await statusOf(page)), { current: await currentId(page), status: await statusOf(page) });
+  // 6b) un clic, une vraie frappe, Ctrl+S, un clic : un seul enregistrement de plus
+  await realClick(page, '#btn-new', 500);
+  await clickIntoText(page);
+  await page.keyboard.type('Texte B', { delay: 30 });
+  await page.evaluate(() => { document.getElementById('template-name').value = 'Double clic clavier'; window.__gristStub.clearActionLog(); });
+  await setLatency(page, { fetchTable: 0, applyUserActions: 2500 });
+  await realClick(page, '#btn-save', 100);
+  const started = await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions > 0, null, 5000);
+  check('la première écriture est partie', started);
+  await clickIntoText(page);
+  await page.keyboard.type(' DERNIER', { delay: 30 }); // tapé pendant la première écriture
+  await page.keyboard.press('Control+s');
+  await realClick(page, '#btn-save', 100);
+  await waitFor(page, () => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
+  await page.waitForTimeout(1500);
+  const maxB = await maxWrites(page);
+  await setLatency(page, 0);
+  await untilQuiet(page);
+  ids = await rowsNamed(page, 'Double clic clavier');
+  check('un clic, Ctrl+S et un clic de plus : une seule ligne, une création, une mise à jour, jamais deux écritures à la fois', ids.length === 1 && (await actions(page, 'AddRecord')) === 1 && (await actions(page, 'UpdateRecord')) === 1 && maxB <= 1,
+    { ids, adds: await actions(page, 'AddRecord'), updates: await actions(page, 'UpdateRecord'), max: maxB });
+  check('la ligne porte le texte tapé pendant la première écriture, c\'est le modèle courant', ids.length === 1 && /Texte B DERNIER/.test(String(await rowContent(page, ids[0]))) && (await currentId(page)) === ids[0],
+    { content: ids.length ? await rowContent(page, ids[0]) : null, current: await currentId(page) });
   await page.context().close();
 }
 

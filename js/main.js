@@ -571,10 +571,38 @@
     I18n.onChange(syncMacroReturnBar); // le nom du macro-modèle est dans la phrase du bandeau
   }
 
+  // Un seul enregistrement manuel à la fois (carte « Corriger » d'Antoine du 02/10). Grist lent, un deuxième clic sur Enregistrer (ou Ctrl+S) pendant que le premier écrivait partait
+  // aussitôt : l'identifiant d'un modèle tout neuf n'arrive qu'à la fin de l'écriture, les deux gestes créaient donc une ligne chacun, sous le même nom - deux modèles identiques.
+  // Le deuxième attend la fin du premier (liste relue comprise), puis enregistre ce que l'écran montre ALORS, dans la même ligne ; plusieurs gestes pendant la même écriture n'en
+  // font qu'un, qui lit l'état au moment où il part (il n'y a rien à rattraper). Un enregistrement qui ne revient jamais (connexion perdue) ne bloque pas le bouton au-delà de
+  // SAVE_WATCHDOG_MS, comme les écritures de js/templates.js.
+  const SAVE_WATCHDOG_MS = 60000;
+  let saveRunning = null; // la promesse de l'enregistrement en cours
+  let saveStartedAt = 0;
+  let saveWaiting = null; // celle du geste qui attend sa fin : un seul, quel que soit le nombre de clics
+  const saveIsRunning = () => saveRunning !== null && Date.now() - saveStartedAt < SAVE_WATCHDOG_MS;
+  // Rend la main quand l'enregistrement en cours est fini, ou passé SAVE_WATCHDOG_MS.
+  function whenSaveFinished() {
+    return new Promise(resolve => {
+      const timer = setTimeout(resolve, Math.max(0, SAVE_WATCHDOG_MS - (Date.now() - saveStartedAt)));
+      saveRunning.finally(() => clearTimeout(timer)).then(resolve, resolve);
+    });
+  }
+  function onSave() {
+    if (currentTypeModele === 'macro') return runSave(); // le bouton n'y fait qu'ouvrir la fenêtre du macro-modèle : rien d'écrit, rien à faire attendre
+    if (!saveIsRunning()) {
+      saveStartedAt = Date.now();
+      const run = saveRunning = runSave().finally(() => { if (saveRunning === run) saveRunning = null; });
+      return run;
+    }
+    if (!saveWaiting) saveWaiting = whenSaveFinished().then(() => { saveWaiting = null; return onSave(); });
+    return saveWaiting;
+  }
+
   // Un macro-modèle s'édite exclusivement via sa modale (MacroEditor) - jamais Editor.getHTML() (toujours vide pour ce type, cf. loadMacroIntoEditor), qui
   // écraserait silencieusement ses slots avec un contenu vide si on laissait passer le chemin normal ci-dessous. "Enregistrer" rouvre donc directement la
   // modale plutôt que d'enregistrer quoi que ce soit lui-même.
-  async function onSave() {
+  async function runSave() {
     if (isReadOnly()) return; // Ctrl+S compris (wireSaveShortcut) : le bouton, lui, est déjà grisé
     if (currentTypeModele === 'macro') {
       const id = Templates.getCurrentId();
@@ -656,6 +684,11 @@
       }
       return;
     }
+    // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, SON identifiant au modèle courant (cf. runSave) : la copie, qui part d'un modèle sans identifiant, attend
+    // qu'il soit fini, celui d'un deuxième clic compris.
+    const epoch = autosaveEpoch;
+    while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+    if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente : la copie n'a plus d'objet
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     await onSave();
