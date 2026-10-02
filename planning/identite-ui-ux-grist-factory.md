@@ -681,7 +681,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde,
   lui, son repère « Page 2 » même sans rien derrière.
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
-  septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
+  septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
   Abréviations » met sur une ligne son titre et le réglage « Caractère déclencheur » (un champ de 44 px, « § » par défaut, gardé par navigateur comme la touche des variables ; il refuse
   une lettre, un chiffre, une espace, un délimiteur et le déclencheur des variables, en disant pourquoi, et reprend l'ancien caractère à la perte du focus), puis une phrase d'exemple, le
@@ -691,6 +691,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   formulaire dans la colonne des champs, entre le texte et les boutons ; celle du caractère, dont le champ est au bord droit de la ligne du titre, alignée sur ce bord (texte à droite,
   filet à droite). Les abréviations vivent dans la table `Publipostage_Abreviations` du document (`Utilisateur`, `Abreviation`, `Texte`) : une personne ne voit et ne change que les
   siennes (sans identité Grist, les lignes à `Utilisateur` vide) ; la table n'est créée qu'à la première abréviation ajoutée et reste cachée du choix `#Variable`.
+- Onglet « Vue » des Réglages (demandes d'Antoine du 02/10, points 16 et 16 bis : « un modèle selon la ligne », « un bouton pour mettre ce modèle par défaut pour la vue ») : les réglages propres à la
+  vue du widget, rangés en sections (un `h4.settings-section-title` chacune, séparées par un filet) - « Modèle selon la ligne » (case, règles « Si colonne = valeur → modèle » sur les lignes des macro-modèles,
+  « Si aucune règle ne correspond » : modèle par défaut / laisser le modèle ouvert / un modèle) et « Modèle par défaut de cette vue » (l'état, « Utiliser « X » pour cette vue », « Retirer »). Ils vivent dans
+  les options du widget, donc dans SA vue, et ne sont partagés qu'une fois la vue enregistrée dans Grist (le texte du haut de l'onglet le dit). L'ordre d'ouverture est la ligne qui désigne un modèle, puis le
+  modèle de la vue, puis le ★ du document ; un email ou un macro-modèle ne peut pas être le modèle de départ (bouton grisé, choix déjà enregistré ignoré). Cadre des règles et boutons grisés, jamais retirés :
+  case décochée ou lecture seule. Les **huit onglets** tiennent encore sur une ligne dans les 480 px (texte à 12 px, 1 px de marge, au lieu de 12,5 px et 2 px) : un neuvième onglet ne tiendrait plus, il
+  demande une autre place. La fenêtre garde ses 480 px.
 - Abréviations dans l'éditeur (même demande) : taper le caractère déclencheur ouvre sous le curseur la liste des abréviations de la personne, dans le même langage que le panneau `#`
   (fond de surface, liseré, ombre légère, ligne choisie sur `--surface-sunken`, texte en `--text`, jamais un gris discret qui n'atteindrait pas 4,5:1 sur la ligne choisie ; couche de
   niveau `--z-menu`, remontée à chaque placement par `ViewportFit.placePopup` : elle passe devant la barre flottante d'un tableau et devant un menu déjà ouvert). Elle se

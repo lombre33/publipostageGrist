@@ -1849,6 +1849,7 @@
     try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
+    ViewTemplate.init();
     RowTemplate.init({
       openTemplate: openTemplateForRow,
       currentId: () => Templates.getCurrentId(),
@@ -1918,8 +1919,12 @@
       catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
     }
     const defaultTemplateId = Templates.getDefaultId();
+    // Ordre d'ouverture : la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis le modèle par défaut du document (★).
+    const viewTemplateId = ViewTemplate.usableId();
     if (startupRowTemplateId != null) {
       templateSelect.value = startupRowTemplateId;
+    } else if (viewTemplateId != null) {
+      templateSelect.value = viewTemplateId;
     } else if (defaultTemplateId != null) {
       const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
       // Un modèle email ou macro ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton,
@@ -1976,6 +1981,7 @@
     wireQualityDropdown();
     Settings.wireSettingsModal();
     RowTemplatePanel.wire();
+    ViewTemplate.wirePanel();
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();

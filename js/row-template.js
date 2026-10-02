@@ -5,7 +5,7 @@
 // avec le widget (aucune lecture de plus), et ne sont partagées qu'une fois la vue enregistrée côté Grist (setOption ne pose qu'un brouillon). Forme :
 //   { enabled: true, rules: [{ column, operator, value, modeleId }], otherwise: 'default' | 'keep' | <id d'un modèle> }
 // Les règles sont celles des macro-modèles (ConditionRules.matches : mêmes opérateurs, colonnes de toutes les tables, clé de correspondance) et se lisent dans l'ordre : la
-// première qui correspond choisit le modèle. Aucune ne correspond : le modèle par défaut (★) ou, au choix, celui qui est déjà ouvert (« keep ») ou un modèle précis.
+// première qui correspond choisit le modèle. Aucune ne correspond : le modèle par défaut (celui de la vue, js/view-template.js, sinon le ★) ou, au choix, celui qui est déjà ouvert (« keep ») ou un modèle précis.
 //
 // Réglage absent ou coupé : `follow()` rend false tout de suite, sans toucher à Grist ni au document, donc l'ouverture n'a pas un appel de plus. Activé : une règle est
 // évaluée à chaque CHANGEMENT de ligne (ou quand le résultat de la ligne change), jamais à chaque mise à jour de la même ligne : un modèle ouvert à la main sur une ligne y
@@ -68,8 +68,11 @@ const RowTemplate = (function () {
 
   const templateExists = id => Templates.getCached().some(t => String(t.id) === String(id));
 
-  // Même garde qu'au démarrage (js/main.js) : un modèle email ou macro n'est jamais « le modèle par défaut » qu'on ouvre tout seul.
+  // « Le modèle par défaut » : celui de la vue (js/view-template.js) s'il y en a un, sinon le ★ du document. Même garde qu'au démarrage (js/main.js) : un modèle email ou
+  // macro n'est jamais « le modèle par défaut » qu'on ouvre tout seul.
   function defaultTemplateId() {
+    const ofView = typeof ViewTemplate !== 'undefined' ? ViewTemplate.usableId() : null;
+    if (ofView != null) return ofView;
     const id = Templates.getDefaultId();
     if (id == null) return null;
     const tpl = Templates.getCached().find(t => String(t.id) === String(id));

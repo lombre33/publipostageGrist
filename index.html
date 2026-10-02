@@ -99,7 +99,7 @@
 <link rel="stylesheet" href="css/qr-code.css?v=0.2">
 <link rel="stylesheet" href="css/search-select.css?v=0.6">
 <link rel="stylesheet" href="css/access-rights.css?v=0.5">
-<link rel="stylesheet" href="css/row-template.css?v=0.1">
+<link rel="stylesheet" href="css/row-template.css?v=0.2">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.1">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.1">
 <link rel="stylesheet" href="css/watermark.css?v=0.1">
@@ -568,6 +568,16 @@
           <p class="settings-access-locked" id="settings-rowtemplate-locked" data-i18n="settings.rowTemplate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
           <p class="settings-access-hint" data-i18n="settings.rowTemplate.exportHint">Un export en lot garde le modèle ouvert pour toutes les lignes exportées.</p>
         </section>
+        <section class="settings-section settings-view-section" id="settings-viewtemplate-section">
+          <h4 class="settings-section-title" data-i18n="settings.viewTemplate.title">Modèle par défaut de cette vue</h4>
+          <p class="settings-panel-intro" data-i18n="settings.viewTemplate.intro">Le modèle qui s'ouvre chaque fois que l'on arrive dans cette vue. Sans choix, c'est le modèle par défaut du document (★) qui s'ouvre.</p>
+          <p class="settings-viewtemplate-status" id="settings-viewtemplate-status" role="status"></p>
+          <div class="settings-viewtemplate-actions">
+            <button type="button" id="settings-viewtemplate-set" data-i18n="settings.viewTemplate.use">Utiliser le modèle ouvert pour cette vue</button>
+            <button type="button" id="settings-viewtemplate-clear" data-i18n="settings.viewTemplate.clear">Retirer</button>
+          </div>
+          <p class="settings-access-locked" id="settings-viewtemplate-locked" data-i18n="settings.viewTemplate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
         <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
@@ -611,7 +621,7 @@
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
 <script src="js/reader-mode.js?v=0.114"></script>
-<script src="js/i18n.js?v=0.87"></script>
+<script src="js/i18n.js?v=0.88"></script>
 <script src="js/shortcuts.js?v=0.4"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
@@ -669,7 +679,8 @@
 <script src="js/conditional-checkbox.js?v=0.2"></script>
 <script src="js/macro-templates.js?v=0.7"></script>
 <script src="js/macro-editor.js?v=0.39"></script>
-<script src="js/row-template.js?v=0.1"></script>
+<script src="js/view-template.js?v=0.1"></script>
+<script src="js/row-template.js?v=0.2"></script>
 <script src="js/row-template-panel.js?v=0.1"></script>
 <script src="js/template-organizer.js?v=0.3"></script>
 <script src="js/template-preferences.js?v=0.3"></script>
@@ -680,6 +691,6 @@
 <script src="js/sheet-assembly-dialog.js?v=0.1"></script>
 <script src="js/orientation-toggle.js?v=0.6"></script>
 <script src="js/clean-reading.js?v=0.1"></script>
-<script src="js/main.js?v=0.93"></script>
+<script src="js/main.js?v=0.94"></script>
 </body>
 </html>
