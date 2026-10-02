@@ -5,6 +5,8 @@
 // Grist (~700x400). Une page.evaluate ne déclenche ni un appui « trusted », ni le survol, ni Ctrl+C / Ctrl+V : c'est ici qu'on s'assure que
 //   - glisser sur quatre cases (2x2) puis cliquer la taille, la police, la couleur, le surlignage ou « Liste à puces » met en forme les quatre cases, aucune autre, et que la sélection
 //     de cases reste (la mise en forme suivante, un Ctrl+C partent de la même sélection) ; un seul Annuler défait la dernière mise en forme sur toutes les cases ;
+//   - la « Citation » (menu au survol de l'icône chaîne) entoure le contenu des quatre cases, un second clic l'en sort ; « Retrait » emboîte les éléments de chaque liste des quatre cases
+//     sous le premier et « Retrait inverse » les sort de leur liste, les deux boutons (grisés avant) sont actifs dès que les cases ont une liste, un seul Annuler rend l'état d'avant ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
 // Lancé par run-headless.mjs (groupe Node « tableCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-cells-mouse.mjs
@@ -214,6 +216,7 @@ const cellsState = page => page.evaluate(() => {
     out[(ri + 1) + ',' + (ci + 1)] = {
       text: td.textContent, size: styled('fontSize'), family: styled('fontFamily'), color: styled('color'), background: styled('backgroundColor'),
       bold: !!td.querySelector('strong, b'), list: !!td.querySelector('ul > li'), ordered: !!td.querySelector('ol > li'),
+      quote: !!td.querySelector(':scope > blockquote'), items: td.querySelectorAll('li').length, nested: td.querySelectorAll('li li').length, paragraphs: td.querySelectorAll(':scope > p').length,
     };
   }));
   return out;
@@ -306,6 +309,81 @@ async function runTheme(colorScheme) {
   await page.waitForTimeout(250);
   state = await cellsState(page);
   check(`${label} - un seul Annuler rend la liste aux quatre cases`, INSIDE.every(k => state[k].list) && OUTSIDE.every(k => !state[k].list));
+
+  // ---- 1 bis. Citation et retrait : le menu au survol de l'icône chaîne, puis les deux boutons du retrait ----
+  const hoverAndClick = async (hoverSel, targetSel, what) => {
+    const main = await boxOf(page, hoverSel);
+    await page.mouse.move(main.x, main.y, { steps: 3 });
+    await page.waitForTimeout(350);
+    const item = await realClick(page, targetSel);
+    check(`${label} - ${what} est visible dans le panneau`, !!item && item.inViewport, item);
+  };
+  const disabledOf = id => page.evaluate(i => document.getElementById(i).disabled, id);
+
+  await loadDoc(page, TABLE);
+  const quoteRect = await dragCells(page, FROM, TO);
+  check(`${label} - citation : le glissé choisit bien les quatre cases du milieu`, sameRect(quoteRect, wantRect(FROM, TO)), show(quoteRect));
+  await hoverAndClick('#v2-btn-link', '#v2-btn-citation', 'la ligne « Citation » du menu');
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - citation : le contenu des quatre cases sélectionnées entre dans une citation`, INSIDE.every(k => state[k].quote && state[k].text.length > 0), INSIDE.map(k => [k, state[k].quote]));
+  check(`${label} - citation : aucune autre case ne change`, OUTSIDE.every(k => !state[k].quote), OUTSIDE.filter(k => state[k].quote));
+  const quoteKept = await selectedRect(page);
+  check(`${label} - citation : la sélection de cases reste (mêmes quatre cases)`, sameRect(quoteKept, wantRect(FROM, TO)), show(quoteKept));
+  check(`${label} - citation : la ligne du menu est enfoncée`, await page.evaluate(() => document.getElementById('v2-btn-citation').classList.contains('is-active')));
+  await hoverAndClick('#v2-btn-link', '#v2-btn-citation', 'la ligne « Citation » du menu (second clic)');
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - un second clic sur « Citation » sort les quatre cases de leur citation`, Object.values(state).every(s => !s.quote));
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  state = await cellsState(page);
+  check(`${label} - un seul Annuler rend la citation aux quatre cases`, INSIDE.every(k => state[k].quote) && OUTSIDE.every(k => !state[k].quote), INSIDE.map(k => [k, state[k].quote]));
+
+  // Le raccourci d'origine de la citation, Ctrl+Maj+B (celui de l'éditeur ne traite que la case de tête) : au vrai clavier, sur la sélection de cases.
+  await loadDoc(page, TABLE);
+  await dragCells(page, FROM, TO);
+  await page.keyboard.press('Control+Shift+B');
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - Ctrl+Maj+B met le contenu des quatre cases sélectionnées en citation, aucune autre`, INSIDE.every(k => state[k].quote) && OUTSIDE.every(k => !state[k].quote), { inside: INSIDE.map(k => [k, state[k].quote]), outside: OUTSIDE.filter(k => state[k].quote) });
+  const shortcutKept = await selectedRect(page);
+  check(`${label} - Ctrl+Maj+B : la sélection de cases reste`, sameRect(shortcutKept, wantRect(FROM, TO)), show(shortcutKept));
+  await page.keyboard.press('Control+Shift+B');
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - Ctrl+Maj+B une seconde fois : les quatre cases sortent de leur citation`, Object.values(state).every(s => !s.quote));
+
+  const LISTS = '<p>Avant</p><table><tbody>' + Array.from({ length: ROWS }, (_, r) => '<tr>' + Array.from({ length: COLS }, (_, c) => `<td><ul><li>a${r + 1}${c + 1}</li><li>b${r + 1}${c + 1}</li><li>c${r + 1}${c + 1}</li></ul></td>`).join('') + '</tr>').join('') + '</tbody></table><p>Après</p>';
+  await loadDoc(page, LISTS);
+  const listRect = await dragCells(page, FROM, TO);
+  check(`${label} - retrait : le glissé choisit bien les quatre cases du milieu`, sameRect(listRect, wantRect(FROM, TO)), show(listRect));
+  check(`${label} - retrait : « Retrait » et « Retrait inverse » sont actifs (les cases contiennent des listes)`, !(await disabledOf('v2-btn-indent')) && !(await disabledOf('v2-btn-outdent')), { indent: await disabledOf('v2-btn-indent'), outdent: await disabledOf('v2-btn-outdent') });
+  const indentBox = await realClick(page, '#v2-btn-indent');
+  check(`${label} - le bouton « Retrait » est visible dans le panneau`, !!indentBox && indentBox.inViewport, indentBox);
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - retrait : dans chacune des quatre cases, le deuxième et le troisième éléments passent sous le premier`, INSIDE.every(k => state[k].items === 3 && state[k].nested === 2 && state[k].text === 'a' + k.replace(',', '') + 'b' + k.replace(',', '') + 'c' + k.replace(',', '')), INSIDE.map(k => [k, state[k].items, state[k].nested]));
+  check(`${label} - retrait : les autres cases gardent leurs trois éléments au même niveau`, OUTSIDE.every(k => state[k].items === 3 && state[k].nested === 0), OUTSIDE.map(k => [k, state[k].items, state[k].nested]));
+  const indentKept = await selectedRect(page);
+  check(`${label} - retrait : la sélection de cases reste`, sameRect(indentKept, wantRect(FROM, TO)), show(indentKept));
+  check(`${label} - retrait : « Retrait » se grise (plus rien à emboîter), « Retrait inverse » reste actif`, (await disabledOf('v2-btn-indent')) && !(await disabledOf('v2-btn-outdent')), { indent: await disabledOf('v2-btn-indent'), outdent: await disabledOf('v2-btn-outdent') });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  state = await cellsState(page);
+  check(`${label} - un seul Annuler rend les listes d'avant aux quatre cases`, INSIDE.every(k => state[k].items === 3 && state[k].nested === 0), INSIDE.map(k => [k, state[k].items, state[k].nested]));
+  const outdentBox = await realClick(page, '#v2-btn-outdent');
+  check(`${label} - le bouton « Retrait inverse » est visible dans le panneau`, !!outdentBox && outdentBox.inViewport, outdentBox);
+  await page.waitForTimeout(200);
+  state = await cellsState(page);
+  check(`${label} - retrait inverse : les éléments des quatre listes deviennent des paragraphes`, INSIDE.every(k => !state[k].list && state[k].paragraphs === 3), INSIDE.map(k => [k, state[k].list, state[k].paragraphs]));
+  check(`${label} - retrait inverse : les autres cases gardent leur liste`, OUTSIDE.every(k => state[k].items === 3), OUTSIDE.map(k => [k, state[k].items]));
+  const outdentKept = await selectedRect(page);
+  check(`${label} - retrait inverse : la sélection de cases reste`, sameRect(outdentKept, wantRect(FROM, TO)), show(outdentKept));
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  state = await cellsState(page);
+  check(`${label} - un seul Annuler rend les listes aux quatre cases`, INSIDE.every(k => state[k].items === 3 && state[k].list), INSIDE.map(k => [k, state[k].items, state[k].list]));
 
   // ---- 2. Copier / couper / coller / effacer au vrai clavier ----
   await loadDoc(page, TABLE);

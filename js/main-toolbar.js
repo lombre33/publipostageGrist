@@ -227,11 +227,13 @@ const MainToolbar = (function () {
     setActive('v2-btn-checklist-classic', taskListStyle === 'classic');
     setActive('v2-btn-checklist-accent-plain', taskListStyle === 'accentPlain');
     const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
-    setDisabled('v2-btn-indent', !editor.can().sinkListItem('listItem'));
-    setDisabled('v2-btn-outdent', !editor.can().liftListItem('listItem'));
+    // Sur une sélection de cases, `can()` est toujours faux (son début est avant la liste, pas dedans) : les boutons se grisent d'après les listes que les cases contiennent.
+    const cellsSelected = EditorCore.isCellSelection(editor.state.selection);
+    setDisabled('v2-btn-indent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('in') : !editor.can().sinkListItem('listItem'));
+    setDisabled('v2-btn-outdent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('out') : !editor.can().liftListItem('listItem'));
     // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
     // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
-    setActive('v2-btn-citation', editor.isActive('blockquote'));
+    setActive('v2-btn-citation', EditorCore.isQuoteActive());
     setActive('v2-btn-code-block', editor.isActive('codeBlock'));
     const inLink = editor.isActive('link');
     setActive('v2-btn-link', inLink);
@@ -475,9 +477,10 @@ const MainToolbar = (function () {
     bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
     bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
     bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));
-    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState) plutôt qu'un masquage complet du bouton.
-    bind('v2-btn-outdent', () => editor.chain().focus().liftListItem('listItem').run());
-    bind('v2-btn-indent', () => editor.chain().focus().sinkListItem('listItem').run());
+    // No-op sans erreur hors d'une liste, d'où l'état désactivé (syncToolbarState) plutôt qu'un masquage complet du bouton. Sur une sélection de cases, chaque liste des cases se décale
+    // (EditorCore.shiftListsInSelectedCells : les commandes ne regardent sinon que la case de tête, et se grisent) ; le premier élément d'une liste ne se décale pas, comme dans une case seule.
+    bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) editor.chain().focus().liftListItem('listItem').run(); });
+    bind('v2-btn-indent', () => { if (!EditorCore.shiftListsInSelectedCells('in')) editor.chain().focus().sinkListItem('listItem').run(); });
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
@@ -497,8 +500,9 @@ const MainToolbar = (function () {
     // Une icône pour trois fonctions (js/link-dialog.js) : le bouton et sa première ligne ouvrent la fenêtre du lien, les deux autres lignes mettent en forme.
     bind('v2-btn-link', () => LinkDialog.open());
     bind('v2-row-link', () => LinkDialog.open());
-    // Nœud blockquote de StarterKit, déjà géré en PDF/DOCX/mode Lecture - seul un point d'entrée manquait.
-    bind('v2-btn-citation', () => editor.chain().focus().toggleBlockquote().run());
+    // Nœud blockquote de StarterKit, déjà géré en PDF/DOCX/mode Lecture - seul un point d'entrée manquait. Sur une sélection de cases, toutes les cases entrent dans une citation (ou en sortent) :
+    // l'état voulu est l'inverse de celui que le bouton montre (la case de tête), comme pour les listes.
+    bind('v2-btn-citation', () => { if (!EditorCore.quoteSelectedCells(!EditorCore.isQuoteActive())) editor.chain().focus().toggleBlockquote().run(); });
     bind('v2-btn-code-block', toggleCodeBlock);
     // Encadré : une fenêtre (couleur, icône) pour l'insérer autour de la sélection ou, dans un encadré, pour le modifier ; signature : un morceau de document tout fait.
     bind('v2-btn-callout', () => Callout.open());

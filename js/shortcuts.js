@@ -191,7 +191,7 @@ const Shortcuts = (function () {
   const templatesList = () => { const el = document.querySelector('#v2-title-cluster .tts-trigger'); if (!usable(el)) return false; el.click(); return true; };
 
   // { id, group, label (clé i18n du nom), key (touche d'origine, '' = aucune), macKey (celle de macOS quand elle diffère), native (la touche d'origine est déjà traitée par l'éditeur,
-  // js/main.js ou js/find-replace.js), aliases (autres touches d'origine traitées de même), scope ('editor' = ne vaut pas dans un champ de saisie ; 'app' = vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de
+  // js/main.js ou js/find-replace.js), cells (sa touche d'origine, traitée par l'éditeur sur la seule case de tête d'une sélection de cases, passe par son bouton quand des cases sont sélectionnées), aliases (autres touches d'origine traitées de même), scope ('editor' = ne vaut pas dans un champ de saisie ; 'app' = vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de
   // l'élément qui montre la touche : infobulle, ligne de menu ou titre de menu), aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), run }.
   const tip = id => '#' + id;
   const ACTIONS = [
@@ -242,7 +242,7 @@ const Shortcuts = (function () {
     { id: 'toc', group: 'insert', label: 'insert.toc.tip', key: '', scope: 'editor', hint: tip('v2-btn-toc'), run: click('v2-btn-toc') },
     { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Alt+Shift+m', scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
     { id: 'link', group: 'insert', label: 'insert.link.row', key: 'Mod+k', native: true, scope: 'editor', aria: '#v2-btn-link, #v2-row-link', run: click('v2-btn-link') },
-    { id: 'citation', group: 'insert', label: 'insert.citation.tip', key: 'Mod+Shift+b', native: true, scope: 'editor', hint: tip('v2-btn-citation'), run: click('v2-btn-citation') },
+    { id: 'citation', group: 'insert', label: 'insert.citation.tip', key: 'Mod+Shift+b', native: true, cells: true, scope: 'editor', hint: tip('v2-btn-citation'), run: click('v2-btn-citation') },
     { id: 'codeBlock', group: 'insert', label: 'insert.codeBlock.tip', key: 'Mod+Alt+c', native: true, scope: 'editor', hint: tip('v2-btn-code-block'), run: click('v2-btn-code-block') },
     { id: 'callout', group: 'insert', label: 'insert.callout.row', key: '', scope: 'editor', hint: tip('v2-btn-callout'), run: click('v2-btn-callout') },
     { id: 'signature', group: 'insert', label: 'insert.signature.tip', key: '', scope: 'editor', hint: tip('v2-btn-signature'), run: click('v2-btn-signature') },
@@ -398,6 +398,11 @@ const Shortcuts = (function () {
     return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable;
   }
 
+  function onCellSelection() {
+    const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
+    return !!editor && EditorCore.isCellSelection(editor.state.selection);
+  }
+
   function onKeydown(event) {
     if (event.isComposing || event.keyCode === 229) return; // une saisie en cours (IME) : ni action, ni enregistrement
     if (recorder) {
@@ -411,8 +416,9 @@ const Shortcuts = (function () {
     if (!combo || altGr) return;
     const owner = ownerOf(combo);
     if (owner) {
-      // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici.
-      if (owner.native && !isCustomized(owner) && defaultOf(owner) === combo) return;
+      // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de cases pour une action qui le demande
+      // (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes.
+      if (owner.native && !isCustomized(owner) && defaultOf(owner) === combo && !(owner.cells && onCellSelection())) return;
       if (modalOpen() || (owner.scope === 'editor' && inTextField())) return;
       event.preventDefault();
       event.stopImmediatePropagation();

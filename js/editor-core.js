@@ -330,22 +330,113 @@ const EditorCore = (function () {
   function runOnSelectedCells(ordinary, perCell) {
     const selection = editor.state.selection;
     if (!isCellSelection(selection)) return ordinary();
-    const ends = cellEnds(selection);
-    const cells = [];
-    selection.forEachCell((node, pos) => cells.push({ node, pos }));
     const chain = editor.chain().focus();
-    cells.sort((a, b) => b.pos - a.pos).forEach(({ node, pos }) => {
+    selectedCells(selection).reverse().forEach(({ node, pos }) => {
       const range = cellTextRange(node, pos);
       if (!range) return;
       chain.setTextSelection(range);
       perCell(chain);
     });
-    return chain.command(({ tr, commands }) => commands.setCellSelection({ anchorCell: tr.mapping.map(ends.anchorCell, -1), headCell: tr.mapping.map(ends.headCell, -1) })).run();
+    return keepCellSelection(chain, cellEnds(selection)).run();
+  }
+  // Les cases d'une sélection de cases, dans l'ordre du document : { node, pos }, `pos` étant la position AVANT la case.
+  function selectedCells(selection) {
+    const cells = [];
+    selection.forEachCell((node, pos) => cells.push({ node, pos }));
+    return cells.sort((a, b) => a.pos - b.pos);
+  }
+  // Dernière commande d'une chaîne qui a déplacé le curseur de case en case : les deux cases d'angle, suivies à travers les changements, redeviennent la sélection de cases.
+  function keepCellSelection(chain, ends) {
+    return chain.command(({ tr, commands }) => commands.setCellSelection({ anchorCell: tr.mapping.map(ends.anchorCell, -1), headCell: tr.mapping.map(ends.headCell, -1) }));
   }
   // Le curseur est-il dans un nœud de ce type ? (une liste, une citation...) - lu sur l'état d'une commande en chaîne, qui voit les cases déjà traitées.
   function isInsideNode($pos, typeName) {
     for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === typeName) return true;
     return false;
+  }
+
+  // ---- Citation et retrait d'une sélection de cases ----
+  // `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de la seule case de tête, et les boutons du retrait se grisent (`can()` faux : le
+  // début d'une sélection de cases est avant la liste, pas dedans). Ici chaque case est traitée pour elle-même.
+
+  // Une case « en citation » : tout ce qu'elle contient est dans une citation (c'est ce que fait le bouton : il entoure le contenu entier de la case). Le bouton la montre enfoncée
+  // pour la case de tête d'une sélection de cases.
+  const hasQuote = cell => { let found = false; cell.forEach(child => { if (child.type.name === 'blockquote') found = true; }); return found; };
+  function isQuotedCell(cell) {
+    let quoted = cell.childCount > 0;
+    cell.forEach(child => { if (child.type.name !== 'blockquote') quoted = false; });
+    return quoted;
+  }
+  function isQuoteActive() {
+    const selection = editor.state.selection;
+    return isCellSelection(selection) ? isQuotedCell(selection.$headCell.nodeAfter) : editor.isActive('blockquote');
+  }
+  // Sort de leur citation les blocs d'une case (d'un niveau), de la dernière citation à la première : les positions des précédentes restent valables.
+  function unquoteCell(tr, pos) {
+    const quotes = [];
+    tr.doc.nodeAt(pos).forEach((child, offset) => { if (child.type.name === 'blockquote') quotes.push({ child, at: pos + 1 + offset }); });
+    quotes.reverse().forEach(({ child, at }) => {
+      const range = tr.doc.resolve(at + 1).blockRange(tr.doc.resolve(at + 1 + child.content.size));
+      if (range) tr.lift(range, tr.doc.resolve(at).depth);
+    });
+  }
+  // Entoure le contenu entier d'une case d'UNE citation (la case de tête, aujourd'hui, via le `blockRange` de la sélection de cases).
+  function quoteCell(tr, pos) {
+    const quote = tr.doc.type.schema.nodes.blockquote;
+    const cell = tr.doc.nodeAt(pos);
+    const range = tr.doc.resolve(pos + 1).blockRange(tr.doc.resolve(pos + 1 + cell.content.size));
+    if (range && quote.validContent(cell.content)) tr.wrap(range, [{ type: quote }]);
+  }
+  // Met chaque case de la sélection en citation (`wanted` vrai : celles qui ne le sont pas encore, une citation partielle est d'abord défaite pour qu'il n'y en ait qu'une) ou l'en sort
+  // (faux), en UNE transaction (un seul Annuler) ; la sélection de cases suit d'elle-même (les cases ne bougent pas, leur contenu seul change). Faux si ce n'est pas une sélection de cases.
+  function quoteSelectedCells(wanted) {
+    const selection = editor.state.selection;
+    if (!isCellSelection(selection)) return false;
+    const cells = selectedCells(selection).reverse();
+    editor.chain().focus().command(({ tr }) => {
+      cells.forEach(({ node, pos }) => {
+        if (wanted ? isQuotedCell(node) : !hasQuote(node)) return;
+        unquoteCell(tr, pos);
+        if (wanted) quoteCell(tr, pos);
+      });
+      return true;
+    }).run();
+    return true;
+  }
+
+  // Les listes de plus haut niveau (à puces ou numérotées) des cases, une plage de texte chacune, dans l'ordre du document : ce que le retrait décale d'un niveau, leurs sous-listes
+  // suivent leur élément. Le retrait va du deuxième élément au dernier (le premier n'a aucun frère avant lui où s'emboîter, comme dans une case seule : une liste d'un seul élément n'a
+  // rien à décaler) ; le retrait inverse prend la liste entière, qui sort de la liste (ses éléments deviennent des paragraphes, ses sous-listes d'un niveau de moins).
+  function listRangesInCells(cells, direction) {
+    const ranges = [];
+    cells.forEach(({ node, pos }) => {
+      node.descendants((child, offset) => {
+        if (child.type.name !== 'bulletList' && child.type.name !== 'orderedList') return true;
+        const items = [];
+        child.forEach((item, itemOffset) => { if (item.type.name === 'listItem') items.push({ item, pos: pos + 1 + offset + 1 + itemOffset }); });
+        const first = items[direction === 'in' ? 1 : 0], last = items[items.length - 1];
+        const from = first && cellTextRange(first.item, first.pos), to = last && cellTextRange(last.item, last.pos);
+        if (from && to) ranges.push({ from: from.from, to: to.to });
+        return false;
+      });
+    });
+    return ranges;
+  }
+  // Le bouton de retrait (`direction` 'in') ou de retrait inverse ('out') a-t-il quelque chose à faire dans la sélection de cases ? (sinon il reste grisé)
+  function canShiftListsInSelectedCells(direction) {
+    const selection = editor.state.selection;
+    return isCellSelection(selection) && listRangesInCells(selectedCells(selection), direction).length > 0;
+  }
+  // Décale chaque liste des cases sélectionnées : une commande par liste, de la dernière à la première (les positions des précédentes ne bougent pas), la plage de la liste étant le
+  // texte sélectionné comme le ferait la souris dans une case seule. Faux si ce n'est pas une sélection de cases.
+  function shiftListsInSelectedCells(direction) {
+    const selection = editor.state.selection;
+    if (!isCellSelection(selection)) return false;
+    const command = direction === 'in' ? 'sinkListItem' : 'liftListItem';
+    const chain = editor.chain().focus();
+    listRangesInCells(selectedCells(selection), direction).reverse().forEach(range => chain.setTextSelection(range)[command]('listItem'));
+    keepCellSelection(chain, cellEnds(selection)).run();
+    return true;
   }
 
   return {
@@ -354,5 +445,6 @@ const EditorCore = (function () {
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
+    isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,
   };
 })();

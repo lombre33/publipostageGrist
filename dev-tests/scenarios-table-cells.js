@@ -2,7 +2,8 @@
 // de la barre d'outils et le copier-coller doivent porter sur TOUTES les cases (Antoine, 02/10 : « dans un module tableau on peut bel et bien sélectionner désormais plusieurs cellules
 // d'un coup, par contre j'ai l'impression que je ne peux pas faire d'édition dessus ? Le but serait de pouvoir mettre en forme et/ou C/C la sélection »). Le gras, l'italique, le
 // souligné, le barré et l'alignement parcouraient déjà les cases (les `ranges` de la sélection) ; la police, la taille, la couleur et le surlignage rétablissaient la
-// sélection en simple texte (la case de tête seule, la sélection de cases éteinte) et les listes ne regardaient que la case de tête. Les gestes à la vraie souris et au vrai clavier
+// sélection en simple texte (la case de tête seule, la sélection de cases éteinte) et les listes ne regardaient que la case de tête. La citation et le retrait suivent (Antoine a choisi
+// « Étendre » sur la carte, 02/10) : la citation n'entourait que la case de tête, et les deux boutons du retrait restaient grisés. Les gestes à la vraie souris et au vrai clavier
 // (glisser, cliquer la barre, Ctrl+C / Ctrl+V à 700x400) sont dans dev-tests/verify-table-cells-mouse.mjs : ici les évènements sont synthétiques.
 (function () {
   const cases = [];
@@ -35,10 +36,16 @@
   // Les cases du rectangle (r1,c1)-(r2,c2) et les autres.
   const inRect = (r, c, [r1, c1, r2, c2]) => r >= Math.min(r1, r2) && r <= Math.max(r1, r2) && c >= Math.min(c1, c2) && c <= Math.max(c1, c2);
   const allCells = () => { const list = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) list.push([r, c]); return list; };
+  // La forme d'un nœud : son type et, entre parenthèses, ses enfants de bloc (« tableCell(blockquote(paragraph,paragraph)) »).
+  function shapeOf(node) {
+    const kids = [];
+    node.forEach(child => { if (!child.isInline) kids.push(shapeOf(child)); });
+    return node.type.name + (kids.length ? '(' + kids.join(',') + ')' : '');
+  }
   // Ce que porte une case : ses marques de style (taille, police, couleur, surlignage), ses listes et ses blocs.
   function cellInfo(r, c) {
     const cell = doc().nodeAt(cellPos(r, c));
-    const info = { size: [], family: [], color: [], background: [], lists: [], quotes: 0, headings: 0, text: cell.textContent };
+    const info = { size: [], family: [], color: [], background: [], lists: [], quotes: 0, headings: 0, text: cell.textContent, shape: shapeOf(cell) };
     cell.descendants(node => {
       if (node.isText) {
         node.marks.forEach(mark => {
@@ -228,6 +235,273 @@
       await sleep(60);
       const outside = doc().child(1);
       return { pass: inCell.length === 1 && inCell[0] === '12' && after.type.name === 'paragraph' && outside.type.name === 'bulletList', notes: JSON.stringify({ inCell, before: after.type.name, outside: outside.type.name }) };
+    }),
+  });
+
+  // ---- Citation et retrait : `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de la case de tête seule ----
+  const para = text => ({ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] });
+  const listItem = (text, nested) => ({ type: 'listItem', content: nested ? [para(text), nested] : [para(text)] });
+  const bulletList = (...items) => ({ type: 'bulletList', content: items });
+  const orderedList = (...items) => ({ type: 'orderedList', content: items });
+  const quote = (...blocks) => ({ type: 'blockquote', content: blocks });
+  // Un tableau 3x3 dont chaque case reçoit les blocs que `blocksOf(r, c)` renvoie (sinon son paragraphe habituel).
+  async function setCells(blocksOf) {
+    const rows = [];
+    for (let r = 0; r < ROWS; r++) {
+      const cells = [];
+      for (let c = 0; c < COLS; c++) cells.push({ type: 'tableCell', attrs: {}, content: (blocksOf && blocksOf(r, c)) || [para(`R${r}C${c} texte`)] });
+      rows.push({ type: 'tableRow', content: cells });
+    }
+    ed().commands.setContent({ type: 'doc', content: [{ type: 'table', content: rows }, para('Après')] });
+    await sleep(120);
+    // Sans cela le premier Annuler défait aussi ce contenu de départ (même groupe d'historique : moins de 500 ms plus tôt).
+    ed().commands.clearHistory();
+    await sleep(60);
+  }
+  const docJson = () => JSON.stringify(doc().toJSON());
+  const shapeAt = (r, c) => shapeOf(doc().nodeAt(cellPos(r, c)));
+  const buttonState = id => { const el = document.getElementById(id); return { disabled: el.disabled, pressed: el.classList.contains('is-active') }; };
+  const QUOTED = 'tableCell(blockquote(paragraph))', PLAIN = 'tableCell(paragraph)';
+  const ABC = () => bulletList(listItem('a'), listItem('b'), listItem('c'));
+  const ABC_SHAPE = 'tableCell(bulletList(listItem(paragraph),listItem(paragraph),listItem(paragraph)))';
+  const shapesOf = rect => allCells().map(([r, c]) => (inRect(r, c, rect) ? 'in ' : 'out ') + r + c + ' ' + shapeAt(r, c));
+
+  cases.push({
+    id: 'cells_quote_wraps_every_selected_cell_and_comes_out_of_all_on_the_second_click',
+    description: 'Quatre cases sélectionnées, un clic sur « Citation » : le contenu de chacune entre dans une citation (aucune autre case), le bouton est enfoncé et la sélection de cases reste ; un seul Annuler les en sort toutes ; un nouveau clic puis un second clic les en sortent (avant, seule la case de tête entrait dans une citation et les autres n\'en sortaient jamais)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const on = verdict(RECT, i => i.shape === QUOTED);
+      const keptOn = stillSelected(RECT);
+      const pressed = buttonState('v2-btn-citation').pressed;
+      await h.clickButton('v2-btn-undo');
+      await sleep(80);
+      const undone = verdict(RECT, i => i.quotes > 0);
+      const undoneOk = undone.reached.every(v => v === false) && undone.untouched.every(v => v === false);
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const off = verdict(RECT, i => i.quotes > 0);
+      const offOk = off.reached.every(v => v === false) && off.untouched.every(v => v === false);
+      return { pass: on.pass && keptOn && pressed && undoneOk && offOk && stillSelected(RECT), notes: JSON.stringify({ on, keptOn, pressed, undone, off, kept: stillSelected(RECT) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_quote_with_a_mixed_selection_puts_every_cell_in_one_quote',
+    description: 'Une des cases sélectionnées est déjà une citation, la case de tête non : un clic sur « Citation » met toutes les cases en citation (aucune n\'en a deux l\'une dans l\'autre), il ne la retire pas à celle qui l\'avait',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(0, 0, 0, 0);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      await selectCells(0, 0, 1, 1);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const v = verdict(RECT, i => i.shape === QUOTED);
+      return { pass: v.pass && stillSelected(RECT), notes: failNotes(v) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_quote_wraps_the_whole_content_of_cells_with_several_blocks_and_gives_it_back_unchanged',
+    description: 'Une case de trois paragraphes et une case qui ne contient qu\'une liste, sélectionnées avec deux autres : chacune garde tout son contenu dans UNE citation (la liste aussi), un second clic rend le document exactement comme il était',
+    run: async (h) => withTable(h, async () => {
+      await setCells((r, c) => (r === 0 && c === 0 ? [para('un'), para('deux'), para('trois')] : r === 0 && c === 1 ? [bulletList(listItem('a'), listItem('b'))] : null));
+      const before = docJson();
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const shapes = [shapeAt(0, 0), shapeAt(0, 1), shapeAt(1, 0), shapeAt(1, 1)];
+      const wanted = ['tableCell(blockquote(paragraph,paragraph,paragraph))', 'tableCell(blockquote(bulletList(listItem(paragraph),listItem(paragraph))))', QUOTED, QUOTED];
+      const wrapped = JSON.stringify(shapes) === JSON.stringify(wanted);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const restored = docJson() === before;
+      return { pass: wrapped && restored && stillSelected(RECT), notes: JSON.stringify({ shapes, restored }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_quote_a_partly_quoted_cell_ends_up_in_a_single_quote_or_out_of_its_quote',
+    description: 'Une case dont seul le premier paragraphe est en citation : « Citation » (case de tête sans citation) en fait une seule citation de tout son contenu, pas une citation dans une citation ; avec une case de tête en citation, le clic retire la citation de cette case aussi',
+    run: async (h) => withTable(h, async () => {
+      await setCells((r, c) => (r === 0 && c === 0 ? [quote(para('un')), para('deux')] : r === 1 && c === 1 ? [quote(para('R1C1 texte'))] : null));
+      await selectCells(0, 0, 0, 1);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const wrapped = shapeAt(0, 0) === 'tableCell(blockquote(paragraph,paragraph))' && shapeAt(0, 1) === QUOTED;
+      await h.clickButton('v2-btn-undo');
+      await sleep(60);
+      await selectCells(0, 0, 1, 1);
+      const pressed = buttonState('v2-btn-citation').pressed;
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const out = shapeAt(0, 0) === 'tableCell(paragraph,paragraph)' && shapeAt(1, 1) === PLAIN && shapeAt(0, 1) === PLAIN && shapeAt(1, 0) === PLAIN;
+      return { pass: wrapped && pressed && out && stillSelected([0, 0, 1, 1]), notes: JSON.stringify({ wrapped, pressed, out, shapes: shapesOf([0, 0, 1, 1]) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_quote_ordinary_selection_is_unchanged',
+    description: 'Hors sélection de cases, « Citation » fait comme avant : un curseur dans une case ne met en citation que le paragraphe de cette case, un second clic l\'en sort',
+    run: async (h) => withTable(h, async () => {
+      ed().chain().focus().setTextSelection(cellPos(1, 2) + 3).run();
+      await sleep(40);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const on = allCells().filter(([r, c]) => cellInfo(r, c).quotes).map(([r, c]) => r + '' + c);
+      await h.clickButton('v2-btn-citation');
+      await sleep(60);
+      const off = allCells().filter(([r, c]) => cellInfo(r, c).quotes).length;
+      return { pass: on.length === 1 && on[0] === '12' && off === 0, notes: JSON.stringify({ on, off }) };
+    }),
+  });
+
+  // La touche d'origine de la citation (Ctrl+Maj+B) est celle de TipTap, qui ne regarde que la case de tête : sur une sélection de cases elle passe par le bouton (js/shortcuts.js, `cells`).
+  // Comme au clavier : le relâchement de Maj suit. ProseMirror retient « Maj enfoncée » (`view.input.shiftKey`) jusqu'à ce keyup, et colle alors en texte brut : sans lui, le cas de collage
+  // qui vient plus loin dans ce groupe perdait son tableau (le texte tabulé arrivait dans la case).
+  const pressCtrlShiftB = () => {
+    const target = ed().view.dom, init = { bubbles: true, cancelable: true };
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'B', code: 'KeyB', keyCode: 66, which: 66, ctrlKey: true, shiftKey: true, ...init }));
+    target.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16, which: 16, ...init }));
+  };
+  cases.push({
+    id: 'cells_quote_shortcut_puts_every_selected_cell_in_a_quote_and_stays_native_elsewhere',
+    description: 'Ctrl+Maj+B avec quatre cases sélectionnées : les quatre entrent dans une citation (comme le bouton), une seconde fois elles en sortent ; avec un simple curseur dans une case, la touche reste celle de l\'éditeur (le paragraphe de cette case seulement) - avant, seule la case de tête changeait',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      pressCtrlShiftB();
+      await sleep(80);
+      const on = verdict(RECT, i => i.shape === QUOTED);
+      const keptOn = stillSelected(RECT);
+      pressCtrlShiftB();
+      await sleep(80);
+      const off = verdict(RECT, i => i.quotes > 0);
+      const offOk = off.reached.every(v => v === false) && off.untouched.every(v => v === false);
+      ed().chain().focus().setTextSelection(cellPos(2, 2) + 3).run();
+      await sleep(40);
+      pressCtrlShiftB();
+      await sleep(80);
+      const cursor = allCells().filter(([r, c]) => cellInfo(r, c).quotes).map(([r, c]) => r + '' + c);
+      return { pass: on.pass && keptOn && offOk && cursor.length === 1 && cursor[0] === '22', notes: JSON.stringify({ on, keptOn, off, cursor }) };
+    }),
+  });
+
+  // Le retrait : « Retrait » (sinkListItem) emboîte un élément sous celui qui le précède - le premier d'une liste n'a personne avant lui, comme dans une case seule ; « Retrait inverse »
+  // (liftListItem) sort une liste de sa liste. Sur une sélection de cases, les deux boutons étaient grisés (`can()` est faux : le début de la sélection est avant la liste).
+  cases.push({
+    id: 'cells_retrait_buttons_follow_the_lists_of_the_selected_cells',
+    description: 'Les deux boutons du retrait sont grisés tant que les cases sélectionnées ne contiennent aucune liste, actifs dès qu\'une d\'elles en contient une (le retrait seulement s\'il y a un deuxième élément à emboîter) - la sélection de cases les laissait toujours grisés',
+    run: async (h) => withTable(h, async () => {
+      await setCells((r, c) => (r === 0 && c === 0 ? [ABC()] : r === 0 && c === 1 ? [bulletList(listItem('seul'))] : null));
+      const state = () => ({ indent: buttonState('v2-btn-indent').disabled, outdent: buttonState('v2-btn-outdent').disabled });
+      await selectCells(1, 0, 2, 2);
+      const noList = state();
+      await selectCells(0, 0, 1, 1);
+      const withList = state();
+      await selectCells(0, 1, 1, 1);
+      const oneItem = state();
+      await selectCells(2, 0, 2, 2);
+      const noListAgain = state();
+      const pass = noList.indent && noList.outdent && !withList.indent && !withList.outdent && oneItem.indent && !oneItem.outdent && noListAgain.indent && noListAgain.outdent;
+      return { pass, notes: JSON.stringify({ noList, withList, oneItem, noListAgain }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_outdent_takes_the_list_of_every_selected_cell_out_and_one_undo_puts_them_back',
+    description: 'Une liste de trois éléments dans chaque case, quatre cases sélectionnées, un clic sur « Retrait inverse » : les éléments de ces quatre listes deviennent des paragraphes (le texte et son ordre intacts), les autres cases gardent leur liste, la sélection de cases reste ; un seul Annuler rend les quatre listes',
+    run: async (h) => withTable(h, async () => {
+      await setCells(() => [ABC()]);
+      const before = docJson();
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-outdent');
+      await sleep(60);
+      const out = verdict(RECT, i => i.shape === 'tableCell(paragraph,paragraph,paragraph)' && i.text === 'abc');
+      const kept = stillSelected(RECT);
+      await h.clickButton('v2-btn-undo');
+      await sleep(80);
+      return { pass: out.pass && kept && docJson() === before, notes: JSON.stringify({ out, kept, undone: docJson() === before }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_indent_nests_every_item_after_the_first_under_it_in_each_selected_list',
+    description: 'Une liste à puces et une liste numérotée de trois éléments, quatre cases sélectionnées, un clic sur « Retrait » : dans chaque liste le deuxième et le troisième éléments passent sous le premier (un niveau de plus, le premier reste), les autres cases sont intactes, la sélection de cases reste, « Retrait » se grise (plus rien à emboîter au premier niveau) et un seul Annuler rend les listes',
+    run: async (h) => withTable(h, async () => {
+      await setCells((r, c) => (c === 1 ? [orderedList(listItem('a'), listItem('b'), listItem('c'))] : [ABC()]));
+      const before = docJson();
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-indent');
+      await sleep(60);
+      const nested = list => `tableCell(${list}(listItem(paragraph,${list}(listItem(paragraph),listItem(paragraph)))))`;
+      const shapes = shapesOf(RECT);
+      const expected = allCells().map(([r, c]) => (inRect(r, c, RECT) ? 'in ' : 'out ') + r + c + ' ' + (inRect(r, c, RECT) ? nested(c === 1 ? 'orderedList' : 'bulletList') : (c === 1 ? ABC_SHAPE.replace(/bulletList/, 'orderedList') : ABC_SHAPE)));
+      const nestedOk = JSON.stringify(shapes) === JSON.stringify(expected);
+      const kept = stillSelected(RECT);
+      const buttons = { indentDisabled: buttonState('v2-btn-indent').disabled, outdentDisabled: buttonState('v2-btn-outdent').disabled };
+      await h.clickButton('v2-btn-undo');
+      await sleep(80);
+      return { pass: nestedOk && kept && buttons.indentDisabled && !buttons.outdentDisabled && docJson() === before, notes: JSON.stringify({ shapes, expected, kept, buttons, undone: docJson() === before }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_retrait_handles_nested_lists_and_several_lists_in_one_cell',
+    description: 'Une case avec une liste dont le premier élément porte une sous-liste, une case avec deux listes séparées par un paragraphe : « Retrait » emboîte les éléments suivants de chaque liste sous son premier (les deux listes de la seconde case en même temps), « Retrait inverse » sort chaque liste de sa liste (une sous-liste monte d\'un niveau, le paragraphe du milieu reste entre les deux)',
+    run: async (h) => withTable(h, async () => {
+      const blocksOf = (r, c) => (r === 0 && c === 0 ? [bulletList(listItem('a', bulletList(listItem('x'), listItem('y'))), listItem('b'), listItem('c'))]
+        : r === 0 && c === 1 ? [bulletList(listItem('d'), listItem('e')), para('milieu'), orderedList(listItem('f'), listItem('g'))] : null);
+      await setCells(blocksOf);
+      const before = docJson();
+      const row = [0, 0, 0, 1];
+      await selectCells(...row);
+      await h.clickButton('v2-btn-indent');
+      await sleep(60);
+      const indented = [shapeAt(0, 0), shapeAt(0, 1)];
+      const wantIndented = [
+        'tableCell(bulletList(listItem(paragraph,bulletList(listItem(paragraph),listItem(paragraph),listItem(paragraph),listItem(paragraph)))))',
+        'tableCell(bulletList(listItem(paragraph,bulletList(listItem(paragraph)))),paragraph,orderedList(listItem(paragraph,orderedList(listItem(paragraph)))))',
+      ];
+      const indentOk = JSON.stringify(indented) === JSON.stringify(wantIndented) && stillSelected(row);
+      await h.clickButton('v2-btn-undo');
+      await sleep(80);
+      const undone = docJson() === before;
+      await selectCells(...row);
+      await h.clickButton('v2-btn-outdent');
+      await sleep(60);
+      const lifted = [shapeAt(0, 0), shapeAt(0, 1)];
+      const wantLifted = [
+        'tableCell(paragraph,bulletList(listItem(paragraph),listItem(paragraph)),paragraph,paragraph)',
+        'tableCell(paragraph,paragraph,paragraph,paragraph,paragraph)',
+      ];
+      const liftOk = JSON.stringify(lifted) === JSON.stringify(wantLifted) && stillSelected(row);
+      return { pass: indentOk && undone && liftOk, notes: JSON.stringify({ indented, undone, lifted }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_retrait_ordinary_selection_is_unchanged',
+    description: 'Hors sélection de cases, « Retrait » et « Retrait inverse » font comme avant : le curseur dans le deuxième élément d\'une liste de cellule n\'emboîte que celui-là, les autres cases ne bougent pas, puis « Retrait inverse » le remet au niveau du premier',
+    run: async (h) => withTable(h, async () => {
+      await setCells(() => [ABC()]);
+      let second = null;
+      doc().nodeAt(cellPos(1, 1)).descendants((node, offset) => { if (node.isText && node.text === 'b') second = cellPos(1, 1) + 1 + offset; });
+      ed().chain().focus().setTextSelection(second + 1).run();
+      await sleep(40);
+      const inItem = ed().state.selection.$from.parent.textContent;
+      await h.clickButton('v2-btn-indent');
+      await sleep(60);
+      const nested = shapeAt(1, 1) === 'tableCell(bulletList(listItem(paragraph,bulletList(listItem(paragraph))),listItem(paragraph)))';
+      const others = allCells().filter(([r, c]) => !(r === 1 && c === 1)).every(([r, c]) => shapeAt(r, c) === ABC_SHAPE);
+      await h.clickButton('v2-btn-outdent');
+      await sleep(60);
+      const back = shapeAt(1, 1) === ABC_SHAPE;
+      return { pass: inItem === 'b' && nested && others && back, notes: JSON.stringify({ inItem, nested, others, back, shape: shapeAt(1, 1) }) };
     }),
   });
 
