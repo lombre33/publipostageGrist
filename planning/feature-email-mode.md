@@ -444,6 +444,6 @@ jamais vus sur un vrai Zimbra : un « + » devient une espace dans l'objet et le
 | Gras, couleur, image | ignorés (inchangé : boutons grisés en mode email) |
 | Tableau (venu d'un collage, le bouton est grisé) | une ligne par ligne du tableau, cellules séparées par « \| » (inchangé) |
 
-**Hors du lien.** La vraie mise en forme (puces réelles, titres, liens cliquables, tableaux) ne passe que par le presse-papiers : « Créer l'email » ouvrirait le brouillon (destinataires, objet) et copierait
-le message mis en forme, un Ctrl+V dans le corps de Zimbra (mode HTML) le colle ; Grist donne à l'iframe du widget `allow="clipboard-write"` (`app/client/components/WidgetFrame.ts`). Cela lèverait aussi la limite de
-longueur du lien. Un `.eml` ne convient pas à Zimbra web (il ne l'ouvre pas comme brouillon). Carte posée à Antoine le 02/10 (« Copier puis coller » recommandé, ou « Texte seul ») : rien n'est codé avant son choix.
+**Hors du lien (écarté par Antoine).** La vraie mise en forme (puces réelles, titres, liens cliquables, tableaux) ne passe que par le presse-papiers : « Créer l'email » aurait ouvert le brouillon (destinataires, objet) et copié
+le message mis en forme, un Ctrl+V dans le corps de Zimbra (mode HTML) l'aurait collé ; Grist donne à l'iframe du widget `allow="clipboard-write"` (`app/client/components/WidgetFrame.ts`). Cela aurait aussi levé la limite de
+longueur du lien. Un `.eml` ne convient pas à Zimbra web (il ne l'ouvre pas comme brouillon). Proposé à Antoine le 02/10 (« Copier puis coller » recommandé, ou « Texte seul ») : il a choisi « Texte seul » à 12:28. Le lien reste le seul canal, rien n'est copié dans le presse-papiers, à ne pas reproposer.

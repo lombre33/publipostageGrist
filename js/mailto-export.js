@@ -28,7 +28,7 @@
 //    en tête de ligne deviennent des espaces insécables - les lignes et les retraits du texte brut survivent (c'est pourquoi une sous-liste s'aligne par des espaces), rien d'autre
 //    (ni vraie puce, ni gras, ni lien cliquable). Défauts de Zimbra lus au même endroit, hors de notre portée et jamais vus sur un vrai Zimbra : un « + » devient une espace dans l'objet et le corps
 //    (replace(/\+/g, ' ') après le décodage) ; « & », « < » et « > » sont encodés en HTML (htmlEncode) dès la lecture du lien et rien ne les décode ensuite, ils pourraient s'afficher « &amp; ».
-//    La vraie mise en forme demande un autre canal que le lien (le presse-papiers) : carte posée à Antoine le 02/10, rien codé avant son choix.
+//    La vraie mise en forme demande un autre canal que le lien (le presse-papiers) : proposé à Antoine le 02/10, qui a choisi « Texte seul » - le lien reste le seul canal, à ne pas reproposer.
 const MailtoExport = (function () {
   // Limite pratique communément citée pour un lien mailto: multi-client
   // (Outlook desktop en particulier) - garder une marge sous le seuil "dur"

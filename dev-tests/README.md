@@ -632,7 +632,7 @@ Deux options utiles :
   `emailMouse` (`dev-tests/verify-email-mouse.mjs`, 11 contrôles) clique pour de vrai à 700×400 : « + » puis « Nouvel email », Objet et destinataire tapés, un corps avec une bulle
   `#Prenom`, puces, sous-liste, numéros, citation et lien ; « Créer l'email » ouvre UN lien (capté au clic de l'ancre, jamais suivi) que le script décode comme le fait un logiciel de
   messagerie - destinataire et objet à l'identique, CRLF, corps égal au texte attendu (la bulle résolue en « Marie »), jauge égale à la longueur du lien. `EMAIL_SHOTS=<dossier>`
-  enregistre aussi une capture. Le lien reste du texte brut : la vraie mise en forme dans Zimbra demande le presse-papiers (carte posée à Antoine le 02/10, rien codé avant son choix).
+  enregistre aussi une capture. Le lien reste du texte brut : la vraie mise en forme dans Zimbra demande le presse-papiers (proposé à Antoine le 02/10, qui a choisi « Texte seul » : à ne pas reproposer).
 
 ### Dépendances CDN et réseau bloqué
 
