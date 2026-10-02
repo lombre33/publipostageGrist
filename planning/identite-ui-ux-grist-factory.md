@@ -360,7 +360,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   pointillé, comme une image de variable, avec l'icône d'un QR code et le texte : le vrai QR code est dessiné à la Lecture et à l'export, un par ligne (dans une zone répétée, comme
   une bulle). Une colonne vide pour la ligne retire le QR code ; une cellule du widget Lien de Grist (« titre adresse ») donne l'adresse seule quand elle est tout le texte ; un nombre
   s'écrit brut ; un texte trop long ou une bibliothèque qui ne charge pas laisse « [QR code : texte trop long] » ou « [QR code indisponible] » dans la langue de l'interface, jamais
-  une image cassée. Le texte du cadre est en `--text` (le gris des images de variable ne fait que 4,39:1 sur son fond en clair). Elle a son action dans Réglages > Raccourcis
+  une image cassée. Le texte du cadre est en `--text`, comme celui d'un cadre d'image de variable (Antoine, 02/10 : « Foncer ce texte », le gris n'y faisait que 4,39:1 sur son fond en clair) ; l'icône garde le gris. Elle a son action dans Réglages > Raccourcis
   (« QR code… », sans touche d'origine), comme les autres lignes du menu.
 - Modes et droits : Édition, Lecture et Email partagent la même barre. En Lecture la barre de mise en forme est grisée
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent

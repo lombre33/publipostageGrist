@@ -668,6 +668,34 @@
     },
   });
 
+  // Cadre d'une image liée à une colonne (css/editor-v2.css) et cadre d'un QR code dont le texte contient une colonne (css/qr-code.css) : le texte « #Table.Colonne » est posé sur le fond gris
+  // du cadre (--surface-sunken). Avant : il était en --text-faint (#667085), 4,39:1 sur ce gris en clair. Réponse d'Antoine du 02/10 à la carte « Foncer le texte gris des cadres d'image de
+  // variable ? » : « Foncer ce texte ». L'icône du cadre, un tracé et non du texte, garde le gris (3:1 au moins, WCAG 1.4.11). Les cadres sont posés dans un `.tiptap` fabriqué (les règles
+  // sont écrites `.tiptap .editor-image-view…`) avec les classes que leur donne le NodeView de js/editor-nodes.js.
+  cases.push({
+    id: 'contrast_variable_image_frame_label_reaches_4_5_on_the_frame_grey_and_its_icon_keeps_3_to_1_in_light_and_dark',
+    description: 'Cadre d\'une image de variable et cadre d\'un QR code à colonne : le texte « #Table.Colonne » a 4,5:1 au moins sur le gris du cadre, en clair et en sombre (il n\'avait que 4,39:1 en clair), et l\'icône garde un gris à 3:1 au moins',
+    run: async () => {
+      const markup = '<div class="tiptap">'
+        + '<div class="editor-image-view editor-image-var-placeholder" data-probe="image de variable"><span class="editor-image-var-label">#Table.Colonne</span></div>'
+        + '<div class="editor-image-view editor-image-var-placeholder editor-image-qr-placeholder" data-probe="QR code"><span class="editor-image-var-label">https://exemple.fr/#Table.Colonne</span></div></div>';
+      return withProbe(markup, root => {
+        const byTheme = inBothThemes(() => {
+          const text = {}, icon = {};
+          for (const kind of ['image de variable', 'QR code']) {
+            const label = root.querySelector(`[data-probe="${kind}"] .editor-image-var-label`);
+            text[kind + ' : texte'] = round2(textRatio(label));
+            icon[kind + ' : icône'] = round2(textRatio(label, '::before'));
+          }
+          return { text, icon };
+        });
+        const badText = failing({ light: byTheme.light.text, dark: byTheme.dark.text }, 4.5);
+        const badIcon = failing({ light: byTheme.light.icon, dark: byTheme.dark.icon }, 3);
+        return { pass: badText.length === 0 && badIcon.length === 0, notes: JSON.stringify({ badText, badIcon, byTheme }) };
+      });
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

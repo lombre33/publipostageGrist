@@ -22,7 +22,7 @@
 .pp-qr-column-host { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* === Dans l'éditeur === Un QR code dont le texte contient une colonne n'a pas d'image avant la Lecture : le cadre carré d'une image de variable, avec l'icône d'un QR code et son texte. */
-/* Le texte du cadre est en --text : le gris des images de variable (--text-muted, #667085) n'y fait que 4,39:1 sur le fond du cadre en clair (< 4,5:1) ; l'icône, un tracé et non
+/* Le texte du cadre est en --text, comme celui d'une image de variable (css/editor-v2.css : le gris n'y faisait que 4,39:1 sur le fond du cadre en clair) ; l'icône, un tracé et non
    du texte, garde le gris (≥ 3:1). */
 .editor-image-qr-placeholder .editor-image-var-label { font-size: 10.5px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
 .editor-image-qr-placeholder .editor-image-var-label::before {
