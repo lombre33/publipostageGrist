@@ -66,6 +66,7 @@ const Comments = (function () {
           { id: 'CreeLe', type: 'DateTime' },
         ]]
       ]);
+      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
     } catch (e) { console.error('[Comments] Erreur création table commentaires', e); }
   }
 

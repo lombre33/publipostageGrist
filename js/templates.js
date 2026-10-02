@@ -38,6 +38,7 @@ const Templates = (function () {
           { id: 'DateModif', type: 'DateTime' }
         ]]
       ]);
+      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME); // page repliée par défaut dans le volet des pages (js/page-tree.js) ; sans attendre : rien n'en dépend
       return true;
     } catch (e) {
       console.error('Erreur création table modèles', e);

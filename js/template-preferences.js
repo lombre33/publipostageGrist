@@ -46,6 +46,7 @@ const TemplatePreferences = (function () {
             { id: 'Replie', type: 'Bool' },
           ]]
         ]);
+        if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
       } catch (e) {
         console.error('Erreur création table préférences de rangement', e);
         return;

@@ -530,6 +530,7 @@ const GristAPI = (function () {
         ]]
       ]);
       _rawTables.push(LINKS_TABLE_NAME);
+      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(LINKS_TABLE_NAME);
     } catch (e) {
       console.error('[GristAPI] Erreur création table de liaison', e);
     }
@@ -637,6 +638,7 @@ const GristAPI = (function () {
       ]],
     ]);
     _rawTables.push(USER_PROBE_TABLE_NAME);
+    if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(USER_PROBE_TABLE_NAME);
   }
   let _userEmailCache = null;
   async function getCurrentUserEmail() {

@@ -69,6 +69,7 @@ const GROUPS = {
   templateTree: 'scenarios-template-tree',
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
+  pageTree: 'scenarios-page-tree', // rangement des pages que Grist crée avec les tables du widget (js/page-tree.js) : sous celle des modèles, repliées par défaut
   templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle
   contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',

@@ -186,6 +186,7 @@ const TextExpansion = (function () {
         { id: 'Abreviation', type: 'Text' },
         { id: 'Texte', type: 'Text' },
       ]]]);
+      if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(TABLE_NAME);
     }
     tableKnown = true;
   }

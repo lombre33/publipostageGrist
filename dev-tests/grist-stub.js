@@ -78,7 +78,12 @@
   state.rows.Publipostage_LiensTables = columnarEmpty(['TableCible', 'Mode', 'ColonneCible', 'ColonneSource']);
   state.rows.Publipostage_UserProbe = columnarEmpty(['Email']);
   state.rows.Publipostage_Commentaires = columnarEmpty(['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']);
-  state.rows._grist_Tables = columnarEmpty(['tableId']);
+  state.rows._grist_Tables = columnarEmpty(['tableId', 'primaryViewId']);
+  // Volet des pages du document (js/page-tree.js) : une vue et une page par table créée par AddTable, comme useractions.py:doAddView - voir addPage / resetPages ci-dessous.
+  // Vide au départ : les quatre tables internes pré-remplies représentent un document déjà migré dont on ne connaît pas le volet ; un scénario le pose avec resetPages.
+  state.rows._grist_Views = columnarEmpty(['name']);
+  state.rows._grist_Pages = columnarEmpty(['viewRef', 'indentation', 'pagePos', 'options']);
+  state.primaryViewOf = {}; // tableId -> id de sa vue principale (primaryViewId)
   state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
 
   const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
@@ -120,13 +125,11 @@
     // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
     // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
     // reconstruit tout à chaque fois à partir de state.tables/columns/choices.
-    const gt = columnarEmpty(['tableId']);
     const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol']);
     let rowId = 1;
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = rowId++; }));
     state.tables.forEach((t, tIdx) => {
-      gt.id.push(tIdx + 1); gt.tableId.push(t);
       Object.keys(state.columns[t] || {}).forEach(colId => {
         const choices = state.choices[t] && state.choices[t][colId];
         const helper = state.displayCols[t] && state.displayCols[t][colId];
@@ -138,8 +141,66 @@
         gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
       });
     });
-    state.rows._grist_Tables = gt;
+    syncTableRows();
     state.rows._grist_Tables_column = gtc;
+  }
+
+  // _grist_Tables : une ligne par table de state.tables (id = rang + 1, comme avant), puis celles qui n'ont qu'une page (créées par AddTable sans passer par setVariables).
+  function syncTableRows() {
+    const gt = columnarEmpty(['tableId', 'primaryViewId']);
+    const ids = state.tables.concat(Object.keys(state.primaryViewOf).filter(t => state.tables.indexOf(t) === -1));
+    ids.forEach((t, i) => { gt.id.push(i + 1); gt.tableId.push(t); gt.primaryViewId.push(state.primaryViewOf[t] || 0); });
+    state.rows._grist_Tables = gt;
+  }
+
+  // Ce que fait AddTable dans Grist (useractions.py:doAddView) : une vue du nom de la table, et sa page au premier niveau, tout en bas du volet.
+  function addPage(tableId, indentation) {
+    const views = state.rows._grist_Views;
+    const pages = state.rows._grist_Pages;
+    const viewId = views.id.length ? Math.max.apply(null, views.id) + 1 : 1;
+    views.id.push(viewId); views.name.push(tableId);
+    const pageId = pages.id.length ? Math.max.apply(null, pages.id) + 1 : 1;
+    const pos = pages.pagePos.length ? Math.max.apply(null, pages.pagePos) + 1 : 1;
+    pages.id.push(pageId); pages.viewRef.push(viewId); pages.indentation.push(indentation || 0); pages.pagePos.push(pos); pages.options.push('');
+    state.primaryViewOf[tableId] = viewId;
+    syncTableRows();
+    return viewId;
+  }
+
+  // Pose un volet de pages connu : `layout` = [{ table, indentation?, options? }, ...] dans l'ordre du volet (indentation 0 par défaut). Les tables nommées ici existent
+  // pour la suite (listTables ne change pas : une table du volet qui n'est pas dans state.tables n'est qu'une page).
+  function resetPages(layout) {
+    state.rows._grist_Views = columnarEmpty(['name']);
+    state.rows._grist_Pages = columnarEmpty(['viewRef', 'indentation', 'pagePos', 'options']);
+    state.primaryViewOf = {};
+    layout.forEach(entry => {
+      addPage(entry.table, entry.indentation || 0);
+      const pages = state.rows._grist_Pages;
+      pages.options[pages.options.length - 1] = entry.options || '';
+    });
+    syncTableRows();
+  }
+
+  // Lecture du volet dans l'ordre où Grist l'affiche : [{ table, indentation, collapsed }, ...].
+  function readPages() {
+    const pages = state.rows._grist_Pages;
+    const tableOfView = {};
+    Object.keys(state.primaryViewOf).forEach(t => { tableOfView[state.primaryViewOf[t]] = t; });
+    return pages.id.map((id, i) => {
+      let options = {};
+      try { options = pages.options[i] ? JSON.parse(pages.options[i]) : {}; } catch (e) { /* option illisible : comme absente */ }
+      return { id, table: tableOfView[pages.viewRef[i]] || null, indentation: pages.indentation[i], pagePos: pages.pagePos[i], collapsed: options.collapsed === true };
+    }).sort((a, b) => a.pagePos - b.pagePos);
+  }
+
+  // Position d'une page quand on met à jour `pagePos` : null = tout en bas ; la position d'une autre page = juste avant elle (relabeling.py:prepare_inserts, comme le fait le
+  // glisser-déposer du volet) ; sinon la valeur donnée.
+  function resolvePagePos(pages, rowId, wanted) {
+    const others = pages.id.map((id, i) => ({ id, pos: pages.pagePos[i] })).filter(p => p.id !== rowId);
+    if (wanted == null) return others.length ? Math.max.apply(null, others.map(p => p.pos)) + 1 : 1;
+    if (!others.some(p => p.pos === wanted)) return wanted;
+    const before = others.filter(p => p.pos < wanted).map(p => p.pos);
+    return ((before.length ? Math.max.apply(null, before) : 0) + wanted) / 2;
   }
 
   function setRows(tableId, rows) {
@@ -237,6 +298,7 @@
         const cols = action[2] || [];
         if (state.tables.indexOf(tableId) === -1 && INTERNAL_TABLES.indexOf(tableId) === -1) state.tables.push(tableId);
         if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(cols.map(c => c.id));
+        if (!state.primaryViewOf[tableId]) addPage(tableId, 0);
         retValues.push({ tableId });
       } else if (type === 'AddRecord' || type === 'BulkAddRecord') {
         const fields = action[3] || {};
@@ -267,8 +329,9 @@
         retValues.push(newId);
       } else if (type === 'UpdateRecord') {
         const rowId = action[2];
-        const fields = action[3] || {};
+        let fields = action[3] || {};
         const table = state.rows[tableId];
+        if (tableId === '_grist_Pages' && table && 'pagePos' in fields) fields = Object.assign({}, fields, { pagePos: resolvePagePos(table, rowId, fields.pagePos) });
         if (table) {
           const unknown = Object.keys(fields).find(k => !(k in table));
           if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
@@ -395,7 +458,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
