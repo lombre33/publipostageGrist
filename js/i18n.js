@@ -1218,6 +1218,11 @@ const I18n = (function () {
     'schemaRenames.status': { fr: 'Mis à jour après un renommage dans Grist : {parts}.', en: 'Updated after a rename in Grist: {parts}.' },
     'schemaRenames.part.variables': { fr: '{count} {count|variable|variables} dans {models} {models|modèle|modèles}', en: '{count} {count|variable|variables} in {models} {models|template|templates}' },
     'schemaRenames.part.links': { fr: '{count} {count|clé de correspondance|clés de correspondance}', en: '{count} matching {count|key|keys}' },
+    // Avertissement d'ouverture (js/settings-columns.js) : un réglage Accès ou Selon la ligne cite une colonne, ou la table des droits, qui n'existe plus dans Grist. Le titre est celui de l'onglet.
+    'settingsColumns.quoted': { fr: '« {name} »', en: '“{name}”' },
+    'settingsColumns.part.columns': { fr: '{title} : {count|la colonne|les colonnes} {names} {count|n’existe|n’existent} plus.', en: '{title}: {count|the column|the columns} {names} {count|no longer exists|no longer exist}.' },
+    'settingsColumns.part.table': { fr: '{title} : la table « {name} » n’existe plus.', en: '{title}: the table “{name}” no longer exists.' },
+    'settingsColumns.status': { fr: '{parts} À re-choisir dans les Réglages.', en: '{parts} Choose again in Settings.' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

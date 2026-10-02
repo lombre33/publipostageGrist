@@ -87,6 +87,7 @@ const GROUPS = {
   varTextPath: 'scenarios-var-text-path',
   varColumn: 'scenarios-var-column', // bouton « Colonne… » de la barre d'une bulle : changer ou réparer la colonne d'une variable (js/variable-column.js)
   schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
+  settingsColumns: 'scenarios-settings-columns', // avertissement d'ouverture : Réglages > Accès ou > Selon la ligne cite une colonne (ou la table des droits) qui n'existe plus dans Grist (js/settings-columns.js)
   varZero: 'scenarios-var-zero',
   varNumber: 'scenarios-var-number-default',
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
@@ -144,6 +145,7 @@ const NODE_SCRIPTS = {
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   rowTemplateMouse: 'verify-row-template-mouse.mjs', // modèle selon la ligne (Réglages > Selon la ligne) à la vraie souris dans 700x400 : onglets lisibles (FR, EN), case, colonne / valeur / modèle dans leurs listes avec recherche, option écrite, ouverture à la fermeture, ligne suivante en édition et en Lecture
   schemaRenamesOpen: 'verify-schema-renames-open.mjs', // ouverture réelle du widget après un renommage dans Grist : rien avant l'affichage du modèle, modèle réécrit et redessiné, message dans 700x400, rien d'écrit à l'ouverture suivante
+  settingsColumnsOpen: 'verify-settings-columns-open.mjs', // ouverture réelle du widget quand Accès ou Selon la ligne cite une colonne disparue : rien avant l'affichage du modèle, avertissement devant « Mis à jour après un renommage… », entier au survol dans 700x400, rien d'écrit
   templateStartupMouse: 'verify-template-startup-mouse.mjs', // modèle ouvert au démarrage, faux Grist semé avant l'init : la ligne qui désigne un modèle, puis le modèle de la vue, puis le ★ ; un choix de vue supprimé ou devenu email est ignoré
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
   runnerGroupLoad: 'verify-runner-group-load.mjs', // le lanceur lui-même : un groupe dont le fichier existe mais ne se charge pas (SyntaxError) est un ECHEC avec l'erreur de la page, un fichier absent de la branche reste annoncé et sauté ; lance une copie du lanceur sur deux groupes d'essai, un navigateur

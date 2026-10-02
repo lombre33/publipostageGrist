@@ -2084,7 +2084,14 @@
     // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
     setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
     // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.
-    SchemaRenames.checkAfterOpen({ isUntouched: () => !hasEditsToConfirmBeforeLeaving(), notify: setStatus }).catch(e => console.warn('[main] suivi des renommages impossible', e));
+    // Puis les réglages Accès et Selon la ligne qui citent une colonne disparue (js/settings-columns.js), qui passent APRÈS : le coin d'état n'a qu'une ligne, et l'avertissement - il demande une action - se lit
+    // en premier ; « Mis à jour après un renommage… » le suit au lieu d'être effacé (message entier au survol, js/viewport-fit.js).
+    const untouched = () => !hasEditsToConfirmBeforeLeaving();
+    let renamedMessage = '';
+    SchemaRenames.checkAfterOpen({ isUntouched: untouched, notify: msg => { renamedMessage = msg; setStatus(msg); } })
+      .catch(e => console.warn('[main] suivi des renommages impossible', e))
+      .then(() => SettingsColumns.checkAfterOpen({ isUntouched: untouched, notify: (msg, isError) => setStatus(renamedMessage ? msg + ' ' + renamedMessage : msg, isError) }))
+      .catch(e => console.warn('[main] vérification des réglages impossible', e));
   }
 
   // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire
