@@ -322,16 +322,20 @@ const Variables = (function () {
   }
   // ReaderMode.resolveFilename() sait déjà remplacer un motif texte brut "#Cle" par la vraie valeur à l'export (regex sur la valeur du champ) - insérer
   // directement "#Cle" en texte, sans badge (un <input> ne peut de toute façon pas contenir de HTML), est donc suffisant.
-  function insertFilenameVariable(item) {
+  // Une variable d'une AUTRE table demande sa clé de correspondance (ensureLinkConfigured) quand on la choisit dans la liste d'un champ qui n'est pas dans une fenêtre - nom du PDF, Objet,
+  // À, Cc, Cci -, comme à l'insertion d'une bulle du corps : sans clé, « réinsérez la variable pour la configurer » (variables.error.noMatching) ne menait nulle part. Refusée, rien n'est
+  // posé et le texte tapé reste. Les champs d'une fenêtre gardent leur propre moment : le calcul demande ses clés à la validation.
+  async function insertFilenameVariable(item) {
     const state = filenameInputState;
     if (!state) return;
     const { el, start, end } = state;
+    hide();
+    filenameInputState = null;
+    if (!el.closest('.pp-modal') && !(await ensureLinkConfigured(item))) { el.focus(); el.setSelectionRange(end, end); return; }
     const value = el.value;
     const insertion = triggerChar() + item.key;
     el.value = value.slice(0, start) + insertion + value.slice(end);
     const newCaret = start + insertion.length;
-    hide();
-    filenameInputState = null;
     el.focus();
     el.setSelectionRange(newCaret, newCaret);
     insertingFilenameVariable = true;
@@ -426,6 +430,16 @@ const Variables = (function () {
     if (!rawRowByRecord.has(record)) rawRowByRecord.set(record, GristAPI.fetchRowById(table, record.id).catch(() => null));
     return rawRowByRecord.get(record);
   }
+  // Identifiant de la ligne que désigne la colonne Référence `column` de la ligne courante de `tableId`. fetchTable (export en lot) le donne tel quel, mais grist.onRecord (Lecture, export
+  // de la ligne courante) livre la valeur AFFICHÉE (« Projet Alpha ») ou un objet Reference, qui ne retrouve aucune ligne (« [ERREUR: ligne introuvable] » à la place de la valeur, dans le
+  // nom du PDF comme dans le corps) : il est relu sur la ligne brute, comme ruleSourceValue le fait pour la colonne source d'une règle. Sans ligne brute (ligne « nouvelle »), la valeur telle quelle.
+  async function referencedRowId(tableId, column, record) {
+    if (!GristAPI.isRawRow(record)) {
+      const raw = await rawRowOf(tableId, record);
+      if (raw && column in raw) return unwrapRefValue(raw[column]);
+    }
+    return unwrapRefValue(record[column]);
+  }
 
   // Valeur de la colonne source d'une règle "match" pour la ligne courante. Une colonne Référence comparée à l'identifiant de ligne de la table cible doit
   // fournir l'identifiant RÉFÉRENCÉ : fetchTable (export en lot) le donne tel quel, un entier, mais grist.onRecord (mode Lecture, export de la ligne
@@ -506,9 +520,9 @@ const Variables = (function () {
     if (rule) return { rows: await resolveLinkedRows(varTable, rule, record, resolvedTableId, opts), multi: rule.mode !== 'singleton' };
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
     if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
-    const refId = record[refCols[0]];
+    const refId = await referencedRowId(resolvedTableId, refCols[0], record);
     if (!refId) return { rows: [] };
-    const linkedRow = await GristAPI.fetchRowById(varTable, unwrapRefValue(refId));
+    const linkedRow = await GristAPI.fetchRowById(varTable, refId);
     if (!linkedRow) return { error: I18n.t('variables.error.rowNotFound', { table: varTable }) };
     return { rows: [linkedRow] };
   }
@@ -587,9 +601,8 @@ const Variables = (function () {
     if (rule) return await resolveRawValueWithRule(varTable, varColumn, rule, record, resolvedTableId, opts);
     const refCols = await GristAPI.findReferenceColumns(resolvedTableId, varTable);
     if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
-    const refId = record[refCols[0]];
-    if (!refId) return { value: null };
-    const rowId = unwrapRefValue(refId);
+    const rowId = await referencedRowId(resolvedTableId, refCols[0], record);
+    if (!rowId) return { value: null };
     const linkedRow = await GristAPI.fetchRowById(varTable, rowId);
     if (!linkedRow) return { error: I18n.t('variables.error.rowNotFound', { table: varTable }) };
     return { value: cellValue(varTable, varColumn, linkedRow) };

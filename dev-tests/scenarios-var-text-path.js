@@ -289,6 +289,113 @@
     },
   });
 
+  // --- Clé de correspondance des champs texte (retour d'Antoine du 2026-10-02, point 4 : « les variables dans le titre de l'export ne déclenchent pas la modale de choix des références
+  // le cas échéant, ou la référence ne se résout pas bien (message d'erreur à la place de la valeur) »). Une variable d'une AUTRE table demande sa clé quand on la choisit dans la liste
+  // # d'un champ texte, comme à l'insertion d'une bulle du corps ; sans clé, la colonne Référence de la page qui mène à cette table suffit, y compris pour la ligne affichée. ---
+  const keyWindow = () => document.getElementById('link-config-modal');
+  const keyWindowOpen = () => !!keyWindow() && keyWindow().style.display === 'flex';
+  const closeKeyWindow = async (h) => { if (keyWindowOpen()) { document.getElementById('link-config-cancel').click(); await h.sleep(40); } };
+  const TEXT_FIELDS = ['pdf-filename-template', 'v2-email-subject', 'v2-email-to', 'v2-email-cc', 'v2-email-cci'];
+  const ruleOf = table => { const rule = GristAPI.getLinkRule(table); return rule ? [rule.mode, rule.colonneCible, rule.colonneSource] : null; };
+
+  cases.push({
+    id: 'vartextpath_a_table_the_page_refers_to_resolves_without_a_key_from_the_displayed_record',
+    description: 'Sans clé de correspondance pour TpProjet, la colonne Référence de la page qui y mène suffit : #TpProjet.Nom et #TpProjet.Accompagnateur.Email se résolvent dans le nom du PDF et dans les champs email pour la ligne affichée (grist.onRecord livre le texte « Projet Alpha », pas l’identifiant de ligne) comme pour chaque ligne d’un export en lot, jamais en « [ERREUR: ligne introuvable dans TpProjet] »',
+    run: async (h) => {
+      await seed(h);
+      await GristAPI.deleteLinkRule('TpProjet');
+      const rows = await GristAPI.fetchTableRows(PAGE);
+      const template = '#TpNotifications.Titre - #TpProjet.Nom (#TpProjet.Accompagnateur.Email)';
+      const live = [await filename(template), await filename(template, RECORD_2)];
+      const subject = await text(template);
+      const batch = [];
+      for (const row of rows) batch.push(await filename(template, row));
+      const expectedLive = ['Notif 1 - Projet Alpha (jean.dupont@ex.fr)', 'Notif 2 - Projet Beta ()'];
+      const expectedBatch = [...expectedLive, 'Notif 3 - Projet Gamma ()'];
+      const pass = JSON.stringify(live) === JSON.stringify(expectedLive) && subject === expectedLive[0] && JSON.stringify(batch) === JSON.stringify(expectedBatch) && !ruleOf('TpProjet');
+      return { pass, notes: JSON.stringify({ live, subject, batch, rule: ruleOf('TpProjet') }) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_picking_a_variable_of_an_unlinked_table_opens_the_key_window_in_every_text_field',
+    description: 'Choisir #TpProjet.Nom dans la liste du nom du PDF, de l’Objet, de À, de Cc ou de Cci, alors que TpProjet n’a pas de clé de correspondance, ouvre la fenêtre de la clé « TpNotifications → TpProjet » (comme l’insertion d’une bulle du corps) ; tant qu’elle est ouverte, le champ garde le texte tapé',
+    run: async (h) => {
+      await seed(h);
+      await GristAPI.deleteLinkRule('TpProjet');
+      const seen = {};
+      try {
+        for (const id of TEXT_FIELDS) {
+          const input = field(id);
+          await type(h, input, 'Suivi_#TpProjet.No');
+          press(input, 'Enter');
+          await h.sleep(200);
+          const open = keyWindowOpen();
+          seen[id] = { open, title: open ? document.getElementById('link-config-title').textContent : null, value: input.value };
+          await closeKeyWindow(h);
+          await reset(h, input);
+        }
+      } finally { await closeKeyWindow(h); }
+      const pass = TEXT_FIELDS.every(id => seen[id].open && seen[id].title === 'TpNotifications → TpProjet' && seen[id].value === 'Suivi_#TpProjet.No');
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_the_key_confirmed_inserts_the_variable_and_the_key_cancelled_inserts_nothing',
+    description: 'Dans le nom du PDF, la clé refusée ne pose rien (le texte tapé reste, aucune règle n’est écrite, la liste est fermée) ; la clé confirmée (celle que la fenêtre propose : identifiant de ligne = colonne Projet) est enregistrée, la variable est posée à la place de la saisie et le nom se résout pour la ligne affichée',
+    run: async (h) => {
+      await seed(h);
+      await GristAPI.deleteLinkRule('TpProjet');
+      const name = field('pdf-filename-template');
+      let cancelled; let confirmed; let resolved;
+      try {
+        await type(h, name, 'Suivi_#TpProjet.No');
+        press(name, 'Enter');
+        await h.sleep(200);
+        const wasOpen = keyWindowOpen();
+        document.getElementById('link-config-cancel').click();
+        await h.sleep(60);
+        cancelled = { wasOpen, open: keyWindowOpen(), value: name.value, rule: ruleOf('TpProjet'), list: listed() };
+        await reset(h, name);
+        await type(h, name, 'Suivi_#TpProjet.No');
+        press(name, 'Enter');
+        await h.sleep(200);
+        const reOpened = keyWindowOpen();
+        document.getElementById('link-config-confirm').click();
+        await h.sleep(120);
+        confirmed = { reOpened, open: keyWindowOpen(), value: name.value, rule: ruleOf('TpProjet'), list: listed() };
+        resolved = await filename(name.value);
+      } finally { await closeKeyWindow(h); await reset(h, name); }
+      const pass = cancelled.wasOpen && !cancelled.open && cancelled.value === 'Suivi_#TpProjet.No' && cancelled.rule === null && cancelled.list === null
+        && confirmed.reOpened && !confirmed.open && confirmed.value === 'Suivi_#TpProjet.Nom' && JSON.stringify(confirmed.rule) === JSON.stringify(['match', 'id', 'Projet']) && confirmed.list === null && resolved === 'Suivi_Projet Alpha';
+      return { pass, notes: JSON.stringify({ cancelled, confirmed, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'vartextpath_picking_a_variable_of_a_linked_table_or_of_the_page_table_asks_nothing',
+    description: 'Une variable de la table de la page, d’une table déjà liée ou d’un chemin qui part d’une table liée (#TpProjet.Accompagnateur.Email) se pose sans aucune fenêtre, comme avant',
+    run: async (h) => {
+      await seed(h);
+      const to = field('v2-email-to');
+      const seen = {};
+      try {
+        for (const [name, typed] of Object.entries({ page: '#TpNotifications.Ti', linked: '#TpProjet.No', path: '#TpProjet.Accompagnateur.Em' })) {
+          await type(h, to, typed);
+          press(to, 'Enter');
+          await h.sleep(150);
+          seen[name] = { open: keyWindowOpen(), value: to.value };
+          await closeKeyWindow(h);
+          await reset(h, to);
+        }
+      } finally { await closeKeyWindow(h); }
+      const pass = !seen.page.open && !seen.linked.open && !seen.path.open
+        && seen.page.value === '#TpNotifications.Titre' && seen.linked.value === '#TpProjet.Nom' && seen.path.value === '#TpProjet.Accompagnateur.Email';
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varTextPath = cases;
 })();

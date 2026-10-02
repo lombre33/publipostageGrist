@@ -444,9 +444,15 @@
     finally { GristAPI.getLinkRule = realGetLinkRule; console.error = realConsoleError; }
     return out;
   }
-  // VpProjet sans règle : la Référence Projet de la page mène à une ligne (99) qui n'existe pas.
+  // VpProjet sans règle : la Référence Projet de la page mène à une ligne (99) qui n'existe pas. La ligne livrée à la page porte le texte affiché, jamais l'identifiant :
+  // le widget relit l'identifiant sur la ligne brute de la table (Variables.referencedRowId) - la ligne 3 de VpNotifications pointe donc vers la ligne 99 dans la table.
   async function missingRowResults(h) {
     await seed(h, { noProjetRule: true });
+    window.__gristStub.setRows('VpNotifications', [
+      { id: 1, Titre: 'Notif 1', Projet: 1, gristHelper_Display: 'Projet Alpha' },
+      { id: 2, Titre: 'Notif 2', Projet: 2, gristHelper_Display: 'Projet Beta' },
+      { id: 3, Titre: 'Notif 3', Projet: 99, gristHelper_Display: '' },
+    ]);
     const row = { id: 3, Titre: 'Notif 3', Projet: 99 };
     return [await readVar('VpProjet', 'Nom', 'VpNotifications', row), await readVar('VpProjet', 'Nom.Email', 'VpNotifications', row)];
   }
