@@ -1132,6 +1132,10 @@ const I18n = (function () {
     'varToolbar.columnBroken': { fr: 'Cette variable ne trouve plus sa colonne : choisir la bonne…', en: 'This variable can no longer find its column: pick the right one…' },
     'varToolbar.columnBlock': { fr: 'Disponible pour une variable, pas pour un bloc de texte', en: 'Available for a variable, not for a text block' },
     'varToolbar.columnCheckbox': { fr: 'Disponible pour une variable, pas pour une case conditionnelle', en: 'Available for a variable, not for a conditional checkbox' },
+    // Suivi des renommages de Grist (js/schema-renames.js) : le coin d'état, une fois les modèles réécrits.
+    'schemaRenames.status': { fr: 'Mis à jour après un renommage dans Grist : {parts}.', en: 'Updated after a rename in Grist: {parts}.' },
+    'schemaRenames.part.variables': { fr: '{count} {count|variable|variables} dans {models} {models|modèle|modèles}', en: '{count} {count|variable|variables} in {models} {models|template|templates}' },
+    'schemaRenames.part.links': { fr: '{count} {count|clé de correspondance|clés de correspondance}', en: '{count} matching {count|key|keys}' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

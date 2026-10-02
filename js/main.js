@@ -1963,6 +1963,8 @@
     AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.
+    SchemaRenames.checkAfterOpen({ isUntouched: () => !hasEditsToConfirmBeforeLeaving(), notify: setStatus }).catch(e => console.warn('[main] suivi des renommages impossible', e));
   }
 
   // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire
