@@ -1135,7 +1135,7 @@
     if (!movedElsewhere) el.focus({ preventScroll: true });
   }
   // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le premier.
-  const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
+  const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-pdf-sheets', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
     'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
   function withExportLock(fn) {
     return async (...args) => {
@@ -1263,6 +1263,8 @@
     'status.noRowsInTable': 'status.noRowsInTableGrid',
     'status.mergedExportDone': 'status.mergedExportDoneGrid',
     'status.mergedExportDoneWithFailures': 'status.mergedExportDoneWithFailuresGrid',
+    'status.sheetsExportDone': 'status.sheetsExportDoneGrid',
+    'status.sheetsExportDoneWithFailures': 'status.sheetsExportDoneWithFailuresGrid',
     'alert.noRecordForExport': 'alert.noRecordForExportGrid',
   };
   function exportText(key, vars) {
@@ -1330,6 +1332,15 @@
       loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
+    // Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js) : les mêmes PDF par ligne que le PDF unique, posés sur des feuilles A4 ou A3 (js/pdf-merge.js:createSheets). La fenêtre
+    // de réglage tient lieu de confirmation (`sheets`) ; le fichier sort sous le nom `<table>-assemblage.pdf`.
+    pdfSheets: {
+      label: 'PDF', loading: 'status.loadingPdfLibs', loadError: 'status.pdfLibsLoadError', progress: 'status.batchExportProgress',
+      noFile: 'status.exportError', done: 'status.sheetsExportDone', doneWithFailures: 'status.sheetsExportDoneWithFailures',
+      merged: true, sheets: true, fileSuffix: '-assemblage.pdf', margins: () => PageLayout.getMarginsPt(),
+      loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    },
     docxZip: {
       label: 'DOCX', confirm: 'confirm.batchExportDocx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressDocx',
       noFile: 'status.exportErrorDocx', done: 'status.batchExportDoneDocx', doneWithFailures: 'status.batchExportDoneWithFailuresDocx',
@@ -1356,6 +1367,7 @@
     const cfg = BATCH_EXPORTS[kind];
     const merged = !!cfg.merged;
     const single = !!cfg.single;
+    const sheets = !!cfg.sheets;
     Editor.exitHeaderFooterModeIfActive();
     const tableId = currentTableId || GristAPI.getCurrentTableId();
     if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
@@ -1367,8 +1379,15 @@
       return;
     }
     if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return; }
-    const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
-    if (!proceed) return;
+    // Les planches se règlent dans leur propre fenêtre (feuille, emplacements, traits de coupe) : elle tient lieu de confirmation.
+    let sheetSetup = null;
+    if (sheets) {
+      sheetSetup = await SheetAssemblyDialog.open({ count: rows.length, table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
+      if (!sheetSetup) return;
+    } else {
+      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rows.length, table: tableId }), confirmLabel: I18n.t('common.generate') });
+      if (!proceed) return;
+    }
 
     // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une fois.
     setStatus(I18n.t(cfg.loading));
@@ -1391,7 +1410,7 @@
     const headerFooterData = Editor.getHeaderFooterData();
     const margins = cfg.margins ? cfg.margins() : null;
     const zip = merged || single ? null : new JSZip();
-    const mergedPdf = merged ? await PdfMerge.create(tableId) : null;
+    const mergedPdf = merged ? (sheets ? await PdfMerge.createSheets(tableId, sheetSetup.layout) : await PdfMerge.create(tableId)) : null;
     const workbook = single ? await XlsxExport.createSingleWorkbook() : null;
     const usedNames = new Set();
     let ok = 0;
@@ -1423,10 +1442,11 @@
     if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
     if (!ok) { setStatus(I18n.t(cfg.noFile), true); return; }
 
-    setStatus(I18n.t(merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
+    setStatus(I18n.t(sheets ? 'status.sheetsAssembling' : merged ? 'status.pdfMerging' : single ? 'status.xlsxAssembling' : 'status.zipCompressing'));
     const outBlob = merged ? await mergedPdf.toBlob() : single ? await workbook.toBlob() : await zip.generateAsync({ type: 'blob' });
     ExportCommon.downloadBlob(outBlob, sanitizeFilenamePart(tableId) + cfg.fileSuffix);
-    setStatus(failed ? exportText(cfg.doneWithFailures, { ok, failed }) : exportText(cfg.done, { ok }));
+    const sheetCount = sheets ? mergedPdf.sheetCount : 0;
+    setStatus(failed ? exportText(cfg.doneWithFailures, { ok, failed, sheets: sheetCount }) : exportText(cfg.done, { ok, sheets: sheetCount }));
   }
 
   async function switchMode(mode) {
@@ -1919,6 +1939,7 @@
     // Fonctions fléchées : sans elles, l'événement click arriverait comme premier argument (`merged`) et serait lu comme vrai.
     document.getElementById('v2-btn-export-pdf-batch').addEventListener('click', withExportLock(() => onExportBatch('pdfZip')));
     document.getElementById('v2-btn-export-pdf-merged').addEventListener('click', withExportLock(() => onExportBatch('pdfMerged')));
+    document.getElementById('v2-btn-export-pdf-sheets').addEventListener('click', withExportLock(() => onExportBatch('pdfSheets')));
     // Une ligne grisée du menu (syncExportRowsForModelType) ne lance rien : la classe ne bloque pas le clic à elle seule.
     const onExportRow = (id, handler) => document.getElementById(id).addEventListener('click', e => { if (!e.currentTarget.classList.contains('v2-hover-row-disabled')) handler(); });
     onExportRow('v2-btn-export-docx', withExportLock(onExportDocx));

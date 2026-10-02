@@ -89,6 +89,7 @@ const GROUPS = {
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',
   pdfBatch: 'scenarios-pdf-batch',
+  sheetAssembly: 'scenarios-sheet-assembly', // « Assemblage avant impression » (js/sheet-layout.js, js/sheet-assembly-dialog.js, js/pdf-merge.js:createSheets) : géométrie des planches, fenêtre de réglage, PDF relu par pdf.js (feuilles, texte par emplacement, traits de coupe tracés et peints), menu, droits d'export, grille
   accessRights: 'scenarios-access-rights',
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
@@ -139,6 +140,7 @@ const NODE_SCRIPTS = {
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  sheetAssemblyMouse: 'verify-sheet-assembly-mouse.mjs', // assemblage avant impression (js/sheet-assembly-dialog.js, ligne du menu Exporter en PDF) : menu, fenêtre sans défilement dans tous ses états, vrais clics et flèches, choix grisé lisible, « Générer » / Annuler / Échap / Entrée, PDF téléchargé relu par pdf.js, 700x400 clair, sombre et anglais
   qrMouse: 'verify-qr-mouse.mjs', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste des colonnes au-dessus de la fenêtre, cadre carré, menu devant la barre flottante, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
   tableSelectMouse: 'verify-table-select-mouse.mjs', // sélection de cases en glissant la souris, tableau de document et grille : rectangle exact dans tous les sens, voile visible sur une case colorée, défilement tenu au bord du panneau, barre de la case fixée dans sa bande (aucune case recouverte), clavier ; 700x400 clair et sombre
