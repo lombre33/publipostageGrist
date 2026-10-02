@@ -12,7 +12,9 @@
 //   5) (carte « Corriger » d'Antoine, 02/10) un autre modèle choisi à la vraie souris, puis « Abandonner » à la vraie question, pendant qu'un Enregistrer lent écrit : à son retour l'écran, la
 //      liste et le modèle courant restent ceux du modèle choisi, et la frappe qui suit va dans SA ligne - jamais dans celle du modèle quitté ;
 //   6) (carte « Corriger » d'Antoine, 02/10) un vrai double clic sur Enregistrer d'un modèle tout neuf, puis un clic, une vraie frappe et Ctrl+S pendant que Grist écrit (~2,5 s) : une seule
-//      ligne est créée, sous le nom tapé, le geste en trop attend la première écriture et enregistre ensuite le texte à jour dans la MÊME ligne, jamais deux écritures à la fois.
+//      ligne est créée, sous le nom tapé, le geste en trop attend la première écriture et enregistre ensuite le texte à jour dans la MÊME ligne, jamais deux écritures à la fois ;
+//   7) (carte « Corriger » d'Antoine, 02/10) un vrai double clic sur « Utiliser ce modèle » dans l'aperçu de la galerie pendant que Grist écrit (~2,5 s) : un seul modèle est créé, sous le nom
+//      de la galerie (jamais « (2) »), la galerie se ferme, il devient le modèle courant et le clic en trop n'écrit rien de plus.
 // Lancé par run-headless.mjs (groupe Node "autosaveRaceMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-autosave-race-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -401,6 +403,57 @@ console.log("\n== 6) un vrai double clic, puis clic + frappe + Ctrl+S, sur Enreg
     { ids, adds: await actions(page, 'AddRecord'), updates: await actions(page, 'UpdateRecord'), max: maxB });
   check('la ligne porte le texte tapé pendant la première écriture, c\'est le modèle courant', ids.length === 1 && /Texte B DERNIER/.test(String(await rowContent(page, ids[0]))) && (await currentId(page)) === ids[0],
     { content: ids.length ? await rowContent(page, ids[0]) : null, current: await currentId(page) });
+  await page.context().close();
+}
+
+// === 7) un deuxième clic sur « Utiliser ce modèle » pendant la création ===
+console.log("\n== 7) un vrai double clic sur « Utiliser ce modèle » de la galerie pendant que Grist écrit (écriture ~2,5 s) ==");
+{
+  const modelRows = (page) => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, nom: t.Nom[i] })); });
+  const actions = (page, type) => page.evaluate((ty) => window.__gristStub.countActions(ty, 'Publipostage_Modeles'), type);
+  const galleryShown = (page) => page.evaluate(() => ['template-gallery-modal', 'template-preview-modal'].some(id => { const m = document.getElementById(id); return !!m && getComputedStyle(m).display !== 'none'; }));
+  const page = await openPage();
+  await page.evaluate(() => { localStorage.setItem('pp_autosave_enabled', 'false'); }); // l'écriture lente est celle de la galerie
+  // Un modèle de départ enregistré d'abord : la table et ses colonnes existent, la création qui suit ne fait plus que l'écriture de la ligne.
+  await pickTemplate(page, 'Bail habitation');
+  await clickIntoText(page);
+  await page.keyboard.type(' base', { delay: 30 });
+  await realClick(page, '#btn-save', 600);
+  await untilQuiet(page);
+  // La galerie, à la vraie souris : « + » au survol, « Créer à partir d'un modèle », la première carte (« Facture »).
+  const newBtn = await rectOf(page, '#btn-new');
+  await page.mouse.move(newBtn.x - 10, newBtn.y, { steps: 2 }); await page.mouse.move(newBtn.x, newBtn.y, { steps: 3 }); await page.waitForTimeout(350);
+  const fromTemplate = await rectOf(page, '#v2-btn-new-from-template');
+  await page.mouse.move(newBtn.x, fromTemplate.y, { steps: 10 }); await page.mouse.move(fromTemplate.x, fromTemplate.y, { steps: 4 });
+  await page.mouse.click(fromTemplate.x, fromTemplate.y); await page.waitForTimeout(400);
+  await page.waitForSelector('#tpl-gallery-grid .tpl-gallery-card', { timeout: 8000 }).catch(() => {});
+  await realClick(page, '#tpl-gallery-grid .tpl-gallery-card', 400);
+  await page.waitForFunction(() => document.getElementById('tpl-preview-tiptap').children.length > 0, null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const entryName = await page.evaluate(() => document.getElementById('tpl-preview-name').textContent.trim());
+  const rowsBefore = (await modelRows(page)).length;
+  await page.evaluate(() => { window.__gristStub.clearActionLog(); window.__clicks = 0; document.getElementById('tpl-preview-use-empty').addEventListener('click', () => { window.__clicks++; }, true); });
+  await setLatency(page, { fetchTable: 0, applyUserActions: 2500 });
+  const useBtn = await rectOf(page, '#tpl-preview-use-empty');
+  check('« Utiliser ce modèle » est visible et libre dans le panneau de 700x400', !!useBtn && useBtn.onTop && useBtn.l >= 0 && useBtn.r <= WIDTH && useBtn.t >= 0 && useBtn.b <= HEIGHT, useBtn);
+  await page.mouse.move(useBtn.x - 12, useBtn.y, { steps: 2 }); await page.mouse.move(useBtn.x, useBtn.y, { steps: 3 });
+  await page.mouse.click(useBtn.x, useBtn.y, { clickCount: 2 }); // un vrai double clic
+  check('le double clic a bien envoyé deux évènements click au bouton', (await page.evaluate(() => window.__clicks)) === 2, await page.evaluate(() => window.__clicks));
+  await waitFor(page, () => window.__gristStub.countActions('AddRecord', 'Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0
+    && ['template-gallery-modal', 'template-preview-modal'].every(id => getComputedStyle(document.getElementById(id)).display === 'none'), null, 15000);
+  await page.waitForTimeout(1500); // une création en trop se montrerait ici
+  const maxC = await maxWrites(page);
+  await setLatency(page, 0);
+  await untilQuiet(page);
+  const created = (await modelRows(page)).slice(rowsBefore);
+  check('un seul modèle est créé, sous le nom de la galerie, jamais « (2) »', created.length === 1 && created[0].nom === entryName, { entryName, created });
+  check('une création, aucune mise à jour, jamais deux écritures à la fois', (await actions(page, 'AddRecord')) === 1 && (await actions(page, 'UpdateRecord')) === 0 && maxC <= 1,
+    { adds: await actions(page, 'AddRecord'), updates: await actions(page, 'UpdateRecord'), max: maxC });
+  check('la galerie est fermée, la liste et le titre disent le nom une seule fois, c\'est le modèle courant',
+    !(await galleryShown(page)) && created.length === 1 && (await triggerLabel(page)) === entryName && (await page.evaluate((n) => Array.from(document.getElementById('template-select').options).filter(o => o.textContent.replace(' ★', '').trim() === n).length, entryName)) === 1
+      && (await page.evaluate(() => Templates.getCurrentId())) === created[0].id,
+    { shown: await galleryShown(page), label: await triggerLabel(page), current: await page.evaluate(() => Templates.getCurrentId()) });
+  check('le coin d\'état dit le nom retenu', new RegExp(entryName).test(await statusOf(page)), await statusOf(page));
   await page.context().close();
 }
 

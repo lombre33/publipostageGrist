@@ -1947,8 +1947,17 @@
     if (previewCloseBtn) previewCloseBtn.addEventListener('click', closeAll);
     if (previewBack) previewBack.addEventListener('click', () => { previewModal.style.display = 'none'; galleryModal.style.display = 'flex'; });
     if (searchInput) searchInput.addEventListener('input', renderGrid);
-    previewUseEmpty.addEventListener('click', useEmpty);
-    previewUseData.addEventListener('click', useWithData);
+    // Un seul « Utiliser… » à la fois (carte « Corriger » d'Antoine du 02/10) : Grist lent, rien ne bouge à l'écran et la personne clique une deuxième fois. Le clic en trop créait un deuxième
+    // modèle (« Facture » puis « Facture (2) ») ; sur « Utiliser avec une nouvelle table de données », il rouvrait la fenêtre du nom de la table avant la fin de la première création. Il est
+    // ignoré tant que la première n'est pas finie ; une création qui ne revient jamais ne bloque pas les boutons au-delà de SAVE_WATCHDOG_MS.
+    let useStartedAt = 0; // 0 : aucune création en cours
+    const once = (action) => async function () {
+      if (useStartedAt && Date.now() - useStartedAt < SAVE_WATCHDOG_MS) return;
+      const startedAt = useStartedAt = Date.now();
+      try { await action(); } finally { if (useStartedAt === startedAt) useStartedAt = 0; }
+    };
+    previewUseEmpty.addEventListener('click', once(useEmpty));
+    previewUseData.addEventListener('click', once(useWithData));
   }
 
   async function init() {

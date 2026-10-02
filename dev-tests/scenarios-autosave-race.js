@@ -653,6 +653,127 @@
     },
   });
 
+  // --- Un deuxième clic sur « Utiliser… » dans l'aperçu de la galerie pendant la création (carte « Corriger » d'Antoine, 02/10) -------------------------------------------------------
+  // Même geste que le double clic sur Enregistrer : Grist lent, rien ne bouge à l'écran, la personne clique une deuxième fois. « Utiliser ce modèle » créait alors un deuxième modèle
+  // (« Facture » puis « Facture (2) ») ; « Utiliser avec une nouvelle table de données » rouvrait la fenêtre du nom de la table. Le clic en trop est ignoré (js/main.js, `once`).
+  // La première carte de la galerie est « Facture », qui a un schéma : les deux boutons sont là. Les noms créés se lisent par différence (un nom pris devient « (2) » d'un cas à l'autre).
+  const namesNow = () => stub().state.rows[TABLE].Nom.slice();
+  const createdSince = (before) => namesNow().slice(before.length);
+  async function openGalleryPreview(h) {
+    document.getElementById('v2-btn-new-from-template').click();
+    if (!await waitUntil(h, () => !!document.querySelector('#tpl-gallery-grid .tpl-gallery-card'), 8000, 50)) return null;
+    document.querySelector('#tpl-gallery-grid .tpl-gallery-card').click();
+    const shown = await waitUntil(h, () => {
+      const preview = document.getElementById('template-preview-modal');
+      return !!preview && preview.style.display !== 'none' && document.getElementById('tpl-preview-tiptap').innerHTML.length > 20;
+    }, 8000, 50);
+    return shown ? document.getElementById('tpl-preview-name').textContent.trim() : null;
+  }
+  function closeGallery() {
+    ['template-preview-modal', 'template-gallery-modal'].forEach(id => { const modal = document.getElementById(id); if (modal) modal.style.display = 'none'; });
+  }
+  const galleryOpen = () => ['template-preview-modal', 'template-gallery-modal'].some(id => { const modal = document.getElementById(id); return !!modal && modal.style.display !== 'none'; });
+
+  cases.push({
+    id: 'race_double_click_on_use_this_template_in_the_gallery_creates_one_template',
+    description: "Deux clics sur « Utiliser ce modèle » dans l'aperçu de la galerie pendant que Grist écrit (2,5 s) : un seul modèle est créé, sous le nom de la galerie (jamais « (2) »), la galerie se ferme, il devient le modèle courant et le deuxième clic n'écrit rien de plus",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      if (!await baseTemplate(h, 'galerie')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        const entryName = await openGalleryPreview(h);
+        if (!entryName) return { pass: false, notes: "l'aperçu de la galerie ne s'ouvre pas, rien à vérifier" };
+        const before = namesNow();
+        const expected = Templates.uniqueName(entryName); // le nom que la création doit prendre : celui de la galerie, numéroté seulement s'il est déjà pris avant le geste
+        stub().clearActionLog();
+        stub().resetInFlightStats();
+        stub().setLatency(SLOW_WRITE);
+        const useEmpty = document.getElementById('tpl-preview-use-empty');
+        useEmpty.click();
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 6000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        await h.sleep(600);
+        useEmpty.click(); // le clic en trop, pendant l'écriture
+        await waitUntil(h, () => createdSince(before).length >= 1 && inFlightNow() === 0 && !galleryOpen(), 20000, 100);
+        await h.sleep(1500); // une création en trop se montrerait ici
+        const counts = countsNow();
+        stub().setLatency(0);
+        await untilQuiet(h);
+        const created = createdSince(before);
+        const id = created.length ? stub().state.rows[TABLE].id[before.length] : null;
+        const pass = created.length === 1 && created[0] === expected && counts.adds === 1 && counts.updates === 0 && counts.maxWrites <= 1
+          && !galleryOpen() && Templates.getCurrentId() === id && document.getElementById('template-name').value === expected;
+        return { pass, notes: 'galerie=' + entryName + ', nom attendu=' + expected + ', modèles créés=' + JSON.stringify(created) + ', créations=' + counts.adds + ', mises à jour=' + counts.updates + ', écritures simultanées au plus=' + counts.maxWrites + ', galerie ouverte=' + galleryOpen() + ', modèle courant=' + Templates.getCurrentId() };
+      } finally { closeGallery(); autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_double_click_on_use_with_a_new_table_in_the_gallery_asks_the_table_name_once_and_creates_one_table',
+    description: "Deux clics sur « Utiliser avec une nouvelle table de données » : la fenêtre du nom de la table s'ouvre une seule fois, une seule table et un seul modèle sont créés",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      if (!await baseTemplate(h, 'galerie table')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      let prompts = 0;
+      const dialogs = h.stubDialogs({ prompt: async () => { prompts++; await h.sleep(300); return 'Facture_sonde_double_clic'; } });
+      try {
+        const entryName = await openGalleryPreview(h);
+        if (!entryName) return { pass: false, notes: "l'aperçu de la galerie ne s'ouvre pas, rien à vérifier" };
+        const before = namesNow();
+        stub().clearActionLog();
+        stub().setLatency({ fetchTable: 0, applyUserActions: 1500 });
+        const useData = document.getElementById('tpl-preview-use-data');
+        useData.click();
+        await h.sleep(120);
+        useData.click(); // le clic en trop, avant même que la première création ait commencé
+        await waitUntil(h, () => createdSince(before).length >= 1 && inFlightNow() === 0 && !galleryOpen(), 20000, 100);
+        await h.sleep(1500);
+        stub().setLatency(0);
+        await untilQuiet(h);
+        const created = createdSince(before);
+        const tables = stub().getActionLog().filter(a => a[0] === 'AddTable' && a[1] === 'Facture_sonde_double_clic').length; // les autres tables du widget ne comptent pas
+        const pass = prompts === 1 && tables === 1 && created.length === 1 && !galleryOpen();
+        return { pass, notes: 'fenêtres du nom de table=' + prompts + ', tables créées=' + tables + ', modèles créés=' + JSON.stringify(created) + ', galerie ouverte=' + galleryOpen() };
+      } finally { dialogs.restore(); closeGallery(); autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_a_gallery_creation_that_never_returns_does_not_block_the_use_buttons_for_good',
+    description: "Une création de la galerie dont Grist ne répond jamais ne bloque pas « Utiliser ce modèle » au-delà d'une minute : un clic passé ce délai crée le modèle",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      if (!await baseTemplate(h, 'galerie sans réponse')) return { pass: false, notes: 'aucun modèle de départ créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      const realSave = Templates.save;
+      const realNow = Date.now;
+      let hungCalls = 0;
+      try {
+        const entryName = await openGalleryPreview(h);
+        if (!entryName) return { pass: false, notes: "l'aperçu de la galerie ne s'ouvre pas, rien à vérifier" };
+        const before = namesNow();
+        const expected = Templates.uniqueName(entryName);
+        const useEmpty = document.getElementById('tpl-preview-use-empty');
+        Templates.save = function () { hungCalls++; return new Promise(() => {}); }; // Grist ne répond jamais
+        useEmpty.click();
+        await h.sleep(500);
+        Templates.save = realSave;
+        Date.now = () => realNow.call(Date) + 61000; // une minute plus tard
+        useEmpty.click();
+        await waitUntil(h, () => createdSince(before).length >= 1 && inFlightNow() === 0 && !galleryOpen(), 10000, 100);
+        await h.sleep(500);
+        const created = createdSince(before);
+        const pass = hungCalls === 1 && created.length === 1 && created[0] === expected && !galleryOpen();
+        return { pass, notes: 'appels sans réponse=' + hungCalls + ', modèles créés=' + JSON.stringify(created) + ', galerie ouverte=' + galleryOpen() };
+      } finally { Templates.save = realSave; Date.now = realNow; closeGallery(); autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosaveRace = cases;
 })();
