@@ -431,6 +431,28 @@ const I18n = (function () {
     'settings.theme.dark': { fr: 'Sombre', en: 'Dark' },
     'settings.tab.credits': { fr: 'Crédits', en: 'Credits' },
     'settings.tab.access': { fr: 'Accès', en: 'Access' },
+    'settings.tab.rowTemplate': { fr: 'Vue', en: 'View' },
+    'settings.view.intro': {
+      fr: 'Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).',
+      en: 'Settings for this view. To apply them to everyone, then save the view in Grist (Save button at the top of the widget).',
+    },
+    'settings.rowTemplate.title': { fr: 'Modèle selon la ligne', en: 'Template by row' },
+    'settings.rowTemplate.intro': {
+      fr: 'Ouvre tout seul le bon modèle selon la ligne sélectionnée dans la table de la page, en édition comme en lecture. Les règles se lisent dans l’ordre : la première qui correspond choisit le modèle.',
+      en: 'Automatically opens the right template for the row selected in the page’s table, in editing and in reading. Rules are read in order: the first one that matches picks the template.',
+    },
+    'settings.rowTemplate.enable': { fr: 'Choisir le modèle selon la ligne', en: 'Pick the template from the row' },
+    'settings.rowTemplate.ruleElseIf': { fr: 'Sinon si', en: 'Else if' },
+    'settings.rowTemplate.addRule': { fr: '+ Ajouter une règle', en: '+ Add a rule' },
+    'settings.rowTemplate.empty': { fr: 'Aucune règle : ajoutez-en une pour relier un modèle à une condition.', en: 'No rule: add one to link a template to a condition.' },
+    'settings.rowTemplate.otherwise': { fr: 'Si aucune règle ne correspond', en: 'If no rule matches' },
+    'settings.rowTemplate.otherwise.default': { fr: 'Ouvrir le modèle par défaut (★)', en: 'Open the default template (★)' },
+    'settings.rowTemplate.otherwise.keep': { fr: 'Laisser le modèle ouvert', en: 'Keep the open template' },
+    'settings.rowTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+    'settings.rowTemplate.exportHint': {
+      fr: 'Un export en lot garde le modèle ouvert pour toutes les lignes exportées.',
+      en: 'A batch export keeps the open template for all exported rows.',
+    },
     'settings.access.intro': {
       fr: 'Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.',
       en: 'Per-person rights, read from a table in the document: one row per person, matched by their Grist email, and one checkbox per right.',

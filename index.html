@@ -82,7 +82,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.83">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.92">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.50">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.51">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.15">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.6">
@@ -99,6 +99,7 @@
 <link rel="stylesheet" href="css/qr-code.css?v=0.2">
 <link rel="stylesheet" href="css/search-select.css?v=0.6">
 <link rel="stylesheet" href="css/access-rights.css?v=0.5">
+<link rel="stylesheet" href="css/row-template.css?v=0.1">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.1">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.1">
 <link rel="stylesheet" href="css/watermark.css?v=0.1">
@@ -461,6 +462,7 @@
         <button type="button" class="settings-tab" data-settings-tab="triggerKey" data-i18n="settings.tab.triggerKey">Déclencheur</button>
         <button type="button" class="settings-tab" data-settings-tab="shortcuts" data-i18n="settings.tab.shortcuts">Raccourcis</button>
         <button type="button" class="settings-tab" data-settings-tab="pageMargins" data-i18n="settings.tab.pageMargins">Marges</button>
+        <button type="button" class="settings-tab" data-settings-tab="rowTemplate" data-i18n="settings.tab.rowTemplate">Vue</button>
         <button type="button" class="settings-tab" data-settings-tab="access" data-i18n="settings.tab.access">Accès</button>
         <button type="button" class="settings-tab" data-settings-tab="credits" data-i18n="settings.tab.credits">Crédits</button>
       </div>
@@ -544,6 +546,25 @@
           <label><span data-i18n="settings.pageMargins.left">Gauche</span><input type="number" id="settings-margin-left" min="0" max="190" step="0.5"></label>
         </div>
       </div>
+      <div class="settings-panel settings-view-panel" data-settings-panel="rowTemplate" hidden>
+        <p class="settings-panel-intro" data-i18n="settings.view.intro">Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).</p>
+        <section class="settings-section settings-view-section" id="settings-rowtemplate-section">
+          <h4 class="settings-section-title" data-i18n="settings.rowTemplate.title">Modèle selon la ligne</h4>
+          <p class="settings-panel-intro" data-i18n="settings.rowTemplate.intro">Ouvre tout seul le bon modèle selon la ligne sélectionnée dans la table de la page, en édition comme en lecture. Les règles se lisent dans l'ordre : la première qui correspond choisit le modèle.</p>
+          <label class="settings-rowtemplate-enable"><input type="checkbox" id="settings-rowtemplate-enabled"><span data-i18n="settings.rowTemplate.enable">Choisir le modèle selon la ligne</span></label>
+          <div class="settings-rowtemplate-body" id="settings-rowtemplate-body">
+            <div class="macro-slot-card">
+              <div class="macro-slot-rules" id="settings-rowtemplate-rules"></div>
+              <button type="button" class="macro-rule-add" id="settings-rowtemplate-add" data-i18n="settings.rowTemplate.addRule">+ Ajouter une règle</button>
+              <div class="macro-slot-sep"></div>
+              <label class="macro-slot-default-label" for="settings-rowtemplate-otherwise" data-i18n="settings.rowTemplate.otherwise">Si aucune règle ne correspond</label>
+              <select class="macro-slot-default-select" id="settings-rowtemplate-otherwise"></select>
+            </div>
+          </div>
+          <p class="settings-access-locked" id="settings-rowtemplate-locked" data-i18n="settings.rowTemplate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+          <p class="settings-access-hint" data-i18n="settings.rowTemplate.exportHint">Un export en lot garde le modèle ouvert pour toutes les lignes exportées.</p>
+        </section>
+      </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
         <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
         <div class="settings-access-grid">
@@ -575,7 +596,7 @@
 <script src="js/grist-api.js?v=0.88"></script>
 <script src="js/templates.js?v=0.81"></script>
 <script src="js/reader-mode.js?v=0.114"></script>
-<script src="js/i18n.js?v=0.83"></script>
+<script src="js/i18n.js?v=0.84"></script>
 <script src="js/shortcuts.js?v=0.3"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
@@ -631,6 +652,8 @@
 <script src="js/conditional-checkbox.js?v=0.2"></script>
 <script src="js/macro-templates.js?v=0.7"></script>
 <script src="js/macro-editor.js?v=0.39"></script>
+<script src="js/row-template.js?v=0.1"></script>
+<script src="js/row-template-panel.js?v=0.1"></script>
 <script src="js/template-organizer.js?v=0.3"></script>
 <script src="js/template-preferences.js?v=0.3"></script>
 <script src="js/template-organize-modal.js?v=0.8"></script>
@@ -639,6 +662,6 @@
 <script src="js/watermark-dialog.js?v=0.1"></script>
 <script src="js/orientation-toggle.js?v=0.6"></script>
 <script src="js/clean-reading.js?v=0.1"></script>
-<script src="js/main.js?v=0.90"></script>
+<script src="js/main.js?v=0.91"></script>
 </body>
 </html>

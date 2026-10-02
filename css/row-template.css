@@ -1,0 +1,11 @@
+/* Réglages > Selon la ligne (js/row-template-panel.js). Les lignes de règle et la carte reprennent les classes des macro-modèles (.macro-slot-card, .macro-rule-*,
+   css/toolbar-v2.css) ; ici seulement la case d'activation et l'état grisé. Pas de `display` sur .settings-panel (il battrait l'attribut `hidden` des onglets masqués). */
+.settings-rowtemplate-enable { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 0 0 10px; cursor: pointer; }
+.settings-rowtemplate-enable input { margin: 0; }
+/* Décoché ou verrouillé : visible mais grisé, inerte (rien ne disparaît). */
+.settings-rowtemplate-body.is-off { opacity: .55; }
+.settings-rowtemplate-body .macro-slot-card { margin-bottom: 8px; }
+.settings-rowtemplate-body .macro-slot-default-select { width: 100%; }
+/* Onglet « Vue » : réglages propres à la vue du widget, une section par réglage (titre, puis son contenu). */
+.settings-view-panel .settings-section-title { margin: 0 0 6px; }
+.settings-view-panel .settings-view-section + .settings-view-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }

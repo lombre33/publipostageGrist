@@ -397,6 +397,16 @@
     if (tpl) loadTemplateIntoEditor(tpl);
   }
 
+  // « Modèle selon la ligne » (js/row-template.js) : ouvre le modèle que la ligne désigne, par le chemin ordinaire de la liste - donc avec sa question « Enregistrer / Abandonner /
+  // Annuler » quand des modifications attendent. true : ce modèle est ouvert ; false : il ne l'est pas (introuvable, ou « Annuler » : la personne garde le sien).
+  async function openTemplateForRow(id) {
+    if (!Templates.getCached().some(t => String(t.id) === String(id))) return false;
+    if (String(Templates.getCurrentId()) === String(id)) return false;
+    templateSelect.value = String(id);
+    await onTemplateSelectChange();
+    return String(Templates.getCurrentId()) === String(id);
+  }
+
   // loadTemplateIntoEditor(null) appelle resetAutosaveState(null) -> updateSaveStatus(), qui affiche déjà l'avertissement "modèle non enregistré"
   // (cf. plus haut) : ne PAS l'écraser après coup avec un message générique, sinon cet avertissement disparaîtrait pile au moment où il est le plus
   // utile (juste après avoir cliqué "Nouveau modèle"). Sans question : onDelete l'appelle quand le modèle courant vient d'être supprimé.
@@ -1809,6 +1819,11 @@
     try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
+    RowTemplate.init({
+      openTemplate: openTemplateForRow,
+      currentId: () => Templates.getCurrentId(),
+      currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
+    });
     await Editor.init();
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
@@ -1839,7 +1854,9 @@
       latestRecord = record;
       latestRecordTableId = tableId || GristAPI.getCurrentTableId();
       if (tableId) currentTableId = tableId;
-      if (currentMode === 'read' && record) await renderReader(record, latestRecordTableId);
+      // Réglage « Modèle selon la ligne » coupé (le cas général) : un test, rien d'autre. Activé et le modèle de la ligne change : loadTemplateIntoEditor a déjà redessiné la Lecture.
+      const switched = await RowTemplate.follow(record, latestRecordTableId);
+      if (currentMode === 'read' && record && !switched) await renderReader(record, latestRecordTableId);
       if (currentMode === 'read') await updateEmailFieldsDisplay();
       await updateEmailLengthGauge();
     });
@@ -1864,8 +1881,16 @@
       .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
     // Modèle par défaut (cf. btn-set-default-template) : sélectionné avant la lecture de templateSelect.value ci-dessous, pour que le widget s'ouvre
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
+    // Réglage « Modèle selon la ligne » activé et la ligne déjà connue : le widget s'ouvre directement sur son modèle, sans passer par le modèle par défaut.
+    let startupRowTemplateId = null;
+    if (RowTemplate.isActive() && latestRecord) {
+      try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
+      catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
+    }
     const defaultTemplateId = Templates.getDefaultId();
-    if (defaultTemplateId != null) {
+    if (startupRowTemplateId != null) {
+      templateSelect.value = startupRowTemplateId;
+    } else if (defaultTemplateId != null) {
       const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
       // Un modèle email ou macro ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton,
       // qui grise désormais le bouton "modèle par défaut" pour ces deux types) - mais ce garde ne
@@ -1876,6 +1901,8 @@
     }
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
+    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien.
+    RowTemplate.start().catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
     document.getElementById('btn-new').addEventListener('click', onNew);
     const btnNewDocument = document.getElementById('v2-btn-new-document');
     const btnNewEmail = document.getElementById('v2-btn-new-email');
@@ -1917,6 +1944,7 @@
     wirePdfFilenameToggle();
     wireQualityDropdown();
     Settings.wireSettingsModal();
+    RowTemplatePanel.wire();
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();

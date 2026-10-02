@@ -71,6 +71,7 @@ const GROUPS = {
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
   pageTree: 'scenarios-page-tree', // rangement des pages que Grist crée avec les tables du widget (js/page-tree.js) : sous celle des modèles, repliées par défaut
+  rowTemplate: 'scenarios-row-template', // modèle selon la ligne (js/row-template.js, Réglages > Selon la ligne) : règles, repli, Lecture et édition, question avant de quitter des modifications, onglet
   templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle
   contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',
@@ -131,6 +132,7 @@ const NODE_SCRIPTS = {
   externalImagesMouse: 'verify-external-images-mouse.mjs', // fenêtre avant l'export d'un modèle qui contient une image d'un site externe (js/external-images.js) : vrai clic sur Exporter PDF / DOCX / lot ZIP, Annuler, Échap, Tab, Continuer, quarante sites qui défilent, 700x400 clair, sombre et anglais
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
+  rowTemplateMouse: 'verify-row-template-mouse.mjs', // modèle selon la ligne (Réglages > Selon la ligne) à la vraie souris dans 700x400 : onglets lisibles (FR, EN), case, colonne / valeur / modèle dans leurs listes avec recherche, option écrite, ouverture à la fermeture, ligne suivante en édition et en Lecture
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais

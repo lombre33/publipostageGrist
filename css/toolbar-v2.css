@@ -383,9 +383,9 @@
 .settings-modal-content .pp-modal-header h3 { margin-bottom: 12px; }
 .settings-tabs { flex: none; display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
 /* Une ligne, jamais deux : chaque onglet prend sa largeur de texte puis se partage le reste ; dans un panneau plus étroit que la fenêtre, un libellé se coupe par « … »
-   plutôt que de passer à la ligne. Sept onglets depuis « Raccourcis » : 2 px de marge de chaque côté et aucun écart entre eux - avec la police de repli des tests, plus large que
-   Manrope, les libellés français font 405 px pour 440 px de place. */
-.settings-tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 2px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+   plutôt que de passer à la ligne. Huit onglets depuis « Vue » (réglages propres à la vue : modèle selon la ligne) : 1 px de marge de chaque côté, texte à 12 px et aucun écart entre
+   eux - avec la police de repli des tests, plus large que Manrope, les libellés français font 415 px pour 440 px de place (405 px à 12,5 px, mais 2 px de marge : 464 px pour huit). */
+.settings-tab { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--text-faint); background: none; border: none; padding: 7px 1px; cursor: pointer; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
 /* Le contenu de l'onglet affiché est l'étage qui défile (.settings-body : la zone de contenu de la base). Pas de `display` sur .settings-panel : js/settings.js
    masque les six autres par l'attribut `hidden`, qu'une règle `display` battrait. Marge négative + même marge intérieure sur .settings-body : la couronne de
    focus des champs qui touchent le bord n'est pas rognée par le défilement, sans décaler le contenu. */
