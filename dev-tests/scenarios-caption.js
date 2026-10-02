@@ -602,8 +602,9 @@
       try {
         const out = {};
         const imageAndCaption = intro(8) + '<p>' + image() + '</p>' + CAP('Figure un');
-        // 1) tout tient
-        out.fits = (await pagedEditorAndReader(h, imageAndCaption + '<p>Après</p>', kids => sumHeights(kids) + 40)).editor.bands;
+        // 1) tout tient, à 6 px près (moins que la hauteur d'une légende : une légende comptée deux fois ferait passer le dernier paragraphe à la page suivante), éditeur et Lecture
+        const fits = await pagedEditorAndReader(h, imageAndCaption + '<p>Après</p>', kids => sumHeights(kids) + 6);
+        out.fits = [fits.editor.bands, fits.reader.bands];
         // 2) une légende sous un paragraphe de texte : jamais liée à lui, elle ouvre la page 2 comme avant
         const orphan = await pagedEditorAndReader(h, intro(8) + '<p>Texte</p>' + CAP('Légende orpheline') + '<p>Après</p>', kids => {
           const at = kids.findIndex(k => k.textContent === 'Texte');
@@ -626,7 +627,7 @@
         // 5) un saut de page entre l'image et sa légende : la paire n'existe pas, l'image reste sur la page 1
         const broken = await pagedEditorAndReader(h, intro(8) + '<p>' + image() + '</p>' + PAGE_BREAK + CAP('Figure un'), kids => sumHeights(kids) + 400);
         out.broken = { bands: broken.editor.bands, first: broken.editor.first };
-        const pass = out.fits === 0 && out.orphan.editor === 'CAPTION:Légende orpheline' && out.orphan.reader === 'CAPTION:Légende orpheline'
+        const pass = out.fits[0] === 0 && out.fits[1] === 0 && out.orphan.editor === 'CAPTION:Légende orpheline' && out.orphan.reader === 'CAPTION:Légende orpheline'
           && out.tall.editor === 'CAPTION:Figure haute' && out.tall.reader === 'CAPTION:Figure haute'
           && out.blankTail === 0 && out.broken.bands === 1 && out.broken.first === 'CAPTION:Figure un';
         return { pass, notes: JSON.stringify(out) };
