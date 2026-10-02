@@ -484,6 +484,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   reste à sa place, estompée dans un cadre rouge en tirets, et sa copie à la nouvelle place porte un cadre vert plein ; « Tout accepter » garde la copie, « Tout refuser » rend l'original ; une
   rafale de flèches n'écrit qu'une trace et un Ctrl+Z la défait d'un coup ; un clic sans déplacement n'écrit rien ; l'original barré ne se déplace pas (ses flèches gardent leur sens ordinaire).
   Le cadre se pose sur l'image (en calque elle sort du flux : la teinte du texte suggéré n'y aurait pas de boîte), mêmes vert et rouge que le texte suggéré (6,4:1 et 6,6:1 sur la page blanche).
+  Le paragraphe qui ne porte qu'une image en calque, la ligne où on l'a posée, garde sa ligne vide dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 02/10, « écart entre l'éditeur et le mode
+  lecture ») : le texte qui suit descend d'une ligne dans les quatre, les coupures de page tombent aux mêmes lignes, en haut du modèle comme après un saut de page, dans une case ou une colonne.
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
   la Lecture, le PDF (fond de page) et le Word (ancre derrière le texte dans l'en-tête de chaque page, première page comprise ; un en-tête est créé quand il n'y en a pas). La place est celle de la

@@ -9,6 +9,7 @@
 //  - la hauteur de page utile : la Lecture coupe ses pages aux mêmes lignes que l'éditeur et le PDF ;
 //  - une zone vide ne prend aucune place ;
 //  - les marges du fichier Word (marge du haut et du bas, distance de l'en-tête et du pied).
+//  - le paragraphe qui ne porte qu'une image en calque garde sa ligne : le texte qui suit descend d'une ligne dans l'éditeur, la Lecture et le PDF, les pages se coupent aux mêmes lignes.
 // Toutes les positions sont en points depuis le coin haut gauche de la feuille.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.imageParity = (function () {
@@ -382,6 +383,119 @@ window.EditorTestSuites.imageParity = (function () {
       move(tip.querySelector('p'));
       const onText = zone.classList.contains('v2-hf-zone-hover');
       return { pass: lit && !dragging && !onText, notes: JSON.stringify({ allumee: lit, boutonEnfonce: dragging, surUneLigne: onText }) };
+    },
+  });
+
+  // --- Le paragraphe qui ne porte qu'une image en calque garde sa ligne (Antoine, 02/10 : « écart entre l'éditeur et la Lecture ») ---
+  // Une image devant ou derrière le texte est hors du flux : le paragraphe qui l'héberge seule est une ligne vide. L'éditeur (ProseMirror) et le Word la gardent ; la Lecture et
+  // le PDF la faisaient disparaître, et tout ce qui suit remontait d'une ligne dans ces deux rendus - les coupures de page aussi. Chaque scénario mesure donc un DÉCALAGE : le
+  // texte qui suit, dans le document avec le paragraphe hôte, moins le même texte dans le document sans lui. Une ligne, la même dans l'éditeur, la Lecture et le PDF.
+  const layerImg = (layer, extra) => '<img class="editor-image" src="' + PNG + '" alt="" style="width: 60px; height: 60px; position: absolute; left: 150px; top: 60px; z-index: ' + (layer === 'front' ? 5 : -1) + '" data-layer="' + layer + '" data-wrap="inline"' + (extra || '') + '>';
+  const REPEAT_GRID = ' data-repeat="true" data-page-index="0" data-page-left-pt="100" data-page-top-pt="40"';
+  const PAGE_BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+  const LINE_PT = 14.9;
+
+  // Le haut du paragraphe qui contient le mot `marker` (un seul mot, unique dans le document : le PDF écrit un mot par morceau de texte), dans l'éditeur et la Lecture (depuis le haut de leur feuille) et le PDF (sa ligne de base sur sa page) : seuls les écarts
+  // entre deux documents mesurés de la même façon ont un sens, jamais la valeur.
+  async function topOf(h, html, marker) {
+    await setup(h, CONFIGS.none.hf, html);
+    const tip = document.querySelector('#editor-container .tiptap');
+    const sheet = tip.parentElement.getBoundingClientRect();
+    const own = el => el.textContent.includes(marker);
+    const p = Array.from(tip.querySelectorAll('p')).find(own);
+    const editor = p ? r2((p.getBoundingClientRect().top - sheet.top) / zoomOf(tip) / PT) : null;
+    const fullHtml = Editor.getHTML();
+    const hf = Editor.getHeaderFooterData();
+    const rc = await h.renderReaderMode(fullHtml, hf);
+    await h.sleep(150);
+    const rp = Array.from(rc.querySelectorAll('p')).find(own);
+    const reader = rp ? r2((rp.getBoundingClientRect().top - readerTopOf(rc)) / zoomOf(rc) / PT) : null;
+    restoreReader(h);
+    const pdfRes = await pdfOf(h, fullHtml, hf);
+    let pdf = null;
+    pdfRes.truth.pages.forEach((pg, i) => { const t = pg.textItems.find(it => it.str.includes(marker)); if (t && pdf == null) pdf = { y: r2(t.y), page: i }; });
+    return { editor, reader, pdf };
+  }
+  // Le décalage de `marker` que le paragraphe hôte ajoute, rendu par rendu.
+  async function hostShift(h, withHost, withoutHost, marker) {
+    const a = await topOf(h, withHost, marker);
+    const b = await topOf(h, withoutHost, marker);
+    const ok = a.editor != null && a.reader != null && a.pdf && b.editor != null && b.reader != null && b.pdf;
+    return ok ? { editeur: r2(a.editor - b.editor), lecture: r2(a.reader - b.reader), pdf: r2(a.pdf.y - b.pdf.y), pagePdf: a.pdf.page } : null;
+  }
+  const aLine = s => !!s && [s.editeur, s.lecture, s.pdf].every(v => near(v, LINE_PT, 0.6));
+
+  [['behind', ''], ['front', ''], ['behind', REPEAT_GRID]].forEach(([layer, extra]) => {
+    cases.push({
+      id: 'imgparity_layer_host_keeps_its_line_' + layer + (extra ? '_repeated' : ''),
+      description: 'Un paragraphe qui ne porte qu\'une image ' + (layer === 'front' ? 'devant' : 'derrière') + ' le texte' + (extra ? ' (« Sur toutes les pages »)' : '') + ' garde sa ligne : le texte qui suit descend d\'une ligne dans l\'éditeur, la Lecture et le PDF',
+      run: async (h) => {
+        const shift = await hostShift(h, '<p>' + layerImg(layer, extra) + '</p><p>Texte du modèle.</p>', '<p>Texte du modèle.</p>', 'modèle.');
+        return { pass: aLine(shift), notes: JSON.stringify({ attenduPt: LINE_PT, decalagePt: shift }) };
+      },
+    });
+  });
+
+  cases.push({
+    id: 'imgparity_layer_host_keeps_its_line_after_page_break',
+    description: 'Après un saut de page, le paragraphe qui ne porte qu\'une image en calque ouvre la page d\'une ligne vide, dans l\'éditeur, la Lecture et le PDF : le texte de la page 2 descend d\'une ligne',
+    run: async (h) => {
+      const shift = await hostShift(h, '<p>Page un.</p>' + PAGE_BREAK + '<p>' + layerImg('behind', REPEAT_GRID) + '</p><p>Page deux.</p>', '<p>Page un.</p>' + PAGE_BREAK + '<p>Page deux.</p>', 'deux.');
+      return { pass: aLine(shift) && shift.pagePdf === 1, notes: JSON.stringify({ attenduPt: LINE_PT, decalagePt: shift }) };
+    },
+  });
+
+  cases.push({
+    id: 'imgparity_layer_host_keeps_its_line_in_cell_and_column',
+    description: 'Dans une case de tableau et dans une colonne de zone deux colonnes, le paragraphe qui ne porte qu\'une image en calque garde aussi sa ligne : le bloc qui suit la case ou la zone descend d\'une ligne dans l\'éditeur, la Lecture et le PDF',
+    run: async (h) => {
+      const table = host => '<table><tbody><tr><td>' + host + '<p>Texte de case.</p></td><td><p>Autre case.</p></td></tr></tbody></table><p>Après le tableau.</p>';
+      // La zone est aussi haute que sa colonne la plus haute (et au moins deux lignes) : la colonne qui porte l'hôte a trois lignes de texte, la ligne de l'hôte allonge la zone.
+      const zone = host => '<div class="two-columns-zone" style="--layout-left: 50%;"><div class="two-columns-column">' + host + '<p>Gauche un.</p><p>Gauche deux.</p><p>Gauche trois.</p></div><div class="two-columns-column"><p>Texte droite.</p></div></div><p>Après les colonnes.</p>';
+      const hostP = '<p>' + layerImg('behind') + '</p>';
+      const inCell = await hostShift(h, table(hostP), table(''), 'tableau.');
+      const inColumn = await hostShift(h, zone(hostP), zone(''), 'colonnes.');
+      return { pass: aLine(inCell) && aLine(inColumn), notes: JSON.stringify({ attenduPt: LINE_PT, case: inCell, colonne: inColumn }) };
+    },
+  });
+
+  cases.push({
+    id: 'imgparity_layer_host_keeps_the_page_cut',
+    description: 'Avec un paragraphe qui ne porte qu\'une image « Sur toutes les pages » en haut du modèle, la page 1 contient autant de lignes dans l\'éditeur, la Lecture et le PDF, et une de moins que sans lui (la ligne de l\'hôte)',
+    run: async (h) => {
+      const count = async (html) => {
+        await setup(h, CONFIGS.none.hf, html);
+        const tip = document.querySelector('#editor-container .tiptap');
+        const seams = Array.from(document.querySelectorAll('#editor-container .v2-page-band')).map(e => e.getBoundingClientRect().top);
+        const countBefore = (root, limit) => Array.from(root.querySelectorAll(':scope > p')).filter(p => /^L\d+$/.test(p.textContent.trim()) && p.getBoundingClientRect().top < limit).length;
+        const editor = seams.length ? countBefore(tip, seams[0]) : null;
+        const fullHtml = Editor.getHTML();
+        const hf = Editor.getHeaderFooterData();
+        const rc = await h.renderReaderMode(fullHtml, hf);
+        await h.sleep(200);
+        const rseams = Array.from(document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-band')).map(e => e.getBoundingClientRect().top);
+        const reader = rseams.length ? countBefore(rc, rseams[0]) : null;
+        restoreReader(h);
+        const pdfRes = await pdfOf(h, fullHtml, hf);
+        return { editor, reader, pdf: pdfRes.truth.pages[0].textItems.filter(t => /^L\d+$/.test(t.str.trim())).length };
+      };
+      const without = await count(manyLines(140));
+      const withHost = await count('<p>' + layerImg('behind', REPEAT_GRID) + '</p>' + manyLines(140));
+      const same = withHost.editor != null && withHost.editor === withHost.reader && withHost.editor === withHost.pdf;
+      const pass = same && withHost.editor === without.editor - 1;
+      return { pass, notes: JSON.stringify({ lignesPage1: { sansHote: without, avecHote: withHost } }) };
+    },
+  });
+
+  cases.push({
+    id: 'imgparity_layer_host_word_keeps_its_paragraph',
+    description: 'Word : le paragraphe qui ne porte qu\'une image en calque reste un paragraphe à lui, avant celui du texte qui suit (la ligne que le Word garde déjà)',
+    run: async (h) => {
+      const dx = await docxOf(h, '<p>' + layerImg('behind', REPEAT_GRID) + '</p><p>Texte du modèle.</p>', CONFIGS.none.hf);
+      const paragraphs = Array.from(dx.parts.doc.getElementsByTagName('w:p'));
+      const first = paragraphs[0], second = paragraphs[1];
+      const pass = !!first && !!second && !/Texte du modèle/.test(first.textContent) && /Texte du modèle/.test(second.textContent);
+      return { pass, notes: JSON.stringify({ paragraphes: paragraphs.length, premierPorteLeTexte: !!first && /Texte du modèle/.test(first.textContent), deuxiemePorteLeTexte: !!second && /Texte du modèle/.test(second.textContent) }) };
     },
   });
 

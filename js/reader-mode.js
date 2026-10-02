@@ -105,9 +105,15 @@ const ReaderMode = (function () {
   const BLANK_LINE_BLOCKS = 'p, h1, h2, h3, h4, h5, h6';
   // Ce qui occupe une ligne sans porter de texte : le marqueur de note de bas de page n'a que le numéro de son compteur CSS.
   const NON_TEXT_CONTENT = 'img, br, svg, canvas, video, audio, iframe, object, embed, input, .footnote-ref-marker';
+  // Une image en calque (devant ou derrière le texte) est hors du flux : elle ne remplit pas la ligne de son paragraphe. Celui qui n'en porte que garde donc sa ligne, comme
+  // dans l'éditeur où ProseMirror la lui laisse (Antoine, 2026-10-02 : la Lecture était d'une ligne plus haut que l'éditeur, le calque « Sur toutes les pages » posé dans une ligne
+  // vide en haut du modèle) - et comme le PDF et le Word.
+  function holdsInFlowContent(block) {
+    return Array.from(block.querySelectorAll(NON_TEXT_CONTENT)).some(el => !el.matches(LAYER_IMAGE_SELECTOR));
+  }
   function keepBlankLines(root) {
     root.querySelectorAll(BLANK_LINE_BLOCKS).forEach(block => {
-      if (block.textContent !== '' || block.querySelector(NON_TEXT_CONTENT)) return;
+      if (block.textContent !== '' || holdsInFlowContent(block)) return;
       const filler = document.createElement('br');
       filler.className = 'pp-blank-line';
       block.appendChild(filler);

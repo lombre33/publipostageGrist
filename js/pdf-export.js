@@ -1385,7 +1385,10 @@ const PdfExport = (function () {
         if (alignInline) textBlock.alignment = alignInline;
         blocks.push(textBlock);
       });
-      if (!blocks.length) blocks.push({ text: ' ', margin: [indentPtInline, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
+      // Un paragraphe qui ne porte que des images en calque (hors du flux), ou rien du tout, garde sa ligne, comme dans l'éditeur et le Word : sans elle, tout ce qui suit
+      // remontait d'une ligne dans le PDF (Antoine, 2026-10-02, le calque « Sur toutes les pages » posé dans une ligne vide en haut du modèle). Le saut de page qui le précède
+      // s'accroche à cette ligne, qui ouvre la page comme dans l'éditeur.
+      if (!blocks.some(b => !b._pendingImgNode)) blocks.unshift({ text: ' ', margin: [indentPtInline, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
       if (pageBreakBefore && blocks[0]) blocks[0].pageBreak = 'before';
       return blocks;
     }
@@ -1416,9 +1419,10 @@ const PdfExport = (function () {
       }
     }
     if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, 4, spaceWidthPt(), 4]; }
-    // Un paragraphe sans aucun texte (ex. ne contenant qu'une image) n'a pas besoin du bloc-texte de repli `text: ' '` : dans l'éditeur il s'effondre à
-    // hauteur nulle, le pousser quand même décalait tout le contenu suivant (et faussait l'ancrage des images voisines, cf. resolvePendingImageAnchors).
-    if (runs.length || !images.length) {
+    // Un bloc sans aucun texte qui ne contient qu'une image DANS LE FLUX n'a pas besoin du bloc-texte de repli `text: ' '` : l'image fait sa hauteur, le pousser quand même
+    // décalait tout le contenu suivant (et faussait l'ancrage des images voisines, cf. resolvePendingImageAnchors). Celui qui ne porte que des images en calque, hors du flux,
+    // garde sa ligne comme dans l'éditeur (cf. plus haut).
+    if (runs.length || !images.length || images.every(img => img._pendingImgNode)) {
       if (pageBreakBefore) block.pageBreak = 'before';
       blocks.push(block);
     } else if (pageBreakBefore && images[0]) {
@@ -1653,9 +1657,13 @@ const PdfExport = (function () {
   //
   // Un bloc vide s'effondre à hauteur nulle en mesure hors-écran, alors que ProseMirror y insère un <br> décoratif (absent de Editor.getHTML()) - plusieurs
   // lignes vides consécutives se mesuraient à la même position, biaisant le bracketing voisin. Corrigé en injectant le même filler avant mesure.
+  // Un bloc qui ne porte que des images en calque (hors du flux) garde sa ligne comme dans l'éditeur : même filler, sinon les blocs qui le suivent se mesureraient une ligne trop haut.
+  function holdsOnlyLayeredImages(el) {
+    return el.children.length > 0 && Array.from(el.childNodes).every(n => (n.nodeType === Node.ELEMENT_NODE && n.matches(LAYER_IMAGE_SELECTOR)) || (n.nodeType === Node.TEXT_NODE && !n.nodeValue.trim()));
+  }
   function insertTrailingBreaksForEmptyBlocks(root) {
     root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => {
-      if (!el.hasChildNodes()) {
+      if (!el.hasChildNodes() || holdsOnlyLayeredImages(el)) {
         const br = document.createElement('br');
         br.setAttribute('data-pdf-measure-filler', '1');
         el.appendChild(br);
