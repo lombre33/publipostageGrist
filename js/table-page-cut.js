@@ -35,9 +35,12 @@ const TablePageCut = (function () {
   // Mesure un tableau pour `plan`. `blockEl` est le bloc de premier niveau qui le porte (l'enveloppe .tableWrapper de l'éditeur, le <table> lui-même en Lecture),
   // `zoom` le facteur de la feuille (les rectangles sont en pixels écran, la page en pixels de mise en page), `pageHeightPx` la hauteur utile d'une page, `padOf(ligne)` le
   // rembourrage que l'aperçu a déjà ajouté à une ligne pour la descendre sous une couture (0 s'il n'y en a pas) : une mesure faite après la pose des coupures ne doit pas le
-  // compter. Rend { rows, segs, heights } ou null si le tableau ne se coupe pas entre deux lignes. `segs` découpe la hauteur du bloc : la tranche de chaque ligne, du haut
+  // compter. Rend { rows, segs, heights, keepsTail } ou null si le tableau ne se coupe pas entre deux lignes. `segs` découpe la hauteur du bloc : la tranche de chaque ligne, du haut
   // de la ligne au haut de la suivante (la première reprend ce qui est au-dessus d'elle, la dernière ce qui est au-dessous), donc leur somme est la hauteur du bloc.
-  function measure(blockEl, table, zoom, pageHeightPx, padOf) {
+  // `captionPx` : la hauteur des légendes qui suivent le tableau (js/caption.js, « Rester ensemble »). Si la dernière ligne et elles tiennent ensemble dans une page, elles
+  // s'ajoutent à la dernière tranche (`keepsTail`) : la dernière ligne ne quitte jamais sa légende, c'est la ligne et sa légende que `plan` passe à la page suivante. Sinon
+  // (`keepsTail` faux) les légendes restent des paragraphes à part, comme avant.
+  function measure(blockEl, table, zoom, pageHeightPx, padOf, captionPx) {
     const rows = rowsOf(table);
     if (!rows) return null;
     const blockRect = blockEl.getBoundingClientRect();
@@ -49,7 +52,9 @@ const TablePageCut = (function () {
     const total = blockRect.height / zoom;
     const segs = tops.map((top, i) => ((i + 1 < tops.length ? tops[i + 1] : total) - top) - pads[i]);
     segs[0] += tops[0];
-    return { rows, segs, heights };
+    const keepsTail = captionPx > 0 && heights[heights.length - 1] + captionPx <= MAX_ROW_RATIO * pageHeightPx;
+    if (keepsTail) segs[segs.length - 1] += captionPx;
+    return { rows, segs, heights, keepsTail };
   }
 
   // Où le tableau change de page. `consumedBefore` : ce que la page en cours porte déjà avant lui (0 : il est en haut de page) ; `segs` : les tranches de `measure` ;

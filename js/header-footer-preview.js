@@ -245,10 +245,14 @@ const HeaderFooterPreview = (function () {
   // ne coupent plus une ligne en deux. Les lignes qui ne tiennent pas ouvrent la page suivante ; la coupure porte alors `rowIndex` (rang de la première ligne de la page qui
   // commence) et `afterEl` est l'enveloppe du tableau. Un tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes, grille...)
   // garde la règle des blocs que l'export coupe.
-  function cuttableTable(el, pageContentHeightPx, zoom) {
+  // La légende d'une image ou d'un tableau (js/caption.js) reste avec son bloc (choix d'Antoine du 02/10, « Rester ensemble » : jamais seule en haut de la page suivante) : le bloc et ses
+  // légendes comptent pour UN bloc, qui passe entier à la page suivante quand il ne tient pas, et jamais coupé par l'export ni par l'aperçu. Pour un tableau qui se coupe entre deux lignes,
+  // la dernière ligne et la légende font ce bloc (le reste du tableau se coupe comme avant). Un bloc et sa légende qui ne tiennent pas ensemble dans une page (Caption.fitsWithCaption)
+  // sont laissés comme avant.
+  function cuttableTable(el, pageContentHeightPx, zoom, captionPx) {
     if (!el.classList.contains('tableWrapper')) return null;
     const table = el.querySelector(':scope > table');
-    return table ? TablePageCut.measure(el, table, zoom, pageContentHeightPx, row => appliedRowPad.get(row)) : null;
+    return table ? TablePageCut.measure(el, table, zoom, pageContentHeightPx, row => appliedRowPad.get(row), captionPx) : null;
   }
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
@@ -257,7 +261,10 @@ const HeaderFooterPreview = (function () {
     let lastBlock = null;
     const children = Array.from(tiptapEl.children);
     const blankTailStart = trailingBlankStart(children);
+    // Les légendes d'un bloc sont comptées avec lui : on saute leurs rangs.
+    let counted = 0;
     children.forEach((child, index) => {
+      if (index < counted) return;
       const height = child.getBoundingClientRect().height / zoom;
       if (child.classList.contains('page-break-marker')) {
         breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
@@ -266,24 +273,31 @@ const HeaderFooterPreview = (function () {
         return;
       }
       if (index >= blankTailStart) return;
-      const cuttable = cuttableTable(child, pageContentHeightPx, zoom);
+      const captions = Caption.captionsAfter(child, children[blankTailStart]);
+      const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
+      const lastCaption = captions[captions.length - 1];
+      const cuttable = cuttableTable(child, pageContentHeightPx, zoom, captionPx);
       if (cuttable) {
         const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);
         if (tablePlan.blockBreakBefore) breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
         tablePlan.cuts.forEach(rowIndex => breaks.push({ afterEl: child, rowIndex, forced: false, remainingPx: 0 }));
         consumed = tablePlan.consumedAfter;
         lastBlock = child;
+        if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = lastCaption; }
         return;
       }
+      const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
+      const unitHeight = keeps ? height + captionPx : height;
       const room = pageContentHeightPx - consumed;
-      const staysOnPage = isSplittableByExport(child) && room > height / 2;
-      if (consumed > 0 && height > room && !staysOnPage) {
+      const staysOnPage = !keeps && isSplittableByExport(child) && room > height / 2;
+      if (consumed > 0 && unitHeight > room && !staysOnPage) {
         breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
-        consumed = height;
+        consumed = unitHeight;
       } else {
-        consumed += height;
+        consumed += unitHeight;
       }
       lastBlock = child;
+      if (keeps) { counted = index + 1 + captions.length; lastBlock = lastCaption; }
     });
     return breaks;
   }

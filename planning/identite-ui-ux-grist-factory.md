@@ -501,6 +501,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   retire ; en suivi des modifications la pose est une insertion suivie et le curseur arrive dans la légende.
   La barre de l'image garde sa largeur d'avant le bouton (511 px) : la glissière d'opacité passe à 97 px pour lui faire place. À ~700 px, image tout en haut de la page, une barre plus large recouvre
   « Tout accepter » dans la bande du suivi des modifications et le vrai clic n'y arrive plus ; tout bouton de plus dans cette barre rend de même sa largeur à un autre élément de la barre.
+  Au saut de page (choix d'Antoine du 02/10, « Rester ensemble ») la légende reste avec son image ou son tableau : jamais seule en haut de la page suivante, dans l'éditeur, la Lecture, le PDF et le Word.
+  Quand l'image tient dans la page sans sa légende, c'est l'image qui passe à la page suivante, légende comprise ; pour un tableau qui se coupe entre deux lignes, c'est sa dernière ligne qui suit la légende (le
+  reste se coupe comme avant) ; un tableau qu'on ne coupe pas passe entier. Rien ne bouge quand le bloc et sa légende tiennent dans la page, pour une légende qui suit un simple paragraphe, au-delà de 90 % d'une
+  page (le PDF ne saurait pas les garder) ni pour une légende vide en fin de document ; le document enregistré ne change pas. Dans le Word : « Conserver avec le suivant » sur le paragraphe de l'image, sur la
+  dernière ligne du tableau (sur toutes si on ne le coupe pas) et sur chaque légende qu'une autre légende suit.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

@@ -59,12 +59,16 @@ const ReaderMode = (function () {
   // Un tableau de premier niveau fait exception à la première phrase : il se coupe ENTRE deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les lignes qui ne
   // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Un
   // tableau qu'on ne sait pas couper ainsi (ligne plus haute que la page, cases fusionnées sur plusieurs lignes...) garde la règle ci-dessus.
+  // La légende d'une image ou d'un tableau reste avec son bloc, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks, « Rester ensemble ») : le bloc et ses légendes comptent pour
+  // UN bloc d'une pièce ; pour un tableau coupé entre deux lignes, la dernière ligne et la légende.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
     const zoom = layoutZoom(rootEl);
     const offsets = [];
     let consumed = 0;
+    let counted = 0;
     Array.from(rootEl.children).forEach((child, index) => {
+      if (index < counted) return;
       const rect = child.getBoundingClientRect();
       const top = (rect.top - rootRect.top) / zoom;
       const height = rect.height / zoom;
@@ -73,17 +77,23 @@ const ReaderMode = (function () {
         consumed = 0;
         return;
       }
-      const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx) : null;
+      const captions = Caption.captionsAfter(child);
+      const captionPx = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height / zoom, 0);
+      const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx, null, captionPx) : null;
       if (cuttable) {
         const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx);
         if (tablePlan.blockBreakBefore) offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
         tablePlan.cuts.forEach(rowIndex => offsets.push({ top: top + cuttable.segs.slice(0, rowIndex).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
         consumed = tablePlan.consumedAfter;
+        if (cuttable.keepsTail) counted = index + 1 + captions.length;
         return;
       }
-      const staysOnPage = isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
-      if (consumed > 0 && consumed + height > pageContentHeightPx && !staysOnPage) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = height; }
-      else { consumed += height; }
+      const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
+      const unitHeight = keeps ? height + captionPx : height;
+      const staysOnPage = !keeps && isSplittableByExport(child) && pageContentHeightPx - consumed > height / 2;
+      if (consumed > 0 && consumed + unitHeight > pageContentHeightPx && !staysOnPage) { offsets.push({ top, afterIndex: index - 1, remainingPx: 0 }); consumed = unitHeight; }
+      else { consumed += unitHeight; }
+      if (keeps) counted = index + 1 + captions.length;
     });
     return offsets;
   }

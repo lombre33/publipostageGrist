@@ -741,11 +741,34 @@ const PdfExport = (function () {
 
   // Un tableau en un ou plusieurs blocs : une grille dont des lignes portent un saut de page (js/grid-editor.js) est coupée avant chacune, et chaque morceau ouvre une page (le premier
   // garde le saut que le tableau avait déjà). Les colonnes, le trait et les hauteurs sont ceux du tableau entier : tous les morceaux se lisent à la même largeur.
-  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow) {
+  // « Rester ensemble » (js/caption.js, choix d'Antoine du 02/10) : un tableau qui se coupe entre deux lignes et que suit une légende (`captionPt`, sa hauteur) est rendu en deux morceaux, tout
+  // sauf la dernière ligne puis la dernière ligne seule (`_keepTail`) : c'est elle, avec la légende, que captionKeepRule passe à la page suivante quand la légende y serait seule. Collés,
+  // les deux morceaux ne se distinguent pas du tableau entier (le trait entre eux n'est dessiné qu'une fois, par le premier) ; la dernière ligne qui ouvre une page dessine son trait du haut.
+  // Seulement quand la dernière ligne et la légende tiennent ensemble dans une page (Caption.fitsWithCaption) : sinon le tableau reste d'une pièce, comme avant.
+  function splitTailRow(table, node, captionPt) {
+    const body = table.table.body;
+    const rows = TablePageCut.rowsOf(node);
+    if (!table.table.dontBreakRows || body.length < 2 || !rows || rows.length !== body.length) return null;
+    const tailPt = rows[rows.length - 1].getBoundingClientRect().height * PX_TO_PT + captionPt;
+    if (!Caption.fitsWithCaption(tailPt, tablePageHeightPt)) return null;
+    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1) }), margin: [0, 5, 0, 0] });
+    const baseLayout = table.layout;
+    const tail = Object.assign({}, table, {
+      table: Object.assign({}, table.table, { body: body.slice(-1) }),
+      margin: [0, 0, 0, 5],
+      layout: Object.assign({}, baseLayout, { hLineWidth: (i, tableNode) => (i === 0 && tableNode.pageBreak !== 'before' ? 0 : baseLayout.hLineWidth(i, tableNode)) }),
+      _keepTail: true,
+      _keepUnitPt: tailPt,
+    });
+    delete tail.pageBreak;
+    delete tail._nestedPending;
+    return [head, tail];
+  }
+  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt) {
     const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow);
     const segments = table._rowSegments;
     delete table._rowSegments;
-    if (!segments) return [table];
+    if (!segments) return (captionPt > 0 && splitTailRow(table, node, captionPt)) || [table];
     return segments.map(([from, to], i) => {
       const piece = Object.assign({}, table, { table: Object.assign({}, table.table, { body: table.table.body.slice(from, to), heights: table.table.heights.slice(from, to) }) });
       if (i > 0) { piece.pageBreak = 'before'; delete piece._nestedPending; }
@@ -1286,9 +1309,9 @@ const PdfExport = (function () {
     return block;
   }
 
-  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry) {
+  function blockFrom(node, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry, captionPt) {
     const tag = node.tagName.toUpperCase();
-    if (tag === 'TABLE') return tableBlocksFrom(node, pageBreakBefore, rootRect, availableWidthPt == null);
+    if (tag === 'TABLE') return tableBlocksFrom(node, pageBreakBefore, rootRect, availableWidthPt == null, captionPt);
     if (tag === 'HR') return [{ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }], margin: [0, 5, 0, 5], ...(pageBreakBefore ? { pageBreak: 'before' } : {}) }];
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     if (tag === 'P' || tag === 'DIV') {
@@ -1444,13 +1467,21 @@ const PdfExport = (function () {
     const slotStarts = {};
     // Parallèle à `blocks` : le slot de chaque bloc (null hors macro-modèle) - une image sans position de page n'est encadrée que par les blocs de son slot.
     const blockSlots = [];
+    // « Rester ensemble » (js/caption.js) : les images et les tableaux du texte courant que suit une légende, avec leur légende - { start, last }, le premier bloc de l'image ou du tableau (la
+    // dernière ligne seule, pour un tableau qui se coupe entre deux lignes) et le dernier bloc de la légende. captionKeepRule les garde sur une même page. `captionOwner` : le bloc qui
+    // vient d'être posé et peut encore recevoir sa légende (le frère suivant) ; tout autre nœud le referme.
+    const captionPairs = [];
+    let captionOwner = null;
+    const inFlow = block => !!block && !block._pendingImgNode && !block.absolutePosition;
     const push = (block, node) => {
       if (pendingSlotStart != null) { slotStarts[pendingSlotStart] = blocks.length; pendingSlotStart = null; }
       blocks.push(block); sourceNodes.push(node); blockSlots.push(currentSlot);
     };
     const visit = async node => {
-      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); pendingPageBreak = false; return; }
+      if (node.nodeType === Node.TEXT_NODE) { if (node.nodeValue.trim()) { captionOwner = null; push({ text: node.nodeValue, margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, ...(pendingPageBreak ? { pageBreak: 'before' } : {}) }, node.parentElement); } pendingPageBreak = false; return; }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const owner = captionOwner;
+      captionOwner = null;
       if (node.classList.contains('page-break-marker')) {
         pendingPageBreak = true; floatCarry = null;
         if (isTopLevel && node.hasAttribute('data-macro-slot')) { currentSlot = pendingSlotStart = node.getAttribute('data-macro-slot'); }
@@ -1491,7 +1522,11 @@ const PdfExport = (function () {
       if (isBlock(node)) {
         const footnoteCheckpoint = footnoteEntries.length;
         let produced;
-        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect, floatCarry); }
+        // Les légendes qui suivent une image ou un tableau du texte courant (hauteur en points : un tableau en tient compte pour garder sa dernière ligne avec elles).
+        const keepable = isTopLevel && tablePageHeightPt > 0;
+        const captions = keepable ? Caption.captionsAfter(node) : [];
+        const captionPt = captions.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0) * PX_TO_PT;
+        try { produced = blockFrom(node, pendingPageBreak, headingMarkers, availableWidthPt, rootRect, floatCarry, captionPt); }
         catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, pendingPageBreak)]; }
         floatCarry = (produced && produced._floatCarry) || null;
         // Attache toute note trouvée dans ce nœud au premier bloc produit : plusieurs blocs pour un seul nœud source atterrissent presque toujours sur la
@@ -1507,6 +1542,23 @@ const PdfExport = (function () {
           if (i === 0 && newFootnotes) footnoteBlocks.push(...newFootnotes.map(fe => ({ block: b, number: fe.number, text: fe.text })));
         });
         pendingPageBreak = breakLeavesWithLayers;
+        if (keepable) {
+          if (owner && Caption.isCaptionElement(node)) {
+            // Une légende de l'image ou du tableau qui précède : le dernier bloc posé de la paire est celui de cette légende (une autre légende à la suite le prolongera).
+            const lastBlock = produced.filter(inFlow).pop();
+            if (lastBlock) {
+              if (!owner.pair) { owner.pair = { start: owner.start, last: lastBlock }; owner.start.id = CAPTION_KEEP_ID + captionPairs.length; captionPairs.push(owner.pair); }
+              else owner.pair.last = lastBlock;
+              captionOwner = owner;
+            }
+          } else if (captions.length) {
+            // L'image ou le tableau et sa légende tiennent-ils ensemble dans une page ? Sinon rien à garder (Caption.fitsWithCaption). Un tableau coupé entre deux lignes ne garde que sa dernière ligne.
+            const tail = produced.find(b => b && b._keepTail);
+            const start = tail || produced.find(inFlow);
+            const unitPt = tail ? tail._keepUnitPt : (node.getBoundingClientRect().height * PX_TO_PT + captionPt);
+            if (start && Caption.fitsWithCaption(unitPt, tablePageHeightPt)) captionOwner = { start, pair: null };
+          }
+        }
         return;
       }
       for (const child of Array.from(node.childNodes)) { await visit(child); }
@@ -1526,6 +1578,7 @@ const PdfExport = (function () {
     content._tocBlocks = tocBlocks;
     content._footnoteBlocks = footnoteBlocks;
     content._slotStarts = slotStarts;
+    content._captionPairs = captionPairs;
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(rootRect, blocks, sourceNodes, blockSlots).concat(nestedPendingAll); }
     catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = nestedPendingAll; }
@@ -1724,6 +1777,26 @@ const PdfExport = (function () {
       + ' fill="' + layout.color + '" fill-opacity="' + layout.opacity + '" transform="rotate(' + layout.angleDeg + ' ' + num(cx) + ' ' + num(cy) + ')">' + escaped + '</text></svg>';
   }
 
+  // « Rester ensemble » (js/caption.js, choix d'Antoine du 02/10) : la légende d'une image ou d'un tableau ne reste jamais seule en haut de la page suivante. Rappel `pageBreakBefore` de
+  // pdfmake : appelé une fois par nœud, après une mise en page, pour le premier bloc de chaque paire (buildPdfContentFromRoot : `id` « pp-keep-N »), il demande de le passer à la page
+  // suivante quand lui et sa légende ne sont plus sur la même page (pdfmake remet alors tout en page, la légende suit). Un bloc déjà en haut de sa page ne bouge pas : le passer à la
+  // suivante n'ajouterait qu'une page blanche. Pas d'`unbreakable` : pdfmake note les positions d'un bloc insécable à l'endroit où il ne tient pas, avant de le déplacer - la page d'une note ou
+  // d'une image en calque ancrée sur lui serait fausse. Un seul paramètre : pdfmake ne dresse les listes des nœuds voisins (en O(n²)) que pour un rappel qui en déclare davantage.
+  const CAPTION_KEEP_ID = 'pp-keep-';
+  function captionKeepRule(pairs) {
+    return function (currentNode) {
+      const id = currentNode && currentNode.id;
+      if (typeof id !== 'string' || id.indexOf(CAPTION_KEEP_ID) !== 0) return false;
+      const pair = pairs[parseInt(id.slice(CAPTION_KEEP_ID.length), 10)];
+      if (!pair) return false;
+      const first = pair.start.positions && pair.start.positions[0];
+      const end = pair.last.positions && pair.last.positions[pair.last.positions.length - 1];
+      if (!first || !end || first.pageNumber === end.pageNumber) return false;
+      const ownTopMargin = (pair.start._margin && pair.start._margin[1]) || 0;
+      return first.verticalRatio * first.pageInnerHeight > ownTopMargin + 2;
+    };
+  }
+
   // `headerFooterChunks` threadé à l'identique dans les deux passes (mesure et rendu réel) : sinon la hauteur de page disponible diffère entre elles et un
   // titre/image pourrait changer de page entre mesure et rendu final.
   function buildNativeDocDefinition(content, filename, headerFooterChunks) {
@@ -1739,6 +1812,7 @@ const PdfExport = (function () {
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
+    if ((content._captionPairs || []).length) doc.pageBreakBefore = captionKeepRule(content._captionPairs);
     // Le filigrane (js/page-layer.js:watermarkLayout : le corps et l'angle que l'éditeur dessine) : le premier des fonds de CHAQUE page, donc derrière le texte et derrière les
     // images en calque, comme à l'écran. Pas le `watermark` natif de pdfmake, qui se peint APRÈS le contenu (par-dessus le texte et les images) et que rien ne descend dessous.
     const watermarkNode = (layout => (layout ? { svg: watermarkSvgFrom(layout), absolutePosition: { x: 0, y: 0 } } : null))(PageLayer.watermarkLayout(pageWatermark, pageWidthPt, pageHeightPt));

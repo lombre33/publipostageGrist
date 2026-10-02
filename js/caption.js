@@ -8,6 +8,10 @@
 // (après le paragraphe qui porte l'image) et y met le curseur ; avec une légende, il est actif et y ramène le curseur - jamais un retrait, aucun texte ne se perd (une légende
 // vide se retire comme un paragraphe vide : Retour arrière). Il est grisé, avec sa raison en info-bulle, pour une image en calque ou habillée par le texte (il n'y a pas de
 // « dessous ») et dans une grille.
+//
+// Au saut de page (choix d'Antoine du 02/10, « Rester ensemble ») la légende reste avec son bloc : jamais seule en haut de la page suivante. L'éditeur (js/header-footer-preview.js), la
+// Lecture (js/reader-mode.js), le PDF (js/pdf-export.js) et le Word (js/docx-export.js) le décident sur le HTML ; `carriesCaption` et `captionsAfter` disent de quel bloc et de quelles
+// légendes il s'agit, `fitsWithCaption` à partir de quelle hauteur le bloc et sa légende ne tiennent plus ensemble dans une page (ils restent alors comme avant).
 const Caption = (function () {
   // 12 px = 9 pt, contre 14 px pour le texte courant. #595959 : 7:1 sur la feuille, qui reste blanche en thème sombre (css/editor-v2.css, #editor-container).
   const SIZE_PX = 12;
@@ -139,5 +143,30 @@ const Caption = (function () {
     return true;
   }
 
-  return { SIZE_PX, SIZE_PT, COLOR, createExtension, status, syncButton, run };
+  // === Au saut de page ===
+  const isCaptionElement = el => !!el && el.nodeType === 1 && el.tagName === 'P' && el.hasAttribute('data-caption') && el.getAttribute('data-caption') !== 'false';
+
+  // Le bloc de premier niveau qui peut porter une légende : un paragraphe qui contient une image, un tableau (l'enveloppe .tableWrapper de l'éditeur, le <table> du HTML sérialisé).
+  // Une légende n'en porte jamais une autre.
+  function carriesCaption(el) {
+    if (!el || el.nodeType !== 1 || isCaptionElement(el)) return false;
+    return el.tagName === 'TABLE' || el.classList.contains('tableWrapper') || (el.tagName === 'P' && !!el.querySelector('img'));
+  }
+
+  // Les légendes qui suivent le bloc `el` (les frères qui se suivent, jusqu'au premier qui n'en est pas une), [] si `el` n'en porte pas. `endEl` : le frère où l'on s'arrête sans
+  // le compter (les lignes vides de fin de document, que l'aperçu laisse hors de la pagination).
+  function captionsAfter(el, endEl) {
+    const out = [];
+    if (!carriesCaption(el)) return out;
+    for (let next = el.nextElementSibling; next && next !== endEl && isCaptionElement(next); next = next.nextElementSibling) out.push(next);
+    return out;
+  }
+
+  // Un bloc et ses légendes ne se gardent ensemble que s'ils tiennent dans une page, et même dans 90 % d'une page : au-delà, pdfmake (qui range le bloc d'une pièce) en perdrait une
+  // partie, et le PDF ne peut pas faire ce que l'éditeur ferait (même plafond que pour une ligne de tableau, js/table-page-cut.js). `unitHeight` et `pageHeight` dans la même unité.
+  function fitsWithCaption(unitHeight, pageHeight) {
+    return unitHeight <= TablePageCut.MAX_ROW_RATIO * pageHeight;
+  }
+
+  return { SIZE_PX, SIZE_PT, COLOR, createExtension, status, syncButton, run, isCaptionElement, carriesCaption, captionsAfter, fitsWithCaption };
 })();

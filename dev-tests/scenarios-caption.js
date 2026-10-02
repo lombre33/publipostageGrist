@@ -456,6 +456,330 @@
     },
   });
 
+  // === 6) Au saut de page : la légende reste avec son image ou son tableau ==============================================================================================
+  // Choix d'Antoine du 02/10 (« Rester ensemble ») : « au saut de page, la légende reste avec son image ou son tableau : jamais seule en haut de la page suivante (éditeur, PDF et Word) ».
+  // L'éditeur et la Lecture comptent le bloc et ses légendes pour un seul bloc (js/header-footer-preview.js:computePageBreaks, js/reader-mode.js:computePageBreakOffsets) ; pour un tableau qui
+  // se coupe entre deux lignes, la dernière ligne et la légende (js/table-page-cut.js) ; le PDF passe le premier bloc de la paire à la page suivante par le rappel `pageBreakBefore` de pdfmake
+  // (js/pdf-export.js:captionKeepRule) et rend la dernière ligne du tableau à part ; le Word met « Conserver avec le suivant » sur le paragraphe de l'image et sur la dernière ligne du tableau.
+  // Pour que les verdicts ne dépendent pas des polices de la machine, l'éditeur et la Lecture sont CALIBRÉS sur des mesures (la page est réglée pour que la coupure tombe à la moitié de
+  // la légende) ; le PDF se juge à ce que pdf.js y lit, sur des marges du bas balayées de 2 pt en 2 pt à travers l'endroit où la légende ne tient plus (pdfmake est déterministe : ses polices
+  // sont dans la page).
+  const intro = n => Array.from({ length: n }, (_, i) => '<p>Introduction ' + i + '</p>').join('');
+  const CAP = text => '<p data-caption="true">' + text + '</p>';
+  const token = (row, line) => 'R' + String(row).padStart(2, '0') + 'L' + line;
+  const tableOf = rows => '<table><tbody>' + Array.from({ length: rows }, (_, i) => '<tr><td><p>' + token(i, 0) + '</p></td><td><p>Valeur ' + i + '</p></td></tr>').join('') + '</tbody></table>';
+  // Un tableau qu'on ne sait pas couper entre deux lignes (une case fusionnée sur deux lignes) : il reste d'une pièce.
+  const MERGED_TABLE = '<table><tbody><tr><td rowspan="2"><p>Fusion</p></td><td><p>B1</p></td></tr><tr><td><p>B2</p></td></tr><tr><td><p>C1</p></td><td><p>C2</p></td></tr></tbody></table>';
+  const PAGE_BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+
+  const zoomOf = el => {
+    const sheet = el.closest('.v2-page-sheet, .reader-content');
+    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(z) && z > 0) ? z : 1;
+  };
+  const layoutHeight = el => el.getBoundingClientRect().height / zoomOf(el);
+  const topLevel = root => Array.from(root.children).filter(k => k.tagName !== 'STYLE');
+  const pageHeightPx = () => PageLayout.getPageSizePx().height;
+  function setPageContentHeight(contentPx) {
+    const halfMm = (pageHeightPx() - contentPx) / 2 / PageLayout.MM_TO_PX;
+    PageLayout.setMarginsMm({ top: halfMm, bottom: halfMm, left: PageLayout.DEFAULT_MARGIN_MM, right: PageLayout.DEFAULT_MARGIN_MM });
+  }
+  function restoreLayout() {
+    PageLayout.setMarginsMm(null);
+    ['editor-container', 'reader-container'].forEach(id => document.getElementById(id).style.removeProperty('--pp-fit-zoom'));
+    document.getElementById('reader-container').style.display = '';
+    document.getElementById('editor-container').style.display = '';
+  }
+  const labelOf = el => (el.querySelector('img') ? 'IMG' : (el.hasAttribute('data-caption') ? 'CAPTION:' + el.textContent.trim() : el.textContent.trim()));
+  // Ce qui ouvre la page 2 : le premier bloc (ou la première ligne d'un tableau, « ROW:R07L0 ») dont le texte est sous la première bande de saut de page.
+  function firstOnPage2(containerSelector, root) {
+    const bands = Array.from(document.querySelectorAll(containerSelector + ' .v2-page-band'));
+    if (!bands.length) return { bands: 0, first: null, next: null };
+    const bandBottom = bands[0].getBoundingClientRect().bottom;
+    const items = [];
+    topLevel(root).forEach(el => {
+      if (el.classList.contains('tableWrapper') || el.tagName === 'TABLE') {
+        Array.from(el.querySelectorAll('tbody > tr')).forEach(tr => items.push({ target: tr.querySelector('p'), label: 'ROW:' + tr.querySelector('p').textContent.trim() }));
+      } else {
+        items.push({ target: el, label: labelOf(el) });
+      }
+    });
+    const at = items.findIndex(it => it.target.getBoundingClientRect().top >= bandBottom - 1);
+    return { bands: bands.length, first: at >= 0 ? items[at].label : null, next: at >= 0 && items[at + 1] ? items[at + 1].label : null };
+  }
+  async function loadPaged(h, html) {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    Editor.setHTML(html);
+    await sleep(450);
+  }
+  // Charge `html`, règle la page à la hauteur que `contentHeight(kids)` calcule sur les blocs mesurés (marges par défaut), puis lit ce qui ouvre la page 2 dans l'éditeur et dans la Lecture
+  // réglée sur la MÊME hauteur : les deux doivent s'accorder.
+  async function pagedEditorAndReader(h, html, contentHeight) {
+    await loadPaged(h, html);
+    const kids = topLevel(h.tiptap());
+    const contentPx = contentHeight(kids);
+    const savedHtml = Editor.getHTML();
+    setPageContentHeight(contentPx);
+    Editor.refreshPaginationPreview();
+    await sleep(450);
+    const editor = firstOnPage2('#editor-container', h.tiptap());
+    const unchanged = Editor.getHTML() === savedHtml;
+    const wrapper = await h.renderReaderMode(savedHtml);
+    await sleep(450);
+    const reader = firstOnPage2('#reader-container', wrapper);
+    return { contentPx: Math.round(contentPx), editor, reader, unchanged };
+  }
+  const sumHeights = kids => kids.reduce((sum, el) => sum + layoutHeight(el), 0);
+  const indexOfImage = kids => kids.findIndex(k => k.querySelector('img'));
+
+  cases.push({
+    id: 'caption_keep_an_image_goes_to_the_next_page_with_its_caption_in_the_editor_and_the_reader',
+    description: 'Éditeur et Lecture : quand l\'image tient dans la page mais pas sa légende, l\'image passe à la page suivante AVEC sa légende (avant : la légende ouvrait la page 2 toute seule, l\'image restait seule en bas de la page 1) ; le document enregistré n\'est pas modifié',
+    run: async (h) => {
+      try {
+        const html = intro(8) + '<p>' + image() + '</p>' + CAP('Figure un') + '<p>Après</p>';
+        const got = await pagedEditorAndReader(h, html, kids => {
+          const at = indexOfImage(kids);
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        // L'image et sa légende tiennent, c'est le paragraphe d'après qui ne tient plus : la couture est derrière la légende, qu'elle ne recouvre pas.
+        const after = await pagedEditorAndReader(h, html, kids => {
+          const at = indexOfImage(kids);
+          return sumHeights(kids.slice(0, at + 2)) + layoutHeight(kids[at + 2]) / 2;
+        });
+        const caption = h.tiptap().querySelector('p[data-caption]');
+        const band = document.querySelector('#editor-container .v2-page-band');
+        const clear = !!caption && !!band && caption.getBoundingClientRect().bottom <= band.getBoundingClientRect().top + 0.5;
+        const pass = got.editor.bands === 1 && got.editor.first === 'IMG' && got.editor.next === 'CAPTION:Figure un'
+          && got.reader.bands === 1 && got.reader.first === 'IMG' && got.reader.next === 'CAPTION:Figure un' && got.unchanged
+          && after.editor.bands === 1 && after.editor.first === 'Après' && after.reader.bands === 1 && after.reader.first === 'Après' && clear;
+        return { pass, notes: JSON.stringify({ got, after, clear }) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  cases.push({
+    id: 'caption_keep_the_last_row_of_a_table_goes_to_the_next_page_with_its_caption_in_the_editor_and_the_reader',
+    description: 'Éditeur et Lecture : quand la dernière ligne d\'un tableau tient dans la page mais pas sa légende, la dernière ligne passe à la page suivante avec sa légende (le reste du tableau se coupe comme avant, entre deux lignes) ; avant, la légende ouvrait la page 2 toute seule',
+    run: async (h) => {
+      try {
+        const html = intro(6) + tableOf(8) + CAP('Tableau un') + '<p>Après</p>';
+        const got = await pagedEditorAndReader(h, html, kids => {
+          const wrapper = kids.find(k => k.classList.contains('tableWrapper'));
+          const at = kids.indexOf(wrapper);
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        const pass = got.editor.bands === 1 && got.editor.first === 'ROW:' + token(7, 0) && got.editor.next === 'CAPTION:Tableau un'
+          && got.reader.bands === 1 && got.reader.first === 'ROW:' + token(7, 0) && got.reader.next === 'CAPTION:Tableau un' && got.unchanged;
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  cases.push({
+    id: 'caption_keep_a_table_that_cannot_be_cut_goes_whole_to_the_next_page_with_its_caption',
+    description: 'Éditeur et Lecture : un tableau qu\'on ne coupe pas entre deux lignes (case fusionnée) qui tient dans la page sans sa légende passe entier à la page suivante avec elle (avant : il restait en bas de la page 1, la légende seule en haut de la page 2)',
+    run: async (h) => {
+      try {
+        const html = intro(6) + MERGED_TABLE + CAP('Tableau fusionné') + '<p>Après</p>';
+        const got = await pagedEditorAndReader(h, html, kids => {
+          const wrapper = kids.find(k => k.classList.contains('tableWrapper'));
+          const at = kids.indexOf(wrapper);
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        const pass = got.editor.bands === 1 && got.editor.first === 'ROW:Fusion' && got.reader.bands === 1 && got.reader.first === 'ROW:Fusion' && got.unchanged;
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  cases.push({
+    id: 'caption_keep_changes_nothing_when_the_caption_fits_or_belongs_to_nothing',
+    description: 'Éditeur et Lecture : rien ne change quand l\'image et sa légende tiennent dans la page (aucune coupure), pour une légende qui suit un simple paragraphe (elle ouvre la page 2 seule, comme avant), pour une image et sa légende plus hautes que 90 % d\'une page (rien à garder : le PDF ne le pourrait pas), pour une légende vide en fin de document (elle n\'ouvre pas de page) et quand un saut de page sépare l\'image de sa légende',
+    run: async (h) => {
+      try {
+        const out = {};
+        const imageAndCaption = intro(8) + '<p>' + image() + '</p>' + CAP('Figure un');
+        // 1) tout tient
+        out.fits = (await pagedEditorAndReader(h, imageAndCaption + '<p>Après</p>', kids => sumHeights(kids) + 40)).editor.bands;
+        // 2) une légende sous un paragraphe de texte : jamais liée à lui, elle ouvre la page 2 comme avant
+        const orphan = await pagedEditorAndReader(h, intro(8) + '<p>Texte</p>' + CAP('Légende orpheline') + '<p>Après</p>', kids => {
+          const at = kids.findIndex(k => k.textContent === 'Texte');
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        out.orphan = { editor: orphan.editor.first, reader: orphan.reader.first };
+        // 3) une image presque aussi haute que la page (la page est réglée juste sous l'image et la moitié de sa légende : le bloc et sa légende dépassent 90 % de la page) : la légende
+        // ouvre la page 2 comme avant
+        const tall = await pagedEditorAndReader(h, '<p>Avant</p><p>' + image(' style="width: 100px; height: 200px"').replace('style="width: 120px"', '') + '</p>' + CAP('Figure haute') + '<p>Après</p>', kids => {
+          const at = indexOfImage(kids);
+          return sumHeights(kids.slice(0, at + 1)) + layoutHeight(kids[at + 1]) / 2;
+        });
+        out.tall = { editor: tall.editor.first, reader: tall.reader.first };
+        // 4) légende vide en fin de document : elle n'ouvre pas de page, l'image reste sur la page 1
+        const blank = await pagedEditorAndReader(h, intro(8) + '<p>' + image() + '</p>' + CAP(''), kids => {
+          const at = indexOfImage(kids);
+          return sumHeights(kids.slice(0, at + 1)) + 4;
+        });
+        out.blankTail = blank.editor.bands + blank.reader.bands;
+        // 5) un saut de page entre l'image et sa légende : la paire n'existe pas, l'image reste sur la page 1
+        const broken = await pagedEditorAndReader(h, intro(8) + '<p>' + image() + '</p>' + PAGE_BREAK + CAP('Figure un'), kids => sumHeights(kids) + 400);
+        out.broken = { bands: broken.editor.bands, first: broken.editor.first };
+        const pass = out.fits === 0 && out.orphan.editor === 'CAPTION:Légende orpheline' && out.orphan.reader === 'CAPTION:Légende orpheline'
+          && out.tall.editor === 'CAPTION:Figure haute' && out.tall.reader === 'CAPTION:Figure haute'
+          && out.blankTail === 0 && out.broken.bands === 1 && out.broken.first === 'CAPTION:Figure un';
+        return { pass, notes: JSON.stringify(out) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  // --- PDF : lu par pdf.js ---
+  const PDF_MARGIN_PT = 28;
+  async function pdfAt(h, html, bottomPt) {
+    const result = await h.exportPdfContent(html, null, { top: PDF_MARGIN_PT, right: PDF_MARGIN_PT, bottom: bottomPt, left: PDF_MARGIN_PT });
+    return { result, gt: await h.extractPdfGroundTruth(result.base64) };
+  }
+  const pdfText = (gt, re) => { const found = []; gt.pages.forEach((page, p) => page.textItems.forEach(it => { if (re.test(it.str)) found.push({ page: p, y: it.y, str: it.str }); })); return found; };
+  const introLine = i => '<p>INTRO' + String(i).padStart(2, '0') + '</p>';
+  const introLines = n => Array.from({ length: n }, (_, i) => introLine(i)).join('');
+  // Le nombre de lignes d'introduction qui amène la légende juste au-dessus du bas de la page 1 (tout tient encore) et ce que le PDF y mesure : la page, l'écart entre deux lignes, le bas
+  // de l'image ou de la dernière ligne (`anchorY`) et la base de la légende (`capY`).
+  async function packedNearBottom(h, makeHtml, anchorOf) {
+    const probe = await pdfAt(h, makeHtml(10), PDF_MARGIN_PT);
+    const lines = pdfText(probe.gt, /^INTRO\d\d$/);
+    const pitch = (lines[lines.length - 1].y - lines[0].y) / (lines.length - 1);
+    const pageHeight = probe.gt.pages[0].height;
+    const capY0 = pdfText(probe.gt, /LEGENDEX/)[0].y;
+    let n = 10 + Math.max(0, Math.floor((pageHeight - PDF_MARGIN_PT - 6 - capY0) / pitch));
+    for (let tries = 0; tries < 6; tries++) {
+      const packed = await pdfAt(h, makeHtml(n), PDF_MARGIN_PT);
+      const cap = pdfText(packed.gt, /LEGENDEX/)[0];
+      if (packed.gt.pages.length === 1) return { n, pitch, pageHeight, capY: cap.y, anchorY: anchorOf(packed.gt) };
+      n--;
+    }
+    throw new Error('Le document ne tient pas sur une page, même raccourci');
+  }
+  // Balaie la marge du bas de 2 pt en 2 pt à travers l'endroit où la légende ne tient plus sur la page 1 et rend ce que le PDF dit de chaque marge.
+  async function sweepBottomMargin(h, makeHtml, packed, pageOf) {
+    const from = Math.floor(packed.pageHeight - packed.capY - 16);
+    const to = Math.ceil(packed.pageHeight - packed.anchorY + 4);
+    const samples = [];
+    for (let bottom = from; bottom <= to; bottom += 2) {
+      const { gt } = await pdfAt(h, makeHtml(packed.n), bottom);
+      const sample = Object.assign({ bottom, pages: gt.pages.length, empty: gt.pages.filter(pg => !pg.textItems.length && !pg.images.length).length, lost: pdfText(gt, /^Après$/).length === 1 ? 0 : 1 }, pageOf(gt));
+      samples.push(sample);
+    }
+    return samples;
+  }
+  const imageHtml = n => introLines(n) + '<p>' + image() + '</p>' + CAP('LEGENDEX') + '<p>Après</p>';
+
+  cases.push({
+    id: 'caption_keep_pdf_an_image_never_leaves_its_caption_alone_at_the_top_of_a_page',
+    description: 'PDF (lu par pdf.js) : quelle que soit la marge du bas, l\'image et sa légende sont sur la même page ; quand la légende ne tient plus en bas de la page 1, l\'image passe à la page 2 avec elle (avant : la légende ouvrait la page 2 toute seule) ; aucune page blanche, rien de perdu',
+    run: async (h) => {
+      await h.resetEditor();
+      const packed = await packedNearBottom(h, imageHtml, gt => { const img = gt.pages[0].images[0]; return img.y + img.height; });
+      const samples = await sweepBottomMargin(h, imageHtml, packed, gt => ({
+        imagePage: gt.pages.findIndex(pg => pg.images.length > 0),
+        captionPage: (pdfText(gt, /LEGENDEX/)[0] || { page: -1 }).page,
+      }));
+      const together = samples.every(s => s.imagePage === s.captionPage);
+      const moved = samples.filter(s => s.imagePage === 1).length;
+      const clean = samples.every(s => s.empty === 0 && s.lost === 0 && s.pages <= 3);
+      const pass = samples.length >= 5 && together && moved >= 3 && samples.some(s => s.imagePage === 0) && clean;
+      return { pass, notes: JSON.stringify({ packed, together, moved, clean, samples: samples.map(s => [s.bottom, s.imagePage, s.captionPage]) }) };
+    },
+  });
+
+  const tableHtml = n => introLines(n) + tableOf(6) + CAP('LEGENDEX') + '<p>Après</p>';
+  cases.push({
+    id: 'caption_keep_pdf_the_last_row_of_a_table_never_leaves_its_caption_alone_at_the_top_of_a_page',
+    description: 'PDF (lu par pdf.js) : quelle que soit la marge du bas, la dernière ligne du tableau et sa légende sont sur la même page ; quand la légende ne tient plus, la dernière ligne la suit à la page 2 (le tableau se coupe entre deux lignes, aucune ligne coupée en deux) ; avant, la légende ouvrait la page 2 toute seule',
+    run: async (h) => {
+      await h.resetEditor();
+      const lastRow = new RegExp('^' + token(5, 0) + '$');
+      const packed = await packedNearBottom(h, tableHtml, gt => pdfText(gt, lastRow)[0].y);
+      const samples = await sweepBottomMargin(h, tableHtml, packed, gt => {
+        const rows = [0, 1, 2, 3, 4, 5].map(i => (pdfText(gt, new RegExp('^' + token(i, 0) + '$'))[0] || { page: -1 }).page);
+        return { rows, lastRowPage: rows[5], captionPage: (pdfText(gt, /LEGENDEX/)[0] || { page: -1 }).page };
+      });
+      const together = samples.every(s => s.lastRowPage === s.captionPage);
+      const cutBeforeLast = samples.filter(s => s.rows[4] === 0 && s.rows[5] === 1).length;
+      const clean = samples.every(s => s.empty === 0 && s.lost === 0 && s.pages <= 3 && s.rows.every(r => r >= 0));
+      const pass = samples.length >= 5 && together && cutBeforeLast >= 2 && samples.some(s => s.lastRowPage === 0) && clean;
+      return { pass, notes: JSON.stringify({ packed, together, cutBeforeLast, clean, samples: samples.map(s => [s.bottom, s.rows.join(''), s.captionPage]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'caption_keep_pdf_only_pairs_that_fit_in_a_page_are_kept_and_nothing_changes_without_a_caption',
+    description: 'PDF : le rappel pageBreakBefore n\'existe que s\'il y a une image ou un tableau suivi d\'une légende qui tiennent ensemble dans une page ; un tableau sans légende reste un seul tableau, avec une légende il est rendu en deux morceaux (la dernière ligne seule) dont le second garde son trait du haut quand il ouvre une page ; une image presque aussi haute que la page n\'est pas gardée',
+    run: async (h) => {
+      await h.resetEditor();
+      const lead = 'Avant';
+      const plain = await h.exportPdfContent('<p>' + lead + '</p>' + tableOf(6) + '<p>Après</p>');
+      const withCaption = await h.exportPdfContent('<p>' + lead + '</p>' + tableOf(6) + CAP('Légende') + '<p>Après</p>');
+      const imageOnly = await h.exportPdfContent('<p>' + lead + '</p><p>' + image() + '</p><p>Après</p>');
+      const imageCaption = await h.exportPdfContent('<p>' + lead + '</p><p>' + image() + '</p>' + CAP('Légende') + '<p>Après</p>');
+      const tallImage = '<p>' + image(' style="width: 100px; height: 1000px"').replace('style="width: 120px"', '') + '</p>';
+      const tall = await h.exportPdfContent('<p>' + lead + '</p>' + tallImage + CAP('Légende') + '<p>Après</p>');
+      const tablesOf = out => { const found = []; const walk = n => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) { n.forEach(walk); return; } if (n.table) found.push(n); ['stack', 'columns'].forEach(k => n[k] && walk(n[k])); }; walk(out.content); return found; };
+      const plainTables = tablesOf(plain);
+      const keptTables = tablesOf(withCaption);
+      const tail = keptTables[1];
+      const tailLine = tail && tail.layout ? { top: tail.layout.hLineWidth(0, { pageBreak: undefined }), moved: tail.layout.hLineWidth(0, { pageBreak: 'before' }), bottom: tail.layout.hLineWidth(1, {}) } : null;
+      const got = {
+        plainTables: plainTables.length, plainHook: typeof plain.docDefinition.pageBreakBefore,
+        keptTables: keptTables.map(t => t.table.body.length), keptHook: typeof withCaption.docDefinition.pageBreakBefore,
+        imageHook: typeof imageOnly.docDefinition.pageBreakBefore, imageCaptionHook: typeof imageCaption.docDefinition.pageBreakBefore, tallHook: typeof tall.docDefinition.pageBreakBefore,
+        tailLine, tailFlag: !!(tail && tail.table.dontBreakRows),
+      };
+      const pass = got.plainTables === 1 && got.plainHook === 'undefined' && JSON.stringify(got.keptTables) === '[5,1]' && got.keptHook === 'function' && got.tailFlag
+        && got.imageHook === 'undefined' && got.imageCaptionHook === 'function' && got.tallHook === 'undefined'
+        && !!tailLine && tailLine.top === 0 && tailLine.moved === 0.5 && tailLine.bottom === 0.5;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  // --- Word ---
+  cases.push({
+    id: 'caption_keep_docx_the_image_and_the_last_row_keep_with_next_so_the_caption_stays_with_them',
+    description: 'Word (OOXML dézippé) : « Conserver avec le suivant » (w:keepNext) sur le paragraphe de l\'image que suit une légende, sur la dernière ligne d\'un tableau qui se coupe entre deux lignes, sur toutes les lignes d\'un tableau qu\'on ne coupe pas, et sur chaque légende que suit une autre légende ; jamais sur la dernière légende, un paragraphe ordinaire, une image ou un tableau sans légende',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Avant</p>'
+        + '<p>' + image() + '</p>' + CAP('Figure un')
+        + tableOf(3).replace(/R0/g, 'A0') + CAP('Tableau un')
+        + MERGED_TABLE.replace(/Fusion|B1|B2|C1|C2/g, m => 'M' + m) + CAP('Tableau fusionné')
+        + '<p>Texte seul</p>' + CAP('Légende orpheline')
+        + '<p>' + image() + '</p>' + CAP('Double un') + CAP('Double deux')
+        + '<p>' + image() + '</p><p>Image sans légende</p>'
+        + tableOf(2).replace(/R0/g, 'S0') + '<p>Après</p>';
+      const out = await h.exportDocxParts(html);
+      const keepNext = p => !!p.getElementsByTagName('w:pPr')[0] && p.getElementsByTagName('w:pPr')[0].getElementsByTagName('w:keepNext').length > 0;
+      const textOf = p => Array.from(p.getElementsByTagName('w:t')).map(t => t.textContent).join('');
+      const paragraphs = Array.from(out.doc.getElementsByTagName('w:p')).map(p => ({ text: textOf(p), drawing: p.getElementsByTagName('w:drawing').length > 0, keep: keepNext(p) }));
+      const named = text => paragraphs.find(p => p.text.includes(text));
+      const images = paragraphs.filter(p => p.drawing);
+      const got = {
+        before: named('Avant').keep, imageWithCaption: images[0].keep, caption: named('Figure un').keep,
+        cutRows: ['A00L0', 'A01L0', 'A02L0'].map(t => named(t).keep), tableCaption: named('Tableau un').keep,
+        mergedRows: ['MFusion', 'MB1', 'MB2', 'MC1', 'MC2'].map(t => named(t).keep), mergedCaption: named('Tableau fusionné').keep,
+        text: named('Texte seul').keep, orphanCaption: named('Légende orpheline').keep,
+        doubleImage: images[1].keep, doubleOne: named('Double un').keep, doubleTwo: named('Double deux').keep,
+        lonelyImage: images[2].keep, lonelyText: named('Image sans légende').keep, plainRows: ['S00L0', 'S01L0'].map(t => named(t).keep), after: named('Après').keep,
+      };
+      const pass = got.before === false && got.imageWithCaption === true && got.caption === false
+        && JSON.stringify(got.cutRows) === '[false,false,true]' && got.tableCaption === false
+        && got.mergedRows.every(k => k === true) && got.mergedCaption === false
+        && got.text === false && got.orphanCaption === false
+        && got.doubleImage === true && got.doubleOne === true && got.doubleTwo === false
+        && got.lonelyImage === false && got.lonelyText === false && got.plainRows.every(k => k === false) && got.after === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.caption = cases;
 })();

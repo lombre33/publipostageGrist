@@ -468,9 +468,14 @@ const DocxExport = (function () {
     const fill = cell.style.backgroundColor && cssColorHex(cell.style.backgroundColor);
     return fill ? { type: docx.ShadingType.CLEAR, fill, color: 'auto' } : undefined;
   }
-  async function tableBlockFrom(tableEl, ctx) {
+  // `keepWithCaption` : une légende suit le tableau (js/caption.js, « Rester ensemble » : jamais seule en haut de la page suivante). Word garde une ligne avec le paragraphe qui la suit quand
+  // les paragraphes de ses cases portent « Conserver avec le suivant » : la dernière ligne d'un tableau qui se coupe entre deux lignes (js/table-page-cut.js), toutes les lignes sinon, comme
+  // l'éditeur et le PDF qui passent alors le tableau entier. Word laisse tomber le lien quand la suite dépasse une page.
+  async function tableBlockFrom(tableEl, ctx, keepWithCaption) {
     const rows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tr'));
     if (!rows.length) return null;
+    const cutRows = keepWithCaption ? TablePageCut.rowsOf(tableEl) : null;
+    const keptRows = keepWithCaption ? (cutRows && cutRows.length === rows.length ? [rows[rows.length - 1]] : rows) : [];
     const firstRowCells = Array.from(rows[0].children).filter(c => /^(TD|TH)$/i.test(c.tagName));
     const columnCount = firstRowCells.reduce((sum, c) => sum + (parseInt(c.getAttribute('colspan') || '1', 10) || 1), 0) || 1;
     // Repli à parts égales si le tableau n'est pas attaché au document (ex. zone en-tête/pied, hors périmètre de la mesure, cf. buildDocxDocument) : aucun rendu à mesurer.
@@ -488,7 +493,7 @@ const DocxExport = (function () {
         const rowSpan = parseInt(cell.getAttribute('rowspan') || '1', 10) || 1;
         const width = colWidthsTwip.slice(colIndex, colIndex + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / columnCount);
         colIndex += span;
-        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP));
+        const children = await blocksFromContainer(cell, ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), keptRows.includes(tr));
         tableCells.push(new docx.TableCell({
           children: children.length ? children : [new docx.Paragraph('')],
           width: { size: width, type: docx.WidthType.DXA },
@@ -633,7 +638,8 @@ const DocxExport = (function () {
   // futur sommaire réel si l'utilisateur en construit un dans Word).
   // `pageBreakBefore` DOIT passer par le constructeur (option native, cf. IParagraphPropertiesOptionsBase) - un Paragraph déjà construit n'est pas
   // mutable de l'extérieur.
-  async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore) {
+  // `keepNext` : « Conserver avec le suivant » (w:keepNext), pour le bloc que sa légende doit suivre sur la même page (cf. keepsWithCaption).
+  async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx);
     const align = paragraphAlignment(node);
     const isHeading = isHeadingTag(node.tagName);
@@ -653,6 +659,7 @@ const DocxExport = (function () {
         spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
         pageBreakBefore: !!(i === 0 && pageBreakBefore),
       };
+      if (keepNext) opts.keepNext = true;
       if (isHeading) opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]];
       if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: 400 }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
       return new docx.Paragraph(opts);
@@ -690,7 +697,17 @@ const DocxExport = (function () {
   // Coeur du module : parcourt les enfants directs d'un conteneur (corps du document, cellule de tableau, colonne 2-colonnes, zone en-tête/pied - les
   // quatre partagent la MÊME logique ici, contrairement à pdf-export.js qui doit distinguer "flux pdfmake" et "cellule" à cause des contraintes de
   // pdfmake) et renvoie un tableau de Paragraph/Table, prêt à poser tel quel dans `children` (Document/TableCell/Header/Footer acceptent tous la même forme).
-  async function blocksFromContainer(container, ctx, isTopLevel, widthTwip) {
+  // Le paragraphe est-il à garder avec le suivant ? L'image que suit une légende, et chaque légende qu'une autre légende suit (« Rester ensemble », js/caption.js). Un tableau passe par
+  // tableBlockFrom (`keepWithCaption`).
+  function keepsWithCaption(node) {
+    if (Caption.captionsAfter(node).length) return true;
+    if (!Caption.isCaptionElement(node) || !Caption.isCaptionElement(node.nextElementSibling)) return false;
+    let owner = node.previousElementSibling;
+    while (Caption.isCaptionElement(owner)) owner = owner.previousElementSibling;
+    return Caption.carriesCaption(owner);
+  }
+  // `keepNext` : tous les paragraphes construits ici gardent le suivant (la dernière ligne d'un tableau que suit une légende, cf. tableBlockFrom).
+  async function blocksFromContainer(container, ctx, isTopLevel, widthTwip, keepNext) {
     let headingMarkers = null;
     if (isTopLevel) {
       const config = container.querySelector(':scope > .heading-numbering-config');
@@ -703,7 +720,7 @@ const DocxExport = (function () {
     let pendingPageBreak = false;
     for (const node of Array.from(container.childNodes)) {
       if (node.nodeType === Node.TEXT_NODE) {
-        if (node.nodeValue && node.nodeValue.trim()) blocks.push(new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: pendingPageBreak }));
+        if (node.nodeValue && node.nodeValue.trim()) blocks.push(new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: pendingPageBreak, keepNext: keepNext ? true : undefined }));
         pendingPageBreak = false;
         continue;
       }
@@ -725,7 +742,7 @@ const DocxExport = (function () {
         continue;
       }
       if (node.tagName === 'TABLE') {
-        const block = await tableBlockFrom(node, ctx);
+        const block = await tableBlockFrom(node, ctx, isTopLevel && Caption.captionsAfter(node).length > 0);
         if (block) blocks.push(block);
         pendingPageBreak = false;
         continue;
@@ -742,7 +759,7 @@ const DocxExport = (function () {
         continue;
       }
       if (/^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName)) {
-        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak);
+        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak, keepNext || (isTopLevel && keepsWithCaption(node)));
         blocks.push(...items);
         pendingPageBreak = false;
         continue;
