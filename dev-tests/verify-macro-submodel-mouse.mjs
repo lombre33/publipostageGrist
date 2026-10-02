@@ -343,7 +343,8 @@ async function run(theme) {
   check(`${T} - un stylo par modèle (cinq), nom accessible et info-bulle « Modifier le modèle « … » », au moins 24 px, au premier plan`,
     pencils.length === 5 && pencils.every(p => p.label === `Modifier le modèle « ${p.name} »` && p.title === p.label && p.w >= 24 && p.h >= 24 && p.onTop && !p.disabled), pencils);
   const sentence = await paintOf('#macro-summary-text', '#macro-summary-container');
-  console.log(`  (info) phrase du résumé, contraste ${ratio(sentence.color, sentence.bg)}:1 - texte existant, hors de la demande`);
+  check(`${T} - la phrase du résumé (« Page de garde : … — 2 annexes conditionnelles. ») se lit sur le fond du panneau (4,5:1 au moins ; en couleur de texte du thème, elle n'avait que 4,39:1 en clair avec le gris atténué)`,
+    ratio(sentence.color, sentence.bg) >= 4.5, { sentence: ratio(sentence.color, sentence.bg), color: sentence.color, bg: sentence.bg });
 
   // Contrastes du résumé : étiquette, nom, nom d'un modèle introuvable, stylo, tous sur le fond de leur ligne.
   const rowBg = (await paintOf('#macro-summary-parts .macro-summary-part')).bg;

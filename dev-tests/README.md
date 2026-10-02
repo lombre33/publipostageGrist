@@ -355,14 +355,14 @@ Deux options utiles :
   (`macro_layer_images_*`, `macro_legacy_layer_images_*`, `macro_build_concatenated_html_marks_slot_starts`) et, pour les deux défauts du PDF qui touchent aussi un modèle seul de
   plusieurs pages (indices décalés par les images déjà insérées ; image « derrière » d'une page suivante peinte sur la page d'avant), dans `pdfFidelity`
   (`pdffid_layered_images_on_page_two_stay_on_page_two`).
-- `macroSubmodelMouse` (`dev-tests/verify-macro-submodel-mouse.mjs`, 89 vérifications) : le stylo de chaque modèle dans le résumé d'un macro-modèle et le bandeau « Revenir au macro-modèle » (demande d'Antoine du 02/10), à la vraie souris,
+- `macroSubmodelMouse` (`dev-tests/verify-macro-submodel-mouse.mjs`, 91 vérifications) : le stylo de chaque modèle dans le résumé d'un macro-modèle et le bandeau « Revenir au macro-modèle » (demande d'Antoine du 02/10), à la vraie souris,
   au vrai clavier et à la vraie molette, à 700×400. Il ouvre par la liste un macro-modèle (page de garde, deux annexes, cinq modèles) et mesure le résumé (une ligne par page de garde ou annexe, un stylo par modèle de 24 px au moins et au premier
   plan, noms accessibles, contrastes à 4,5:1, survol), clique un stylo (modèle ouvert, bandeau entre la barre d'outils et le texte sans rien recouvrir, bouton atteignable, contrastes), « Revenir au macro-modèle » (résumé, focus sur le stylo quitté),
   le même aller et retour en Lecture, Tab (ordre des stylos, anneau de focus de 2 px à 3:1), Entrée et Espace. Puis une frappe que le retour ne laisse pas perdre sans question (enregistrement automatique coupé : Annuler garde le modèle, son texte
   et le bandeau sans écrire ; Enregistrer écrit UNE fois et la Lecture du macro-modèle montre le texte ; Abandonner n'écrit rien), l'enregistrement automatique allumé (la frappe est écrite avant le retour, aucune question), un nom de macro-modèle
   très long (phrase coupée par « … », bouton entier, info-bulle), un macro-modèle de sept annexes (le résumé défile à la molette, le dernier stylo se clique, le focus le ramène à l'écran), un modèle supprimé (stylo grisé, ligne gardée), clair,
-  sombre et anglais (dont le bandeau réécrit au changement de langue). Les cas équivalents sans souris sont les huit cas `macro_summary_*`, `macro_pencil_*` et `macro_return_*` du groupe `macroModeles`. Une phrase du résumé qui existait déjà
-  (`.macro-summary-text`, 4,39:1 en clair) est mesurée et affichée en `(info)`, pas contrôlée : elle n'est pas de ce lot.
+  sombre et anglais (dont le bandeau réécrit au changement de langue). Les cas équivalents sans souris sont les huit cas `macro_summary_*`, `macro_pencil_*` et `macro_return_*` du groupe `macroModeles`. La phrase du résumé
+  (`.macro-summary-text`) est contrôlée à 4,5:1 au moins, clair et sombre : le gris atténué n'y faisait que 4,39:1 en clair, elle prend la couleur de texte du thème (choix d'Antoine, 02/10).
 - Un septième, `chipCellMouse` (`dev-tests/verify-chip-cell-mouse.mjs`), met à 700×400 des bulles #Variable aux noms de 40 caractères et plus dans des
   cases de tableau de ~100 px (dont une bulle formatée, une bulle en boucle et une bulle cassée) et s'en sert à la vraie souris : survol (le nom entier en
   info-bulle seulement quand il est coupé, le message d'une bulle cassée intact), clic (la bulle est sélectionnée, la barre de variable atteignable), Ctrl+C

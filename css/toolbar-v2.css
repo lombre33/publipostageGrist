@@ -291,7 +291,8 @@
    il s'affiche : le `display:flex` d'ici n'a jamais joué, le cadre se centre donc par ses marges et le panneau défile quand la liste des modèles dépasse sa hauteur (700×400). */
 #macro-summary-container { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--surface-sunken); overflow-y: auto; }
 .macro-summary-box { text-align: center; max-width: 480px; margin: 0 auto; }
-.macro-summary-text { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+/* La phrase prend --text (choix d'Antoine, 02/10) : --text-muted sur le fond --surface-sunken du panneau n'y faisait que 4,39:1 en clair, sous les 4,5:1 de la charte (F5). */
+.macro-summary-text { font-size: 13px; color: var(--text); margin: 0 0 12px; }
 /* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, le nom de chaque modèle suivi de son stylo, qui l'ouvre dans l'éditeur (le bandeau
    « Revenir au macro-modèle » ramène ici, js/main.js). Un modèle supprimé depuis reste dit (grisé, stylo grisé), jamais retiré. */
 .macro-summary-parts { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
