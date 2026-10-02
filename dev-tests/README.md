@@ -1198,7 +1198,12 @@ seule sur sa ligne, à gauche, le texte d'avant finit sa ligne et celui d'après
   `imgtext_toolbar_wrap_{enabled,greyed}_*` - le bouton « Basculer en ligne / bloc » est grisé (`is-disabled`, `aria-disabled`, info-bulle `imgToolbar.wrapNeedsText`, jamais retiré) pour une image seule dans son paragraphe, alignée ou en calque,
   actif dans une phrase ; `imgtext_toolbar_wrap_greyed_click_changes_nothing` et `imgtext_toolbar_wrap_toggle_puts_the_image_on_its_own_line_and_back`. Sur l'ancien code 17 des 20 échouent (les trois « actif » sont des garde-fous) : le paragraphe
   d'une image en bloc au milieu d'un texte mesurait 120 px (l'image seule : `line-height: 0` posé sur tout le paragraphe, les lignes se superposaient à l'image) au lieu de 180 px, 125 px au lieu de 120 px pour une image seule.
-- Les familles Lecture, PDF et Word s'ajoutent dans ce fichier, un lot par rendu, avec la même table de cas (alignement x bascule x place dans le texte x taille x contexte).
+- Deuxième lot, famille « Lecture » (52 scénarios `imgtext_reader_<cas>`, la table `MATRIX` : alignement x bascule x place dans le texte = 32, tailles = 9, contextes = 8, fin de page = 3) : le scénario pose le cas dans l'éditeur, relève
+  chaque image et chaque ligne de texte (`layoutOf` : pixels de mise en page, zoom de la feuille retiré, depuis le coin du conteneur), rend le même HTML en Lecture et compare (`compareLayouts`) : même nombre d'images et de lignes, mêmes mots sur
+  chaque ligne, chaque position à 0,6 pt près ; le résultat donne le pire écart d'image et de ligne en pt. Sur l'ancien code 27 des 52 échouent, tous les cas où l'image est alignée à gauche ou à droite (la Lecture en faisait un bloc : le texte
+  la contournait par dessus et dessous, 129 pt de retrait en moins à côté, les paragraphes suivants 75 à 225 pt plus bas) ; les 25 autres sont des garde-fous. Correction : `css/style.css` (flottant `.reader-content img.editor-image[data-align]`, 12 px côté
+  texte, 8 px dessous, largeur au plus celle de la ligne moins la marge comme dans l'éditeur) et `holdsInFlowContent` de `js/reader-mode.js` (un flottant ne remplit pas la ligne de son paragraphe : celui où il est seul garde sa ligne).
+- Les familles PDF et Word s'ajoutent dans ce fichier, un lot par rendu, avec la même table de cas.
 
 **« Sur toutes les pages »** (01/10, `scenarios-page-layer.js`, groupe `pageLayer`, 15 scénarios, plus le script Node `pageLayerMouse` ; choix d'Antoine à la Fiche mission : un triangle dans le coin de chaque
 feuille) : une image en calque « derrière le texte » dont la case est cochée (`data-repeat="true"`, `js/page-layer.js`) est peinte à la MÊME place de chaque page. La place est sa grille page

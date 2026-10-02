@@ -294,6 +294,12 @@ body { display:flex; flex-direction:column; }
 .editor-image[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
 .editor-image[data-align="right"] { display: block; margin-left: auto; margin-right: 0; }
 .editor-image[data-wrap="block"] { display: block; }
+/* Gauche / droite = habillage réel (float), comme `.tiptap .editor-image-view[data-align="left"|"right"]` de l'éditeur (css/editor-v2.css) : le texte se place à côté de l'image, y compris celui des paragraphes qui
+   suivent tant qu'elle les dépasse, avec 12 px de marge côté texte et 8 px dessous. Avant, l'image était un bloc et le texte la contournait par dessus et dessous (Antoine, 02/10, point 9 : la fiabilité
+   entre l'éditeur et la Lecture). Une image en calque (devant / derrière le texte) est positionnée en absolu : sans habillage, ni marge. Une image plus large que la ligne y rétrécit de la marge (12 px) pour
+   tenir à côté d'elle, comme le flottant de l'éditeur (largeur « au plus ce qui reste »), et non de toute la largeur. */
+.reader-content img.editor-image[data-align="left"]:not([data-layer="front"]):not([data-layer="behind"]) { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
+.reader-content img.editor-image[data-align="right"]:not([data-layer="front"]):not([data-layer="behind"]) { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
 
 /* === Mode Lecture : état vide (aucune ligne sélectionnée) ===
    Rendu par js/reader-mode.js:render() quand record est null. Avant l'ajout de cet état, #reader-container restait littéralement vide dans ce cas : un

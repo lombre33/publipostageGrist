@@ -502,7 +502,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
   Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
   ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté
-  texte, 8 px dessous). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
+  texte, 8 px dessous ; une image flottante plus large que la ligne rétrécit de cette marge pour tenir à côté du texte). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
   quand il ne change rien (image seule dans son paragraphe, alignée ou en calque) : son info-bulle dit pourquoi.
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
