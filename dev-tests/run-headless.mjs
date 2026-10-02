@@ -105,6 +105,7 @@ const GROUPS = {
   shortcuts: 'scenarios-shortcuts', // raccourcis clavier personnalisables (js/shortcuts.js, js/shortcuts-panel.js) : combinaisons, touches de départ, une touche changée libère l'ancienne, refus, boutons grisés, infobulles, liste des Réglages, contrastes
   imageWide: 'scenarios-image-wide', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : la largeur que l'éditeur montre, dans le corps, une case, une colonne, centrée, flottante, selon le format de page
   varCalc: 'scenarios-var-calc', // bulle « Calcul » (variables calculées) : nœud, fenêtre, barre flottante, Lecture, PDF, Word, zones répétées, total de lignes
+  emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -125,6 +126,7 @@ const NODE_SCRIPTS = {
   externalImagesMouse: 'verify-external-images-mouse.mjs', // fenêtre avant l'export d'un modèle qui contient une image d'un site externe (js/external-images.js) : vrai clic sur Exporter PDF / DOCX / lot ZIP, Annuler, Échap, Tab, Continuer, quarante sites qui défilent, 700x400 clair, sombre et anglais
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
+  emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais

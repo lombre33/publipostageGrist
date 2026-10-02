@@ -513,7 +513,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   en cas de doute, réutiliser un pattern déjà en place plutôt que d'en inventer un. Objet / À / Cc / Cci sont de simples
   champs texte ; « Créer l'email » ouvre le logiciel de messagerie (`mailto:`) et la fenêtre « Email trop long »
   avertit au-delà de ~2000 caractères sans bloquer ; ce qui n'a pas de sens en Email (en-tête et pied de page, modèle par
-  défaut) est grisé, pas masqué.
+  défaut) est grisé, pas masqué. Le texte du lien suit l'éditeur autant qu'un `mailto:` le permet (texte brut seulement ;
+  Zimbra web n'en garde que les lignes et les retraits) : mêmes puces (•, °, *), mêmes numéros (1., a., i., à partir de leur
+  début), « [x] » et « [ ] » pour les cases, « > » devant une citation, les lignes qui suivent un item alignées sous son texte ;
+  le gras, les couleurs et les liens cliquables n'y passent pas (un lien s'écrit « texte (adresse) »).
 - Grille (mode tableau, demande d'Antoine du 01/10) : « + » puis « Nouvelle grille » crée un modèle de type `grille` — un seul tableau
   (15 lignes × 6 colonnes de 100 × 28 px au départ), sans feuille A4 ni en-tête ni pied, qui part du coin du plan de travail et défile
   dans le panneau, entouré de ses bandeaux A, B, C et 1, 2, 3 (gris du chrome, texte ≥ 4,5:1, collés au défilement). On tire le trait entre

@@ -700,14 +700,14 @@
 
   cases.push({
     id: 'lb_mailto_text_writes_links_with_their_address_and_keeps_code_lines',
-    description: 'Email (texte brut) : « texte (adresse) » pour un lien, l\'adresse seule quand le texte est déjà l\'adresse, rien de plus pour un href refusé ; le bloc de code garde ses lignes et ses retraits ; citation et item de liste ne collent pas leurs blocs',
+    description: 'Email (texte brut) : « texte (adresse) » pour un lien, l\'adresse seule quand le texte est déjà l\'adresse, rien de plus pour un href refusé ; le bloc de code garde ses lignes et ses retraits ; citation (« > » devant chaque ligne) et item de liste (le bloc de code sous le texte de l\'item) ne collent pas leurs blocs',
     run: async () => {
       const text = MailtoExport.plainTextFromHtml('<p>Voir <a href="https://www.exemple.fr/page?x=1">le site</a>, <a href="https://exemple.fr">https://exemple.fr</a>, <a href="https://www.exemple.fr/">www.exemple.fr</a>, <a href="mailto:contact@exemple.fr">contact@exemple.fr</a>, <a href="mailto:contact@exemple.fr">écrire</a>, <a href="tel:+33123456789">01 23 45 67 89</a>, <a href="javascript:alert(1)">piège</a>, <a href="https://exemple.fr/vide"></a>.</p>'
         + '<pre><code>def f(x):\n    return x\n\n\tfin</code></pre>'
         + '<blockquote><p>Citation un</p><p>Citation deux</p></blockquote>'
         + '<ul><li><p>Item</p><pre><code>dans_liste()</code></pre></li></ul>');
       const want = 'Voir le site (https://www.exemple.fr/page?x=1), https://exemple.fr, www.exemple.fr, contact@exemple.fr, écrire (contact@exemple.fr), 01 23 45 67 89 (+33123456789), piège, https://exemple.fr/vide.'
-        + '\n\ndef f(x):\n    return x\n\n\tfin\n\nCitation un\nCitation deux\n\n- Item\ndans_liste()';
+        + '\n\ndef f(x):\n    return x\n\n\tfin\n\n> Citation un\n> Citation deux\n\n• Item\n  dans_liste()';
       return { pass: text === want, notes: JSON.stringify({ text, want }) };
     },
   });

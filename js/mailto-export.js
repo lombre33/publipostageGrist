@@ -22,18 +22,42 @@
 // 3) Aucune pièce jointe possible via un lien `mailto:` - c'est une limite du
 //    protocole, pas de l'implémentation. Confirmé que ce n'est PAS le besoin
 //    (juste préremplir un brouillon destinataires + objet + corps texte).
+// 4) Zimbra (le client web d'Antoine). Lu dans son code (Zimbra/zm-web-client, branche develop, 02/10) : il s'inscrit comme gestionnaire de `mailto:` dans le navigateur
+//    (`?view=compose&to=<le lien entier>`, js/zimbraMail/core/ZmZimbraMail.js) et lit le lien dans ZmMailApp `_parseComposeUrl` / `_showComposeView` ; le corps n'y passe que comme
+//    TEXTE. En rédaction HTML, ZmComposeView `_setBody1` le passe par AjxStringUtil.convertToHtml : chaque retour à la ligne devient un <br>, deux espaces de suite et un espace
+//    en tête de ligne deviennent des espaces insécables - les lignes et les retraits du texte brut survivent (c'est pourquoi une sous-liste s'aligne par des espaces), rien d'autre
+//    (ni vraie puce, ni gras, ni lien cliquable). Défauts de Zimbra lus au même endroit, hors de notre portée et jamais vus sur un vrai Zimbra : un « + » devient une espace dans l'objet et le corps
+//    (replace(/\+/g, ' ') après le décodage) ; « & », « < » et « > » sont encodés en HTML (htmlEncode) dès la lecture du lien et rien ne les décode ensuite, ils pourraient s'afficher « &amp; ».
+//    La vraie mise en forme demande un autre canal que le lien (le presse-papiers) : carte posée à Antoine le 02/10, rien codé avant son choix.
 const MailtoExport = (function () {
   // Limite pratique communément citée pour un lien mailto: multi-client
   // (Outlook desktop en particulier) - garder une marge sous le seuil "dur"
   // plutôt que de viser l'extrême limite au plus juste.
   const SAFE_URL_LENGTH = 2000;
 
+  // Puces d'une liste : les MÊMES signes que ceux que l'éditeur et le PDF montrent (css/editor-v2.css, `li::marker` ; js/pdf-export.js, BULLET_MARKERS) - ce que la personne voit dans
+  // le modèle est ce que le destinataire lit. Les trois tiennent dans Windows-1252, comme les accents du texte.
+  const BULLET_MARKERS = { disc: '• ', circle: '° ', square: '* ' };
+
+  // Le signe d'un item : puce, numéro (1. / a. / i., à partir de `start` comme l'éditeur et le PDF, js/pdf-export.js:listMarkerFor) ou case « [ ] » / « [x] ».
+  function listMarker(listEl, li, position) {
+    if (listEl.getAttribute('data-type') === 'taskList') return li.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ';
+    if (listEl.tagName === 'OL') {
+      const number = (parseInt(listEl.getAttribute('start') || '1', 10) || 1) + position;
+      const numberStyle = listEl.getAttribute('data-number-style');
+      if (numberStyle === 'alpha') return HeadingNumbering.formatCounterValue(number, 'lower-alpha') + '. ';
+      if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(number, 'upper-roman').toLowerCase() + '. ';
+      return number + '. ';
+    }
+    return BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc;
+  }
+
   // Sérialise du HTML DÉJÀ RÉSOLU (plus aucune bulle #Variable/chip - passé par la même résolution
   // que le mode Lecture, ReaderMode.render(), avant d'arriver ici) en texte brut adapté à un corps
   // mailto. Sérialiseur séparé de pdf-export.js (pas une extension) :
   // règles de dégradation actées avec l'utilisateur - paragraphes/titres -> une ligne, ligne vide
-  // entre blocs ; listes -> préfixes "- "/"1. "/"[ ] " ; toute mise en forme (gras/couleur/police...)
-  // ignorée, aucune ne pouvant survivre dans du texte brut (§ contraintes dures ci-dessus).
+  // entre blocs ; listes -> le signe de l'éditeur devant chaque item (puce, numéro, case), les lignes qui suivent et les sous-listes alignées sous le texte de l'item ; citation -> « > » devant
+  // chaque ligne (« >> » pour une citation dans une citation) ; toute mise en forme (gras/couleur/police...) ignorée, aucune ne pouvant survivre dans du texte brut (§ contraintes dures ci-dessus).
   function plainTextFromHtml(html) {
     const root = document.createElement('div');
     root.innerHTML = html || '';
@@ -53,6 +77,9 @@ const MailtoExport = (function () {
     // Un paragraphe, un titre ou un bloc de code qui en suit un autre dans le même bloc (citation de deux paragraphes, item de liste suivi d'un bloc de code) commence sa propre ligne.
     const isLineBlock = node => node.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(node.tagName);
 
+    // Une liste ou une citation dans un item, une citation ou une case : ses lignes sont écrites sur de nouvelles lignes, à la suite du texte qui les précède (le retrait vient de l'appelant).
+    const endLine = out => (out === '' || out.endsWith('\n') ? out : out + '\n');
+
     function inlineText(node) {
       let out = '';
       let sawLineBlock = false;
@@ -61,6 +88,16 @@ const MailtoExport = (function () {
         if (child.nodeType !== Node.ELEMENT_NODE) return;
         if (isLineBlock(child)) { if (sawLineBlock) out += '\n'; sawLineBlock = true; }
         if (child.tagName === 'BR') { out += '\n'; return; }
+        if (child.tagName === 'UL' || child.tagName === 'OL') {
+          const lines = listLines(child);
+          if (lines.length) { out = endLine(out) + lines.join('\n') + '\n'; sawLineBlock = false; }
+          return;
+        }
+        if (child.tagName === 'BLOCKQUOTE') {
+          const quoted = quoteText(child);
+          if (quoted) { out = endLine(out) + quoted + '\n'; sawLineBlock = false; }
+          return;
+        }
         if (child.tagName === 'A') {
           const href = HtmlSanitize.safeLinkHref(child.getAttribute('href'));
           if (href) { out += linkAsText(inlineText(child), href); return; }
@@ -72,7 +109,7 @@ const MailtoExport = (function () {
           out += text ? ` (${text})` : '';
           return;
         }
-        // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases (listItemsText).
+        // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : « [x] » / « [ ] », comme celle d'un item de liste à cases (listMarker).
         if (child.classList && child.classList.contains('resolved-checkbox')) { out += child.getAttribute('data-checked') === 'true' ? '[x]' : '[ ]'; return; }
         if (child.tagName === 'IMG') return; // aucune image possible en texte brut mailto
         if (child.tagName === 'STYLE' || child.tagName === 'SCRIPT') return; // jamais de contenu utilisateur, à ignorer partout où il peut apparaître
@@ -81,34 +118,27 @@ const MailtoExport = (function () {
       return out;
     }
 
-    // Une liste à puces/numérotée/à cases dégrade en préfixe texte (règle ci-dessus)
-    // - les sous-listes imbriquées sont indentées de 2 espaces par niveau.
-    function listItemsText(listEl, depth) {
-      const ordered = listEl.tagName === 'OL';
-      const isTaskList = listEl.getAttribute('data-type') === 'taskList';
-      const indent = '  '.repeat(depth);
+    // Une liste à puces/numérotée/à cases dégrade en signe texte devant chaque item (règle ci-dessus). Les lignes d'un item qui suivent la première (un second paragraphe, un retour à la
+    // ligne, un bloc de code) et ses sous-listes se placent sous son texte, après la largeur du signe : « 10. » pousse plus loin que « • ». Les lignes d'une sous-liste, écrites sans retrait
+    // par l'appel récursif de inlineText, reçoivent ainsi le leur de leur item parent.
+    function listLines(listEl) {
       const lines = [];
-      let index = 0;
+      let position = 0;
       Array.from(listEl.children).forEach(li => {
         if (li.tagName !== 'LI') return;
-        index++;
-        let prefix;
-        if (isTaskList) prefix = (li.getAttribute('data-checked') === 'true') ? '[x] ' : '[ ] ';
-        else if (ordered) prefix = index + '. ';
-        else prefix = '- ';
-        let sawLineBlock = false;
-        const directText = Array.from(li.childNodes)
-          .filter(n => !(n.nodeType === Node.ELEMENT_NODE && (n.tagName === 'UL' || n.tagName === 'OL')))
-          .map(n => {
-            const separator = isLineBlock(n) && sawLineBlock ? '\n' : '';
-            if (isLineBlock(n)) sawLineBlock = true;
-            return separator + (n.nodeType === Node.ELEMENT_NODE ? inlineText(n) : n.textContent);
-          })
-          .join('').trim();
-        lines.push(indent + prefix + directText);
-        li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub => { lines.push(...listItemsText(sub, depth + 1)); });
+        const marker = listMarker(listEl, li, position++);
+        const pad = ' '.repeat(marker.length);
+        inlineText(li).trim().split('\n').forEach((line, index) => lines.push(((index === 0 ? marker : pad) + line).replace(/[ \t]+$/, '')));
       });
       return lines;
+    }
+
+    // Une citation : « > » devant chaque ligne, une ligne vide de la citation garde son « > » seul ; les blocs qu'elle contient s'écrivent comme ailleurs (listes comprises), donc une
+    // citation dans une citation devient « >> ».
+    function quoteText(node) {
+      const inner = inlineText(node).trim();
+      if (!inner) return '';
+      return inner.split('\n').map(line => (line.trim() === '' ? '>' : (line.startsWith('>') ? '>' : '> ') + line)).join('\n');
     }
 
     const blocks = [];
@@ -123,8 +153,9 @@ const MailtoExport = (function () {
         }
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         const tag = node.tagName;
-        if (tag === 'UL' || tag === 'OL') { blocks.push(listItemsText(node, 0).join('\n')); return; }
-        if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'BLOCKQUOTE') { blocks.push(inlineText(node).trim()); return; }
+        if (tag === 'UL' || tag === 'OL') { blocks.push(listLines(node).join('\n')); return; }
+        if (tag === 'BLOCKQUOTE') { blocks.push(quoteText(node)); return; }
+        if (/^H[1-6]$/.test(tag) || tag === 'P') { blocks.push(inlineText(node).trim()); return; }
         // Bloc de code : son texte tel quel, lignes et retraits gardés (seuls les retours à la ligne de tête et de queue partent, jamais l'indentation de la première ligne).
         if (tag === 'PRE') { blocks.push((node.textContent || '').replace(/^\n+|\s+$/g, '')); return; }
         if (node.classList.contains('callout')) { collectBlocks(node); return; }

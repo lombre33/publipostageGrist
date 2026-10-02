@@ -417,3 +417,33 @@ permis, PDF→email ne l'est pas — relation déjà actée dans `js/mailto-expo
 La maquette visuelle (canvas, 3 écrans : Édition, Lecture, Création) est à jour de ces réponses :
 https://claude.ai/artifact/TiZzpjqNSLJ7FaX5BzDLZK — l'artboard « Création » montre précisément où
 le type (document/email) se choisit, seule question qui n'était pas encore visible sur la maquette.
+
+---
+
+## 7. Ce que le lien peut porter, et ce qu'on y écrit (02/10)
+
+Retour d'Antoine le 02/10 : « améliorer la mise en forme conservée lors de l'envoi d'un email, par exemple que les listes à puces soient conservées ». Il ouvre le lien dans Zimbra (client web).
+
+**Ce qu'un lien `mailto:` porte.** Du texte brut seulement (RFC 6068, paramètre `body`). Zimbra, lu dans son code (`Zimbra/zm-web-client`, branche `develop`) : il s'inscrit comme gestionnaire de `mailto:`
+dans le navigateur (`?view=compose&to=<le lien entier>`, `js/zimbraMail/core/ZmZimbraMail.js`), lit le lien dans `ZmMailApp._parseComposeUrl` / `_showComposeView` et, en rédaction HTML,
+`ZmComposeView._setBody1` passe le corps par `AjxStringUtil.convertToHtml` : chaque retour à la ligne devient un `<br>`, deux espaces de suite et un espace en tête de ligne des espaces
+insécables. Les lignes et les retraits du texte survivent, rien d'autre : ni vraie puce, ni gras, ni lien cliquable. Deux défauts de Zimbra lus au même endroit, hors de notre portée et
+jamais vus sur un vrai Zimbra : un « + » devient une espace dans l'objet et le corps ; « & », « < » et « > » sont encodés en HTML dès la lecture et rien ne les décode ensuite.
+
+**Ce que le texte écrit** (`MailtoExport.plainTextFromHtml`, groupe `emailExport`) - tout ce qui passe est ce que le texte seul peut dire :
+
+| Dans le modèle | Dans le lien |
+|---|---|
+| Liste à puces (disque, rond, carré) | « • », « ° », « * » : les signes que l'éditeur dessine (`li::marker`), au lieu de « - » pour toutes |
+| Liste numérotée (1, a, i, `start`) | « 1. », « a. », « i. » comme l'éditeur et le PDF |
+| Liste à cases | « [ ] » / « [x] » |
+| Sous-liste, second paragraphe d'un item, retour à la ligne, bloc de code dans un item | sous le texte de l'item, après la largeur de son signe (« 10. » plus loin que « • ») |
+| Citation | « > » devant chaque ligne, « >> » dans une citation, « > » seul pour une ligne vide |
+| Lien | « texte (adresse) » (inchangé) |
+| Paragraphes, titres | une ligne, une ligne vide entre blocs (inchangé) |
+| Gras, couleur, image | ignorés (inchangé : boutons grisés en mode email) |
+| Tableau (venu d'un collage, le bouton est grisé) | une ligne par ligne du tableau, cellules séparées par « \| » (inchangé) |
+
+**Hors du lien.** La vraie mise en forme (puces réelles, titres, liens cliquables, tableaux) ne passe que par le presse-papiers : « Créer l'email » ouvrirait le brouillon (destinataires, objet) et copierait
+le message mis en forme, un Ctrl+V dans le corps de Zimbra (mode HTML) le colle ; Grist donne à l'iframe du widget `allow="clipboard-write"` (`app/client/components/WidgetFrame.ts`). Cela lèverait aussi la limite de
+longueur du lien. Un `.eml` ne convient pas à Zimbra web (il ne l'ouvre pas comme brouillon). Carte posée à Antoine le 02/10 (« Copier puis coller » recommandé, ou « Texte seul ») : rien n'est codé avant son choix.
