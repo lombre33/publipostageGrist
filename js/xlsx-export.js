@@ -3,7 +3,8 @@
 // modèle passe par ReaderMode.preview (les bulles prennent leur valeur), puis un parcours du DOM résolu fabrique le fichier.
 //
 // L'Excel n'est qu'un AFFICHAGE : aucune formule, aucun calcul. Une case n'est écrite comme VRAI nombre ou VRAIE date que si elle ne contient QUE cela (une seule bulle
-// nombre ou date, sans autre texte), avec le format d'affichage de la bulle ; toute autre case est du texte (choix d'Antoine, 01/10).
+// nombre ou date - ou un seul « Calcul », écrit en nombre -, sans autre texte), avec le format d'affichage de la bulle ; toute autre case est du texte (choix d'Antoine, 01/10 ;
+// le calcul seul, 02/10).
 //
 // Portée : seul un tableau de grille a un sens ici (le menu grise l'export Excel hors grille) ; un modèle sans tableau donne une feuille d'une case avec son texte.
 // Les listes s'écrivent « • », « 1. » et « ☐ » devant leurs lignes (Excel n'a pas de liste dans une case) ; une image se pose sur sa case, à sa taille.
@@ -127,12 +128,22 @@ const XlsxExport = (function () {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? codes.en : codes.fr;
   }
 
+  // Les bulles qui prennent une valeur : celles d'une variable et celles d'un calcul (js/variable-calc.js), comme BADGE_SELECTOR de js/reader-mode.js.
+  const BUBBLES = '.var-badge, .calc-badge';
   // Vrai si `badge` est tout le contenu de sa case : une seule bulle, pas d'autre texte ni d'image, pas de boucle « dans la phrase » ou de zone répétée.
   function isSoleBadge(cell, badge) {
-    if (cell.querySelectorAll('.var-badge').length !== 1 || cell.querySelector('img') || badge.hasAttribute('data-loop')) return false;
+    if (cell.querySelectorAll(BUBBLES).length !== 1 || cell.querySelector('img') || badge.hasAttribute('data-loop')) return false;
     const rest = cell.cloneNode(true);
-    rest.querySelector('.var-badge').remove();
+    rest.querySelector(BUBBLES).remove();
     return rest.textContent.replace(/[\s\u00a0]+/g, '') === '';
+  }
+  // Un nombre que la bulle écrit : { kind: 'number', value, numFmt } ; null = du texte (nombre en toutes lettres, zéro que la bulle masque - la case est vide, comme dans la Lecture et
+  // le PDF -, plus de 15 chiffres : Excel les arrondirait en silence, un n° de série ou un IBAN saisi en nombre reste un texte).
+  function typedNumber(value, format, colType) {
+    if (format && ((format.type && format.type !== 'number') || format.words)) return null;
+    if (value === 0 && Variables.zeroHidden(format, colType)) return null;
+    if (Math.abs(value) >= MAX_EXACT_NUMBER) return null;
+    return { kind: 'number', value: String(value), numFmt: numberFormatCode(format, value) };
   }
   // { kind: 'number' | 'date', value, numFmt } si la bulle vaut un vrai nombre ou une vraie date qu'Excel peut afficher comme la bulle l'écrit ; null = du texte (nombre écrit
   // en toutes lettres, date dont on a retiré le jour, le mois ou l'année, valeur absente ou en erreur, liste, colonne d'un autre type). Un zéro que la bulle masque
@@ -164,14 +175,18 @@ const XlsxExport = (function () {
       const iso = instant.toISOString().slice(0, 10);
       return { kind: 'date', value: iso, numFmt: dateFormatCode(format) };
     }
-    if (!isDateColumn && (colType === 'Numeric' || colType === 'Int' || (format && format.type === 'number'))) {
-      if (format && ((format.type && format.type !== 'number') || format.words)) return null;
-      if (value === 0 && Variables.zeroHidden(format, colType)) return null;
-      // Excel garde 15 chiffres significatifs : un identifiant plus long (n° de série, IBAN saisi en nombre) y serait arrondi en silence, il reste un texte.
-      if (Math.abs(value) >= MAX_EXACT_NUMBER) return null;
-      return { kind: 'number', value: String(value), numFmt: numberFormatCode(format, value) };
-    }
+    if (!isDateColumn && (colType === 'Numeric' || colType === 'Int' || (format && format.type === 'number'))) return typedNumber(value, format, colType);
     return null;
+  }
+  // Le même verdict pour une bulle « Calcul » : son résultat est un nombre, écrit comme celui d'une colonne Numérique (Variables.resolveCalcResult), avec la ligne du tour dans une zone
+  // répétée. Une erreur de calcul (« [ERREUR : …] »), un calcul qui ne montre rien (cellule vide, moyenne de rien) et une liste restent du texte.
+  async function typedCalcValueOf(badge, tableId, record, binding) {
+    let format = null;
+    try { format = JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
+    let result;
+    try { result = await Variables.resolveCalcResult(badge.getAttribute('data-formula') || '', tableId, record, format, binding ? { loop: binding } : undefined); } catch (e) { return null; }
+    if (!result || result.isError || typeof result.value !== 'number' || !Number.isFinite(result.value)) return null;
+    return typedNumber(result.value, format, 'Numeric');
   }
   // Crochet de ReaderMode.preview : une case dont la seule bulle vaut un vrai nombre ou une vraie date en garde la trace (data-xl-*) ; ReaderMode.preview remplace ensuite
   // la bulle par son texte, et le parcours de la feuille (addTableSheet) lit ces marques. Le contrôle « seule bulle de la case » est fait d'un trait, avant tout await :
@@ -180,7 +195,8 @@ const XlsxExport = (function () {
     return (badge, binding) => {
       const cell = badge.closest('td, th');
       if (!cell || !isSoleBadge(cell, badge)) return undefined;
-      return typedValueOf(badge, tableId, record, binding).then(info => {
+      const typed = badge.classList.contains('calc-badge') ? typedCalcValueOf(badge, tableId, record, binding) : typedValueOf(badge, tableId, record, binding);
+      return typed.then(info => {
         if (!info) return;
         cell.setAttribute('data-xl-kind', info.kind);
         cell.setAttribute('data-xl-value', info.value);

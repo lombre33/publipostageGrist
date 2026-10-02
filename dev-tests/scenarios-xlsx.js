@@ -143,6 +143,8 @@
   const badge = (col, extra) => `<span class="var-badge" data-table="${TABLE}" data-column="${col}" data-key="${TABLE}.${col}"${extra || ''}></span>`;
   const withFormat = format => ` data-format='${JSON.stringify(format)}'`;
   const withCondition = condition => ` data-condition="${JSON.stringify(condition).replace(/"/g, '&quot;')}"`;
+  // Une bulle « Calcul » (js/variable-calc.js) : sa formule enregistrée, neutre (`{Table.Colonne}`, décimales au point, `;` entre les valeurs), et son format.
+  const calc = (formula, format) => `<span class="calc-badge" data-formula="${formula.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"${format ? withFormat(format) : ''}></span>`;
   async function seed(h) {
     await h.resetEditor();
     const stub = window.__gristStub;
@@ -252,6 +254,50 @@
       expect('A6', 'number', 1234.5, '#,##0.###'); // condition vraie : la bulle reste, et reste un nombre
       // Les cellules à nombre se lisent à gauche, comme dans la grille et le PDF.
       if (c('A1').style.horizontal !== 'left' || c('C1').style.horizontal !== 'left') bad.push('alignement des nombres=' + c('A1').style.horizontal);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  // Antoine, 02/10 : « Écrire en nombre, dans l'Excel, un calcul seul dans une case de grille ? » - « Oui, en nombre ». Même règle que la bulle d'une colonne : seul dans sa case, le
+  // résultat est un VRAI nombre au format de la bulle ; avec du texte autour, avec une autre bulle, en erreur, en toutes lettres, caché (zéro) ou trop long, du texte (ou rien).
+  cases.push({
+    id: 'xlsx_a_calculation_alone_in_a_cell_is_a_real_number',
+    description: 'Une case qui ne contient qu\'une bulle « Calcul » est un vrai nombre au format de la bulle (entier, décimales, devise, à l\'américaine, zéro affiché) ; avec du texte autour, une autre bulle, une erreur de calcul, un nombre en lettres, un zéro masqué ou plus de 15 chiffres, c\'est du texte (ou rien)',
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([100, 100, 100, 100], [30, 30, 30, 30], [
+        [calc('{GrilleExcel.Montant} * 2'), calc('{GrilleExcel.Montant} + {GrilleExcel.Quantite}'), calc('{GrilleExcel.Montant} * 2', { type: 'number', decimals: 2, currency: '€' }), calc('{GrilleExcel.Montant} * 2', { type: 'number', style: 'us', currency: '$' })],
+        ['Total : ' + calc('{GrilleExcel.Montant} * 2'), calc('{GrilleExcel.Montant} * 2') + ' ' + badge('Quantite'), calc('{GrilleExcel.Montant} * 2', { type: 'number', words: true }), calc('{GrilleExcel.Montant} / {GrilleExcel.Zero}')],
+        [calc('{GrilleExcel.Zero} * 5'), calc('{GrilleExcel.Zero} * 5', { type: 'number', zero: 'show' }), calc('{GrilleExcel.Gros} * 1'), calc('{GrilleExcel.Date} + 1')],
+        [calc('ROUND({GrilleExcel.Montant} / 7; 2)'), calc('{GrilleExcel.Montant} * 2', { type: 'number', style: 'none', decimals: 1 }), calc('{GrilleExcel.Absente} * 2'), calc('SUM({GrilleExcel.Montant}; {GrilleExcel.Quantite})')],
+      ]);
+      const s = x.sheet;
+      const c = ref => s.cell(ref);
+      const bad = [];
+      const expect = (ref, kind, value, fmt) => {
+        const cell = c(ref);
+        if (cell.kind !== kind) bad.push(ref + ' type=' + cell.kind + ' (attendu ' + kind + ', valeur ' + JSON.stringify(cell.value) + ')');
+        else if (value !== undefined && cell.value !== value) bad.push(ref + ' valeur=' + JSON.stringify(cell.value) + ' (attendu ' + JSON.stringify(value) + ')');
+        if (fmt !== undefined && cell.style.numFmt !== fmt) bad.push(ref + ' format=' + cell.style.numFmt + ' (attendu ' + fmt + ')');
+      };
+      expect('A1', 'number', 2469, '#,##0');
+      expect('B1', 'number', 1246.5, '#,##0.###');
+      expect('C1', 'number', 2469, '#,##0.00 "€"');
+      expect('D1', 'number', 2469, '"$"#,##0');
+      expect('A2', 'text'); if (!/^Total : 2.469$/.test(String(c('A2').value))) bad.push('A2=' + JSON.stringify(c('A2').value));
+      expect('B2', 'text'); // une autre bulle dans la case : du texte
+      expect('C2', 'text'); if (!/mille/.test(String(c('C2').value))) bad.push('C2 (en lettres)=' + JSON.stringify(c('C2').value));
+      expect('D2', 'text'); if (!/^\[/.test(String(c('D2').value))) bad.push('D2 (division par zéro)=' + JSON.stringify(c('D2').value));
+      expect('A3', 'empty'); // zéro masqué par défaut : la case est vide, comme en Lecture et dans le PDF
+      expect('B3', 'number', 0, '#,##0'); // « Afficher le zéro » : le 0 est un vrai nombre
+      expect('C3', 'text'); // 1 234 567 890 123 456 : plus de 15 chiffres
+      expect('D3', 'text'); if (!/^\[/.test(String(c('D3').value))) bad.push('D3 (une date n\'est pas un nombre)=' + JSON.stringify(c('D3').value));
+      expect('A4', 'number', 176.36, '#,##0.###');
+      expect('B4', 'number', 2469, '0.0');
+      expect('C4', 'text'); if (!/^\[/.test(String(c('C4').value))) bad.push('C4 (colonne disparue)=' + JSON.stringify(c('C4').value));
+      expect('D4', 'number', 1246.5, '#,##0.###');
+      // Les cases à nombre se lisent à gauche, comme dans la grille et le PDF.
+      if (c('A1').style.horizontal !== 'left') bad.push('alignement=' + c('A1').style.horizontal);
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
   });
@@ -487,6 +533,39 @@
       const got = [2, 3, 4].map(r => [s.cell('A' + r).value, s.cell('B' + r).kind, s.cell('B' + r).value]);
       const expected = [['Livret', 'number', 12], ['Journée', 'number', 1.5], ['Déplacement', 'number', 3]];
       return { pass: JSON.stringify(got) === JSON.stringify(expected) && !s.rows.has(5), notes: JSON.stringify({ got, expected, rows: s.rows.size }) };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_a_calculation_alone_in_a_repeated_row_is_the_number_of_each_of_its_rows',
+    description: 'Un calcul seul dans une ligne de grille répétée (zone « ligne ») est le vrai nombre de CHAQUE copie, calculé dans la ligne du tour (quantité × 10 : 120, 15, 30), et le total sous la grille (SOMME) est un vrai nombre qui additionne toutes les lignes liées (16,5)',
+    run: async (h) => {
+      await h.resetEditor();
+      const stub = window.__gristStub;
+      stub.setVariables('XlFactures', { Numero: 'Text' });
+      stub.setVariables('XlLignes', { Facture: 'Ref:XlFactures', Designation: 'Text', Qte: 'Numeric', manualSort: 'ManualSortPos' });
+      stub.setRows('XlFactures', [{ id: 1, Numero: 'F-1' }]);
+      stub.setRows('XlLignes', [
+        { id: 1, Facture: 1, Designation: 'Journée', Qte: 1.5, manualSort: 2 },
+        { id: 2, Facture: 1, Designation: 'Livret', Qte: 12, manualSort: 1 },
+        { id: 3, Facture: 1, Designation: 'Déplacement', Qte: 3, manualSort: 3 },
+      ]);
+      await GristAPI.refreshSchema();
+      await GristAPI.deleteLinkRule('XlLignes');
+      await GristAPI.saveLinkRule('XlLignes', { mode: 'match', colonneTarget: undefined, colonneCible: 'Facture', colonneSource: 'id' });
+      await GristAPI.refreshSchema();
+      const record = { id: 1, Numero: 'F-1' };
+      stub.fireRecord(Object.assign({}, record), 'XlFactures');
+      await sleep(80);
+      const loop = JSON.stringify({ repeat: 'row', table: 'XlLignes', empty: 'header' }).replace(/"/g, '&quot;');
+      const designation = `<span class="var-badge" data-table="XlLignes" data-column="Designation" data-key="XlLignes.Designation" data-loop="${loop}" data-loop-repeat="row"></span>`;
+      await loadGrid(gridHtml([160, 80], [30, 30, 30], [['Désignation', 'Qté × 10'], [designation, calc('{XlLignes.Qte} * 10')], ['Total', calc('SUM({XlLignes.Qte})')]]));
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(Editor.getHTML(), 'XlFactures', record, '');
+      const x = await openXlsx(blob);
+      const s = x.sheet;
+      const got = [2, 3, 4, 5].map(r => [s.cell('A' + r).value, s.cell('B' + r).kind, s.cell('B' + r).value, s.cell('B' + r).style.numFmt]);
+      const expected = [['Livret', 'number', 120, '#,##0'], ['Journée', 'number', 15, '#,##0'], ['Déplacement', 'number', 30, '#,##0'], ['Total', 'number', 16.5, '#,##0.###']];
+      return { pass: JSON.stringify(got) === JSON.stringify(expected) && !s.rows.has(6), notes: JSON.stringify({ got, expected, rows: s.rows.size }) };
     },
   });
 

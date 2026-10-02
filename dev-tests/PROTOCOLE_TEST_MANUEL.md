@@ -565,8 +565,8 @@ captures avec `WATERMARK_SHOTS=<dossier>`). Le texte, l'angle, la couleur et l'o
 **Couverture automatisée** : groupe `varCalc` (`scenarios-var-calc.js`, 20 cas : nœud et étiquette, case de tableau étroite, bulle rouge, résultat à la Lecture / à l'aperçu commun du PDF et du Word /
 en lot / en-tête et pied, anglais, total sans ligne liée, erreurs écrites dans la langue de l'interface, ligne de tableau répétée, vrais PDF et Word, fenêtre ouverte depuis le panneau « # », annulation, calcul refusé,
 boutons de fonction, liste des colonnes devant la fenêtre, virgule décimale refusée en anglais, clé de correspondance demandée une fois par table, aperçu, barre flottante, réglages nombre, copier-coller), script Node
-`formulaUnit` (le moteur, 104 contrôles) et script Node `calcMouse` (vraie souris et vrai clavier à 700×400, clair, sombre et anglais).
-**Non couvert** : un vrai Word (le fichier est relu dans `docx`, pas ouvert dans Word), un document Grist réel (jeu de données de test), un calcul sur plusieurs milliers de lignes liées.
+`formulaUnit` (le moteur, 104 contrôles) et script Node `calcMouse` (vraie souris et vrai clavier à 700×400, clair, sombre et anglais) ; l'Excel d'un calcul seul dans une case de grille : deux cas du groupe `xlsx`.
+**Non couvert** : un vrai Word (le fichier est relu dans `docx`, pas ouvert dans Word), un vrai Excel (le .xlsx est dézippé et son OOXML relu dans `xlsx`, pas ouvert dans Excel), un document Grist réel (jeu de données de test), un calcul sur plusieurs milliers de lignes liées.
 
 ### Protocole
 1. Dans un modèle dont la table de la page a une colonne Nombre (ex. `HT`) : taper `#`, onglet Chips, ligne « Calcul » : la fenêtre « Insérer un calcul » s'ouvre, rien n'est encore dans le texte.
@@ -580,6 +580,7 @@ boutons de fonction, liste des colonnes devant la fenêtre, virgule décimale re
 5. Une table pas encore liée : le résultat dit « pas encore liée », « Insérer » ouvre la fenêtre de la clé de correspondance ; Annuler la laisse ouverte. Supprimer ensuite la colonne dans Grist : la bulle devient rouge
    avec son message en info-bulle et la Lecture écrit une erreur, jamais un total faux.
 6. Panneau de 700 × 400 : la fenêtre tient sans défiler, boutons « Insérer » / « Annuler » visibles ; dans une case de tableau étroite la formule est coupée par « … ».
+7. Dans une grille, une case qui ne contient QUE la bulle « Calcul » : « Exporter en Excel… » l'écrit en vrai nombre (la barre de formule d'Excel montre `2469`, pas du texte ; le format de la bulle - décimales, devise - est celui de la case ; aligné à gauche comme les autres nombres). Avec du texte autour, une autre bulle, une erreur de calcul, le bouton « Lettres » ou un zéro masqué (Ø enfoncé) la case est du texte, ou vide ; dans une ligne répétée chaque ligne a SON nombre, et le total sous la grille additionne toutes les lignes liées.
 
 ---
 

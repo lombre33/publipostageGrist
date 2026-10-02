@@ -88,7 +88,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   Une grille plus large que la page est ramenée à sa largeur par la logique des colonnes de tout tableau.
 - Export Excel d'un enregistrement (lot D, `js/xlsx-export.js`, `XlsxExport.exportCurrentRecord`) : le modèle est rendu comme en Lecture (`ReaderMode.preview`, donc bulles, conditions, boucles et zéro masqué résolus
   exactement comme à l'écran) dans un hôte hors écran, puis ses cases sont écrites dans une feuille ExcelJS. Le crochet `onBadge` de `ReaderMode.preview(html, tableId, record, onBadge)` laisse l'export lire, bulle
-  par bulle, le type de la valeur (`typedCellHook` écrit `data-xl-kind|value|fmt` sur la case) : une case n'est typée que si elle ne contient QUE cette bulle (nombre ou date) ; ce que `ReaderMode.preview` rend en
+  par bulle, le type de la valeur (`typedCellHook` écrit `data-xl-kind|value|fmt` sur la case) : une case n'est typée que si elle ne contient QUE cette bulle (nombre ou date, ou un seul calcul : 02/10, `typedCalcValueOf`) ; ce que `ReaderMode.preview` rend en
   texte reste du texte. Aucun style calculé n'est lu (couleurs : seulement ce que la personne a posé, `codeHygiene` y veille). Chargement : ExcelJS 4.4.0 depuis cdnjs avec son SRI, à la demande
   (`ExportCommon.loadScriptOnce`), jamais au démarrage. Menu : « Exporter en Excel… » grisée hors grille, les deux lignes Word grisées dans une grille (`syncExportRowsForModelType` de `js/main.js` ; une ligne grisée
   garde `aria-disabled` et son clic ne lance rien) ; elle ne disparaît jamais.
