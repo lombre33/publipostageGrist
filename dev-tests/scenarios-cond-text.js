@@ -164,7 +164,7 @@
   // === Éditeur : entrée du panneau, pose du bloc ===
   cases.push({
     id: 'condtext_chips_tab_lists_the_block_entry_in_both_languages',
-    description: 'L’onglet Chips du panneau « # » propose « Texte conditionnel » (« Conditional text » en anglais), après les quatre chips existants, puis « Case conditionnelle » (suite condCheckbox), puis « Calcul » (« Calculation »)',
+    description: 'L’onglet Chips du panneau « # » propose « Texte conditionnel » (« Conditional text » en anglais), après les quatre chips existants, puis « Valeur conditionnelle » (suite condValue), « Case conditionnelle » (suite condCheckbox) et « Calcul » (« Calculation »)',
     run: async (h) => {
       await seed(h);
       await h.focusAtEnd();
@@ -184,8 +184,9 @@
         await openChipsTab(h);
         en = panelItems();
       } finally { I18n.setLang(lang); }
-      const pass = fr.length === 7 && fr[4] === 'Texte conditionnel' && fr[5] === 'Case conditionnelle' && fr[6] === 'Calcul' && fr.slice(0, 4).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur'
-        && en.length === 7 && en[4] === 'Conditional text' && en[5] === 'Conditional checkbox' && en[6] === 'Calculation';
+      // Huit lignes : « Valeur conditionnelle » (js/conditional-value.js) vient juste après le bloc, « Case conditionnelle » puis « Calcul » ensuite.
+      const pass = fr.length === 8 && fr[4] === 'Texte conditionnel' && fr[5] === 'Valeur conditionnelle' && fr[6] === 'Case conditionnelle' && fr[7] === 'Calcul' && fr.slice(0, 4).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur'
+        && en.length === 8 && en[4] === 'Conditional text' && en[5] === 'Conditional value' && en[6] === 'Conditional checkbox' && en[7] === 'Calculation';
       return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });

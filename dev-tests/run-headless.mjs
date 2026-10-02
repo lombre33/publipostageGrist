@@ -81,6 +81,7 @@ const GROUPS = {
   varLoop: 'scenarios-var-loop',
   condText: 'scenarios-cond-text', // bloc de texte conditionnel (menu des variables, onglet Chips) : pose et entourage, barre flottante, fenêtre de condition, Lecture et exports
   condCheckbox: 'scenarios-cond-checkbox', // case conditionnelle (menu des variables, onglet Chips) : pose en un clic, barre flottante (condition, trois styles), fenêtre de condition, Lecture, boucle, en-tête, PDF, Word et e-mail
+  condValue: 'scenarios-cond-value', // valeur conditionnelle EN LIGNE (menu des variables, onglet Chips) : pose dans la phrase ou autour d'un texte, touches aux bords, barre flottante, fenêtre de condition, Défaire la valeur, suivi, Lecture, boucle, en-tête, PDF et Word
   varPath: 'scenarios-var-path',
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
@@ -133,6 +134,7 @@ const NODE_SCRIPTS = {
   varBoolMouse: 'verify-var-bool-mouse.mjs', // barre d'une bulle Oui / Non à la vraie souris : quatre boutons atteignables, bouton enfoncé, Lecture mesurée aux pixels d'une vraie capture ; 700x400 clair, sombre et anglais
   condTextMouse: 'verify-cond-text-mouse.mjs', // bloc de texte conditionnel à la vraie souris : liste « # » et Chips, étiquette et barre (icônes grisées aux pixels), fenêtre de condition, blocs emboîtés, texte entouré, Lecture ; 700x400 clair et sombre
   condCheckboxMouse: 'verify-cond-checkbox-mouse.mjs', // case conditionnelle à la vraie souris : liste « # » et Chips, UN clic pose la puce et ouvre sa barre (icônes grisées aux pixels), fenêtre de condition, colonne étroite, Lecture mesurée aux pixels ; 700x400 clair, sombre et anglais
+  condValueMouse: 'verify-cond-value-mouse.mjs', // valeur conditionnelle à la vraie souris et au vrai clavier : liste « # » et Chips, frappe dans la valeur, Entrée, flèches qui en sortent et frappe derrière (ou devant) son cadre, Retour arrière et Suppr aux bords, texte vidé sans perdre la valeur, barre et fenêtre de condition, texte sélectionné entouré, Lecture ; 700x400 clair, sombre et anglais, puis 360 px
   captionMouse: 'verify-caption-mouse.mjs', // légende sous une image ou un tableau à la vraie souris et au vrai clavier : barre de l'image et du tableau, bouton « Légende » (actif, grisé), texte d'attente, frappe, Entrée, Ctrl+Z, Retour arrière ; 700x400 clair, sombre et anglais
   modalBaseMouse: 'verify-modal-base-mouse.mjs', // base commune des fenêtres (js/modal-base.js) : Condition, Autres attributs, Boucle - titre et boutons fixes, Tab, Échap
   modalPagesMouse: 'verify-modal-pages-mouse.mjs', // même base, lot 2 : les sept fenêtres d'index.html (Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser, Galerie, Aperçu)

@@ -29,6 +29,9 @@ const Variables = (function () {
     // Pas un chip en ligne mais un BLOC (js/conditional-text.js) : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la liste dessus, sinon il
     // se pose vide, curseur dedans.
     { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
+    // Le pendant en ligne du bloc (js/conditional-value.js) : une valeur - quelques mots, un nombre - posée dans la phrase, qui grandit avec son texte. Elle entoure le texte sélectionné s'il tient
+    // dans un paragraphe, sinon elle se pose vide, curseur dedans.
+    { key: 'Valeur conditionnelle', i18nKey: 'chips.conditionalValue', kind: 'chip', chipKind: 'conditionalValue' },
     // Une puce en ligne, pas un chip de valeur : une case que sa condition coche ou non (js/conditional-checkbox.js), posée à la place de « #requête » et sélectionnée pour que sa barre s'ouvre.
     { key: 'Case conditionnelle', i18nKey: 'chips.conditionalCheckbox', kind: 'chip', chipKind: 'conditionalCheckbox' },
     // Pas un chip non plus : une bulle « Calcul » (js/variable-calc.js) dont la fenêtre s'ouvre à l'insertion ; elle se pose par-dessus le texte tapé après la touche de déclenchement.
@@ -211,6 +214,10 @@ const Variables = (function () {
               if (props.kind === 'chip') {
                 if (props.chipKind === 'conditionalText') {
                   ConditionalText.insertFromPanel(editor, range);
+                  return;
+                }
+                if (props.chipKind === 'conditionalValue') {
+                  ConditionalValue.insertFromPanel(editor, range);
                   return;
                 }
                 if (props.chipKind === 'conditionalCheckbox') {

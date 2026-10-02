@@ -675,6 +675,20 @@ const FloatingToolbars = (function () {
       const node = editor.state.selection.node;
       return (node && node.type && node.type.name === 'conditionalText') ? node : null;
     }
+    // Une valeur conditionnelle (js/editor-nodes.js:createConditionalValueNode) ouvre la même barre dès que la sélection est DANS elle - le curseur dans son texte, comme le curseur dans un
+    // tableau ouvre la barre du tableau - ou qu'elle est sélectionnée en entier : sa condition d'affichage seulement (la même fenêtre que celle d'une bulle) ; « Autres attributs », « Boucle » et
+    // « Colonne » n'ont pas d'objet ici et sont grisés, avec leur raison en info-bulle. Une sélection qui déborde de la valeur ne l'ouvre pas. { node, pos } ou null ; `pos` est celle de la valeur.
+    function selectedValue() {
+      const { selection } = editor.state;
+      const picked = selection.node;
+      if (picked) return picked.type && picked.type.name === 'conditionalValue' ? { node: picked, pos: selection.from } : null;
+      const { $from, $to } = selection;
+      for (let depth = $from.depth; depth > 0; depth--) {
+        const node = $from.node(depth);
+        if (node.type.name === 'conditionalValue') return ($to.depth >= depth && $to.node(depth) === node) ? { node, pos: $from.before(depth) } : null;
+      }
+      return null;
+    }
     // Une case conditionnelle sélectionnée (clic sur la puce, js/editor-nodes.js:createConditionalCheckboxNode) ouvre la même barre : sa condition (la même fenêtre que celle d'une bulle)
     // et les trois styles de case ; « Autres attributs » et « Boucle » n'ont pas d'objet ici et sont grisés, avec leur raison en info-bulle.
     function selectedCheckboxNode() {
@@ -700,6 +714,11 @@ const FloatingToolbars = (function () {
     function onAction(action) {
       if (selectedBlockNode()) {
         if (action === 'var-condition') VariableCondition.open(editor, editor.state.selection.from);
+        return;
+      }
+      const value = selectedValue();
+      if (value) {
+        if (action === 'var-condition') VariableCondition.open(editor, value.pos);
         return;
       }
       const checkbox = selectedCheckboxNode();
@@ -799,7 +818,11 @@ const FloatingToolbars = (function () {
       conditionBtn.title = I18n.t(key);
       conditionBtn.setAttribute('aria-label', conditionBtn.title);
     }
-    function syncBlockState(node) {
+    // Un bloc de texte conditionnel et une valeur conditionnelle ont la même barre : seules les raisons des trois boutons grisés changent (`reasons`, les clés de js/i18n.js).
+    const BLOCK_REASONS = { linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', column: 'varToolbar.columnBlock' };
+    const VALUE_REASONS = { linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', column: 'varToolbar.notForValue' };
+    function syncBlockState(node, reasons) {
+      const why = reasons || BLOCK_REASONS;
       setConditionTitle('varToolbar.condition');
       const calcBtn = panel.el.querySelector('button[data-action="calc-edit"]');
       if (calcBtn) calcBtn.hidden = true;
@@ -807,12 +830,12 @@ const FloatingToolbars = (function () {
       setButtonDisabled(conditionBtn, false, I18n.t('varToolbar.condition'));
       if (conditionBtn) conditionBtn.classList.toggle('is-active', !!ConditionRules.normalizeCondition(node.attrs.condition));
       const linkedBtn = panel.el.querySelector('button[data-action="var-linked"]');
-      setButtonDisabled(linkedBtn, true, I18n.t('varToolbar.linkedBlock'));
+      setButtonDisabled(linkedBtn, true, I18n.t(why.linked));
       if (linkedBtn) linkedBtn.classList.remove('is-active');
       const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
-      setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopBlock'));
+      setButtonDisabled(loopBtn, true, I18n.t(why.loop));
       if (loopBtn) loopBtn.classList.remove('is-active');
-      syncColumnButton(node, 'varToolbar.columnBlock');
+      syncColumnButton(node, why.column);
     }
 
     // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans réglage ; une case conditionnelle n'a pas ce bouton.
@@ -931,8 +954,9 @@ const FloatingToolbars = (function () {
       // fiable y compris pour un <select>) ; ici, seule la sélection réelle (bulle #Variable toujours sélectionnée ou non) décide de fermer le panneau.
       const block = selectedBlockNode();
       const checkbox = selectedCheckboxNode();
-      const node = (block || checkbox) ? null : selectedFormatNode();
-      if (!block && !checkbox && !node) { panel.hide(); return; }
+      const value = (block || checkbox) ? null : selectedValue();
+      const node = (block || checkbox || value) ? null : selectedFormatNode();
+      if (!block && !checkbox && !value && !node) { panel.hide(); return; }
       // Fenêtre de condition / d'autres attributs / de boucle / de calcul ouverte sur cette bulle : la barre reste masquée tant qu'elle l'est (règle d'Antoine) ; son niveau, sous les fenêtres, la
       // cacherait de toute façon derrière le voile.
       if (VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableCalc.isOpen()) { panel.hide(); return; }
@@ -948,7 +972,7 @@ const FloatingToolbars = (function () {
       const textButton = panel.el.querySelector('button[data-action="bool-style:text"]');
       if (textButton) textButton.hidden = !!checkbox;
       panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
-      const dom = editor.view.nodeDOM(editor.state.selection.from);
+      const dom = editor.view.nodeDOM(value ? value.pos : editor.state.selection.from);
       // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre en haut à gauche (8, 8) -
       // une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la rouvrir.
       if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
@@ -959,6 +983,11 @@ const FloatingToolbars = (function () {
       }
       if (checkbox) {
         syncCheckboxState(checkbox);
+        panel.show(dom, GridEditor.floatingOptions);
+        return;
+      }
+      if (value) {
+        syncBlockState(value.node, VALUE_REASONS);
         panel.show(dom, GridEditor.floatingOptions);
         return;
       }

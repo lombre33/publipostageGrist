@@ -981,6 +981,206 @@ const EditorNodes = (function () {
     });
   }
 
+  // Valeur conditionnelle (menu des variables, onglet Chips ; demande d'Antoine du 02/10, « une valeur - un ou plusieurs mots, un nombre... - qui s'affiche de manière conditionnelle », posée
+  // DANS la phrase, petite, son contour grandissant avec le texte et les retours à la ligne) : le pendant en ligne du bloc de texte conditionnel. Un nœud en ligne qui CONTIENT du texte (marques,
+  // bulles, retours à la ligne) et que sa condition fait apparaître en lecture et à l'export (js/conditional-value.js) ou disparaître. Même condition que celle d'une bulle ou d'un bloc
+  // ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, la valeur est toujours affichée. Dans l'éditeur le texte est celui de la
+  // phrase, simplement entouré d'un cadre (css/conditional-value.css) : aucune étiquette ne prend de place dans la ligne, le texte passe donc à la ligne exactement où il le fera à
+  // l'export. renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span class="conditional-value" data-condition>.
+  function createConditionalValueNode(Node, mergeAttributes) {
+    // Les textes d'un changement de langue : une seule écoute pour toutes les vues (I18n.onChange ne se désabonne pas), chaque vue s'inscrit tant qu'elle vit.
+    const views = new Set();
+    I18n.onChange(() => views.forEach(refresh => refresh()));
+    return Node.create({
+      name: 'conditionalValue',
+      group: 'inline',
+      inline: true,
+      content: 'inline*',
+      addAttributes() {
+        return { condition: { default: null, renderHTML: () => ({}) } };
+      },
+      parseHTML() {
+        return [{
+          tag: 'span.conditional-value',
+          // ProseMirror traite le contenu d'un nœud comme celui d'un bloc : il en retire l'espace du début et celle de la fin (« Dossier<valeur> urgent</valeur> » relu, « urgent » collait au
+          // mot d'avant). Une valeur garde les siennes - c'est ce qui permet de masquer l'espace avec le mot -, les retours à la ligne du source HTML devenant des espaces.
+          preserveWhitespace: true,
+          getAttrs: el => {
+            let condition = null;
+            try { condition = JSON.parse(el.getAttribute('data-condition') || 'null'); } catch (e) { condition = null; }
+            return { condition };
+          },
+        }];
+      },
+      renderHTML({ HTMLAttributes, node }) {
+        const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-value' });
+        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+        return ['span', attrs, 0];
+      },
+      // Vue de l'éditeur SEULEMENT : la même balise, son texte d'attente quand elle est vide, son info-bulle (la condition en toutes lettres) et sa classe `has-condition`.
+      addNodeView() {
+        return ({ node: initialNode }) => {
+          let node = initialNode;
+          const dom = document.createElement('span');
+          dom.className = 'conditional-value';
+          dom.setAttribute('role', 'group');
+          function refresh() {
+            const condition = ConditionRules.normalizeCondition(node.attrs.condition);
+            if (node.attrs.condition) dom.setAttribute('data-condition', JSON.stringify(node.attrs.condition)); else dom.removeAttribute('data-condition');
+            dom.classList.toggle('has-condition', !!condition);
+            dom.setAttribute('data-placeholder', I18n.t('condValue.placeholder'));
+            const title = condition ? I18n.t('condValue.titleIf', { condition: VariableCondition.describe(condition, { full: true }) }) : I18n.t('condValue.titleNone');
+            dom.title = title;
+            dom.setAttribute('aria-label', title);
+          }
+          refresh();
+          views.add(refresh);
+          return {
+            dom,
+            contentDOM: dom,
+            update: updatedNode => {
+              if (updatedNode.type !== node.type) return false;
+              node = updatedNode;
+              refresh();
+              return true;
+            },
+            // Les attributs de la balise sont posés hors transaction : ProseMirror ne doit pas les lire comme une modification du document.
+            ignoreMutation: mutation => mutation.type === 'attributes' && mutation.target === dom,
+            destroy: () => views.delete(refresh),
+          };
+        };
+      },
+    });
+  }
+
+  // Touches d'une valeur conditionnelle, dans une extension à part (pour ne pas changer l'ordre des nœuds du schéma) rangée comme celle de l'Entrée d'une grille (js/editor.js) : après
+  // StarterKit, donc essayée avant ses touches, et avant Variables et TextExpansion, donc après elles - leurs listes ouvertes gardent Entrée.
+  // - Entrée est un retour à la ligne DANS la valeur (le cadre grandit d'une ligne) : sans elle, la valeur n'étant pas un bloc, TipTap couperait le paragraphe autour d'elle.
+  // - Retour arrière au début de la valeur, Suppr à sa fin : les commandes de base de TipTap (joinBackward, joinForward), appelées sans la vue, prennent le bord de la valeur pour celui d'un
+  //   paragraphe et mangent le texte voisin (« Avant » entier disparaissait). Le curseur passe donc d'abord de l'autre côté du bord, et la touche suit son cours : elle efface le caractère
+  //   voisin, comme si la valeur n'était pas là. Dans une valeur vide, elles la retirent : sinon rien ne l'ôterait une fois son texte effacé.
+  // - Une suppression qui viderait la valeur (le dernier caractère, un mot entier) se fait ici : le navigateur retire alors la balise vide, avec sa condition (`beforeinput`, cible lue par
+  //   `getTargetRanges`). Effacer le texte d'une valeur la laisse vide, avec son texte d'attente.
+  // - Flèche droite à la FIN d'une valeur, flèche gauche à son DÉBUT : le curseur sort de la valeur, sans bouger à l'écran - la frappe suivante se pose juste derrière (ou devant) son cadre.
+  //   Sans elles, une valeur en fin de paragraphe ne se quittait pas au clavier (la flèche passait au paragraphe suivant) et ce qu'on tapait pour finir la phrase, un point, entrait dans la valeur.
+  // - Une frappe AU BORD d'une valeur (juste dehors, ou dedans au début ou à la fin de son contenu, valeur vide comprise) se pose là où ProseMirror a le curseur. Un bord de cadre n'a qu'une
+  //   place à l'écran, et Chrome choisit seul de quel côté la frappe tombe - l'élément qui précède, le plus souvent : la valeur avalait la suite de la phrase tapée derrière elle, et ce
+  //   qu'on tapait après un retour à la ligne en fin de valeur, ou dans une valeur vide rendue par Ctrl+Z, se retrouvait dehors.
+  function createConditionalValueKeysExtension(Extension, Plugin, PluginKey) {
+    const valueAt = state => {
+      const { $from, empty } = state.selection;
+      return $from.parent.type.name === 'conditionalValue' ? { $from, empty } : null;
+    };
+    const moveTo = (editor, pos) => {
+      const TextSelection = EditorCore.getTextSelectionClass();
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)));
+    };
+    // Retour arrière (`dir` -1) ou Suppr (1) avec le curseur au bord ou dans une valeur vide. Rend vrai quand la touche est consommée.
+    const atEdge = (editor, dir) => {
+      const here = valueAt(editor.state);
+      if (!here || !here.empty || !editor.isEditable) return false;
+      const { $from } = here;
+      const size = $from.parent.content.size;
+      if (!size) {
+        const before = $from.before();
+        const tr = editor.state.tr.delete(before, $from.after());
+        tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(before), dir));
+        editor.view.dispatch(tr.scrollIntoView());
+        return true;
+      }
+      if (dir < 0 && $from.parentOffset === 0) moveTo(editor, $from.before());
+      else if (dir > 0 && $from.parentOffset === size) moveTo(editor, $from.after());
+      return false;
+    };
+    // Flèche droite (`dir` 1) à la fin d'une valeur, flèche gauche (-1) à son début : le curseur passe de l'autre côté du bord. Rend vrai quand la touche est consommée ; ailleurs dans la valeur,
+    // avec une sélection ou avec Maj, la flèche suit son cours.
+    const leave = (editor, dir) => {
+      const here = valueAt(editor.state);
+      if (!here || !here.empty || !editor.isEditable) return false;
+      const { $from } = here;
+      if ($from.parentOffset !== (dir > 0 ? $from.parent.content.size : 0)) return false;
+      moveTo(editor, dir > 0 ? $from.after() : $from.before());
+      return true;
+    };
+    // Frappe (`beforeinput`, insertText) quand le curseur de ProseMirror est au bord d'une valeur - juste dehors, ou dedans au début ou à la fin de son contenu : le texte entre à cet
+    // endroit, par la même voie que la frappe de ProseMirror (`handleTextInput`, donc les règles de saisie), et non là où le navigateur le mettrait. Au milieu du texte, il tape comme
+    // d'habitude.
+    const typeAtEdge = (view, event) => {
+      const { selection, schema } = view.state;
+      if (event.isComposing || !event.data || !selection.empty) return false;
+      const type = schema.nodes.conditionalValue;
+      const { $from } = selection;
+      const outside = ($from.nodeBefore && $from.nodeBefore.type === type) || ($from.nodeAfter && $from.nodeAfter.type === type);
+      const edgeInside = $from.parent.type === type && ($from.parentOffset === 0 || $from.parentOffset === $from.parent.content.size);
+      if (!outside && !edgeInside) return false;
+      event.preventDefault();
+      const tr = view.state.tr.insertText(event.data);
+      if (!view.someProp('handleTextInput', f => f(view, selection.from, selection.to, event.data, () => tr))) view.dispatch(tr.scrollIntoView());
+      return true;
+    };
+    return Extension.create({
+      name: 'conditionalValueKeys',
+      addKeyboardShortcuts() {
+        return {
+          Enter: ({ editor }) => (valueAt(editor.state) && editor.isEditable) ? editor.commands.setHardBreak() : false,
+          Backspace: ({ editor }) => atEdge(editor, -1),
+          Delete: ({ editor }) => atEdge(editor, 1),
+          ArrowRight: ({ editor }) => leave(editor, 1),
+          ArrowLeft: ({ editor }) => leave(editor, -1),
+        };
+      },
+      addProseMirrorPlugins() {
+        return [new Plugin({
+          key: new PluginKey('conditionalValueInput'),
+          // Suivi des modifications : la bibliothèque (js/track-changes.js) ne marque que le TEXTE d'une valeur - un nœud qui n'est pas une feuille ne porte pas ses marques -, jamais la valeur
+          // elle-même. « Tout accepter » d'une valeur supprimée ou défaite, « Tout refuser » d'une valeur insérée (ou d'un texte tapé dedans) ne lui laissent donc qu'un cadre VIDE,
+          // avec sa condition : il part avec son contenu. Seule la résolution des suggestions est concernée (sa transaction porte le méta `skip` de la bibliothèque), et seule une valeur
+          // dont TOUT le contenu était suggéré (inséré ou supprimé) et qui s'est vidée par elle : un texte effacé à la main dans une valeur la laisse vide, comme hors suivi.
+          appendTransaction(transactions, oldState, newState) {
+            if (!transactions.some(tr => tr.docChanged && TrackChanges.isSkipped(tr))) return null;
+            const type = newState.schema.nodes.conditionalValue;
+            const emptied = [];
+            newState.doc.descendants((node, pos) => { if (node.type === type && node.content.size === 0) emptied.push({ pos, size: node.nodeSize }); });
+            if (!emptied.length) return null;
+            // La position d'une valeur dans le document d'AVANT : les transactions reprises à l'envers, chacune par sa table inversée.
+            const positionBefore = pos => transactions.slice().reverse().reduce((at, tr) => tr.mapping.invert().map(at, 1), pos);
+            const suggested = child => child.marks.some(mark => mark.type.name === 'insertion' || mark.type.name === 'deletion');
+            const gone = emptied.filter(({ pos }) => {
+              const before = oldState.doc.nodeAt(positionBefore(pos));
+              return !!before && before.type === type && before.childCount > 0 && Array.from({ length: before.childCount }, (_, i) => before.child(i)).every(suggested);
+            });
+            if (!gone.length) return null;
+            const tr = newState.tr;
+            gone.reverse().forEach(({ pos, size }) => tr.delete(pos, pos + size));
+            return tr;
+          },
+          props: {
+            handleDOMEvents: {
+              beforeinput: (view, event) => {
+                if (view.editable && event.inputType === 'insertText') return typeAtEdge(view, event);
+                if (!view.editable || !/^delete/.test(event.inputType || '') || typeof event.getTargetRanges !== 'function') return false;
+                const ranges = event.getTargetRanges();
+                if (ranges.length !== 1) return false;
+                let from;
+                let to;
+                try {
+                  from = view.posAtDOM(ranges[0].startContainer, ranges[0].startOffset);
+                  to = view.posAtDOM(ranges[0].endContainer, ranges[0].endOffset);
+                } catch (e) { return false; }
+                if (!(from < to) || to > view.state.doc.content.size) return false;
+                const $from = view.state.doc.resolve(from);
+                if ($from.parent.type.name !== 'conditionalValue' || from !== $from.start() || to !== $from.end()) return false;
+                event.preventDefault();
+                view.dispatch(view.state.tr.delete(from, to).scrollIntoView());
+                return true;
+              },
+            },
+          },
+        })];
+      },
+    });
+  }
+
   // Écrit la nouvelle position d'une image en calque que la personne vient de DÉPLACER : une seule voie pour le glisser de la NodeView (`onMoveUp`) et les flèches du clavier
   // (`nudgeSelectedImage`, js/floating-toolbars.js). `patch` : left, top et la grille page (pageIndex, pageLeftPt, pageTopPt). Rend true si le document a changé.
   // Rien ne s'écrit quand aucune valeur ne change (un simple clic sur l'image déjà sélectionnée, une flèche contre le bord de la page) : ni étape d'historique, ni suggestion.
@@ -1372,7 +1572,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createEditorImageNode, moveImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode,
   };
 })();

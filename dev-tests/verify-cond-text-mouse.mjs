@@ -316,7 +316,8 @@ async function runTheme(theme) {
   // 3) Les deux icônes sans objet sont GRISÉES aux pixels (pas retirées) : leur encre tombe sous 60 % de celle des mêmes icônes actives sur une bulle de colonne Référence.
   const greyedInk = { linked: await ink(page, '.v2-varfmt-toolbar.visible button[data-action="var-linked"]'), loop: await ink(page, '.v2-varfmt-toolbar.visible button[data-action="var-loop"]') };
   const badgeBox = await hitTest(page, '.tiptap .var-badge[data-column="Responsable"]');
-  await realClick(page, badgeBox);
+  // La barre du bloc, posée contre son étiquette, recouvre le début de la bulle - son centre aussi, la barre comptant quatre icônes (condition, « Autres attributs », « Boucle », « Colonne ») : le clic part de la fin de la bulle.
+  await realClick(page, { x: badgeBox.right - 8, y: badgeBox.y });
   await page.waitForTimeout(300);
   const activeInk = await ink(page, '.v2-varfmt-toolbar.visible button[data-action="var-linked"]');
   check(`${label} - « Autres attributs » grisé sur un bloc : moins de 60 % de l'encre de la même icône active sur une bulle`, greyedInk.linked != null && activeInk != null && greyedInk.linked < activeInk * 0.6, { greyedInk, activeInk });

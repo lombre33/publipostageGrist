@@ -425,6 +425,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sa place, un seul Annuler rend le bloc ; son texte garde la couleur du texte (le rouge de « Retirer la condition » ne fait que 4,4:1 sur blanc). Les quatre boutons de la fenêtre
   d'un bloc à condition passent sur deux lignes - les retraits au-dessus, Annuler et Enregistrer dessous, à droite - quand ils ne tiennent pas côte à côte (le français dans les
   480 px) : jamais un bouton hors de la fenêtre.
+- Valeur conditionnelle (demande d'Antoine du 02/10, « une valeur - un ou plusieurs mots, un nombre, etc. - qui s'affiche de manière conditionnelle » ; sa réponse à la carte : « Dans la
+  phrase », pas un mot dans le bloc) : une ligne « Valeur conditionnelle » (« Conditional value ») de l'onglet Chips du menu des variables, juste après « Texte conditionnel », jamais une
+  nouvelle icône ; le pendant EN LIGNE du bloc. Sans sélection, une valeur vide se pose à la place de « # » et le curseur s'y met ; avec du texte sélectionné (d'un seul paragraphe), le bouton
+  « Insérer une variable » ouvre la liste sur Chips et Entrée entoure ce texte. Elle contient du texte mis en forme, des bulles et des retours à la ligne (Entrée y fait un retour à la ligne,
+  jamais un nouveau paragraphe) et se pose là où une bulle se pose (paragraphe, titre, élément de liste, case de tableau, colonne, encadré, en-tête ou pied de page, ligne d'une boucle),
+  pas dans un bloc de code. Petite par défaut : vide, un cadre de 2,2 em avec son texte d'attente « valeur » (`#12406b`, italique, au moins 4,5:1 sur le voile) ; il grandit avec ce qu'on
+  tape et ses retours à la ligne, sans marge ni étiquette ajoutées au texte, donc la phrase passe à la ligne là où elle le fera à l'export (cadre en `outline`, dans la direction artistique
+  des bulles : liseré `#b7cdf2` en pointillés sur un voile bleu pâle, `#5b7fc0` une fois la condition posée). Les espaces d'une valeur sont les siens et partent avec elle. Au clavier : → à la
+  fin de la valeur et ← à son début en sortent sans que le curseur bouge à l'écran, et le texte tapé ensuite se pose là où le curseur est, jamais dedans ou dehors au hasard du navigateur
+  (au bord d'un cadre, Chrome choisit seul le côté) ; Retour arrière au début et Suppr à la fin effacent le caractère voisin, comme si la valeur n'était pas là ; vider son texte la laisse
+  vide avec sa condition, Retour arrière ou Suppr dans une valeur vide la retire. Un clic dans la valeur ouvre la barre flottante des variables, réduite à la condition d'affichage (même
+  fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Colonne » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
+  raison en info-bulle, jamais retirés. « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
+  Annuler rend la valeur). Condition remplie, le texte se lit sans cadre au fil de la phrase ; sinon la valeur disparaît, le texte autour reste (une valeur masquée emporte celles qu'elle
+  contient), en Lecture, PDF, Word, Excel et e-mail. Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
 - Calcul (demande d'Antoine du 01/10, « variables calculées ») : une ligne « Calcul » (« Calculation ») de l'onglet Chips du menu des variables, jamais une nouvelle icône ; elle remplace le « # » tapé et
   ouvre la fenêtre « Insérer un calcul » (base commune, 480 px, sans défilement dans 700×400) : le champ « Formule » (le focus y est ; « # » y ouvre la liste des colonnes par-dessus la fenêtre, Entrée y
   choisit une colonne sans valider), l'indication de la syntaxe sous le champ, une rangée « Fonctions » (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI ; SUM, AVERAGE, MIN, MAX, COUNT, ROUND en anglais : un clic écrit

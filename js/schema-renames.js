@@ -2,7 +2,7 @@
 // dans la variable ? »). Grist garde l'identifiant de ligne d'une table et d'une colonne (_grist_Tables, _grist_Tables_column : un renommage met à jour la MÊME ligne, vérifié à la
 // source grist-core, useractions.py RenameColumn / RenameTable) et réécrit ses propres formules, jamais le contenu d'un widget : un modèle qui nomme « Dossiers.Montant » garde ce
 // nom, et la bulle devient rouge. Ici, à l'ouverture du widget, les noms d'aujourd'hui sont comparés, identifiant par identifiant, à ceux de la dernière ouverture ; ce qui a changé
-// de nom est réécrit là où le widget l'a écrit : les modèles (bulles, conditions, boucles, calculs, blocs et cases conditionnels, images liées, QR codes, en-têtes et pieds de page,
+// de nom est réécrit là où le widget l'a écrit : les modèles (bulles, conditions, boucles, calculs, blocs, valeurs et cases conditionnels, images liées, QR codes, en-têtes et pieds de page,
 // macro-modèles, nom du PDF, champs de l'e-mail) et les clés de correspondance entre tables (Publipostage_LiensTables).
 //
 // Rien n'est lu ni écrit avant l'affichage du modèle (point 1 d'Antoine, temps d'ouverture) : js/main.js appelle checkAfterOpen en toute dernière ligne d'init(), sans l'attendre.
@@ -30,7 +30,7 @@ const SchemaRenames = (function () {
   const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
   const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
   // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne (js/loop-rules.js:BOUND_SELECTOR, plus la bulle de calcul).
-  const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-checkbox';
+  const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
 
   let running = false;
 
@@ -353,7 +353,7 @@ const SchemaRenames = (function () {
     return tables;
   }
 
-  // Un élément du modèle (bulle, bulle de calcul, image liée ou QR code, bloc ou case conditionnels) : le nombre de références réécrites.
+  // Un élément du modèle (bulle, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références réécrites.
   function rewriteElement(el, m, page, trigger) {
     let count = 0;
     const isImage = el.tagName === 'IMG';

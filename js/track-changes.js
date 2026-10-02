@@ -39,6 +39,14 @@ const TrackChanges = (function () {
     return suggestKey ? tr.setMeta(suggestKey, { skip: true }) : tr;
   }
 
+  // Vrai pour une transaction qui n'est PAS une modification de la personne mais le résultat de ce qu'elle décrit : « Tout accepter » et « Tout refuser » (et leurs variantes par suggestion
+  // ou par sélection), le chargement d'un document, une écriture marquée par skipTracking(). dispatchTransaction (plus bas) les laisse passer sans les suivre ; un plugin qui doit
+  // réagir à la RÉSOLUTION des suggestions (la valeur conditionnelle vidée, js/editor-nodes.js) s'appuie sur la même marque.
+  function isSkipped(tr) {
+    const meta = suggestKey ? tr.getMeta(suggestKey) : null;
+    return !!meta && 'skip' in meta;
+  }
+
   function lastNodeCarriesSuggestionMark(state) {
     const last = state.doc.lastChild;
     return !!last && last.marks.some(m => MARK_NAMES.includes(m.type.name));
@@ -338,6 +346,6 @@ const TrackChanges = (function () {
   }
 
   return {
-    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking,
+    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking, isSkipped,
   };
 })();

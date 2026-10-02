@@ -186,5 +186,6 @@ const ConditionalText = (function () {
     return true;
   }
 
-  return { resolve, startFromSelection, hasPending, cancelPending, insertFromPanel, unwrap };
+  // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
+  return { resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap };
 })();

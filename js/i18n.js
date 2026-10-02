@@ -1026,6 +1026,23 @@ const I18n = (function () {
     'condText.tag.titleNone': { fr: 'Texte conditionnel sans condition : il s’affiche toujours. Cliquez pour choisir sa condition.', en: 'Conditional text with no condition: it always shows. Click to choose its condition.' },
     'condText.tag.titleIf': { fr: 'S’affiche si {condition}. Cliquez pour modifier sa condition.', en: 'Shown if {condition}. Click to edit its condition.' },
 
+    // --- Valeur conditionnelle (menu des variables, onglet Chips ; js/conditional-value.js, js/editor-nodes.js:createConditionalValueNode) : l'entrée du panneau, le texte d'attente et l'info-bulle
+    // de la valeur dans l'éditeur, les boutons grisés de sa barre (js/floating-toolbars.js) et les variantes « valeur » de la fenêtre de condition (js/variable-condition.js) ---
+    'chips.conditionalValue': { fr: 'Valeur conditionnelle', en: 'Conditional value' },
+    'condValue.placeholder': { fr: 'valeur', en: 'value' },
+    'condValue.titleNone': { fr: 'Valeur conditionnelle sans condition : elle s’affiche toujours. Pour choisir sa condition, cliquez dedans puis sur l’icône de condition de la barre.', en: 'Conditional value with no condition: it always shows. To choose its condition, click inside it, then the condition icon in the toolbar.' },
+    'condValue.titleIf': { fr: 'S’affiche si {condition}. Pour modifier sa condition, cliquez dedans puis sur l’icône de condition de la barre.', en: 'Shown if {condition}. To edit its condition, click inside it, then the condition icon in the toolbar.' },
+    'varToolbar.notForValue': { fr: 'Disponible pour une variable, pas pour une valeur conditionnelle', en: 'Available for a variable, not for a conditional value' },
+    'varToolbar.loopValue': { fr: 'Disponible pour une variable liée à plusieurs lignes, pas pour une valeur conditionnelle', en: 'Available for a variable linked to several rows, not for a conditional value' },
+    'varCond.introValue': { fr: 'Cette valeur n’apparaît en lecture et à l’export que si la condition est remplie. En édition, elle reste visible, entourée de pointillés.', en: 'This value only appears in read mode and in exports when the condition is met. While editing, it stays visible inside a dashed frame.' },
+    'varCond.debug.currentMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la valeur s’affiche.', en: 'Selected row (#{id}): condition met, the value is shown.' },
+    'varCond.debug.currentNotMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la valeur est masquée.', en: 'Selected row (#{id}): condition not met, the value is hidden.' },
+    'varCond.saveLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The conditional value was moved or deleted while editing: the condition was not saved.' },
+    'varCond.unwrapValue': { fr: 'Défaire la valeur', en: 'Unwrap value' },
+    'varCond.unwrapValueTitle': { fr: 'Retire le cadre et la condition : le texte de la valeur reste à sa place.', en: 'Removes the frame and the condition: the value’s text stays where it is.' },
+    'varCond.unwrapLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : elle n’a pas été défaite.', en: 'The conditional value was moved or deleted while editing: it was not unwrapped.' },
+    'varCond.clip.pastedStatusValue': { fr: 'Condition collée. Enregistrez pour l’appliquer à la valeur.', en: 'Condition pasted. Save to apply it to the value.' },
+
     // --- Case conditionnelle (menu des variables, onglet Chips ; js/conditional-checkbox.js, js/editor-nodes.js:createConditionalCheckboxNode) : l'entrée du panneau, le libellé et l'info-bulle
     // de la puce dans l'éditeur, les deux boutons grisés de sa barre (js/floating-toolbars.js). La fenêtre de condition a ses phrases à part (`varCond.*Checkbox`).
     'chips.conditionalCheckbox': { fr: 'Case conditionnelle', en: 'Conditional checkbox' },

@@ -1,0 +1,10 @@
+/* Valeur conditionnelle dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalValueNode). Une vue de l'éditeur seulement : le HTML enregistré ne porte que
+   <span class="conditional-value" data-condition>, que la Lecture, le PDF, le Word, l'Excel et l'e-mail défont (condition remplie) ou retirent (sinon) - js/conditional-value.js.
+   Même direction artistique que les bulles et la case conditionnelle (css/conditional-checkbox.css) : liseré #b7cdf2 sur un voile bleu pâle, en pointillés #5b7fc0 une fois la condition posée.
+   La page reste blanche dans les deux thèmes, d'où des couleurs écrites en dur. Le cadre n'ajoute AUCUNE marge ni étiquette au texte : il l'entoure seulement (contour et fond ne prennent pas
+   de place), donc la phrase passe à la ligne exactement où elle le fera à l'export, et le cadre grandit avec ce qu'on y tape et ses retours à la ligne. Vide, la valeur garde une largeur
+   minimale et son texte d'attente (même bleu foncé que le texte d'une bulle, ≥ 4,5:1 sur le voile) : sans cela elle n'aurait ni largeur ni endroit où cliquer. */
+.tiptap .conditional-value { outline: 1px dashed #b7cdf2; outline-offset: 1px; border-radius: 2px; background: rgba(183, 205, 242, .2); }
+.tiptap .conditional-value.has-condition { outline-color: #5b7fc0; background: rgba(91, 127, 192, .12); }
+.tiptap .conditional-value:empty { display: inline-block; min-width: 2.2em; }
+.tiptap .conditional-value:empty::before { content: attr(data-placeholder); color: #12406b; font-style: italic; }

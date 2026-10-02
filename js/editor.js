@@ -312,6 +312,7 @@ const Editor = (function () {
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     const ConditionalText = EditorNodes.createConditionalTextNode(Node, mergeAttributes);
     const ConditionalCheckboxNode = EditorNodes.createConditionalCheckboxNode(Node, mergeAttributes);
+    const ConditionalValueNode = EditorNodes.createConditionalValueNode(Node, mergeAttributes);
     const EditorImage = EditorNodes.createEditorImageNode(Node);
     const PageBreak = EditorNodes.createPageBreakNode(Node);
     const HeadingNumberingConfig = EditorNodes.createHeadingNumberingConfigNode(Node);
@@ -395,6 +396,8 @@ const Editor = (function () {
         // Entrée d'une grille (descend d'une case) : ICI, après StarterKit et avant Variables et TextExpansion - TipTap essaie la dernière extension rangée en premier, donc leurs listes
         // ouvertes gardent Entrée et la liste à puces aussi (cf. GridEditor.createEnterExtension). Hors grille elle ne fait rien.
         GridEditor.createEnterExtension(Extension),
+        // Les touches d'une valeur conditionnelle (Entrée = retour à la ligne dans la valeur, Retour arrière la retire vide) : même rang que l'Entrée d'une grille, pour la même raison.
+        EditorNodes.createConditionalValueKeysExtension(Extension, Plugin, PluginKey),
         Variables.createExtension(Extension, Suggestion),
         TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
         LinkDialog.createExtension(Extension),
@@ -409,6 +412,7 @@ const Editor = (function () {
         TrackedCallout,
         TrackedConditionalText,
         ConditionalCheckboxNode,
+        ConditionalValueNode,
         CaptionExtension,
         EditorImage,
         PageBreak,

@@ -313,8 +313,8 @@ async function placeChip(page, label, entryName) {
   const entry = await hitByText(page, '#autocomplete-box .ac-item', entryName);
   check(`${label} - la ligne « ${entryName} » est dans l'onglet Chips, visible et au premier plan`, entry.found && entry.inViewport && entry.onTop, entry);
   const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  // Sept lignes depuis la ligne « Calcul » (js/variable-calc.js), ajoutée après elle : la case conditionnelle est la sixième.
-  check(`${label} - elle vient après « Texte conditionnel » : sept lignes, « Calcul » en dernier`, items.length === 7 && items[5] === entryName && /^(Calcul|Calculation)$/.test(items[6]), items);
+  // Huit lignes depuis « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la septième, juste avant « Calcul ».
+  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : huit lignes, « Calcul » en dernier`, items.length === 8 && items[6] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[5]) && /^(Calcul|Calculation)$/.test(items[7]), items);
   if (entry.found) await realClick(page, entry);
   await page.waitForTimeout(350);
   return entry;
