@@ -261,6 +261,87 @@
     },
   });
 
+  // Réglages > Accès : la case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 2026-10-02, carte « Un réglage »).
+  cases.push({
+    id: 'clean_reading_access_checkbox_is_off_greyed_then_follows_the_read_only_column',
+    description: 'Réglages > Accès : la case est décochée et grisée au départ ; une colonne « Lecture seule » choisie, elle s’active, se coche et écrit cleanReading dans l’option du widget ; retirer la colonne la décoche ; les textes suivent la langue',
+    run: async (h) => {
+      await setup(h);
+      const RIGHTS = 'PpDroitsEpure';
+      stub().setVariables(RIGHTS, { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+      stub().setRows(RIGHTS, [{ id: 1, Email: 'lecteur@exemple.fr', LectureSeule: false, Export: true, Commentaires: true }]);
+      stub().setUserEmail('lecteur@exemple.fr');
+      await GristAPI.refreshSchema();
+      el('v2-btn-settings').click();
+      await sleep(300);
+      const box = el('settings-access-clean-reading');
+      const texts = () => ({ label: box.parentElement.querySelector('span').textContent, hint: box.parentElement.nextElementSibling.textContent });
+      const choose = async (id, value) => { const select = el(id); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); await sleep(400); };
+      const option = () => stub().state.options && stub().state.options.droitsAcces;
+      const state = () => ({ checked: box.checked, disabled: box.disabled, stored: option() ? option().cleanReading : null, config: AccessRights.getConfig() ? AccessRights.getConfig().cleanReading : null });
+      const start = state();
+      const startTexts = texts();
+      await choose('settings-access-table', RIGHTS);
+      const afterTable = state();
+      await choose('settings-access-readonly', 'LectureSeule');
+      const afterColumn = state();
+      box.click();
+      await sleep(450);
+      const ticked = state();
+      I18n.setLang('en');
+      await sleep(150);
+      const en = texts();
+      I18n.setLang('fr');
+      await sleep(150);
+      box.click();
+      await sleep(450);
+      const unticked = state();
+      box.click();
+      await sleep(450);
+      await choose('settings-access-readonly', '');
+      const afterRemoval = state();
+      el('settings-close').click();
+      stub().setWidgetOptions(null);
+      await waitFor(() => !AccessRights.getConfig());
+      await finish();
+      const pass = start.checked === false && start.disabled === true && afterTable.disabled === true && afterTable.checked === false
+        && afterColumn.disabled === false && afterColumn.checked === false && afterColumn.stored === false
+        && ticked.checked === true && ticked.stored === true && ticked.config === true
+        && unticked.checked === false && unticked.stored === false && unticked.config === false
+        && afterRemoval.disabled === true && afterRemoval.checked === false && afterRemoval.stored == null
+        && startTexts.label === 'Ouvrir les personnes en lecture seule sur la Lecture épurée' && /Choisissez d’abord la colonne « Lecture seule »/.test(startTexts.hint)
+        && en.label === 'Open read-only people on Clean reading' && /Choose the “Read-only” column first/.test(en.hint);
+      return { pass, notes: JSON.stringify({ start, startTexts, afterTable, afterColumn, ticked, en, unticked, afterRemoval }) };
+    },
+  });
+
+  cases.push({
+    id: 'clean_reading_opens_by_itself_only_for_a_confirmed_read_only_row_when_asked',
+    description: 'Ouverture d’emblée : seule une ligne de la table des droits qui dit « lecture seule », la case cochée et une réponse confirmée des droits, ouvre la Lecture épurée ; une personne qui a tous les droits, absente de la table, sans réglage, une réponse qui tarde, une table illisible (verrou par précaution) ou une case décochée n’ouvrent rien, et ni l’attente ni la table illisible ne comptent comme une réponse',
+    run: async () => {
+      // `state` est AccessRights.getStatus().state ; readOnly vaut AccessRights.get().readOnly (vrai aussi pour le verrou par précaution) ; enabled, la case cochée.
+      const base = { state: 'found', readOnly: true, enabled: true };
+      const would = patch => CleanReading.wouldOpenForReadOnly(Object.assign({}, base, patch));
+      const got = {
+        yes: CleanReading.wouldOpenForReadOnly(base),
+        off: would({ enabled: false }),
+        fullRights: would({ readOnly: false }),
+        notInTable: would({ state: 'notFound' }),
+        noEmail: would({ state: 'noEmail' }),
+        noSetting: would({ state: 'off' }),
+        waiting: would({ state: 'pending' }),
+        unreadable: would({ state: 'error' }),
+        nothing: CleanReading.wouldOpenForReadOnly(null),
+        // Une réponse « confirmée » : ce qui décide une fois pour la session. L'attente et la table illisible n'en sont pas (AccessRights relit toutes les 10 s : la réponse peut encore venir).
+        answered: ['pending', 'error', 'found', 'notFound', 'noEmail', 'off'].map(st => st + ':' + CleanReading.isAnswered(st)).join(' '),
+        none: CleanReading.isAnswered(undefined),
+      };
+      const pass = got.yes === true && !got.off && !got.fullRights && !got.notInTable && !got.noEmail && !got.noSetting && !got.waiting && !got.unreadable && !got.nothing
+        && got.answered === 'pending:false error:false found:true notFound:true noEmail:true off:true' && got.none === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.cleanReading = cases;
 })();

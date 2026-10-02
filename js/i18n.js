@@ -468,9 +468,29 @@ const I18n = (function () {
     'settings.rowTemplate.addRule': { fr: '+ Ajouter une règle', en: '+ Add a rule' },
     'settings.rowTemplate.empty': { fr: 'Aucune règle : ajoutez-en une pour relier un modèle à une condition.', en: 'No rule: add one to link a template to a condition.' },
     'settings.rowTemplate.otherwise': { fr: 'Si aucune règle ne correspond', en: 'If no rule matches' },
-    'settings.rowTemplate.otherwise.default': { fr: 'Ouvrir le modèle par défaut (★)', en: 'Open the default template (★)' },
+    'settings.rowTemplate.otherwise.default': { fr: 'Ouvrir le modèle par défaut', en: 'Open the default template' },
     'settings.rowTemplate.otherwise.keep': { fr: 'Laisser le modèle ouvert', en: 'Keep the open template' },
     'settings.rowTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+    'settings.viewTemplate.title': { fr: 'Modèle par défaut de cette vue', en: 'Default template for this view' },
+    'settings.viewTemplate.intro': {
+      fr: 'Le modèle qui s’ouvre chaque fois que l’on arrive dans cette vue. Sans choix, c’est le modèle par défaut du document (★) qui s’ouvre.',
+      en: 'The template that opens every time someone arrives in this view. With no choice, the document’s default template (★) opens.',
+    },
+    'settings.viewTemplate.status.set': { fr: 'Modèle de cette vue : « {name} ».', en: 'Template for this view: “{name}”.' },
+    'settings.viewTemplate.status.none': { fr: 'Aucun modèle choisi pour cette vue.', en: 'No template chosen for this view.' },
+    'settings.viewTemplate.status.noneWithDefault': {
+      fr: 'Aucun modèle choisi pour cette vue : le modèle par défaut du document (« {name} ») s’ouvre.',
+      en: 'No template chosen for this view: the document’s default template (“{name}”) opens.',
+    },
+    'settings.viewTemplate.status.missing': {
+      fr: 'Le modèle choisi pour cette vue n’existe plus ou ne peut pas s’ouvrir seul : le modèle par défaut du document s’ouvre.',
+      en: 'The template chosen for this view no longer exists or cannot open on its own: the document’s default template opens.',
+    },
+    'settings.viewTemplate.use': { fr: 'Utiliser le modèle ouvert pour cette vue', en: 'Use the open template for this view' },
+    'settings.viewTemplate.useNamed': { fr: 'Utiliser « {name} » pour cette vue', en: 'Use “{name}” for this view' },
+    'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
+    'settings.viewTemplate.cannotStart': { fr: 'Un modèle email ou un macro-modèle ne peut pas s’ouvrir au démarrage.', en: 'An email template or a macro template cannot open at startup.' },
+    'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
     'settings.rowTemplate.exportHint': {
       fr: 'Un export en lot garde le modèle ouvert pour toutes les lignes exportées.',
       en: 'A batch export keeps the open template for all exported rows.',
@@ -484,6 +504,12 @@ const I18n = (function () {
     'settings.access.readOnly': { fr: 'Lecture seule', en: 'Read-only' },
     'settings.access.export': { fr: 'Export autorisé', en: 'Export allowed' },
     'settings.access.comments': { fr: 'Commentaires autorisés', en: 'Comments allowed' },
+    // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (js/access-rights.js, js/clean-reading.js : choix d'Antoine du 2026-10-02).
+    'settings.access.cleanReading': { fr: 'Ouvrir les personnes en lecture seule sur la Lecture épurée', en: 'Open read-only people on Clean reading' },
+    'settings.access.cleanReadingHint': {
+      fr: 'Elles ouvrent sur le document seul, sans la barre d’outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Choisissez d’abord la colonne « Lecture seule ».',
+      en: 'They open on the document alone, without the toolbar; the round button at the top right, or Esc, brings the toolbar back (Comment, Export, depending on their rights). Choose the “Read-only” column first.',
+    },
     'settings.access.none': { fr: '— Aucune —', en: '— None —' },
     'settings.access.saveHint': {
       fr: 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.',

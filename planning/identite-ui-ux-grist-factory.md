@@ -373,7 +373,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la
   Lecture, qui surligne alors les passages commentés (choix d'Antoine du 30/09) ; sans le droit de commenter, la Lecture
   reste sans commentaires, comme l'export. La Lecture épurée (demande d'Antoine du 02/10, §3) cache toute la barre du haut sur un geste : ce n'est ni un mode ni un droit, et elle reste
-  ouverte aux personnes en lecture seule (elle ne modifie rien).
+  ouverte aux personnes en lecture seule (elle ne modifie rien). Réglages > Accès a une case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 02/10, carte « Un réglage »),
+  décochée au départ et grisée tant qu'aucune colonne « Lecture seule » n'est choisie : la personne dont la ligne de la table des droits dit « lecture seule » ouvre alors le widget sur la Lecture épurée,
+  une seule fois par session, à la première réponse confirmée des droits : une réponse qui tarde ou une table illisible n'est pas une réponse (la relecture de 10 s peut encore aboutir), une personne absente de la table,
+  sans identité ou sans réglage n'ouvre rien ; sortie faite, elle n'y est pas ramenée.
 - Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
   favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
   choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).
@@ -499,7 +502,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
   Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
   ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté
-  texte, 8 px dessous). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
+  texte, 8 px dessous ; une image flottante plus large que la ligne rétrécit de cette marge pour tenir à côté du texte). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
   quand il ne change rien (image seule dans son paragraphe, alignée ou en calque) : son info-bulle dit pourquoi.
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
@@ -681,7 +684,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde,
   lui, son repère « Page 2 » même sans rien derrière.
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
-  septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
+  septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
   Abréviations » met sur une ligne son titre et le réglage « Caractère déclencheur » (un champ de 44 px, « § » par défaut, gardé par navigateur comme la touche des variables ; il refuse
   une lettre, un chiffre, une espace, un délimiteur et le déclencheur des variables, en disant pourquoi, et reprend l'ancien caractère à la perte du focus), puis une phrase d'exemple, le
@@ -691,6 +694,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   formulaire dans la colonne des champs, entre le texte et les boutons ; celle du caractère, dont le champ est au bord droit de la ligne du titre, alignée sur ce bord (texte à droite,
   filet à droite). Les abréviations vivent dans la table `Publipostage_Abreviations` du document (`Utilisateur`, `Abreviation`, `Texte`) : une personne ne voit et ne change que les
   siennes (sans identité Grist, les lignes à `Utilisateur` vide) ; la table n'est créée qu'à la première abréviation ajoutée et reste cachée du choix `#Variable`.
+- Onglet « Vue » des Réglages (demandes d'Antoine du 02/10, points 16 et 16 bis : « un modèle selon la ligne », « un bouton pour mettre ce modèle par défaut pour la vue ») : les réglages propres à la
+  vue du widget, rangés en sections (un `h4.settings-section-title` chacune, séparées par un filet) - « Modèle selon la ligne » (case, règles « Si colonne = valeur → modèle » sur les lignes des macro-modèles,
+  « Si aucune règle ne correspond » : modèle par défaut / laisser le modèle ouvert / un modèle) et « Modèle par défaut de cette vue » (l'état, « Utiliser « X » pour cette vue », « Retirer »). Ils vivent dans
+  les options du widget, donc dans SA vue, et ne sont partagés qu'une fois la vue enregistrée dans Grist (le texte du haut de l'onglet le dit). L'ordre d'ouverture est la ligne qui désigne un modèle, puis le
+  modèle de la vue, puis le ★ du document ; un email ou un macro-modèle ne peut pas être le modèle de départ (bouton grisé, choix déjà enregistré ignoré). Cadre des règles et boutons grisés, jamais retirés :
+  case décochée ou lecture seule. Les **huit onglets** tiennent encore sur une ligne dans les 480 px (texte à 12 px, 1 px de marge, au lieu de 12,5 px et 2 px) : un neuvième onglet ne tiendrait plus, il
+  demande une autre place. La fenêtre garde ses 480 px.
 - Abréviations dans l'éditeur (même demande) : taper le caractère déclencheur ouvre sous le curseur la liste des abréviations de la personne, dans le même langage que le panneau `#`
   (fond de surface, liseré, ombre légère, ligne choisie sur `--surface-sunken`, texte en `--text`, jamais un gris discret qui n'atteindrait pas 4,5:1 sur la ligne choisie ; couche de
   niveau `--z-menu`, remontée à chaque placement par `ViewportFit.placePopup` : elle passe devant la barre flottante d'un tableau et devant un menu déjà ouvert). Elle se

@@ -19,6 +19,11 @@
 .settings-access-grid select:disabled { opacity: .55; }
 /* Choix de colonne avec recherche (js/search-select.js) : même hauteur et même corps de texte que la liste des tables à côté, qui reste native. */
 .settings-access-grid .ss-trigger { height: 28px; padding: 0 6px; font-size: 13px; }
+/* Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : sous les cinq choix, grisée comme eux tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît). */
+.settings-access-clean { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 14px 0 0; cursor: pointer; }
+.settings-access-clean input { margin: 0; flex: none; cursor: inherit; }
+.settings-access-clean input:disabled { cursor: default; }
+.settings-access-clean input:disabled + span { opacity: .55; }
 .settings-access-status { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 12px 0 0; }
 .settings-access-locked { font-size: 12.5px; color: var(--danger); margin: 8px 0 0; }
 .settings-access-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }

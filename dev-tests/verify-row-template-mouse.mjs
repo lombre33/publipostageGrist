@@ -258,7 +258,7 @@ async function run() {
   const offered = await page.evaluate(() => Array.from(document.querySelectorAll('.ss-panel:not([hidden]) .ss-option .ss-name')).map(n => n.textContent));
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  check('la liste « Si aucune règle ne correspond » propose le défaut (★), « Laisser le modèle ouvert » et les modèles', offered[0] === 'Ouvrir le modèle par défaut (★)' && offered[1] === 'Laisser le modèle ouvert' && offered.length >= 5, offered);
+  check('la liste « Si aucune règle ne correspond » propose le défaut (★), « Laisser le modèle ouvert » et les modèles', offered[0] === 'Ouvrir le modèle par défaut' && offered[1] === 'Laisser le modèle ouvert' && offered.length >= 5, offered);
   const stillOpen = await page.evaluate(() => document.getElementById('settings-modal').style.display === 'flex');
   check('Échap ferme la liste sans fermer les Réglages', stillOpen, stillOpen);
 
@@ -285,6 +285,29 @@ async function run() {
   const readerB = await page.evaluate(() => document.getElementById('reader-container').textContent);
   check('la Lecture suit', /Contenu B urgent/.test(readerB), readerB.slice(0, 80));
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'row-template-read-700x400.png') });
+
+  // 8) « 16 bis » : « Modèle par défaut de cette vue », au vrai clic dans la même fenêtre. Le modèle ouvert (B, pour la ligne 5) devient celui de la vue.
+  await realClick('#v2-btn-settings', 500);
+  await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
+  await page.evaluate(() => document.getElementById('settings-viewtemplate-section').scrollIntoView({ block: 'end' }));
+  await page.waitForTimeout(200);
+  const viewGeometry = await page.evaluate(() => {
+    const modal = document.querySelector('#settings-modal .modal-content').getBoundingClientRect();
+    const body = document.querySelector('#settings-modal .settings-body');
+    const rect = id => { const r = document.getElementById(id).getBoundingClientRect(); return { l: r.left, r: r.right, w: r.width, h: r.height }; };
+    return { set: rect('settings-viewtemplate-set'), clear: rect('settings-viewtemplate-clear'), modal: { l: modal.left, r: modal.right }, hScroll: body.scrollWidth > body.clientWidth + 1, label: document.getElementById('settings-viewtemplate-set').textContent, status: document.getElementById('settings-viewtemplate-status').textContent };
+  });
+  const within = r => r.l >= viewGeometry.modal.l && r.r <= viewGeometry.modal.r && r.w > 40 && r.h >= 24;
+  check('les deux boutons de la vue tiennent dans la fenêtre 700x400, sans défilement horizontal', within(viewGeometry.set) && within(viewGeometry.clear) && !viewGeometry.hScroll, viewGeometry);
+  check('l’état dit que le modèle par défaut du document s’ouvre, et le bouton nomme le modèle ouvert', /par défaut du document/.test(viewGeometry.status) && viewGeometry.label === 'Utiliser « Ligne - B urgent » pour cette vue', viewGeometry);
+  await realClick('#settings-viewtemplate-set', 400);
+  const chosen = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').disabled, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+  check('un vrai clic choisit le modèle ouvert pour la vue : option du widget écrite, état mis à jour, bouton grisé', String(chosen.option) === String(ids.B) && chosen.status === 'Modèle de cette vue : « Ligne - B urgent ».' && chosen.setDisabled && !chosen.clearDisabled, chosen);
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'view-template-700x400.png') });
+  await realClick('#settings-viewtemplate-clear', 400);
+  const cleared = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, status: document.getElementById('settings-viewtemplate-status').textContent, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+  check('« Retirer » enlève le choix de la vue', cleared.option === null && /par défaut du document/.test(cleared.status) && cleared.clearDisabled, cleared);
+  await realClick('#settings-close', 500);
 }
 
 await run();

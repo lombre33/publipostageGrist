@@ -249,12 +249,17 @@ const DocxExport = (function () {
   // pile à la bonne hauteur même quand l'image est insérée après plusieurs lignes de texte, paragraphBlockFrom DÉCOUPE le paragraphe HTML en plusieurs
   // paragraphes Word au point d'insertion de l'image (cf. splitRunsAtFloatedImages/__docxSplitBefore) - "haut du paragraphe" tombe alors exactement là où
   // l'image apparaît dans le texte, sans dépendre du support de "line" par le lecteur.
+  // Marges d'habillage = celles de l'éditeur (`float` : 12 px côté texte, 8 px dessous, css/editor-v2.css), soit 9 pt et 6 pt : docx.js les écrit sur le <wp:anchor> et le <wp:wrapSquare> (EMU). Sans elles
+  // le texte touchait l'image, 9 pt plus près que dans l'éditeur (Antoine, 02/10, point 9).
+  const WRAP_TEXT_SIDE_EMU = 9 * EMU_PER_PT;
+  const WRAP_BELOW_EMU = 6 * EMU_PER_PT;
   function docxAlignFloatingOptionsFrom(imgNode, uniqueId) {
     const align = imgNode.getAttribute('data-align');
     if (align !== 'left' && align !== 'right') return null;
     return {
       zIndex: 1000 + uniqueId,
       __isAlignFloat: true,
+      margins: { top: 0, bottom: WRAP_BELOW_EMU, left: align === 'right' ? WRAP_TEXT_SIDE_EMU : 0, right: align === 'left' ? WRAP_TEXT_SIDE_EMU : 0 },
       wrap: { type: docx.TextWrappingType.SQUARE, side: align === 'right' ? docx.TextWrappingSide.LEFT : docx.TextWrappingSide.RIGHT },
       horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.MARGIN, align: align === 'right' ? docx.HorizontalPositionAlign.RIGHT : docx.HorizontalPositionAlign.LEFT },
       verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PARAGRAPH, align: docx.VerticalPositionAlign.TOP },
@@ -345,6 +350,10 @@ const DocxExport = (function () {
       // (js/pdf-export.js:pdfImageFromNode). Sans ce marqueur, DOCX était le seul des trois à la laisser collée à gauche : `alignment` est une propriété de
       // PARAGRAPHE en OOXML (w:jc), pas de run, donc l'image doit occuper son propre <w:p> centré - ce que splitRunsAtFloatedImages fait ci-dessous.
       if (!floatingOptions && node.getAttribute('data-align') === 'center') imgRun.__docxCenterBlock = true;
+      // « Bloc » sans alignement (barre de l'image, « Basculer en ligne / bloc ») : seule sur sa ligne, À GAUCHE - `.editor-image-view[data-wrap="block"] { display: block; width: fit-content }` dans l'éditeur, le texte d'avant finit sa
+      // ligne et celui d'après repart dessous (Antoine, 02/10, point 10 : « La rendre fidèle »). Même raison que le centre : l'alignement est une propriété du PARAGRAPHE, l'image prend donc son propre <w:p>, aligné à gauche
+      // (un paragraphe centré ou justifié ne la déplace pas : un bloc ne suit pas le text-align de son parent).
+      if (!floatingOptions && !node.getAttribute('data-align') && node.getAttribute('data-wrap') === 'block') imgRun.__docxBlock = true;
       return [imgRun];
     }
     if (node.tagName === 'BR') return [new docx.TextRun({ break: 1 })];
@@ -618,6 +627,7 @@ const DocxExport = (function () {
   //    servirait à rien) - le texte qui SUIT l'image reste avec elle, c'est lui qui doit l'habiller.
   //  - __docxCenterBlock (image centrée) : l'image est SEULE dans son groupe, centré - le texte autour d'elle garde son propre alignement, comme dans
   //    l'éditeur où `display:block` la met sur sa propre ligne sans toucher aux lignes voisines.
+  //  - __docxBlock (image « bloc » sans alignement) : de même, seule dans son groupe, mais alignée à gauche.
   // Chaque groupe porte `alignment: undefined` (= garder celui du paragraphe HTML d'origine) ou une valeur qui le remplace.
   function splitRunsAtFloatedImages(runsArr) {
     const groups = [];
@@ -625,6 +635,7 @@ const DocxExport = (function () {
     const flush = () => { if (current.runs.length) groups.push(current); current = { runs: [], alignment: undefined }; };
     for (const run of runsArr) {
       if (run && run.__docxCenterBlock) { flush(); groups.push({ runs: [run], alignment: docx.AlignmentType.CENTER }); continue; }
+      if (run && run.__docxBlock) { flush(); groups.push({ runs: [run], alignment: docx.AlignmentType.LEFT }); continue; }
       if (run && run.__docxSplitBefore && current.runs.length) flush();
       current.runs.push(run);
     }

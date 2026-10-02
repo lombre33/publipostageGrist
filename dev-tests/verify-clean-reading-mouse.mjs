@@ -19,6 +19,9 @@ const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const PORT = Number(process.env.CLEAN_READING_MOUSE_PORT || 8931);
 const SHOTS = process.env.CLEAN_READING_SHOTS || '';
+// CLEAN_READING_ONLY=<partie> n'en lance qu'une (theme, readOnly, startup, fullRights, lateAnswer, unreadable) : un rejeu court pendant le développement ; la passe avant un envoi lance tout.
+const ONLY = process.env.CLEAN_READING_ONLY || '';
+const wanted = (part) => !ONLY || ONLY === part;
 const WIDTH = 700;
 const HEIGHT = 400;
 
@@ -91,7 +94,11 @@ const LONG_BODY = '<p>Bonjour <span class="var-badge" data-table="Clients" data-
   + Array.from({ length: 40 }, (_, i) => '<p>Paragraphe ' + (i + 1) + ' du contrat de location : une phrase assez longue pour que la ligne aille jusqu’au bord droit de la feuille, et que le texte '
     + 'passe près du bouton de sortie quand on fait défiler la Lecture épurée de haut en bas.</p>').join('');
 
-async function openWidget(colorScheme, readOnly) {
+// opts : rights = 'readOnly' | 'full' (une ligne de droits pour la personne, sinon aucun réglage de droits) ; cleanReading = la case de Réglages > Accès ; rightsDelayMs = la table des droits met ce
+// temps à répondre (Grist lent : le widget démarre verrouillé par précaution après ACCESS_STARTUP_WAIT_MS, js/main.js) ; rightsFailing = la table des droits est illisible (erreur) tant que la page
+// n'a pas mis window.__droitsFail à false.
+async function openWidget(colorScheme, opts) {
+  opts = opts || {};
   const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -120,15 +127,32 @@ async function openWidget(colorScheme, readOnly) {
     await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   }
   // Semé avant le démarrage : un modèle « Contrat » enregistré et ouvert par défaut, deux lignes de données ; en lecture seule, le réglage de droits et l'email de la personne.
-  await page.addInitScript(({ longBody, ro }) => {
+  await page.addInitScript(({ longBody, rights, cleanReading, delayMs, failing }) => {
     window.__preSeedGristStub = (stub) => {
       stub.setVariables('Clients', { Nom: 'Text' });
       stub.setRows('Clients', [{ id: 1, Nom: 'Dupont' }, { id: 2, Nom: 'Martin' }]);
-      if (ro) {
+      if (rights) {
         stub.setVariables('Droits', { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
-        stub.setRows('Droits', [{ id: 1, Email: 'lecteur@exemple.fr', LectureSeule: true, Export: false, Commentaires: true }]);
+        stub.setRows('Droits', [{ id: 1, Email: 'lecteur@exemple.fr', LectureSeule: rights === 'readOnly', Export: false, Commentaires: true }]);
         stub.setUserEmail('lecteur@exemple.fr');
         stub.state.options = { droitsAcces: { table: 'Droits', emailColumn: 'Email', readOnlyColumn: 'LectureSeule', exportColumn: 'Export', commentsColumn: 'Commentaires' } };
+        if (cleanReading) stub.state.options.droitsAcces.cleanReading = true;
+        if (delayMs) {
+          const read = window.grist.docApi.fetchTable;
+          window.grist.docApi.fetchTable = async function (tableId) {
+            if (tableId === 'Droits') await new Promise(r => setTimeout(r, delayMs));
+            return read.apply(this, arguments);
+          };
+        }
+        if (failing) {
+          // Illisible jusqu'à ce que la page de test mette window.__droitsFail à false : AccessRights passe en erreur (verrou par précaution), puis aboutit à sa relecture suivante.
+          const read = window.grist.docApi.fetchTable;
+          window.__droitsFail = true;
+          window.grist.docApi.fetchTable = async function (tableId) {
+            if (tableId === 'Droits' && window.__droitsFail) throw new Error('table des droits illisible (essai de test)');
+            return read.apply(this, arguments);
+          };
+        }
       }
       const m = stub.state.rows.Publipostage_Modeles;
       m.id.push(1); m.Nom.push('Contrat');
@@ -136,7 +160,7 @@ async function openWidget(colorScheme, readOnly) {
       m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
       stub.state.nextRowId.Publipostage_Modeles = 2;
     };
-  }, { longBody: LONG_BODY, ro: !!readOnly });
+  }, { longBody: LONG_BODY, rights: opts.rights || '', cleanReading: !!opts.cleanReading, delayMs: opts.rightsDelayMs || 0, failing: !!opts.rightsFailing });
   await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => {
@@ -257,7 +281,7 @@ const textUnderExit = (page, scrollTop) => page.evaluate((top) => {
 async function runTheme(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
   console.log(`\n=== Lecture épurée à la vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
-  const { context, page } = await openWidget(theme, false);
+  const { context, page } = await openWidget(theme);
   const stub = () => page.evaluate(() => window.__gristStub.getActionLog().length);
   const logSince = n => page.evaluate(k => JSON.stringify(window.__gristStub.getActionLog().slice(k)).slice(0, 700), n);
   const start = await snapshot(page);
@@ -389,7 +413,7 @@ async function runTheme(theme) {
 async function runReadOnly(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
   console.log(`\n=== Lecture épurée, personne en lecture seule, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
-  const { context, page } = await openWidget(theme, true);
+  const { context, page } = await openWidget(theme, { rights: 'readOnly' });
   await waitReader(page);
   const actionsBefore = await page.evaluate(() => window.__gristStub.getActionLog().length);
   const start = await snapshot(page);
@@ -427,10 +451,154 @@ async function runReadOnly(theme) {
   await context.close();
 }
 
-await runTheme('light');
-await runTheme('dark');
-await runReadOnly('light');
-await runReadOnly('dark');
+// La case de Réglages > Accès « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 02/10, carte « Un réglage ») : au démarrage, à la première réponse des droits.
+async function runStartup(theme) {
+  const label = theme === 'dark' ? 'sombre' : 'clair';
+  console.log(`\n=== Lecture épurée d'emblée pour la lecture seule, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  // Case cochée, personne en lecture seule : le widget s'ouvre sur le document seul, sans le moindre geste.
+  const { context, page } = await openWidget(theme, { rights: 'readOnly', cleanReading: true });
+  await waitClean(page, true);
+  await waitReader(page);
+  const start = await snapshot(page);
+  const geo = await page.evaluate(() => {
+    const r = document.getElementById('reader-container').getBoundingClientRect();
+    const b = document.getElementById('btn-exit-clean-reading').getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, exitInViewport: b.width > 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight };
+  });
+  const audit = await screenAudit(page);
+  check(`${label} - case cochée, personne en lecture seule : le widget s'ouvre sur la Lecture épurée sans aucun geste (barre cachée, document sur tout le panneau, bouton de sortie, rien d'autre)`,
+    start.clean && start.reader === 'block' && start.editor === 'none' && !start.barShown && geo.top === 0 && Math.abs(geo.bottom - HEIGHT) < 1 && geo.exitInViewport && audit.strangers.length === 0, { start, geo, audit });
+  await shot(page, `clean-startup-${theme}`);
+  // Une autre ligne : le document suit, l'état reste.
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 2, Nom: 'Martin' }, 'Clients'));
+  await page.waitForFunction(() => (document.querySelector('#reader-container .reader-content') || { textContent: '' }).textContent.indexOf('Bonjour Martin') !== -1, null, { timeout: 6000 }).catch(() => {});
+  const followed = await snapshot(page);
+  check(`${label} - ouverte d'emblée, une autre ligne de la table met le document à jour sans quitter la Lecture épurée`, followed.clean && !followed.barShown, followed);
+  // Échap (vrai clavier) : la Lecture ordinaire avec sa barre, l'éditeur ne s'affiche jamais ; la personne n'est pas ramenée dedans (droits relus, autre ligne).
+  const actionsBefore = await page.evaluate(() => window.__gristStub.getActionLog().length);
+  await page.keyboard.press('Escape');
+  await waitClean(page, false);
+  const out = await snapshot(page);
+  check(`${label} - Échap : la Lecture ordinaire avec sa barre, l'éditeur ne s'est jamais affiché`, !out.clean && out.reader === 'block' && out.editor === 'none' && out.barShown, out);
+  await page.evaluate(() => AccessRights.refresh());
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await page.waitForTimeout(900);
+  const stays = await snapshot(page);
+  check(`${label} - sortie faite, la relecture des droits et une nouvelle ligne ne la ramènent pas dans la Lecture épurée`, !stays.clean && stays.barShown, stays);
+  // À la demande, elle y retourne par le menu comme les autres, et en sort par le bouton rond.
+  await realClickCleanRow(page);
+  await waitClean(page, true);
+  const again = await snapshot(page);
+  await realClick(page, '#btn-exit-clean-reading');
+  await waitClean(page, false);
+  const done = await snapshot(page);
+  check(`${label} - à la demande, le menu la rouvre et le bouton rond en sort (Lecture ordinaire, éditeur caché)`, again.clean && !again.barShown && !done.clean && done.barShown && done.editor === 'none', { again, done });
+  const actionsAfter = await page.evaluate(() => window.__gristStub.getActionLog().length);
+  check(`${label} - rien n'est écrit dans le document Grist après le démarrage`, actionsAfter === actionsBefore, { actionsBefore, actionsAfter });
+  await context.close();
+}
+
+// Une personne qui a tous les droits, case cochée : rien ne change pour elle (Édition ordinaire) ; la case est cochée et active dans ses Réglages, et un vrai clic la décoche puis la recoche.
+async function runFullRights(theme) {
+  const label = theme === 'dark' ? 'sombre' : 'clair';
+  console.log(`\n=== Case de Réglages > Accès, tous les droits, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  const { context, page } = await openWidget(theme, { rights: 'full', cleanReading: true });
+  const start = await snapshot(page);
+  check(`${label} - case cochée, personne qui a tous les droits : Édition ordinaire, aucune Lecture épurée`, !start.clean && start.editor !== 'none' && start.barShown, start);
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('settings-modal')).display !== 'none', null, { timeout: 4000 }).catch(() => {});
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="access"]');
+  await page.waitForTimeout(250);
+  // La case est sous les cinq choix : la molette fait défiler le contenu de l'onglet jusqu'à elle.
+  const scroller = await page.evaluate(() => {
+    let node = document.querySelector('.settings-panel:not([hidden])');
+    while (node && !/auto|scroll/.test(getComputedStyle(node).overflowY)) node = node.parentElement;
+    if (!node) return null;
+    const r = node.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + Math.min(20, r.height / 2) };
+  });
+  const boxState = () => page.evaluate(() => {
+    const box = document.getElementById('settings-access-clean-reading');
+    const label = box.closest('label');
+    const r = label.getBoundingClientRect();
+    let scrollEl = label.parentElement;
+    while (scrollEl && !/auto|scroll/.test(getComputedStyle(scrollEl).overflowY)) scrollEl = scrollEl.parentElement;
+    const pr = scrollEl ? scrollEl.getBoundingClientRect() : { top: 0, bottom: innerHeight };
+    const br = box.getBoundingClientRect();
+    const hit = document.elementFromPoint(br.x + br.width / 2, br.y + br.height / 2);
+    const hint = label.nextElementSibling;
+    return { checked: box.checked, disabled: box.disabled, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1, hit: !!hit && (hit === box || label.contains(hit)), text: label.textContent.trim(), hint: hint ? hint.textContent.trim().slice(0, 40) : null,
+      stored: window.__gristStub.state.options && window.__gristStub.state.options.droitsAcces ? window.__gristStub.state.options.droitsAcces.cleanReading : null };
+  });
+  if (scroller) {
+    await page.mouse.move(scroller.x, scroller.y, { steps: 3 });
+    for (let i = 0; i < 4; i++) { if ((await boxState()).inside) break; await page.mouse.wheel(0, 120); await page.waitForTimeout(120); }
+  }
+  const seen = await boxState();
+  check(`${label} - Réglages > Accès : la case « Ouvrir les personnes en lecture seule sur la Lecture épurée » est cochée, active, entière dans la fenêtre et atteignable`,
+    seen.checked && !seen.disabled && seen.inside && seen.hit && seen.text === 'Ouvrir les personnes en lecture seule sur la Lecture épurée', seen);
+  await shot(page, `clean-setting-${theme}`);
+  const box = await page.evaluate(() => { const r = document.getElementById('settings-access-clean-reading').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await page.mouse.move(box.x - 5, box.y, { steps: 2 });
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(450);
+  const off = await boxState();
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(450);
+  const on = await boxState();
+  check(`${label} - un vrai clic décoche la case et l'option du widget passe à false, un second la recoche et l'option repasse à true`, off.checked === false && off.stored === false && on.checked === true && on.stored === true, { off, on });
+  await realClick(page, '#settings-close');
+  await page.waitForTimeout(300);
+  await context.close();
+}
+
+// Réponse des droits tardive (Grist lent) : le widget démarre verrouillé par précaution, sans rien décider. Une personne en lecture seule y entre dès la réponse ; une personne qui a tous les droits n'y entre jamais.
+async function runLateAnswer(rights) {
+  const who = rights === 'readOnly' ? 'personne en lecture seule' : 'personne qui a tous les droits';
+  console.log(`\n=== Réponse des droits tardive, ${who}, ${WIDTH}x${HEIGHT}, thème clair ===`);
+  const { context, page } = await openWidget('light', { rights, cleanReading: true, rightsDelayMs: 8000 });
+  const early = Object.assign(await snapshot(page), { status: await page.evaluate(() => AccessRights.getStatus().state) });
+  check(`réponse tardive, ${who} : tant que la table des droits n'a pas répondu (${early.status}), rien n'est ouvert, la barre est là`, early.status === 'pending' && !early.clean && !early.bodyClass && early.barShown, early);
+  await page.waitForFunction(() => AccessRights.getStatus().state === 'found', null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(1200);
+  const late = await snapshot(page);
+  const rightsNow = await page.evaluate(() => AccessRights.get());
+  if (rights === 'readOnly') {
+    check(`réponse tardive, ${who} : dès la réponse, le widget s'ouvre sur la Lecture épurée`, rightsNow.readOnly && late.clean && !late.barShown && late.editor === 'none', { rightsNow, late });
+  } else {
+    check(`réponse tardive, ${who} : la réponse arrivée, aucune Lecture épurée, la barre reste et l'Édition est disponible`, !rightsNow.readOnly && !late.clean && late.barShown, { rightsNow, late });
+  }
+  await context.close();
+}
+
+// Table des droits illisible au démarrage (erreur : droits verrouillés par précaution), lisible à la relecture suivante : une table illisible n'est pas une réponse, la décision attend la première réponse
+// confirmée. Une personne en lecture seule entre alors dans la Lecture épurée ; une personne qui a tous les droits n'y entre jamais.
+async function runUnreadableThenAnswer(rights) {
+  const who = rights === 'readOnly' ? 'personne en lecture seule' : 'personne qui a tous les droits';
+  console.log(`\n=== Table des droits illisible puis lisible, ${who}, ${WIDTH}x${HEIGHT}, thème clair ===`);
+  const { context, page } = await openWidget('light', { rights, cleanReading: true, rightsFailing: true });
+  await page.waitForFunction(() => AccessRights.getStatus().state === 'error', null, { timeout: 20000 }).catch(() => {});
+  const early = Object.assign(await snapshot(page), { status: await page.evaluate(() => AccessRights.getStatus().state), locked: await page.evaluate(() => AccessRights.get().readOnly) });
+  check(`table illisible, ${who} : en erreur, droits verrouillés par précaution, mais rien n'est ouvert et la barre est là`, early.status === 'error' && early.locked && !early.clean && !early.bodyClass && early.barShown, early);
+  await page.evaluate(() => { window.__droitsFail = false; });
+  await page.waitForFunction(() => AccessRights.getStatus().state === 'found', null, { timeout: 25000 }).catch(() => {});
+  await page.waitForTimeout(1200);
+  const late = await snapshot(page);
+  const rightsNow = await page.evaluate(() => AccessRights.get());
+  if (rights === 'readOnly') {
+    check(`table illisible puis lisible, ${who} : à la première réponse confirmée, le widget s'ouvre sur la Lecture épurée`, rightsNow.readOnly && late.clean && !late.barShown && late.editor === 'none', { rightsNow, late });
+  } else {
+    check(`table illisible puis lisible, ${who} : la réponse arrivée, aucune Lecture épurée, la barre reste et l'Édition est disponible`, !rightsNow.readOnly && !late.clean && late.barShown, { rightsNow, late });
+  }
+  await context.close();
+}
+
+if (wanted('theme')) { await runTheme('light'); await runTheme('dark'); }
+if (wanted('readOnly')) { await runReadOnly('light'); await runReadOnly('dark'); }
+if (wanted('startup')) { await runStartup('light'); await runStartup('dark'); }
+if (wanted('fullRights')) { await runFullRights('light'); await runFullRights('dark'); }
+if (wanted('lateAnswer')) { await runLateAnswer('readOnly'); await runLateAnswer('full'); }
+if (wanted('unreadable')) { await runUnreadableThenAnswer('readOnly'); await runUnreadableThenAnswer('full'); }
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

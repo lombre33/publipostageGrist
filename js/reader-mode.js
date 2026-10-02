@@ -107,9 +107,11 @@ const ReaderMode = (function () {
   const NON_TEXT_CONTENT = 'img, br, svg, canvas, video, audio, iframe, object, embed, input, .footnote-ref-marker';
   // Une image en calque (devant ou derrière le texte) est hors du flux : elle ne remplit pas la ligne de son paragraphe. Celui qui n'en porte que garde donc sa ligne, comme
   // dans l'éditeur où ProseMirror la lui laisse (Antoine, 2026-10-02 : la Lecture était d'une ligne plus haut que l'éditeur, le calque « Sur toutes les pages » posé dans une ligne
-  // vide en haut du modèle) - et comme le PDF et le Word.
+  // vide en haut du modèle) - et comme le PDF et le Word. Il en va de même d'une image alignée à gauche ou à droite : elle flotte (css/style.css, comme dans l'éditeur), le texte l'habille,
+  // et le paragraphe où elle est seule garde sa ligne (Antoine, 2026-10-02, point 9).
+  const FLOAT_IMAGE_SELECTOR = 'img.editor-image[data-align="left"], img.editor-image[data-align="right"]';
   function holdsInFlowContent(block) {
-    return Array.from(block.querySelectorAll(NON_TEXT_CONTENT)).some(el => !el.matches(LAYER_IMAGE_SELECTOR));
+    return Array.from(block.querySelectorAll(NON_TEXT_CONTENT)).some(el => !el.matches(LAYER_IMAGE_SELECTOR) && !el.matches(FLOAT_IMAGE_SELECTOR));
   }
   function keepBlankLines(root) {
     root.querySelectorAll(BLANK_LINE_BLOCKS).forEach(block => {

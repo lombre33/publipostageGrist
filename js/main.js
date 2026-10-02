@@ -677,6 +677,15 @@
   function onAccessRightsChange() {
     applyAccessRights();
     if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
+    openCleanReadingForReadOnly();
+  }
+
+  // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (Réglages > Accès) : voir CleanReading.openForReadOnly, qui décide une seule fois par session. Appelée à la fin d'init()
+  // puis à chaque changement de droits : tant que la table des droits n'a pas donné de réponse (pending, Grist lent ; error, table illisible), rien n'est décidé - une personne qui a tous les droits
+  // démarre verrouillée par précaution et ne doit jamais être mise en Lecture épurée sur cette foi.
+  function openCleanReadingForReadOnly() {
+    const config = AccessRights.getConfig();
+    CleanReading.openForReadOnly({ state: AccessRights.getStatus().state, readOnly: AccessRights.get().readOnly, enabled: !!(config && config.cleanReading) });
   }
 
   // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en capture,
@@ -1849,6 +1858,7 @@
     try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
+    ViewTemplate.init();
     RowTemplate.init({
       openTemplate: openTemplateForRow,
       currentId: () => Templates.getCurrentId(),
@@ -1918,8 +1928,12 @@
       catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
     }
     const defaultTemplateId = Templates.getDefaultId();
+    // Ordre d'ouverture : la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis le modèle par défaut du document (★).
+    const viewTemplateId = ViewTemplate.usableId();
     if (startupRowTemplateId != null) {
       templateSelect.value = startupRowTemplateId;
+    } else if (viewTemplateId != null) {
+      templateSelect.value = viewTemplateId;
     } else if (defaultTemplateId != null) {
       const defaultTpl = Templates.getCached().find(t => String(t.id) === String(defaultTemplateId));
       // Un modèle email ou macro ne doit jamais être le modèle de démarrage (cf. syncDefaultTemplateButton,
@@ -1976,6 +1990,7 @@
     wireQualityDropdown();
     Settings.wireSettingsModal();
     RowTemplatePanel.wire();
+    ViewTemplate.wirePanel();
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();
@@ -1994,6 +2009,7 @@
     AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    openCleanReadingForReadOnly();
     // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
     setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
     // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.

@@ -195,9 +195,11 @@
 .tiptap .editor-image-view[data-align="right"] { float: right; margin: 0 0 8px 12px; }
 /* Même traitement, mais pour l'<img> BRUTE directement (sans wrapper) : c'est la forme du HTML SÉRIALISÉ (getHTML()), celle que voit l'hôte de mesure
    hors-écran de pdf-export.js - sans cette règle, l'image n'y flotte pas (juste une image en ligne normale), et floatedImageParagraphFrom ne peut jamais
-   mesurer où le texte dépasse réellement son bas. Ne s'applique PAS en lecture seule (#reader-container, pas de classe .tiptap) - limitation acceptée. */
-.tiptap img.editor-image[data-align="left"] { float: left; margin: 0 12px 8px 0; }
-.tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; }
+   mesurer où le texte dépasse réellement son bas. Ne s'applique PAS en lecture seule (#reader-container, pas de classe .tiptap) - limitation acceptée : la Lecture a ses propres règles (css/style.css).
+   `max-width: calc(100% - 12px)` : le flottant de l'éditeur (le <span> de l'image) rétrécit de sa marge pour tenir à côté du texte ; une image de la largeur de la ligne ou plus large y mesure donc 12 px de moins que
+   la ligne, et c'est cette largeur que le PDF et le Word reprennent (ExportCommon.shownImageWidthPx lit l'image de cet hôte). */
+.tiptap img.editor-image[data-align="left"] { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
+.tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
 .tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
 /* Image seule sur sa ligne (centrée, ou « bloc » sans alignement) : le texte du paragraphe garde son interligne, avant comme après l'image ; l'image prend sa hauteur et rien de plus.
