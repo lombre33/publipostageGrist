@@ -527,9 +527,19 @@
     const nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     let savedId, dateModif;
+    const epoch = autosaveEpoch;
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
+      const editVersion = autosaveEditVersion;
       ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications));
+      // La date écrite est notée TOUT DE SUITE, avant la relecture de la liste plus bas (une lecture de Grist de plus : plusieurs secondes quand il est lent). Un passage de l'enregistrement
+      // automatique qui lisait entre les deux voyait la date que ce geste venait d'écrire sans la connaître : « modifié ailleurs » (cf. autosaveTick). Un modèle chargé pendant l'écriture
+      // (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit en cours en faveur de CETTE version - pas besoin de recharger.
+      if (epoch === autosaveEpoch) {
+        autosaveLastKnownDateModif = dateModif;
+        noteSaved(editVersion);
+        hideConflictBanner();
+      }
     } catch (e) {
       // Avant ce try/catch, un échec ici (ex. colonne Grist manquante) interrompait silencieusement la fonction : aucune erreur visible, la liste des
       // modèles/le statut n'étaient jamais mis à jour, et rien dans l'interface ne laissait deviner que "Enregistrer" n'avait rien enregistré.
@@ -549,10 +559,6 @@
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
       forgetMacroOriginUnless(null); // une copie (« Enregistrer sous… ») n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
     }
-    // Un enregistrement manuel explicite tranche tout conflit auto-save en cours en faveur de CETTE version (cf. autosaveTick) - pas besoin de recharger.
-    autosaveDirty = false;
-    autosaveLastKnownDateModif = dateModif;
-    hideConflictBanner();
     updateSaveStatus();
     if (nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom })); // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
   }
@@ -694,6 +700,18 @@
   // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps, sinon « Abandonner » ne
   // laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
   let leavePromptOpen = false;
+  // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro quand l'écriture REVIENT effaçait aussi ce qui avait été tapé
+  // pendant qu'elle durait (Grist lent : des secondes) : ces mots n'étaient jamais enregistrés tant qu'une autre frappe ne rallumait pas le drapeau, et « Enregistré à… » s'affichait quand
+  // même. noteSaved(numéro) ne rend « enregistré » que ce qui n'a pas bougé depuis le numéro que l'écriture portait au départ.
+  let autosaveEditVersion = 0;
+  // Monte à chaque chargement d'un modèle (resetAutosaveState). Un passage ou un enregistrement qui attend Grist le relit à son retour : s'il a changé, le modèle de l'écran n'est plus
+  // celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui appartiennent plus.
+  let autosaveEpoch = 0;
+  // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une minute (un appel à Grist qui ne
+  // revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
+  let autosaveTickPending = false;
+  let autosaveTickStartedAt = 0;
+  const AUTOSAVE_TICK_WATCHDOG_MS = 60000;
 
   function isAutosaveEnabled() {
     try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
@@ -711,9 +729,12 @@
     if (saveBtn) saveBtn.classList.toggle('is-autosave-off', !isAutosaveEnabled());
   }
 
-  function markAutosaveDirty() { autosaveDirty = true; updateSaveStatus(); }
+  function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
+  // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à enregistrer » pour le passage suivant.
+  function noteSaved(editVersion) { if (editVersion === autosaveEditVersion) autosaveDirty = false; }
 
   function resetAutosaveState(tpl) {
+    autosaveEpoch++;
     autosaveDirty = false;
     autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
     hideConflictBanner();
@@ -776,7 +797,39 @@
     if (conflictBanner) conflictBanner.style.display = 'none';
   }
 
+  // Le modèle a-t-il été réécrit par quelqu'un d'autre ? Sa date dans Grist n'est ni celle que ce widget connaît (autosaveLastKnownDateModif) ni celle de sa dernière écriture
+  // (Templates.lastWritten : un enregistrement fait par ce widget dont l'état d'ici n'est pas encore à jour, comme un macro-modèle enregistré par sa fenêtre).
+  function changedElsewhere(remoteTpl) {
+    const known = autosaveLastKnownDateModif;
+    if (!remoteTpl || !known || !remoteTpl.dateModif) return false;
+    if (Templates.sameDateModif(remoteTpl.dateModif, known)) return false;
+    return !Templates.sameDateModif(remoteTpl.dateModif, Templates.lastWritten(remoteTpl.id));
+  }
+
+  // Relit la table des modèles et rend { remoteTpl } (la ligne de `id`, absente si le modèle a été supprimé), ou null quand cette lecture ne prouve rien : elle a croisé une écriture de CE
+  // widget (la lecture tombe entre l'écriture et la relecture de sa date, ou revient avec l'état d'avant : Grist lent, cf. Templates.getWriteSeq), ou un autre modèle a été chargé pendant ce
+  // temps (la ligne relue n'est plus celle de l'écran). Une lecture abandonnée ne perd rien : le passage suivant relit l'état d'alors. Lève si la lecture échoue.
+  async function readRemoteTemplate(id, epoch) {
+    if (Templates.isWriting()) return null;
+    const seq = Templates.getWriteSeq();
+    const fresh = await Templates.loadAll();
+    if (epoch !== autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
+    return { remoteTpl: fresh.find(t => String(t.id) === String(id)) };
+  }
+
+  // Un seul passage à la fois : Grist lent, un passage (relire la table, écrire, relire la date) dure plus que l'intervalle, et chaque passage de plus s'empilait, relisant la table pendant
+  // que le précédent écrivait - jusqu'à trois écritures en même temps, et le faux conflit que ce chevauchement produit (retour d'Antoine du 02/10 : « modifié ailleurs » alors qu'il est
+  // seul). Le passage de l'intervalle suivant est simplement sauté : un passage lit l'état d'AUJOURD'HUI, il n'y a rien à rattraper.
   async function autosaveTick() {
+    if (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) return;
+    autosaveTickPending = true;
+    autosaveTickStartedAt = Date.now();
+    const startedAt = autosaveTickStartedAt;
+    try { await runAutosaveTick(); }
+    finally { if (autosaveTickStartedAt === startedAt) autosaveTickPending = false; }
+  }
+
+  async function runAutosaveTick() {
     if (leavePromptOpen) return;
     if (!isAutosaveEnabled()) return; // désactivé par l'utilisateur (cf. wireSaveMenu) - aucun appel Grist tant que c'est le cas, pas seulement le
     // dernier enregistrement sauté : ni le polling de conflit ni l'écriture elle-même ne doivent tourner en arrière-plan pendant que c'est éteint.
@@ -784,11 +837,13 @@
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     const id = Templates.getCurrentId();
     if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
-    let fresh;
-    try { fresh = await Templates.loadAll(); }
+    const epoch = autosaveEpoch;
+    let remote;
+    try { remote = await readRemoteTemplate(id, epoch); }
     catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
-    const remoteTpl = fresh.find(t => String(t.id) === String(id));
-    if (remoteTpl && autosaveLastKnownDateModif && remoteTpl.dateModif && remoteTpl.dateModif !== autosaveLastKnownDateModif) {
+    if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
+    const remoteTpl = remote.remoteTpl;
+    if (changedElsewhere(remoteTpl)) {
       showConflictBanner(remoteTpl);
       return;
     }
@@ -799,6 +854,7 @@
     // getHTML() renverrait le fragment en-tête/pied actuellement chargé, pas le document principal (cf. header-footer-preview.js) - on saute ce tick
     // plutôt que de forcer une sortie de ce mode toutes les ~2-3s (bien plus perturbant que d'attendre le tick suivant).
     if (Editor.isEditingHeaderFooter()) return;
+    const editVersion = autosaveEditVersion; // AVANT de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return; // même garde que le bouton Enregistrer manuel
     // Un macro-modèle n'a rien dans l'éditeur (Editor.getHTML() est toujours vide, cf. loadMacroIntoEditor) : son Contenu est sa composition, réécrite telle que Grist vient de la rendre
@@ -810,9 +866,12 @@
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
       const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
       const { dateModif } = await Templates.save(id, nom, contenu, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
-      autosaveLastKnownDateModif = dateModif;
-      autosaveDirty = false;
-      updateSaveStatus();
+      // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
+      if (epoch === autosaveEpoch) {
+        autosaveLastKnownDateModif = dateModif;
+        noteSaved(editVersion);
+        updateSaveStatus();
+      }
     } catch (e) {
       console.error('[main] auto-save : échec d’enregistrement', e);
       // autosaveDirty reste true - retenté au prochain tick. Affiché (pas seulement loggé) : un échec RÉPÉTÉ doit se voir dans le coin "info" plutôt que
@@ -947,18 +1006,26 @@
     if (!id || currentTypeModele === 'macro' || autosaveConflictActive) return false;
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return false;
-    let fresh;
-    try { fresh = await Templates.loadAll(); }
+    const epoch = autosaveEpoch;
+    let remote;
+    try {
+      remote = await readRemoteTemplate(id, epoch);
+      // Une écriture de ce widget (un passage de l'enregistrement automatique) a croisé la lecture : on attend qu'elle finisse et on relit, plutôt que d'annuler le commentaire de la personne.
+      if (!remote) { await Templates.whenIdle(); remote = await readRemoteTemplate(id, epoch); }
+    }
     catch (e) { console.error('[main] commentaire en lecture : vérification de conflit impossible', e); return false; }
-    const remoteTpl = fresh.find(t => String(t.id) === String(id));
-    if (!remoteTpl) return false;
-    if (autosaveLastKnownDateModif && remoteTpl.dateModif && remoteTpl.dateModif !== autosaveLastKnownDateModif) { showConflictBanner(remoteTpl); return false; }
+    if (!remote || !remote.remoteTpl) return false;
+    const remoteTpl = remote.remoteTpl;
+    if (changedElsewhere(remoteTpl)) { showConflictBanner(remoteTpl); return false; }
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
+      const editVersion = autosaveEditVersion;
       const { dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
-      autosaveLastKnownDateModif = dateModif;
-      autosaveDirty = false;
-      updateSaveStatus();
+      if (epoch === autosaveEpoch) {
+        autosaveLastKnownDateModif = dateModif;
+        noteSaved(editVersion);
+        updateSaveStatus();
+      }
       // Cache des modèles relu (Templates.save ne le touche pas) : revenir plus tard sur ce modèle doit montrer la marque qui vient d'être posée.
       Templates.loadAll().catch(e => console.error('[main] relecture des modèles impossible', e));
       return true;

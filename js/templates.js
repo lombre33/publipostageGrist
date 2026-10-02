@@ -338,7 +338,7 @@ const Templates = (function () {
   // suiviModifications : { [id]: {author, createdAt} } (js/track-changes.js, TrackChanges.computeMetadata), écrite dans CE MÊME UpdateRecord/AddRecord que
   // Contenu - jamais un appel séparé (planning/feature-track-changes.md, décision n°4, exigence sur la fenêtre de risque en cas de conflit d'auto-save).
   // null pour un macro-modèle (Editor.getSuiviModificationsForSave n'est jamais appelée sur ce chemin, cf. onSave - js/main.js).
-  async function save(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null) {
+  async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null) {
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
@@ -363,6 +363,7 @@ const Templates = (function () {
       const cached = templatesCache.find(t => String(t.id) === String(id));
       if (cached) cached.nom = nom;
       const dateModif = await readBackDateModif(id, now);
+      lastWrittenById.set(String(id), dateModif);
       return { id, dateModif };
     } else {
       const result = await grist.docApi.applyUserActions([
@@ -371,8 +372,61 @@ const Templates = (function () {
       const newId = result.retValues[0];
       currentTemplateId = newId;
       const dateModif = await readBackDateModif(newId, now);
+      lastWrittenById.set(String(newId), dateModif);
       return { id: newId, dateModif };
     }
+  }
+
+  // Écritures de CE widget en cours, et ce qu'elles laissent dans Grist. js/main.js (auto-save, commentaires de la Lecture) compare le DateModif relu dans Grist à celui que ce widget
+  // a écrit en dernier pour dire « modifié ailleurs ». Or une écriture n'est pas un instant : Grist l'applique, puis la relecture du DateModif (readBackDateModif) revient plus tard -
+  // et, Grist répondant lentement (la table des modèles se relit EN ENTIER), ce plus tard dure des secondes. Une lecture qui tombe dans cet intervalle voit la date écrite et ne
+  // la connaît pas encore (ou, l'inverse, revient avec l'état d'avant l'écriture) : faux conflit, alors que personne d'autre n'a rien touché (retour d'Antoine du 02/10).
+  // writeSeq() change au DÉBUT et à la FIN de chaque écriture : une lecture qui commence avec le même nombre qu'à sa fin n'a croisé aucune écriture de ce widget.
+  // isWriting() : une écriture est en cours ; whenIdle() : rend la main quand plus aucune ne l'est ; lastWritten(id) : le DateModif que Grist a relu après la dernière écriture de
+  // cette ligne par ce widget (rien d'écrit par un autre n'y passe), ce qui n'est jamais un conflit même si l'état de main.js ne l'a pas encore noté (un macro-modèle
+  // enregistré par sa fenêtre : sa date est notée au rechargement). Une écriture qui ne revient jamais (connexion perdue) ne bloque rien au-delà de WRITE_WATCHDOG_MS : passé ce
+  // délai, isWriting() redit faux et whenIdle() rend la main.
+  const WRITE_WATCHDOG_MS = 60000;
+  let writeSeq = 0;
+  let writesPending = 0;
+  let writesPendingSince = 0;
+  let idleWaiters = [];
+  const lastWrittenById = new Map();
+  function getWriteSeq() { return writeSeq; }
+  function isWriting() { return writesPending > 0 && Date.now() - writesPendingSince < WRITE_WATCHDOG_MS; }
+  function whenIdle() {
+    if (!isWriting()) return Promise.resolve();
+    return new Promise(resolve => { idleWaiters.push(resolve); setTimeout(resolve, WRITE_WATCHDOG_MS); });
+  }
+  function lastWritten(id) { return id != null && lastWrittenById.has(String(id)) ? lastWrittenById.get(String(id)) : null; }
+
+  async function save(...args) {
+    writeSeq++;
+    if (writesPending === 0) writesPendingSince = Date.now();
+    writesPending++;
+    try { return await saveRow(...args); }
+    finally {
+      writesPending--;
+      writeSeq++;
+      if (writesPending === 0) idleWaiters.splice(0).forEach(resolve => resolve());
+    }
+  }
+
+  // Deux formes d'un même DateModif : Grist rend une colonne DateTime en secondes (un nombre, décimales comprises : grist-core, sandbox/grist/usertypes.py, DateTime.do_convert puis
+  // moment.parse_iso) ; readBackDateModif retombe sur la chaîne ISO envoyée quand sa relecture échoue (réseau coupé un instant). Comparer les deux avec `!==` voyait un conflit à chaque
+  // passage suivant. Même forme : égalité stricte, comme avant (une seconde d'écart est un vrai écart) ; formes différentes : le même instant, à moins d'une seconde près (le stub de test
+  // arrondit à la seconde, Grist non : la marge couvre les deux).
+  function dateModifSeconds(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string') { const ms = Date.parse(value); return Number.isNaN(ms) ? null : ms / 1000; }
+    return null;
+  }
+  function sameDateModif(a, b) {
+    if (a === b) return true;
+    if (a == null || b == null || typeof a === typeof b) return false;
+    const secondsA = dateModifSeconds(a);
+    const secondsB = dateModifSeconds(b);
+    return secondsA !== null && secondsB !== null && Math.abs(secondsA - secondsB) < 1;
   }
 
   async function remove(id) {
@@ -381,5 +435,5 @@ const Templates = (function () {
     ]);
   }
 
-  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, sameName, uniqueName, TABLE_NAME };
+  return { loadAll, getCached, getCurrentId, setCurrentId, getDefaultId, setDefault, save, remove, sameName, uniqueName, getWriteSeq, isWriting, whenIdle, lastWritten, sameDateModif, TABLE_NAME };
 })();

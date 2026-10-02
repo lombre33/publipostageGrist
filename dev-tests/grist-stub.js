@@ -291,6 +291,8 @@
   }
   async function applyUserActions(actions) {
     actions.forEach(a => state.actionLog.push(a));
+    // Une écriture dans la table des modèles vient d'avoir lieu : la prochaine lecture de cette table peut échouer (failReadBackOnce). Synchrone, aucun tour de microtâche de plus.
+    if (actions.some(a => a[1] === 'Publipostage_Modeles' && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
     const retValues = [];
     actions.forEach(action => {
       const [type, tableId] = action;
@@ -415,6 +417,48 @@
     return row;
   }
 
+  // Latence simulée des appels réseau (grist.docApi.fetchTable / applyUserActions) : un vrai Grist met de quelques dizaines de millisecondes à plusieurs secondes
+  // à répondre (la table des modèles se relit EN ENTIER, contenus compris, à chaque passage de l'enregistrement automatique), alors que ce stub répond dans la même
+  // microtâche - un défaut qui ne naît que d'appels qui se chevauchent (deux passages de l'auto-save, un Enregistrer pendant un passage...) ne peut donc jamais s'y
+  // produire. Modèle d'un aller-retour : la requête arrive au serveur après la moitié du délai (c'est LÀ que la lecture ou l'écriture a lieu), la réponse revient
+  // après l'autre moitié. 0 (défaut) = aucun minuteur, comportement d'avant. setLatency(ms) pour les deux appels, setLatency({ fetchTable: ms, applyUserActions: ms }).
+  state.latency = { fetchTable: 0, applyUserActions: 0 };
+  // Appels en cours et plus grand nombre simultané depuis resetInFlightStats() : prouve qu'un client n'écrit jamais deux fois en même temps.
+  state.inFlight = { fetchTable: 0, applyUserActions: 0 };
+  state.maxInFlight = { fetchTable: 0, applyUserActions: 0 };
+  // true : la prochaine lecture de la table des modèles faite APRÈS une écriture dans cette table échoue une fois (réseau coupé), cf. failReadBackOnce.
+  state.failNextModelsFetchAfterWrite = false;
+  state.modelsWriteSeen = false;
+  function setLatency(spec) {
+    if (typeof spec === 'number') spec = { fetchTable: spec, applyUserActions: spec };
+    state.latency = Object.assign({ fetchTable: 0, applyUserActions: 0 }, spec || {});
+  }
+  function resetInFlightStats() { state.maxInFlight = { fetchTable: state.inFlight.fetchTable, applyUserActions: state.inFlight.applyUserActions }; }
+  function failReadBackOnce() { state.failNextModelsFetchAfterWrite = true; state.modelsWriteSeen = false; }
+  const waitMs = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  async function withLatency(method, work) {
+    const ms = state.latency[method] || 0;
+    if (!ms) return work();
+    state.inFlight[method]++;
+    if (state.inFlight[method] > state.maxInFlight[method]) state.maxInFlight[method] = state.inFlight[method];
+    try {
+      await waitMs(ms / 2);
+      const out = await work();
+      await waitMs(ms / 2);
+      return out;
+    } finally { state.inFlight[method]--; }
+  }
+
+  // Ce que rend fetchTable : une copie de la table, ou - une seule fois, quand failReadBackOnce l'a armé et qu'une écriture de la table des modèles a eu lieu depuis - une panne
+  // de réseau simulée. Synchrone : l'appelant (une fonction async) garde les mêmes tours de microtâche qu'avant.
+  function readTable(tableId) {
+    if (tableId === 'Publipostage_Modeles' && state.failNextModelsFetchAfterWrite && state.modelsWriteSeen) {
+      state.failNextModelsFetchAfterWrite = false; state.modelsWriteSeen = false;
+      throw new Error('Réseau coupé (simulé par failReadBackOnce)');
+    }
+    return state.rows[tableId] ? JSON.parse(JSON.stringify(state.rows[tableId])) : columnarEmpty([]);
+  }
+
   window.grist = {
     ready: function () { /* no-op, cf. GristAPI.init() */ },
     // Ajoute TOUJOURS un nouvel écouteur, ne remplace jamais le précédent : la vraie API n'offre pas d'"offRecord", plusieurs souscriptions coexistent
@@ -436,10 +480,15 @@
     clearOptions: async function () { state.options = null; notifyOptions(); },
     docApi: {
       listTables: async function () { return state.tables.slice(); },
+      // Latence nulle (le défaut) : les mêmes fonctions qu'avant, appelées directement, sans minuteur ni tour de microtâche de plus - seuls les scénarios qui posent setLatency
+      // ou failReadBackOnce voient autre chose.
       fetchTable: async function (tableId) {
-        return state.rows[tableId] ? JSON.parse(JSON.stringify(state.rows[tableId])) : columnarEmpty([]);
+        if (state.latency.fetchTable) return withLatency('fetchTable', async () => readTable(tableId));
+        return readTable(tableId);
       },
-      applyUserActions: applyUserActions,
+      applyUserActions: function (actions) {
+        return state.latency.applyUserActions ? withLatency('applyUserActions', () => applyUserActions(actions)) : applyUserActions(actions);
+      },
       getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/stub' }; },
       // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
@@ -458,7 +507,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
