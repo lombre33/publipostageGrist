@@ -36,6 +36,34 @@ const GristAPI = (function () {
     if (!_rawTables) _rawTables = (await grist.docApi.listTables()) || [];
     return _rawTables;
   }
+  // === Lectures de tables partagées pendant un rendu ===
+  // fetchTable est un aller-retour jusqu'au serveur de Grist, qui renvoie la table ENTIÈRE (WidgetFrame.ts : docComm.fetchTable, vérifié à la source grist-core le
+  // 2026-10-02). Une bulle d'une autre table en demandait plusieurs d'affilée - la ligne de la table liée, celle de la page, les deux tables de métadonnées pour
+  // trouver la colonne Référence -, soit des centaines de lectures identiques pour un macro-modèle (304 pour trois pages dans le banc d'essai) : la Lecture attendait
+  // chacune. Le temps d'un rendu (withReadPass), chaque table n'est lue qu'une fois, et tous les appels, simultanés ou suivants, partagent cette lecture. Sans mémoire
+  // ensuite : le cache est jeté à la fin du rendu, une ligne modifiée dans Grist apparaît donc au rendu suivant. Un rendu qui démarre repart d'un cache neuf, jamais
+  // des lectures d'un rendu plus ancien (une modification arrivée entre les deux ne doit pas lui échapper).
+  let _readPass = null;
+  let _readPassesOpen = 0;
+  async function withReadPass(work) {
+    _readPass = { tables: new Map(), rows: new Map() };
+    _readPassesOpen++;
+    try { return await work(); }
+    finally { if (--_readPassesOpen === 0) _readPass = null; }
+  }
+  // Données colonnaires d'une table (le résultat de fetchTable, jamais modifié par les appelants). `fresh` : lecture directe, hors rendu - quand le résultat dépend d'une
+  // écriture qui vient d'avoir lieu (getCurrentUserEmail).
+  function readTable(tableId, fresh) {
+    const pass = _readPass;
+    if (!pass || fresh) return grist.docApi.fetchTable(tableId);
+    if (!pass.tables.has(tableId)) {
+      const read = Promise.resolve(grist.docApi.fetchTable(tableId));
+      // Une lecture qui échoue n'est pas mémorisée : l'appel suivant la retente.
+      read.catch(() => { if (pass.tables.get(tableId) === read) pass.tables.delete(tableId); });
+      pass.tables.set(tableId, read);
+    }
+    return pass.tables.get(tableId);
+  }
   let _linkRulesByTable = {};
   let _currentRecord = null;
   let _currentMappings = null;
@@ -267,7 +295,7 @@ const GristAPI = (function () {
       const nextColumnsByTable = {};
       await Promise.all(_tables.map(async t => {
         try {
-          const data = await grist.docApi.fetchTable(t);
+          const data = await readTable(t);
           const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
           nextColumnsByTable[t] = cols;
         } catch (e) {
@@ -288,30 +316,32 @@ const GristAPI = (function () {
 
   // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale dans la modale de liaison qu'une colonne est une Référence, pour que l'utilisateur
   // la compare à l'Identifiant de ligne, pas à une colonne texte.
+  // Écrit dans des objets temporaires, remplacés d'un coup à la fin (comme refreshSchema pour les colonnes) : pendant les allers-retours, un autre rendu qui lit un type
+  // (getColumnType) ne tombe plus sur un schéma vidé.
   async function refreshColumnTypes() {
-    _columnTypesByTable = {};
-    _columnChoicesByTable = {};
-    _displayColByTable = {};
-    _referenceColumnByTable = {};
+    const types = {};
+    const choices = {};
+    const displayCols = {};
+    const referenceCols = {};
     try {
-      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
+      // Les deux tables de métadonnées en même temps : une attente au lieu de deux.
+      const [tablesMeta, colsMeta] = await Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column')]);
       const tableIdByRowId = {};
       for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
-      const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const colIdByRowId = {};
       const colIndexByRowId = {};
       for (let i = 0; i < colsMeta.id.length; i++) { colIdByRowId[colsMeta.id[i]] = colsMeta.colId[i]; colIndexByRowId[colsMeta.id[i]] = i; }
       for (let i = 0; i < colsMeta.id.length; i++) {
         const tableId = tableIdByRowId[colsMeta.parentId[i]];
         if (!tableId) continue;
-        if (!_columnTypesByTable[tableId]) _columnTypesByTable[tableId] = {};
-        _columnTypesByTable[tableId][colsMeta.colId[i]] = colsMeta.type[i];
+        if (!types[tableId]) types[tableId] = {};
+        types[tableId][colsMeta.colId[i]] = colsMeta.type[i];
         // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0 (ColumnRec.displayColModel,
         // vérifié à la source grist-core le 2026-09-28).
         const displayRef = colsMeta.displayCol ? colsMeta.displayCol[i] : 0;
         if (displayRef && displayRef !== colsMeta.id[i] && colIdByRowId[displayRef]) {
-          if (!_displayColByTable[tableId]) _displayColByTable[tableId] = {};
-          _displayColByTable[tableId][colsMeta.colId[i]] = colIdByRowId[displayRef];
+          if (!displayCols[tableId]) displayCols[tableId] = {};
+          displayCols[tableId][colsMeta.colId[i]] = colIdByRowId[displayRef];
         }
         // visibleCol (schema.ts : Ref:_grist_Tables_column, 0 = aucune, la Référence montre alors l'id de la ligne) : la colonne de la TABLE LIÉE dont la valeur
         // s'affiche (vérifié à la source grist-core le 2026-09-29). Retenue seulement si elle porte du texte ou un nombre, seules valeurs qu'une règle peut
@@ -321,20 +351,24 @@ const GristAPI = (function () {
         if (refColon !== -1 && (refType.slice(0, refColon) === 'Ref' || refType.slice(0, refColon) === 'RefList') && refType.length > refColon + 1) {
           const shown = colIndexByRowId[colsMeta.visibleCol ? colsMeta.visibleCol[i] : 0];
           if (shown !== undefined && REFERENCE_SHOWN_TYPES.indexOf(colsMeta.type[shown]) !== -1) {
-            if (!_referenceColumnByTable[tableId]) _referenceColumnByTable[tableId] = {};
-            _referenceColumnByTable[tableId][colsMeta.colId[i]] = { table: refType.slice(refColon + 1), column: colsMeta.colId[shown] };
+            if (!referenceCols[tableId]) referenceCols[tableId] = {};
+            referenceCols[tableId][colsMeta.colId[i]] = { table: refType.slice(refColon + 1), column: colsMeta.colId[shown] };
           }
         }
         // Choix d'une colonne Choice/ChoiceList : widgetOptions est un JSON stocké en Text (schema.ts), clé "choices" (vérifié à la source grist-core,
         // ChoiceTextBox.ts: this.options.prop("choices")) - un tableau de chaînes. widgetOptions absent/mal formé ne doit jamais faire planter tout
         // refreshSchema, juste laisser cette colonne sans choix connus (repli sur le champ texte libre, cf. js/macro-editor.js:buildValueField).
-        if (!_columnChoicesByTable[tableId]) _columnChoicesByTable[tableId] = {};
+        if (!choices[tableId]) choices[tableId] = {};
         try {
           const raw = colsMeta.widgetOptions && colsMeta.widgetOptions[i];
           const opts = raw ? JSON.parse(raw) : null;
-          if (opts && Array.isArray(opts.choices)) _columnChoicesByTable[tableId][colsMeta.colId[i]] = opts.choices;
+          if (opts && Array.isArray(opts.choices)) choices[tableId][colsMeta.colId[i]] = opts.choices;
         } catch (e) { /* widgetOptions mal formé pour cette colonne : pas de choix connus, tant pis */ }
       }
+      _columnTypesByTable = types;
+      _columnChoicesByTable = choices;
+      _displayColByTable = displayCols;
+      _referenceColumnByTable = referenceCols;
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
     }
@@ -464,7 +498,7 @@ const GristAPI = (function () {
   async function findReferenceColumns(fromTableId, toTableId) {
     if (!fromTableId || !toTableId) return [];
     try {
-      const tablesMeta = await grist.docApi.fetchTable('_grist_Tables');
+      const [tablesMeta, colsMeta] = await Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column')]);
       const tableRowId = {};
       for (let i = 0; i < tablesMeta.id.length; i++) {
         tableRowId[tablesMeta.tableId[i]] = tablesMeta.id[i];
@@ -472,7 +506,6 @@ const GristAPI = (function () {
       const fromRowId = tableRowId[fromTableId];
       const toRowId = tableRowId[toTableId];
       if (!fromRowId || !toRowId) return [];
-      const colsMeta = await grist.docApi.fetchTable('_grist_Tables_column');
       const refCols = [];
       if (colsMeta && colsMeta.parentId) {
         for (let i = 0; i < colsMeta.parentId.length; i++) {
@@ -489,8 +522,8 @@ const GristAPI = (function () {
     }
   }
 
-  async function fetchRowById(tableId, rowId) {
-    const data = await grist.docApi.fetchTable(tableId);
+  async function fetchRowById(tableId, rowId, fresh) {
+    const data = await readTable(tableId, fresh);
     const ids = data && data.id ? data.id : [];
     const idx = ids.indexOf(rowId);
     if (idx === -1) return null;
@@ -503,7 +536,18 @@ const GristAPI = (function () {
   // Toutes les lignes d'une table sous forme de tableau d'objets {colonne: valeur} (au lieu du format colonnaire de fetchTable) - utilisé par la résolution
   // "match"/"singleton" des règles de liaison, qui compare plusieurs lignes à la fois, contrairement à fetchRowById.
   async function fetchTableRows(tableId) {
-    const data = await grist.docApi.fetchTable(tableId);
+    // Pendant un rendu, les lignes sont construites une fois par table (readTable partage déjà la lecture) : les appelants ne font que chercher, filtrer ou trier une
+    // copie (tableOrder), jamais modifier une ligne.
+    const pass = _readPass;
+    if (!pass) return rowsOf(await readTable(tableId));
+    if (!pass.rows.has(tableId)) {
+      const built = readTable(tableId).then(rowsOf);
+      built.catch(() => { if (pass.rows.get(tableId) === built) pass.rows.delete(tableId); });
+      pass.rows.set(tableId, built);
+    }
+    return (await pass.rows.get(tableId)).slice();
+  }
+  function rowsOf(data) {
     const ids = data && data.id ? data.id : [];
     const rows = [];
     for (let i = 0; i < ids.length; i++) {
@@ -648,7 +692,7 @@ const GristAPI = (function () {
     const rowId = addResult && addResult.retValues && addResult.retValues[0];
     if (rowId == null) throw new Error('AddRecord sur ' + USER_PROBE_TABLE_NAME + ' n’a renvoyé aucun id de ligne');
     try {
-      const row = await fetchRowById(USER_PROBE_TABLE_NAME, rowId);
+      const row = await fetchRowById(USER_PROBE_TABLE_NAME, rowId, true);
       const email = row && row.Email;
       if (!email) throw new Error('la formule déclenchée user.Email n’a renvoyé aucune valeur');
       _userEmailCache = email;
@@ -683,5 +727,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
 })();

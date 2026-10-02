@@ -213,19 +213,24 @@ const ReaderMode = (function () {
     seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);
     return { seam, divider };
   }
-  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
-  // peuvent recouvrir un peu de texte pile à la limite - résidu assumé).
-  async function renderPaginationPreview(container, wrapper, headerFooterData, tableId, record) {
-    if (!container.classList.contains('a4-preview')) return null;
-    // `hfEnabled` remplace l'ancien `return` sec quand aucun en-tête/pied n'est configuré : le mode Lecture ne montrait alors AUCUNE frontière de page,
-    // alors que l'éditeur y affiche son repère « Page N ». Un document sans en-tête/pied garde donc maintenant ses gouttières, mais pas d'espaceur de bord
-    // (rien à y afficher - une bande blanche vide flotterait au-dessus et en dessous de la feuille).
+  // Les quatre fragments d'en-tête et de pied, résolus : leurs #Variable relisent des tables, d'où une résolution par rendu et non à chaque mise en page (renderPaginationPreview
+  // se refait quand une image finit de charger, cf. watchGeometry).
+  // `hfEnabled` remplace l'ancien `return` sec quand aucun en-tête/pied n'est configuré : le mode Lecture ne montrait alors AUCUNE frontière de page,
+  // alors que l'éditeur y affiche son repère « Page N ». Un document sans en-tête/pied garde donc maintenant ses gouttières, mais pas d'espaceur de bord
+  // (rien à y afficher - une bande blanche vide flotterait au-dessus et en dessous de la feuille).
+  async function resolvePaginationZones(headerFooterData, tableId, record) {
     const hfEnabled = !!(headerFooterData && headerFooterData.enabled);
     const differentFirstPage = hfEnabled && !!headerFooterData.differentFirstPage;
     const headerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.default, tableId, record) : null;
     const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record) : null;
     const footerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record) : null;
     const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
+    return { hfEnabled, differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
+  }
+  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
+  // peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout ce qu'elle pose.
+  function renderPaginationPreview(container, wrapper, zones) {
+    const { hfEnabled, differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst } = zones;
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
 
@@ -238,8 +243,7 @@ const ReaderMode = (function () {
 
     const wrapperChildren = Array.from(wrapper.children);
 
-    // Les résolutions #Variable ci-dessus sont asynchrones - un rendu plus récent peut avoir déjà repeint `container` pendant l'attente, `wrapper` ne serait
-    // alors plus attaché et insertBefore lèverait une exception.
+    // Un rendu plus récent peut avoir déjà repeint `container` : `wrapper` ne serait alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return null;
 
     // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de CETTE page n'a rien (page 1 sans en-tête
@@ -268,6 +272,7 @@ const ReaderMode = (function () {
     container.appendChild(overlay);
     // <style> en display:none, donc sans effet de mise en page propre, et dernier enfant de .reader-content : il ne décale aucun `nth-child` déjà calculé.
     const styleEl = document.createElement('style');
+    styleEl.className = 'v2-pagination-style';
     wrapper.appendChild(styleEl);
     const marginRules = [];
     const zoom = layoutZoom(wrapper);
@@ -373,6 +378,29 @@ const ReaderMode = (function () {
     return { offsets, pages, layer, zoom, toLayoutY, sheetLeft: wrapperLeft, sheetWidth: wrapperWidth, contentLeftPx: mPx.left };
   }
 
+  // `top` d'une image en calque avant que la Lecture le décale (par slot, par page), gardé à la première écriture : la mise en page refaite (clearPagination) repart du `top`
+  // d'origine, jamais d'un décalage déjà appliqué.
+  function setLayerTop(img, px) {
+    if (img.dataset.ppTop0 === undefined) img.dataset.ppTop0 = img.style.top;
+    img.style.top = px + 'px';
+  }
+  // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, fond de la feuille, réserves de bas de page, `top` des images en
+  // calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau.
+  function clearPagination(container, wrapper) {
+    container.querySelectorAll(':scope > .v2-page-edge-spacer, :scope > .v2-pagination-overlay, :scope > .v2-reader-backdrop').forEach(el => el.remove());
+    wrapper.querySelectorAll(':scope > style.v2-pagination-style').forEach(el => el.remove());
+    wrapper.classList.remove('v2-paper-backed');
+    wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
+  }
+  // Mise en page complète de la Lecture, dans l'ordre : feuilles et coutures, images en calque décalées par slot puis posées sur leur page (grille), copies de « Sur toutes
+  // les pages ». `zones` nul : pas d'Aperçu A4, donc pas de pagination, seuls les `top` par slot s'appliquent.
+  function paginate(container, wrapper, zones) {
+    const paged = zones ? renderPaginationPreview(container, wrapper, zones) : null;
+    rebaseLayerImagesBySlot(wrapper);
+    if (paged) { placeGridImagesOnPages(wrapper, paged); paintRepeatedCopies(wrapper, paged); }
+    return paged;
+  }
+
   // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
   function pageOfChildIndex(offsets, index) { return offsets.filter(o => o.afterIndex < index).length; }
 
@@ -391,7 +419,7 @@ const ReaderMode = (function () {
         const grid = PageLayer.gridOfEl(img);
         if (!grid || grid.pageIndex < 1 || img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
         const page = paged.pages[slotFirstPage + grid.pageIndex];
-        if (page) img.style.top = (page.bodyTop - wrapperTop + grid.topPt * PageLayer.PT_TO_PX) + 'px';
+        if (page) setLayerTop(img, page.bodyTop - wrapperTop + grid.topPt * PageLayer.PT_TO_PX);
       });
     });
   }
@@ -456,15 +484,84 @@ const ReaderMode = (function () {
       const layered = child.matches(LAYER_IMAGE_SELECTOR) ? [child] : Array.from(child.querySelectorAll(LAYER_IMAGE_SELECTOR));
       layered.forEach(img => {
         if (img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
-        img.style.top = ((parseFloat(img.style.top) || 0) + shiftPx) + 'px';
+        setLayerTop(img, (parseFloat(img.style.top) || 0) + shiftPx);
       });
     });
   }
 
+  // === La mise en page de la Lecture suit ce qui bouge après le rendu ===
+  // La pagination se mesure une fois, mais l'écran continue de changer : une image finit de charger (pièce jointe, adresse externe, image d'une variable), une police web
+  // arrive, la feuille change de largeur. Chaque coupure posée sur une mesure périmée coupait alors une ligne en deux et laissait un décalage vers le bas que seul un nouveau
+  // rendu (quitter la ligne et y revenir, l'image étant alors en cache) corrigeait. Comme l'éditeur (js/header-footer-preview.js:watchPaginationGeometry), la Lecture surveille
+  // donc sa feuille et chaque image, et refait la mise en page seule - les variables ne sont pas relues, les en-têtes et pieds restent ceux du rendu.
+  let geometryWatch = null;
+  const GEOMETRY_RECOMPUTES_MAX = 8; // par fenêtre de 3 s, comme l'éditeur : une mise en page qui ne se stabilise pas ne tourne pas en boucle
+  const GEOMETRY_DEBOUNCE_MS = 40;
+  function stopGeometryWatch() {
+    const w = geometryWatch;
+    if (!w) return;
+    geometryWatch = null;
+    clearTimeout(w.timer); clearTimeout(w.windowTimer);
+    if (w.observer) w.observer.disconnect();
+    if (w.onFonts && document.fonts && document.fonts.removeEventListener) document.fonts.removeEventListener('loadingdone', w.onFonts);
+  }
+  function watchGeometry(container, wrapper, zones) {
+    stopGeometryWatch();
+    if (typeof ResizeObserver !== 'function') return;
+    const targets = [wrapper].concat(Array.from(wrapper.querySelectorAll('img')));
+    const sizeOf = el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); };
+    const w = { sizes: new Map(), timer: 0, windowTimer: 0, recomputes: 0, observer: null, onFonts: null };
+    const remember = () => { w.sizes.clear(); targets.forEach(el => w.sizes.set(el, sizeOf(el))); };
+    const changed = () => targets.some(el => w.sizes.get(el) !== sizeOf(el));
+    const recompute = () => {
+      if (geometryWatch !== w) return;
+      if (!wrapper.isConnected) { stopGeometryWatch(); return; }
+      // Masquée (autre mode) : rien à mesurer. Elle se mesure de nouveau à son retour, la taille de la feuille passant de zéro à sa vraie valeur.
+      if (!wrapper.getClientRects().length) return;
+      w.recomputes++;
+      clearTimeout(w.windowTimer);
+      w.windowTimer = setTimeout(() => { w.recomputes = 0; if (geometryWatch === w && changed()) schedule(); }, 3000);
+      // Sans la mise en page, la feuille est plus courte : le navigateur ramènerait le défilement en arrière, et le lecteur ne retrouverait pas sa page.
+      const { scrollTop, scrollLeft } = container;
+      clearPagination(container, wrapper);
+      paginate(container, wrapper, zones);
+      container.scrollTop = scrollTop; container.scrollLeft = scrollLeft;
+      remember();
+    };
+    function schedule() {
+      if (geometryWatch !== w || w.recomputes >= GEOMETRY_RECOMPUTES_MAX) return;
+      clearTimeout(w.timer);
+      w.timer = setTimeout(recompute, GEOMETRY_DEBOUNCE_MS);
+    }
+    geometryWatch = w;
+    remember();
+    w.observer = new ResizeObserver(() => { if (changed()) schedule(); });
+    targets.forEach(el => w.observer.observe(el));
+    // Une police qui arrive refait les lignes sans forcément changer la taille de la feuille : la mise en page est toujours refaite.
+    if (document.fonts && document.fonts.addEventListener) { w.onFonts = schedule; document.fonts.addEventListener('loadingdone', w.onFonts); }
+  }
+  // Attend que les images du rendu aient fini de charger (ou d'échouer), au plus `maxMs` : leur hauteur décide des coupures de page, la première mise en page se mesure donc
+  // une fois qu'elles l'ont. Celles qui arrivent plus tard sont reprises par watchGeometry.
+  const IMAGE_SETTLE_MS = 1500;
+  function settleImages(root, maxMs) {
+    const pending = Array.from(root.querySelectorAll('img')).filter(img => !img.complete);
+    if (!pending.length) return Promise.resolve();
+    return new Promise(resolve => {
+      let left = pending.length;
+      const timer = setTimeout(resolve, maxMs);
+      const one = () => { if (--left === 0) { clearTimeout(timer); resolve(); } };
+      pending.forEach(img => { img.addEventListener('load', one, { once: true }); img.addEventListener('error', one, { once: true }); });
+    });
+  }
+
   let renderGeneration = 0;
+  // `htmlContent` : le HTML du document, ou une fonction qui le donne (js/main.js : un macro-modèle assemble ses modèles contre la ligne courante, ce qui relit des tables -
+  // l'appel se fait donc dans les lectures partagées de CE rendu, cf. GristAPI.withReadPass).
   async function render(htmlContent, tableId, record, headerFooterData) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
+    // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
+    stopGeometryWatch();
     // État vide : atteignable depuis js/main.js:renderReader(), qui appelle désormais render() avec record=null au lieu de retourner en silence (le mode
     // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas de .error-msg ici : ce n'est pas une erreur, juste une étape
     // que l'utilisateur n'a pas encore faite.
@@ -476,6 +573,13 @@ const ReaderMode = (function () {
       empty.appendChild(title); empty.appendChild(hint); container.appendChild(empty);
       return;
     }
+    return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));
+  }
+  async function renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData) {
+    // Un rendu plus récent a démarré : celui-ci sera écarté au remplacement final, inutile de poursuivre ses lectures et ses résolutions.
+    const stale = () => renderId !== renderGeneration;
+    if (typeof htmlContent === 'function') htmlContent = await htmlContent();
+    if (stale()) return;
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
     // <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content'; wrapper.innerHTML = HtmlSanitize.clean(htmlContent);
@@ -483,38 +587,46 @@ const ReaderMode = (function () {
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
-    // Rafraîchit le schéma avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments
-    // récemment ajoutée.
-    await GristAPI.refreshSchema().catch(() => {});
+    // Rafraîchit les types de colonnes avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments
+    // récemment ajoutée. Pas refreshSchema : il relisait chaque table du document en entier, à chaque rendu, pour une liste de colonnes que la Lecture n'utilise pas.
+    await GristAPI.refreshColumnTypes().catch(() => {});
+    if (stale()) return;
     // Zones répétées d'une boucle (js/loop-rules.js) déroulées AVANT la résolution : chaque copie porte la ligne de son tour, lue par resolveBadgeNode.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
+    if (stale()) return;
     // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
+    if (stale()) return;
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR); let hasError = false;
     const results = await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
       const { node, isError } = await resolveBadgeNode(badge, tableId, record, format, loopCtx);
       return { badge, node, isError };
     }));
+    if (stale()) return;
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveQrCodes(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
+    if (stale()) return;
     trimTrailingBlankBlocks(wrapper);
     keepBlankLines(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
+    await settleImages(wrapper, IMAGE_SETTLE_MS);
     // Variables déjà résolues (texte des titres définitif) : peut construire le sommaire maintenant, avant le swap DOM final ci-dessous.
     resolveTocMarkers(wrapper);
-    if (renderId !== renderGeneration) return;
+    if (stale()) return;
     container.innerHTML = '';
     if (hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
-    const paged = await renderPaginationPreview(container, wrapper, headerFooterData, tableId, record);
-    rebaseLayerImagesBySlot(wrapper);
-    if (paged) { placeGridImagesOnPages(wrapper, paged); paintRepeatedCopies(wrapper, paged); }
+    const zones = container.classList.contains('a4-preview') ? await resolvePaginationZones(headerFooterData, tableId, record) : null;
+    // Les résolutions ci-dessus sont asynchrones : un rendu plus récent peut avoir déjà repeint `container`, `wrapper` ne serait alors plus attaché.
+    if (!wrapper.isConnected) return;
+    paginate(container, wrapper, zones);
+    if (!stale()) watchGeometry(container, wrapper, zones);
   }
   // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Marqueur recalculé en JS, jamais lu via
   // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas le texte peint - counter() n'est résolu qu'à la peinture).

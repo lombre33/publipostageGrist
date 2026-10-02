@@ -928,7 +928,8 @@
       if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
     }
     readerContainer.classList.toggle('pp-reader-comments', readerCommentsActive());
-    const html = readerCommentsActive() ? await Comments.buildReaderHtml() : await currentDocumentHtml(tableId, record);
+    // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les lectures partagées de CE rendu.
+    const html = () => (readerCommentsActive() ? Comments.buildReaderHtml() : currentDocumentHtml(tableId, record));
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 

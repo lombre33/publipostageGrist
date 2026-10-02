@@ -108,6 +108,7 @@ const GROUPS = {
   varCalc: 'scenarios-var-calc', // bulle « Calcul » (variables calculées) : nœud, fenêtre, barre flottante, Lecture, PDF, Word, zones répétées, total de lignes
   emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
   cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
+  readerReads: 'scenarios-reader-reads', // la Lecture lit chaque table une seule fois par rendu (js/grist-api.js:withReadPass) et suit une image qui change de taille après la mesure (js/reader-mode.js:watchGeometry)
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -158,6 +159,7 @@ const NODE_SCRIPTS = {
   layerImagesMouse: 'verify-layer-images-mouse.mjs', // images en calque d'un ancien modèle chargées éditeur masqué (macro-modèle, Mode lecture) : leur position de page se mesure au retour de l'éditeur, 700x400
   macroImagesMouse: 'verify-macro-images-mouse.mjs', // images en calque d'un macro-modèle (js/macro-templates.js, js/reader-mode.js, js/pdf-export.js) : chacune reste dans son courrier en Lecture et dans le PDF téléchargé par le vrai bouton, 700x400
   macroSubmodelMouse: 'verify-macro-submodel-mouse.mjs', // stylo d'un modèle dans le résumé d'un macro-modèle et bandeau « Revenir au macro-modèle » (js/macro-editor.js, js/main.js) à la vraie souris, au vrai clavier et à la molette, 700x400 : ouvrir, revenir, question avant d'abandonner une modification, Lecture, nom très long, sept annexes, modèle supprimé ; clair, sombre et anglais
+  readerLateMouse: 'verify-reader-late-images-mouse.mjs', // Lecture d'un macro-modèle à la vraie souris à 700x400 avec une pièce jointe lente (réseau retardé) : la Lecture attend l'image, suit celle qui arrive plus tard, les coupures de page sont celles d'une image déjà là ; lectures de tables comptées
   wideImagesMouse: 'verify-wide-images-mouse.mjs', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : au vrai clic à 700x400, le PDF et le Word téléchargés sont relus, chaque image a la largeur que l'éditeur lui montre
   imageZoomMouse: 'verify-image-zoom-mouse.mjs', // gestes sur une image à la vraie souris à 700x400 (feuille réduite à ~0,85) : devant le texte, glisser, redimensionner, à gauche / au centre / à droite ; témoin à 1400x1000
   pageLayerMouse: 'verify-page-layer-mouse.mjs', // « Sur toutes les pages » à la vraie souris à 700x400 : le bouton de la barre de l'image coche et décoche la case, grisé hors du calque derrière le texte (info-bulle, clic sans effet), barre dans le panneau, flèches, HTML enregistré, anglais ; témoin à 1400x1000
