@@ -105,6 +105,20 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   Pas de ligne de tableau ajoutée en passant : un choix du produit (une ligne a une hauteur, des traits, peut porter un saut de page). La case d'arrivée est montrée EN ENTIER, jamais sous les bandeaux collés (colonnes en
   haut, lignes à gauche) : `revealCell` complète le défilement de ProseMirror, qui ne regarde que la ligne du curseur et ne connaît pas les bandeaux (curseur resté hors de vue plus haut, puis Entrée : la case arrivait cachée dessous).
   Limite connue, laissée telle quelle : les flèches du haut et Maj+Tab remontent encore le curseur sous le bandeau des colonnes (même cause, geste qui n'est pas Entrée).
+- Coller un tableau de tableur (02/10, Antoine : « quand on a copié un tableau depuis exel et que l'on veut le Coller dans une grille, actuellement ça colle une image dans la cellule ; moi j'aimerais bien le tableau avec ses
+  cellules, etc. y compris les cellules fusionnées et mises en forme si possible ») : Excel pose dans le presse-papiers un tableau HTML, le texte tabulé ET une image de la plage, et `handlePaste` de `js/editor.js` collait l'image.
+  Dans une grille, un presse-papiers qui porte un tableau de tableur (la signature d'Excel, de Google Sheets ou de LibreOffice Calc : `GridTable.clipboardHasSpreadsheetTable`) ne passe plus par le collage d'image ;
+  `GridTable.cleanPastedHtml` (branché sur `transformPastedHTML` de `js/grid-editor.js`) lit le tableau case par case (`js/grid-table.js`, DOMParser seulement : la mise en forme d'Excel est dans une feuille de style, `class=xl65`,
+  celle de Sheets en ligne, celle de LibreOffice en attributs `bgcolor` / `align` / `valign`) et le réécrit en HTML d'éditeur ; le collage de `prosemirror-tables` fait le reste : les cases collées remplacent celles de la grille à partir
+  de la case courante, la grille gagne les lignes et colonnes qui manquent (à la taille de leurs voisines), UN Annuler défait tout. Gardé : fusions (colspan, rowspan, une fusion qui couvre une ligne cachée ne couvre que les lignes qui
+  restent), fond, gras / italique / souligné / barré, couleur et taille du texte (la taille de départ du tableur n'est pas écrite), alignement horizontal (écrit, ou à droite pour un nombre qui n'en a pas : « Standard » d'Excel) et vertical
+  (en haut, au milieu), traits (la règle des traits partagés de `TableBorders` : le trait du bas d'une case est aussi le haut de celle du dessous ; le gris `#cccccc` du quadrillage de Sheets n'est pas un trait choisi), retours à la ligne
+  dans la case, liens (http, https, mailto, tel ; un `javascript:` perd son lien et garde son texte). Pas gardé : la police, les traits épais, pointillés ou doubles (un trait fin continu), l'alignement en bas (c'est celui du tableur
+  par défaut : la grille garde le sien, le milieu), les largeurs et hauteurs de la source (la grille garde les siennes), les formules et formats de nombre (le texte AFFICHÉ est collé), les images, les tableaux dans une case. Une ligne ou une case
+  masquée (`display:none`) ne se colle pas. Hors grille rien ne change : un document garde le collage d'image d'Excel (une carte à Antoine pour l'étendre) ; les cases copiées dans la grille, un tableau de page web et un tableau d'Excel
+  copié « comme image » (HTML sans tableau) passent comme avant, la réécriture ne touche que ce qui porte la signature d'un tableur. Le modèle de cases (`{ width, cols, rows: [{ height, cells }] }`) est le même pour l'import d'un
+  classeur .xlsx (sujet 18) : `GridTable.toHtml(model, { sizes: true })` écrit aussi les largeurs et hauteurs. Les presse-papiers des tests sont reconstitués d'après le format réel (le bac à sable n'a pas de tableur) : à revérifier
+  avec un vrai Excel.
 - Pas dans la première version : boucles sur une ligne de grille, formules, volets figés, images en calque, en-tête/pied/numéros de page, conversion document ⇄ grille.
 
 ## Lots
@@ -147,6 +161,11 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   toujours par ses cases, un document inchangé (4 cas, trois échouent sur l'ancien code).
   Entrée (02/10) : descend d'une case et sélectionne son texte, dernière ligne (rien ne bouge), cases fusionnées (dessus, dessous, sur deux colonnes), Maj+Entrée et Ctrl+Entrée = une ligne dans la case (un Annuler chacune),
   liste (un point de plus, sortie sur un point vide, puis la case du dessous), liste `#` ouverte qui garde son Entrée, cases choisies, document inchangé, case d'arrivée toute visible sous les bandeaux dans un plan étroit (9 cas : six échouent sans l'extension, celui de la liste `#` échoue aussi quand l'extension est rangée après Variables, celui du défilement sans `revealCell`).
+- `dev-tests/scenarios-grid-table.js` (groupe `gridTable`, 13 cas, sujet 17 du 02/10) : le presse-papiers d'Excel (HTML à feuille de style, texte tabulé et image), de Google Sheets et de LibreOffice Calc, reconstitués ; la
+  reconnaissance (une page web, des cases copiées dans la grille, un texte et une plage copiée « comme image » ne sont jamais réécrits), la lecture case par case des trois (fusions, fond, traits, alignements, marques, largeurs et
+  hauteurs), un HTML bancal (fusion qui dépasse, ligne courte, script, image, lien `javascript:`, tableau démesuré), les lignes et cases masquées, le HTML d'éditeur relu dans une grille avec ses tailles ; puis le vrai collage (un
+  évènement `paste` avec HTML, texte et image) : les cases et aucune image, la grille qui garde ses tailles, UN Annuler, la grille qui grandit au bord, Sheets et LibreOffice, des cases copiées dans la grille, une page web, et un document
+  qui colle toujours l'image d'Excel.
 - `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 31 cas, lots D, E, B2 et C) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
   un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D

@@ -94,6 +94,7 @@ const GROUPS = {
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
   caption: 'scenarios-caption', // légende sous une image ou un tableau (js/caption.js) : attribut `data-caption`, boutons des barres flottantes, grisage, tableau / case / colonne, texte d'attente, suivi, style de l'éditeur et de la Lecture, PDF, Word, e-mail
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
+  gridTable: 'scenarios-grid-table', // tableau de tableur collé dans une grille (js/grid-table.js) : le presse-papiers d'Excel (HTML + texte + image), de Google Sheets et de LibreOffice lu case par case (fusions, fond, traits, alignements, marques), collé pour de vrai, aucune image, un seul Annuler
   blankLastPage: 'scenarios-blank-last-page', // page blanche en fin de document : Lecture, PDF, Word, et le repère « Page 2 » de l'éditeur (js/header-footer-preview.js:trailingBlankStart)
   tablePageCut: 'scenarios-table-page-cut', // un tableau se coupe entre deux lignes au saut de page (js/table-page-cut.js) : règle, couture de l'éditeur et de la Lecture, PDF relu par pdf.js, Word
   findReplace: 'scenarios-find-replace', // Rechercher / Remplacer (js/find-replace.js) : moteur, panneau, loupe, remplacement en une étape d'annulation, mode suivi, textes FR / EN, contrastes

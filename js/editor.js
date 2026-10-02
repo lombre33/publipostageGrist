@@ -348,6 +348,8 @@ const Editor = (function () {
           const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
           const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
           if (!imageItem) return false;
+          // Excel joint à son tableau HTML une IMAGE de la plage copiée : dans une grille c'est le tableau, case par case, que la personne veut (GridTable le réécrit).
+          if (GridEditor.isActive() && GridTable.clipboardHasSpreadsheetTable(event.clipboardData)) return false;
           const file = imageItem.getAsFile();
           if (!file) return false;
           event.preventDefault();

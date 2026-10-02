@@ -9,7 +9,8 @@
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées ;
 //   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent ;
 //   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`) ;
-//   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case.
+//   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
+//   - le collage d'un tableau de tableur (Excel, Sheets, LibreOffice) case par case, mise en forme comprise (`transformPastedHTML`, js/grid-table.js).
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
 // fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
@@ -776,6 +777,8 @@ const GridEditor = (function () {
             return tr;
           },
           props: {
+            // Un tableau de tableur (Excel, Sheets, LibreOffice) est réécrit pour la grille avant que ProseMirror le lise : fusions, fond, texte, alignements, traits (js/grid-table.js).
+            transformPastedHTML(html) { return active ? GridTable.cleanPastedHtml(html) : html; },
             transformPasted(slice) { return active ? trimPastedSlice(slice) : slice; },
             decorations(state) {
               if (!active || isCellSelection(state.selection)) return null;
