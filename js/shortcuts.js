@@ -140,10 +140,10 @@ const Shortcuts = (function () {
     return '';
   }
 
-  // Touches que l'éditeur ou le navigateur gardent pour eux, hors des actions de la liste : copier-coller, sélection, saut de ligne, texte en code, titres 0 et 4 à 6, tâches, retour à
+  // Touches que l'éditeur ou le navigateur gardent pour eux, hors des actions de la liste : copier-coller, sélection, saut de ligne, texte en code, titres 0 et 4 à 6, retour à
   // la ligne forcé, rechargement, fermeture, nouveaux onglets, retour en arrière. Elles n'arrivent pas toutes à la page (Ctrl+T, Ctrl+N, Ctrl+W jamais) :
   // ce sont celles qu'on refuse de prendre, avec leur raison - une touche déjà liée qui n'a pas de ligne dans la liste ne pourrait plus jamais être rétablie.
-  const RESERVED = ['Mod+a', 'Mod+c', 'Mod+x', 'Mod+v', 'Mod+Shift+v', 'Mod+Enter', 'Shift+Enter', 'Mod+Backspace', 'Mod+Delete', 'Mod+e', 'Mod+Shift+9',
+  const RESERVED = ['Mod+a', 'Mod+c', 'Mod+x', 'Mod+v', 'Mod+Shift+v', 'Mod+Enter', 'Shift+Enter', 'Mod+Backspace', 'Mod+Delete', 'Mod+e',
     'Mod+Alt+0', 'Mod+Alt+4', 'Mod+Alt+5', 'Mod+Alt+6',
     'Mod+r', 'Mod+Shift+r', 'Mod+l', 'Mod+n', 'Mod+t', 'Mod+w', 'Mod+q', 'Mod+m', 'Mod+Shift+n', 'Mod+Shift+t', 'Mod+Shift+w', 'Mod+Tab', 'Mod+Shift+Tab',
     'Mod+PageUp', 'Mod+PageDown', 'Alt+F4', 'F5', 'F11', 'F12', 'Alt+ArrowLeft', 'Alt+ArrowRight', 'Alt+ArrowUp', 'Alt+ArrowDown'];
@@ -189,11 +189,12 @@ const Shortcuts = (function () {
     return true;
   };
   const templatesList = () => { const el = document.querySelector('#v2-title-cluster .tts-trigger'); if (!usable(el)) return false; el.click(); return true; };
-  // « Liste numérotée » : la touche d'origine (Ctrl+Maj+7, celle de TipTap) bascule - elle pose la liste et la retire au second appui - alors que le bouton pose un style de numérotation. Sur une
-  // sélection de cases, où l'éditeur ne traiterait que la case de tête, elle bascule donc la liste dans chaque case (EditorCore.toggleList), sous les mêmes gardes que le bouton.
-  const toggleOrderedListInCells = () => {
-    if (typeof EditorCore === 'undefined' || !usable(byId('v2-btn-ordered-numeric'))) return false;
-    EditorCore.toggleList('orderedList', 'toggleOrderedList');
+  // « Liste numérotée » et « Liste de tâches » : la touche d'origine (Ctrl+Maj+7 et Ctrl+Maj+9, celles de TipTap) bascule - elle pose la liste et la retire au second appui - alors que le bouton
+  // pose un style (numérotation, cases à cocher). Sur une sélection de cases, où l'éditeur ne traiterait que la case de tête, elle bascule donc la liste dans chaque case
+  // (EditorCore.toggleList), sous les mêmes gardes que le bouton.
+  const toggleListInCells = (name, command, buttonId) => () => {
+    if (typeof EditorCore === 'undefined' || !usable(byId(buttonId))) return false;
+    EditorCore.toggleList(name, command);
     return true;
   };
 
@@ -227,7 +228,8 @@ const Shortcuts = (function () {
     { id: 'alignRight', group: 'format', label: 'align.right', key: 'Mod+Shift+r', native: true, scope: 'editor', hint: tip('v2-btn-align-right'), run: click('v2-btn-align-right') },
     { id: 'alignJustify', group: 'format', label: 'align.justify', key: 'Mod+Shift+j', native: true, scope: 'editor', hint: tip('v2-btn-align-justify'), run: click('v2-btn-align-justify') },
     { id: 'bulletList', group: 'format', label: 'shortcuts.action.bulletList', key: 'Mod+Shift+8', native: true, cells: true, scope: 'editor', hint: '#v2-list-flyout .v2-hover-flyout-label', aria: tip('v2-btn-bullet'), run: click('v2-btn-bullet') },
-    { id: 'orderedList', group: 'format', label: 'shortcuts.action.orderedList', key: 'Mod+Shift+7', native: true, cells: toggleOrderedListInCells, scope: 'editor', hint: tip('v2-btn-ordered-numeric'), run: click('v2-btn-ordered-numeric') },
+    { id: 'orderedList', group: 'format', label: 'shortcuts.action.orderedList', key: 'Mod+Shift+7', native: true, cells: toggleListInCells('orderedList', 'toggleOrderedList', 'v2-btn-ordered-numeric'), scope: 'editor', hint: tip('v2-btn-ordered-numeric'), run: click('v2-btn-ordered-numeric') },
+    { id: 'taskList', group: 'format', label: 'shortcuts.action.taskList', key: 'Mod+Shift+9', native: true, cells: toggleListInCells('taskList', 'toggleTaskList', 'v2-btn-checklist-accent-strike'), scope: 'editor', hint: tip('v2-btn-checklist-accent-strike'), run: click('v2-btn-checklist-accent-strike') },
     { id: 'outdent', group: 'format', label: 'indent.decrease', key: '', scope: 'editor', repeat: true, hint: tip('v2-btn-outdent'), run: click('v2-btn-outdent') },
     { id: 'indent', group: 'format', label: 'indent.increase', key: '', scope: 'editor', repeat: true, hint: tip('v2-btn-indent'), run: click('v2-btn-indent') },
     { id: 'sizeDown', group: 'format', label: 'font.sizeDecrease', key: '', scope: 'editor', repeat: true, aria: tip('v2-size-minus'), run: mouseDown('v2-size-minus') },

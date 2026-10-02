@@ -356,7 +356,7 @@ async function remapPart(T, fr) {
     : { listening: 'Press a key…', none: 'None', dupe: 'Alt+B is already the key for “Bold”.', alone: 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.', bold: 'Bold', reset: 'Default' };
   const rowCount = await page.evaluate(() => document.querySelectorAll('#settings-keys-list .settings-key-row').length);
   const actionCount = await page.evaluate(() => Shortcuts.ACTIONS.length);
-  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === 53, { rowCount, actionCount });
+  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === 54, { rowCount, actionCount });
   check(`${T} : au départ rien n'est changé : « ${L.reset} » et « Tout remettre » grisés`, await page.evaluate(() => Array.from(document.querySelectorAll('.settings-key-reset')).every(b => b.disabled) && document.getElementById('settings-keys-reset-all').disabled));
 
   // Gras : Alt+B à la place de Ctrl+B.

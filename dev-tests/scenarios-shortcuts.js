@@ -253,6 +253,7 @@
         modeRead: 'Alt+l', modeEdit: 'Alt+e', templates: 'Alt+m', rename: 'F2', exportPdf: 'Alt+p', keysList: 'Mod+/',
         heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Alt+Shift+m', today: 'Alt+Shift+d',
         save: 'Mod+s', link: 'Mod+k', bold: 'Mod+b', italic: 'Mod+i', underline: 'Mod+u', undo: 'Mod+z', redo: 'Mod+y', find: 'Mod+f', replace: 'Mod+h',
+        bulletList: 'Mod+Shift+8', orderedList: 'Mod+Shift+7', taskList: 'Mod+Shift+9',
       };
       const wrong = Object.keys(expected).filter(id => Shortcuts.keyFor(id) !== expected[id]).map(id => id + ' = ' + Shortcuts.keyFor(id));
       const without = ['sizeUp', 'sizeDown', 'table', 'image', 'twoColumns', 'toc', 'textColor', 'delete', 'new'].filter(id => Shortcuts.keyFor(id) !== '');
@@ -392,7 +393,7 @@
   const MOUSE_BUTTON = {
     bold: '#v2-btn-bold', italic: '#v2-btn-italic', underline: '#v2-btn-underline', strike: '#v2-btn-strike',
     alignLeft: '#v2-btn-align-left', alignCenter: '#v2-btn-align-center', alignRight: '#v2-btn-align-right', alignJustify: '#v2-btn-align-justify',
-    bulletList: '#v2-btn-bullet', orderedList: '#v2-btn-ordered-numeric', indent: '#v2-btn-indent', outdent: '#v2-btn-outdent',
+    bulletList: '#v2-btn-bullet', orderedList: '#v2-btn-ordered-numeric', taskList: '#v2-btn-checklist-accent-strike', indent: '#v2-btn-indent', outdent: '#v2-btn-outdent',
     sizeUp: '#v2-size-plus', sizeDown: '#v2-size-minus', textColor: '#v2-btn-text-color', highlight: '#v2-btn-highlight', formatPainter: '#v2-btn-format-painter',
     heading1: '#v2-heading-flyout .v2-hover-row[data-level="1"]', heading2: '#v2-heading-flyout .v2-hover-row[data-level="2"]', heading3: '#v2-heading-flyout .v2-hover-row[data-level="3"]',
     pageBreak: '#v2-btn-page-break', toc: '#v2-btn-toc', twoColumns: '#v2-btn-two-columns', citation: '#v2-btn-citation', codeBlock: '#v2-btn-code-block', callout: '#v2-btn-callout',
@@ -404,7 +405,7 @@
     alignLeft: { markup: '<p style="text-align: center">Bonjour monde</p>', sel: 'all' },
     indent: { markup: '<ul><li><p>a</p></li><li><p>b</p></li></ul>', sel: 'inB' },
     outdent: { markup: '<ul><li><p>a</p><ul><li><p>b</p></li></ul></li></ul>', sel: 'inB' },
-    bulletList: { sel: 'end' }, orderedList: { sel: 'end' }, heading1: { sel: 'end' }, heading2: { sel: 'end' }, heading3: { sel: 'end' },
+    bulletList: { sel: 'end' }, orderedList: { sel: 'end' }, taskList: { sel: 'end' }, heading1: { sel: 'end' }, heading2: { sel: 'end' }, heading3: { sel: 'end' },
     pageBreak: { sel: 'end' }, toc: { sel: 'end' }, twoColumns: { sel: 'end' }, citation: { sel: 'end' }, codeBlock: { sel: 'end' }, callout: { sel: 'end' }, signature: { sel: 'end' }, qrCode: { sel: 'end' },
     table: { sel: 'end' }, variable: { sel: 'end' }, trackChanges: { sel: 'end' },
     undo: { sel: 'all', pre: editor => editor.chain().focus().toggleBold().run() },
@@ -624,7 +625,10 @@
       out.dupe = dupe.problem + ':' + (dupe.other && dupe.other.id);
       const nativeOther = Shortcuts.setKey('modeRead', 'Mod+i');
       out.nativeOther = nativeOther.problem + ':' + (nativeOther.other && nativeOther.other.id);
-      out.reserved = ['Mod+r', 'Mod+e', 'Mod+Alt+4', 'Mod+Shift+9', 'Mod+n', 'F5', 'Mod+Enter'].map(c => Shortcuts.setKey('modeRead', c).problem).join(',');
+      out.reserved = ['Mod+r', 'Mod+e', 'Mod+Alt+4', 'Mod+Alt+0', 'Mod+n', 'F5', 'Mod+Enter'].map(c => Shortcuts.setKey('modeRead', c).problem).join(',');
+      // Ctrl+Maj+9 (liste de tâches) était gardée sans ligne dans la liste ; elle a la sienne depuis l'extension de la touche aux sélections de cases : « déjà prise », plus « gardée ».
+      const taskKey = Shortcuts.setKey('modeRead', 'Mod+Shift+9');
+      out.taskKey = taskKey.problem + ':' + (taskKey.other && taskKey.other.id);
       out.alone = Shortcuts.setKey('modeRead', 'a').problem;
       out.garbage = Shortcuts.setKey('modeRead', 'Foo+a').problem;
       out.unknownAction = Shortcuts.setKey('nope', 'Alt+x').problem;
@@ -636,7 +640,7 @@
       // Remettre l'action sur sa touche d'origine = la rétablir (rien de stocké pour elle).
       Shortcuts.setKey('italic', 'Mod+i');
       out.backToDefault = Shortcuts.isChanged('italic') === false && localStorage.getItem('pp_shortcuts') === null;
-      const pass = out.dupe === 'duplicate:modeRead' && out.nativeOther === 'duplicate:italic' && out.reserved === 'reserved,reserved,reserved,reserved,reserved,reserved,reserved'
+      const pass = out.dupe === 'duplicate:modeRead' && out.nativeOther === 'duplicate:italic' && out.reserved === 'reserved,reserved,reserved,reserved,reserved,reserved,reserved' && out.taskKey === 'duplicate:taskList'
         && out.alone === 'needsModifier' && out.garbage === 'invalid' && out.unknownAction === 'invalid' && out.stored === null && out.changedAfterRefusals === 0
         && out.freedNowFree === '' && out.backToDefault;
       await reset(h);

@@ -624,6 +624,7 @@ const I18n = (function () {
     'shortcuts.action.replace': { fr: 'Rechercher et remplacer', en: 'Find and replace' },
     'shortcuts.action.bulletList': { fr: 'Liste à puces', en: 'Bulleted list' },
     'shortcuts.action.orderedList': { fr: 'Liste numérotée', en: 'Numbered list' },
+    'shortcuts.action.taskList': { fr: 'Liste de tâches', en: 'Task list' },
     'shortcuts.action.image': { fr: 'Insérer une image', en: 'Insert an image' },
     'shortcuts.action.formatPaste': { fr: 'Appliquer la mise en forme', en: 'Apply the copied formatting' },
 

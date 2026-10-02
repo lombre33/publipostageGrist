@@ -605,7 +605,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Ctrl+V dans une case remplit à partir d'elle (le tableau gagne les lignes qui manquent), et une valeur copiée d'une seule case, collée sur une sélection de cases, les remplit toutes.
   La citation entoure le contenu entier de chaque case d'UNE citation, ou l'en sort (l'état voulu est l'inverse de celui que montre le bouton, la case de tête) ; « Retrait » emboîte, dans chaque
   liste des cases, le deuxième élément et les suivants sous le premier (le premier d'une liste ne peut pas se décaler, comme dans une case seule) et « Retrait inverse » sort chaque liste de sa
-  liste ; ces deux boutons restent grisés (jamais retirés) tant qu'aucune case n'a de liste à décaler. Ctrl+Maj+B suit le bouton Citation ; Ctrl+Maj+8 et Ctrl+Maj+7 posent la liste dans chaque case, ou l'en retirent, comme sur une seule case.
+  liste ; ces deux boutons restent grisés (jamais retirés) tant qu'aucune case n'a de liste à décaler. Ctrl+Maj+B suit le bouton Citation ; Ctrl+Maj+8, Ctrl+Maj+7 et Ctrl+Maj+9 (liste de tâches) posent la liste dans chaque case, ou l'en retirent, comme sur une seule case.
 - Barre de la case d'une grille : fusion et alignement vertical (demande d'Antoine du 01/10, maquette « Barre »). De gauche à droite, séparés par un trait fin : Lignes (avant, après, supprimer), Colonnes (avant, après,
   supprimer), « Supprimer le tableau » (toujours grisé), Fusion (« Fusionner les cases », « Scinder la case »), Fond, Bordures, Alignement vertical (en haut, au milieu, en bas). Fusion, bordures et alignement n'existent que dans une grille :
   la barre d'un tableau de document reste celle d'avant. Rien ne disparaît, on grise : « Fusionner » ne s'allume que sur deux cases ou plus, « Scinder » que sur une case fusionnée ; les trois boutons d'alignement sont des
@@ -750,7 +750,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
-  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (53, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
+  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (54, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
   n'est coupé à 700 px), la touche dans un bouton de 112 px au moins (« Aucune » en italique quand il n'y en a pas), « Par défaut » à droite, grisé tant que la touche est celle d'origine
   ; « Tout remettre par défaut » en haut à droite demande confirmation. Un clic sur la touche l'écoute (« Tapez la touche… », fond `--accent-soft`) : la combinaison tapée est prise,
   Échap abandonne sans fermer la fenêtre, Retour arrière retire la touche. Une combinaison refusée dit pourquoi dans un message sous la touche, dans sa colonne et jamais sous le nom de

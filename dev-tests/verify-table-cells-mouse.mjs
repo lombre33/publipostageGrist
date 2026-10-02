@@ -7,7 +7,7 @@
 //     de cases reste (la mise en forme suivante, un Ctrl+C partent de la même sélection) ; un seul Annuler défait la dernière mise en forme sur toutes les cases ;
 //   - la « Citation » (menu au survol de l'icône chaîne) entoure le contenu des quatre cases, un second clic l'en sort ; « Retrait » emboîte les éléments de chaque liste des quatre cases
 //     sous le premier et « Retrait inverse » les sort de leur liste, les deux boutons (grisés avant) sont actifs dès que les cases ont une liste, un seul Annuler rend l'état d'avant ;
-//   - les touches d'origine de la citation et des listes (Ctrl+Maj+B, Ctrl+Maj+8 puces, Ctrl+Maj+7 numérotée) font la même chose que leur bouton sur les quatre cases (celles de l'éditeur ne traitent
+//   - les touches d'origine de la citation et des listes (Ctrl+Maj+B, Ctrl+Maj+8 puces, Ctrl+Maj+7 numérotée, Ctrl+Maj+9 tâches) font la même chose que leur bouton sur les quatre cases (celles de l'éditeur ne traitent
 //     que la case de tête) : la sélection de cases reste, une seconde fois elles défont, un seul Annuler rend l'état d'avant ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
@@ -217,7 +217,7 @@ const cellsState = page => page.evaluate(() => {
     const styled = prop => { const el = Array.from(td.querySelectorAll('span[style]')).find(s => s.style[prop]); return el ? el.style[prop] : ''; };
     out[(ri + 1) + ',' + (ci + 1)] = {
       text: td.textContent, size: styled('fontSize'), family: styled('fontFamily'), color: styled('color'), background: styled('backgroundColor'),
-      bold: !!td.querySelector('strong, b'), list: !!td.querySelector('ul > li'), ordered: !!td.querySelector('ol > li'),
+      bold: !!td.querySelector('strong, b'), list: !!td.querySelector('ul > li'), ordered: !!td.querySelector('ol > li'), task: !!td.querySelector('ul[data-type="taskList"]'),
       quote: !!td.querySelector(':scope > blockquote'), items: td.querySelectorAll('li').length, nested: td.querySelectorAll('li li').length, paragraphs: td.querySelectorAll(':scope > p').length,
     };
   }));
@@ -356,9 +356,9 @@ async function runTheme(colorScheme) {
   state = await cellsState(page);
   check(`${label} - Ctrl+Maj+B une seconde fois : les quatre cases sortent de leur citation`, Object.values(state).every(s => !s.quote));
 
-  // Les touches d'origine des listes, Ctrl+Maj+8 (puces) et Ctrl+Maj+7 (numérotée) : celles de l'éditeur ne traitent que la case de tête ; au vrai clavier, sur la sélection de cases.
+  // Les touches d'origine des listes, Ctrl+Maj+8 (puces), Ctrl+Maj+7 (numérotée) et Ctrl+Maj+9 (tâches) : celles de l'éditeur ne traitent que la case de tête ; au vrai clavier, sur la sélection de cases.
   // 600 ms entre deux appuis : l'historique de ProseMirror groupe les gestes plus proches (un Annuler rendrait alors les deux).
-  for (const [chord, name, has] of [['Control+Shift+8', 'Ctrl+Maj+8', s => s.list], ['Control+Shift+7', 'Ctrl+Maj+7', s => s.ordered]]) {
+  for (const [chord, name, has] of [['Control+Shift+8', 'Ctrl+Maj+8', s => s.list], ['Control+Shift+7', 'Ctrl+Maj+7', s => s.ordered], ['Control+Shift+9', 'Ctrl+Maj+9', s => s.task]]) {
     await loadDoc(page, TABLE);
     await dragCells(page, FROM, TO);
     await page.keyboard.press(chord);
