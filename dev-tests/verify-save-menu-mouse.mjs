@@ -7,7 +7,8 @@
 //      de bouton « Enregistrer sous » ni de bascule dans la barre, la barre garde sa hauteur ;
 //   2) un clic sur Enregistrer enregistre (une seule action), le focus et le curseur restent dans le texte (la frappe suivante y arrive), le menu ne reste pas ouvert souris partie ;
 //   3) la ligne « Enregistrement automatique » : cochée au départ, un vrai clic la décoche (coche disparue, choix gardé après rechargement, plus aucune écriture automatique, Enregistrer
-//      écrit toujours), la recoche et la modification en attente part ;
+//      écrit toujours), la recoche et la modification en attente part ; au rechargement, coupée, le bouton est noir et blanc dès la PREMIÈRE image rendue (image par image, et pixel du rendu
+//      réel) : il était peint en bleu jusqu'à la fin des scripts, puis fondait vers le noir ;
 //   4) « Enregistrer sous… » au vrai clic : la fenêtre s'ouvre, Entrée crée la copie sous le nom tapé (l'original reste), Échap n'en crée pas et rend le focus là où il était ;
 //      renommer puis cliquer Enregistrer : le champ de nom se referme (il perd le focus comme avant) et le nouveau nom est enregistré ;
 //   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre, puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
@@ -378,14 +379,53 @@ for (const theme of ['light', 'dark']) {
       const b = document.getElementById('btn-save');
       window.__saveOffAtDomReady = !!b && b.classList.contains('is-autosave-off');
     }));
+    // Image par image : à chaque image rendue où le bouton Enregistrer existe, porte-t-il déjà l'aspect noir et blanc (sa classe, ou celle de <html> posée par le <head> d'index.html) ? Les rappels de
+    // requestAnimationFrame précèdent le calcul de style et la peinture de l'image : une image où le bouton existe sans l'une des deux classes est peinte en bleu, puis le fondu de .12s la ramène au noir.
+    await page.addInitScript(() => {
+      const F = window.__saveFrames = { seen: 0, blue: 0, firstBlueAt: null };
+      const tick = () => {
+        const b = document.getElementById('btn-save');
+        if (b) {
+          F.seen++;
+          if (!b.classList.contains('is-autosave-off') && !document.documentElement.classList.contains('pp-autosave-off')) { F.blue++; if (F.firstBlueAt === null) F.firstBlueAt = Math.round(performance.now()); }
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    // Le rendu réel : les images que Chromium compose pendant le rechargement (screencast), dont on lit le pixel du fond du bouton une fois la page chargée.
+    const cdp = await page.context().newCDPSession(page);
+    const cast = [];
+    cdp.on('Page.screencastFrame', async (ev) => { cast.push(ev.data); try { await cdp.send('Page.screencastFrameAck', { sessionId: ev.sessionId }); } catch (e) { /* page déjà fermée */ } });
+    await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+    await cdp.send('Page.stopScreencast').catch(() => {});
     const reloaded = await autoState(page);
     check('clair : après un rechargement de la page, « Enregistrement automatique » est toujours décochée (choix gardé par navigateur)', reloaded.checked === 'false' && reloaded.tick === 'hidden' && reloaded.stored === 'false', reloaded);
     const reloadedLook = await saveLook(page);
     check('clair : ... et le bouton Enregistrer est noir et blanc dès le premier affichage (pas bleu le temps d’un clic)', reloadedLook.off && reloadedLook.bg === reloadedLook.neutral, reloadedLook);
     const offAtDomReady = await page.evaluate(() => window.__saveOffAtDomReady);
     check('clair : ... il l’est déjà quand les scripts ont fini de se charger, sans attendre la réponse de Grist (pas bleu pendant tout le chargement)', offAtDomReady === true, offAtDomReady);
+    // « Dès le premier affichage » : le contrôle du DOMContentLoaded ci-dessus arrive trop tard, la première image est peinte avant la fin des scripts (le bouton y était bleu, puis fondait vers le noir en .12s).
+    const frames = await page.evaluate(() => window.__saveFrames);
+    check('clair : ... aucune image rendue ne montre le bouton Enregistrer sans son aspect noir et blanc (ni bleu, ni en fondu vers le noir) : images vues avec le bouton > 0, images bleues = 0', frames && frames.seen > 0 && frames.blue === 0, frames);
+    const geo = await rectOf(page, '#btn-save');
+    const decoder = await page.context().newPage();
+    const bluish = [];
+    let painted = 0;
+    for (const b64 of cast) {
+      const px = await decoder.evaluate(async ({ b64, x, y }) => {
+        const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        const d = g.getImageData(Math.round(x), Math.round(y), 1, 1).data; return [d[0], d[1], d[2]];
+      }, { b64, x: geo.l + 2, y: geo.y });
+      if (!(px[0] === 255 && px[1] === 255 && px[2] === 255)) painted++; // une page encore blanche n'a pas peint le bouton
+      if (px[2] - px[0] > 30) bluish.push(px.join(',')); // le bleu du thème (47,111,237) et son fondu vers le noir (30,47,76...) ; le noir et blanc (27,36,48) reste sous 30
+    }
+    await decoder.close();
+    check('clair : ... et, dans les images du rendu réel du rechargement, le fond du bouton n’est bleuté à aucun moment (images composées > 0, images bleutées = 0)', cast.length > 0 && painted > 0 && bluish.length === 0, { images: cast.length, peintes: painted, bleutees: bluish });
     await clickMenuRow(page, '#v2-btn-autosave');
     await away(page);
     check('clair : un clic la recoche (état de départ rétabli)', (await autoState(page)).checked === 'true');

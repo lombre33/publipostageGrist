@@ -2,6 +2,10 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><title>Publipostage Grist</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
+     les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
+     feuilles de style soient chargées, et une image bleue passait parfois avant lui. js/main.js:syncSaveButtonLook garde ensuite cette classe et celle du bouton à jour (css/style.css). -->
+<script>try { if (localStorage.getItem('pp_autosave_enabled') === 'false') document.documentElement.classList.add('pp-autosave-off'); } catch (e) { /* stockage indisponible : bouton bleu, comme enregistrement automatique allumé */ }</script>
 <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 <!-- pdfmake/vfs_fonts/jszip + js/pdf-fonts(-extra).js : chargés à la
      demande au premier export PDF (cf. js/pdf-export.js:ensurePdfLibsLoaded),
@@ -80,7 +84,7 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
-<link rel="stylesheet" href="css/style.css?v=0.84">
+<link rel="stylesheet" href="css/style.css?v=0.85">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.95">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.51">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
@@ -701,6 +705,6 @@
 <script src="js/sheet-assembly-dialog.js?v=0.1"></script>
 <script src="js/orientation-toggle.js?v=0.6"></script>
 <script src="js/clean-reading.js?v=0.2"></script>
-<script src="js/main.js?v=0.101"></script>
+<script src="js/main.js?v=0.102"></script>
 </body>
 </html>

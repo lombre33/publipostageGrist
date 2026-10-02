@@ -171,9 +171,10 @@ body { display:flex; flex-direction:column; }
    générique + type "button" s'annuleraient sinon en cas d'égalité). */
 #toolbar-top #btn-save { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
 #toolbar-top #btn-save:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
-/* Enregistrement automatique coupé (js/main.js:wireSaveMenu, retour d'Antoine du 01/10) : noir et blanc classique ; le bleu, lui, dit « enregistrement automatique actif ». */
-#toolbar-top #btn-save.is-autosave-off { background: var(--solid-neutral); border-color: var(--solid-neutral-border); color: #fff; box-shadow: 0 1px 2px rgba(20,28,46,.35); }
-#toolbar-top #btn-save.is-autosave-off:hover { background: var(--solid-neutral-hover); border-color: var(--solid-neutral-hover); }
+/* Enregistrement automatique coupé (js/main.js:wireSaveMenu, retour d'Antoine du 01/10) : noir et blanc classique ; le bleu, lui, dit « enregistrement automatique actif ».
+   Deux classes disent la même chose : celle du bouton, et celle de <html>, posée par le <head> d'index.html avant le premier affichage (le bouton n'est jamais peint en bleu puis en fondu vers le noir). */
+#toolbar-top #btn-save.is-autosave-off, html.pp-autosave-off #toolbar-top #btn-save { background: var(--solid-neutral); border-color: var(--solid-neutral-border); color: #fff; box-shadow: 0 1px 2px rgba(20,28,46,.35); }
+#toolbar-top #btn-save.is-autosave-off:hover, html.pp-autosave-off #toolbar-top #btn-save:hover { background: var(--solid-neutral-hover); border-color: var(--solid-neutral-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
 #toolbar-top #btn-export-pdf { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }

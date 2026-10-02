@@ -807,11 +807,15 @@
     try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* choix non persisté, reste actif pour cette session */ }
   }
 
-  // Aspect du bouton Enregistrer d'après ce réglage (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé. Posé dès
-  // le début d'init(), avant toute attente de Grist, pour que le bouton ne reste pas bleu le temps du chargement chez qui a coupé l'enregistrement automatique.
+  // Aspect du bouton Enregistrer d'après ce réglage (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique coupé. Deux classes le disent :
+  // celle du bouton, et celle de <html> (pp-autosave-off), que le <head> d'index.html pose AVANT le premier affichage - c'est elle qui évite un premier affichage en bleu puis un fondu vers
+  // le noir chez qui a coupé l'enregistrement automatique (posée ici, à la fin du chargement des scripts, elle arrivait après l'image bleue). Remise à l'heure dès le début d'init(), à chaque
+  // clic de la ligne du menu et quand un autre onglet change le réglage.
   function syncSaveButtonLook() {
+    const off = !isAutosaveEnabled();
+    document.documentElement.classList.toggle('pp-autosave-off', off);
     const saveBtn = document.getElementById('btn-save');
-    if (saveBtn) saveBtn.classList.toggle('is-autosave-off', !isAutosaveEnabled());
+    if (saveBtn) saveBtn.classList.toggle('is-autosave-off', off);
   }
 
   function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
