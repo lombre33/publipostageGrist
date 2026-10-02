@@ -119,6 +119,22 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   copié « comme image » (HTML sans tableau) passent comme avant, la réécriture ne touche que ce qui porte la signature d'un tableur. Le modèle de cases (`{ width, cols, rows: [{ height, cells }] }`) est le même pour l'import d'un
   classeur .xlsx (sujet 18) : `GridTable.toHtml(model, { sizes: true })` écrit aussi les largeurs et hauteurs. Les presse-papiers des tests sont reconstitués d'après le format réel (le bac à sable n'a pas de tableur) : à revérifier
   avec un vrai Excel.
+- Importer un classeur Excel (02/10, Antoine : « Prévoir un Import Excel pour le modèle Grille »), le contraire de l'export : la ligne « Importer un Excel… » du menu « + » (juste après « Nouvelle grille », grisée en lecture seule avec tout le
+  groupe) ouvre le sélecteur de fichier du navigateur (`.xlsx` / `.xlsm`, un seul fichier) ; le classeur devient une NOUVELLE grille, sans nom et pas enregistrée (comme « Nouvelle grille » : « Nommez le modèle puis enregistrez-le »). Un
+  document modifié ouvre « Modifications non enregistrées » APRÈS la lecture du fichier (un fichier illisible ne demande rien ; « Annuler » garde le document). Choix retenus faute de réponse d'Antoine : seule la PREMIÈRE feuille visible est
+  lue (le message dit laquelle : « Feuille « X » (1 sur 3) importée… Les autres ne le sont pas. ») ; un choix de la feuille n'est proposé que sur une carte, rien de codé avant sa réponse. `js/grid-xlsx-import.js` (`GridXlsxImport` :
+  `importFile`, `fromArrayBuffer`, `buildModel`, `chooseFile`) lit le classeur avec ExcelJS (chargé à la demande, comme l'export), en fait le modèle de cases de `GridTable` (le même que le collage, sujet 17) et le rend par
+  `GridTable.toHtml(model, { sizes: true })` ; `js/xlsx-number-format.js` (`XlsxNumberFormat`) écrit le texte que le format de la case donne (« #,##0.00\ "€" », « dd/mm/yyyy », zéros de tête, sections, pourcentages) dans la langue du widget
+  (virgule décimale et espace insécable des milliers en français) : un .xlsx ne garde que la valeur brute et le code du format.
+  Lu : largeurs (`w × 7 + 5` px, 24 au moins), hauteurs (`pt / 0,75`), fusions (une ligne que des fusions couvrent entièrement reste, avec sa hauteur), fonds (couleur, thème avec sa nuance calculée en HLS, palette indexée), texte (gras, italique,
+  souligné, barré, couleur, taille, texte riche, retours à la ligne ; la police n'est pas gardée ; un noir ou « automatique » ne s'écrit pas, le texte suit le thème), alignement horizontal (écrit, sinon les règles de « Standard » : nombre et
+  date à droite, booléen et erreur au centre) et vertical (haut ou bas ; le milieu, celui de la grille, sinon), traits (côté par côté, puis la règle des traits partagés de `TableBorders` ; le gris `#777777` que l'export écrit sur toute case est
+  le trait par défaut, pas un choix), liens (http, https, mailto, tel ; un `javascript:` perd son lien), résultat des formules (la formule n'est pas gardée). Une feuille, une ligne ou une colonne masquée ne vient pas ; l'étendue lue est celle du
+  contenu OU de l'apparence (fond, trait) et des fusions. Pas gardé : images, graphiques, mises en forme conditionnelles, validations, commentaires, volets figés, formules, police, traits épais ou pointillés (un trait fin continu), autres feuilles.
+  Limites : 1 000 lignes, 100 colonnes et 5 000 cases (une frappe dans une grille de 5 000 cases coûte ~120 ms) ; un .xls ou un classeur protégé par un mot de passe (conteneur OLE `D0 CF 11 E0`), un fichier qui n'est pas un classeur et un classeur
+  sans case disent pourquoi (`status.xlsxImport*`, en rouge) et ne changent rien. Deux leçons : (1) la grille arrive PRÊTE (alignement vertical écrit, traits résolus) : sans cela l'éditeur corrigeait chaque case par une transaction à part
+  et tiptap rejoue `getChangedRanges` en O(n²) (20 000 cases : 94 à 122 s, maintenant 5 s) ; (2) `loadTemplateIntoEditor` retire `a4-preview` avant de charger une grille (`clampOverflowingTables` ramenait les colonnes d'une grille large à la
+  largeur de la page A4 quand on venait d'un document : 36 px par colonne ; cela corrige aussi la réouverture d'une grille large enregistrée).
 - Pas dans la première version : boucles sur une ligne de grille, formules, volets figés, images en calque, en-tête/pied/numéros de page, conversion document ⇄ grille.
 
 ## Lots
@@ -133,6 +149,7 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
 | C | Saut de page porté par la ligne (bouton, marqueur, PDF : nouvelle page, Excel : nouvelle feuille) ; bascule portrait / paysage et format active pour `grille` (`OrientationToggle.TYPES`) | prêt (01/10) |
 | D | Export Excel d'un enregistrement (ExcelJS 4.4.0, cdnjs, chargé à la demande) : ligne « Exporter en Excel… » du menu Qualité PDF, grisée hors grille ; les deux lignes Word grisées dans une grille | en ligne (01/10) |
 | E | « Exporter toutes les valeurs de la table » : une archive ZIP d'un classeur par valeur et un classeur unique d'une feuille par valeur ; dans une grille, « lignes » devient « valeurs de la table » (lot PDF compris) ; « Nouvelle grille » visible sans `?dev` (second commit, séparé) | en ligne (01/10) |
+| Import | Importer un classeur Excel dans une NOUVELLE grille : ligne « Importer un Excel… » du menu « + », première feuille visible lue case par case (`js/grid-xlsx-import.js`, `js/xlsx-number-format.js`) ; sujet 18 du 02/10 | en ligne (02/10) |
 
 ## Export Excel (lots D et E) : correspondances retenues
 
@@ -170,6 +187,18 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
   un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D
   (LibreOffice n'a pas de module Calc dans ce bac à sable).
+- `dev-tests/scenarios-grid-import.js` (groupe `gridImport`, 15 cas, sujet 18 du 02/10) : des classeurs fabriqués octet par octet « comme Excel les écrit » (un zip d'OOXML : le bac à sable n'a pas d'Excel, et ExcelJS n'écrit ni un trait d'un seul
+  côté ni un style par case) et lus dans la VRAIE grille chargée : la ligne du menu et son sélecteur ; une facture case par case (fusions, fond du thème avec sa nuance, traits partagés, texte riche, euros, date, formule) ; le texte d'Excel dans
+  la langue du widget ; les alignements écrits et ceux de « Standard » ; les liens sûrs (dans l'éditeur ET dans le HTML de l'import : l'éditeur refuse déjà un `javascript:`, l'import ne doit pas le lui transmettre) ; feuilles, lignes et colonnes
+  masquées ; largeurs et hauteurs ; lignes couvertes par des fusions ; une grille qui arrive prête (nombre de pas des transactions) et une grille large qui garde ses largeurs venant d'un document et à la réouverture ; les erreurs en français
+  et en anglais et les limites (rien ne change) ; la confirmation posée après la lecture du fichier ; un résultat neuf, sans nom, enregistrable ; la lecture seule ; l'aller-retour avec l'export Excel (même grille).
+- `dev-tests/unit-xlsx-number-format.mjs` (script Node `xlsxNumberFormatUnit`, 65 vérifications) : le texte qu'Excel montre pour une valeur (euros, pourcentages, milliers, zéros de tête, sections, comptabilité, devises, « Standard », dates et heures,
+  français et anglais, formats abîmés) ; les attendus sont ceux d'Excel, pas ceux de la fonction.
+- `dev-tests/verify-grid-import-mouse.mjs` (script Node `gridImportMouse`, 58 mesures) : à 700×400, clair, sombre et anglais, au vrai survol, au vrai clic et avec un VRAI sélecteur de fichier (`filechooser` de Playwright, armé avant le clic) : la ligne du
+  menu après « Nouvelle grille », dans le panneau, lisible ; le sélecteur réduit aux classeurs ; « Annuler » ; une facture fabriquée par ExcelJS qui devient une grille visible (bandeaux atteignables, largeurs d'Excel, fond du titre, message de fin en
+  entier) ; un fichier illisible ; « Modifications non enregistrées » après le choix du fichier, « Annuler » puis « Abandonner » au vrai clic.
+- Preuves sur l'ancien code du sujet 18 : 26 règles de l'import retirées une à une du code, chacune fait échouer au moins un cas de `gridImport` (celle du lien sûr, qui survivait parce que l'éditeur refuse déjà un `javascript:`, a obtenu la lecture du
+  HTML de l'import) ; 16 sur 16 pour le moteur des formats ; 6 règles du menu et du geste retirées du code font échouer le script à la souris.
 - `dev-tests/verify-grid-mouse.mjs` (script Node `gridMouse`) : les mêmes gestes à la vraie souris et au vrai clavier à 700×400, clair et sombre, avec la molette et les contrastes ;
   la Lecture d'une grille large au vrai bouton « Lecture » (colonnes gardées, défilement horizontal, texte au milieu, bulle résolue, pas de ligne vide, contraste du texte) ;
   lots D et E : les menus d'export au survol (cinq lignes dans « Qualité PDF » et deux dans « Exporter en PDF », atteignables dans le panneau, grisées selon le type de modèle, contraste), un vrai clic sur « Exporter en Excel… »

@@ -395,7 +395,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ce modèle » de la galerie ouvrent d'abord la fenêtre « Modifications non enregistrées » : Annuler, Abandonner, Enregistrer (le bouton principal, où le focus arrive). Elle est posée que
   l'enregistrement automatique soit allumé ou non, et il n'écrit rien tant qu'elle est ouverte. Annuler et Échap restent sur le modèle (la liste le montre à nouveau, le curseur revient où
   il était) ; Abandonner perd la modification ; Enregistrer l'écrit puis continue. Un nouveau modèle sans nom n'a pas d'Enregistrer, et le message dit pourquoi. Aucune question quand rien
-  n'attend, en lecture seule, pour un macro-modèle (il s'édite dans sa fenêtre) ni après « Supprimer » (le modèle n'existe plus).
+  n'attend, en lecture seule, pour un macro-modèle (il s'édite dans sa fenêtre) ni après « Supprimer » (le modèle n'existe plus). « Importer un Excel… » (menu « + ») pose la même fenêtre APRÈS le choix du fichier, une fois le classeur lu : un fichier illisible n'en demande pas et ne change rien ;
+  Annuler garde le modèle ouvert.
 - Nom de modèle déjà pris (demande d'Antoine du 01/10, « nom(x) avec incrémentation de x ») : un nom que porte déjà un autre modèle devient « nom (2) », puis « nom (3) »... avec une espace
   avant la parenthèse, comme les noms de fichiers d'une archive ; majuscules et espaces autour ne comptent pas (« contrat » et « Contrat » sont le même nom), et un nom qui finit déjà par « (n) »
   continue sa série (« Rapport (2) » donne « Rapport (3) », jamais « Rapport (2) (2) »). Le nom n'est vérifié qu'à la validation : Entrée ou un clic ailleurs sur le crayon « Renommer »,
@@ -557,6 +558,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (un appui ou un glissé de souris tombe toujours sur la case visée), à la même place quelle que soit la case courante, masquée avec l'éditeur (Lecture, macro-modèle), et
   « Supprimer le tableau » y est grisé. Depuis que l'export Excel est complet
   (une ligne, puis toutes les valeurs de la table), « Nouvelle grille » est dans le menu « + » de tout widget, sans rien dans l'adresse.
+- Importer un classeur Excel dans une grille (demande d'Antoine du 02/10, « Prévoir un Import Excel pour le modèle Grille »). La ligne « Importer un Excel… » du menu « + » suit « Nouvelle grille » (grisée en lecture seule avec tout le groupe) :
+  un clic ouvre le sélecteur de fichier du navigateur, réduit aux .xlsx et .xlsm, un seul fichier. Le classeur devient une NOUVELLE grille, sans nom et pas enregistrée (le message dit « Nommez le modèle puis enregistrez-le ») ; seule la première
+  feuille visible est lue, et le message la nomme quand il y en a d'autres. Sont repris les largeurs, les hauteurs, les fusions, les fonds, le gras, l'italique, le souligné, les couleurs et les tailles de texte, les alignements, les traits (le
+  gris par défaut n'est pas un trait choisi) et les liens ; les nombres et les dates s'écrivent comme Excel les montre, dans la langue du widget ; une formule donne son résultat ; une ligne, une colonne ou une feuille masquée ne vient pas.
+  Au-delà de 1 000 lignes, 100 colonnes ou 5 000 cases, pour un .xls, un classeur protégé par un mot de passe ou un fichier qui n'est pas un classeur, un message en rouge dit pourquoi et rien ne change.
 - Sélectionner des cases en glissant la souris (demande d'Antoine du 01/10, « en mode tableau, laisser le clic appuyé pour sélectionner plusieurs cellules »), dans une grille comme dans un
   tableau de document : appuyer sur une case puis glisser sélectionne le rectangle entre les deux cases, dans tous les sens, en partant du texte de la case aussi ; Maj + clic l'étend. Une case
   sélectionnée reçoit un voile bleu translucide posé PAR-DESSUS son fond (un fond de case jaune cachait la sélection) et son texte garde au moins 4,5:1. Le pointeur tenu près d'un bord du plan

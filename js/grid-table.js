@@ -394,5 +394,8 @@ const GridTable = (function () {
     try { return isSpreadsheetHtml(clipboardData && clipboardData.getData('text/html')); } catch (e) { return false; }
   }
 
-  return { fromClipboardHtml, toHtml, cleanPastedHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, parseColor, markHtml, escapeHtml, parseRules, parseDecls };
+  // Un lien qu'une case peut garder : http, https, mailto, tel (un `javascript:` ou un `file:` perd son lien et garde son texte).
+  const isSafeLink = href => SAFE_LINK_RE.test(String(href || '').trim());
+
+  return { fromClipboardHtml, toHtml, cleanPastedHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, parseColor, markHtml, escapeHtml, parseRules, parseDecls };
 })();

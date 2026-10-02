@@ -213,6 +213,9 @@
     // de PageLayout.getContentWidthMm() - les poser après aurait rendu une 1ère passe avec les marges du modèle PRÉCÉDENT.
     PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
     layerGridsStale = false; // les grilles d'un modèle chargé sont celles de SA propre orientation
+    // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que PLUS BAS (syncA4PreviewForModelType), après le chargement : venant d'un document, `setHTML` ci-dessous
+    // rognait le tableau chargé à la largeur d'une page (clampOverflowingTables, qui ne mesure que sous cette classe) - un classeur de 20 colonnes de 64 px arrivait à 36 px par colonne.
+    if (GridEditor.isGridType(tpl ? tpl.typeModele : forcedTypeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
     Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
@@ -436,6 +439,34 @@
     if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
     templateSelect.value = '';
     loadTemplateIntoEditor(null, GridEditor.TYPE);
+  }
+
+  // Import d'un classeur Excel (js/grid-xlsx-import.js, sujet 18 du 02/10 : « Prévoir un Import Excel pour le modèle Grille »). Le sélecteur de fichier doit s'ouvrir DANS le clic ; la première
+  // feuille visible est lue ensuite, et seulement alors on demande de quitter le modèle courant s'il a des modifications non enregistrées : choisir « Annuler » dans le sélecteur, ou un
+  // fichier illisible, ne coûte rien. Le résultat est une NOUVELLE grille, sans nom et pas encore enregistrée (comme « Nouvelle grille »), qui le dit tant qu'elle n'a pas de nom.
+  const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig' };
+  function onImportXlsx() {
+    if (isReadOnly()) return;
+    GridXlsxImport.chooseFile(async (file) => {
+      setStatus(I18n.t('status.xlsxImporting'));
+      let imported;
+      try {
+        imported = await GridXlsxImport.importFile(file, { lang: I18n.getLang() });
+      } catch (e) {
+        console.warn('[main] import Excel impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
+        const key = XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable;
+        setStatus(I18n.t(key, { rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
+        return;
+      }
+      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return; }
+      templateSelect.value = '';
+      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
+      markAutosaveDirty();
+      const counts = { rows: imported.rows, cols: imported.cols };
+      setStatus(imported.sheetCount > 1
+        ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
+        : I18n.t('status.xlsxImported', counts));
+    });
   }
 
   // Un nouveau macro-modèle n'a rien à "charger" avant d'avoir été composé et enregistré au moins une fois (contrairement à onNew/onNewEmail, qui vident
@@ -1956,6 +1987,8 @@
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
+    const btnImportXlsx = document.getElementById('v2-btn-import-xlsx');
+    if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
     MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
