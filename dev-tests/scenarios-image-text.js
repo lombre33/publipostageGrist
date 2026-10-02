@@ -75,14 +75,14 @@ window.EditorTestSuites.imageText = (function () {
       while ((m = re.exec(n.nodeValue))) {
         const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
         const r = rg.getBoundingClientRect();
-        if (r.width) items.push({ w: m[0], left: r.left / z, right: r.right / z, top: r.top / z, bottom: r.bottom / z });
+        if (r.width) items.push({ w: m[0], left: r.left / z, right: r.right / z, top: r.top / z, bottom: r.bottom / z, font: (parseFloat(getComputedStyle(n.parentElement).fontSize) || 0) / z });
       }
     }
     const lines = [];
     items.forEach(it => {
       const last = lines[lines.length - 1];
-      if (last && Math.abs(last.top - it.top) < 3 && it.left >= last.right - 1) { last.right = it.right; last.bottom = Math.max(last.bottom, it.bottom); last.words.push(it.w); }
-      else lines.push({ top: it.top, bottom: it.bottom, left: it.left, right: it.right, words: [it.w] });
+      if (last && Math.abs(last.top - it.top) < 3 && it.left >= last.right - 1) { last.right = it.right; last.bottom = Math.max(last.bottom, it.bottom); last.words.push(it.w); last.font = Math.max(last.font, it.font); }
+      else lines.push({ top: it.top, bottom: it.bottom, left: it.left, right: it.right, words: [it.w], font: it.font });
     });
     return lines;
   }
@@ -259,7 +259,7 @@ window.EditorTestSuites.imageText = (function () {
       const r = img.getBoundingClientRect();
       return { x: r.left / z - ox, y: r.top / z - oy, w: r.width / z, h: r.height / z };
     });
-    const lines = linesOf(root, z).map(l => ({ x: l.left - ox, xr: l.right - ox, y: l.top - oy, text: l.words.join(' ') }));
+    const lines = linesOf(root, z).map(l => ({ x: l.left - ox, xr: l.right - ox, y: l.top - oy, text: l.words.join(' '), font: l.font }));
     return { imgs, lines };
   }
   const PT = 0.75; // 1 px = 0,75 pt
@@ -416,11 +416,11 @@ window.EditorTestSuites.imageText = (function () {
     },
   });
 
-  const PDF_NOT_YET = ['cell_left', 'column_left', 'list_left', 'heading_none', 'heading_left', 'quote_left'];
+  const PDF_NOT_YET = ['list_left', 'quote_left'];
   // === Famille « PDF » (quatrième lot) : ce que pdf.js lit dans le fichier, cas par cas ===
   // Le PDF se lit sur ce qui y est peint (pdf.js, h.extractPdfGroundTruth) : chaque image (rectangle) et chaque ligne de texte (bord gauche, bord droit, ligne de base), en pt depuis le coin de la page, comme
   // l'éditeur (la référence) depuis le coin de sa feuille. pdf.js donne la ligne de base du texte, l'éditeur le haut de sa boîte : l'écart entre les deux est celui d'un paragraphe seul, mesuré une fois.
-  let pdfBaselineOffsetPt = null;
+  let pdfBaselineOffsetPt = null, pdfBaselineFontPx = 0;
   async function pdfOf(h) {
     const res = await h.exportPdfContent(Editor.getHTML(), Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
     return h.extractPdfGroundTruth(res.base64);
@@ -462,6 +462,7 @@ window.EditorTestSuites.imageText = (function () {
       await setupEditor(h, '<p>Étalon</p>');
       const etalon = layoutOf(h.tiptap()).lines[0], ground = await pdfOf(h);
       pdfBaselineOffsetPt = pdfLinesOf(ground.pages[0])[0].y - etalon.y * PT;
+      pdfBaselineFontPx = etalon.font;
     }
     await setupEditor(h, html);
     const editor = layoutOf(h.tiptap());
@@ -472,18 +473,20 @@ window.EditorTestSuites.imageText = (function () {
     // Dans l'espace de l'éditeur (pixels de mise en page), pour la même comparaison que la Lecture.
     const got = {
       imgs: page.images.filter(i => !(dropIcon && i.width < 20)).map(i => ({ x: i.x / PT, y: i.y / PT, w: i.width / PT, h: i.height / PT })),
-      lines: pdfLinesOf(page).map(l => ({ x: l.x / PT, xr: l.xr / PT, y: (l.y - pdfBaselineOffsetPt) / PT, text: l.text })),
+      lines: pdfLinesOf(page).map(l => ({ x: l.x / PT, xr: l.xr / PT, y: l.y / PT, text: l.text })),
     };
     // L'éditeur range les lignes dans l'ordre du document (une colonne après l'autre), le PDF par hauteur : mêmes lignes, rangées dans l'ordre de l'éditeur (une ligne que l'éditeur n'a pas reste à la fin).
+    // La ligne de base de pdf.js est ramenée au haut du texte par l'écart d'une ligne seule, proportionnel au corps de la ligne (un titre n'a pas celui d'un paragraphe).
     const taken = new Set();
     const rank = l => { const i = editor.lines.findIndex((e, k) => !taken.has(k) && e.text === l.text); if (i === -1) return Infinity; taken.add(i); return i; };
-    got.lines = got.lines.filter(l => !(ignored && ignored.includes(l.text))).map(l => ({ l, r: rank(l) })).sort((a, b) => a.r - b.r).map(o => o.l);
+    got.lines = got.lines.filter(l => !(ignored && ignored.includes(l.text))).map(l => ({ l, r: rank(l) })).sort((a, b) => a.r - b.r)
+      .map(o => Object.assign(o.l, { y: o.l.y - (pdfBaselineOffsetPt / PT) * ((editor.lines[o.r] && editor.lines[o.r].font) || pdfBaselineFontPx) / pdfBaselineFontPx }));
     return compareLayouts(editor, got, xTolerancePt ? { x: xTolerancePt } : null);
   }
   MATRIX.filter(c => c.family !== 'page' && !(PDF_NOT_YET || []).includes(c.id)).forEach(c => cases.push({
     id: 'imgtext_pdf_' + c.id,
     description: 'PDF : ' + c.what + ' - les images et chaque ligne de texte sont où l\'éditeur les met (mêmes mots par ligne, écart de position ≤ ' + TOLERANCE_PT + ' pt)',
-    run: async (h) => pdfVersusEditor(h, c.html, { ignoreText: c.meta && c.meta.container === 'cell' ? FOLLOW : null }),
+    run: async (h) => pdfVersusEditor(h, c.html, c.meta && c.meta.container === 'cell' ? { ignoreText: FOLLOW, xTolerancePt: 1 } : {}),
   }));
   // Autres contextes de la case de tableau et de l'encadré, que seul le PDF doit démêler : l'image en bloc ou centrée, le texte justifié ou centré autour d'une image dans la ligne.
   const cellOf = (td, p) => '<table><tbody><tr>' + td + p + '</td><td><p>' + FOLLOW + '</p></td></tr></tbody></table><p>' + SHORT + '</p>';
@@ -497,6 +500,19 @@ window.EditorTestSuites.imageText = (function () {
     { id: 'centered_mid_none', what: 'image en ligne au milieu d\'un paragraphe centré', html: '<p style="text-align: center">' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>' },
     { id: 'right_aligned_mid_none', what: 'image en ligne au milieu d\'un paragraphe aligné à droite', html: '<p style="text-align: right">' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>' },
     { id: 'callout_none_mid', what: 'image en ligne au milieu du texte, dans un encadré', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p></div><p>' + SHORT + '</p>', opts: { dropIcon: true } },
+    { id: 'heading_right', what: 'image à droite en tête d\'un titre (le texte du titre à côté d\'elle)', html: '<h2>' + im('right', 'inline', 100, 80) + 'Un titre suivi de son image à droite, assez long pour passer sur deux lignes</h2><p>' + FOLLOW + '</p>' },
+    { id: 'heading_after_float', what: 'titre sous une image à gauche plus haute que son paragraphe (le titre se range à côté d\'elle, puis reprend toute la largeur)', html: '<p>Ligne repère.</p><p>' + im('left', 'inline', 160, 300) + SHORT + '</p><h2>Un titre assez long pour passer à côté de l\'image puis dessous, sur plusieurs lignes d\'affilée comme le texte</h2><p>' + FOLLOW + '</p>', opts: { xTolerancePt: 1.5 } },
+    { id: 'heading_plain_long', what: 'titre long sans image (garde-fou de la mesure : la largeur d\'une ligne de texte gras)', html: '<h2>Un titre assez long pour passer à côté de l\'image puis dessous, sur plusieurs lignes d\'affilée comme le texte</h2><p>' + FOLLOW + '</p>', opts: { xTolerancePt: 1.5 } },
+    { id: 'heading_centered_none', what: 'image en ligne dans un titre centré', html: '<h2 style="text-align: center">Un titre avec ' + im('none', 'inline', 40, 40) + ' au milieu</h2><p>' + FOLLOW + '</p>' },
+    { id: 'cell_right', what: 'image à droite dans une case de tableau (la case de droite : l\'image sépare sinon le texte de sa voisine)', html: '<table><tbody><tr><td><p>' + FOLLOW + '</p></td><td><p>' + im('right', 'inline', 100, 80) + LONG + '</p></td></tr></tbody></table><p>' + SHORT + '</p>', opts: { ignoreText: FOLLOW, xTolerancePt: 5 } },
+    { id: 'cell_left_next_paragraph', what: 'image à gauche plus haute que son paragraphe, dans une case : le paragraphe suivant de la case se range à côté d\'elle', html: cellOf('<td>', '<p>' + im('left', 'inline', 100, 200) + SHORT + '</p><p>' + LONG + '</p>'), opts: { ignoreText: FOLLOW, xTolerancePt: 1 } },
+    { id: 'cell_left_then_row', what: 'image à gauche plus haute que le texte de sa case : la ligne suivante du tableau repart sous elle', html: '<table><tbody><tr><td><p>' + im('left', 'inline', 100, 200) + SHORT + '</p></td><td><p>' + FOLLOW + '</p></td></tr><tr><td><p>Case du dessous.</p></td><td><p></p></td></tr></tbody></table><p>' + SHORT + '</p>', opts: { ignoreText: FOLLOW, xTolerancePt: 1 } },
+    { id: 'column_right', what: 'image à droite dans une colonne (la colonne de droite : l\'image sépare sinon le texte de sa voisine)', html: '<div class="two-columns-zone" style="--layout-left: 50%;"><div class="two-columns-column"><p>' + FOLLOW + '</p></div><div class="two-columns-column"><p>' + im('right', 'inline', 100, 80) + LONG + '</p></div></div><p>' + SHORT + '</p>', opts: { ignoreText: FOLLOW } },
+    { id: 'column_left_next_paragraph', what: 'image à gauche plus haute que son paragraphe, dans une colonne : le paragraphe suivant de la colonne se range à côté d\'elle', html: column('<p>' + im('left', 'inline', 100, 200) + SHORT + '</p><p>' + LONG + '</p>') },
+    { id: 'callout_left', what: 'image à gauche dans un encadré', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + im('left', 'inline', 100, 80) + LONG + '</p></div><p>' + SHORT + '</p>', opts: { dropIcon: true } },
+    { id: 'callout_right', what: 'image à droite dans un encadré', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + im('right', 'inline', 100, 80) + LONG + '</p></div><p>' + SHORT + '</p>', opts: { dropIcon: true } },
+    { id: 'callout_left_tall', what: 'image à gauche plus haute que le texte de son encadré : elle le dépasse (l\'éditeur ne l\'agrandit pas) et le paragraphe d\'après se range encore à côté d\'elle', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + im('left', 'inline', 100, 200) + FOLLOW + '</p></div><p>' + LONG + '</p><p>' + SHORT + '</p>', opts: { dropIcon: true } },
+    { id: 'callout_right_tall', what: 'image à droite plus haute que le texte de son encadré : elle le dépasse et le paragraphe d\'après se range encore à côté d\'elle', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + im('right', 'inline', 100, 200) + FOLLOW + '</p></div><p>' + LONG + '</p><p>' + SHORT + '</p>', opts: { dropIcon: true } },
   ].forEach(c => cases.push({
     id: 'imgtext_pdf_' + c.id,
     description: 'PDF : ' + c.what + ' - l\'image et chaque ligne de texte sont où l\'éditeur les met (mêmes mots par ligne, écart de position ≤ ' + TOLERANCE_PT + ' pt)',
@@ -506,7 +522,8 @@ window.EditorTestSuites.imageText = (function () {
   // === Fin de page : le PDF coupe en pages, l'éditeur est continu ===
   // Les y de l'éditeur ne valent plus ici : une image qui ne tient pas dans ce qui reste de la page passe en haut de la suivante, avec la ligne où elle est posée. Ce que le PDF doit garder, lui : le texte entier, dans l'ordre ;
   // l'image une fois, entière dans sa page (jamais coupée par le bord ni dans la marge) ; autant de lignes avant l'image que dans l'éditeur ; rien qui la recouvre ; et, pour une image habillée, le texte à côté d'elle à sa marge de 9 pt.
-  async function pdfPagesVersusEditor(h, html, align) {
+  async function pdfPagesVersusEditor(h, html, align, opts) {
+    const { dropIcon = false } = opts || {};
     await setupEditor(h, html);
     const editor = layoutOf(h.tiptap());
     const ground = await pdfOf(h);
@@ -518,7 +535,7 @@ window.EditorTestSuites.imageText = (function () {
     const pdfText = pages.map(p => p.lines.map(l => l.text).join('')).join('').replace(/•/g, '');
     if (pdfText !== editorText) { let i = 0; while (i < pdfText.length && pdfText[i] === editorText[i]) i += 1; problems.push({ texte: 'différent', rang: i, editeur: editorText.slice(Math.max(0, i - 10), i + 20), pdf: pdfText.slice(Math.max(0, i - 10), i + 20) }); }
     const found = [];
-    pages.forEach((p, pi) => p.pg.images.forEach(im => found.push({ page: pi, im })));
+    pages.forEach((p, pi) => p.pg.images.forEach(im => { if (!(dropIcon && im.width < 20)) found.push({ page: pi, im }); }));
     if (found.length !== editor.imgs.length) problems.push({ images: { editeur: editor.imgs.length, pdf: found.length } });
     const before = { editor: 0, pdf: 0 };
     found.forEach(({ page, im }, k) => {
@@ -555,10 +572,13 @@ window.EditorTestSuites.imageText = (function () {
     { id: 'page_right_tall', what: 'image haute à droite au bas de la page, trop haute pour ce qui reste', align: 'right', html: fill(44) + '<p>' + im('right', 'inline', 160, 300) + LONG + '</p><p>' + FOLLOW + '</p>' },
     { id: 'page_left_fits', what: 'image à gauche qui tient dans ce qui reste de la page, texte à côté qui passe à la page suivante', align: 'left', html: fill(38) + '<p>' + im('left', 'inline', 160, 160) + LONG + '</p><p>' + FOLLOW + '</p><p>' + LONG + '</p><p>' + FOLLOW + '</p><p>' + LONG + '</p><p>' + FOLLOW + '</p>' },
     { id: 'page_block_mid', what: 'image « bloc » au milieu du texte, au bas de la page', align: null, html: FILL + '<p>' + BEFORE + ' ' + im('none', 'block', 160, 200) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>' },
+    { id: 'page_cell_left', what: 'image à gauche dans une case de tableau au bas de la page (la ligne du tableau passe à la page suivante avec son image)', align: 'left', html: fill(44) + '<table><tbody><tr><td><p>' + im('left', 'inline', 100, 150) + LONG + '</p></td><td><p></p></td></tr></tbody></table><p>' + SHORT + '</p>' },
+    { id: 'page_column_left', what: 'image à gauche dans une colonne au bas de la page (la zone passe à la page suivante avec son image)', align: 'left', html: fill(44) + '<div class="two-columns-zone" style="--layout-left: 50%;"><div class="two-columns-column"><p>' + im('left', 'inline', 100, 150) + LONG + '</p></div><div class="two-columns-column"><p></p></div></div><p>' + SHORT + '</p>' },
+    { id: 'page_callout_left', what: 'image à gauche dans un encadré au bas de la page', align: 'left', opts: { dropIcon: true }, html: fill(45) + '<div class="callout" data-color="blue" data-icon="info"><p>' + im('left', 'inline', 100, 150) + LONG + '</p></div><p>' + SHORT + '</p>' },
   ].forEach(c => cases.push({
     id: 'imgtext_pdf_' + c.id,
     description: 'PDF : ' + c.what + ' - le texte entier dans l\'ordre, l\'image une fois et entière dans sa page (jamais coupée), rien dessus, le texte à côté d\'elle à 9 pt, autant de lignes avant elle que dans l\'éditeur',
-    run: async (h) => pdfPagesVersusEditor(h, c.html, c.align),
+    run: async (h) => pdfPagesVersusEditor(h, c.html, c.align, c.opts),
   }));
 
   // Une image habillée plus haute que son paragraphe, suivie d'autre chose qu'un paragraphe : un tableau, un titre, une liste, une citation, un bloc de code n'ont pas de texte que le PDF puisse ranger à côté d'elle, ils

@@ -521,7 +521,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   texte, 8 px dessous ; une image flottante plus large que la ligne rétrécit de cette marge pour tenir à côté du texte). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
   quand il ne change rien (image seule dans son paragraphe, alignée ou en calque) : son info-bulle dit pourquoi. Dans le PDF le texte autour garde ses lignes et ses retraits : un paragraphe justifié va jusqu'au bord de la
   ligne comme dans l'éditeur (à 0,3 pt près), la dernière ligne d'un paragraphe centré ou à droite n'a pas l'espace de fin des autres, une note de bas de page garde son numéro et sa place après son mot, et une image habillée
-  qui ne tient pas dans ce qui reste de la page ouvre la page suivante avec le texte à côté d'elle.
+  qui ne tient pas dans ce qui reste de la page ouvre la page suivante avec le texte à côté d'elle. Dans un titre, une case de tableau, une colonne ou un encadré, l'image habillée et le texte autour sont posés comme dans le texte courant :
+  la case et la colonne contiennent l'image, l'encadré non (elle le dépasse et le texte d'après se range encore à côté d'elle, comme dans l'éditeur ; il passe à la page suivante avec elle quand elle ne tient pas) ; chaque ligne garde les mots
+  que l'éditeur y met, même quand le navigateur renvoie « : » à la ligne.
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
   la Lecture, le PDF (fond de page) et le Word (ancre derrière le texte dans l'en-tête de chaque page, première page comprise ; un en-tête est créé quand il n'y en a pas). La place est celle de la
