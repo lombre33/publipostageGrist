@@ -104,6 +104,7 @@
 <link rel="stylesheet" href="css/shortcuts.css?v=0.1">
 <link rel="stylesheet" href="css/watermark.css?v=0.1">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.1">
+<link rel="stylesheet" href="css/format-painter.css?v=0.1">
 </head>
 <body>
 <div id="app">
@@ -321,6 +322,7 @@
           <span class="v2-color-split-caret" id="v2-color-highlight-caret"></span>
         </button>
       </span>
+      <button type="button" id="v2-btn-format-painter" data-tip="Reproduire la mise en forme" aria-label="Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)" aria-pressed="false" data-i18n-tip="fmt.painter.tip" data-i18n-aria="fmt.painter.aria"></button>
       <span class="v2-sep"></span>
       <button id="v2-btn-table" data-tip="Insérer un tableau" aria-label="Insérer un tableau" data-i18n-tip="insert.table" data-i18n-aria="insert.table"></button>
       <span class="v2-sep"></span>
@@ -596,8 +598,8 @@
 <script src="js/grist-api.js?v=0.88"></script>
 <script src="js/templates.js?v=0.81"></script>
 <script src="js/reader-mode.js?v=0.114"></script>
-<script src="js/i18n.js?v=0.85"></script>
-<script src="js/shortcuts.js?v=0.3"></script>
+<script src="js/i18n.js?v=0.86"></script>
+<script src="js/shortcuts.js?v=0.4"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
 <script src="js/table-page-cut.js?v=0.2"></script>
@@ -608,12 +610,13 @@
 <script src="js/viewport-fit.js?v=0.4"></script>
 <script src="js/search-select.js?v=0.8"></script>
 <script src="js/variables.js?v=0.47"></script>
-<script src="js/icons.js?v=0.36"></script>
+<script src="js/icons.js?v=0.37"></script>
 <script src="js/editor-core.js?v=0.11"></script>
 <script src="js/header-footer-preview.js?v=1.15"></script>
 <script src="js/editor-nodes.js?v=1.11"></script>
 <script src="js/floating-toolbars.js?v=0.32"></script>
-<script src="js/main-toolbar.js?v=1.03"></script>
+<script src="js/main-toolbar.js?v=1.04"></script>
+<script src="js/format-painter.js?v=0.1"></script>
 <script src="js/comments.js?v=0.8"></script>
 <script src="js/track-changes.js?v=0.6"></script>
 <script src="js/table-borders.js?v=0.1"></script>

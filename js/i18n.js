@@ -138,6 +138,9 @@ const I18n = (function () {
     'fmt.italic': { fr: 'Italique', en: 'Italic' },
     'fmt.underline': { fr: 'Souligné', en: 'Underline' },
     'fmt.strike': { fr: 'Barré', en: 'Strikethrough' },
+    // Pinceau de mise en forme (js/format-painter.js) : l'infobulle nomme le bouton, le nom accessible dit comment s'en servir.
+    'fmt.painter.tip': { fr: 'Reproduire la mise en forme', en: 'Format painter' },
+    'fmt.painter.aria': { fr: 'Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu\'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)', en: 'Format painter: copies the formatting of the selected text, then applies it to the text you select next (double-click to keep painting, Esc to stop)' },
     'align.main.tip': { fr: 'Alignement', en: 'Alignment' },
     'align.main.aria': { fr: 'Alignement (survoler pour les options)', en: 'Alignment (hover for options)' },
     'align.left': { fr: 'Aligner à gauche', en: 'Align left' },
@@ -575,6 +578,7 @@ const I18n = (function () {
     'shortcuts.action.bulletList': { fr: 'Liste à puces', en: 'Bulleted list' },
     'shortcuts.action.orderedList': { fr: 'Liste numérotée', en: 'Numbered list' },
     'shortcuts.action.image': { fr: 'Insérer une image', en: 'Insert an image' },
+    'shortcuts.action.formatPaste': { fr: 'Appliquer la mise en forme', en: 'Apply the copied formatting' },
 
     // --- Mode Lecture (js/reader-mode.js:render) : état vide (aucune ligne sélectionnée) et avertissement quand une variable n'a pas pu être résolue ---
     'reader.empty.title': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },

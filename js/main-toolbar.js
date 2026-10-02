@@ -191,6 +191,7 @@ const MainToolbar = (function () {
     set('v2-btn-track-changes', 'trackChanges');
     set('v2-btn-accept-all', 'acceptAll'); set('v2-btn-reject-all', 'rejectAll');
     set('v2-highlight-icon', 'highlight');
+    set('v2-btn-format-painter', 'formatPainter');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
     set('v2-font-chip-caret', 'caretDown');
   }
@@ -271,6 +272,7 @@ const MainToolbar = (function () {
     setLocked('v2-font-chip', inEmailMode || inMacroMode);
     setLocked('v2-text-color-split', inEmailMode || inMacroMode);
     setLocked('v2-highlight-split', inEmailMode || inMacroMode);
+    setLocked('v2-btn-format-painter', inEmailMode || inMacroMode);
     setLocked('v2-btn-table', inEmailMode || inMacroMode);
     setLocked('v2-btn-two-columns', inEmailMode || inMacroMode);
     setLocked('v2-image-group', inEmailMode || inMacroMode);
@@ -512,6 +514,8 @@ const MainToolbar = (function () {
     // Du texte sélectionné n'est pas remplacé par le « # » : la liste s'ouvre devant lui, sur l'onglet Chips, pour entourer ce texte d'un bloc « Texte conditionnel »
     // (js/conditional-text.js:startFromSelection).
     bind('v2-btn-insert-variable', () => { if (!ConditionalText.startFromSelection(editor)) editor.chain().focus().insertContent(Variables.triggerChar()).run(); });
+    // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js).
+    FormatPainter.wire(editor);
     bind('v2-btn-undo', () => editor.chain().focus().undo().run());
     bind('v2-btn-redo', () => editor.chain().focus().redo().run());
     bind('v2-btn-track-changes', () => editor.chain().focus().toggleSuggestMode().run());

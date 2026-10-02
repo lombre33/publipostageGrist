@@ -687,7 +687,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
-  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (51, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
+  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (53, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
   n'est coupé à 700 px), la touche dans un bouton de 112 px au moins (« Aucune » en italique quand il n'y en a pas), « Par défaut » à droite, grisé tant que la touche est celle d'origine
   ; « Tout remettre par défaut » en haut à droite demande confirmation. Un clic sur la touche l'écoute (« Tapez la touche… », fond `--accent-soft`) : la combinaison tapée est prise,
   Échap abandonne sans fermer la fenêtre, Retour arrière retire la touche. Une combinaison refusée dit pourquoi dans un message sous la touche, dans sa colonne et jamais sous le nom de
@@ -730,6 +730,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   des cases fusionnées sur plusieurs lignes, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image en calque (PDF) et une ligne proposée en suivi des
   modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
   enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
+- Pinceau de mise en forme (demande d'Antoine du 02/10, « ajout d'un bouton pour copier/coller la mise en forme ») : un bouton sur la deuxième rangée de la barre, juste après le
+  surlignage (`#v2-btn-format-painter`, un rouleau de peintre : ni le feutre du surlignage ni le seau de la couleur de fond, une icône = une fonction), de la taille des autres et collé
+  comme eux, sans ajouter de rangée à 700 px. Un clic copie la mise en forme du texte où l'on est (curseur ou sélection) et arme le pinceau pour UN usage : le bouton s'enfonce comme tout
+  bouton enfoncé de la barre (`.is-active`) et le curseur sur le texte devient un rouleau (`html.pp-format-painting`) ; la sélection qu'on fait ensuite - double-clic sur un mot, glissé,
+  triple-clic sur un paragraphe, cases d'un tableau, Maj+clic, ou Alt+Maj+V au clavier - reçoit la mise en forme à son relâchement, puis le pinceau se range. Un double-clic sur le bouton
+  le garde armé pour plusieurs endroits (liseré de 2 px en `--accent` autour du bouton) ; Échap ou un clic sur le bouton l'arrête ; un simple clic sans sélection ne peint rien et le
+  laisse armé. La mise en forme du caractère (gras, italique, souligné, barré, police, taille, couleur, surlignage) REMPLACE celle du texte peint - peindre un texte ordinaire l'efface,
+  comme dans Word ; un lien, un commentaire et les marques du suivi des modifications ne sont pas de la mise en forme et ne sont jamais touchés. L'alignement et le niveau de titre ne se
+  copient que d'un curseur ou d'un paragraphe entier et ne se posent que sur les paragraphes peints en entier (peindre un mot ne recentre pas son paragraphe) ; une légende et le premier
+  paragraphe d'une puce gardent leur type ; les puces, les tableaux et les images ne sont pas de la mise en forme de texte. Une application est un seul Ctrl+Z. Le bouton est grisé,
+  jamais retiré, en e-mail, en macro-modèle, en Lecture et sans droit d'écriture, et un pinceau armé s'arrête dès que son bouton se grise. Touches : Alt+Maj+C (le geste du bouton) puis
+  Alt+Maj+V (poser sur la sélection du moment) ; Ctrl+Maj+V reste le collage sans mise en forme du navigateur.
 
 ## 4. Spécifique à SlidesPlus
 
