@@ -146,6 +146,7 @@ const NODE_SCRIPTS = {
   schemaRenamesOpen: 'verify-schema-renames-open.mjs', // ouverture réelle du widget après un renommage dans Grist : rien avant l'affichage du modèle, modèle réécrit et redessiné, message dans 700x400, rien d'écrit à l'ouverture suivante
   templateStartupMouse: 'verify-template-startup-mouse.mjs', // modèle ouvert au démarrage, faux Grist semé avant l'init : la ligne qui désigne un modèle, puis le modèle de la vue, puis le ★ ; un choix de vue supprimé ou devenu email est ignoré
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
+  runnerGroupLoad: 'verify-runner-group-load.mjs', // le lanceur lui-même : un groupe dont le fichier existe mais ne se charge pas (SyntaxError) est un ECHEC avec l'erreur de la page, un fichier absent de la branche reste annoncé et sauté ; lance une copie du lanceur sur deux groupes d'essai, un navigateur
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
@@ -421,7 +422,15 @@ for (const g of runnable) {
   try {
     const r = await runGroup(g);
     if (r.absent) { console.log(`  (dev-tests/${GROUPS[g]}.js absent de cette branche - groupe sauté)`); continue; }
-    if (r.missing) { console.log(`  (groupe absent de EditorTestSuites - fichier dev-tests/${GROUPS[g]}.js non enregistré ?)`); continue; }
+    // Le fichier existe (sinon `absent` ci-dessus) mais « g » ne s'est pas inscrit dans EditorTestSuites : une erreur de syntaxe l'a empêché de se charger, ou il s'inscrit sous un autre nom.
+    // La suite demandée n'a donc PAS tourné : la passe ne peut pas finir verte (calloutSignature est restée sautée près de quatre heures le 02/10, « 0 ECHEC » à la clé). Compté en échec,
+    // avec les erreurs de la page (le SyntaxError y est) - choix d'Antoine du 02/10.
+    if (r.missing) {
+      totalFail++; failing.push(g);
+      console.log(`  ECHEC groupe non chargé : dev-tests/${GROUPS[g]}.js existe mais « ${g} » n'est pas inscrit dans EditorTestSuites (erreur de syntaxe dans le fichier ? inscrit sous un autre nom ?)`);
+      if (r.consoleErrors.length) console.log(`  (${r.consoleErrors.length} erreur(s) console)\n    ` + r.consoleErrors.slice(0, 5).join('\n    '));
+      continue;
+    }
     totalPass += r.pass; totalFail += r.fail;
     console.log(r.report);
     if (r.fail) { failing.push(g); r.failures.forEach(f => console.log(`  ECHEC ${f.name}: ${f.notes || ''}`)); }

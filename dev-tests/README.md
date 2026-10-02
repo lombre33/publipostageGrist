@@ -124,6 +124,7 @@ apparaît) :
 | `js/find-replace.js`, `css/find-replace.css` (Rechercher / Remplacer : moteur `findMatches`, barre sous la barre d'outils, surlignage, `replaceCurrent` / `replaceAll`, Ctrl+F / Ctrl+H sur le document), la loupe `#v2-btn-find` d'`index.html` et ses lignes de `js/main-toolbar.js` (`setLocked`, `decorateFindShortcut`, `bind`), les icônes ajoutées à `js/icons.js`, les clés `find.*` de `js/i18n.js`, le crochet de `js/editor.js` (extension et `wireEditor`) et celui de `js/main.js` (`FindReplace.close` quand l'éditeur est masqué) | **Toujours `findReplace` ET le script Node `findReplaceMouse`** (le moteur : casse, mot entier, espaces et apostrophes typographiques, bulles et suppressions suivies jamais trouvées, jamais à cheval sur deux blocs ; le remplacement garde la mise en forme et reste UNE étape d'annulation, « Tout remplacer » compris, y compris avec le suivi des modifications ; le script clique et tape pour de vrai à 700×400, en clair, en sombre et en anglais) **+ `trackChanges`** (le remplacement passe par le pont du suivi) **+ `toolbarChrome`, `accessRights` et `accessRightsMouse`** (la loupe, grisée en Lecture) **+ `macroModeles`** (grisée en macro-modèle) **+ `contrast`** (la barre et le surlignage) **+ `codeHygiene`** (CSS et clés i18n) |
 | `js/table-page-cut.js` (`rowsOf`, `rowsFit`, `measure`, `plan`, `padRule`, `clipRule` : la coupure d'un tableau entre deux lignes), et ses appels : `computePageBreaks` / `cuttableTable` / la branche `brk.rowIndex` de `renderPaginationOverlay` / `addTableSeamCaps` / `watchPaginationGeometry` / `computePageGridPosition` de `js/header-footer-preview.js`, `computePageBreakOffsets` / la branche `offset.rowIndex` de `renderPaginationPreview` de `js/reader-mode.js`, `tableFrom` (`dontBreakRows`) de `js/pdf-export.js`, `tableBlockFrom` (`cantSplit`) de `js/docx-export.js`, les règles `.v2-page-seam-cap` de `css/editor-v2.css` | **Toujours `tablePageCut` ET le script Node `tableCutMouse`** (un tableau se coupe entre deux lignes au saut de page, jamais au milieu d'une ligne : éditeur, Lecture, PDF relu par pdf.js, Word) + `pageBreakToc` (la règle des blocs que l'export coupe), `tables`, `headerFooter`, `pdfFidelity`, `pdfGroundTruth`, `pdfBatch`, `docx`, `readModeFidelity` ; `computePageGridPosition` : **+ `images`** (position de page des images en calque) ; `measure` (`captionPx`, `keepsTail` : la dernière ligne reste avec la légende du tableau) : **+ `caption`** |
 | `dev-tests/helpers.js`, `dev-tests/runner.js` | **Transverse** - même traitement (tout scénario dépend de ces deux fichiers) |
+| `dev-tests/run-headless.mjs` (le verdict d'un groupe : fichier absent de la branche, groupe qui ne se charge pas, exception) | **Toujours le script Node `runnerGroupLoad`** (il lance une copie du lanceur sur deux groupes d'essai : un navigateur, une vingtaine de secondes) ; le lanceur ne touche aucun rendu, aucun autre groupe n'est concerné |
 
 Exemple : un correctif dans `twoColumnsFrom` (`js/pdf-export.js`) ne lance
 QUE `scenarios-twocolumns.js` + `scenarios-pdf-fidelity.js` (+ `scenarios-images.js`
@@ -142,7 +143,9 @@ node dev-tests/run-headless.mjs comments formatting # seulement ces groupes
 headless (Playwright), pose `.a4-preview`, charge `helpers`/`runner` + le
 fichier du groupe, exécute et imprime le rapport. Il sort en code 1 dès qu'un
 scénario échoue, donc il s'utilise tel quel avant un commit ou dans un runner
-CI. **Un navigateur neuf par groupe**, à dessein : ce README documente plus bas
+CI. Un groupe dont le fichier existe mais ne se charge pas (erreur de syntaxe : le groupe ne
+s'inscrit pas dans `EditorTestSuites`) est un ÉCHEC, affiché avec l'erreur de la page ; seul un
+fichier absent de la branche est annoncé et sauté. **Un navigateur neuf par groupe**, à dessein : ce README documente plus bas
 des fuites d'état entre suites, un processus par groupe rend chaque verdict
 indépendant de l'ordre de lancement.
 
@@ -750,6 +753,13 @@ Deux options utiles :
   comparent les COUPURES (bloc avant | bloc après chaque couture), pas la position des coutures : sous « Pages entières » une couture reste à sa place quand le contenu bouge. Les 7
   scénarios échouent sur l'ancien code. `readerLateMouse` ouvre la Lecture à la vraie souris à 700×400, avec une pièce jointe servie avec du retard, et vérifie coupures, défilement et
   absence de ligne à cheval (7 des 14 vérifications échouent sur l'ancien code).
+- Le script Node `runnerGroupLoad` (`dev-tests/verify-runner-group-load.mjs`, 7 contrôles) éprouve le lanceur lui-même - retour d'Antoine du 02/10 : une apostrophe non échappée dans
+  `scenarios-callout-signature.js` (`'la puce de l'éditeur'`, SyntaxError) a laissé le groupe `calloutSignature` sauté près de quatre heures, `run-headless.mjs` écrivant « groupe absent
+  de EditorTestSuites » sans le compter, donc « 0 ECHEC(S) » ; Antoine a choisi de le compter en échec. Il écrit dans `dev-tests/` une COPIE du lanceur à laquelle deux groupes d'essai sont
+  ajoutés (`GROUPS`) : l'un dont le fichier a la même erreur de syntaxe, l'autre dont le fichier n'existe pas ; puis il lit le code de sortie (1), le total (« 0 OK, 1 ECHEC(S) »), la liste des
+  groupes en échec, l'erreur de la page (`pageerror`) et le fait qu'un fichier absent de la branche reste annoncé et sauté (voulu : plusieurs chantiers avancent en parallèle sur main). Les fichiers
+  d'essai sont supprimés à la fin. `RUNNER_SOURCE=<fichier>` éprouve un autre lanceur (sur l'ancien, 5 des 7 contrôles échouent : code 0, « 0 ECHEC(S) », ni liste ni erreur). Après une passe,
+  lire quand même les lignes « groupe ignoré » / « fichier absent » : elles disent qu'un groupe n'a pas tourné parce que son fichier n'est pas sur la branche.
 
 ### Dépendances CDN et réseau bloqué
 
