@@ -8,7 +8,9 @@
 //   2) un vrai clic sur Enregistrer au milieu de la frappe : pas de bandeau, la frappe qui suit est enregistrée, le curseur reste dans le texte ;
 //   3) un autre modèle choisi dans la liste, à la vraie souris, pendant qu'un passage relit la table : pas de bandeau, l'écran montre le nouveau modèle, aucune des deux lignes touchée ;
 //   4) un vrai conflit (quelqu'un d'autre a enregistré) reste signalé même Grist lent : bandeau visible dans la fenêtre, aucune écriture pendant le gel, la version de l'autre intacte, un
-//      vrai clic sur « Recharger la dernière version » la charge et le lève.
+//      vrai clic sur « Recharger la dernière version » la charge et le lève ;
+//   5) (carte « Corriger » d'Antoine, 02/10) un autre modèle choisi à la vraie souris, puis « Abandonner » à la vraie question, pendant qu'un Enregistrer lent écrit : à son retour l'écran, la
+//      liste et le modèle courant restent ceux du modèle choisi, et la frappe qui suit va dans SA ligne - jamais dans celle du modèle quitté.
 // Lancé par run-headless.mjs (groupe Node "autosaveRaceMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-autosave-race-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -180,6 +182,23 @@ const updates = (page) => page.evaluate(() => window.__gristStub.countActions('U
 const statusOf = (page) => page.evaluate(() => document.getElementById('status-msg').textContent);
 const editorText = (page) => page.evaluate(() => document.querySelector('.ProseMirror').textContent);
 const inEditor = (page) => page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest && !!a.closest('.ProseMirror'); });
+const rowName = (page, id) => page.evaluate((i) => { const r = window.__gristStub.getRow('Publipostage_Modeles', i); return r ? String(r.Nom) : null; }, id);
+// La vraie fenêtre « Enregistrer / Abandonner / Annuler » (js/dialogs.js:choose), posée en quittant un modèle modifié : ses boutons se cliquent à la vraie souris.
+const dialogState = (page) => page.evaluate(() => {
+  const ov = document.getElementById('pp-dialog-modal');
+  if (!ov || getComputedStyle(ov).display === 'none') return { open: false };
+  const box = ov.querySelector('.modal-content').getBoundingClientRect();
+  const buttons = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden);
+  const rects = buttons.map(b => { const r = b.getBoundingClientRect(); return { label: b.textContent, x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  return { open: true, title: ov.querySelector('h3').textContent, labels: buttons.map(b => b.textContent), rects, inPanel: box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight };
+});
+async function clickDialog(page, label, wait = 500) {
+  const s = await dialogState(page);
+  const b = s.open && s.rects.find(r => r.label === label);
+  if (!b) throw new Error('bouton « ' + label + ' » absent : ' + JSON.stringify(s));
+  await page.mouse.move(b.x - 10, b.y, { steps: 2 }); await page.mouse.click(b.x, b.y);
+  await page.waitForTimeout(wait);
+}
 const triggerLabel = (page) => page.evaluate(() => document.querySelector('.tts-trigger-label').textContent.replace(/\s*★\s*$/, '').trim());
 async function waitFor(page, fn, arg, timeoutMs) {
   try { await page.waitForFunction(fn, arg, { timeout: timeoutMs, polling: 100 }); return true; } catch { return false; }
@@ -278,6 +297,43 @@ console.log('\n== 4) un vrai conflit reste signalé, Grist lent (relecture ~0,8 
   check('un vrai clic sur « Recharger la dernière version » charge celle de l\'autre et lève le bandeau', !after.shown && (await editorText(page)) === 'Version d\'ailleurs', { after, text: await editorText(page) });
   await page.waitForTimeout(3200);
   check('et il ne revient pas', !(await bannerNow(page)).shown);
+  await page.context().close();
+}
+
+// === 5) un autre modèle choisi pendant qu'un Enregistrer lent écrit ===
+console.log("\n== 5) un autre modèle choisi à la vraie souris pendant qu'un Enregistrer lent écrit (écriture ~2,5 s), puis une frappe dans ce modèle ==");
+{
+  const page = await openPage();
+  await page.evaluate(() => { localStorage.setItem('pp_autosave_enabled', 'false'); }); // l'écriture lente est celle du bouton, pas d'un passage de l'enregistrement automatique
+  await pickTemplate(page, 'Bail habitation');
+  await clickIntoText(page);
+  await page.keyboard.type(' modifié', { delay: 40 });
+  await setLatency(page, { fetchTable: 0, applyUserActions: 2500 });
+  await realClick(page, '#btn-save', 100);
+  const writing = await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions > 0, null, 5000);
+  check("l'écriture lente de « Bail habitation » est partie", writing);
+  await pickTemplate(page, 'Contrat de vente', 700); // des modifications attendent : la liste pose la question « Enregistrer / Abandonner / Annuler »
+  const asked = await dialogState(page);
+  check('la question « Enregistrer / Abandonner / Annuler » s\'ouvre dans le panneau de 700x400', asked.open && asked.inPanel && JSON.stringify(asked.labels) === '["Annuler","Abandonner","Enregistrer"]', asked);
+  await clickDialog(page, 'Abandonner', 800);
+  check('pendant l\'écriture : l\'écran montre déjà « Contrat de vente »', (await triggerLabel(page)) === 'Contrat de vente' && (await editorText(page)) === 'texte b', { label: await triggerLabel(page), text: await editorText(page) });
+  await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions === 0, null, 8000);
+  await page.waitForTimeout(1200); // la fin de l'enregistrement : la liste relue
+  await untilQuiet(page);
+  const snap = await page.evaluate(() => ({ current: Templates.getCurrentId(), select: document.getElementById('template-select').value, name: document.getElementById('template-name').value }));
+  check('à son retour, l\'enregistrement laisse « Contrat de vente » à l\'écran, dans la liste et comme modèle courant', (await triggerLabel(page)) === 'Contrat de vente' && (await editorText(page)) === 'texte b' && snap.current === 2 && snap.select === '2' && snap.name === 'Contrat de vente',
+    { label: await triggerLabel(page), text: await editorText(page), snap });
+  check('l\'écriture de « Bail habitation » est allée au bout, « Contrat de vente » n\'a pas bougé', (await rowContent(page, 1)) === '<p>texte a modifié</p>' && (await rowContent(page, 2)) === '<p>texte b</p>', { a: await rowContent(page, 1), b: await rowContent(page, 2) });
+  await setLatency(page, 0);
+  await page.evaluate(() => { localStorage.removeItem('pp_autosave_enabled'); }); // l'enregistrement automatique revient
+  await clickIntoText(page);
+  await page.keyboard.type(' ok', { delay: 40 });
+  const stored = await waitFor(page, () => / ok/.test(String((window.__gristStub.getRow('Publipostage_Modeles', 2) || {}).Contenu)), null, 8000);
+  await page.waitForTimeout(2800); // un passage de plus : rien d'autre ne s'écrit
+  await untilQuiet(page);
+  check('la frappe dans « Contrat de vente » va dans sa ligne ; « Bail habitation » garde son texte et son nom',
+    stored && (await rowContent(page, 1)) === '<p>texte a modifié</p>' && (await rowName(page, 1)) === 'Bail habitation' && (await rowName(page, 2)) === 'Contrat de vente',
+    { a: await rowContent(page, 1), b: await rowContent(page, 2), nameA: await rowName(page, 1), nameB: await rowName(page, 2) });
   await page.context().close();
 }
 

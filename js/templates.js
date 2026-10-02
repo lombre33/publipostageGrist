@@ -3,6 +3,8 @@ const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Modeles';
   let templatesCache = [];
   let currentTemplateId = null;
+  // Monte à chaque setCurrentId : un enregistrement qui crée une ligne (saveRow, sans identifiant) ne la pose comme modèle courant que si personne n'a chargé un autre modèle pendant que Grist écrivait.
+  let currentIdSeq = 0;
 
   // Régression du 2026-09-28 (Antoine : "l'enregistrement d'un modèle ne fonctionne pas") : chaque
   // ensureXxxColumn() ci-dessous suit un patron "vérifier (fetchTable) puis agir (AddVisibleColumn)"
@@ -315,7 +317,7 @@ const Templates = (function () {
 
   function getCurrentId() { return currentTemplateId; }
 
-  function setCurrentId(id) { currentTemplateId = id; }
+  function setCurrentId(id) { currentTemplateId = id; currentIdSeq++; }
 
   // Un modèle email ou macro n'est jamais le modèle de démarrage (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée EstParDefaut sur l'un
   // d'eux (défaut posé avant cette règle, colonne éditée dans Grist) ne doit pas masquer un modèle document lui aussi marqué - sinon le widget s'ouvrait sur
@@ -397,11 +399,14 @@ const Templates = (function () {
       lastWrittenById.set(String(id), dateModif);
       return { id, dateModif };
     } else {
+      const seqAtStart = currentIdSeq;
       const result = await grist.docApi.applyUserActions([
         ['AddRecord', TABLE_NAME, null, columns]
       ]);
       const newId = result.retValues[0];
-      currentTemplateId = newId;
+      // Le modèle neuf devient le modèle courant, sauf si un autre a été chargé pendant l'écriture (Grist lent : des secondes) : c'est celui-là qui est à l'écran, et l'enregistrement automatique y
+      // écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
+      if (currentIdSeq === seqAtStart) currentTemplateId = newId;
       const dateModif = await readBackDateModif(newId, now);
       lastWrittenById.set(String(newId), dateModif);
       return { id: newId, dateModif };

@@ -572,6 +572,9 @@
     const epoch = autosaveEpoch;
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
+      // Cette attente (l'identification de la personne : une écriture et une lecture de Grist quand elle n'est pas encore connue, des secondes quand il est lent) a pu laisser choisir un autre modèle :
+      // l'éditeur montre alors celui-là, et l'écrire sous l'identifiant de ce modèle-ci le remplacerait. Le choisir en répondant « Abandonner » voulait dire renoncer à cet enregistrement.
+      if (epoch !== autosaveEpoch) return;
       const editVersion = autosaveEditVersion;
       ({ id: savedId, dateModif } = await Templates.save(id, nom, Editor.getHTML(), getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications));
       // La date écrite est notée TOUT DE SUITE, avant la relecture de la liste plus bas (une lecture de Grist de plus : plusieurs secondes quand il est lent). Un passage de l'enregistrement
@@ -589,20 +592,24 @@
       setStatus(I18n.t('status.saveError'), true);
       return;
     }
-    Templates.setCurrentId(savedId);
+    if (epoch === autosaveEpoch) Templates.setCurrentId(savedId);
     await refreshTemplateList();
-    templateSelect.value = savedId;
+    // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch). L'écran, la liste et le modèle courant sont alors
+    // les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement automatique y écrirait ensuite ce que l'écran montre), il ne fait que rafraîchir la liste.
+    const sameTemplate = epoch === autosaveEpoch;
+    const shownId = sameTemplate ? savedId : Templates.getCurrentId();
+    templateSelect.value = shownId == null ? '' : shownId;
     syncDefaultTemplateButton();
     // Premier enregistrement d'un modèle tout neuf : Comments n'a encore JAMAIS reçu d'id de modèle (loadForTemplate n'est appelé que par
     // loadTemplateIntoEditor, qui ne repasse pas par ici). Sans ceci, "Commenter la sélection" répondait "Enregistrez d'abord le modèle" à quelqu'un qui
     // venait précisément de l'enregistrer, jusqu'à ce qu'il change de modèle et revienne. Uniquement quand l'id CHANGE : un ré-enregistrement du même
     // modèle n'a rien à recharger, et loadForTemplate referme le popup ouvert.
-    if (String(id) !== String(savedId)) {
+    if (sameTemplate && String(id) !== String(savedId)) {
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
       forgetMacroOriginUnless(null); // une copie (« Enregistrer sous… ») n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
     }
     updateSaveStatus();
-    if (nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom })); // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
+    if (sameTemplate && nom !== typedName) setStatus(I18n.t('status.nameExists', { name: nom })); // à la place de « Enregistré à… » : le nom a changé, c'est ce qu'il faut lire
   }
 
   // La copie est proposée sous le premier nom libre (« Contrat (2) » pour « Contrat ») : Entrée suffit, la saisie est sélectionnée pour la remplacer d'une frappe.
@@ -928,6 +935,7 @@
     if (isMacro && !remoteTpl) return;
     try {
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
+      if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
       const contenu = isMacro ? remoteTpl.contenu : Editor.getHTML();
       const { dateModif } = await Templates.save(id, nom, contenu, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications);
       // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.

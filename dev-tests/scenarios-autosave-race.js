@@ -235,6 +235,196 @@
     },
   });
 
+  // --- Un autre modèle choisi pendant un enregistrement lent (carte « Corriger » d'Antoine, 02/10) ---------------------------------------------------------------------------------------
+  // Vu en réglant le point 12 : A modifié, clic sur Enregistrer, B choisi avant que Grist réponde. À son retour l'Enregistrer remettait A comme modèle courant et dans la liste alors que
+  // l'écran montrait B ; la frappe suivante dans B était écrite par l'enregistrement automatique dans la ligne de A (contenu ET nom). Ici l'enregistrement automatique est coupé pendant le geste
+  // lui-même (l'écriture lente est celle du bouton), puis rallumé pour la frappe qui suit : c'est elle qui révélait le mal. La question « Enregistrer / Abandonner / Annuler » posée en
+  // quittant un modèle modifié reçoit « Abandonner » du harnais.
+  const nameOf = (id) => { const row = stub().getRow(TABLE, id); return row ? String(row.Nom) : ''; };
+  const screenNow = () => ({ current: Templates.getCurrentId(), select: selectEl().value, name: document.getElementById('template-name').value, html: Editor.getHTML() });
+  function autosaveSwitch(on) {
+    try { if (on) localStorage.removeItem('pp_autosave_enabled'); else localStorage.setItem('pp_autosave_enabled', 'false'); } catch (e) { /* pas de stockage : l'enregistrement automatique reste allumé */ }
+  }
+  // Un nom par cas : un nom déjà pris par un cas précédent deviendrait « nom (2) » (cf. Templates.uniqueName) et fausserait les comparaisons de noms.
+  async function twoTemplates(h, tag) {
+    const nameA = 'Échange ' + tag + ' A';
+    const nameB = 'Échange ' + tag + ' B';
+    const idA = await saveTemplate(h, nameA, '<p>Contenu A</p>');
+    await h.sleep(1200); // DateModif en secondes entières : deux enregistrements à une seconde d'écart au moins
+    await newTemplate(h);
+    const idB = await saveTemplate(h, nameB, '<p>Contenu B</p>');
+    return { idA, idB, nameA, nameB };
+  }
+  // Frappe dans le modèle à l'écran, enregistrement automatique rallumé : dans quelle ligne atterrit-elle ?
+  async function typeThenWatchRows(h, typed, rowIdExpected) {
+    autosaveSwitch(true);
+    await h.focusAtEnd();
+    await h.typeText(typed);
+    const written = await waitUntil(h, () => contentOf(rowIdExpected).indexOf(typed.trim()) !== -1, TICK_MS * 2 + 1500, 60);
+    await h.sleep(TICK_MS + 600); // un passage de plus : rien d'autre ne s'écrit
+    return written;
+  }
+
+  cases.push({
+    id: 'race_switching_template_while_a_manual_save_is_writing_keeps_the_screen_and_the_current_template',
+    description: "Un autre modèle choisi pendant qu'un Enregistrer lent écrit : à son retour l'enregistrement ne remet pas l'ancien modèle comme modèle courant ni dans la liste, l'écran garde le modèle choisi, et ce qui est tapé ensuite va dans sa ligne - jamais dans celle de l'ancien",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const { idA, idB, nameA, nameB } = await twoTemplates(h, 'écriture');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        chooseTemplate(idA);
+        await h.sleep(700);
+        await h.focusAtEnd();
+        await h.typeText(' modifié');
+        stub().setLatency({ fetchTable: 0, applyUserActions: 2500 });
+        await h.clickButton('btn-save');
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        chooseTemplate(idB); // la question avant de quitter A, « Abandonner » : B se charge pendant que l'écriture de A dure encore
+        await h.sleep(500);
+        const during = screenNow();
+        await waitUntil(h, () => inFlightNow() === 0, 8000, 40);
+        await h.sleep(900); // la fin de l'enregistrement : la liste relue
+        stub().setLatency(0);
+        const after = screenNow();
+        const listHasBoth = Array.from(selectEl().options).filter(o => o.value === String(idA) || o.value === String(idB)).length === 2;
+        const rowsAfterSave = { a: contentOf(idA), b: contentOf(idB), nameA: nameOf(idA), nameB: nameOf(idB) };
+        const written = await typeThenWatchRows(h, ' TAPÉ', idB);
+        const rows = { a: contentOf(idA), b: contentOf(idB), nameA: nameOf(idA), nameB: nameOf(idB) };
+        const pass = during.current === idB && during.html.indexOf('Contenu B') !== -1
+          && after.current === idB && after.select === String(idB) && after.name === nameB && after.html.indexOf('Contenu B') !== -1 && listHasBoth
+          && rowsAfterSave.a.indexOf('modifié') !== -1 && rowsAfterSave.b === '<p>Contenu B</p>'
+          && written && rows.b.indexOf('TAPÉ') !== -1 && rows.nameB === nameB
+          && rows.a === rowsAfterSave.a && rows.nameA === nameA && !watch.seen();
+        return { pass, notes: 'pendant l\'écriture=' + JSON.stringify(during) + ', après=' + JSON.stringify(after) + ', liste des deux=' + listHasBoth + ', lignes après l\'écriture=' + JSON.stringify(rowsAfterSave) + ', frappe enregistrée dans B=' + written + ', lignes à la fin=' + JSON.stringify(rows) + ', bandeau vu=' + watch.seen() };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_switching_template_while_a_new_template_is_being_created_keeps_the_screen_and_the_current_template',
+    description: "Un autre modèle choisi pendant que l'Enregistrer d'un modèle tout neuf écrit (la ligne est créée, son identifiant n'arrive qu'à la fin) : la ligne neuve apparaît dans la liste mais ne devient ni le modèle courant ni celui de l'écran, et ce qui est tapé ensuite va dans le modèle à l'écran",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const nameB = 'Échange neuf B';
+      const nameC = 'Échange neuf C';
+      const idB = await saveTemplate(h, nameB, '<p>Contenu B</p>');
+      if (!idB) return { pass: false, notes: 'aucun modèle créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        await newTemplate(h); // « + » : un modèle tout neuf, sans identifiant
+        document.getElementById('template-name').value = nameC;
+        await h.focusAtEnd();
+        await h.typeText('Contenu C');
+        stub().setLatency({ fetchTable: 0, applyUserActions: 2500 });
+        await h.clickButton('btn-save');
+        const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
+        if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
+        chooseTemplate(idB);
+        await h.sleep(500);
+        const during = screenNow();
+        await waitUntil(h, () => inFlightNow() === 0, 8000, 40);
+        await h.sleep(900);
+        stub().setLatency(0);
+        const rowsTable = stub().state.rows[TABLE];
+        const posC = rowsTable.Nom.indexOf(nameC);
+        const idC = posC === -1 ? null : rowsTable.id[posC];
+        const after = screenNow();
+        const listHasC = idC != null && Array.from(selectEl().options).some(o => o.value === String(idC));
+        const rowCAfter = idC != null ? contentOf(idC) : '';
+        const written = await typeThenWatchRows(h, ' TAPÉ', idB);
+        const rows = { b: contentOf(idB), nameB: nameOf(idB), c: idC != null ? contentOf(idC) : '', nameC: idC != null ? nameOf(idC) : '' };
+        const pass = idC != null && idC !== idB && during.current === idB
+          && after.current === idB && after.select === String(idB) && after.name === nameB && after.html.indexOf('Contenu B') !== -1 && listHasC
+          && rowCAfter.indexOf('Contenu C') !== -1
+          && written && rows.b.indexOf('TAPÉ') !== -1 && rows.nameB === nameB
+          && rows.c === rowCAfter && rows.nameC === nameC && !watch.seen();
+        return { pass, notes: 'ligne neuve=' + idC + ', pendant l\'écriture=' + JSON.stringify(during) + ', après=' + JSON.stringify(after) + ', dans la liste=' + listHasC + ', frappe enregistrée dans B=' + written + ', lignes à la fin=' + JSON.stringify(rows) + ', bandeau vu=' + watch.seen() };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  // Une attente AVANT l'écriture (l'identification de la personne : une écriture et une lecture de Grist quand elle n'est pas encore connue) laisse le temps de choisir un autre modèle : l'éditeur
+  // montre alors celui-là et le geste, qui garde l'identifiant de l'ancien, y écrirait ce que l'écran montre. Ici cette attente est simulée par un Editor.getSuiviModificationsForSave qui dure.
+  async function slowIdentification(h, run) {
+    const original = Editor.getSuiviModificationsForSave;
+    const state = { waiting: false };
+    Editor.getSuiviModificationsForSave = async function () {
+      state.waiting = true;
+      await h.sleep(1500);
+      state.waiting = false;
+      return original.apply(this, arguments);
+    };
+    try { return await run(state); } finally { Editor.getSuiviModificationsForSave = original; }
+  }
+
+  cases.push({
+    id: 'race_switching_template_while_a_manual_save_waits_for_the_identification_never_writes_the_screen_into_the_wrong_row',
+    description: "Un autre modèle choisi pendant l'attente d'un Enregistrer (avant que rien ne parte vers Grist) : l'enregistrement renonce, il n'écrit pas ce que l'écran montre sous l'identifiant de l'ancien modèle",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const { idA, idB, nameA } = await twoTemplates(h, 'attente manuelle');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      try {
+        return await slowIdentification(h, async (state) => {
+          chooseTemplate(idA);
+          await h.sleep(700);
+          await h.focusAtEnd();
+          await h.typeText(' modifié');
+          const writesBefore = stub().countActions('UpdateRecord', TABLE);
+          await h.clickButton('btn-save');
+          const waiting = await waitUntil(h, () => state.waiting, 3000, 20);
+          if (!waiting) return { pass: false, notes: "l'enregistrement n'attend pas l'identification, rien à vérifier" };
+          chooseTemplate(idB);
+          await h.sleep(500);
+          await waitUntil(h, () => !state.waiting, 4000, 40);
+          await h.sleep(900);
+          const after = screenNow();
+          const writes = stub().countActions('UpdateRecord', TABLE) - writesBefore;
+          const pass = after.current === idB && after.html.indexOf('Contenu B') !== -1 && contentOf(idA) === '<p>Contenu A</p>' && nameOf(idA) === nameA && contentOf(idB) === '<p>Contenu B</p>' && writes === 0;
+          return { pass, notes: 'écran=' + JSON.stringify(after) + ', écritures=' + writes + ', ligne A=' + contentOf(idA) + ' / ' + nameOf(idA) + ', ligne B=' + contentOf(idB) };
+        });
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_switching_template_while_a_pass_waits_for_the_identification_never_writes_the_screen_into_the_wrong_row',
+    description: "Même attente dans un passage de l'enregistrement automatique : un autre modèle choisi pendant qu'il attend, il ne part pas écrire ce que l'écran montre sous l'identifiant de l'ancien modèle",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const { idA, idB, nameA } = await twoTemplates(h, 'attente passage');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
+      autosaveSwitch(true);
+      const watch = watchBanner();
+      try {
+        return await slowIdentification(h, async (state) => {
+          chooseTemplate(idA);
+          await h.sleep(700);
+          await h.focusAtEnd();
+          await h.typeText(' modifié'); // le prochain passage écrit - et attend l'identification
+          const waiting = await waitUntil(h, () => state.waiting, TICK_MS * 2 + 500, 20);
+          if (!waiting) return { pass: false, notes: "aucun passage n'attend l'identification, rien à vérifier" };
+          const writesBefore = stub().countActions('UpdateRecord', TABLE);
+          chooseTemplate(idB);
+          await h.sleep(500);
+          await waitUntil(h, () => !state.waiting, 4000, 40);
+          await h.sleep(TICK_MS + 900); // le passage rend la main, un autre suit : rien ne doit être écrit pour A
+          const after = screenNow();
+          const writes = stub().countActions('UpdateRecord', TABLE) - writesBefore;
+          const pass = after.current === idB && after.html.indexOf('Contenu B') !== -1 && contentOf(idA) === '<p>Contenu A</p>' && nameOf(idA) === nameA && contentOf(idB) === '<p>Contenu B</p>' && writes === 0;
+          return { pass, notes: 'écran=' + JSON.stringify(after) + ', écritures=' + writes + ', ligne A=' + contentOf(idA) + ' / ' + nameOf(idA) + ', ligne B=' + contentOf(idB) };
+        });
+      } finally { await leaveClean(h, watch); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosaveRace = cases;
 })();
