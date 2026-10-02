@@ -280,18 +280,72 @@ const EditorCore = (function () {
     if (el) el.style.color = color || '';
   }
 
+  // Une sélection de cases (CellSelection de prosemirror-tables) se reconnaît à `forEachCell` et à sa case d'ancrage, sans importer la classe : même convention que
+  // setCellsBackground de js/floating-toolbars.js. Ses deux cases d'angle suffisent à la refaire ; son `from` / `to` n'est que le texte de la case de tête.
+  function isCellSelection(selection) { return !!selection && typeof selection.forEachCell === 'function' && !!selection.$anchorCell; }
+  const cellEnds = selection => ({ anchorCell: selection.$anchorCell.pos, headCell: selection.$headCell.pos });
+
   // Un menu/panneau flottant vole le focus au clic - sans mémoriser la sélection avant de l'ouvrir, `editor.chain().focus()` retomberait sur la position du
-  // curseur, pas la sélection réellement visée par l'utilisateur.
+  // curseur, pas la sélection réellement visée par l'utilisateur. Une sélection de cases est mémorisée par ses deux cases d'angle : rétablie en simple texte, elle ne
+  // mettait en forme que la case de tête (police, taille, couleur, surlignage) et éteignait la sélection de cases (Antoine, 02/10).
   function createSelectionPreserver() {
     let savedSelection = null;
-    const captureSelection = () => { const { from, to } = editor.state.selection; savedSelection = { from, to }; };
+    const captureSelection = () => {
+      const { selection } = editor.state;
+      savedSelection = { from: selection.from, to: selection.to, cells: isCellSelection(selection) ? cellEnds(selection) : null };
+    };
     const withSavedSelection = (fn) => {
       const chain = editor.chain().focus();
-      if (savedSelection) chain.setTextSelection(savedSelection);
+      if (savedSelection) chain.command(({ commands }) => restoreSelection(commands, savedSelection));
       fn(chain);
       chain.run();
     };
     return { captureSelection, withSavedSelection };
+  }
+  function restoreSelection(commands, saved) {
+    // Les cases ont pu disparaître depuis (document remplacé) : le texte de la case de tête reprend alors la place de la sélection de cases.
+    if (saved.cells) { try { return commands.setCellSelection(saved.cells); } catch (e) { /* repli ci-dessous */ } }
+    return commands.setTextSelection({ from: saved.from, to: saved.to });
+  }
+
+  // Plage de texte d'une case (de son premier à son dernier bloc de texte), `pos` étant la position AVANT la case ; null pour une case sans bloc de texte.
+  function cellTextRange(node, pos) {
+    let from = null, to = null;
+    node.descendants((child, offset) => {
+      if (!child.isTextblock) return true;
+      const start = pos + 1 + offset;
+      if (from === null) from = start + 1;
+      to = start + child.nodeSize - 1;
+      return false;
+    });
+    return from === null ? null : { from, to };
+  }
+
+  // Une commande de bloc (liste...) se calcule sur le bloc commun à `$from.blockRange($to)`, qui pour une sélection de cases est celui de la seule case de tête : le gras, l'italique
+  // ou l'alignement, eux, parcourent les `ranges` de la sélection. Ici elle est rejouée dans CHAQUE case, de la dernière à la première (envelopper le contenu d'une case décale tout
+  // ce qui la suit), en UNE transaction (un seul Annuler) : pour chaque case, le texte de la case devient la sélection puis `perCell(chain)` ajoute ses commandes à la chaîne, avant
+  // que la sélection de cases soit rétablie. Chaque commande de la chaîne s'exécute tout de suite, sur l'état que la case précédente a laissé : une condition ou une seconde commande
+  // qui dépend de la première (poser une liste, puis régler son style) est donc une commande de plus dans la chaîne (`chain.command(({ state, commands }) => ...)`), pas la suite d'un
+  // même rappel qui lirait encore l'état d'avant. Hors sélection de cases, `ordinary()` fait ce qu'on faisait avant, inchangé.
+  function runOnSelectedCells(ordinary, perCell) {
+    const selection = editor.state.selection;
+    if (!isCellSelection(selection)) return ordinary();
+    const ends = cellEnds(selection);
+    const cells = [];
+    selection.forEachCell((node, pos) => cells.push({ node, pos }));
+    const chain = editor.chain().focus();
+    cells.sort((a, b) => b.pos - a.pos).forEach(({ node, pos }) => {
+      const range = cellTextRange(node, pos);
+      if (!range) return;
+      chain.setTextSelection(range);
+      perCell(chain);
+    });
+    return chain.command(({ tr, commands }) => commands.setCellSelection({ anchorCell: tr.mapping.map(ends.anchorCell, -1), headCell: tr.mapping.map(ends.headCell, -1) })).run();
+  }
+  // Le curseur est-il dans un nœud de ce type ? (une liste, une citation...) - lu sur l'état d'une commande en chaîne, qui voit les cases déjà traitées.
+  function isInsideNode($pos, typeName) {
+    for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === typeName) return true;
+    return false;
   }
 
   return {
@@ -299,6 +353,6 @@ const EditorCore = (function () {
     patchNodeAndReselect, editorContentWidthPx, layoutZoom, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
-    setColorBar, setColorIcon, createSelectionPreserver,
+    setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
   };
 })();

@@ -32,9 +32,18 @@ const GristAPI = (function () {
   // les exclut déjà, inutilisable ici. Tenue à jour manuellement après un AddTable réussi (cf. listAllTablesCached/ensureLinksTableExists/
   // ensureUserProbeTable) pour ne jamais répondre "table absente" pour une table qu'on vient nous-mêmes de créer dans la même session.
   let _rawTables = null;
+  // listTables en cours : partagé par refreshSchema et listAllTablesCached (deux demandes qui se chevauchent n'en font qu'une).
+  let _rawTablesLoading = null;
+  function loadRawTables() {
+    if (!_rawTablesLoading) {
+      _rawTablesLoading = grist.docApi.listTables().then(list => { _rawTables = list || []; return _rawTables; });
+      const done = () => { _rawTablesLoading = null; };
+      _rawTablesLoading.then(done, done);
+    }
+    return _rawTablesLoading;
+  }
   async function listAllTablesCached() {
-    if (!_rawTables) _rawTables = (await grist.docApi.listTables()) || [];
-    return _rawTables;
+    return _rawTables || loadRawTables();
   }
   // === Lectures de tables partagées pendant un rendu ===
   // fetchTable est un aller-retour jusqu'au serveur de Grist, qui renvoie la table ENTIÈRE (WidgetFrame.ts : docComm.fetchTable, vérifié à la source grist-core le
@@ -194,29 +203,40 @@ const GristAPI = (function () {
       console.warn('[GristAPI] onOptions non disponible:', e);
     }
 
+    // Les options du widget, le schéma du document et les règles de liaison se lisent ENSEMBLE : en série, ces appels faisaient attendre cinq aller-retour de plus l'affichage du
+    // premier modèle (mesure d'ouverture du 2026-10-02). Aucun ne dépend d'un autre, et chacun attrape ses propres erreurs.
+    //
     // Seed immédiat des options JSON propres au widget (jamais accessLevel : grist.getOptions() = WidgetAPI.getOptions(), qui renvoie les options
     // personnalisées DU WIDGET lui-même (activeCustomOptions côté grist-core), pas InteractionOptions - seul onOptions(cb) ci-dessus reçoit
     // {accessLevel, linking} en 2e argument, vérifié à la source le 2026-09-28).
-    try {
-      if (typeof grist.getOptions === 'function') {
-        const seedOptions = await grist.getOptions();
-        _currentOptions = seedOptions || _currentOptions;
-        console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions));
+    const seedOptionsLoaded = (async function () {
+      try {
+        if (typeof grist.getOptions === 'function') {
+          const seedOptions = await grist.getOptions();
+          _currentOptions = seedOptions || _currentOptions;
+          console.log('[GristAPI] getOptions (seed) optionsJSON=', safeJSONStringify(seedOptions));
+        }
+      } catch (e) {
+        console.warn('[GristAPI] getOptions indisponible:', e);
       }
-    } catch (e) {
-      console.warn('[GristAPI] getOptions indisponible:', e);
-    }
-
-    try {
-      await refreshSchema();
-    } catch (e) {
-      console.error('[GristAPI] refreshSchema a échoué:', e);
-    }
-    try {
-      await loadLinkRules();
-    } catch (e) {
-      console.error('[GristAPI] loadLinkRules a échoué:', e);
-    }
+    })();
+    // Schéma RAPIDE : noms des tables, types et colonnes tirées des métadonnées (cf. runSchemaPass). La lecture complète de chaque table, qui rend les colonnes exactes, ne bloque plus
+    // l'ouverture : Editor.setHTML la demande dès le premier modèle affiché (et js/main.js la rappelle quelques secondes après l'ouverture si rien ne l'a fait).
+    const schemaLoaded = (async function () {
+      try {
+        await (_schemaPass ? refreshSchema() : startSchemaPass(true));
+      } catch (e) {
+        console.error('[GristAPI] refreshSchema a échoué:', e);
+      }
+    })();
+    const linkRulesLoaded = (async function () {
+      try {
+        await loadLinkRules();
+      } catch (e) {
+        console.error('[GristAPI] loadLinkRules a échoué:', e);
+      }
+    })();
+    await Promise.all([seedOptionsLoaded, schemaLoaded, linkRulesLoaded]);
     console.log('[GristAPI] init terminé.');
   }
 
@@ -285,29 +305,83 @@ const GristAPI = (function () {
     return null;
   }
 
-  async function refreshSchema() {
+  // Une passe de schéma à la fois (jamais deux lectures complètes de toutes les tables en même temps) : un appel qui arrive pendant une passe attend la suivante, qui part dès
+  // la fin de celle-ci et sert tous ceux qui l'ont demandée entre-temps - la passe en cours a pu lire avant le changement que l'appelant vient de faire (une colonne ajoutée,
+  // renommée), elle ne le dispense pas d'une relecture. `maxAgeMs` (facultatif) : se contente d'une passe commencée il y a moins que ça, en cours ou terminée - Editor.setHTML
+  // le demande, le schéma qu'init() vient de lire n'a aucune raison d'être relu à l'instant où s'affiche le premier modèle.
+  let _schemaPass = null;       // { startedAt, promise } de la passe en cours
+  let _schemaNext = null;       // promesse de la passe qui suivra
+  let _schemaLastStart = 0;     // début de la dernière passe terminée
+  function startSchemaPass(fast) {
+    const pass = { startedAt: Date.now(), fast: !!fast };
+    _schemaPass = pass;
+    // Une passe rapide (init) ne compte pas comme « lue il y a moins de maxAgeMs » : ses listes de colonnes sont provisoires, la passe complète qui la suit les rend exactes.
+    pass.promise = runSchemaPass(fast).then(() => { if (!fast) _schemaLastStart = pass.startedAt; }).finally(() => { if (_schemaPass === pass) _schemaPass = null; });
+    return pass.promise;
+  }
+  function refreshSchema(options) {
+    const maxAgeMs = options && options.maxAgeMs > 0 ? options.maxAgeMs : 0;
+    if (maxAgeMs) {
+      if (_schemaPass && !_schemaPass.fast && Date.now() - _schemaPass.startedAt < maxAgeMs) return _schemaPass.promise;
+      if (!_schemaPass && _schemaLastStart && Date.now() - _schemaLastStart < maxAgeMs) return Promise.resolve();
+    }
+    if (!_schemaPass) return startSchemaPass();
+    if (!_schemaNext) _schemaNext = _schemaPass.promise.then(() => { _schemaNext = null; return startSchemaPass(); });
+    return _schemaNext;
+  }
+
+  // `fast` (init) : les listes de colonnes viennent des métadonnées (provisionalColumnsByTable), quelques Ko lus avec listTables, au lieu de la lecture complète de chaque table - qui, sur un
+  // gros document, faisait attendre plusieurs secondes l'affichage du premier modèle (mesure d'ouverture du 2026-10-02). La passe complète qui suit les rend exactes.
+  async function runSchemaPass(fast) {
+    // Les métadonnées des colonnes partent en même temps que listTables (un aller-retour de moins) ; leur échec éventuel est traité par refreshColumnTypes.
+    const metaRead = readColumnMeta();
+    metaRead.catch(() => {});
     try {
-      _rawTables = (await grist.docApi.listTables()) || [];
+      await loadRawTables();
       _tables = _rawTables.filter(t => INTERNAL_TABLES.indexOf(t) === -1);
       console.log('[GristAPI] refreshSchema: tables détectées =', _tables);
-      // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit dans un objet temporaire, remplacé d'un coup pour éviter un schéma
-      // vidé-mais-pas-repeuplé pendant les allers-retours réseau.
-      const nextColumnsByTable = {};
-      await Promise.all(_tables.map(async t => {
-        try {
-          const data = await readTable(t);
-          const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
-          nextColumnsByTable[t] = cols;
-        } catch (e) {
-          console.warn('[GristAPI] refreshSchema: échec fetchTable(' + t + ') —', e);
-          nextColumnsByTable[t] = [];
-        }
-      }));
-      _columnsByTable = nextColumnsByTable;
+      _columnsByTable = await (fast ? provisionalColumnsByTable(metaRead) : exactColumnsByTable());
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
     }
-    await refreshColumnTypes();
+    await refreshColumnTypes(metaRead);
+  }
+
+  // Colonnes exactes : les clés que Grist rend à fetchTable pour chaque table (lecture complète de toutes les tables).
+  async function exactColumnsByTable() {
+    // fetchTable en parallèle (latence = le plus lent, pas la somme) ; écrit dans un objet temporaire, remplacé d'un coup par l'appelant pour éviter un schéma
+    // vidé-mais-pas-repeuplé pendant les allers-retours réseau.
+    const nextColumnsByTable = {};
+    await Promise.all(_tables.map(async t => {
+      try {
+        const data = await readTable(t);
+        const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
+        nextColumnsByTable[t] = cols;
+      } catch (e) {
+        console.warn('[GristAPI] refreshSchema: échec fetchTable(' + t + ') —', e);
+        nextColumnsByTable[t] = [];
+      }
+    }));
+    return nextColumnsByTable;
+  }
+
+  // Colonnes PROVISOIRES : celles que les métadonnées (_grist_Tables_column) rangent sous chaque table, dans l'ordre de leur position (parentPos, celui du code que Grist génère pour la
+  // table). Les mêmes que les clés de fetchTable, à l'ordre et aux colonnes qu'un accès restreint cache près - ce que la passe complète corrige.
+  async function provisionalColumnsByTable(metaRead) {
+    const [tablesMeta, colsMeta] = await metaRead;
+    const tableIdByRowId = {};
+    for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
+    const found = {};
+    for (let i = 0; i < colsMeta.id.length; i++) {
+      const tableId = tableIdByRowId[colsMeta.parentId[i]];
+      const colId = colsMeta.colId[i];
+      if (!tableId || colId === 'manualSort') continue;
+      const pos = colsMeta.parentPos && colsMeta.parentPos[i] != null ? colsMeta.parentPos[i] : i;
+      (found[tableId] = found[tableId] || []).push({ colId, pos });
+    }
+    const next = {};
+    _tables.forEach(t => { next[t] = (found[t] || []).sort((a, b) => a.pos - b.pos).map(c => c.colId); });
+    return next;
   }
 
   // Types de la « colonne à afficher » d'une Référence dont les valeurs se proposent dans un champ Valeur (getReferenceValues). « Any » : une colonne à
@@ -316,16 +390,19 @@ const GristAPI = (function () {
 
   // Type Grist de chaque colonne (ex. "Ref:Employes", "Text"...) - signale dans la modale de liaison qu'une colonne est une Référence, pour que l'utilisateur
   // la compare à l'Identifiant de ligne, pas à une colonne texte.
+  // Les deux tables de métadonnées, demandées ENSEMBLE (un aller-retour au lieu de deux) ; refreshSchema les lance en même temps que listTables et les passe à refreshColumnTypes.
+  function readColumnMeta() {
+    return Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column')]);
+  }
   // Écrit dans des objets temporaires, remplacés d'un coup à la fin (comme refreshSchema pour les colonnes) : pendant les allers-retours, un autre rendu qui lit un type
-  // (getColumnType) ne tombe plus sur un schéma vidé.
-  async function refreshColumnTypes() {
+  // (getColumnType) ne tombe plus sur un schéma vidé. `metaRead` : la lecture des métadonnées déjà lancée par refreshSchema, sinon elle est faite ici.
+  async function refreshColumnTypes(metaRead) {
     const types = {};
     const choices = {};
     const displayCols = {};
     const referenceCols = {};
     try {
-      // Les deux tables de métadonnées en même temps : une attente au lieu de deux.
-      const [tablesMeta, colsMeta] = await Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column')]);
+      const [tablesMeta, colsMeta] = await (metaRead || readColumnMeta());
       const tableIdByRowId = {};
       for (let i = 0; i < tablesMeta.id.length; i++) tableIdByRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
       const colIdByRowId = {};

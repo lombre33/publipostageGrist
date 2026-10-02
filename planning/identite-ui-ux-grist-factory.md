@@ -560,6 +560,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de travail, ou au-delà (sur la barre d'outils, hors du panneau), le fait défiler, d'autant plus vite qu'il s'éloigne, et la sélection suit la case qui arrive sous le bord ; les bandeaux
   restent collés. Règle générale : rien de flottant ne se pose sur les cases d'un tableau pendant qu'on y travaille ; une barre reste dans sa bande ou hors du plan de travail. Les boutons de la
   barre de la case se déclenchent aussi au clavier (Tab puis Entrée ou Espace), sans doubler le clic de la souris.
+- Mettre en forme et copier plusieurs cases d'un tableau de document sélectionnées d'un coup (demande d'Antoine du 02/10, « dans un module tableau on peut bel et bien sélectionner désormais
+  plusieurs cellules d'un coup, par contre j'ai l'impression que je ne peux pas faire d'édition dessus ? »). Une sélection de cases se traite comme une seule sélection : toute mise en forme de
+  la barre d'outils (gras, italique, souligné, barré, police, taille, couleurs, surlignage, alignement, liste à puces, numérotée ou à cocher et leurs styles) atteint CHACUNE des cases choisies et
+  aucune autre, la sélection de cases reste là pour le geste suivant (le voile bleu ne s'éteint pas) et un seul Annuler défait le geste sur toutes les cases ; une liste qui se voit dans la case de
+  tête se retire de toutes les cases au clic suivant, sinon elle se pose dans chacune. Ctrl+C met dans le presse-papiers le tableau (HTML) ET un texte brut tabulé que lisent Grist et les tableurs
+  (une tabulation entre deux cases, un retour à la ligne entre deux lignes, une case à plusieurs lignes, à tabulation ou à guillemet entre guillemets doublés) ; Ctrl+X et Suppr vident les cases ;
+  Ctrl+V dans une case remplit à partir d'elle (le tableau gagne les lignes qui manquent), et une valeur copiée d'une seule case, collée sur une sélection de cases, les remplit toutes.
 - Barre de la case d'une grille : fusion et alignement vertical (demande d'Antoine du 01/10, maquette « Barre »). De gauche à droite, séparés par un trait fin : Lignes (avant, après, supprimer), Colonnes (avant, après,
   supprimer), « Supprimer le tableau » (toujours grisé), Fusion (« Fusionner les cases », « Scinder la case »), Fond, Bordures, Alignement vertical (en haut, au milieu, en bas). Fusion, bordures et alignement n'existent que dans une grille :
   la barre d'un tableau de document reste celle d'avant. Rien ne disparaît, on grise : « Fusionner » ne s'allume que sur deux cases ou plus, « Scinder » que sur une case fusionnée ; les trois boutons d'alignement sont des

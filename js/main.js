@@ -84,8 +84,9 @@
     return { nomFichierPDF: getPdfFilenameTemplate(), headerFooter: Editor.getHeaderFooterData(), marginsMm: PageLayout.getMarginsMm() };
   }
 
-  async function refreshTemplateList() {
-    const templates = await Templates.loadAll();
+  // `preloaded` : la lecture des modèles déjà lancée (init() la démarre en même temps que Grist et l'éditeur) ; sans elle, la liste est relue.
+  async function refreshTemplateList(preloaded) {
+    const templates = await (preloaded || Templates.loadAll());
     templateSelect.innerHTML = '';
     const emptyOpt = document.createElement('option');
     emptyOpt.value = '';
@@ -627,6 +628,8 @@
   // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le widget
   // démarre verrouillé (AccessRights.get() tant que le calcul n'a pas abouti) et se déverrouille seul à la réponse.
   const ACCESS_STARTUP_WAIT_MS = 5000;
+  // Délai après l'ouverture au bout duquel les colonnes exactes des tables sont relues si rien ne l'a fait (l'affichage du premier modèle les demande déjà, Editor.setHTML).
+  const EXACT_SCHEMA_CHECK_MS = 2500;
 
   function isReadOnly() { return AccessRights.get().readOnly; }
 
@@ -1836,7 +1839,14 @@
   async function init() {
     syncSaveButtonLook();
     wireAccessLockGuard();
-    try { await GristAPI.init(); } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
+    // Grist (schéma, règles de liaison), les modèles et l'éditeur se chargent ENSEMBLE : en série, leurs aller-retour et leurs téléchargements faisaient attendre 6 s le premier
+    // modèle (mesure d'ouverture du 2026-10-02). index.html a pu les lancer plus tôt encore (window.__earlyStart), pendant que les derniers scripts arrivent.
+    const early = window.__earlyStart || {};
+    const gristInit = early.grist || GristAPI.init();
+    const templatesLoaded = early.templates || Templates.loadAll();
+    const editorReady = Editor.init();
+    editorReady.catch(() => {}); // l'échec se lit plus bas, à l'attente ; ici seulement pas d'« unhandled rejection » le temps que Grist réponde
+    try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
     RowTemplate.init({
@@ -1844,7 +1854,7 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
-    await Editor.init();
+    await editorReady;
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
     // 'update' (pas 'transaction') : ne fire que si le DOCUMENT a réellement changé (docChanged), jamais pour un simple déplacement de curseur/sélection -
@@ -1880,7 +1890,7 @@
       if (currentMode === 'read') await updateEmailFieldsDisplay();
       await updateEmailLengthGauge();
     });
-    await refreshTemplateList();
+    await refreshTemplateList(templatesLoaded);
     // Enveloppe #template-select AVANT l'écriture de templateSelect.value ci-dessous (modèle par
     // défaut) : TemplateTreeSelect intercepte cet accesseur pour se synchroniser (js/template-tree-select.js),
     // donc l'ordre importe - attaché après, ce premier affichage du modèle par défaut serait manqué.
@@ -1984,6 +1994,8 @@
     AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
+    setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
     // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.
     SchemaRenames.checkAfterOpen({ isUntouched: () => !hasEditsToConfirmBeforeLeaving(), notify: setStatus }).catch(e => console.warn('[main] suivi des renommages impossible', e));
   }

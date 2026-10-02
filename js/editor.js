@@ -344,6 +344,8 @@ const Editor = (function () {
       onUpdate: ({ editor: updatedEditor, transaction }) => { HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction); backfillAutoColumnWidths(updatedEditor, transaction); clampOverflowingTables(updatedEditor, transaction); HeaderFooterPreview.schedulePaginationRecompute(); refreshVariableBadgeValidity(); },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       editorProps: {
+        // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le reste garde le texte par défaut.
+        clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
         handlePaste(view, event) {
           const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
           const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));

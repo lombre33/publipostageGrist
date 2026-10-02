@@ -443,30 +443,35 @@ const MainToolbar = (function () {
     // Bouton principal du groupe survol - réapplique l'alignement qu'il montre actuellement (currentAlign, tenu à jour par syncToolbarState) ; les 4 boutons
     // ci-dessus vivent maintenant dans le panneau révélé au survol (cf. index.html .v2-hover-flyout), inchangés sinon.
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
-    bind('v2-btn-bullet', () => editor.chain().focus().toggleBulletList().run());
-    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette "Options au survol") - crée la liste si le curseur n'y est pas encore, sinon
-    // change juste le style de la liste existante à cet endroit.
-    const applyBulletStyle = (style) => {
-      const chain = editor.chain().focus();
-      if (!editor.isActive('bulletList')) chain.toggleBulletList();
-      chain.updateAttributes('bulletList', { bulletStyle: style }).run();
+    // Une liste se pose dans TOUTES les cases d'une sélection de cases (EditorCore.runOnSelectedCells : la commande ne regarde sinon que la case de tête) ; l'état voulu est
+    // l'inverse de celui que le bouton montre (la case de tête) : enfoncé, un clic retire la liste de chaque case, sinon il la pose dans chacune.
+    const toggleList = (name, command) => {
+      const wanted = !editor.isActive(name);
+      EditorCore.runOnSelectedCells(
+        () => editor.chain().focus()[command]().run(),
+        chain => chain.command(({ state, commands }) => { if (EditorCore.isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
     };
+    bind('v2-btn-bullet', () => toggleList('bulletList', 'toggleBulletList'));
+    // Style d'une liste : crée la liste si le curseur n'y est pas encore (dans chaque case d'une sélection de cases), sinon change juste le style de la liste existante à cet endroit.
+    const applyListStyle = (name, command, attrs) => EditorCore.runOnSelectedCells(
+      () => {
+        const chain = editor.chain().focus();
+        if (!editor.isActive(name)) chain[command]();
+        chain.updateAttributes(name, attrs).run();
+      },
+      chain => chain
+        .command(({ state, commands }) => { if (!EditorCore.isInsideNode(state.selection.$from, name)) commands[command](); return true; })
+        .updateAttributes(name, attrs));
+    // Styles de puce, révélés au survol du bouton "Liste à puces" (maquette "Options au survol").
+    const applyBulletStyle = style => applyListStyle('bulletList', 'toggleBulletList', { bulletStyle: style });
     bind('v2-btn-bullet-disc', () => applyBulletStyle('disc'));
     bind('v2-btn-bullet-circle', () => applyBulletStyle('circle'));
     bind('v2-btn-bullet-square', () => applyBulletStyle('square'));
-    const applyOrderedStyle = (style) => {
-      const chain = editor.chain().focus();
-      if (!editor.isActive('orderedList')) chain.toggleOrderedList();
-      chain.updateAttributes('orderedList', { numberStyle: style }).run();
-    };
+    const applyOrderedStyle = style => applyListStyle('orderedList', 'toggleOrderedList', { numberStyle: style });
     bind('v2-btn-ordered-numeric', () => applyOrderedStyle('decimal'));
     bind('v2-btn-ordered-alpha', () => applyOrderedStyle('alpha'));
     bind('v2-btn-ordered-roman', () => applyOrderedStyle('roman'));
-    const applyTaskListStyle = (style) => {
-      const chain = editor.chain().focus();
-      if (!editor.isActive('taskList')) chain.toggleTaskList();
-      chain.updateAttributes('taskList', { taskListStyle: style }).run();
-    };
+    const applyTaskListStyle = style => applyListStyle('taskList', 'toggleTaskList', { taskListStyle: style });
     bind('v2-btn-checklist-accent-strike', () => applyTaskListStyle('accentStrike'));
     bind('v2-btn-checklist-classic', () => applyTaskListStyle('classic'));
     bind('v2-btn-checklist-accent-plain', () => applyTaskListStyle('accentPlain'));

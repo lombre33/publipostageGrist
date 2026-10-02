@@ -18,12 +18,28 @@ const Templates = (function () {
   // fait partager le MÊME appel fetchTable+AddVisibleColumn en cours à tout appelant concurrent, au lieu
   // que chacun reparte de zéro - et relance un essai (au prochain appel) seulement si celui-ci a échoué,
   // même comportement de retry que les checked=true/false individuels remplacés ci-dessous.
-  function ensureOnce(worker) {
+  //
+  // Ouverture du widget (mesure du 2026-10-02) : chaque migration relisait TOUTE la table des modèles (contenus et images compris) pour y chercher une colonne, soit huit lectures
+  // complètes en série avant d'afficher le moindre modèle - la moitié du temps d'ouverture. `columns` (les colonnes que la migration garantit, [] pour la table elle-même) l'inscrit dans
+  // `columnMigrations` : loadAll lit la table UNE fois et tient pour faites celles dont toutes les colonnes s'y trouvent. Une migration créée sans `columns` tourne comme avant, jamais sautée.
+  // Une migration qui ajoute une colonne s'écrit donc `ensureOnce(async function () { ... }, ['NouvelleColonne'])` : sans le second argument, elle coûte seulement une lecture de plus à l'ouverture.
+  const columnMigrations = [];
+  let migrationRuns = 0; // migrations réellement lancées (pas celles tenues pour faites) : loadAll en déduit si sa lecture initiale est encore juste
+  function ensureOnce(worker, columns) {
     let inFlight = null;
-    return function ensure() {
-      if (!inFlight) inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; });
+    function ensure() {
+      if (!inFlight) {
+        migrationRuns++;
+        inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; });
+      }
       return inFlight;
-    };
+    }
+    if (columns) {
+      ensure.satisfiedBy = data => columns.every(column => column in data);
+      ensure.markDone = () => { if (!inFlight) inFlight = Promise.resolve(true); };
+      columnMigrations.push(ensure);
+    }
+    return ensure;
   }
 
   const ensureTableExists = ensureOnce(async function () {
@@ -44,7 +60,7 @@ const Templates = (function () {
       console.error('Erreur création table modèles', e);
       return false;
     }
-  });
+  }, ['Nom', 'Contenu']); // la table sous la forme que loadAll lit : une lecture qui n'y trouve pas ces deux colonnes ne prouve pas qu'elle existe
 
   // Colonne ajoutée APRÈS la création initiale de la table (v2, en-têtes/pieds de page) - AddTable ne concerne que les tout nouveaux documents, un document
   // existant a besoin de ce chemin de migration dédié (idempotent - ne fait rien si la colonne existe déjà).
@@ -62,7 +78,7 @@ const Templates = (function () {
       console.error('Erreur migration colonne HeaderFooter', e);
       return false;
     }
-  });
+  }, ['HeaderFooter']);
 
   // Marges de page (haut/droite/bas/gauche, mm) - même migration idempotente que HeaderFooter ci-dessus.
   const ensureMarginsColumn = ensureOnce(async function () {
@@ -79,7 +95,7 @@ const Templates = (function () {
       console.error('Erreur migration colonne Margins', e);
       return false;
     }
-  });
+  }, ['Margins']);
 
   // Horodatage de dernière modification (auto-save, cf. js/main.js) - même migration idempotente que HeaderFooter ci-dessus. Manquait à l'origine : DateModif
   // ne figurait QUE dans le AddTable de ensureTableExists (donc présent sur un document tout neuf), jamais ajoutée en migration sur un document existant -
@@ -98,7 +114,7 @@ const Templates = (function () {
       console.error('Erreur migration colonne DateModif', e);
       return false;
     }
-  });
+  }, ['DateModif']);
 
   // Modèle qui s'ouvre automatiquement au chargement du widget (au plus un à la fois - cf. setDefault). Colonne ajoutée après coup, même migration idempotente
   // que HeaderFooter ci-dessus.
@@ -116,7 +132,7 @@ const Templates = (function () {
       console.error('Erreur migration colonne EstParDefaut', e);
       return false;
     }
-  });
+  }, ['EstParDefaut']);
 
   // Mode email (planning/feature-email-mode.md) : colonnes par table existante plutôt qu'une table dédiée (décision d'Antoine, 2026-09-18 - "pas fan de la
   // démultiplication des tables"). TypeModele distingue un modèle email d'un modèle document ('document' par défaut - une ligne déjà existante sans cette
@@ -140,7 +156,7 @@ const Templates = (function () {
       console.error('Erreur migration colonnes mode email', e);
       return false;
     }
-  });
+  }, ['TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet']);
 
   // Suivi des modifications (planning/feature-track-changes.md, décision n°4) : auteur/horodatage par suggestion en attente, écrit dans le MÊME
   // UpdateRecord/AddRecord que Contenu/DateModif (jamais un appel séparé) - même migration idempotente que HeaderFooter ci-dessus.
@@ -158,7 +174,7 @@ const Templates = (function () {
       console.error('Erreur migration colonne SuiviModifications', e);
       return false;
     }
-  });
+  }, ['SuiviModifications']);
 
   // Forme par défaut si absente/invalide - DOIT rester cohérente avec la forme utilisée côté js/editor.js (dupliquée plutôt qu'importée, ces deux fichiers ne
   // partagent aucun mécanisme de module - même tolérance à la duplication que le reste de ce projet pour ce genre de petite forme).
@@ -216,7 +232,21 @@ const Templates = (function () {
     }
   }
 
+  // Lecture de la table des modèles, null si elle est absente ou illisible (document neuf : les migrations de loadAll la créent).
+  async function readTable() {
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      return data && typeof data === 'object' ? data : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function loadAll() {
+    // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
+    const first = await readTable();
+    if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
+    const runsBefore = migrationRuns;
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureDefaultColumn();
@@ -225,7 +255,8 @@ const Templates = (function () {
     await ensureEmailColumns();
     await ensureTrackChangesColumn();
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
+      const data = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
       templatesCache = [];
       for (let i = 0; i < data.id.length; i++) {
         const typeModele = (data.TypeModele && data.TypeModele[i]) || 'document';
