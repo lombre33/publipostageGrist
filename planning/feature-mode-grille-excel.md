@@ -96,6 +96,15 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   ProseMirror garde en dernier paragraphe vide sous le texte collé. `GridEditor.trimPastedSlice` (branché sur `transformPasted`, grille seulement : un document garde son collage) ôte les paragraphes vides de fin et
   les retours à la ligne forcés qui terminent le dernier texte ; il en reste toujours un (des lignes vides seules ne collent rien) ; les lignes vides du MILIEU d'un texte restent ; un tableau copié (lignes, cases) est
   laissé tel quel. Le chemin exact d'Antoine (d'où il copie la variable) n'a pas pu être rejoué : seul ce défaut-là est reproduit et corrigé.
+- Entrée dans une case (02/10, Antoine : « l'appui sur entrer doit descendre d'une cellule et après soit shift entrer soit ctrl entrer pour ajouter une ligne (prendre le standard de Gsheet ou Exel) ») : Entrée descend d'une case et la
+  sélectionne (on tape par-dessus, comme avec Tab), dans la même colonne ; sous une case fusionnée sur plusieurs lignes elle va sous la dernière, dans une case fusionnée sur deux colonnes elle entre par la colonne de gauche ; sur des cases
+  choisies elle repart de la case où la sélection a commencé ; sur la DERNIÈRE ligne elle ne fait rien (la touche est prise : ni paragraphe vide, ni ligne de tableau ajoutée). Maj+Entrée et Ctrl+Entrée ajoutent une ligne DANS la case
+  (le retour à la ligne forcé de TipTap, déjà là ; l'Excel et le PDF le rendent). Dans une liste (puces, numéros, tâches) Entrée garde son sens de liste, sinon on n'y ajouterait jamais un point ; la liste `#` ou celle des expansions
+  ouverte garde aussi son Entrée (choisir une ligne). `GridEditor.createEnterExtension` est une extension à part, de priorité normale, rangée dans `js/editor.js` APRÈS StarterKit et AVANT Variables et TextExpansion : TipTap essaie
+  les extensions de la dernière rangée à la première, donc ces listes passent d'abord et la liste à puces ensuite ; une bulle « Calcul » sélectionnée (priorité 1000) garde son Entrée. Hors grille, rien ne change. Alt+Entrée reste « Saut de page ».
+  Pas de ligne de tableau ajoutée en passant : un choix du produit (une ligne a une hauteur, des traits, peut porter un saut de page). La case d'arrivée est montrée EN ENTIER, jamais sous les bandeaux collés (colonnes en
+  haut, lignes à gauche) : `revealCell` complète le défilement de ProseMirror, qui ne regarde que la ligne du curseur et ne connaît pas les bandeaux (curseur resté hors de vue plus haut, puis Entrée : la case arrivait cachée dessous).
+  Limite connue, laissée telle quelle : les flèches du haut et Maj+Tab remontent encore le curseur sous le bandeau des colonnes (même cause, geste qui n'est pas Entrée).
 - Pas dans la première version : boucles sur une ligne de grille, formules, volets figés, images en calque, en-tête/pied/numéros de page, conversion document ⇄ grille.
 
 ## Lots
@@ -136,6 +145,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
   Collage dans une case (02/10) : un texte qui finit par un retour à la ligne, une variable suivie de paragraphes vides, les lignes du milieu gardées et des lignes vides seules qui ne collent rien, un tableau copié qui passe
   toujours par ses cases, un document inchangé (4 cas, trois échouent sur l'ancien code).
+  Entrée (02/10) : descend d'une case et sélectionne son texte, dernière ligne (rien ne bouge), cases fusionnées (dessus, dessous, sur deux colonnes), Maj+Entrée et Ctrl+Entrée = une ligne dans la case (un Annuler chacune),
+  liste (un point de plus, sortie sur un point vide, puis la case du dessous), liste `#` ouverte qui garde son Entrée, cases choisies, document inchangé, case d'arrivée toute visible sous les bandeaux dans un plan étroit (9 cas : six échouent sans l'extension, celui de la liste `#` échoue aussi quand l'extension est rangée après Variables, celui du défilement sans `revealCell`).
 - `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 31 cas, lots D, E, B2 et C) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
   un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D

@@ -388,6 +388,9 @@ const Editor = (function () {
         trackChangesApi.DeletionMark,
         trackChangesApi.ModificationMark,
         trackChangesApi.SuggestChangesBridge,
+        // Entrée d'une grille (descend d'une case) : ICI, après StarterKit et avant Variables et TextExpansion - TipTap essaie la dernière extension rangée en premier, donc leurs listes
+        // ouvertes gardent Entrée et la liste à puces aussi (cf. GridEditor.createEnterExtension). Hors grille elle ne fait rien.
+        GridEditor.createEnterExtension(Extension),
         Variables.createExtension(Extension, Suggestion),
         TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
         LinkDialog.createExtension(Extension),

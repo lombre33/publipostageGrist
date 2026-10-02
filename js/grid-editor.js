@@ -7,8 +7,9 @@
 //   - les bandeaux A, B, C / 1, 2, 3 autour du tableau, collants au défilement, avec les poignées qui règlent la largeur d'une colonne et la hauteur d'une ligne
 //     (aperçu en direct pendant le geste, UNE seule transaction au relâcher : un seul Annuler) ;
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées ;
-//   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent.
-//   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`).
+//   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent ;
+//   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`) ;
+//   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case.
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
 // fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
@@ -659,6 +660,80 @@ const GridEditor = (function () {
     return new slice.constructor(fragment, slice.openStart, Math.min(slice.openEnd, openDepthAtEnd(fragment)));
   }
 
+  // --- Entrée : la case du dessous --------------------------------------------------------------------------------------------------------------------------------
+  // Comme dans Excel et Google Sheets (Antoine, 02/10) : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée ajoutent une
+  // ligne DANS la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est prise sans rien faire : pas de ligne de
+  // tableau ajoutée en passant, pas de paragraphe vide. Dans une liste (puces, numéros, tâches) Entrée garde son sens de liste, sinon on n'y ajouterait jamais un point.
+  const LIST_ITEMS = new Set(['listItem', 'taskItem']);
+
+  function inListItem(sel) {
+    if (isCellSelection(sel)) return false;
+    for (let d = sel.$head.depth; d > 0; d--) if (LIST_ITEMS.has(sel.$head.node(d).type.name)) return true;
+    return false;
+  }
+
+  // La case « active » : celle du curseur ; pour des cases choisies, celle d'où la sélection est partie (comme Excel : Entrée se range alors sous elle).
+  function activeCellPos(sel) {
+    if (isCellSelection(sel)) return sel.$anchorCell.pos;
+    for (let d = sel.$head.depth; d > 0; d--) if (CELL_NODES.has(sel.$head.node(d).type.name)) return sel.$head.before(d);
+    return null;
+  }
+
+  // La case sous la case active, dans sa colonne de gauche ; sous une case fusionnée sur plusieurs lignes, la case qui suit sa dernière ligne. Null sur la dernière ligne.
+  function cellBelowPos(info, cellPos) {
+    const map = libs.TableMap.get(info.node);
+    const rect = map.findCell(cellPos - (info.pos + 1));
+    return rect.bottom < map.height ? info.pos + 1 + map.map[rect.bottom * map.width + rect.left] : null;
+  }
+
+  // Montre TOUTE la case d'arrivée. ProseMirror ne regarde que la ligne du curseur et ne connaît pas les bandeaux collés (colonnes en haut, lignes à gauche) : une case remontée au
+  // bord du panneau (curseur resté hors de vue, puis Entrée) arrivait cachée dessous. Une case plus haute (ou plus large) que le panneau garde son bord haut (gauche) visible.
+  function revealCell(view, cellPos) {
+    const cell = view.nodeDOM(cellPos);
+    const scroller = view.dom.closest('.v2-grid-mode');
+    if (!cell || !cell.getBoundingClientRect || !scroller) return;
+    const cols = scroller.querySelector('.v2-grid-cols');
+    const rows = scroller.querySelector('.v2-grid-rows');
+    const box = scroller.getBoundingClientRect();
+    const r = cell.getBoundingClientRect();
+    const top = box.top + (cols ? cols.offsetHeight : 0);
+    const left = box.left + (rows ? rows.offsetWidth : 0);
+    const bottom = box.top + scroller.clientHeight;
+    const right = box.left + scroller.clientWidth;
+    if (r.top < top) scroller.scrollTop -= top - r.top;
+    else if (r.bottom > bottom) scroller.scrollTop += Math.min(r.bottom - bottom, r.top - top);
+    if (r.left < left) scroller.scrollLeft -= left - r.left;
+    else if (r.right > right) scroller.scrollLeft += Math.min(r.right - right, r.left - left);
+  }
+
+  function enterGoesDown(ed) {
+    if (!active || !ed.isEditable || ed.view.composing) return false;
+    const { state, view } = ed;
+    const sel = state.selection;
+    const info = tableInfo(state.doc);
+    if (!info || !selectionInsideTable(sel) || inListItem(sel)) return false;
+    const here = activeCellPos(sel);
+    if (here == null) return false;
+    const below = cellBelowPos(info, here);
+    if (below == null) return true;
+    const $below = state.doc.resolve(below);
+    view.dispatch(state.tr.setSelection(libs.TextSelection.between($below, state.doc.resolve(below + $below.nodeAfter.nodeSize))).scrollIntoView());
+    revealCell(view, below);
+    return true;
+  }
+
+  // Une extension à part, de priorité normale, et rangée dans js/editor.js APRÈS StarterKit (sa liste à puces, ses touches de base) et AVANT Variables et TextExpansion : TipTap
+  // essaie les extensions de la dernière rangée à la première, donc la liste `#` (ou celle des expansions) ouverte garde son Entrée (choisir une ligne) et ne cède la touche
+  // qu'à la case du dessous quand elle n'en veut pas, alors que celle d'un calcul (priorité 1000) passe toujours devant. Hors grille la fonction rend faux : Entrée coupe le paragraphe.
+  function createEnterExtension(Extension) {
+    return Extension.create({
+      name: 'gridEnter',
+      addKeyboardShortcuts() {
+        return { Enter: ({ editor: ed }) => enterGoesDown(ed) };
+      },
+    });
+  }
+
   // --- Extension TipTap : garde-fou, sélection, touches ----------------------------------------------------------------------------------------------------------
   function createExtension(Extension) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
@@ -1085,7 +1160,7 @@ const GridEditor = (function () {
 
   return {
     TYPE, DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_COL_WIDTH_PX, DEFAULT_ROW_HEIGHT_PX, MIN_COL_WIDTH_PX, DEFAULT_VALIGN,
-    configure, attach, createExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
+    configure, attach, createExtension, createEnterExtension, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType, refresh,
     currentCellDom, columnWidths, colName, floatingOptions, barSlot,
     canMerge, canSplit, mergeCells, splitCell, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, canTogglePageBreak, hasPageBreak, togglePageBreak,
   };

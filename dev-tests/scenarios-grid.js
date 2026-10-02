@@ -1805,6 +1805,255 @@
     },
   });
 
+  // === Entrée : la case du dessous (Antoine, 02/10 : « l'appui sur entrer doit descendre d'une cellule, shift entrer ou ctrl entrer pour ajouter une ligne ») =========================
+
+  // [ligne, colonne] de la case du curseur (index dans la ligne, une case fusionnée compte pour une) ; pour des cases choisies, celle d'où la sélection est partie.
+  function selectionCell() {
+    const sel = ed().state.selection;
+    const here = sel.$anchorCell ? sel.$anchorCell.pos : sel.from;
+    const table = tableNode();
+    let rowPos = 1;
+    for (let r = 0; r < table.childCount; r++) {
+      const row = table.child(r);
+      let cellStart = rowPos + 1;
+      for (let c = 0; c < row.childCount; c++) {
+        const size = row.child(c).nodeSize;
+        if (here >= cellStart && here < cellStart + size) return [r, c];
+        cellStart += size;
+      }
+      rowPos += row.nodeSize;
+    }
+    return null;
+  }
+  const selectedText = () => { const sel = ed().state.selection; return doc().textBetween(sel.from, sel.to, ' '); };
+  const docJson = () => JSON.stringify(doc().toJSON());
+  const enterKey = options => key('Enter', options);
+
+  cases.push({
+    id: 'grid_enter_goes_down_one_cell_and_selects_its_text',
+    description: 'Entrée dans une case de grille descend d\'une case (même colonne) comme dans Excel et Google Sheets : le document ne change pas (aucun paragraphe ajouté), la case d\'en dessous est sélectionnée - taper remplace son texte, comme avec Tab -, et la touche est prise (rien ne part au navigateur).',
+    run: async (h) => inGrid(h, async () => {
+      await typeInCell(1, 1, 'un');
+      await typeInCell(2, 1, 'deux');
+      await typeInCell(3, 1, 'trois');
+      await placeCursor(1, 1);
+      const before = docJson();
+      const first = enterKey();
+      const afterFirst = { cell: selectionCell(), text: selectedText(), same: docJson() === before };
+      const second = enterKey();
+      const afterSecond = { cell: selectionCell(), text: selectedText(), same: docJson() === before };
+      ed().commands.insertContent('X');
+      await sleep(60);
+      const typedOver = tableNode().child(3).child(1).textContent;
+      // Une case vide : le curseur s'y pose, rien n'est sélectionné.
+      await placeCursor(5, 4);
+      enterKey();
+      const empty = { cell: selectionCell(), text: selectedText(), empty: ed().state.selection.empty };
+      const ok = first && second && afterFirst.cell + '' === '2,1' && afterFirst.text === 'deux' && afterFirst.same && afterSecond.cell + '' === '3,1' && afterSecond.text === 'trois' && afterSecond.same
+        && typedOver === 'X' && empty.cell + '' === '6,4' && empty.empty;
+      return { pass: ok, notes: JSON.stringify({ first, second, afterFirst, afterSecond, typedOver, empty }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_on_the_last_row_stays_in_place_and_adds_nothing',
+    description: 'Entrée sur la dernière ligne ne fait rien : le curseur reste dans sa case, ni paragraphe vide ni ligne de tableau ajoutés, et la touche est prise (le navigateur n\'en fait rien non plus).',
+    run: async (h) => inGrid(h, async () => {
+      const last = rowsNow() - 1;
+      await typeInCell(last, 2, 'Fin');
+      await placeCursor(last, 2);
+      const before = docJson();
+      const rows = rowsNow();
+      const taken = enterKey();
+      const taken2 = enterKey();
+      const ok = taken && taken2 && docJson() === before && rowsNow() === rows && selectionCell() + '' === last + ',2';
+      return { pass: ok, notes: JSON.stringify({ taken, taken2, cell: selectionCell(), rows: rowsNow(), rowsBefore: rows, same: docJson() === before }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_goes_below_a_merged_cell_and_into_the_merged_cell_below',
+    description: 'Cases fusionnées : de la case du dessus Entrée entre dans la case fusionnée ; d\'une case fusionnée sur deux lignes elle va sous ses DEUX lignes ; d\'une case fusionnée sur deux colonnes elle va dans la colonne de gauche de la ligne suivante.',
+    run: async (h) => inGrid(h, async () => {
+      const w = 100;
+      const td = (text, extra) => `<td colwidth="${w}"${extra || ''}><p>${text}</p></td>`;
+      const tr = cells => `<tr data-row-height="28" style="height: 28px">${cells.join('')}</tr>`;
+      await loadGrid(`<table style="width: ${3 * w}px;"><colgroup>${[1, 2, 3].map(() => `<col style="width: ${w}px;">`).join('')}</colgroup><tbody>`
+        + tr([td('a'), td('b'), td('c')])
+        + tr([td('M', ' rowspan="2"'), td('d'), td('e')])
+        + tr([td('f'), td('g')])
+        + tr([td('h'), td('i'), td('j')])
+        + tr([td('W', ' colspan="2"'), td('k')])
+        + tr([td('l'), td('m'), td('n')])
+        + '</tbody></table>');
+      const from = async (row, col) => { await placeCursor(row, col); enterKey(); return selectedText(); };
+      const intoMerged = await from(0, 0);      // a -> M
+      const belowMerged = await from(1, 0);     // M (lignes 1 et 2) -> h
+      const besideMerged = await from(1, 1);    // d -> f (M tient la colonne de gauche des lignes 1 et 2, f est sous d)
+      const intoWide = await from(3, 1);        // i -> W (W couvre les colonnes 1 et 2 de la ligne 4)
+      const belowWide = await from(4, 0);       // W -> l
+      const beside = await from(4, 1);          // k -> n
+      const ok = intoMerged === 'M' && belowMerged === 'h' && besideMerged === 'f' && intoWide === 'W' && belowWide === 'l' && beside === 'n';
+      return { pass: ok, notes: JSON.stringify({ intoMerged, belowMerged, besideMerged, intoWide, belowWide, beside }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_shift_enter_and_ctrl_enter_add_a_line_inside_the_cell',
+    description: 'Maj+Entrée et Ctrl+Entrée ajoutent une ligne DANS la case (retour à la ligne forcé) : le curseur reste dans la case, le texte suit sur la ligne d\'après, aucune ligne de tableau ni paragraphe ne naît, et un Annuler défait chaque ligne.',
+    run: async (h) => inGrid(h, async () => {
+      await typeInCell(2, 2, 'haut');
+      ed().chain().focus().setTextSelection(cellPos(2, 2) + 2 + 'haut'.length).run();
+      const rows = rowsNow();
+      const shift = enterKey({ shiftKey: true });
+      ed().commands.insertContent('milieu');
+      const ctrl = enterKey({ ctrlKey: true });
+      ed().commands.insertContent('bas');
+      await sleep(60);
+      const cell = tableNode().child(2).child(2);
+      const lines = cellLines(2, 2);
+      const staysHere = selectionCell() + '' === '2,2';
+      ed().commands.undo(); ed().commands.undo(); ed().commands.undo(); ed().commands.undo();
+      await sleep(60);
+      const afterUndo = cellLines(2, 2);
+      const ok = shift && ctrl && cell.childCount === 1 && lines === 'haut<br>milieu<br>bas' && staysHere && rowsNow() === rows && afterUndo.indexOf('<br>') === -1;
+      return { pass: ok, notes: JSON.stringify({ shift, ctrl, paragraphs: cell.childCount, lines, staysHere, rows: rowsNow(), rowsBefore: rows, afterUndo }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_in_a_list_keeps_the_list_then_goes_down',
+    description: 'Dans une liste à puces ou de tâches Entrée garde son sens de liste (un point de plus ; sur un point vide on sort de la liste) : sinon on n\'y ajouterait jamais un point. Une fois hors de la liste, Entrée descend d\'une case.',
+    run: async (h) => inGrid(h, async () => {
+      const td = inner => `<td colwidth="120">${inner}</td>`;
+      const tr = cells => `<tr data-row-height="40" style="height: 40px">${cells.join('')}</tr>`;
+      await loadGrid(`<table style="width: 240px;"><colgroup><col style="width: 120px;"><col style="width: 120px;"></colgroup><tbody>`
+        + tr([td('<ul><li><p>un</p></li></ul>'), td('<p>x</p>')]) + tr([td('<p></p>'), td('<p></p>')]) + tr([td('<p></p>'), td('<p></p>')]) + '</tbody></table>');
+      const items = () => { let n = 0; tableNode().child(0).child(0).descendants(node => { if (node.type.name === 'listItem') n++; return true; }); return n; };
+      ed().chain().focus().setTextSelection(cellPos(0, 0) + 6).run(); // fin de « un »
+      const startItems = items();
+      enterKey();
+      ed().commands.insertContent('deux');
+      const twoItems = items();
+      const stillHere = selectionCell() + '' === '0,0';
+      enterKey(); // un point de plus, vide
+      const threeItems = { items: items(), cell: selectionCell() };
+      enterKey(); // sur le point vide on sort de la liste (la case reste la même)
+      const lifted = { items: items(), cell: selectionCell() };
+      enterKey(); // hors de la liste : la case du dessous
+      const down = selectionCell();
+      const ok = startItems === 1 && twoItems === 2 && stillHere && threeItems.items === 3 && threeItems.cell + '' === '0,0' && lifted.items === 2 && lifted.cell + '' === '0,0' && down + '' === '1,0';
+      return { pass: ok, notes: JSON.stringify({ startItems, twoItems, stillHere, threeItems, lifted, down, cell: tableNode().child(0).child(0).textContent }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_picks_the_open_variable_list_entry_before_moving',
+    description: 'La liste « # » ouverte garde son Entrée : elle insère la variable choisie, dans la même case ; liste fermée, Entrée descend d\'une case.',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await placeCursor(1, 1);
+      await h.typeText('#');
+      await sleep(120);
+      const box = document.getElementById('autocomplete-box');
+      const listOpen = !!box && box.style.display !== 'none';
+      const picked = enterKey();
+      await sleep(120);
+      const stay = { cell: selectionCell(), lines: cellLines(1, 1), listClosed: box.style.display === 'none' };
+      const down = enterKey();
+      const after = selectionCell();
+      const ok = listOpen && picked && stay.cell + '' === '1,1' && /^#/.test(stay.lines) && stay.listClosed && down && after + '' === '2,1';
+      return { pass: ok, notes: JSON.stringify({ listOpen, picked, stay, down, after }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_from_chosen_cells_goes_under_the_first_one',
+    description: 'Des cases choisies (glisser, bandeau) : Entrée repart de la case où la sélection a commencé et se range sous elle, en une seule case.',
+    run: async (h) => inGrid(h, async () => {
+      await typeInCell(2, 1, 'sous la première');
+      await typeInCell(3, 1, 'plus bas');
+      ed().chain().focus().setCellSelection({ anchorCell: cellPos(1, 1), headCell: cellPos(3, 2) }).run();
+      await sleep(60);
+      const isRange = !!ed().state.selection.$anchorCell;
+      const taken = enterKey();
+      const result = { cell: selectionCell(), text: selectedText(), range: !!ed().state.selection.$anchorCell };
+      const ok = isRange && taken && result.cell + '' === '2,1' && result.text === 'sous la première' && !result.range;
+      return { pass: ok, notes: JSON.stringify({ isRange, taken, result }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_shows_the_whole_cell_it_lands_on_below_the_strips',
+    description: 'Dans un plan de travail étroit et bas, la case où Entrée arrive est TOUTE visible, jamais sous les bandeaux collés (colonnes en haut, lignes à gauche) : en descendant d\'une ligne à l\'autre, quand le curseur était resté hors de vue plus haut (la case arrivait cachée sous le bandeau), et quand sa colonne est hors de vue à droite.',
+    run: async (h) => {
+      await enterGrid(h);
+      const box = editorBox();
+      const saved = box.style.cssText;
+      const result = { down: [], above: null, right: null };
+      const landing = () => {
+        const dom = ed().view.domAtPos(ed().state.selection.head).node;
+        const td = (dom.nodeType === 1 ? dom : dom.parentElement).closest('td,th');
+        const r = td.getBoundingClientRect();
+        const b = box.getBoundingClientRect();
+        const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
+        const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
+        const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
+        return { ok: r.top >= top - 0.5 && r.bottom <= bottom + 0.5 && r.left >= left - 0.5 && r.right <= right + 0.5, cell: [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)], visible: [Math.round(top), Math.round(bottom), Math.round(left), Math.round(right)] };
+      };
+      try {
+        box.style.cssText = saved + ';width:320px;max-width:320px;height:160px;max-height:160px;overflow:auto';
+        await sleep(80);
+        box.scrollTop = 0; box.scrollLeft = 0;
+        await placeCursor(0, 0);
+        await sleep(100);
+        for (let i = 0; i < 12; i++) { enterKey(); await sleep(30); result.down.push(landing().ok); }
+        // Le curseur reste dans une case que le défilement a sortie de vue par le haut : Entrée amène la case du dessous, pas sous le bandeau.
+        await placeCursor(2, 1);
+        await sleep(100);
+        box.scrollTop = 260;
+        await sleep(60);
+        enterKey();
+        await sleep(30);
+        result.above = Object.assign({ at: selectionCell() }, landing());
+        // Sa colonne est hors de vue à droite.
+        await placeCursor(1, 4);
+        await sleep(100);
+        box.scrollLeft = 0; box.scrollTop = 0;
+        await sleep(60);
+        enterKey();
+        await sleep(30);
+        result.right = Object.assign({ at: selectionCell() }, landing());
+      } finally {
+        box.style.cssText = saved;
+        await leaveGrid(h);
+      }
+      const ok = result.down.every(Boolean) && result.above.ok && result.above.at + '' === '3,1' && result.right.ok && result.right.at + '' === '2,4';
+      return { pass: ok, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'grid_enter_in_a_document_still_splits_the_paragraph',
+    description: 'Hors grille, dans un document, Entrée coupe le paragraphe comme avant (et dans un tableau de document, elle ajoute un paragraphe dans la case).',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>ab</p><table><tbody><tr><td><p>cd</p></td><td><p>ef</p></td></tr><tr><td><p>gh</p></td><td><p>ij</p></td></tr></tbody></table>');
+      await sleep(200);
+      const paragraphs = () => { let n = 0; doc().forEach(node => { if (node.type.name === 'paragraph') n++; }); return n; };
+      const before = paragraphs();
+      ed().chain().focus().setTextSelection(2).run(); // au milieu de « ab »
+      const outside = key('Enter');
+      const outsideParagraphs = paragraphs() - before;
+      let cellPara = 0;
+      doc().descendants((node, pos) => { if (node.type.name === 'tableCell' && node.textContent === 'cd') { ed().chain().focus().setTextSelection(pos + 3).run(); } return true; });
+      const inside = key('Enter');
+      doc().descendants(node => { if (node.type.name === 'tableCell' && node.textContent === 'cd') cellPara = node.childCount; return true; });
+      const ok = outside && outsideParagraphs === 1 && inside && cellPara === 2;
+      return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs, inside, cellPara }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.grid = cases;
 })();
