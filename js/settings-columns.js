@@ -9,6 +9,8 @@
 //                                            tels que la règle les cite] } ; null pour un réglage sain, coupé ou incomplet
 //   SettingsColumns.message(found)        -> le texte du coin d'état, dans la langue de l'interface ('' sans problème)
 //   SettingsColumns.checkAfterOpen(hooks) -> Promise<{ message, skipped? }> ; hooks = { notify(texte, estUneErreur), isUntouched() } (js/main.js)
+//   SettingsColumns.tableGone(table)      -> Promise<boolean> : la table est SUPPRIMÉE ou renommée (et pas seulement cachée à cette personne par une règle d'accès) ; faux quand on ne peut pas le
+//                                            savoir. js/access-rights.js s'en sert pour laisser l'onglet Accès modifiable quand la table des droits n'existe plus (choix d'Antoine du 2026-10-02)
 const SettingsColumns = (function () {
   const unique = list => list.filter((name, i) => list.indexOf(name) === i);
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -25,12 +27,17 @@ const SettingsColumns = (function () {
     try { return (await GristAPI.fetchTableRows('_grist_Tables')).some(row => row.tableId === ''); }
     catch (e) { return true; }
   }
+  // Table réellement disparue : le schéma est lu, elle n'y figure plus et aucune table n'est cachée dans le document. Dans le doute (schéma inconnu, liste des tables illisible, table
+  // peut-être cachée) : faux - jamais « disparue » pour qui n'a simplement pas le droit de la lire.
+  async function tableGone(table) {
+    return !!table && schemaKnown() && !tableExists(table) && !(await mayBeHidden());
+  }
 
   // Réglage Accès : { table } si la table des droits a disparu (ses colonnes ne se comptent alors pas), { columns } pour celles qui manquent dans l'ordre de l'onglet, null sinon.
   async function accessProblem() {
     const config = AccessRights.getConfig();
     if (!config || !schemaKnown()) return null;
-    if (!tableExists(config.table)) return (await mayBeHidden()) ? null : { table: config.table };
+    if (!tableExists(config.table)) return (await tableGone(config.table)) ? { table: config.table } : null;
     if (!columnsKnown(config.table)) return null;
     const cited = unique([config.emailColumn, config.readOnlyColumn, config.exportColumn, config.commentsColumn].filter(Boolean));
     const missing = cited.filter(col => !GristAPI.getColumnType(config.table, col));
@@ -101,5 +108,5 @@ const SettingsColumns = (function () {
     return { message: text };
   }
 
-  return { problems, message, checkAfterOpen };
+  return { problems, message, checkAfterOpen, tableGone };
 })();

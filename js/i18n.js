@@ -526,6 +526,7 @@ const I18n = (function () {
     'settings.access.status.notFound': { fr: 'Vous ({email}) n’êtes pas dans la table : tous les droits.', en: 'You ({email}) are not in the table: all rights.' },
     'settings.access.status.noEmail': { fr: 'Votre email Grist est introuvable : tous les droits.', en: 'Your Grist email could not be found: all rights.' },
     'settings.access.status.error': { fr: 'Table des droits illisible pour vous : lecture seule par précaution.', en: 'Rights table unreadable for you: read-only as a precaution.' },
+    'settings.access.status.tableGone': { fr: 'La table des droits n’existe plus : choisissez-en une autre. Lecture seule d’ici là, par précaution.', en: 'The rights table no longer exists: choose another one. Read-only until then, as a precaution.' },
     'settings.access.right.readOnly': { fr: 'lecture seule', en: 'read-only' },
     'settings.access.right.edit': { fr: 'modification', en: 'editing' },
     'settings.access.right.export': { fr: 'export', en: 'export' },

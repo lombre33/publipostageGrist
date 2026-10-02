@@ -574,6 +574,260 @@
     },
   });
 
+  // === Table des droits supprimée ou renommée (choix d'Antoine du 2026-10-02, carte « Rendre l'onglet Accès modifiable quand la table des droits n'existe plus ? » : « Rendre modifiable ») ===
+  // Tout le monde reste en lecture seule par précaution (état « error »), mais l'onglet Accès reste modifiable : sans cela, la personne qui a réglé l'Accès n'aurait aucun moyen d'en choisir une autre.
+  // Une table seulement CACHÉE par une règle d'accès, ou une liste des tables illisible : rien ne se déverrouille, comme avant.
+  // Un vrai Grist refuse de lire une table qui n'existe plus ; le faux en rend une vide (« personne n'y figure : tous les droits ») : la lecture est donc refusée ici comme Grist le ferait.
+  const ACCESS_SELECTS = ['settings-access-table', 'settings-access-email', 'settings-access-readonly', 'settings-access-export', 'settings-access-comments'];
+  const RIGHTS_COLUMNS = { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' };
+  const OTHER_RIGHTS_TABLE = 'PpDroitsBis';
+  const GONE_FR = 'La table des droits n’existe plus : choisissez-en une autre. Lecture seule d’ici là, par précaution.';
+  const UNREADABLE_FR = 'Table des droits illisible pour vous : lecture seule par précaution.';
+
+  function refuseReads(names) {
+    const original = grist.docApi.fetchTable;
+    grist.docApi.fetchTable = async (tableId) => {
+      if (names.indexOf(tableId) !== -1) throw new Error('Table not found or blocked: ' + tableId);
+      return original(tableId);
+    };
+    return () => { grist.docApi.fetchTable = original; };
+  }
+  // Une table que Grist cache à cette personne (WidgetFrame.ts:listTables, vérifié à la source) : absente de la liste des tables, sa ligne de _grist_Tables reste, au nom blanchi.
+  // Rend de quoi la remettre en place (setVariables recalcule les lignes de métadonnées).
+  function hideTable(name) {
+    const state = stub().state;
+    const at = state.rows._grist_Tables.tableId.indexOf(name);
+    state.tables.splice(state.tables.indexOf(name), 1);
+    state.rows._grist_Tables.tableId[at] = '';
+    return () => stub().setVariables(name, state.columns[name]);
+  }
+  const accessSelectsDisabled = () => ACCESS_SELECTS.map(id => document.getElementById(id).disabled);
+  const accessTriggersDisabled = () => ACCESS_SELECTS.map(id => document.getElementById(id).nextElementSibling.querySelector('.ss-trigger').disabled);
+  const accessTabState = () => ({
+    selects: accessSelectsDisabled(),
+    triggers: accessTriggersDisabled(),
+    cleanBoxDisabled: document.getElementById('settings-access-clean-reading').disabled,
+    lockedHint: !document.getElementById('settings-access-locked').hidden,
+    status: document.getElementById('settings-access-status').textContent,
+  });
+  const allFalse = list => list.length === 5 && list.every(v => v === false);
+  const allTrue = list => list.length === 5 && list.every(v => v === true);
+  async function chooseInAccessTab(id, value) {
+    const select = document.getElementById(id);
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(300);
+  }
+  async function openSettings() {
+    document.getElementById('v2-btn-settings').click();
+    await sleep(300);
+  }
+  async function closeSettings() {
+    const close = document.getElementById('settings-close');
+    if (close) close.click();
+    await sleep(100);
+  }
+  async function restoreRightsTables() {
+    stub().dropTable(OTHER_RIGHTS_TABLE);
+    await GristAPI.refreshSchema();
+  }
+
+  cases.push({
+    id: 'access_deleted_rights_table_leaves_the_access_tab_editable',
+    description: 'Table des droits supprimée ou renommée dans Grist : les droits restent en lecture seule par précaution, mais l’onglet Accès reste modifiable (cinq listes, case de la Lecture épurée), dit que la table n’existe plus, et choisir une autre table puis sa colonne « Lecture seule » rend les droits de cette table',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits table supprimée');
+      await applyRights({ readOnly: false, export: true, comments: true });
+      stub().setVariables(OTHER_RIGHTS_TABLE, RIGHTS_COLUMNS);
+      stub().setRows(OTHER_RIGHTS_TABLE, [{ id: 1, Email: 'Lecteur@Exemple.fr', LectureSeule: false, Export: true, Commentaires: true }]);
+      stub().dropTable(RIGHTS_TABLE);
+      await GristAPI.refreshSchema();
+      const allowReads = refuseReads([RIGHTS_TABLE]);
+      const out = {};
+      try {
+        await AccessRights.refresh();
+        await sleep(300);
+        out.status = AccessRights.getStatus();
+        out.rights = AccessRights.get();
+        out.greyed = locked('v2-save-group');
+        out.read = inReadMode();
+        await openSettings();
+        out.tab = accessTabState();
+        out.tableShown = document.getElementById('settings-access-table').nextElementSibling.querySelector('.ss-trigger').textContent;
+        const lang = I18n.getLang();
+        try { I18n.setLang('en'); await sleep(100); out.english = document.getElementById('settings-access-status').textContent; }
+        finally { I18n.setLang(lang); await sleep(100); }
+        await chooseInAccessTab('settings-access-table', OTHER_RIGHTS_TABLE);
+        out.afterTable = {
+          config: AccessRights.getConfig(),
+          option: stub().state.options && stub().state.options.droitsAcces,
+          readOnly: AccessRights.get().readOnly,
+          greyed: locked('v2-save-group'),
+          email: document.getElementById('settings-access-email').value,
+        };
+        await chooseInAccessTab('settings-access-readonly', 'LectureSeule');
+        await waitFor(() => AccessRights.getStatus().state === 'found');
+        out.afterColumn = {
+          status: AccessRights.getStatus(),
+          config: AccessRights.getConfig(),
+          readOnly: AccessRights.get().readOnly,
+          greyed: locked('v2-save-group'),
+          tab: accessTabState(),
+        };
+      } finally {
+        allowReads();
+        await closeSettings();
+        await restoreRightsTables();
+        await cleanup();
+      }
+      const checks = {
+        gone: out.status.state === 'error' && out.status.tableGone === true,
+        rightsStayReadOnly: out.rights.readOnly === true && out.rights.canExport === false && out.rights.canComment === false && out.greyed === true && out.read === true,
+        selectsEditable: allFalse(out.tab.selects) && allFalse(out.tab.triggers),
+        cleanBoxEditable: out.tab.cleanBoxDisabled === false,
+        noLockHint: out.tab.lockedHint === false,
+        saysTheTableIsGone: out.tab.status === GONE_FR,
+        saysItInEnglishToo: out.english === 'The rights table no longer exists: choose another one. Read-only until then, as a precaution.',
+        goneNameStaysVisible: out.tableShown === RIGHTS_TABLE,
+        otherTableChosen: out.afterTable.config === null && out.afterTable.option == null && out.afterTable.readOnly === false && out.afterTable.greyed === false && out.afterTable.email === 'Email',
+        columnChosenReadsTheNewTable: out.afterColumn.status.state === 'found' && !out.afterColumn.status.tableGone && !!out.afterColumn.config && out.afterColumn.config.table === OTHER_RIGHTS_TABLE
+          && out.afterColumn.readOnly === false && out.afterColumn.greyed === false && allFalse(out.afterColumn.tab.selects) && out.afterColumn.tab.status.indexOf(EMAIL) !== -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' | ' + JSON.stringify(out) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'access_rights_table_hidden_by_an_access_rule_keeps_the_access_tab_locked',
+    description: 'Table des droits seulement cachée à la personne par une règle d’accès de Grist (absente de la liste des tables, ligne de _grist_Tables au nom blanchi, lecture refusée) : l’onglet Accès reste verrouillé - sinon il suffirait à se déverrouiller - avec son texte « illisible pour vous », et l’état garde sa forme d’avant',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits table cachée');
+      await applyRights({ readOnly: false, export: true, comments: true });
+      const unhide = hideTable(RIGHTS_TABLE);
+      const allowReads = refuseReads([RIGHTS_TABLE]);
+      const out = {};
+      try {
+        await GristAPI.refreshSchema();
+        await AccessRights.refresh();
+        await sleep(300);
+        out.status = AccessRights.getStatus();
+        out.rights = AccessRights.get();
+        out.listed = GristAPI.getTables().indexOf(RIGHTS_TABLE) !== -1;
+        await openSettings();
+        out.tab = accessTabState();
+      } finally {
+        allowReads();
+        await closeSettings();
+        unhide();
+        await GristAPI.refreshSchema();
+        await cleanup();
+      }
+      const checks = {
+        reallyHidden: out.listed === false,
+        lockedByPrecaution: out.status.state === 'error' && out.rights.readOnly === true,
+        notSaidToBeGone: out.status.tableGone === undefined && JSON.stringify(out.status) === JSON.stringify({ state: 'error', email: EMAIL }),
+        selectsLocked: allTrue(out.tab.selects) && allTrue(out.tab.triggers),
+        cleanBoxLocked: out.tab.cleanBoxDisabled === true,
+        lockHintShown: out.tab.lockedHint === true,
+        unreadableText: out.tab.status === UNREADABLE_FR,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' | ' + JSON.stringify(out) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'access_unreadable_table_list_keeps_the_access_tab_locked_until_it_can_tell',
+    description: 'Table des droits absente mais liste des tables (_grist_Tables) illisible : on ne peut pas savoir si elle est supprimée ou cachée, l’onglet Accès reste verrouillé (même si le test lui-même échoue) ; dès que la liste se relit et que la table est bien supprimée, l’onglet ouvert se déverrouille tout seul (relecture de 10 s), sans le rouvrir',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits liste illisible');
+      await applyRights({ readOnly: false, export: true, comments: true });
+      stub().dropTable(RIGHTS_TABLE);
+      await GristAPI.refreshSchema();
+      const allowRights = refuseReads([RIGHTS_TABLE]);
+      let allowMeta = refuseReads(['_grist_Tables']);
+      const out = {};
+      try {
+        await AccessRights.refresh();
+        await sleep(300);
+        out.unsure = { status: AccessRights.getStatus(), rights: AccessRights.get() };
+        await openSettings();
+        out.unsureTab = accessTabState();
+        // Le test lui-même qui échoue (exception) : dans le doute, rien ne se déverrouille.
+        const realTableGone = SettingsColumns.tableGone;
+        SettingsColumns.tableGone = async () => { throw new Error('test de la table disparue en panne'); };
+        try {
+          await AccessRights.refresh();
+          await sleep(200);
+          out.broken = { status: AccessRights.getStatus(), tab: accessTabState() };
+        } finally { SettingsColumns.tableGone = realTableGone; }
+        allowMeta();
+        allowMeta = () => {};
+        await AccessRights.refresh();
+        await sleep(300);
+        out.sure = { status: AccessRights.getStatus(), rights: AccessRights.get() };
+        out.sureTab = accessTabState();
+      } finally {
+        allowMeta();
+        allowRights();
+        await closeSettings();
+        await GristAPI.refreshSchema();
+        await cleanup();
+      }
+      const checks = {
+        unsureStaysLocked: out.unsure.status.state === 'error' && out.unsure.status.tableGone === undefined && out.unsure.rights.readOnly === true,
+        unsureTabLocked: allTrue(out.unsureTab.selects) && allTrue(out.unsureTab.triggers) && out.unsureTab.lockedHint === true && out.unsureTab.status === UNREADABLE_FR,
+        brokenTestStaysLocked: out.broken.status.state === 'error' && out.broken.status.tableGone === undefined && allTrue(out.broken.tab.selects) && out.broken.tab.lockedHint === true,
+        sureSaysGone: out.sure.status.state === 'error' && out.sure.status.tableGone === true && out.sure.rights.readOnly === true,
+        openTabFollows: allFalse(out.sureTab.selects) && allFalse(out.sureTab.triggers) && out.sureTab.lockedHint === false && out.sureTab.status === GONE_FR,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' | ' + JSON.stringify(out) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'access_rights_table_back_in_grist_gives_the_rights_back',
+    description: 'La table des droits rétablie dans Grist après sa suppression : à la relecture, l’état « n’existe plus » disparaît, les droits de la personne reviennent (plus de lecture seule par précaution) et l’onglet Accès ouvert le dit, sans le rouvrir',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits table rétablie');
+      await applyRights({ readOnly: false, export: true, comments: true });
+      stub().dropTable(RIGHTS_TABLE);
+      await GristAPI.refreshSchema();
+      const allowReads = refuseReads([RIGHTS_TABLE]);
+      const out = {};
+      try {
+        await AccessRights.refresh();
+        await sleep(300);
+        out.gone = { status: AccessRights.getStatus(), rights: AccessRights.get() };
+        await openSettings();
+        out.goneTab = accessTabState();
+        allowReads();
+        // La table revient telle qu'elle était : mêmes colonnes, la ligne de la personne.
+        stub().setVariables(RIGHTS_TABLE, RIGHTS_COLUMNS);
+        stub().setRows(RIGHTS_TABLE, [{ id: 1, Email: 'Lecteur@Exemple.fr', LectureSeule: false, Export: true, Commentaires: true }]);
+        await GristAPI.refreshSchema();
+        await AccessRights.refresh();
+        await sleep(300);
+        out.back = { status: AccessRights.getStatus(), rights: AccessRights.get(), greyed: locked('v2-save-group') };
+        out.backTab = accessTabState();
+      } finally {
+        allowReads();
+        await closeSettings();
+        await cleanup();
+      }
+      const checks = {
+        wasGone: out.gone.status.tableGone === true && out.gone.rights.readOnly === true,
+        goneTabEditable: allFalse(out.goneTab.selects) && out.goneTab.status === GONE_FR,
+        backFound: out.back.status.state === 'found' && out.back.status.tableGone === undefined && out.back.rights.readOnly === false && out.back.rights.canExport === true && out.back.greyed === false,
+        openTabFollows: allFalse(out.backTab.selects) && out.backTab.lockedHint === false && out.backTab.status.indexOf(EMAIL) !== -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' | ' + JSON.stringify(out) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();

@@ -432,6 +432,49 @@
     },
   );
 
+  // SettingsColumns.tableGone, que js/access-rights.js appelle pour laisser l'onglet Accès modifiable quand la table des droits n'existe plus (choix d'Antoine du 2026-10-02 : « Rendre
+  // modifiable »). Les scénarios de l'onglet lui-même sont dans scenarios-access-rights.js ; ici, le test de « vraiment disparue » seul.
+  scenario(
+    'settingscolumns_table_gone_is_true_only_when_certain',
+    'SettingsColumns.tableGone : vrai pour une table renommée ou supprimée, faux pour une table qui existe, un schéma encore inconnu, une liste des tables (_grist_Tables) illisible, un nom vide - et pour une table cachée par une règle d’accès (rien n’est dit « disparu » pour qui n’a pas le droit de la lire)',
+    async () => {
+      const exists = await SettingsColumns.tableGone(RIGHTS);
+      await renamed(s => s.renameTable(RIGHTS, 'ScDroitsBis'));
+      const renamedAway = await SettingsColumns.tableGone(RIGHTS);
+      const newName = await SettingsColumns.tableGone('ScDroitsBis');
+      await renamed(s => s.dropTable('ScDroitsBis'));
+      const dropped = await SettingsColumns.tableGone('ScDroitsBis');
+      const tables = GristAPI.getTables;
+      const fetchTable = grist.docApi.fetchTable;
+      let unknownSchema; let unreadableList;
+      try {
+        GristAPI.getTables = () => [];
+        unknownSchema = await SettingsColumns.tableGone(RIGHTS);
+        GristAPI.getTables = tables;
+        grist.docApi.fetchTable = async function (name) { if (name === '_grist_Tables') throw new Error('réseau coupé'); return fetchTable.apply(this, arguments); };
+        unreadableList = await SettingsColumns.tableGone(RIGHTS);
+      } finally { GristAPI.getTables = tables; grist.docApi.fetchTable = fetchTable; }
+      const noName = [await SettingsColumns.tableGone(''), await SettingsColumns.tableGone(undefined), await SettingsColumns.tableGone(null)];
+      const unhide = hideTables([LINKED]);
+      let hidden; let hiddenElsewhere;
+      try {
+        hidden = await SettingsColumns.tableGone(LINKED);
+        hiddenElsewhere = await SettingsColumns.tableGone(RIGHTS);
+      } finally { unhide(); }
+      const checks = {
+        existsIsNotGone: exists === false,
+        renamedIsGone: renamedAway === true && newName === false,
+        droppedIsGone: dropped === true,
+        unknownSchemaCannotTell: unknownSchema === false,
+        unreadableListCannotTell: unreadableList === false,
+        noNameIsNotGone: noName.every(v => v === false),
+        hiddenIsNotGone: hidden === false && hiddenElsewhere === false,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
   scenario(
     'settingscolumns_not_written_over_unsaved_changes',
     'Quand la personne a déjà commencé à modifier (le coin d’état dit « Modifications non enregistrées »), le message ne le remplace pas : rien n’est écrit au coin d’état, le résultat garde le message',
