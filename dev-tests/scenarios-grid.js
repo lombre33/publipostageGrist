@@ -1716,6 +1716,95 @@
     },
   });
 
+  // === Collage dans une case : pas de ligne vide en dessous (Antoine, 02/10 : « quand on colle une variable en mode grille ca rajouter 1 à 2 ligne en dessous ») ===========
+
+  // Un vrai collage de ProseMirror : un `paste` avec un DataTransfer (texte brut et/ou HTML), le curseur dans la case visée.
+  async function pasteInto(row, col, data) {
+    await placeCursor(row, col);
+    const dt = new DataTransfer();
+    if (data.html != null) dt.setData('text/html', data.html);
+    if (data.plain != null) dt.setData('text/plain', data.plain);
+    ed().view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    await sleep(150);
+  }
+  // Ce que la case contient : un mot par paragraphe (« # » pour une bulle de variable, « - » pour un paragraphe vide).
+  function cellLines(row, col) {
+    const cell = tableNode().child(row).child(col);
+    const lines = [];
+    cell.forEach(block => {
+      const parts = [];
+      block.forEach(inline => parts.push(inline.type.name === 'varBadge' ? '#' + inline.attrs.column : inline.type.name === 'hardBreak' ? '<br>' : inline.text));
+      lines.push(parts.join('') || '-');
+    });
+    return lines.join(' / ');
+  }
+  const pasteBadge = '<span class="var-badge" data-table="Collage" data-column="Nom" data-key="Collage.Nom"></span>';
+  const rowsNow = () => tableNode().childCount;
+
+  cases.push({
+    id: 'grid_paste_text_with_a_final_line_break_adds_no_empty_line_below',
+    description: 'Collage dans une case de grille d\'un texte copié qui finit par un retour à la ligne (une ligne de Grist, d\'un mail, d\'un autre tableur : « Alpha\\n », « Bêta\\r\\n\\r\\n ») : la case n\'a que le texte, aucun paragraphe vide en dessous, et le nombre de lignes de la grille ne change pas.',
+    run: async (h) => inGrid(h, async () => {
+      const rows = rowsNow();
+      await pasteInto(1, 1, { plain: 'Alpha\n' });
+      await pasteInto(2, 2, { plain: 'Bêta\r\n\r\n' });
+      await pasteInto(14, 0, { plain: 'Gamma\n' });
+      const got = [cellLines(1, 1), cellLines(2, 2), cellLines(14, 0)];
+      return { pass: got.join('|') === 'Alpha|Bêta|Gamma' && rowsNow() === rows, notes: JSON.stringify({ got, rows: rowsNow(), rowsBefore: rows }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_paste_variable_with_trailing_empty_paragraphs_adds_no_line_below',
+    description: 'Collage d\'une variable (une bulle) copiée avec un ou deux paragraphes vides derrière elle - un paragraphe sélectionné jusqu\'à sa fin, un mail, une page web - : la case garde la bulle, sans ligne en dessous, quel que soit le nombre de paragraphes vides ou de `<br>` de fin.',
+    run: async (h) => inGrid(h, async () => {
+      await pasteInto(0, 0, { html: '<p data-pm-slice="1 1 []">Texte ' + pasteBadge + '</p><p></p>', plain: 'Texte \n' });
+      await pasteInto(1, 0, { html: '<p>' + pasteBadge + '</p><p></p><p></p>', plain: '\n\n' });
+      await pasteInto(2, 0, { html: '<p>' + pasteBadge + '</p><p><br></p><p><br></p>' });
+      await pasteInto(3, 0, { html: '<p>Fin' + pasteBadge + '<br></p>' });
+      const got = [cellLines(0, 0), cellLines(1, 0), cellLines(2, 0), cellLines(3, 0)];
+      return { pass: got.join('|') === 'Texte #Nom|#Nom|#Nom|Fin#Nom', notes: JSON.stringify(got) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_paste_keeps_the_lines_inside_a_text_and_pastes_nothing_for_blank_lines_only',
+    description: 'Collage dans une case de grille : un texte de deux lignes garde ses deux lignes (la ligne vide du milieu aussi), seules les lignes vides de FIN ne sont pas collées ; des lignes vides seules ne collent rien et la case reste une case vide.',
+    run: async (h) => inGrid(h, async () => {
+      await pasteInto(0, 0, { plain: 'un\ndeux\n' });
+      await pasteInto(1, 0, { html: '<p>haut</p><p></p><p>bas</p><p></p>' });
+      await pasteInto(2, 0, { plain: '\n\n' });
+      await pasteInto(3, 0, { html: '<p></p><p><br></p>' });
+      const got = [cellLines(0, 0), cellLines(1, 0), cellLines(2, 0), cellLines(3, 0)];
+      return { pass: got.join('|') === 'un / deux|haut / - / bas|-|-', notes: JSON.stringify(got) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_paste_of_cells_still_goes_through_the_table_and_a_document_keeps_its_paste',
+    description: 'Le collage de cases (un tableau copié) n\'est pas touché : deux cases collées sur la dernière ligne ajoutent toujours la ligne qui leur manque ; et hors grille, dans un document, un texte « Alpha\\n » colle toujours son paragraphe vide (ce collage n\'est réglé que pour une case de grille).',
+    run: async (h) => {
+      let grown = null;
+      await inGrid(h, async () => {
+        const rows = rowsNow();
+        const cells = '<table><tbody><tr><td><p>un</p></td></tr><tr><td><p>deux</p></td></tr></tbody></table>';
+        await pasteInto(rows - 1, 0, { html: cells, plain: 'un\ndeux' });
+        grown = { before: rows, after: rowsNow(), first: cellLines(rows - 1, 0), second: tableNode().childCount > rows ? cellLines(rows, 0) : null };
+      });
+      await h.resetEditor();
+      ed().commands.setContent('<p></p>');
+      ed().chain().focus().setTextSelection(1).run();
+      const dt = new DataTransfer();
+      dt.setData('text/plain', 'Alpha\n');
+      ed().view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await sleep(150);
+      const docLines = [];
+      doc().forEach(block => docLines.push(block.textContent || '-'));
+      const pass = grown.after === grown.before + 1 && grown.first === 'un' && grown.second === 'deux' && docLines.join('|') === 'Alpha|-';
+      return { pass, notes: JSON.stringify({ grown, docLines }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.grid = cases;
 })();

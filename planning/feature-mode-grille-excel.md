@@ -92,6 +92,10 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   texte reste du texte. Aucun style calculé n'est lu (couleurs : seulement ce que la personne a posé, `codeHygiene` y veille). Chargement : ExcelJS 4.4.0 depuis cdnjs avec son SRI, à la demande
   (`ExportCommon.loadScriptOnce`), jamais au démarrage. Menu : « Exporter en Excel… » grisée hors grille, les deux lignes Word grisées dans une grille (`syncExportRowsForModelType` de `js/main.js` ; une ligne grisée
   garde `aria-disabled` et son clic ne lance rien) ; elle ne disparaît jamais.
+- Collage dans une case (02/10, Antoine : « quand on colle une variable en mode grille ça rajoute 1 à 2 lignes en dessous non souhaitées ») : un texte copié finit presque toujours par un retour à la ligne, que
+  ProseMirror garde en dernier paragraphe vide sous le texte collé. `GridEditor.trimPastedSlice` (branché sur `transformPasted`, grille seulement : un document garde son collage) ôte les paragraphes vides de fin et
+  les retours à la ligne forcés qui terminent le dernier texte ; il en reste toujours un (des lignes vides seules ne collent rien) ; les lignes vides du MILIEU d'un texte restent ; un tableau copié (lignes, cases) est
+  laissé tel quel. Le chemin exact d'Antoine (d'où il copie la variable) n'a pas pu être rejoué : seul ce défaut-là est reproduit et corrigé.
 - Pas dans la première version : boucles sur une ligne de grille, formules, volets figés, images en calque, en-tête/pied/numéros de page, conversion document ⇄ grille.
 
 ## Lots
@@ -130,6 +134,8 @@ Maquette validée : <https://claude.ai/artifact/CC98edDfx54GyxEhhswFBu> (v4). Le
   collage d'un tableau, Annuler, tailles des lignes et colonnes ajoutées, bandeaux alignés, tirer un trait (une transaction, un Annuler, minimum, Échap), clic sur un bandeau, barre de la case, suivi coupé,
   contenu qui n'est pas une grille, enregistrer et rouvrir, Lecture et retour ; lot A2 : alignement vertical enregistré (ancien modèle, valeur inconnue, `vertical-align` collé hors grille),
   Lecture comparée à l'éditeur (largeurs, hauteurs, texte à la même hauteur), PDF comparé à l'éditeur (hauteurs et texte peint, lus par pdf.js), grille large ramenée à la page, tableau de document inchangé.
+  Collage dans une case (02/10) : un texte qui finit par un retour à la ligne, une variable suivie de paragraphes vides, les lignes du milieu gardées et des lignes vides seules qui ne collent rien, un tableau copié qui passe
+  toujours par ses cases, un document inchangé (4 cas, trois échouent sur l'ancien code).
 - `dev-tests/scenarios-xlsx.js` (groupe `xlsx`, 31 cas, lots D, E, B2 et C) : le .xlsx produit est dézippé et son OOXML relu (colonnes et lignes, cases typées, formats FR et EN, texte riche, couleurs, fusions et filets, paragraphes
   et listes, liens, images, nom de feuille et mise en page, paysage, ligne répétée par une zone « ligne », document sans tableau, menu grisé, clic de la ligne Excel et alerte sans ligne sélectionnée) ; lot E : l'archive ZIP (un classeur par valeur), le classeur unique (une feuille par valeur, noms valides et distincts), une valeur qui échoue en cours de feuille,
   un bloc de texte conditionnel dans une case (résolu comme à la Lecture), les mots d'une grille (français et anglais, document inchangé, changement de langue) et le PDF unique d'une grille ; relu une fois par openpyxl à l'écriture du lot D

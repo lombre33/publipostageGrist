@@ -8,6 +8,7 @@
 //     (aperçu en direct pendant le geste, UNE seule transaction au relâcher : un seul Annuler) ;
 //   - la hauteur de ligne (`rowHeight` sur tableRow, plancher = la hauteur de son texte) et la largeur de colonne (`colwidth` de chaque case) toujours posées ;
 //   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent.
+//   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`).
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
 // fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
 const GridEditor = (function () {
@@ -616,6 +617,48 @@ const GridEditor = (function () {
     return rows;
   }
 
+  // --- Collage ----------------------------------------------------------------------------------------------------------------------------------------------------
+  // Un texte copié finit presque toujours par un retour à la ligne (une ligne de Grist, d'un mail ou d'un autre tableur, un paragraphe sélectionné jusqu'à sa fin) :
+  // ProseMirror en fait un dernier paragraphe vide qui reste sous le texte collé (Antoine, 02/10 : « quand on colle une variable en mode grille ça rajoute 1 à 2 lignes en
+  // dessous non souhaitées »). Dans une case ces lignes vides ne servent à rien : elles agrandissent la ligne et ouvrent des lignes dans l'Excel. Elles ne sont pas collées ;
+  // les lignes vides du MILIEU d'un texte restent, et un tableau copié (ses lignes, ses cases) est laissé tel quel - c'est prosemirror-tables qui le place.
+  function isBlankBlock(node) {
+    if (!node.isTextblock) return false;
+    let blank = true;
+    node.forEach(child => { if (child.isText ? child.text.trim() !== '' : child.type.name !== 'hardBreak') blank = false; });
+    return blank;
+  }
+
+  function openDepthAtEnd(fragment) {
+    let depth = 0;
+    for (let node = fragment.lastChild; node && !node.isLeaf; node = node.lastChild) depth++;
+    return depth;
+  }
+
+  function trimPastedSlice(slice) {
+    const content = slice.content;
+    const blocks = [];
+    content.forEach(node => blocks.push(node));
+    if (!blocks.length || blocks.some(node => node.type.spec.tableRole)) return slice;
+    // Au moins un bloc reste : coller des lignes vides seules ne colle rien, sans faire disparaître la case.
+    let end = blocks.length;
+    while (end > 1 && isBlankBlock(blocks[end - 1])) end--;
+    // Le dernier texte peut finir par des retours à la ligne forcés (`<br>` d'un mail, d'une page web).
+    let last = blocks[end - 1];
+    if (last.isTextblock) {
+      let keep = last.childCount;
+      while (keep > 0 && last.child(keep - 1).type.name === 'hardBreak') keep--;
+      if (keep > 0 && keep < last.childCount) {
+        let size = 0;
+        for (let i = 0; i < keep; i++) size += last.child(i).nodeSize;
+        last = last.copy(last.content.cut(0, size));
+      }
+    }
+    if (end === blocks.length && last === blocks[end - 1]) return slice;
+    const fragment = content.constructor.fromArray(blocks.slice(0, end - 1).concat(last));
+    return new slice.constructor(fragment, slice.openStart, Math.min(slice.openEnd, openDepthAtEnd(fragment)));
+  }
+
   // --- Extension TipTap : garde-fou, sélection, touches ----------------------------------------------------------------------------------------------------------
   function createExtension(Extension) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
@@ -658,6 +701,7 @@ const GridEditor = (function () {
             return tr;
           },
           props: {
+            transformPasted(slice) { return active ? trimPastedSlice(slice) : slice; },
             decorations(state) {
               if (!active || isCellSelection(state.selection)) return null;
               const pos = currentCellPos(state);
