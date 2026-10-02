@@ -575,6 +575,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (un appui ou un glissé de souris tombe toujours sur la case visée), à la même place quelle que soit la case courante, masquée avec l'éditeur (Lecture, macro-modèle), et
   « Supprimer le tableau » y est grisé. Depuis que l'export Excel est complet
   (une ligne, puis toutes les valeurs de la table), « Nouvelle grille » est dans le menu « + » de tout widget, sans rien dans l'adresse.
+- Coller un tableau de tableur dans un document (choix d'Antoine du 02/10, « Coller aussi un tableau Excel en cases dans un document, hors grille ? » - « Oui, en cases »). Un tableau copié dans Excel, Google Sheets ou
+  LibreOffice Calc et collé dans un document ordinaire devient un tableau du document, jamais l'image de la plage : posé à la place du curseur (la ligne se coupe autour), avec ses fusions, ses fonds, son texte (gras, italique,
+  souligné, barré, couleur, taille), ses alignements et les largeurs de ses colonnes ; un tableau plus large que la page revient à la page en Aperçu A4. Ni traits case par case, ni alignement vertical, ni hauteur de ligne : le PDF et le
+  Word ne les lisent que pour une grille, l'éditeur ne montre donc rien que l'export perde (WYSIWYG). Un seul Annuler défait le collage ; Ctrl+Maj+V colle le texte de la plage, ni tableau ni image ; le curseur dans une case d'un
+  tableau du document : le tableau d'Excel remplit les cases à partir de celle du curseur ; une image seule, un tableau de page web et du texte se collent comme avant.
 - Importer un classeur Excel dans une grille (demande d'Antoine du 02/10, « Prévoir un Import Excel pour le modèle Grille »). La ligne « Importer un Excel… » du menu « + » suit « Nouvelle grille » (grisée en lecture seule avec tout le groupe) :
   un clic ouvre le sélecteur de fichier du navigateur, réduit aux .xlsx et .xlsm, un seul fichier. Le classeur devient une NOUVELLE grille, sans nom et pas enregistrée (le message dit « Nommez le modèle puis enregistrez-le »). Quand il a
   plusieurs feuilles visibles, une liste avec recherche (la même que celle des colonnes, des tables et des modèles : `SearchSelect.attachSheets`) s'ouvre sous le « + » une fois le classeur lu (choix d'Antoine du 02/10, « Oui, une liste ») :

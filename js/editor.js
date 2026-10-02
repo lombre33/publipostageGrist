@@ -347,12 +347,15 @@ const Editor = (function () {
       editorProps: {
         // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le reste garde le texte par défaut.
         clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
+        // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un DOCUMENT devient un tableau du document, case par case (js/grid-table.js, choix d'Antoine du 02/10) ; dans une grille
+        // c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle.
+        transformPastedHTML: html => (GridEditor.isActive() ? html : GridTable.cleanPastedDocumentHtml(html)),
         handlePaste(view, event) {
           const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
           const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
           if (!imageItem) return false;
-          // Excel joint à son tableau HTML une IMAGE de la plage copiée : dans une grille c'est le tableau, case par case, que la personne veut (GridTable le réécrit).
-          if (GridEditor.isActive() && GridTable.clipboardHasSpreadsheetTable(event.clipboardData)) return false;
+          // Excel joint à son tableau HTML une IMAGE de la plage copiée : dans une grille comme dans un document, c'est le tableau, case par case, que la personne veut.
+          if (GridTable.clipboardHasSpreadsheetTable(event.clipboardData)) return false;
           const file = imageItem.getAsFile();
           if (!file) return false;
           event.preventDefault();

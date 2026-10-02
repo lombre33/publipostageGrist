@@ -6,6 +6,9 @@
 //   { width, cols: [px], rows: [{ height: px, cells: [{ col, colspan, rowspan, html, align, valign, fill, borders: { top, right, bottom, left } }] }] }
 // où `html` est le contenu en ligne déjà écrit (marques comprises) : le presse-papiers (`fromClipboardHtml`) et, au sujet 18, un classeur .xlsx (js/grid-xlsx-import.js) y arrivent chacun
 // de leur côté et sortent par le même `toHtml` - un tableau collé et un tableau importé ne peuvent pas diverger.
+// Un document (hors grille) reçoit le même tableau, au choix d'Antoine du 02/10 (« Coller aussi un tableau Excel en cases dans un document, hors grille ? » - « Oui, en cases ») : `toDocumentHtml`
+// n'écrit que ce que le PDF et le Word d'un tableau de document lisent - fusions, fond, texte, alignement horizontal, liens, largeur des colonnes - et ni traits case par case, ni alignement
+// vertical, ni hauteur de ligne : l'éditeur les montrerait, mais l'export ne les lit que pour une grille (une ligne qui porte `data-row-height` en fait une).
 // Pur : DOMParser seulement, ni éditeur ni ProseMirror. Script classique, portée globale comme TableBorders.
 const GridTable = (function () {
   const MAX_ROWS = 3000;
@@ -371,25 +374,42 @@ const GridTable = (function () {
     return `<table${sizes ? ` style="width: ${total}px;"` : ''}>${colgroup}<tbody>${rows}</tbody></table>`;
   }
 
-  // --- Ce que la grille fait du presse-papiers -----------------------------------------------------------------------------------------------------------------
+  // Le modèle en HTML de DOCUMENT : les largeurs des colonnes (le tableau garde les proportions du tableur, l'éditeur le ramène à la page s'il la dépasse), sans hauteur de ligne, sans trait
+  // case par case ni alignement vertical - voir l'en-tête.
+  function toDocumentHtml(model) {
+    const plain = {
+      width: model.width,
+      cols: model.cols,
+      rows: model.rows.map(row => ({ height: 0, cells: row.cells.map(cell => Object.assign({}, cell, { valign: null, borders: null })) })),
+    };
+    return toHtml(plain, { sizes: true });
+  }
+
+  // --- Ce que l'éditeur fait du presse-papiers -----------------------------------------------------------------------------------------------------------------
 
   function isSpreadsheetHtml(html) {
     return typeof html === 'string' && TABLE_RE.test(html) && SPREADSHEET_RE.test(html);
   }
 
-  // Le HTML collé, réécrit pour la grille quand il vient d'un tableur ; tout autre HTML (un texte, une page web, des cases copiées dans la grille même) est rendu tel quel.
-  function cleanPastedHtml(html) {
+  // Le HTML collé, réécrit par `write` quand il vient d'un tableur ; tout autre HTML (un texte, une page web, des cases copiées dans l'éditeur même) est rendu tel quel.
+  function rewriteSpreadsheetHtml(html, write) {
     if (!isSpreadsheetHtml(html)) return html;
     try {
       const model = fromClipboardHtml(html);
-      return model ? toHtml(model, { sizes: false }) : html;
+      return model ? write(model) : html;
     } catch (e) {
       console.warn('[GridTable] tableau collé illisible, collé tel quel :', e);
       return html;
     }
   }
 
-  // Le presse-papiers porte-t-il un tableau de tableur ? Excel y joint aussi une IMAGE de la plage : sans ce test, c'est elle qui était collée.
+  // Pour la grille : sans largeurs ni hauteurs (la grille garde ses colonnes et ses lignes).
+  function cleanPastedHtml(html) { return rewriteSpreadsheetHtml(html, model => toHtml(model, { sizes: false })); }
+
+  // Pour un document : un tableau du document.
+  function cleanPastedDocumentHtml(html) { return rewriteSpreadsheetHtml(html, toDocumentHtml); }
+
+  // Le presse-papiers porte-t-il un tableau de tableur ? Excel y joint aussi une IMAGE de la plage : sans ce test, c'est elle qui était collée (dans une grille comme dans un document).
   function clipboardHasSpreadsheetTable(clipboardData) {
     try { return isSpreadsheetHtml(clipboardData && clipboardData.getData('text/html')); } catch (e) { return false; }
   }
@@ -397,5 +417,5 @@ const GridTable = (function () {
   // Un lien qu'une case peut garder : http, https, mailto, tel (un `javascript:` ou un `file:` perd son lien et garde son texte).
   const isSafeLink = href => SAFE_LINK_RE.test(String(href || '').trim());
 
-  return { fromClipboardHtml, toHtml, cleanPastedHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, parseColor, markHtml, escapeHtml, parseRules, parseDecls };
+  return { fromClipboardHtml, toHtml, toDocumentHtml, cleanPastedHtml, cleanPastedDocumentHtml, isSpreadsheetHtml, clipboardHasSpreadsheetTable, isSafeLink, parseColor, markHtml, escapeHtml, parseRules, parseDecls };
 })();

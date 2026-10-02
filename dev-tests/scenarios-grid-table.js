@@ -2,13 +2,15 @@
 // l'on veut le coller dans une grille, actuellement ça colle une image dans la cellule ; moi j'aimerais bien le tableau avec ses cellules, etc. y compris les cellules fusionnées et mises en
 // forme si possible »). Excel pose dans le presse-papiers un tableau HTML (mise en forme dans une feuille de style : `class=xl65`), le texte tabulé ET une image de la plage : c'est l'image que
 // l'éditeur collait. Les presse-papiers ci-dessous sont ceux qu'Excel (Windows, Chrome), Google Sheets et LibreOffice Calc posent, relevés de mémoire du format réel (le bac à sable n'a pas de
-// tableur). Les cas lisent le modèle de cases (`GridTable.fromClipboardHtml`), puis collent pour de vrai (un évènement `paste` avec un DataTransfer qui porte HTML, texte et image) dans une vraie grille.
+// tableur). Les cas lisent le modèle de cases (`GridTable.fromClipboardHtml`), puis collent pour de vrai (un évènement `paste` avec un DataTransfer qui porte HTML, texte et image) dans une vraie grille
+// ET dans un document ordinaire (choix d'Antoine du 02/10, « Coller aussi un tableau Excel en cases dans un document, hors grille ? » - « Oui, en cases » : un tableau du document, sans l'image).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ed = () => EditorCore.getEditor();
   const doc = () => ed().state.doc;
-  const tableNode = () => doc().child(0);
+  // Le premier tableau du document : celui d'une grille est son premier enfant, celui d'un document vient après son texte.
+  const tableNode = () => { let found = null; doc().forEach((node) => { if (!found && node.type.name === 'table') found = node; }); return found; };
 
 // Presse-papiers de tableurs, tels qu'Excel (Windows, Chrome), Google Sheets et LibreOffice Calc les posent (relevés de mémoire du format réel, ce sandbox n'a pas de tableur).
   const EXCEL_HTML = `<html xmlns:v="urn:schemas-microsoft-com:vml"
@@ -540,25 +542,180 @@ td
     }),
   });
 
+  // --- 5) Hors grille : un document reçoit le tableau, case par case -----------------------------------------------------------------------------------------------------------------
+  // Un tableau du DOCUMENT : fusions, fond, texte, alignement horizontal et largeur des colonnes ; ni traits case par case, ni alignement vertical, ni hauteur de ligne (le PDF et le Word ne les
+  // lisent que pour une grille : l'éditeur les montrerait, l'export non). Une ligne qui porte `data-row-height` ferait traiter le tableau en grille.
+
+  const tableCount = () => { let n = 0; doc().descendants((node) => { if (node.type.name === 'table') n++; return true; }); return n; };
+  // Colle `parts` dans un document ordinaire (un paragraphe « début », le curseur après « dé ») ; rend ce que la personne voit.
+  async function pasteInDocument(h, parts, opts) {
+    const { html = '<p>début</p>', caret = () => 3, prepare = null } = opts || {};
+    await h.resetEditor();
+    Editor.setHTML(html);
+    await sleep(150);
+    ed().chain().focus().setTextSelection(caret()).run();
+    if (prepare) await prepare();
+    await sleep(60);
+    const before = docJson();
+    const ev = new ClipboardEvent('paste', { clipboardData: clipboard(parts), bubbles: true, cancelable: true });
+    ed().view.dom.dispatchEvent(ev);
+    await sleep(700);
+    return { before, prevented: ev.defaultPrevented, images: imageCount(), domImages: document.querySelectorAll('.tiptap img:not(.ProseMirror-separator)').length, tables: tableCount(), html: Editor.getHTML(), grid: GridEditor.isActive() };
+  }
+  const widthsOfFirstRow = () => { const out = []; tableNode().firstChild.forEach(cell => (cell.attrs.colwidth || [null]).forEach(w => out.push(w))); return out.join(','); };
+
   cases.push({
-    id: 'gridTable_in_a_document_an_excel_clipboard_still_pastes_its_image',
-    description: 'Hors grille rien ne change (une décision à part : une carte à Antoine) : dans un document le presse-papiers d\'Excel colle toujours son image, comme avant.',
+    id: 'gridTable_in_a_document_an_excel_clipboard_pastes_the_cells_not_the_image',
+    description: 'Le cas d\'Antoine hors grille : le presse-papiers d\'Excel (tableau HTML, texte tabulé ET image de la plage) collé dans un document donne un tableau du document - aucune image - posé au curseur (le paragraphe se coupe autour) ; fusions, fond, gras, souligné, couleur et taille du texte, alignement horizontal, retour à la ligne et largeurs des colonnes d\'Excel sont repris ; ni trait case par case, ni alignement vertical, ni hauteur de ligne (rien qui fasse prendre le tableau pour une grille) ; un seul Annuler.',
     run: async (h) => {
-      await h.resetEditor();
-      Editor.setHTML('<p>début</p>');
-      await sleep(150);
-      ed().chain().focus().setTextSelection(3).run();
-      await sleep(60);
-      const ev = new ClipboardEvent('paste', { clipboardData: clipboard({ html: EXCEL_HTML, text: EXCEL_TEXT, png: true }), bubbles: true, cancelable: true });
-      ed().view.dom.dispatchEvent(ev);
-      await sleep(700);
-      const images = imageCount();
-      let tables = 0;
-      doc().descendants((node) => { if (node.type.name === 'table') tables++; return true; });
-      return { pass: ev.defaultPrevented && images === 1 && tables === 0, notes: JSON.stringify({ prevented: ev.defaultPrevented, images, tables }) };
+      const out = await pasteInDocument(h, { html: EXCEL_HTML, text: EXCEL_TEXT, png: true });
+      const title = cellAt(0, 0), ref = cellAt(1, 0), amountTitle = cellAt(1, 2), code = cellAt(2, 0), merged = cellAt(2, 1), price = cellAt(2, 2), second = cellAt(3, 0), total = cellAt(4, 0), totalPrice = cellAt(4, 2);
+      const rows = []; tableNode().forEach(row => rows.push(row.childCount));
+      const widths = widthsOfFirstRow();
+      const around = [doc().firstChild.textContent, doc().lastChild.textContent];
+      const checks = {
+        prevented: out.prevented, noImage: out.images === 0 && out.domImages === 0, oneTable: out.tables === 1 && !out.grid,
+        splitAround: doc().firstChild.type.name === 'paragraph' && around.join('|') === 'dé|but',
+        shape: rows.join(',') === '1,3,3,2,2',
+        title: title.text === 'Facture Alpha' && title.colspan === 3 && title.fill === '#ffc000' && title.align === 'center' && title.marks === 'bold textStyle:14pt',
+        heads: ref.text === 'Réf' && ref.marks === 'bold' && amountTitle.align === 'right',
+        code: code.text === 'A-1' && code.align === 'center' && code.marks === 'italic textStyle:#c00000',
+        merged: merged.text === 'Vis à boiszinguée 4x40' && merged.rowspan === 2 && merged.lineBreaks === 1 && merged.marks === 'bold textStyle:#0070c0 underline',
+        price: price.text === '12,50 €' && price.align === 'right' && second.text === 'A-2',
+        total: total.text === 'Total' && total.colspan === 2 && total.align === 'right' && totalPrice.text === '20,50 €',
+        widths: widths === '64,190,149',
+        // Ce qu'un document ne sait pas rendre à l'export : ni trait case par case, ni alignement vertical, ni hauteur de ligne.
+        noBorders: [title, ref, code, merged, total].every(c => c.borders === '.,.,.,.'),
+        noVerticalAlign: [title, merged].every(c => c.valign === null),
+        notAGrid: !/data-row-height|data-border-|data-valign/.test(out.html),
+      };
+      ed().commands.undo();
+      await sleep(120);
+      checks.undoOnce = docJson() === out.before && tableCount() === 0;
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, title, merged, widths }) };
     },
   });
 
+  cases.push({
+    id: 'gridTable_in_a_document_google_sheets_and_libreoffice_ranges_paste_the_cells',
+    description: 'Les presse-papiers de Google Sheets et de LibreOffice Calc donnent eux aussi un tableau du document (fond, gras, couleur, fusions, texte barré, alignement), sans image, sans trait ni alignement vertical par case ; le gris du quadrillage de Sheets ne devient rien.',
+    run: async (h) => {
+      const sheets = await pasteInDocument(h, { html: SHEETS_HTML, text: 'Facture Beta\t\t\nB-1\tÉcrou M8\t3,20 €\n' });
+      const sheetTitle = cellAt(0, 0), sheetRed = cellAt(1, 0), sheetPart = cellAt(1, 1), sheetNumber = cellAt(1, 2);
+      const sheetsHtml = sheets.html;
+      const calc = await pasteInDocument(h, { html: LIBREOFFICE_HTML, text: 'Facture Gamma\t\t\nC-1\tRondelle\nplate\t1,75\nC-2\t\t0,25\n' });
+      const calcTitle = cellAt(0, 0), calcMerged = cellAt(1, 1), calcStruck = cellAt(2, 0), calcNumber = cellAt(2, 2);
+      const checks = {
+        sheetsNoImage: sheets.images === 0 && sheets.domImages === 0 && sheets.tables === 1,
+        sheetTitle: sheetTitle.colspan === 3 && sheetTitle.fill === '#ffd966' && sheetTitle.align === 'center' && sheetTitle.marks === 'bold textStyle:14pt',
+        sheetRed: sheetRed.marks === 'italic textStyle:#ff0000', sheetPart: sheetPart.text === 'Écrou M8' && sheetPart.marks === 'bold', sheetNumber: sheetNumber.text === '3,20 €' && sheetNumber.align === 'right',
+        sheetsPlain: !/data-row-height|data-border-|data-valign|#cccccc/i.test(sheetsHtml) && [sheetTitle, sheetRed].every(c => c.borders === '.,.,.,.' && c.valign === null),
+        calcNoImage: calc.images === 0 && calc.domImages === 0 && calc.tables === 1,
+        calcTitle: calcTitle.colspan === 3 && calcTitle.fill === '#ffff00' && calcTitle.marks === 'bold textStyle:#ff0000',
+        calcMerged: calcMerged.rowspan === 2 && calcMerged.lineBreaks === 1 && calcMerged.marks === 'underline',
+        calcStruck: calcStruck.marks === 'strike' && calcNumber.align === 'right',
+        calcPlain: !/data-row-height|data-border-|data-valign/.test(calc.html) && [calcTitle, calcMerged].every(c => c.borders === '.,.,.,.' && c.valign === null),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, sheetTitle, calcTitle }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridTable_in_a_document_only_a_spreadsheet_table_is_rewritten_an_image_alone_is_still_pasted',
+    description: 'Hors grille, rien d\'autre ne change : un tableau HTML qui ne vient pas d\'un tableur (une page web) n\'est pas réécrit (ProseMirror le lit, son texte en gras garde sa marque, sa fusion reste) ; une image seule (aucun tableau dans le presse-papiers) se colle toujours comme image ; le texte seul aussi.',
+    run: async (h) => {
+      const web = '<table border="1"><tr><td colspan="2" style="font-weight: bold">Titre web</td></tr><tr><td>a</td><td>b</td></tr></table>';
+      const untouched = GridTable.cleanPastedDocumentHtml(web) === web && GridTable.cleanPastedDocumentHtml('<p>texte</p>') === '<p>texte</p>' && GridTable.cleanPastedDocumentHtml('') === '' && GridTable.cleanPastedDocumentHtml(null) === null;
+      const pasted = await pasteInDocument(h, { html: web, text: 'Titre web\n\na\tb' });
+      const title = cellAt(0, 0);
+      const webOk = pasted.tables === 1 && pasted.images === 0 && pasted.domImages === 0 && title.text === 'Titre web' && title.colspan === 2 && title.marks === 'bold' && cellAt(1, 0).text === 'a' && cellAt(1, 1).text === 'b';
+      const image = await pasteInDocument(h, { png: true });
+      const imageOk = image.prevented && image.images === 1 && image.domImages === 1 && image.tables === 0;
+      const text = await pasteInDocument(h, { text: 'seulement du texte' });
+      const textOk = text.tables === 0 && text.images === 0 && text.domImages === 0 && /seulement du texte/.test(doc().textContent);
+      return { pass: untouched && webOk && imageOk && textOk, notes: JSON.stringify({ untouched, webOk, imageOk, textOk, web: { tables: pasted.tables, title } }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridTable_toDocumentHtml_keeps_widths_fills_and_merges_but_no_row_heights_borders_or_vertical_alignment',
+    description: 'GridTable.toDocumentHtml (le tableau d\'un document) : largeurs des colonnes (`colwidth`, colgroup), fond, fusions, alignement horizontal gardés ; aucune `data-row-height`, aucun `data-border-*`, aucun `data-valign`, même quand le modèle les porte ; cleanPastedHtml (la grille) reste sans largeurs ni hauteurs.',
+    run: async () => {
+      const model = GridTable.fromClipboardHtml(EXCEL_HTML);
+      const document = GridTable.toDocumentHtml(model);
+      const gridHtml = GridTable.cleanPastedHtml(EXCEL_HTML);
+      const modelKeepsThem = model.rows.some(r => r.height > 0) && model.rows.some(r => r.cells.some(c => c.valign)) && model.rows.some(r => r.cells.some(c => c.borders && Object.values(c.borders).some(Boolean)));
+      const checks = {
+        modelKeepsThem,
+        widths: /colwidth="64"/.test(document) && /colwidth="190"/.test(document) && /colwidth="149"/.test(document) && /colwidth="64,190,149"/.test(document) && /<col style="width: 190px;">/.test(document),
+        fillAndMerges: /colspan="3"[^>]*style="background-color: #ffc000"/i.test(document) && /rowspan="2"/.test(document) && /text-align: center/.test(document),
+        noRowHeight: !/data-row-height|style="height/.test(document),
+        noBorders: !/data-border-/.test(document), noValign: !/data-valign/.test(document),
+        gridUntouched: !/colwidth|<colgroup|data-row-height/.test(gridHtml) && /data-border-/.test(gridHtml) && /data-valign/.test(gridHtml),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, head: document.slice(0, 300) }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridTable_in_a_document_an_excel_clipboard_pasted_inside_a_table_fills_its_cells',
+    description: 'Le curseur dans une case d\'un tableau du document : le tableau d\'Excel remplit les cases à partir de celle du curseur (comme tout tableau collé dans un tableau), sans image et sans second tableau dedans ; le texte avant et après le tableau ne bouge pas ; un Annuler rend le document.',
+    run: async (h) => {
+      const start = '<p>début</p><table><tbody><tr><td><p>un</p></td><td><p>deux</p></td></tr><tr><td><p>trois</p></td><td><p>quatre</p></td></tr></tbody></table><p>fin</p>';
+      const firstCellText = () => { let at = null; doc().descendants((node, pos) => { if (at === null && node.type.name === 'tableCell') at = pos + 2; return at === null; }); return at; };
+      const out = await pasteInDocument(h, { html: EXCEL_HTML, text: EXCEL_TEXT, png: true }, { html: start, caret: firstCellText });
+      let nested = 0;
+      doc().descendants((node, pos, parent) => { if (node.type.name === 'table' && parent && parent.type.name === 'tableCell') nested++; return true; });
+      const title = cellAt(0, 0), ref = cellAt(1, 0);
+      const checks = {
+        noImage: out.images === 0 && out.domImages === 0, oneTable: out.tables === 1 && nested === 0,
+        around: doc().firstChild.textContent === 'début' && doc().lastChild.textContent === 'fin',
+        filled: !!title && title.text === 'Facture Alpha' && !!ref && ref.text === 'Réf',
+      };
+      ed().commands.undo();
+      await sleep(120);
+      checks.undoOnce = docJson() === out.before;
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, nested, title, ref, html: out.html.slice(0, 600) }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridTable_in_a_document_a_range_wider_than_the_page_is_brought_back_to_the_page',
+    description: 'Une plage de douze colonnes de largeurs différentes (1 200 px au total, plus que la page) collée dans un document : le tableau garde les proportions d\'Excel mais revient à la largeur de la page (Aperçu A4, la vue de départ : rien ne dépasse dans l\'éditeur, donc nulle part), et UN Annuler rend le document d\'avant.',
+    run: async (h) => {
+      const pattern = [60, 100, 140, 100, 60, 100, 140, 100, 60, 100, 140, 100];
+      const cols = pattern.length;
+      const colTags = pattern.map(w => `<col width=${w} style="width:${w * 0.75}pt">`).join('');
+      const row = pattern.map((w, i) => `<td height=20 width=${w} style="height:15.0pt;width:${w * 0.75}pt">C${i + 1}</td>`).join('');
+      const wide = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta name=ProgId content=Excel.Sheet></head><body><table border=0 cellpadding=0 cellspacing=0 width=${cols * 100} style="border-collapse:collapse;table-layout:fixed;width:${cols * 75}pt">${colTags}<tr height=20 style="height:15.0pt">${row}</tr><tr height=20 style="height:15.0pt">${row}</tr></table></body></html>`;
+      // L'Aperçu A4 est la vue de départ du widget ; resetEditor() la retire entre deux scénarios, on la repose comme les autres scénarios qui en ont besoin.
+      const container = document.getElementById('editor-container');
+      const reader = document.getElementById('reader-container');
+      const a4 = async () => { container.classList.add('a4-preview'); reader.classList.add('a4-preview'); await sleep(200); };
+      const out = await pasteInDocument(h, { html: wide, text: Array.from({ length: cols }, (_, i) => 'C' + (i + 1)).join('\t') }, { prepare: a4 });
+      const page = EditorCore.editorContentWidthPx(ed());
+      const a4On = container.classList.contains('a4-preview');
+      container.classList.remove('a4-preview'); reader.classList.remove('a4-preview');
+      const widths = [];
+      tableNode().firstChild.forEach(cell => (cell.attrs.colwidth || [null]).forEach(w => widths.push(w)));
+      const total = widths.reduce((sum, w) => sum + (w || 0), 0);
+      const domTable = document.querySelector('.tiptap table');
+      const checks = {
+        a4Preview: a4On && page > 0,
+        oneTable: out.tables === 1 && widths.length === cols && widths.every(w => w >= 25),
+        fitsThePage: total <= page + 1 && total >= page - cols,
+        sameProportions: widths.length === cols && widths.every((w, i) => Math.abs(w / widths[0] - pattern[i] / pattern[0]) < 0.1),
+        drawnWithinThePage: !!domTable && domTable.getBoundingClientRect().width <= page + 2,
+      };
+      ed().commands.undo();
+      await sleep(150);
+      checks.undoOnce = docJson() === out.before && tableCount() === 0;
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, page, total, widths: widths.join(',') }) };
+    },
+  });
+
+  // Les presse-papiers ci-dessus, pour dev-tests/verify-doc-paste-mouse.mjs : il les pose dans le VRAI presse-papiers du navigateur (navigator.clipboard.write) et colle au vrai Ctrl+V.
+  window.GridTableFixtures = { EXCEL_HTML, EXCEL_TEXT, SHEETS_HTML, LIBREOFFICE_HTML, PNG_BASE64 };
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridTable = cases;
 })();
