@@ -243,7 +243,7 @@ console.log('\n== 3) un autre modèle choisi à la vraie souris pendant qu\'un p
   await pickTemplate(page, 'Bail habitation');
   await watchBanner(page);
   await setLatency(page, { fetchTable: 1600, applyUserActions: 0 });
-  const reading = await waitFor(page, () => window.__gristStub.state.inFlight.fetchTable > 0, null, 10000);
+  const reading = await waitFor(page, () => window.__gristStub.state.inFlight.fetchTable > 0, null, 20000); // au repos, un passage ne relit la table que toutes les 15 s (AUTOSAVE_IDLE_INTERVAL_MS)
   check('un passage de l\'enregistrement automatique est en train de relire la table', reading);
   await pickTemplate(page, 'Contrat de vente', 400);
   await page.waitForTimeout(7500); // les passages en vol reviennent, deux autres suivent

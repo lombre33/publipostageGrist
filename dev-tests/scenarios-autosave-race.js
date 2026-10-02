@@ -13,6 +13,7 @@
   const cases = [];
   const TABLE = 'Publipostage_Modeles';
   const TICK_MS = 2500; // = AUTOSAVE_INTERVAL_MS (js/main.js). À garder synchronisé si cette constante change.
+  const IDLE_MS = 15000; // = AUTOSAVE_IDLE_INTERVAL_MS (js/main.js) : au repos (rien à enregistrer), un passage ne relit la table qu'à cette échéance.
 
   const stub = () => window.__gristStub;
   const banner = () => document.getElementById('autosave-conflict-banner');
@@ -161,7 +162,7 @@
       const watch = watchBanner();
       try {
         stub().setLatency({ fetchTable: 1600, applyUserActions: 0 });
-        const reading = await waitUntil(h, () => stub().state.inFlight.fetchTable > 0, 8000, 20); // un passage vient de partir relire la table
+        const reading = await waitUntil(h, () => stub().state.inFlight.fetchTable > 0, IDLE_MS + TICK_MS * 2, 20); // un passage de repos part relire la table (une fois toutes les 15 s)
         if (!reading) return { pass: false, notes: 'aucun passage de l\'auto-save en vol à temps, rien à vérifier' };
         chooseTemplate(idA);
         await h.sleep(TICK_MS * 2 + 2500);

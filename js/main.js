@@ -742,11 +742,17 @@
   // gèle alors (n'écrase plus rien tout seul) et affiche un bandeau proposant de recharger. Un Enregistrer MANUEL reste toujours possible pendant ce
   // temps et tranche explicitement en faveur de la version locale (cf. onSave) - un choix conscient de l'utilisateur, jamais fait à sa place.
   const AUTOSAVE_INTERVAL_MS = 2500;
+  // Au repos (rien à enregistrer), le passage ne relit la table des modèles que toutes les AUTOSAVE_IDLE_INTERVAL_MS : la relire en entier, contenus compris (816 Ko pour 14 modèles avec
+  // images), toutes les 2,5 s pour n'y rien trouver chargeait Grist en continu (choix d'Antoine, 02/10 : « Ralentir au repos »). Dès qu'il y a quelque chose à enregistrer, chaque passage
+  // relit AVANT d'écrire, comme toujours : la protection contre un écrasement ne change pas, seul un enregistrement fait ailleurs pendant que rien ne bouge est signalé plus tard (15 s au plus).
+  const AUTOSAVE_IDLE_INTERVAL_MS = 15000;
   // Préférence PAR NAVIGATEUR (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document Grist : chacun choisit s'il veut de
   // l'auto-save, indépendamment des autres personnes qui ouvrent le même widget.
   const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
   let autosaveDirty = false;
   let autosaveLastKnownDateModif = null;
+  // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le chargement du modèle, qui vient de Grist.
+  let autosaveLastCheckAt = -Infinity;
   let autosaveConflictActive = false;
   let autosaveConflictTpl = null;
   let autosaveTimer = null;
@@ -790,6 +796,7 @@
     autosaveEpoch++;
     autosaveDirty = false;
     autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
+    autosaveLastCheckAt = performance.now();
     hideConflictBanner();
     updateSaveStatus();
   }
@@ -890,11 +897,15 @@
     if (autosaveConflictActive) return; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     const id = Templates.getCurrentId();
     if (!id) return; // aucune ligne à mettre à jour - jamais de création automatique
+    // Au repos, une lecture toutes les AUTOSAVE_IDLE_INTERVAL_MS, à une demi-période près (un passage un peu en avance lit déjà, au lieu de repousser la lecture d'une période de plus).
+    const checkStartedAt = performance.now();
+    if (!autosaveDirty && checkStartedAt - autosaveLastCheckAt < AUTOSAVE_IDLE_INTERVAL_MS - AUTOSAVE_INTERVAL_MS / 2) return;
     const epoch = autosaveEpoch;
     let remote;
     try { remote = await readRemoteTemplate(id, epoch); }
     catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
     if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
+    autosaveLastCheckAt = checkStartedAt;
     const remoteTpl = remote.remoteTpl;
     if (changedElsewhere(remoteTpl)) {
       showConflictBanner(remoteTpl);

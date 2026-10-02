@@ -65,6 +65,7 @@ const GROUPS = {
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
   autosaveRace: 'scenarios-autosave-race', // enregistrement automatique face à un Grist lent : passages qui se chevauchent, Enregistrer pendant un passage, changement de modèle pendant une lecture, relecture échouée
+  autosaveIdle: 'scenarios-autosave-idle', // enregistrement automatique AU REPOS (js/main.js, AUTOSAVE_IDLE_INTERVAL_MS) : la table des modèles n'est relue que toutes les 15 s quand rien n'est à enregistrer et un enregistrement fait ailleurs est signalé à la lecture suivante ; la frappe relit toujours AVANT d'écrire. Vrais minuteurs : ~45 s
   toolbarChrome: 'scenarios-toolbar-chrome',
   macroModeles: 'scenarios-macro-modeles',
   templateTree: 'scenarios-template-tree',
