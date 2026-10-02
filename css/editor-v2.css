@@ -200,6 +200,16 @@
    la ligne, et c'est cette largeur que le PDF et le Word reprennent (ExportCommon.shownImageWidthPx lit l'image de cet hôte). */
 .tiptap img.editor-image[data-align="left"] { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
 .tiptap img.editor-image[data-align="right"] { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
+/* Hôte de mesure du PDF (`.pdf-measure-host`) : l'<img> brute s'y pose comme son NodeView dans l'éditeur, pour que le PDF reprenne les positions que le navigateur y mesure. Dans l'éditeur, une image
+   en ligne a son pied sur la ligne de base du texte (la ligne grandit de sa hauteur et garde sous elle le bas de son interligne : 4,4 pt à 10,5 pt) ; `vertical-align: bottom` ci-dessus la posait sur le
+   bas de la ligne, 4,4 pt plus bas, et tout le texte de la ligne 4,4 pt plus haut. « Bloc » sans alignement et le centre sont seuls sur leur ligne (le NodeView est un bloc). L'éditeur n'est pas touché :
+   son <img> est dans un NodeView, sans `data-align` ni `data-wrap` sur l'image elle-même.
+   `white-space: break-spaces` : ProseMirror le pose sur l'éditeur (l'espace qui précède un retour à la ligne compte dans la largeur de la ligne, et celle qui suit une image « bloc » reste en tête de
+   ligne, 2,6 px) ; l'hôte, en `normal`, coupait une ligne trop tard par endroits et perdait cette espace. */
+.pdf-measure-host { white-space: break-spaces; }
+.pdf-measure-host img.editor-image { vertical-align: baseline; }
+.pdf-measure-host img.editor-image[data-align="center"], .pdf-measure-host img.editor-image[data-wrap="block"]:not([data-align]) { display: block; }
+.pdf-measure-host img.editor-image[data-align="center"] { margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-align="center"] { display: block; width: fit-content; margin-left: auto; margin-right: auto; }
 .tiptap .editor-image-view[data-wrap="block"] { display: block; width: fit-content; }
 /* Image seule sur sa ligne (centrée, ou « bloc » sans alignement) : le texte du paragraphe garde son interligne, avant comme après l'image ; l'image prend sa hauteur et rien de plus.

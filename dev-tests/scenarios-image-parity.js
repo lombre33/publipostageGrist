@@ -260,7 +260,7 @@ window.EditorTestSuites.imageParity = (function () {
   // --- Le haut du contenu de l'en-tête : à la moitié de la marge du haut, comme le PDF ---
   cases.push({
     id: 'imgparity_header_logo_top',
-    description: 'Un logo d\'en-tête est au même endroit depuis le haut de la feuille dans l\'éditeur, la Lecture, le PDF et le Word (à la marge du haut / 2, le PDF y ajoute les 2 pt de marge qu\'il laisse au-dessus d\'une image dans le texte)',
+    description: 'Un logo d\'en-tête est au même endroit depuis le haut de la feuille dans l\'éditeur, la Lecture, le PDF et le Word (à la marge du haut / 2 ; le PDF ne laisse plus de marge de 2 pt au-dessus d\'une image dans le texte, comme l\'éditeur)',
     run: async (h) => {
       await setup(h, CONFIGS.imageOnly.hf, BODY);
       const tip = document.querySelector('#editor-container .tiptap');
@@ -277,9 +277,8 @@ window.EditorTestSuites.imageParity = (function () {
       restoreReader(h);
       const pdfRes = await pdfOf(h, html, hf);
       const pdfImg = pdfRes.truth.pages[0].images[0];
-      // Écart 10 de ecarts-mesures.md : le PDF laisse 2 pt au-dessus d'une image dans le texte (l'éditeur 0). À mettre à 0 quand cet écart est corrigé.
-      const PDF_IMAGE_MARGIN_TOP_PT = 2;
-      const pdf = pdfImg ? r2(pdfImg.y - PDF_IMAGE_MARGIN_TOP_PT) : null;
+      // Écart 10 de ecarts-mesures.md, corrigé (02/10, image dans le flux du PDF posée comme dans l'éditeur) : le PDF laissait 2 pt au-dessus d'une image dans le texte, l'éditeur 0.
+      const pdf = pdfImg ? r2(pdfImg.y) : null;
       const word = (await docxOf(h, html, hf)).sect.margins.header / 20;
       const want = r2(PageLayout.getMarginsPt().top / 2);
       const all = { editeur: editor, lecture: reader, pdf, word };
