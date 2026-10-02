@@ -111,5 +111,30 @@ const TableSelect = (function () {
     document.addEventListener('mousedown', onDown, true);
   }
 
-  return { attach };
+  // Texte brut d'une sélection de cases copiée ou coupée : une ligne par ligne du tableau, les cases séparées par une tabulation - ce que lisent Grist, un tableur ou un éditeur de texte.
+  // Celui de ProseMirror par défaut sépare tous les blocs par une ligne vide : chaque case tombait sur sa propre ligne, entre deux lignes vides (Antoine, 02/10 : copier-coller de cases).
+  // Une case de plusieurs lignes, ou qui porte une tabulation ou un guillemet, est mise entre guillemets, comme le font les tableurs. Autre chose que des lignes de tableau (celles
+  // d'une sélection de cases, ou le tableau entier) : null, le texte par défaut.
+  function clipboardText(slice) {
+    const content = slice && slice.content;
+    const first = content && content.firstChild;
+    if (!first) return null;
+    const rows = first.type.spec.tableRole === 'row' ? content : (content.childCount === 1 && first.type.spec.tableRole === 'table' ? first.content : null);
+    if (!rows) return null;
+    const field = text => (/[\t\n\r"]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text);
+    // Un nœud sans texte propre (le retour à la ligne forcé) donne celui que son extension déclare (`renderText`, devenu `spec.toText`), comme le texte par défaut de TipTap.
+    const leafText = node => (node.type.spec.toText ? node.type.spec.toText({ node }) : '');
+    const lines = [];
+    rows.forEach(row => {
+      const fields = [];
+      row.forEach(cell => {
+        fields.push(field(cell.textBetween(0, cell.content.size, '\n', leafText)));
+        for (let i = 1; i < (cell.attrs.colspan || 1); i++) fields.push('');
+      });
+      lines.push(fields.join('\t'));
+    });
+    return lines.join('\n');
+  }
+
+  return { attach, clipboardText };
 })();
