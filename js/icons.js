@@ -89,6 +89,8 @@ const Icons = (function () {
     // Deux feuilles l'une derrière l'autre, un triangle dans le coin de celle de devant : la même image dans le coin de chaque page.
     layerRepeat: '<rect x="8" y="2.5" width="12" height="15" rx="1.5"/><path d="M5 7.5v11a2.5 2.5 0 0 0 2.5 2.5H16"/><path d="M8 2.5h6L8 8.5z" fill="currentColor" stroke="none"/>',
     highlight: '<path d="m8 15-4 4M15.5 4.5 19 8l-9 9-4.5-.5L5 12z"/>',
+    // Pinceau de mise en forme (js/format-painter.js) : un rouleau de peintre (le rouleau, son bras, son manche). Ni le feutre du surlignage ni le seau de la couleur de fond : une icône = une fonction.
+    formatPainter: '<rect x="3" y="3" width="14" height="6" rx="1.5"/><path d="M17 6h2.5A1.5 1.5 0 0 1 21 7.5V11a1.5 1.5 0 0 1-1.5 1.5H12V15"/><rect x="10" y="15" width="4" height="6" rx="1"/>',
     fill: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
     caretDown: '<path d="M6 9l6 6 6-6"/>',
     noColor: '<circle cx="12" cy="12" r="8.5"/><path d="M5.5 5.5l13 13"/>',

@@ -654,6 +654,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   seul calcul pour les quatre rendus (`PageLayer.watermarkLayout` : de 6 à 200 pt, 45 % du petit côté au plus, l'encre reste dans la page de A3 à A6, en portrait et en paysage). L'éditeur (avec l'Aperçu A4) et la Lecture le peignent dans la
   couche de page, le PDF en vrai texte vectoriel au fond de chaque page, le Word en image dans l'en-tête, derrière le texte (une image, pas du texte modifiable : c'est ce que Word et Google Docs ouvrent sans surprise). Une image
   « Sur toutes les pages » et un filigrane partagent la même couche.
+- Assemblage avant impression (demande d'Antoine du 02/10, point 13 : « 4 A6 sur une A4, chacun prend une ligne dans l'ordre, une planche prête à imprimer », avec ou sans trait de coupe, sur A3 et A4) : « Assemblage avant
+  impression… » est la troisième ligne du volet « Exporter en PDF », sous « Exporter toutes les lignes (ZIP)… » et « … en un seul PDF… » : la barre ne gagne aucune icône. La ligne suit le reste du volet (grisée pendant un export
+  et sans le droit d'exporter, jamais retirée) et ouvre une fenêtre qui tient lieu de confirmation du lot : la feuille (A4, A3), son orientation, les traits de coupe (Sans, Avec) et les emplacements (en largeur × en hauteur).
+  « Générer » écrit `<table>-assemblage.pdf` : chaque ligne de la table prend sa place, de gauche à droite puis de haut en bas, une ligne de plusieurs pages en prend autant ; la dernière feuille, à moitié pleine, garde ses
+  repères de grille entière. La fenêtre tient dans 700×400 sans défiler, en français comme en anglais : libellé à gauche, réglage à droite, et une feuille d'aperçu dessinée par le même code que le PDF (ce qu'elle montre est ce
+  que le fichier porte). Chaque indication commence SOUS le champ qu'elle concerne, pas sous son libellé (l'échelle sous les traits de coupe, la règle de l'ordre sous les emplacements) et le résumé (« 4 emplacements par
+  feuille (2 × 2) : 6 lignes sur 2 feuilles A4. ») ferme la fenêtre ; dans une grille, « valeurs de la table » remplace « lignes ». Une feuille où la page du modèle ne tient pas reste affichée, grisée, avec la raison en
+  info-bulle, jamais retirée. Les traits de coupe sont deux repères par ligne de coupe, hors de la page (à 3 mm, longs de 4 mm, 0,5 pt, noir) : quand la feuille n'a pas la place de les poser (4 A6 sur une A4), TOUTES les pages
+  sont réduites du même facteur et la fenêtre le dit (« Pages réduites à 93 % pour laisser la place aux traits de coupe. », seulement dans ce cas) ; rien n'est jamais réduit sans traits, jamais en silence. La feuille, son
+  orientation et les traits sont gardés par navigateur pour la prochaine fois, pas le nombre d'emplacements (la page du modèle a pu changer) ; Entrée valide, Échap annule.
 - Image plus large que sa place (carte d'Antoine du 01/10, « Ramener à la page les images trop larges dans le PDF et le Word ? » : « logique de WYSIWYG, si ça dépend en éditeur ça dépasse partout sinon nulle
   part ») : l'éditeur est la référence, la Lecture, le PDF et le Word montrent ce qu'il montre. Une image dans le texte plus large que la zone de texte, la case de tableau ou la colonne qui la porte y est
   ramenée partout, proportions gardées, et suit le format de page et les marges ; une image qui tient garde sa taille réglée. Une image en calque garde sa taille réglée (son placement est une autre règle).
@@ -687,7 +697,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
-  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (51, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
+  choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (53, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun
   n'est coupé à 700 px), la touche dans un bouton de 112 px au moins (« Aucune » en italique quand il n'y en a pas), « Par défaut » à droite, grisé tant que la touche est celle d'origine
   ; « Tout remettre par défaut » en haut à droite demande confirmation. Un clic sur la touche l'écoute (« Tapez la touche… », fond `--accent-soft`) : la combinaison tapée est prise,
   Échap abandonne sans fermer la fenêtre, Retour arrière retire la touche. Une combinaison refusée dit pourquoi dans un message sous la touche, dans sa colonne et jamais sous le nom de
@@ -730,6 +740,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   des cases fusionnées sur plusieurs lignes, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image en calque (PDF) et une ligne proposée en suivi des
   modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
   enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
+- Pinceau de mise en forme (demande d'Antoine du 02/10, « ajout d'un bouton pour copier/coller la mise en forme ») : un bouton sur la deuxième rangée de la barre, juste après le
+  surlignage (`#v2-btn-format-painter`, un rouleau de peintre : ni le feutre du surlignage ni le seau de la couleur de fond, une icône = une fonction), de la taille des autres et collé
+  comme eux, sans ajouter de rangée à 700 px. Un clic copie la mise en forme du texte où l'on est (curseur ou sélection) et arme le pinceau pour UN usage : le bouton s'enfonce comme tout
+  bouton enfoncé de la barre (`.is-active`) et le curseur sur le texte devient un rouleau (`html.pp-format-painting`) ; la sélection qu'on fait ensuite - double-clic sur un mot, glissé,
+  triple-clic sur un paragraphe, cases d'un tableau, Maj+clic, ou Alt+Maj+V au clavier - reçoit la mise en forme à son relâchement, puis le pinceau se range. Un double-clic sur le bouton
+  le garde armé pour plusieurs endroits (liseré de 2 px en `--accent` autour du bouton) ; Échap ou un clic sur le bouton l'arrête ; un simple clic sans sélection ne peint rien et le
+  laisse armé. La mise en forme du caractère (gras, italique, souligné, barré, police, taille, couleur, surlignage) REMPLACE celle du texte peint - peindre un texte ordinaire l'efface,
+  comme dans Word ; un lien, un commentaire et les marques du suivi des modifications ne sont pas de la mise en forme et ne sont jamais touchés. L'alignement et le niveau de titre ne se
+  copient que d'un curseur ou d'un paragraphe entier et ne se posent que sur les paragraphes peints en entier (peindre un mot ne recentre pas son paragraphe) ; une légende et le premier
+  paragraphe d'une puce gardent leur type ; les puces, les tableaux et les images ne sont pas de la mise en forme de texte. Une application est un seul Ctrl+Z. Le bouton est grisé,
+  jamais retiré, en e-mail, en macro-modèle, en Lecture et sans droit d'écriture, et un pinceau armé s'arrête dès que son bouton se grise. Touches : Alt+Maj+C (le geste du bouton) puis
+  Alt+Maj+V (poser sur la sélection du moment) ; Ctrl+Maj+V reste le collage sans mise en forme du navigateur.
 
 ## 4. Spécifique à SlidesPlus
 

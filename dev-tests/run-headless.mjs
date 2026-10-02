@@ -90,6 +90,7 @@ const GROUPS = {
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',
   pdfBatch: 'scenarios-pdf-batch',
+  sheetAssembly: 'scenarios-sheet-assembly', // « Assemblage avant impression » (js/sheet-layout.js, js/sheet-assembly-dialog.js, js/pdf-merge.js:createSheets) : géométrie des planches, fenêtre de réglage, PDF relu par pdf.js (feuilles, texte par emplacement, traits de coupe tracés et peints), menu, droits d'export, grille
   accessRights: 'scenarios-access-rights',
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
@@ -114,6 +115,7 @@ const GROUPS = {
   cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
   readerReads: 'scenarios-reader-reads', // la Lecture lit chaque table une seule fois par rendu (js/grist-api.js:withReadPass) et suit une image qui change de taille après la mesure (js/reader-mode.js:watchGeometry)
   imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
+  formatPainter: 'scenarios-format-painter', // pinceau de mise en forme (js/format-painter.js, bouton après le surlignage, Alt+Maj+C / V) : ce qui est copié et posé, le paragraphe sur un curseur ou un paragraphe entier, une étape d'historique, armé par un clic ou un double-clic, grisé en e-mail et en macro-modèle, les touches
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -140,6 +142,7 @@ const NODE_SCRIPTS = {
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais
   calloutMouse: 'verify-callout-mouse.mjs', // encadré et bloc de signature (js/callout.js) : menu de cinq lignes, fenêtre sans défilement, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  sheetAssemblyMouse: 'verify-sheet-assembly-mouse.mjs', // assemblage avant impression (js/sheet-assembly-dialog.js, ligne du menu Exporter en PDF) : menu, fenêtre sans défilement dans tous ses états, vrais clics et flèches, choix grisé lisible, « Générer » / Annuler / Échap / Entrée, PDF téléchargé relu par pdf.js, 700x400 clair, sombre et anglais
   qrMouse: 'verify-qr-mouse.mjs', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste des colonnes au-dessus de la fenêtre, cadre carré, menu devant la barre flottante, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridMouse: 'verify-grid-mouse.mjs', // mode grille (js/grid-editor.js) : « Nouvelle grille » à la souris, tirer un trait de colonne ou de ligne (aperçu, un seul Annuler), bandeaux, flèches et Ctrl+A, défilement collé, contrastes, 700x400 clair et sombre
   tableSelectMouse: 'verify-table-select-mouse.mjs', // sélection de cases en glissant la souris, tableau de document et grille : rectangle exact dans tous les sens, voile visible sur une case colorée, défilement tenu au bord du panneau, barre de la case fixée dans sa bande (aucune case recouverte), clavier ; 700x400 clair et sombre
@@ -188,6 +191,7 @@ const NODE_SCRIPTS = {
   templatePreferencesUnit: 'unit-template-preferences.mjs', // Node pur (vm + faux docApi) : js/template-preferences.js, file d'écritures et retour arrière
   calcMouse: 'verify-calc-mouse.mjs', // bulle « Calcul » (variables calculées) à la vraie souris et au vrai clavier : ligne « Calcul » de la liste « # », fenêtre dans 700x400, liste des colonnes devant elle, barre aux boutons grisés aux pixels, case étroite, Lecture, anglais ; 700x400 clair et sombre
   formulaUnit: 'unit-formula.mjs', // Node pur (vm) : js/formula.js, le moteur des bulles « Calcul » (variables calculées) : opérations, listes de lignes, fonctions, fautes de syntaxe, écriture saisie et enregistrée
+  formatPainterMouse: 'verify-format-painter-mouse.mjs', // pinceau de mise en forme à la vraie souris et au vrai clavier à 700x400 : le bouton sur la 2e rangée sans en ajouter, un mot, un glissé, un triple-clic, des cases de tableau, le double-clic qui garde le pinceau, Échap, Alt+Maj+C / V, clair, sombre et anglais
 };
 
 const argv = process.argv.slice(2);

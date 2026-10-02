@@ -7,7 +7,7 @@
 //  - une touche changée dans Réglages > Raccourcis marche tout de suite, l'ancienne ne fait plus rien (Ctrl+B ne met plus en gras), « Par défaut » les rend ;
 //  - l'écoute d'une combinaison : un doublon, une touche seule, Ctrl+Alt (AltGr) sont refusés sous la touche concernée, Échap abandonne sans fermer la fenêtre ;
 //  - au clavier seul : Ctrl+/ ouvre la liste, Tab passe de touche en touche, Entrée écoute, la touche tapée est prise ;
-//  - la liste des touches (une ligne par action, 51) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
+//  - la liste des touches (une ligne par action, 53) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
 //  - les infobulles montrent la touche (« Gras (Alt+B) ») sans sortir de la fenêtre, les lignes de menu aussi ; mode Mac : ⌥L, ⌘ ; anglais : « Shift ».
 // Lancé par run-headless.mjs (groupe Node "shortcutsKeyboard", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-shortcuts-keyboard.mjs
 // SHORTCUTS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -356,7 +356,7 @@ async function remapPart(T, fr) {
     : { listening: 'Press a key…', none: 'None', dupe: 'Alt+B is already the key for “Bold”.', alone: 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.', bold: 'Bold', reset: 'Default' };
   const rowCount = await page.evaluate(() => document.querySelectorAll('#settings-keys-list .settings-key-row').length);
   const actionCount = await page.evaluate(() => Shortcuts.ACTIONS.length);
-  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === 51, { rowCount, actionCount });
+  check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === 53, { rowCount, actionCount });
   check(`${T} : au départ rien n'est changé : « ${L.reset} » et « Tout remettre » grisés`, await page.evaluate(() => Array.from(document.querySelectorAll('.settings-key-reset')).every(b => b.disabled) && document.getElementById('settings-keys-reset-all').disabled));
 
   // Gras : Alt+B à la place de Ctrl+B.

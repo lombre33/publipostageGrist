@@ -233,8 +233,9 @@
       }
       Object.keys(requested).forEach(id => requested[id].forEach(target => { if (!realGet.call(document, target)) problems.push(id + ' : #' + target + ' n\'existe pas dans index.html'); }));
       const notRun = Object.keys(ran).filter(id => !ran[id]).sort();
-      // Rien à presser dans l'état de départ : pas de modèle à marquer par défaut, ni de modifications suivies à accepter ou refuser.
-      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault'].sort();
+      // Rien à presser dans l'état de départ : pas de modèle à marquer par défaut, ni de modifications suivies à accepter ou refuser, ni de mise en forme copiée à appliquer (le clic du pinceau est
+      // avalé ici ; sa touche d'application a son propre test, groupe formatPainter).
+      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault', 'formatPaste'].sort();
       const unexpected = notRun.filter(id => expectedNotRun.indexOf(id) === -1);
       const groupsWithoutAction = Shortcuts.GROUPS.filter(g => !Shortcuts.ACTIONS.some(a => a.group === g));
       const count = Shortcuts.ACTIONS.length;
@@ -392,7 +393,7 @@
     bold: '#v2-btn-bold', italic: '#v2-btn-italic', underline: '#v2-btn-underline', strike: '#v2-btn-strike',
     alignLeft: '#v2-btn-align-left', alignCenter: '#v2-btn-align-center', alignRight: '#v2-btn-align-right', alignJustify: '#v2-btn-align-justify',
     bulletList: '#v2-btn-bullet', orderedList: '#v2-btn-ordered-numeric', indent: '#v2-btn-indent', outdent: '#v2-btn-outdent',
-    sizeUp: '#v2-size-plus', sizeDown: '#v2-size-minus', textColor: '#v2-btn-text-color', highlight: '#v2-btn-highlight',
+    sizeUp: '#v2-size-plus', sizeDown: '#v2-size-minus', textColor: '#v2-btn-text-color', highlight: '#v2-btn-highlight', formatPainter: '#v2-btn-format-painter',
     heading1: '#v2-heading-flyout .v2-hover-row[data-level="1"]', heading2: '#v2-heading-flyout .v2-hover-row[data-level="2"]', heading3: '#v2-heading-flyout .v2-hover-row[data-level="3"]',
     pageBreak: '#v2-btn-page-break', toc: '#v2-btn-toc', twoColumns: '#v2-btn-two-columns', citation: '#v2-btn-citation', codeBlock: '#v2-btn-code-block', callout: '#v2-btn-callout',
     signature: '#v2-btn-signature', qrCode: '#v2-btn-qr', table: '#v2-btn-table', link: '#v2-btn-link', comment: '#v2-btn-comment', variable: '#v2-btn-insert-variable',
