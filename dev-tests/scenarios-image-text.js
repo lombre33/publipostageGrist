@@ -457,7 +457,7 @@ window.EditorTestSuites.imageText = (function () {
   // `opts.dropIcon` : l'icône d'un encadré est une image du PDF (15 pt), pas une image du texte : elle n'est pas comparée. `opts.xTolerancePt` : l'écart permis sur les x quand le PDF ne reprend pas la largeur de la case (une case de
   // tableau y est plus étroite d'une espace et demie, cf. tableFrom : un texte centré s'en décale de 2 pt, un texte justifié s'arrête 6 pt avant) ; les y gardent 0,6 pt.
   async function pdfVersusEditor(h, html, opts) {
-    const { ignoreText = null, dropIcon = false, xTolerancePt = null } = opts || {};
+    const { ignoreText = null, dropIcon = false, xTolerancePt = null, opensWith = null } = opts || {};
     if (pdfBaselineOffsetPt === null) {
       await setupEditor(h, '<p>Étalon</p>');
       const etalon = layoutOf(h.tiptap()).lines[0], ground = await pdfOf(h);
@@ -466,6 +466,10 @@ window.EditorTestSuites.imageText = (function () {
     }
     await setupEditor(h, html);
     const editor = layoutOf(h.tiptap());
+    // `opts.opensWith` : un signe qu'une ligne de l'éditeur (pas la première) doit ouvrir, sans quoi le scénario ne prouverait rien (le texte d'essai est cherché dans le navigateur de la passe, cf. signTextFor).
+    if (opensWith && !editor.lines.some((l, i) => i > 0 && l.text.charAt(0) === opensWith)) {
+      return { pass: false, notes: JSON.stringify({ probleme: 'aucune ligne de l\'éditeur ne commence par « ' + opensWith + ' » : le texte d\'essai ne prouve rien', lignes: editor.lines.map(l => l.text.slice(0, 24)) }) };
+    }
     editor.lines.forEach(l => { l.text = l.text.replace(/\s+/g, ''); });
     const page = (await pdfOf(h)).pages[0];
     const ignored = ignoreText ? ignoreText.replace(/\s+/g, '') : null;
@@ -519,16 +523,169 @@ window.EditorTestSuites.imageText = (function () {
     run: async (h) => pdfVersusEditor(h, c.html, c.opts),
   }));
 
+  // === Signes en début de ligne (cinquième lot) ===
+  // Le navigateur ouvre une ligne par « : ; ! ? , . ) ] } / » quand une espace les précède ; pdfmake ne coupe jamais avant ces signes (« mot : » reste ensemble) : il mettait un mot de plus sur la ligne et tout le paragraphe se coupait
+  // autrement que dans l'éditeur (Antoine, 02/10, carte « Là où ça diffère » : seuls les paragraphes où le navigateur ouvre une ligne par le signe changent, les autres gardent leur bloc de texte). Où le signe tombe sur sa ligne
+  // dépend de la police, de la largeur du conteneur et du zoom de la feuille : aucun texte écrit d'avance ne le garantit. Chaque scénario cherche donc, dans son conteneur et dans le navigateur de la passe, un texte de remplissage où une
+  // ligne commence bien par le signe (`signTextFor`), et échoue, au lieu de passer pour rien, s'il n'en trouve pas.
+  // Aucun mot avec « fi », « fl » ou « ff » : le navigateur y pose une ligature, plus large de 0,39 pt (« enfin ») que les deux lettres du PDF ; l'écart n'est pas celui que ces scénarios mesurent.
+  const FILL_WORDS = ['maison', 'étage', 'très', 'grande', 'rapide', 'un', 'projet', 'de', 'la', 'ligne', 'nouvelle', 'au', 'texte', 'plus', 'simple', 'mot', 'lecture', 'document', 'page', 'son', 'ses', 'dans', 'chaque', 'case', 'seule',
+    'même', 'place', 'long', 'court', 'avec', 'il', 'ou', 'et', 'à', 'sur', 'trois', 'quatre', 'alors', 'souvent', 'parfois'];
+  const signTexts = {};
+  // Les mots de remplissage, toujours les mêmes d'une passe à l'autre (un petit générateur à graine) : `n` mots.
+  function fillWords(n, seed) {
+    let s = seed;
+    return Array.from({ length: n }, () => { s = (s * 16807) % 2147483647; return FILL_WORDS[Math.floor(s / 2147483647 * FILL_WORDS.length)]; });
+  }
+  // Un texte qui fait commencer une ligne du navigateur par `sign`. `build(t)` : le HTML du document pour le texte `t` ({ lead, sign, tail } : le paragraphe dit `lead sign tail`) ; `key` : le conteneur et la mise en forme du
+  // paragraphe (la largeur des lignes, qui seule décide où le signe tombe), pour garder le texte d'une passe. Le signe ouvre une ligne quand le mot qui le précède, et l'espace qui suit ce mot, tiennent sur la ligne mais pas le
+  // signe : il reste moins de la place d'un signe au bout de la ligne. Un long paragraphe de mots de remplissage est donc mesuré une fois, ligne par ligne (la place qui reste après le dernier mot de chacune), puis les
+  // lignes qui en laissent à peu près la place d'un signe sont essayées, le signe posé après leur dernier mot, jusqu'à ce que le navigateur ouvre bien une ligne par lui. `wanted` à false cherche l'inverse (le garde-fou) :
+  // un texte dont aucune ligne ne commence par le signe. `null` si rien ne convient.
+  async function signTextFor(h, key, sign, build, wanted) {
+    const cacheKey = [key, sign, wanted === false ? 'no' : 'yes', window.innerWidth, window.innerHeight].join('|');
+    if (signTexts[cacheKey]) return signTexts[cacheKey];
+    const hosts = tip => Array.from(tip.querySelectorAll('p, h1, h2, h3'));
+    const opens = (p, z) => linesOf(p, z).some((l, i) => i > 0 && l.words[0].charAt(0) === sign);
+    const tryAll = async candidates => {
+      await setupEditor(h, candidates.map(build).join(''));
+      const tip = h.tiptap(), z = zoomOf(tip), ps = hosts(tip);
+      return candidates.find(c => {
+        const p = ps.find(el => norm(el.textContent).startsWith(norm(c.lead + ' ' + sign + ' ' + c.tail)));
+        return !!p && opens(p, z) === (wanted !== false);
+      }) || null;
+    };
+    if (wanted === false) return (signTexts[cacheKey] = await tryAll([{ lead: fillWords(30, 11).join(' '), sign, tail: fillWords(5, 12).join(' ') }]));
+    const long = fillWords(700, 7919).join(' ');
+    await setupEditor(h, build({ lead: long, sign: '', tail: '' }));
+    const tip = h.tiptap(), z = zoomOf(tip);
+    const host = hosts(tip).find(el => norm(el.textContent).startsWith(long));
+    if (!host) return null;
+    const words = [];
+    const tw = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      const re = /\S+/g; let m;
+      while ((m = re.exec(n.nodeValue))) { const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length); const r = rg.getBoundingClientRect(); words.push({ w: m[0], left: r.left / z, right: r.right / z, top: r.top / z }); }
+    }
+    const cs = getComputedStyle(host), box = host.getBoundingClientRect();
+    const boxRight = (box.right - (parseFloat(cs.paddingRight) || 0) - (parseFloat(cs.borderRightWidth) || 0)) / z;
+    // Le dernier mot de chaque ligne, et ce qui reste de la ligne après lui (l'espace entre deux mots d'une même ligne est celui du texte).
+    const gaps = [], ends = [];
+    words.forEach((w, i) => {
+      const next = words[i + 1];
+      if (next && Math.abs(next.top - w.top) < 3) gaps.push(next.left - w.right);
+      else if (next) ends.push({ k: i, slack: boxRight - w.right });
+    });
+    gaps.sort((a, b) => a - b);
+    const space = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 3;
+    const candidates = ends.filter(e => e.slack >= space + 0.3 && e.slack < space + 8).slice(0, 12)
+      .map(e => ({ lead: words.slice(0, e.k + 1).map(x => x.w).join(' '), sign, tail: fillWords(5, 12 + e.k).join(' ') }));
+    return (signTexts[cacheKey] = candidates.length ? await tryAll(candidates) : null);
+  }
+  const SIGN_ID = { ':': 'colon', ';': 'semicolon', '!': 'exclamation', '?': 'question', ',': 'comma', '.': 'period', ')': 'paren', ']': 'bracket', '}': 'brace', '/': 'slash' };
+  const SIGN_NAME = { ':': 'deux-points', ';': 'point-virgule', '!': 'point d\'exclamation', '?': 'point d\'interrogation', ',': 'virgule', '.': 'point', ')': 'parenthèse fermante', ']': 'crochet fermant', '}': 'accolade fermante', '/': 'barre oblique' };
+  const signLine = t => t.lead + ' ' + t.sign + ' ' + t.tail;
+  const withFollow = p => p + '<p>' + FOLLOW + '</p>';
+  const inCallout = p => '<div class="callout" data-color="blue" data-icon="info">' + p + '</div><p>' + SHORT + '</p>';
+  const lastWord = s => { const i = s.lastIndexOf(' '); return [s.slice(0, i + 1), s.slice(i + 1)]; };
+  const SIGN_CASES = Object.keys(SIGN_ID).map(sign => ({
+    id: 'sign_' + SIGN_ID[sign], what: 'paragraphe où une ligne commence par « ' + sign + ' » (' + SIGN_NAME[sign] + ' après une espace)', key: 'page', sign,
+    build: t => withFollow('<p>' + signLine(t) + '</p>'),
+  })).concat([
+    { id: 'sign_colon_justified', what: 'paragraphe justifié où une ligne commence par « : » (chaque ligne étirée à la largeur de l\'éditeur)', key: 'page', sign: ':', build: t => withFollow('<p style="text-align: justify">' + signLine(t) + '</p>') },
+    { id: 'sign_colon_centered', what: 'paragraphe centré où une ligne commence par « : »', key: 'page', sign: ':', build: t => withFollow('<p style="text-align: center">' + signLine(t) + '</p>') },
+    { id: 'sign_colon_right', what: 'paragraphe aligné à droite où une ligne commence par « : »', key: 'page', sign: ':', build: t => withFollow('<p style="text-align: right">' + signLine(t) + '</p>') },
+    { id: 'sign_colon_heading', what: 'titre où une ligne commence par « : »', key: 'heading', sign: ':', build: t => withFollow('<h2>' + signLine(t) + '</h2>'), opts: { xTolerancePt: 1.5 } },
+    { id: 'sign_colon_bold_word', what: 'paragraphe où le mot avant « : » est en gras et la ligne suivante commence par « : »', key: 'page-bold-word', sign: ':',
+      build: t => { const [head, word] = lastWord(t.lead); return withFollow('<p>' + head + '<strong>' + word + '</strong> ' + t.sign + ' ' + t.tail + '</p>'); } },
+    { id: 'sign_colon_bold_sign', what: 'paragraphe où « : » est lui-même en gras (un autre morceau de texte que le mot avant) et ouvre une ligne', key: 'page-bold-sign', sign: ':',
+      build: t => withFollow('<p>' + t.lead + ' <strong>' + t.sign + '</strong> ' + t.tail + '</p>') },
+    { id: 'sign_colon_cell', what: 'paragraphe d\'une case de tableau où une ligne commence par « : »', key: 'cell', sign: ':', build: t => cellOf('<td>', '<p>' + signLine(t) + '</p>'), opts: { ignoreText: FOLLOW, xTolerancePt: 1 } },
+    { id: 'sign_colon_cell_justified', what: 'paragraphe justifié d\'une case de tableau où une ligne commence par « : »', key: 'cell', sign: ':', build: t => cellOf('<td>', '<p style="text-align: justify">' + signLine(t) + '</p>'), opts: { ignoreText: FOLLOW, xTolerancePt: 6.5 } },
+    { id: 'sign_colon_cell_centered', what: 'texte centré d\'une case de tableau où une ligne commence par « : »', key: 'cell', sign: ':', build: t => cellOf('<td style="text-align: center">', '<p>' + signLine(t) + '</p>'), opts: { ignoreText: FOLLOW, xTolerancePt: 2.5 } },
+    { id: 'sign_colon_column', what: 'paragraphe d\'une colonne où une ligne commence par « : »', key: 'column', sign: ':', build: t => column('<p>' + signLine(t) + '</p>') },
+    { id: 'sign_colon_callout', what: 'paragraphe d\'un encadré où une ligne commence par « : »', key: 'callout', sign: ':', build: t => inCallout('<p>' + signLine(t) + '</p>'), opts: { dropIcon: true } },
+  ]);
+  SIGN_CASES.forEach(c => cases.push({
+    id: 'imgtext_pdf_' + c.id,
+    description: 'PDF : ' + c.what + ' - le PDF coupe là aussi, chaque ligne a les mots de l\'éditeur (écart de position ≤ ' + TOLERANCE_PT + ' pt)',
+    run: async (h) => {
+      const t = await signTextFor(h, c.key, c.sign, c.build);
+      if (!t) return { pass: false, notes: JSON.stringify({ probleme: 'aucun texte d\'essai ne fait ouvrir une ligne par « ' + c.sign + ' » dans ce conteneur' }) };
+      return pdfVersusEditor(h, c.build(t), Object.assign({ opensWith: c.sign }, c.opts));
+    },
+  }));
+  // Le signe au milieu d'une ligne (jamais en tête) : rien ne change, le paragraphe reste un seul bloc de texte pour pdfmake (choix d'Antoine : seulement là où ça diffère), et ses lignes sont celles de l'éditeur.
+  cases.push({
+    id: 'imgtext_pdf_sign_mid_line_unchanged',
+    description: 'PDF : paragraphe où « : » reste au milieu d\'une ligne dans l\'éditeur - un seul bloc de texte comme avant, et les lignes de l\'éditeur (écart de position ≤ ' + TOLERANCE_PT + ' pt)',
+    run: async (h) => {
+      const build = t => withFollow('<p>' + signLine(t) + '</p>');
+      const t = await signTextFor(h, 'page', ':', build, false);
+      if (!t) return { pass: false, notes: JSON.stringify({ probleme: 'aucun texte d\'essai ne garde « : » au milieu de ses lignes' }) };
+      const r = await pdfVersusEditor(h, build(t));
+      const res = await h.exportPdfContent(Editor.getHTML(), Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
+      const textBlocks = res.content.filter(b => b.text !== undefined).length;
+      return { pass: r.pass && textBlocks === 2, notes: JSON.stringify({ blocsDeTexte: textBlocks, attendus: 2, mesure: JSON.parse(r.notes) }) };
+    },
+  });
+  // Un saut de ligne forcé (Maj+Entrée, deux fois : une ligne vide) garde l'ancien chemin, même quand une ligne commence par « : » : une ligne vide n'a pas de mot, elle disparaîtrait d'un paragraphe posé ligne à ligne.
+  cases.push({
+    id: 'imgtext_pdf_sign_colon_hard_break_unchanged',
+    description: 'PDF : paragraphe avec deux sauts de ligne forcés (une ligne vide) où une ligne commence par « : » - il garde son bloc de texte (la ligne vide ne disparaît pas), comme avant',
+    run: async (h) => {
+      const build = t => withFollow('<p>' + signLine(t) + '<br><br>Fin du paragraphe.</p>');
+      const t = await signTextFor(h, 'page-br', ':', build);
+      if (!t) return { pass: false, notes: JSON.stringify({ probleme: 'aucun texte d\'essai ne fait ouvrir une ligne par « : »' }) };
+      await setupEditor(h, build(t));
+      const opens = layoutOf(h.tiptap()).lines.some((l, i) => i > 0 && l.text.charAt(0) === ':');
+      const res = await h.exportPdfContent(Editor.getHTML(), Editor.getHeaderFooterData(), PageLayout.getMarginsPt());
+      const textBlocks = res.content.filter(b => b.text !== undefined).length;
+      return { pass: opens && textBlocks === 2, notes: JSON.stringify({ uneLigneCommenceParDeuxPoints: opens, blocsDeTexte: textBlocks, attendus: 2 }) };
+    },
+  });
+  // Le paragraphe où une ligne commence par « : » à cheval sur deux pages : le texte entier, dans l'ordre, une ligne de l'éditeur par ligne du PDF avant la coupure.
+  cases.push({
+    id: 'imgtext_pdf_sign_colon_page_break',
+    description: 'PDF : paragraphe où une ligne commence par « : », à cheval sur le saut de page - le texte entier dans l\'ordre, les premières lignes en bas de la première page, la suite sur la seconde, les mêmes lignes que l\'éditeur d\'une page à l\'autre',
+    run: async (h) => {
+      const t = await signTextFor(h, 'page', ':', SIGN_CASES[0].build);
+      if (!t) return { pass: false, notes: JSON.stringify({ probleme: 'aucun texte d\'essai ne fait ouvrir une ligne par « : »' }) };
+      const r = await pdfPagesVersusEditor(h, fill(50) + '<p>' + signLine(t) + '</p><p>' + FOLLOW + '</p>', null, { opensWith: ':' });
+      const ground = await pdfOf(h);
+      const lastOfFirst = ground.pages.length > 1 ? pdfLinesOf(ground.pages[0]).slice(-1)[0] : null;
+      const split = !!lastOfFirst && signLine(t).replace(/\s+/g, '').includes(lastOfFirst.text) && pdfLinesOf(ground.pages[1])[0].text !== '';
+      // Les mêmes lignes que l'éditeur, dans l'ordre, d'une page à l'autre : le texte seul ne le dit pas (« mot : » gardé ensemble dans le PDF donne le même texte, coupé ailleurs).
+      const editorLines = layoutOf(h.tiptap()).lines.map(l => l.text.replace(/\s+/g, ''));
+      const pdfLines = [].concat(...ground.pages.map(pg => pdfLinesOf(pg).map(l => l.text)));
+      const firstDiff = editorLines.findIndex((l, i) => l !== pdfLines[i]);
+      const sameLines = firstDiff === -1 && editorLines.length === pdfLines.length;
+      return { pass: r.pass && split && sameLines, notes: JSON.stringify({ pages: ground.pages.length, derniereLigneDeLaPage1: lastOfFirst && lastOfFirst.text.slice(0, 30), coupeLeParagraphe: split, lignes: { editeur: editorLines.length, pdf: pdfLines.length }, premiereLigneDifferente: firstDiff === -1 ? null : { rang: firstDiff, editeur: (editorLines[firstDiff] || '').slice(0, 30), pdf: (pdfLines[firstDiff] || '').slice(0, 30) }, mesure: JSON.parse(r.notes) }) };
+    },
+  });
+  // L'encadré d'une seule ligne : l'icône est posée dans l'éditeur (position: absolute), elle ne donne pas sa hauteur à l'encadré ; dans le PDF, la cellule de l'icône (15 pt, plus 1,5 pt de marge) dépassait la ligne de texte de 14,91 pt :
+  // l'encadré faisait 1,6 pt de plus et tout ce qui suit était 1,6 pt trop bas (Antoine, 02/10, carte « L'aligner »). Un encadré plus haut que l'icône n'a jamais changé.
+  [
+    { id: 'callout_one_line', what: 'encadré d\'une seule ligne - sa hauteur est celle de l\'éditeur, ce qui suit n\'est pas 1,6 pt plus bas', html: '<div class="callout" data-color="blue" data-icon="info"><p>Une seule ligne dans l\'encadré.</p></div><p>' + SHORT + '</p><p>' + FOLLOW + '</p>' },
+    { id: 'callout_one_line_warning', what: 'encadré d\'une seule ligne avec une autre icône et une autre couleur (l\'icône ne décide pas de la hauteur)', html: '<div class="callout" data-color="amber" data-icon="warning"><p>Attention, une seule ligne.</p></div><p>' + SHORT + '</p><p>' + FOLLOW + '</p>' },
+    { id: 'callout_two_lines', what: 'encadré de plusieurs lignes (garde-fou : plus haut que l\'icône, sa hauteur n\'a pas changé)', html: '<div class="callout" data-color="blue" data-icon="info"><p>' + LONG + '</p></div><p>' + SHORT + '</p><p>' + FOLLOW + '</p>' },
+  ].forEach(c => cases.push({
+    id: 'imgtext_pdf_' + c.id,
+    description: 'PDF : ' + c.what + ' (écart de position ≤ ' + TOLERANCE_PT + ' pt)',
+    run: async (h) => pdfVersusEditor(h, c.html, { dropIcon: true }),
+  }));
+
   // === Fin de page : le PDF coupe en pages, l'éditeur est continu ===
   // Les y de l'éditeur ne valent plus ici : une image qui ne tient pas dans ce qui reste de la page passe en haut de la suivante, avec la ligne où elle est posée. Ce que le PDF doit garder, lui : le texte entier, dans l'ordre ;
   // l'image une fois, entière dans sa page (jamais coupée par le bord ni dans la marge) ; autant de lignes avant l'image que dans l'éditeur ; rien qui la recouvre ; et, pour une image habillée, le texte à côté d'elle à sa marge de 9 pt.
   async function pdfPagesVersusEditor(h, html, align, opts) {
-    const { dropIcon = false } = opts || {};
+    const { dropIcon = false, opensWith = null } = opts || {};
     await setupEditor(h, html);
     const editor = layoutOf(h.tiptap());
     const ground = await pdfOf(h);
     const m = PageLayout.getMarginsPt();
     const problems = [];
+    if (opensWith && !editor.lines.some((l, i) => i > 0 && l.text.charAt(0) === opensWith)) problems.push({ probleme: 'aucune ligne de l\'éditeur ne commence par « ' + opensWith + ' » : le texte d\'essai ne prouve rien' });
     const pages = ground.pages.map(pg => ({ pg, lines: pdfLinesOf(pg) }));
     const editorText = editor.lines.map(l => l.text.replace(/\s+/g, '')).join('');
     // Les puces d'une liste sont du texte dans le PDF, un marqueur de la liste dans l'éditeur.
@@ -599,7 +756,8 @@ window.EditorTestSuites.imageText = (function () {
   // Le texte d'un tel paragraphe est lu par morceaux (une ligne, ce qui précède l'image, ce qui la suit) : chaque note doit rester dans le texte, juste après son mot, et n'être comptée qu'une fois au bas de la page.
   const NOTE = (n, text) => '<sup class="footnote-ref-marker" data-note-id="' + n + '" data-note-text="' + text + '"></sup>';
   const NOTE_1 = NOTE(1, 'Première note'), NOTE_2 = NOTE(2, 'Deuxième note');
-  async function pdfNotesWithImage(h, html) {
+  // `endsWith` : le mot après lequel la première note est posée (la ligne qui la porte finit, avant elle, par ce mot).
+  async function pdfNotesWithImage(h, html, endsWith) {
     await setupEditor(h, html);
     const page = (await pdfOf(h)).pages[0];
     const entries = page.textItems.filter(i => /^\d+\.$/.test(i.str.trim()));
@@ -616,7 +774,7 @@ window.EditorTestSuites.imageText = (function () {
     if (entries.map(i => i.str.trim()).join(' ') !== '1. 2.') problems.push({ entrees: entries.map(i => i.str.trim()) });
     if (zoneText.split('Premièrenote').length !== 2 || zoneText.split('Deuxièmenote').length !== 2) problems.push({ bas: zoneText.slice(0, 80) });
     if (refs.map(i => i.str.trim()).join(' ') !== '1 2') problems.push({ numeros: refs.map(i => i.str.trim()) });
-    if (!before.endsWith('Lecture,') || gap === null || gap < -0.5 || gap > 3) problems.push({ avantLaNote1: before.slice(-20), ecartPt: gap === null ? null : r2(gap) });
+    if (!before.endsWith(endsWith || 'Lecture,') || gap === null || gap < -0.5 || gap > 3) problems.push({ avantLaNote1: before.slice(-20), ecartPt: gap === null ? null : r2(gap) });
     return { pass: problems.length === 0, notes: JSON.stringify({ entrees: entries.length, numeros: refs.map(i => i.str.trim()), avantLaNote1: before.slice(-12), ecartPt: gap === null ? null : r2(gap), problemes: problems }) };
   }
   [
@@ -630,6 +788,19 @@ window.EditorTestSuites.imageText = (function () {
     description: 'PDF : ' + c.what + ', avec deux notes de bas de page - chaque note reste juste après son mot (la première après « Lecture, »), les deux numéros sont dans le texte, et les deux notes sont au bas de la page, une fois chacune',
     run: async (h) => pdfNotesWithImage(h, c.html),
   }));
+  // Le même contrôle quand le paragraphe n'a pas d'image mais une ligne qui commence par « : » (cinquième lot) : une ligne du navigateur par bloc, chaque note reste dans le texte, juste après son mot, une fois chacune au bas de la page.
+  cases.push({
+    id: 'imgtext_pdf_sign_colon_footnotes',
+    description: 'PDF : paragraphe où une ligne commence par « : », avec deux notes de bas de page - la première juste après le premier mot, les deux numéros sont dans le texte, les deux notes sont au bas de la page, une fois chacune',
+    run: async (h) => {
+      const build = t => '<p>' + t.lead.replace(' ', NOTE_1 + ' ') + ' ' + t.sign + ' ' + t.tail + NOTE_2 + '</p><p>Suite sans note.</p>';
+      const t = await signTextFor(h, 'page-notes', ':', build);
+      if (!t) return { pass: false, notes: JSON.stringify({ probleme: 'aucun texte d\'essai ne fait ouvrir une ligne par « : »' }) };
+      const r = await pdfNotesWithImage(h, build(t), t.lead.split(' ')[0]);
+      const opens = layoutOf(h.tiptap()).lines.some((l, i) => i > 0 && l.text.charAt(0) === ':');
+      return { pass: r.pass && opens, notes: JSON.stringify({ uneLigneCommenceParDeuxPoints: opens, mesure: JSON.parse(r.notes) }) };
+    },
+  });
 
   return cases;
 })();

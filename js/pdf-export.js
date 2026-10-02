@@ -604,6 +604,11 @@ const PdfExport = (function () {
         return flowBlocks;
       }
     }
+    // Un paragraphe de la case où le navigateur ouvre une ligne par « : » (ou un signe voisin) : une ligne du navigateur par bloc, comme dans le flux principal (signLineBlocksFrom).
+    if (/^(P|DIV)$/.test(node.tagName) && !rawRuns.some(r => r._imageMarker)) {
+      const signLines = signLineBlocksFrom(node, false, { nested: true, maxWidthPt: cellWidthPt, baseStyle: cellBaseStyle, textAlign: cellAlign });
+      if (signLines) return signLines;
+    }
     const runs = trimEdgeWhitespace(stripImageMarkers(rawRuns));
     const align = alignment(node) || cellAlign;
     let obj;
@@ -1000,11 +1005,14 @@ const PdfExport = (function () {
     catch (e) { console.warn('[PdfExport] contenu d\'encadré ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(node, false)]; }
     const color = Callout.colorOf(node.getAttribute('data-color'));
     const iconKey = node.getAttribute('data-icon');
+    // L'icône est posée dans l'éditeur (position: absolute) : elle ne donne pas sa hauteur à l'encadré, qui ne dépend que de son texte. La cellule de l'icône ne compte donc pour aucune hauteur dans la ligne du
+    // tableau : sa marge du dessous reprend ce que l'icône et sa marge du dessus ajoutent (sans elle, un encadré d'une seule ligne, dont le texte est plus court que l'icône avec sa marge, grandissait de 1,6 pt).
+    const iconTopGapPt = Math.max(0, iconTopPt - padTopPt);
     const block = {
       table: {
         widths: [iconSizePt, '*'],
         body: [[
-          { image: Callout.iconPng(iconKey, color.accent, 96), width: iconSizePt, height: iconSizePt, margin: [0, Math.max(0, iconTopPt - padTopPt), 0, 0] },
+          { image: Callout.iconPng(iconKey, color.accent, 96), width: iconSizePt, height: iconSizePt, margin: [0, iconTopGapPt, 0, -(iconTopGapPt + iconSizePt)] },
           { stack: blocks },
         ]],
       },
@@ -1266,6 +1274,38 @@ const PdfExport = (function () {
       out.push(blockOf(runs, lead, endsParagraph && li === to, stretch));
     }
     return out;
+  }
+
+  // === Signes en début de ligne ===
+  // Le navigateur passe à la ligne avant « : » (et « ; ! ? , . ) ] } / ») quand une espace le précède : le signe ouvre la ligne d'après. pdfmake ne coupe jamais là (UAX #14 : pas de coupure avant ces signes, même après
+  // une espace) : « mot : » reste ensemble, un mot de plus tient sur la ligne et tout le paragraphe se coupe autrement que dans l'éditeur. Un paragraphe où le navigateur ouvre une ligne par l'un de ces signes est donc posé
+  // comme ceux qui portent une image, une ligne du navigateur par bloc (lineBlocksFrom) ; les autres gardent leur texte d'un seul bloc (Antoine, 02/10 : « Là où ça diffère »).
+  const LINE_START_SIGNS = ':;!?,.)]}/';
+  const SIGN_AFTER_SPACE = /[ \t\n][:;!?,.)\]}\/]/;
+  // Les blocs pdfmake d'un paragraphe sans image dont une ligne du navigateur commence par l'un de ces signes, ou `null` (l'appelant garde son bloc de texte).
+  // `opts` : `nested` (dans une case, une colonne ou un encadré), `maxWidthPt` (la largeur que pdfmake donne au bloc quand elle est plus étroite que celle du navigateur : une case), `baseStyle` (le style que le bloc
+  // hérite de sa case), `textAlign` (l'alignement de la case quand le bloc n'a pas le sien).
+  function signLineBlocksFrom(node, pageBreakBefore, opts) {
+    const { nested = false, maxWidthPt, baseStyle, textAlign: containerAlign } = opts || {};
+    // Le texte d'abord : mesurer chaque mot d'un paragraphe n'est utile que s'il porte une espace suivie d'un de ces signes. Un saut de ligne forcé (Maj+Entrée) garde l'ancien chemin : une ligne vide n'a pas de mot, donc pas de
+    // ligne ici (elle disparaîtrait), et le navigateur n'étire pas la ligne qui précède un saut.
+    if (!node.isConnected || node.querySelector('br') || !SIGN_AFTER_SPACE.test(node.textContent || '')) return null;
+    const words = collectWords(node);
+    const lines = groupWordsIntoLines(words);
+    const opensWithSign = line => LINE_START_SIGNS.includes(line[0].textNode.nodeValue.charAt(line[0].start));
+    if (!lines.some((line, li) => li > 0 && opensWithSign(line))) return null;
+    const nodeRect = node.getBoundingClientRect();
+    const nodeStyle = getComputedStyle(node);
+    const insetLeftPx = (parseFloat(nodeStyle.borderLeftWidth) || 0) + (parseFloat(nodeStyle.paddingLeft) || 0);
+    const insetRightPx = (parseFloat(nodeStyle.borderRightWidth) || 0) + (parseFloat(nodeStyle.paddingRight) || 0);
+    const domWidthPt = Math.max(0, (nodeRect.width - insetLeftPx - insetRightPx) * PX_TO_PT);
+    const lineWidthPt = maxWidthPt > 0 ? Math.min(domWidthPt, maxWidthPt) : domWidthPt;
+    const slackPt = domWidthPt - lineWidthPt;
+    const indentPt = nested ? Math.max(0, (nodeRect.left + insetLeftPx - flowOriginLeftPx(node)) * PX_TO_PT) : measureIndentPt(node, 'box');
+    const textAlign = alignment(node) || containerAlign;
+    const blocks = lineBlocksFrom({ node, words, lines, textAlign, indentPt, lineWidthPt, slackPt, cuts: wordCutsOf(words), baseStyle }, 0, lines.length - 1, { endsParagraph: true, leadPt: leadingSpacePt(words[0]) });
+    if (pageBreakBefore) blocks[0].pageBreak = 'before';
+    return blocks;
   }
 
   // === Image dans le flux (dans la ligne, « bloc », centrée) ===
@@ -1971,6 +2011,11 @@ const PdfExport = (function () {
       if (!blocks.some(b => !b._pendingImgNode)) blocks.unshift({ text: ' ', margin: [indentPtInline, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO });
       if (pageBreakBefore && blocks[0]) blocks[0].pageBreak = 'before';
       return asHeading(blocks);
+    }
+    // Un paragraphe où le navigateur ouvre une ligne par « : » (ou un signe voisin) : une ligne du navigateur par bloc, pdfmake ne coupe pas avant ce signe.
+    if (flowText) {
+      const signLines = signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null });
+      if (signLines) return asHeading(signLines);
     }
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
     const blocks = [];
