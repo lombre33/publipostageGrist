@@ -7,6 +7,10 @@
 // source grist-core, ViewSectionRec.activeCustomOptions / ViewSectionMenu.ts doSave).
 //
 // Ce n'est qu'un verrou d'interface (js/main.js:applyAccessRights grise, jamais ne retire) : seules les règles d'accès de Grist protègent les données.
+//
+// Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 2026-10-02, carte « Un réglage ») : clé cleanReading du même réglage, décochée au départ,
+// grisée tant qu'aucune colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
+// (CleanReading.openForReadOnly) : la personne dont la ligne dit « lecture seule » ouvre alors le widget sur le document seul, sans barre d'outils.
 const AccessRights = (function () {
   const OPTION_KEY = 'droitsAcces';
   // Relecture périodique, seulement quand un réglage existe : une case cochée dans la table pendant que la personne a le widget ouvert s'applique sans
@@ -39,6 +43,7 @@ const AccessRights = (function () {
       readOnlyColumn: clean(raw.readOnlyColumn),
       exportColumn: clean(raw.exportColumn),
       commentsColumn: clean(raw.commentsColumn),
+      cleanReading: raw.cleanReading === true,
     };
     if (!next.table || !next.emailColumn) return null;
     if (!next.readOnlyColumn && !next.exportColumn && !next.commentsColumn) return null;
@@ -158,6 +163,8 @@ const AccessRights = (function () {
     exportCol: 'settings-access-export',
     comments: 'settings-access-comments',
   };
+  // La case n'est pas dans `ids` : celui-ci ne contient que les listes, que wireSettingsPanel habille de la recherche.
+  const CLEAN_ID = 'settings-access-clean-reading';
   // Réglage en cours d'édition dans l'onglet - distinct de `config` (normalisé, donc null tant qu'aucune case n'est choisie) : sans lui, choisir la table
   // puis la colonne email effacerait le choix de table au rendu suivant, faute de colonne de droit déjà choisie.
   let draft = null;
@@ -227,6 +234,12 @@ const AccessRights = (function () {
     // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller.
     const locked = get().readOnly && !!config;
     Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
+    // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est lui-même en lecture seule.
+    const cleanBox = el(CLEAN_ID);
+    if (cleanBox) {
+      cleanBox.checked = !!current.cleanReading;
+      cleanBox.disabled = locked || !current.readOnlyColumn;
+    }
     searches.forEach(search => search.sync());
     const lockedHint = el('settings-access-locked');
     if (lockedHint) lockedHint.hidden = !locked;
@@ -245,6 +258,7 @@ const AccessRights = (function () {
       readOnlyColumn: el(ids.readOnly) ? el(ids.readOnly).value : '',
       exportColumn: el(ids.exportCol) ? el(ids.exportCol).value : '',
       commentsColumn: el(ids.comments) ? el(ids.comments).value : '',
+      cleanReading: !!(el(CLEAN_ID) && el(CLEAN_ID).checked),
     };
   }
 
@@ -256,6 +270,8 @@ const AccessRights = (function () {
       const emails = next.table ? columnsOfType(next.table, ['Text', 'Choice', 'Any']).filter(c => /e-?mail/i.test(c)) : [];
       next.emailColumn = emails.length === 1 ? emails[0] : '';
     }
+    // Sans colonne « Lecture seule » (colonne retirée, ou autre table), la case n'a plus de sens : elle se décoche en même temps qu'elle se grise.
+    if (!next.readOnlyColumn) next.cleanReading = false;
     draft = next;
     renderSettingsPanel();
     const normalized = normalizeConfig(next);
@@ -278,6 +294,8 @@ const AccessRights = (function () {
       try { searches.push(k === 'table' ? SearchSelect.attachTables(select) : SearchSelect.attachColumns(select)); }
       catch (e) { console.warn('[AccessRights] recherche indisponible, liste native conservée', e); }
     });
+    const cleanBox = el(CLEAN_ID);
+    if (cleanBox) cleanBox.addEventListener('change', () => { onPanelChange(CLEAN_ID); });
     // Rempli à chaque ouverture des Réglages (schéma relu : une table ou une colonne a pu être ajoutée depuis), jamais seulement au démarrage.
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', () => {

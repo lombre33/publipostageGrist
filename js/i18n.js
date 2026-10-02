@@ -504,6 +504,12 @@ const I18n = (function () {
     'settings.access.readOnly': { fr: 'Lecture seule', en: 'Read-only' },
     'settings.access.export': { fr: 'Export autorisé', en: 'Export allowed' },
     'settings.access.comments': { fr: 'Commentaires autorisés', en: 'Comments allowed' },
+    // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (js/access-rights.js, js/clean-reading.js : choix d'Antoine du 2026-10-02).
+    'settings.access.cleanReading': { fr: 'Ouvrir les personnes en lecture seule sur la Lecture épurée', en: 'Open read-only people on Clean reading' },
+    'settings.access.cleanReadingHint': {
+      fr: 'Elles ouvrent sur le document seul, sans la barre d’outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Choisissez d’abord la colonne « Lecture seule ».',
+      en: 'They open on the document alone, without the toolbar; the round button at the top right, or Esc, brings the toolbar back (Comment, Export, depending on their rights). Choose the “Read-only” column first.',
+    },
     'settings.access.none': { fr: '— Aucune —', en: '— None —' },
     'settings.access.saveHint': {
       fr: 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.',

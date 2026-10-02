@@ -98,7 +98,7 @@
 <link rel="stylesheet" href="css/caption.css?v=0.1">
 <link rel="stylesheet" href="css/qr-code.css?v=0.2">
 <link rel="stylesheet" href="css/search-select.css?v=0.6">
-<link rel="stylesheet" href="css/access-rights.css?v=0.5">
+<link rel="stylesheet" href="css/access-rights.css?v=0.6">
 <link rel="stylesheet" href="css/row-template.css?v=0.2">
 <link rel="stylesheet" href="css/text-expansion.css?v=0.1">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.1">
@@ -588,6 +588,9 @@
           <label for="settings-access-export" data-i18n="settings.access.export">Export autorisé</label><select id="settings-access-export"></select>
           <label for="settings-access-comments" data-i18n="settings.access.comments">Commentaires autorisés</label><select id="settings-access-comments"></select>
         </div>
+        <!-- Lecture épurée d'emblée (js/access-rights.js, js/clean-reading.js) : décochée au départ, grisée tant qu'aucune colonne « Lecture seule » n'est choisie. -->
+        <label class="settings-access-clean" for="settings-access-clean-reading"><input type="checkbox" id="settings-access-clean-reading" disabled><span data-i18n="settings.access.cleanReading">Ouvrir les personnes en lecture seule sur la Lecture épurée</span></label>
+        <p class="settings-access-hint" data-i18n="settings.access.cleanReadingHint">Elles ouvrent sur le document seul, sans la barre d'outils ; le bouton rond du coin haut droit ou Échap leur rend la barre (Commenter, Exporter selon leurs droits). Choisissez d'abord la colonne « Lecture seule ».</p>
         <p class="settings-access-status" id="settings-access-status" role="status" hidden></p>
         <p class="settings-access-locked" id="settings-access-locked" data-i18n="settings.access.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
         <p class="settings-access-hint" data-i18n="settings.access.saveHint">Pour l'appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits.</p>
@@ -621,7 +624,7 @@
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
 <script src="js/reader-mode.js?v=0.114"></script>
-<script src="js/i18n.js?v=0.88"></script>
+<script src="js/i18n.js?v=0.89"></script>
 <script src="js/shortcuts.js?v=0.4"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
@@ -686,11 +689,11 @@
 <script src="js/template-preferences.js?v=0.3"></script>
 <script src="js/template-organize-modal.js?v=0.8"></script>
 <script src="js/template-tree-select.js?v=0.12"></script>
-<script src="js/access-rights.js?v=0.3"></script>
+<script src="js/access-rights.js?v=0.4"></script>
 <script src="js/watermark-dialog.js?v=0.1"></script>
 <script src="js/sheet-assembly-dialog.js?v=0.1"></script>
 <script src="js/orientation-toggle.js?v=0.6"></script>
-<script src="js/clean-reading.js?v=0.1"></script>
-<script src="js/main.js?v=0.94"></script>
+<script src="js/clean-reading.js?v=0.2"></script>
+<script src="js/main.js?v=0.95"></script>
 </body>
 </html>

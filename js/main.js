@@ -677,6 +677,15 @@
   function onAccessRightsChange() {
     applyAccessRights();
     if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
+    openCleanReadingForReadOnly();
+  }
+
+  // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (Réglages > Accès) : voir CleanReading.openForReadOnly, qui décide une seule fois par session. Appelée à la fin d'init()
+  // puis à chaque changement de droits : tant que la table des droits n'a pas donné de réponse (pending, Grist lent ; error, table illisible), rien n'est décidé - une personne qui a tous les droits
+  // démarre verrouillée par précaution et ne doit jamais être mise en Lecture épurée sur cette foi.
+  function openCleanReadingForReadOnly() {
+    const config = AccessRights.getConfig();
+    CleanReading.openForReadOnly({ state: AccessRights.getStatus().state, readOnly: AccessRights.get().readOnly, enabled: !!(config && config.cleanReading) });
   }
 
   // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en capture,
@@ -2000,6 +2009,7 @@
     AccessRights.onChange(onAccessRightsChange);
     await switchMode('edit');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    openCleanReadingForReadOnly();
     // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
     setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
   }

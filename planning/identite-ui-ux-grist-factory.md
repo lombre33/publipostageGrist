@@ -373,7 +373,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la
   Lecture, qui surligne alors les passages commentés (choix d'Antoine du 30/09) ; sans le droit de commenter, la Lecture
   reste sans commentaires, comme l'export. La Lecture épurée (demande d'Antoine du 02/10, §3) cache toute la barre du haut sur un geste : ce n'est ni un mode ni un droit, et elle reste
-  ouverte aux personnes en lecture seule (elle ne modifie rien).
+  ouverte aux personnes en lecture seule (elle ne modifie rien). Réglages > Accès a une case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (choix d'Antoine du 02/10, carte « Un réglage »),
+  décochée au départ et grisée tant qu'aucune colonne « Lecture seule » n'est choisie : la personne dont la ligne de la table des droits dit « lecture seule » ouvre alors le widget sur la Lecture épurée,
+  une seule fois par session, à la première réponse confirmée des droits : une réponse qui tarde ou une table illisible n'est pas une réponse (la relecture de 10 s peut encore aboutir), une personne absente de la table,
+  sans identité ou sans réglage n'ouvre rien ; sortie faite, elle n'y est pas ramenée.
 - Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
   favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
   choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).
