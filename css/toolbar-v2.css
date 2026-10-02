@@ -287,10 +287,34 @@
 .macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 
 /* Panneau résumé (#macro-summary-container, index.html) affiché à la place de l'éditeur TipTap quand le modèle courant est un macro modèle
-   (js/main.js:syncEditorVisibilityForMode) - reste sobre, l'utilisateur ne modifie sa composition qu'en rouvrant la modale ci-dessus. */
-#macro-summary-container { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--surface-sunken); }
-.macro-summary-box { text-align: center; max-width: 360px; }
+   (js/main.js:syncEditorVisibilityForMode) - reste sobre, l'utilisateur ne modifie sa composition qu'en rouvrant la modale ci-dessus. js/main.js lui pose `display:block` (style en ligne) quand
+   il s'affiche : le `display:flex` d'ici n'a jamais joué, le cadre se centre donc par ses marges et le panneau défile quand la liste des modèles dépasse sa hauteur (700×400). */
+#macro-summary-container { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: var(--surface-sunken); overflow-y: auto; }
+.macro-summary-box { text-align: center; max-width: 480px; margin: 0 auto; }
 .macro-summary-text { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+/* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, le nom de chaque modèle suivi de son stylo, qui l'ouvre dans l'éditeur (le bandeau
+   « Revenir au macro-modèle » ramène ici, js/main.js). Un modèle supprimé depuis reste dit (grisé, stylo grisé), jamais retiré. */
+.macro-summary-parts { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.macro-summary-part { display: flex; align-items: flex-start; gap: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.macro-summary-part-label { flex: none; width: 88px; box-sizing: border-box; font-size: 11px; font-weight: 700; line-height: 24px; color: var(--text-muted); }
+.macro-summary-models { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
+.macro-summary-model { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
+.macro-summary-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
+.macro-summary-model.is-missing .macro-summary-model-name { color: var(--text-muted); font-style: italic; }
+.macro-summary-edit { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.macro-summary-edit svg { width: 14px; height: 14px; pointer-events: none; }
+.macro-summary-edit:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }
+.macro-summary-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.macro-summary-edit:disabled { opacity: .35; cursor: default; }
+.macro-summary-edit:disabled:hover { background: transparent; border-color: transparent; color: var(--text-muted); }
+/* Bandeau « Revenir au macro-modèle » (#macro-return-bar, index.html ; js/main.js:syncMacroReturnBar) : une ligne fine entre la barre d'outils et le texte, tant que le modèle à l'écran a été ouvert
+   par le stylo du résumé d'un macro-modèle (pas une icône de plus dans la barre d'outils gelée). Jetons de css/style.css seulement : clair et sombre. */
+.macro-return-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; }
+.macro-return-bar[hidden] { display: none; }
+.macro-return-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.macro-return-btn { flex: none; height: 26px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; }
+.macro-return-btn:hover { background: var(--surface-sunken); }
+.macro-return-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 #btn-edit-macro { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 32px; padding: 0 16px; border-radius: var(--radius-sm); border: 1px solid var(--accent-solid); background: var(--accent-solid); color: #fff; cursor: pointer; }
 #btn-edit-macro:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 

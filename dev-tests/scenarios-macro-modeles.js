@@ -1437,6 +1437,289 @@
     },
   });
 
+  // --- Ouvrir un modèle d'un macro-modèle par son stylo, et y revenir (02/10, retour d'Antoine : « modifier un sous-modèle en cliquant sur un stylo […] et, si possible, un bouton pour revenir au macro-modèle ») ---
+  // Le résumé du macro-modèle (js/macro-editor.js:renderParts) liste ses modèles, un stylo chacun ; le stylo ouvre le modèle dans l'éditeur (js/main.js:openTemplateFromMacro) et le bandeau « Revenir au
+  // macro-modèle » (#macro-return-bar) ramène au macro-modèle d'où l'on vient. Les gestes sont ceux de la personne (le vrai stylo, le vrai bouton, la vraie fenêtre « Modifications non enregistrées ») ; ce
+  // que la souris mesure à 700×400 est dans le script Node macroSubmodelMouse.
+  const summaryRows = () => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-part')).map(row => ({
+    label: row.querySelector('.macro-summary-part-label').textContent,
+    models: Array.from(row.querySelectorAll('.macro-summary-model-name')).map(n => n.textContent),
+    pencils: Array.from(row.querySelectorAll('.macro-summary-edit')).map(b => {
+      const r = b.getBoundingClientRect();
+      return { id: String(b.dataset.templateId), disabled: b.disabled, label: b.getAttribute('aria-label'), w: Math.round(r.width), h: Math.round(r.height) };
+    }),
+  }));
+  const pencilOf = id => Array.from(document.querySelectorAll('.macro-summary-edit')).find(b => String(b.dataset.templateId) === String(id) && !b.disabled);
+  const isShown = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+  const returnBarShown = () => { const bar = document.getElementById('macro-return-bar'); return !bar.hidden && getComputedStyle(bar).display !== 'none'; };
+  const triggerLabel = () => document.querySelector('.tts-trigger').textContent.trim();
+  const screenState = () => ({
+    current: String(Templates.getCurrentId()), list: String(document.getElementById('template-select').value), trigger: triggerLabel(), name: document.getElementById('template-name').value,
+    text: document.querySelector('.ProseMirror').textContent, editor: isShown('editor-container'), summary: isShown('macro-summary-container'), bar: returnBarShown(),
+    barText: document.getElementById('macro-return-text').textContent, barButton: document.getElementById('btn-macro-return').textContent,
+  });
+  const writesNow = () => window.__gristStub.countActions('UpdateRecord', MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
+  const dialogButtons = () => Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).filter(b => !b.hidden);
+  const dialogOpen = () => !!document.getElementById('pp-dialog-modal') && getComputedStyle(document.getElementById('pp-dialog-modal')).display !== 'none';
+  async function answerDialog(h, label) {
+    const button = dialogButtons().find(b => b.textContent === label);
+    if (!button) throw new Error('bouton « ' + label + ' » absent de la fenêtre : ' + JSON.stringify(dialogButtons().map(b => b.textContent)));
+    button.click();
+    await h.sleep(600);
+  }
+  // Un macro-modèle à plusieurs modèles : sa page de garde, une annexe à deux règles et un modèle par défaut (le troisième, créé APRÈS la dernière relecture de la liste : il n'a pas encore sa ligne dans le
+  // <select>), puis les annexes que `moreSlots` ajoute. La composition est écrite dans sa ligne Grist et rechargée par la liste, comme une personne qui y revient.
+  async function composedMacro(h, nom, moreSlots) {
+    const loaded = await loadedMacro(h, nom);
+    const third = await Templates.save(null, nom + ' - défaut', '<p>Page par défaut</p>', '', null, null, 'document', null);
+    const rule = (modeleId, value) => ({ column: 'Nom', operator: '=', value, modeleId });
+    const slots = [{ type: 'fixed', modeleId: loaded.coverId }, { type: 'conditional', rules: [rule(loaded.otherId, 'a'), rule(loaded.coverId, 'b')], defaultModeleId: third.id }]
+      .concat(moreSlots ? moreSlots(loaded, rule) : []);
+    window.__gristStub.remoteWrite(MACRO_TABLE, loaded.id, { Contenu: JSON.stringify({ slots }) });
+    await reopen(h, loaded.id);
+    return Object.assign({ thirdId: third.id }, loaded);
+  }
+
+  cases.push({
+    id: 'macro_summary_lists_every_model_of_the_composition_with_a_pencil',
+    description: 'Le résumé d\'un macro-modèle liste ses modèles (page de garde, puis chaque annexe : modèle de chaque règle et modèle par défaut, sans doublon dans une annexe), un stylo chacun ; une annexe sans modèle garde sa ligne, un modèle supprimé reste dit avec son stylo grisé',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro stylos', (m, rule) => [
+          { type: 'conditional', rules: [rule(m.otherId, 'c'), rule(m.otherId, 'd')], defaultModeleId: m.otherId },
+          { type: 'conditional', rules: [], defaultModeleId: null },
+          { type: 'conditional', rules: [rule(987654, 'e')], defaultModeleId: null },
+        ]);
+        const cover = 'Macro stylos - garde', other = 'Macro stylos - autre', third = 'Macro stylos - défaut';
+        const rows = summaryRows();
+        const problems = [];
+        const wanted = [['Page de garde', [cover]], ['Annexe 1', [other, cover, third]], ['Annexe 2', [other]], ['Annexe 3', ['aucun modèle choisi']], ['Annexe 4', ['modèle introuvable']]];
+        if (JSON.stringify(rows.map(r => [r.label, r.models])) !== JSON.stringify(wanted)) problems.push('lignes : ' + JSON.stringify(rows.map(r => [r.label, r.models])));
+        const ids = rows.map(r => r.pencils.map(p => p.id + (p.disabled ? '(grisé)' : '')));
+        const wantedIds = [[macro.coverId], [macro.otherId, macro.coverId, macro.thirdId], [macro.otherId], [], ['987654(grisé)']].map(list => list.map(String));
+        if (JSON.stringify(ids) !== JSON.stringify(wantedIds)) problems.push('stylos : ' + JSON.stringify(ids));
+        const enabled = rows.flatMap(r => r.pencils).filter(p => !p.disabled);
+        if (enabled.some(p => p.w < 24 || p.h < 24)) problems.push('stylo plus petit que 24 px : ' + JSON.stringify(enabled));
+        const labels = rows.flatMap(r => r.pencils).map(p => p.label);
+        const wantedLabels = ['Modifier le modèle « ' + cover + ' »', 'Modifier le modèle « ' + other + ' »', 'Modifier le modèle « ' + cover + ' »', 'Modifier le modèle « ' + third + ' »', 'Modifier le modèle « ' + other + ' »', 'modèle introuvable'];
+        if (JSON.stringify(labels) !== JSON.stringify(wantedLabels)) problems.push('noms accessibles : ' + JSON.stringify(labels));
+        const sentence = document.getElementById('macro-summary-text').textContent;
+        if (sentence !== 'Page de garde : ' + cover + ' — 4 annexes conditionnelles.') problems.push('phrase : ' + sentence);
+        if (!isShown('macro-summary-container') || returnBarShown()) problems.push('le résumé doit être à l\'écran, sans bandeau de retour');
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_pencil_opens_the_model_in_the_editor_and_the_return_bar_brings_back_to_the_macro',
+    description: 'Le stylo d\'une ligne du résumé ouvre ce modèle dans l\'éditeur (liste, nom, texte, pas de résumé) avec le bandeau « Revenir au macro-modèle » ; le bouton ramène au macro-modèle (résumé, plus de bandeau, focus rendu au stylo) ; rien n\'est écrit dans Grist ; un modèle créé ailleurs (sans ligne dans la liste) s\'ouvre aussi, la liste le montre',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro stylo ouvre');
+        setAutosave(false); // aucun passage du minuteur : seul un enregistrement de ce geste pourrait écrire
+        const problems = [];
+        const writes0 = writesNow();
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        const opened = screenState();
+        if (opened.current !== String(macro.otherId) || opened.list !== String(macro.otherId) || opened.trigger !== 'Macro stylo ouvre - autre' || opened.name !== 'Macro stylo ouvre - autre' || opened.text !== 'Autre page') problems.push('modèle ouvert : ' + JSON.stringify(opened));
+        if (!opened.editor || opened.summary) problems.push('l\'éditeur doit remplacer le résumé : ' + JSON.stringify(opened));
+        if (!opened.bar || opened.barText !== 'Modèle ouvert depuis le macro-modèle « Macro stylo ouvre ».' || opened.barButton !== 'Revenir au macro-modèle') problems.push('bandeau : ' + JSON.stringify(opened));
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(800);
+        const back = screenState();
+        if (back.current !== String(macro.id) || back.list !== String(macro.id) || back.trigger !== 'Macro stylo ouvre' || !back.summary || back.editor || back.bar) problems.push('retour : ' + JSON.stringify(back));
+        const focused = document.activeElement;
+        if (!focused || !focused.classList.contains('macro-summary-edit') || String(focused.dataset.templateId) !== String(macro.otherId)) problems.push('focus après le retour : ' + (focused && (focused.className + ' ' + focused.dataset.templateId)));
+        // Un modèle créé après la dernière relecture de la liste : pas de ligne dans le <select>, que le stylo relit avant d'ouvrir.
+        pencilOf(macro.thirdId).click();
+        await h.sleep(800);
+        const third = screenState();
+        if (third.current !== String(macro.thirdId) || third.list !== String(macro.thirdId) || third.trigger !== 'Macro stylo ouvre - défaut' || third.text !== 'Page par défaut' || !third.bar) problems.push('modèle absent de la liste : ' + JSON.stringify(third));
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(800);
+        if (screenState().current !== String(macro.id) || screenState().bar) problems.push('second retour : ' + JSON.stringify(screenState()));
+        const writes1 = writesNow();
+        if (writes1 !== writes0) problems.push('ouvrir et revenir ont écrit dans Grist : ' + writes0 + ' -> ' + writes1);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_return_bar_goes_away_with_any_other_model_but_stays_when_the_same_one_is_reloaded',
+    description: 'Le bandeau « Revenir au macro-modèle » disparaît dès qu\'un autre modèle se charge (la liste, « + ») et reste quand le même est rechargé (« Recharger la dernière version » après un conflit d\'enregistrement)',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro bandeau');
+        const problems = [];
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        if (!returnBarShown()) problems.push('bandeau absent après le stylo');
+        // Quelqu'un d'autre enregistre ce modèle : le conflit de l'enregistrement automatique fait proposer « Recharger la dernière version », qui recharge LE MÊME modèle.
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.otherId, { Contenu: '<p>Version de quelqu\'un d\'autre</p>', DateModif: new Date(Date.now() + 60000).toISOString() });
+        await h.focusAtEnd();
+        await h.typeText(' frappe locale');
+        await waitTicks(h, 1);
+        const banner = document.getElementById('autosave-conflict-banner');
+        if (getComputedStyle(banner).display === 'none') problems.push('le conflit n\'a pas affiché son bandeau');
+        document.getElementById('autosave-conflict-reload').click();
+        await h.sleep(800);
+        const reloaded = screenState();
+        if (reloaded.current !== String(macro.otherId) || !reloaded.text.includes('quelqu\'un d\'autre') || !reloaded.bar) problems.push('même modèle rechargé, le bandeau doit rester : ' + JSON.stringify(reloaded));
+        await reopen(h, macro.coverId);
+        if (returnBarShown()) problems.push('bandeau resté après un choix dans la liste');
+        await reopen(h, macro.id);
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        if (!returnBarShown()) problems.push('bandeau absent après le second stylo');
+        await h.clickButton('btn-new');
+        await h.sleep(500);
+        if (returnBarShown()) problems.push('bandeau resté après « + »');
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_return_bar_goes_away_when_save_as_puts_a_copy_on_screen',
+    description: '« Enregistrer sous… » depuis un modèle ouvert par le stylo met une copie à l\'écran : ce n\'est pas un modèle du macro-modèle, le bandeau « Revenir au macro-modèle » s\'efface',
+    run: async (h) => {
+      const dialogs = h.stubDialogs({ prompt: 'Copie du modèle ouvert' });
+      try {
+        const macro = await composedMacro(h, 'Macro copie');
+        const problems = [];
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        if (!returnBarShown()) problems.push('bandeau absent après le stylo');
+        document.getElementById('v2-btn-save-as').click();
+        await h.sleep(900);
+        const after = screenState();
+        if (after.current === String(macro.otherId) || after.name !== 'Copie du modèle ouvert') problems.push('la copie n\'est pas à l\'écran : ' + JSON.stringify(after));
+        if (after.bar) problems.push('bandeau resté sur une copie : ' + JSON.stringify(after));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { dialogs.restore(); await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_return_with_the_macro_deleted_elsewhere_keeps_the_model_and_drops_the_bar',
+    description: 'Le macro-modèle a été supprimé par quelqu\'un d\'autre pendant qu\'on modifie un de ses modèles : « Revenir au macro-modèle » laisse le modèle à l\'écran (pas de modèle vide à la place) et le bandeau s\'efface',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro supprimée');
+        setAutosave(false);
+        const problems = [];
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        await window.__gristStub.applyUserActions([['RemoveRecord', MACRO_TABLE, macro.id]]);
+        const before = screenState();
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(900);
+        const after = screenState();
+        if (after.current !== String(macro.otherId) || after.text !== before.text || after.text === '') problems.push('le modèle doit rester à l\'écran : ' + JSON.stringify({ before, after }));
+        if (after.bar) problems.push('bandeau resté alors que le macro-modèle n\'existe plus : ' + JSON.stringify(after));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_return_asks_before_dropping_a_pending_edit_and_cancel_keeps_the_model_and_the_bar',
+    description: 'Revenir au macro-modèle avec une modification en attente pose la question « Modifications non enregistrées » (rien d\'écrit tant qu\'on n\'a pas répondu) : Annuler garde le modèle, son texte et le bandeau ; Enregistrer écrit le modèle puis ramène au macro-modèle',
+    run: async (h) => {
+      try {
+        return await h.withRealChoose(async () => {
+        const macro = await composedMacro(h, 'Macro retour question');
+        setAutosave(false);
+        const problems = [];
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        await h.focusAtEnd();
+        await h.typeText(' modifié');
+        const writes0 = writesNow();
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(500);
+        const asked = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: writesNow() - writes0 };
+        if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !asked.message.includes('Macro retour question - autre') || asked.writes !== 0) problems.push('question : ' + JSON.stringify(asked));
+        await answerDialog(h, 'Annuler');
+        const kept = screenState();
+        if (dialogOpen() || kept.current !== String(macro.otherId) || kept.list !== String(macro.otherId) || kept.text !== 'Autre page modifié' || !kept.bar || writesNow() !== writes0) problems.push('après Annuler : ' + JSON.stringify(kept));
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(500);
+        await answerDialog(h, 'Enregistrer');
+        const done = screenState();
+        const stored = String(macroRow(macro.otherId).Contenu);
+        if (dialogOpen() || done.current !== String(macro.id) || !done.summary || done.bar || !stored.includes('Autre page modifié')) problems.push('après Enregistrer : ' + JSON.stringify({ done, stored }));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+        });
+      } finally {
+        // Une assertion qui échoue ne doit pas laisser la fenêtre ouverte (ni la modification en attente) aux scénarios suivants.
+        if (dialogOpen()) await answerDialog(h, 'Abandonner').catch(() => {});
+        await leaveMacro(h);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'macro_return_rereads_the_models_so_the_reading_shows_what_was_just_saved',
+    description: 'Revenir au macro-modèle relit les modèles : le texte qu\'un modèle vient de recevoir dans Grist (enregistrement automatique pas encore relu) se lit dans la Lecture du macro-modèle, sans attendre le passage suivant',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro relecture');
+        await feedRecord(h);
+        setAutosave(false); // aucun passage du minuteur ne relit la liste à la place du retour
+        const problems = [];
+        pencilOf(macro.coverId).click();
+        await h.sleep(800);
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.coverId, { Contenu: '<p>Texte enregistré à l\'instant</p>' });
+        const stale = String(Templates.getCached().find(t => String(t.id) === String(macro.coverId)).contenu);
+        if (stale.includes('à l\'instant')) problems.push('le cache n\'était pas en retard, le cas ne prouve rien : ' + stale);
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(900);
+        const cached = String(Templates.getCached().find(t => String(t.id) === String(macro.coverId)).contenu);
+        if (!cached.includes('à l\'instant')) problems.push('cache des modèles pas relu au retour : ' + cached);
+        await h.clickButton('btn-mode-read');
+        await h.sleep(1200);
+        const reading = (document.getElementById('reader-container').textContent || '');
+        if (!reading.includes('Texte enregistré à l\'instant')) problems.push('Lecture du macro-modèle : ' + reading.slice(0, 160));
+        await h.clickButton('btn-mode-edit');
+        await h.sleep(300);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_pencil_and_return_bar_follow_the_language',
+    description: 'En anglais, le résumé (Cover page, Annex 1, infobulle du stylo) et le bandeau de retour sont traduits, et un changement de langue en cours de route les réécrit',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro langue');
+        const problems = [];
+        I18n.setLang('en');
+        await h.sleep(200);
+        const rows = summaryRows();
+        if (rows[0].label !== 'Cover page' || rows[1].label !== 'Annex 1' || rows[0].pencils[0].label !== 'Edit the template “Macro langue - garde”') problems.push('résumé en anglais : ' + JSON.stringify(rows[0]));
+        pencilOf(macro.otherId).click();
+        await h.sleep(800);
+        const en = screenState();
+        if (en.barText !== 'Template opened from the macro template “Macro langue”.' || en.barButton !== 'Back to the macro template' || document.getElementById('macro-return-bar').getAttribute('aria-label') !== 'Back to the macro template') problems.push('bandeau en anglais : ' + JSON.stringify(en));
+        I18n.setLang('fr');
+        await h.sleep(200);
+        const fr = screenState();
+        if (fr.barText !== 'Modèle ouvert depuis le macro-modèle « Macro langue ».' || fr.barButton !== 'Revenir au macro-modèle') problems.push('bandeau repassé en français : ' + JSON.stringify(fr));
+        document.getElementById('btn-macro-return').click();
+        await h.sleep(800);
+        I18n.setLang('en');
+        await h.sleep(200);
+        if (summaryRows()[0].label !== 'Cover page' || !summaryRows()[0].pencils[0].label.startsWith('Edit the template')) problems.push('résumé déjà à l\'écran, repassé en anglais : ' + JSON.stringify(summaryRows()[0]));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();

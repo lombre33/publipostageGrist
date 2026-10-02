@@ -6,6 +6,9 @@ const MacroEditor = (function () {
   // Copie de travail des slots conditionnels (le slot fixe "page de garde" est géré à part par #macro-editor-cover, cf. collectSlotsForSave) - jamais la
   // même référence que tpl.macroSlots.slots, pour ne modifier le modèle réellement enregistré qu'au clic sur "Enregistrer".
   let slots = [];
+  // Le macro-modèle dont le résumé est à l'écran (redessiné au changement de langue) et le rappel de js/main.js qui ouvre un de ses modèles dans l'éditeur (stylo d'une ligne du résumé).
+  let summaryTpl = null;
+  let openTemplate = null;
 
   // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication - hors scope V1), ni un modèle email (pas un contenu
   // de page). Recalculé à chaque ouverture/rendu plutôt que mis en cache : la liste des modèles peut changer pendant que la modale est ouverte.
@@ -244,8 +247,12 @@ const MacroEditor = (function () {
   // onSaved(id) : rappel de js/main.js pour rafraîchir la liste des modèles et recharger le macro-modèle enregistré - branché une seule fois à l'init,
   // même patron que les autres modales de ce fichier (js/main.js:wireLinkRulesModal).
   // getScreenSettings() : les réglages du macro-modèle chargé tels qu'ils sont à l'écran (voir settingsToKeep), fournis par js/main.js.
-  function wire(onSaved, getScreenSettings) {
+  // onOpenTemplate(id) : ouvre ce modèle dans l'éditeur, depuis le stylo d'une ligne du résumé (js/main.js:openTemplateFromMacro).
+  function wire(onSaved, getScreenSettings, onOpenTemplate) {
     screenSettings = typeof getScreenSettings === 'function' ? getScreenSettings : null;
+    openTemplate = typeof onOpenTemplate === 'function' ? onOpenTemplate : null;
+    // Le résumé écrit des textes composés à l'exécution (nom des modèles dans les infobulles, numéro d'annexe) : il suit un changement de langue.
+    I18n.onChange(() => { if (summaryTpl) renderSummary(summaryTpl); });
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
     if (addSlotBtn) addSlotBtn.addEventListener('click', () => {
       slots.push({ type: 'conditional', rules: [{ column: '', operator: '=', value: '', modeleId: null }], defaultModeleId: null });
@@ -268,9 +275,85 @@ const MacroEditor = (function () {
     });
   }
 
-  function showSummary(tpl) {
+  // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui de « Si aucune règle ne correspond » (jamais
+  // deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas.
+  function summaryParts(tpl) {
+    const slots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
+    let annexNumber = 0;
+    return slots.map(slot => {
+      const isCover = slot.type === 'fixed';
+      if (!isCover) annexNumber++;
+      const ids = isCover ? [slot.modeleId] : (slot.rules || []).map(rule => rule.modeleId).concat(slot.defaultModeleId);
+      return {
+        label: isCover ? I18n.t('macro.modal.coverLabel') : I18n.t('macro.modal.annexeLabel', { n: annexNumber }),
+        ids: ids.filter((id, index) => id != null && id !== '' && ids.findIndex(other => other != null && String(other) === String(id)) === index),
+      };
+    });
+  }
+
+  // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on vient pour le bandeau « Revenir au macro-modèle »). Un
+  // modèle supprimé depuis reste dit, grisé, avec son stylo grisé : rien ne disparaît.
+  function modelEntry(id, found) {
+    const entry = document.createElement('span');
+    entry.className = 'macro-summary-model' + (found ? '' : ' is-missing');
+    const name = document.createElement('span');
+    name.className = 'macro-summary-model-name';
+    name.textContent = found ? found.nom : I18n.t('macro.summary.missing');
+    if (found) name.title = found.nom; // un nom long est coupé par « … » : il se lit en entier au survol
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'macro-summary-edit';
+    edit.dataset.templateId = String(id);
+    edit.innerHTML = Icons.svg('edit');
+    if (found) {
+      const label = I18n.t('macro.summary.edit', { name: found.nom });
+      edit.setAttribute('aria-label', label);
+      edit.title = label;
+      edit.addEventListener('click', () => { if (openTemplate) openTemplate(found.id); });
+    } else {
+      edit.disabled = true;
+      edit.setAttribute('aria-label', I18n.t('macro.summary.missing'));
+    }
+    entry.appendChild(name);
+    entry.appendChild(edit);
+    return entry;
+  }
+
+  function renderParts(tpl) {
+    const list = document.getElementById('macro-summary-parts');
+    if (!list) return;
+    list.innerHTML = '';
+    const known = Templates.getCached();
+    summaryParts(tpl).forEach(part => {
+      const item = document.createElement('li');
+      item.className = 'macro-summary-part';
+      const label = document.createElement('span');
+      label.className = 'macro-summary-part-label';
+      label.textContent = part.label;
+      const models = document.createElement('span');
+      models.className = 'macro-summary-models';
+      if (!part.ids.length) {
+        const none = document.createElement('span');
+        none.className = 'macro-summary-model-name';
+        none.textContent = I18n.t('macro.summary.noTemplate');
+        models.appendChild(none);
+      }
+      part.ids.forEach(id => models.appendChild(modelEntry(id, known.find(t => String(t.id) === String(id)))));
+      item.appendChild(label);
+      item.appendChild(models);
+      list.appendChild(item);
+    });
+  }
+
+  function renderSummary(tpl) {
     const text = document.getElementById('macro-summary-text');
     if (text) text.textContent = describeSummary(tpl);
+    renderParts(tpl);
+  }
+
+  function showSummary(tpl) {
+    summaryTpl = tpl;
+    renderSummary(tpl);
     const editBtn = document.getElementById('btn-edit-macro');
     if (editBtn) editBtn.onclick = () => openModal(tpl);
   }

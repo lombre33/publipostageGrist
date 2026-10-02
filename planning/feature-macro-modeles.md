@@ -125,6 +125,10 @@ pour le mode email avec `TypeModele`) :
 - Pas d'aperçu pixel-perfect dans cet écran : c'est de la configuration, pas de l'édition. Un résumé
   textuel suffit ("Page de garde : [Modèle X] — 2 annexes conditionnelles configurées"). Le vrai aperçu
   existe déjà : le mode Lecture, une fois le macro-modèle sélectionné et une ligne Grist choisie.
+- **Modifier un modèle de la composition** (demande d'Antoine du 02/10) : sous la phrase du résumé, une ligne par page de garde et par annexe liste ses modèles, chacun suivi d'un stylo qui l'ouvre dans l'éditeur
+  (même chemin qu'un choix de la liste, `openTemplateFromMacro` de `js/main.js`) ; un bandeau d'une ligne sous la barre d'outils (la barre gelée ne change pas) dit d'où l'on vient et ramène au macro-modèle
+  (`macroOrigin`, `returnToMacro`). Revenir pose la question « Modifications non enregistrées » comme un changement de modèle et relit les modèles pour que la Lecture montre ce qu'on vient d'enregistrer ; un autre
+  modèle chargé (liste, « + », galerie, suppression) efface le bandeau. Tests : cas `macro_summary_*`, `macro_pencil_*`, `macro_return_*` de `dev-tests/scenarios-macro-modeles.js`, script `macroSubmodelMouse`.
 
 ## Résolution en mode Lecture / export
 

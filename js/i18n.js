@@ -402,6 +402,14 @@ const I18n = (function () {
     'macro.summary.empty': { fr: 'Aucune page de garde ni annexe définie pour l’instant.', en: 'No cover page or annex defined yet.' },
     'macro.summary.noCover': { fr: 'aucune', en: 'none' },
     'macro.summary.text': { fr: 'Page de garde : {cover} — {count} {count|annexe conditionnelle|annexes conditionnelles}.', en: 'Cover page: {cover} — {count} conditional {count|annex|annexes}.' },
+    // Les modèles de la composition, un stylo chacun (js/macro-editor.js) : il ouvre ce modèle dans l'éditeur ; le bandeau « Revenir au macro-modèle » (js/main.js) ramène au macro-modèle.
+    'macro.summary.partsAria': { fr: 'Modèles assemblés', en: 'Assembled templates' },
+    'macro.summary.edit': { fr: 'Modifier le modèle « {name} »', en: 'Edit the template “{name}”' },
+    'macro.summary.missing': { fr: 'modèle introuvable', en: 'template not found' },
+    'macro.summary.noTemplate': { fr: 'aucun modèle choisi', en: 'no template chosen' },
+    'macro.return.aria': { fr: 'Retour au macro-modèle', en: 'Back to the macro template' },
+    'macro.return.text': { fr: 'Modèle ouvert depuis le macro-modèle « {name} ».', en: 'Template opened from the macro template “{name}”.' },
+    'macro.return.button': { fr: 'Revenir au macro-modèle', en: 'Back to the macro template' },
     'status.macroSaved': { fr: 'Macro-modèle enregistré.', en: 'Macro template saved.' },
 
     // --- Panneau Réglages ---

@@ -82,7 +82,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.83">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.92">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.48">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.49">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.15">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.6">
@@ -353,11 +353,17 @@
     <span data-i18n="autosave.conflict.message">Ce modèle a été modifié ailleurs pendant votre édition.</span>
     <button type="button" id="autosave-conflict-reload" data-i18n="autosave.conflict.reload">Recharger la dernière version</button>
   </div>
+  <!-- Bandeau « Revenir au macro-modèle » : une ligne fine entre la barre d'outils et le texte, montrée par js/main.js (syncMacroReturnBar) tant que le modèle à l'écran a été ouvert par le stylo du résumé d'un macro-modèle. -->
+  <div id="macro-return-bar" class="macro-return-bar" role="region" aria-label="Retour au macro-modèle" data-i18n-aria="macro.return.aria" hidden>
+    <span class="macro-return-text" id="macro-return-text"></span>
+    <button type="button" id="btn-macro-return" class="macro-return-btn" data-i18n="macro.return.button">Revenir au macro-modèle</button>
+  </div>
   <div id="v2-cell-bar-dock" class="v2-cell-bar-dock" role="toolbar" aria-label="Barre de la case" data-i18n-aria="grid.cellBar"></div>
   <div id="editor-container"></div>
   <div id="macro-summary-container" style="display:none;">
     <div class="macro-summary-box">
       <p class="macro-summary-text" id="macro-summary-text"></p>
+      <ul class="macro-summary-parts" id="macro-summary-parts" aria-label="Modèles assemblés" data-i18n-aria="macro.summary.partsAria"></ul>
       <button type="button" id="btn-edit-macro" data-i18n="macro.editButton">Modifier la composition</button>
     </div>
   </div>
@@ -559,7 +565,7 @@
 <script src="js/grist-api.js?v=0.87"></script>
 <script src="js/templates.js?v=0.80"></script>
 <script src="js/reader-mode.js?v=0.112"></script>
-<script src="js/i18n.js?v=0.80"></script>
+<script src="js/i18n.js?v=0.81"></script>
 <script src="js/shortcuts.js?v=0.2"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>
@@ -571,7 +577,7 @@
 <script src="js/viewport-fit.js?v=0.4"></script>
 <script src="js/search-select.js?v=0.8"></script>
 <script src="js/variables.js?v=0.47"></script>
-<script src="js/icons.js?v=0.34"></script>
+<script src="js/icons.js?v=0.35"></script>
 <script src="js/editor-core.js?v=0.11"></script>
 <script src="js/header-footer-preview.js?v=1.15"></script>
 <script src="js/editor-nodes.js?v=1.10"></script>
@@ -612,7 +618,7 @@
 <script src="js/conditional-text.js?v=0.2"></script>
 <script src="js/conditional-checkbox.js?v=0.2"></script>
 <script src="js/macro-templates.js?v=0.7"></script>
-<script src="js/macro-editor.js?v=0.38"></script>
+<script src="js/macro-editor.js?v=0.39"></script>
 <script src="js/template-organizer.js?v=0.3"></script>
 <script src="js/template-preferences.js?v=0.3"></script>
 <script src="js/template-organize-modal.js?v=0.8"></script>
@@ -620,6 +626,6 @@
 <script src="js/access-rights.js?v=0.3"></script>
 <script src="js/watermark-dialog.js?v=0.1"></script>
 <script src="js/orientation-toggle.js?v=0.6"></script>
-<script src="js/main.js?v=0.86"></script>
+<script src="js/main.js?v=0.87"></script>
 </body>
 </html>

@@ -8,6 +8,8 @@
   // Mode email (planning/feature-email-mode.md) : 'document' par défaut, y compris pour un modèle jamais chargé (avant le tout premier appel à
   // loadTemplateIntoEditor) - ne devient 'email' que via un modèle dont TypeModele='email' ou onNewEmail().
   let currentTypeModele = 'document';
+  // Le macro-modèle d'où le modèle à l'écran a été ouvert par le stylo de son résumé, et ce modèle : { macroId, templateId }, null sinon (cf. openTemplateFromMacro).
+  let macroOrigin = null;
   // Valeurs BRUTES (gabarits #Variable) des 4 champs, capturées juste avant de passer en Lecture - le mode Lecture affiche des valeurs RÉSOLUES dans les
   // MÊMES <input> (pas de duplication de zone, comme le reste de la bar-row 2/#v2-toolbar déjà partagée entre les deux modes) ; non-null uniquement pendant
   // que le mode Lecture est actif, cf. updateEmailFieldsDisplay().
@@ -24,6 +26,7 @@
   const btnRead = document.getElementById('btn-mode-read');
   const conflictBanner = document.getElementById('autosave-conflict-banner');
   const conflictReloadBtn = document.getElementById('autosave-conflict-reload');
+  const macroReturnBar = document.getElementById('macro-return-bar');
   const emailFieldsRow = document.getElementById('v2-email-fields-row');
   const emailSubjectInput = document.getElementById('v2-email-subject');
   const emailToInput = document.getElementById('v2-email-to');
@@ -196,6 +199,7 @@
   // forcedTypeModele : n'a d'effet que pour tpl=null (nouveau modèle vide, cf. onNew/onNewEmail) - un tpl existant porte déjà son propre typeModele
   // (Templates.loadAll()), jamais réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
+    forgetMacroOriginUnless(tpl);
     if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
     closeTemplateRenameEditor();
     // Changer de modèle en pleine édition d'en-tête/pied de page laisserait sinon le contenu d'en-tête chargé à la place du document principal qu'on
@@ -445,6 +449,67 @@
     done();
   }
 
+  // === Ouvrir un modèle d'un macro-modèle, et y revenir ===
+  // Le stylo d'une ligne du résumé d'un macro-modèle (js/macro-editor.js:showSummary) ouvre ce modèle dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau « Revenir au
+  // macro-modèle » (#macro-return-bar) ramène au macro-modèle d'où l'on vient. macroOrigin = { macroId, templateId }, remis à null dès qu'un AUTRE modèle se charge (liste, « + », galerie, suppression :
+  // forgetMacroOriginUnless, en tête de loadTemplateIntoEditor), jamais quand le même est rechargé (conflit d'enregistrement automatique).
+
+  function syncMacroReturnBar() {
+    if (!macroReturnBar) return;
+    const macro = macroOrigin ? Templates.getCached().find(t => String(t.id) === String(macroOrigin.macroId)) : null;
+    macroReturnBar.hidden = !macro;
+    const text = document.getElementById('macro-return-text');
+    if (!text) return;
+    text.textContent = macro ? I18n.t('macro.return.text', { name: macro.nom }) : '';
+    text.title = text.textContent; // le nom d'un macro-modèle long est coupé par « … » : la phrase se lit en entier au survol
+  }
+
+  function forgetMacroOriginUnless(tpl) {
+    if (!macroOrigin || (tpl && String(tpl.id) === String(Templates.getCurrentId()))) return;
+    macroOrigin = null;
+    syncMacroReturnBar();
+  }
+
+  // Un macro-modèle n'a rien à enregistrer avant d'être quitté (il s'édite dans sa fenêtre) : pas de question ici, contrairement au retour (returnToMacro). La liste et le cache des modèles sont relus
+  // d'abord : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne dans le <select> (le choisir y laisserait « Nouveau modèle »), et le texte lu est celui de Grist.
+  async function openTemplateFromMacro(templateId) {
+    if (isReadOnly() || currentTypeModele !== 'macro') return;
+    const macroId = Templates.getCurrentId();
+    if (macroId == null) return;
+    await refreshTemplateList();
+    const tpl = Templates.getCached().find(t => String(t.id) === String(templateId));
+    // Un autre modèle s'est chargé pendant la relecture (deux clics de suite) : celui-là gagne. Modèle disparu : le macro-modèle reste, la liste le montre de nouveau.
+    if (String(Templates.getCurrentId()) !== String(macroId)) return;
+    if (!tpl || tpl.typeModele === 'macro') { templateSelect.value = macroId; return; }
+    templateSelect.value = tpl.id;
+    loadTemplateIntoEditor(tpl);
+    macroOrigin = { macroId, templateId: tpl.id };
+    syncMacroReturnBar();
+  }
+
+  // Même chemin qu'un choix du macro-modèle dans la liste : la question « Modifications non enregistrées » est posée si le modèle ouvert en a, et « Annuler » reste sur lui (le bandeau aussi).
+  // Le cache des modèles est relu d'abord : Templates.save ne touche pas à Contenu, et ce qui vient d'être modifié ici doit se lire dans le macro-modèle (Lecture, PDF, Word) sans attendre le
+  // prochain passage de l'enregistrement automatique.
+  async function returnToMacro() {
+    const origin = macroOrigin;
+    if (!origin) return;
+    try { await Templates.loadAll(); } catch (e) { console.error('[main] relecture des modèles impossible', e); }
+    // Macro-modèle supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface (choisir une valeur absente de la liste ouvrirait un modèle vide).
+    if (!Templates.getCached().some(t => String(t.id) === String(origin.macroId))) { syncMacroReturnBar(); return; }
+    templateSelect.value = origin.macroId;
+    await onTemplateSelectChange();
+    if (currentTypeModele !== 'macro' || String(Templates.getCurrentId()) !== String(origin.macroId)) return;
+    // Le stylo du modèle qu'on vient de quitter reprend le focus : le bouton « Revenir » a disparu avec le bandeau.
+    const pencil = document.querySelector('.macro-summary-edit[data-template-id="' + CSS.escape(String(origin.templateId)) + '"]');
+    if (pencil) pencil.focus();
+  }
+
+  function wireMacroReturn() {
+    const button = document.getElementById('btn-macro-return');
+    if (button) button.addEventListener('click', returnToMacro);
+    I18n.onChange(syncMacroReturnBar); // le nom du macro-modèle est dans la phrase du bandeau
+  }
+
   // Un macro-modèle s'édite exclusivement via sa modale (MacroEditor) - jamais Editor.getHTML() (toujours vide pour ce type, cf. loadMacroIntoEditor), qui
   // écraserait silencieusement ses slots avec un contenu vide si on laissait passer le chemin normal ci-dessous. "Enregistrer" rouvre donc directement la
   // modale plutôt que d'enregistrer quoi que ce soit lui-même.
@@ -482,6 +547,7 @@
     // modèle n'a rien à recharger, et loadForTemplate referme le popup ouvert.
     if (String(id) !== String(savedId)) {
       Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
+      forgetMacroOriginUnless(null); // une copie (« Enregistrer sous… ») n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
     }
     // Un enregistrement manuel explicite tranche tout conflit auto-save en cours en faveur de CETTE version (cf. autosaveTick) - pas besoin de recharger.
     autosaveDirty = false;
@@ -1749,7 +1815,7 @@
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
-    MacroEditor.wire(onMacroSaved, macroSettingsOnScreen);
+    MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
     document.getElementById('btn-export-pdf').addEventListener('click', withExportLock(onExportPdf));
@@ -1785,6 +1851,7 @@
     I18n.onChange(() => { if (statusMsg.classList.contains('is-unsaved')) statusMsg.textContent = I18n.t('status.unsavedChanges'); });
     Variables.initFilenameInput(pdfFilenameInput);
     wireAutosaveConflictBanner();
+    wireMacroReturn();
     wireSaveMenu();
     startAutosaveLoop();
     await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
