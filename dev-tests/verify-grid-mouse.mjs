@@ -374,6 +374,114 @@ async function runTheme(theme) {
   const ctrlA = await gridState(page);
   check(`${label} - Ctrl+A sélectionne les 90 cases (pas le document entier)`, ctrlA.selected === 90, ctrlA.selected);
 
+  // 6 bis) Au vrai clavier, la case où l'on arrive est TOUTE visible, jamais sous un bandeau collé (Antoine, 02/10 : la flèche du haut et Maj+Tab cachaient le curseur sous le
+  // bandeau). ProseMirror ne voit pas les bandeaux : il amenait le curseur au bord du panneau, dessous. Une grille de 14 colonnes x 16 lignes déborde dans les deux sens.
+  const loadBigGrid = longCell => page.evaluate(({ withLongCell }) => {
+    const cols = 14, rows = 16, w = 100;
+    const long = Array.from({ length: 120 }, () => 'mot').join(' ');
+    const row = r => '<tr data-row-height="28" style="height: 28px">' + Array.from({ length: cols }, (_, c) => '<td colwidth="' + w + '"><p>' + (withLongCell && r === 1 && c === 1 ? long : '') + '</p></td>').join('') + '</tr>';
+    GridEditor.setActive(false);
+    Editor.setHTML('<table style="width: ' + cols * w + 'px;"><colgroup>' + ('<col style="width: ' + w + 'px;">').repeat(cols) + '</colgroup><tbody>' + Array.from({ length: rows }, (_, r) => row(r)).join('') + '</tbody></table>');
+    GridEditor.setActive(true);
+  }, { withLongCell: !!longCell });
+  const scrollPanel = (top, left) => page.evaluate(([t, l]) => { const b = document.getElementById('editor-container'); b.scrollTop = t; b.scrollLeft = l; }, [top, left]);
+  // La case du curseur (pour des cases choisies : la dernière touchée) : où est-elle par rapport à ce qu'on voit, c'est-à-dire le panneau moins les bandeaux collés ?
+  const landingNow = () => page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    const sel = ed.state.selection;
+    let td;
+    if (sel.$headCell) td = ed.view.nodeDOM(sel.$headCell.pos);
+    else { const dom = ed.view.domAtPos(sel.head).node; td = (dom.nodeType === 1 ? dom : dom.parentElement).closest('td,th'); }
+    const box = document.getElementById('editor-container');
+    const r = td.getBoundingClientRect(), b = box.getBoundingClientRect();
+    const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
+    const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
+    const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
+    return { cell: [td.parentElement.rowIndex, td.cellIndex], ok: r.top >= top - 0.5 && r.bottom <= bottom + 0.5 && r.left >= left - 0.5 && r.right <= right + 0.5,
+      over: { top: Math.round(top - r.top), left: Math.round(left - r.left), bottom: Math.round(r.bottom - bottom), right: Math.round(r.right - right) } };
+  });
+  // Le curseur lui-même : ni sous un bandeau, ni hors du panneau.
+  const caretNow = () => page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    const c = ed.view.coordsAtPos(ed.state.selection.head, 1);
+    const box = document.getElementById('editor-container');
+    const b = box.getBoundingClientRect();
+    const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
+    const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
+    const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
+    return { ok: c.top >= top - 0.5 && c.bottom <= bottom + 0.5 && c.left >= left - 0.5 && c.right <= right + 0.5, caret: [Math.round(c.top), Math.round(c.bottom), Math.round(c.left)], visible: [Math.round(top), Math.round(bottom), Math.round(left), Math.round(right)] };
+  });
+  // `count` fois la même touche, au vrai clavier ; `measure` dit après chacune si la case (ou le curseur) est en vue.
+  const walkKeys = async (name, count, measure) => {
+    const bad = []; let last = null;
+    for (let i = 1; i <= count; i++) {
+      await page.keyboard.press(name);
+      await page.waitForTimeout(60);
+      const m = await measure();
+      last = m.cell || null;
+      if (!m.ok) bad.push(Object.assign({ n: i }, m));
+    }
+    return { badCount: bad.length, first: bad[0] || null, last };
+  };
+  const startAt = async (row, col, top, left, what) => {
+    await scrollPanel(top, left);
+    await page.waitForTimeout(100);
+    await clickInPanel(page, `.tiptap table > tbody > tr:nth-child(${row + 1}) > td:nth-child(${col + 1})`, `${label} - ${what}`);
+    await page.waitForTimeout(100);
+  };
+  await freshGrid(page);
+  await loadBigGrid(false);
+  await page.waitForTimeout(500);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  await startAt(15, 1, 99999, 0, 'départ de la flèche du haut');
+  const keysUp = await walkKeys('ArrowUp', 15, landingNow);
+  check(`${label} - 15 flèches du haut de suite (ligne 16 -> ligne 1) : chaque case d'arrivée est toute visible, jamais sous le bandeau des colonnes`, keysUp.badCount === 0 && keysUp.last + '' === '0,1', keysUp);
+  await startAt(15, 13, 99999, 99999, 'départ de Maj+Tab');
+  const keysBack = await walkKeys('Shift+Tab', 30, landingNow);
+  check(`${label} - 30 Maj+Tab de suite (de la dernière case vers la gauche, ligne après ligne) : chaque case d'arrivée est toute visible, sous aucun bandeau`, keysBack.badCount === 0 && keysBack.last + '' === '13,11', keysBack);
+  await startAt(4, 13, 0, 99999, 'départ de la flèche de gauche');
+  const keysLeft = await walkKeys('ArrowLeft', 13, landingNow);
+  check(`${label} - 13 flèches de gauche de suite (jusqu'à la colonne A) : chaque case d'arrivée est toute visible, jamais sous le bandeau des lignes`, keysLeft.badCount === 0 && keysLeft.last + '' === '4,0', keysLeft);
+  await startAt(0, 0, 0, 0, 'départ de Tab');
+  const keysTab = await walkKeys('Tab', 30, landingNow);
+  check(`${label} - 30 Tab de suite : chaque case d'arrivée est toute visible, sans être coupée par le bord du panneau`, keysTab.badCount === 0 && keysTab.last + '' === '2,2', keysTab);
+  await startAt(0, 3, 0, 0, 'départ de la flèche du bas');
+  const keysDown = await walkKeys('ArrowDown', 15, landingNow);
+  check(`${label} - 15 flèches du bas de suite : chaque case d'arrivée est toute visible, sans être coupée par le bord du panneau`, keysDown.badCount === 0 && keysDown.last + '' === '15,3', keysDown);
+  await startAt(0, 0, 0, 0, 'départ de Maj+flèche du bas');
+  await page.keyboard.down('Shift');
+  const keysExtend = await walkKeys('ArrowDown', 13, landingNow);
+  await page.keyboard.up('Shift');
+  const extended = await gridState(page);
+  check(`${label} - Maj+flèche du bas 13 fois : des cases choisies, et la case où le geste arrive est toute visible à chaque pas`, keysExtend.badCount === 0 && extended.selected === 14, { keysExtend, selected: extended.selected });
+  // Taper dans une case que le bord du panneau coupe, sur laquelle on vient de cliquer : la grille ne défile pas (seul le curseur est ramené en vue, jamais la case entière).
+  await scrollPanel(0, 0);
+  await page.waitForTimeout(100);
+  const cut = await page.evaluate(() => { const td = document.querySelector('.tiptap table > tbody > tr:nth-child(2) > td:nth-child(7)'); const r = td.getBoundingClientRect(); const box = document.getElementById('editor-container'); return { x: r.left + 20, y: r.top + r.height / 2, cut: r.right > box.getBoundingClientRect().left + box.clientWidth, onScreen: r.left + 20 < box.getBoundingClientRect().left + box.clientWidth }; });
+  await page.mouse.move(cut.x - 6, cut.y, { steps: 2 });
+  await page.mouse.click(cut.x, cut.y);
+  await page.waitForTimeout(100);
+  const scrollBefore = await page.evaluate(() => { const b = document.getElementById('editor-container'); return [b.scrollTop, b.scrollLeft]; });
+  await page.keyboard.type('abc');
+  await page.waitForTimeout(150);
+  const scrollAfter = await page.evaluate(() => { const b = document.getElementById('editor-container'); return [b.scrollTop, b.scrollLeft]; });
+  const typedIn = await page.evaluate(() => document.querySelector('.tiptap table > tbody > tr:nth-child(2) > td:nth-child(7)').textContent);
+  check(`${label} - un vrai clic sur la partie visible d'une case coupée par le bord du panneau, puis une frappe : le texte entre dans la case et la grille ne défile pas`, cut.cut && cut.onScreen && typedIn === 'abc' && scrollBefore + '' === scrollAfter + '', { cut, scrollBefore, scrollAfter, typedIn });
+  // Une case plus haute que le panneau : le curseur reste visible quand il descend puis remonte ligne à ligne dedans (le navigateur le déplace, ProseMirror le suit sans connaître les bandeaux).
+  await freshGrid(page);
+  await loadBigGrid(true);
+  await page.waitForTimeout(500);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+  await scrollPanel(0, 0);
+  await page.waitForTimeout(100);
+  const tallBox = await page.evaluate(() => { const td = document.querySelector('.tiptap table > tbody > tr:nth-child(2) > td:nth-child(2)'); const r = td.getBoundingClientRect(); return { x: r.left + 40, y: r.top + 10, height: r.height }; });
+  await page.mouse.move(tallBox.x - 6, tallBox.y, { steps: 2 });
+  await page.mouse.click(tallBox.x, tallBox.y);
+  await page.waitForTimeout(100);
+  const caretDown = await walkKeys('ArrowDown', 25, caretNow);
+  const caretUp = await walkKeys('ArrowUp', 22, caretNow);
+  check(`${label} - dans une case de ${Math.round(tallBox.height)} px (plus haute que le panneau), 25 flèches du bas puis 22 flèches du haut : le curseur est visible à chaque pas, jamais sous le bandeau des colonnes`, tallBox.height > 300 && caretDown.badCount === 0 && caretUp.badCount === 0, { tallBox, caretDown, caretUp });
+
   // 7) Barre de la case : fixée dans sa bande au-dessus de la grille (jamais sur une case ni sur un bandeau), la même quelle que soit la case courante.
   await freshGrid(page);
   await clickInPanel(page, '.tiptap table tr:nth-child(5) td:nth-child(3)', `${label} - barre`);

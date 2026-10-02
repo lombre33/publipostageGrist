@@ -1991,16 +1991,7 @@
       const box = editorBox();
       const saved = box.style.cssText;
       const result = { down: [], above: null, right: null };
-      const landing = () => {
-        const dom = ed().view.domAtPos(ed().state.selection.head).node;
-        const td = (dom.nodeType === 1 ? dom : dom.parentElement).closest('td,th');
-        const r = td.getBoundingClientRect();
-        const b = box.getBoundingClientRect();
-        const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
-        const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
-        const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
-        return { ok: r.top >= top - 0.5 && r.bottom <= bottom + 0.5 && r.left >= left - 0.5 && r.right <= right + 0.5, cell: [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)], visible: [Math.round(top), Math.round(bottom), Math.round(left), Math.round(right)] };
-      };
+      const landing = shownCell;
       try {
         box.style.cssText = saved + ';width:320px;max-width:320px;height:160px;max-height:160px;overflow:auto';
         await sleep(80);
@@ -2052,6 +2043,242 @@
       const ok = outside && outsideParagraphs === 1 && inside && cellPara === 2;
       return { pass: ok, notes: JSON.stringify({ outside, outsideParagraphs, inside, cellPara }) };
     },
+  });
+
+  // === Défilement : la case et le curseur jamais sous les bandeaux (Antoine, 02/10 : « Corriger la flèche du haut et Maj+Tab qui cachent le curseur sous le bandeau ») ============
+
+  // Un panneau étroit et bas (celui de Grist l'est) : la grille y défile dans les deux sens et ses bandeaux collés recouvrent ce qui passe dessous.
+  async function inNarrowPanel(h, body) {
+    await enterGrid(h);
+    const box = editorBox();
+    const saved = box.style.cssText;
+    try {
+      box.style.cssText = saved + ';width:320px;max-width:320px;height:160px;max-height:160px;overflow:auto';
+      await sleep(80);
+      box.scrollTop = 0; box.scrollLeft = 0;
+      return await body(box);
+    } finally {
+      box.style.cssText = saved;
+      await leaveGrid(h);
+    }
+  }
+
+  // La case où le geste se trouve (pour des cases choisies : la dernière touchée) et si on la voit EN ENTIER : dans le panneau, sans ses barres de défilement, moins les bandeaux collés.
+  function shownCell() {
+    const box = editorBox();
+    const sel = ed().state.selection;
+    let td;
+    if (sel.$headCell) td = ed().view.nodeDOM(sel.$headCell.pos);
+    else { const dom = ed().view.domAtPos(sel.head).node; td = (dom.nodeType === 1 ? dom : dom.parentElement).closest('td,th'); }
+    const r = td.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
+    const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
+    const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
+    return { ok: r.top >= top - 0.5 && r.bottom <= bottom + 0.5 && r.left >= left - 0.5 && r.right <= right + 0.5, cell: [Math.round(r.top), Math.round(r.bottom), Math.round(r.left), Math.round(r.right)], visible: [Math.round(top), Math.round(bottom), Math.round(left), Math.round(right)] };
+  }
+
+  // Le curseur est-il vu : ni sous les bandeaux, ni hors du panneau ? (`point` : son rectangle à l'écran, par défaut celui de la tête de la sélection)
+  function caretShown(point) {
+    const box = editorBox();
+    const c = point || ed().view.coordsAtPos(ed().state.selection.head, 1);
+    const b = box.getBoundingClientRect();
+    const top = b.top + document.querySelector('.v2-grid-cols').offsetHeight;
+    const left = b.left + document.querySelector('.v2-grid-rows').offsetWidth;
+    const bottom = b.top + box.clientHeight, right = b.left + box.clientWidth;
+    return { ok: c.top >= top - 0.5 && c.bottom <= bottom + 0.5 && c.left >= left - 0.5 && c.right <= right + 0.5, caret: [Math.round(c.top), Math.round(c.bottom), Math.round(c.left), Math.round(c.right)], visible: [Math.round(top), Math.round(bottom), Math.round(left), Math.round(right)] };
+  }
+
+  // La ligne `row` fait au moins `px` px (le plancher `rowHeight`, comme quand on tire son trait).
+  function setRowHeight(row, px) {
+    let pos = 1;
+    for (let r = 0; r < row; r++) pos += tableNode().child(r).nodeSize;
+    ed().view.dispatch(ed().state.tr.setNodeMarkup(pos, undefined, Object.assign({}, tableNode().child(row).attrs, { rowHeight: px })));
+  }
+
+  // La colonne `col` fait `px` px de large (le `colwidth` de chacune de ses cases, comme quand on tire son trait).
+  function setColWidth(col, px) {
+    const tr = ed().state.tr;
+    for (let r = 0; r < tableNode().childCount; r++) tr.setNodeMarkup(cellPos(r, col), undefined, Object.assign({}, tableNode().child(r).child(col).attrs, { colwidth: [px] }));
+    ed().view.dispatch(tr);
+  }
+
+  // Une touche, `count` fois : après chacune, la case d'arrivée est-elle toute visible ? Rend les arrivées qui ne le sont pas (et la dernière case atteinte).
+  async function walkKeys(name, options, count) {
+    const bad = [];
+    for (let i = 1; i <= count; i++) {
+      key(name, options);
+      await sleep(25);
+      const l = shownCell();
+      if (!l.ok) bad.push(Object.assign({ n: i, at: selectionCell() }, l));
+    }
+    return { bad: bad.slice(0, 3), badCount: bad.length, last: selectionCell() };
+  }
+
+  cases.push({
+    id: 'grid_going_back_shows_the_whole_cell_below_the_strips',
+    description: 'Dans un plan de travail étroit et bas, la flèche du haut, la flèche de gauche et Maj+Tab amènent le curseur dans une case TOUTE visible, jamais cachée sous le bandeau des colonnes ni sous celui des lignes (ProseMirror ne connaît pas ces bandeaux collés : la case remontée au bord du panneau arrivait recouverte)',
+    run: async (h) => inNarrowPanel(h, async (box) => {
+      const result = {};
+      // Flèche du haut : on remonte de la ligne 15 à la ligne 2, la colonne B.
+      box.scrollTop = 99999;
+      await placeCursor(14, 1);
+      await sleep(100);
+      result.up = await walkKeys('ArrowUp', null, 13);
+      // Maj+Tab : de la dernière case vers la gauche, puis de ligne en ligne vers le haut (le panneau défile dans les deux sens).
+      box.scrollTop = 99999; box.scrollLeft = 99999;
+      await placeCursor(14, 5);
+      await sleep(100);
+      result.shiftTab = await walkKeys('Tab', { shiftKey: true }, 30);
+      // Flèche de gauche : du bout d'une ligne vers sa colonne A, puis la ligne d'avant.
+      box.scrollTop = 0; box.scrollLeft = 99999;
+      await placeCursor(2, 5);
+      await sleep(100);
+      result.left = await walkKeys('ArrowLeft', null, 11);
+      const ok = result.up.badCount === 0 && result.up.last + '' === '1,1'
+        && result.shiftTab.badCount === 0 && result.shiftTab.last + '' === '9,5'
+        && result.left.badCount === 0 && result.left.last + '' === '1,0';
+      return { pass: ok, notes: JSON.stringify(result) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_going_forward_shows_the_whole_cell_not_cut_at_the_panel_edge',
+    description: 'Vers le bas et vers la droite aussi (Tab, flèche du bas, flèche de droite), la case d\'arrivée est toute visible : elle n\'arrive plus coupée par le bord du panneau (ProseMirror ne montrait que la ligne du curseur)',
+    run: async (h) => inNarrowPanel(h, async (box) => {
+      const result = {};
+      await placeCursor(0, 0);
+      await sleep(100);
+      result.tab = await walkKeys('Tab', null, 40);
+      box.scrollTop = 0; box.scrollLeft = 0;
+      await placeCursor(0, 3);
+      await sleep(100);
+      result.down = await walkKeys('ArrowDown', null, 14);
+      box.scrollTop = 0; box.scrollLeft = 0;
+      await placeCursor(1, 0);
+      await sleep(100);
+      result.right = await walkKeys('ArrowRight', null, 11);
+      const ok = result.tab.badCount === 0 && result.tab.last + '' === '6,4'
+        && result.down.badCount === 0 && result.down.last + '' === '14,3'
+        && result.right.badCount === 0 && result.right.last + '' === '2,5';
+      return { pass: ok, notes: JSON.stringify(result) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_extending_chosen_cells_shows_the_whole_cell_the_gesture_reaches',
+    description: 'Maj+flèche qui étend des cases choisies : la case où le geste arrive (la dernière touchée) est toute visible, vers le bas comme vers la droite',
+    run: async (h) => inNarrowPanel(h, async () => {
+      const result = {};
+      await placeCursor(0, 0);
+      await sleep(100);
+      result.down = await walkKeys('ArrowDown', { shiftKey: true }, 13);
+      const rangeAfterDown = !!ed().state.selection.$anchorCell;
+      result.right = await walkKeys('ArrowRight', { shiftKey: true }, 5);
+      const ok = rangeAfterDown && result.down.badCount === 0 && result.right.badCount === 0 && ed().state.selection.$headCell.pos === cellPos(13, 5);
+      return { pass: ok, notes: JSON.stringify({ rangeAfterDown, result }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_typing_brings_the_cursor_out_from_under_the_strip_but_does_not_scroll_a_clicked_cell',
+    description: 'Taper dans une case dont la ligne du curseur est cachée sous le bandeau des colonnes la ramène en vue (ProseMirror ne défile que si le curseur sort du panneau, pas du bandeau) ; taper dans une case coupée sur laquelle on vient de cliquer ne fait pas défiler la grille',
+    run: async (h) => inNarrowPanel(h, async (box) => {
+      const type = text => ed().view.dispatch(ed().state.tr.insertText(text).scrollIntoView());
+      const cols = document.querySelector('.v2-grid-cols');
+      const result = {};
+      // 1) Le curseur d'une case dont le haut passe sous le bandeau : on la place SANS défiler (la sélection seule), puis on tape.
+      await placeCursor(6, 1);
+      await sleep(100);
+      const td = () => ed().view.nodeDOM(cellPos(6, 1));
+      box.scrollTop += td().getBoundingClientRect().top - (box.getBoundingClientRect().top + cols.offsetHeight - 22);
+      await sleep(60);
+      result.hiddenBefore = !caretShown().ok;
+      type('x');
+      await sleep(40);
+      result.hiddenAfter = !caretShown().ok;
+      result.shown = caretShown();
+      // 2) Une case coupée par le bord droit du panneau, cliquée : la frappe garde le défilement tel quel.
+      box.scrollTop = 0; box.scrollLeft = 90;
+      await sleep(60);
+      ed().commands.setTextSelection(cellPos(1, 3) + 2);
+      await sleep(60);
+      const cut = !shownCell().ok;
+      const before = [box.scrollTop, box.scrollLeft];
+      type('y');
+      await sleep(40);
+      const after = [box.scrollTop, box.scrollLeft];
+      result.clicked = { cut, before, after };
+      // Le curseur ramené en vue a sa marge de 5 px sous le bandeau (celle de ProseMirror), il ne le touche pas.
+      result.margin = result.shown.caret[0] - result.shown.visible[0];
+      const ok = result.hiddenBefore && !result.hiddenAfter && result.margin >= 4 && cut && before + '' === after + '';
+      return { pass: ok, notes: JSON.stringify(result) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_extending_chosen_cells_into_a_tall_or_wide_cell_keeps_its_top_left_corner_in_view',
+    description: 'Des cases choisies qui s\'étendent jusque dans une case plus haute (ou plus large) que le panneau : elle ne se montre pas en entier, c\'est son bord haut (gauche) qui reste visible, pas son bas (sa droite)',
+    run: async (h) => inNarrowPanel(h, async (box) => {
+      setRowHeight(5, 300);
+      setColWidth(3, 500);
+      await sleep(100);
+      box.scrollTop = 0; box.scrollLeft = 0;
+      await placeCursor(0, 0);
+      await sleep(100);
+      const down = await walkKeys('ArrowDown', { shiftKey: true }, 5);
+      const high = shownCell();
+      const heightNow = document.querySelectorAll('.tiptap table > tbody > tr')[5].getBoundingClientRect().height;
+      const right = await walkKeys('ArrowRight', { shiftKey: true }, 3);
+      const corner = shownCell();
+      const widthNow = document.querySelectorAll('.tiptap table > tbody > tr')[5].children[3].getBoundingClientRect().width;
+      const topInView = l => l.cell[0] >= l.visible[0] - 1;
+      const leftInView = l => l.cell[2] >= l.visible[2] - 1;
+      const ok = heightNow >= 300 && widthNow >= 500 && !!ed().state.selection.$anchorCell && ed().state.selection.$headCell.pos === cellPos(5, 3)
+        && topInView(high) && topInView(corner) && leftInView(corner);
+      return { pass: ok, notes: JSON.stringify({ heightNow, widthNow, down: down.last, right: right.last, high, corner }) };
+    }),
+  });
+
+  cases.push({
+    id: 'grid_enter_into_a_cell_taller_than_the_panel_keeps_the_start_of_its_text_in_view',
+    description: 'Une case plus haute que le panneau ne peut pas se montrer en entier : Entrée (qui la sélectionne) garde en vue le DÉBUT de son texte - au milieu de la case quand le texte est court et centré, en haut quand il est long -, et un texte tapé dedans garde le curseur visible',
+    run: async (h) => inNarrowPanel(h, async (box) => {
+      await typeInCell(1, 1, 'Bonjour');
+      await typeInCell(3, 1, Array.from({ length: 60 }, () => 'mot').join(' '));
+      // La ligne 2 (index 1) fait 300 px : bien plus que ce qu'on voit du panneau (160 px moins les bandeaux et la barre de défilement) ; la ligne 4 est grandie par son texte.
+      setRowHeight(1, 300);
+      await sleep(100);
+      const tall = Array.from(document.querySelectorAll('.tiptap table > tbody > tr')).map(row => Math.round(row.getBoundingClientRect().height));
+      box.scrollTop = 0;
+      await placeCursor(0, 1);
+      await sleep(100);
+      enterKey();
+      await sleep(60);
+      const short = { at: selectionCell(), text: selectedText(), start: caretShown(ed().view.coordsAtPos(ed().state.selection.from, 1)) };
+      // Entrée depuis la case d'au-dessus vers la longue : le début du texte est en vue, pas sa fin.
+      box.scrollTop = 0;
+      await placeCursor(2, 1);
+      await sleep(100);
+      enterKey();
+      await sleep(60);
+      const sel = ed().state.selection;
+      const long = { at: selectionCell(), length: selectedText().length, start: caretShown(ed().view.coordsAtPos(sel.from, 1)), end: caretShown(ed().view.coordsAtPos(sel.to, 1)).ok };
+      // Même case, la sélection s'étend jusqu'à la fin du texte (Maj+flèche) : c'est son bout mobile, la tête, qui reste en vue - le début n'a plus à l'être.
+      ed().view.dispatch(ed().state.tr.setSelection(sel.constructor.create(ed().state.doc, sel.anchor, sel.head)).scrollIntoView());
+      const moving = { head: caretShown(ed().view.coordsAtPos(sel.head, 1)).ok, startHidden: !caretShown(ed().view.coordsAtPos(sel.from, 1)).ok };
+      // Taper dans la case de 300 px, curseur au milieu de son texte, la grille défilée tout en haut : le curseur revient en vue.
+      box.scrollTop = 0;
+      await sleep(60);
+      ed().commands.setTextSelection(cellPos(1, 1) + 2 + 3);
+      await sleep(60);
+      ed().view.dispatch(ed().state.tr.insertText('+').scrollIntoView());
+      await sleep(40);
+      const typed = caretShown();
+      const ok = tall[1] >= 300 && tall[3] > 300 && short.at + '' === '1,1' && short.text === 'Bonjour' && short.start.ok
+        && long.at + '' === '3,1' && long.length > 100 && long.start.ok && !long.end && moving.head && moving.startHidden && typed.ok;
+      return { pass: ok, notes: JSON.stringify({ tall, short, long, moving, typed }) };
+    }),
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

@@ -10,6 +10,7 @@
 //   - le saut de page, porté par une ligne (`pageBreakBefore`) : le PDF y commence une page, l'Excel une feuille ; une pastille dans le numéro de la ligne et un trait en tirets le montrent ;
 //   - le collage dans une case, sans les lignes vides de fin que les textes copiés traînent (`trimPastedSlice`) ;
 //   - Entrée qui descend d'une case (`enterGoesDown`), Maj+Entrée et Ctrl+Entrée qui ajoutent une ligne dans la case ;
+//   - le défilement vers la sélection (flèches, Tab, Entrée, frappe) qui tient compte des bandeaux : la case d'arrivée toute visible, le curseur jamais dessous (`revealSelection`) ;
 //   - le collage d'un tableau de tableur (Excel, Sheets, LibreOffice) case par case, mise en forme comprise (`transformPastedHTML`, js/grid-table.js).
 // Tout est inerte tant que setActive(true) n'a pas été appelé (js/main.js:loadTemplateIntoEditor) : un document, un email ou un macro-modèle ne voient rien de ce
 // fichier. Script classique, même convention de portée globale que Editor/MainToolbar ; les classes TipTap/ProseMirror arrivent par configure() (editor.js).
@@ -661,6 +662,48 @@ const GridEditor = (function () {
     return new slice.constructor(fragment, slice.openStart, Math.min(slice.openEnd, openDepthAtEnd(fragment)));
   }
 
+  // --- Défilement : la case et le curseur jamais sous les bandeaux ------------------------------------------------------------------------------------------------------
+  // ProseMirror amène le curseur dans la vue en ne connaissant que le bord du panneau : les bandeaux collés (colonnes en haut, lignes à gauche) recouvrent ce qui passe dessous, il ne les voit pas.
+  // Une flèche du haut ou de gauche, Maj+Tab ou Entrée laissaient donc le curseur, ou toute la case, cachés sous eux (Antoine, 02/10) ; vers le bas et la droite la case arrivait coupée au bord.
+  // On complète son défilement APRÈS lui (l'évènement `transaction` de TipTap suit la mise à jour de la vue), pour toute transaction qui le demande : flèches, Tab, Entrée, frappe, Annuler.
+  // Quand la transaction a changé de case, la case d'arrivée est montrée EN ENTIER. Puis, même dans une case plus haute (ou plus large) que le panneau, reste en vue ce qui compte : le curseur ;
+  // le début de ce qui est sélectionné quand on arrive en sélectionnant la case (Entrée, Tab, Maj+Tab) ; sa tête quand on étend une sélection dans la même case. Dans la même case seul le curseur
+  // est ramené hors des bandeaux : taper ne fait pas défiler une case coupée sur laquelle on vient de cliquer.
+  const CARET_MARGIN_PX = 5; // la marge que ProseMirror laisse autour du curseur (`scrollMargin`)
+  let lastCellDom = null;    // la case du curseur après la transaction d'avant : sert à voir si celle-ci a changé de case
+
+  // Le rectangle où l'on voit vraiment le contenu : le panneau sans ses barres de défilement, moins les bandeaux collés.
+  function visibleArea(scroller) {
+    const cols = scroller.querySelector('.v2-grid-cols');
+    const rows = scroller.querySelector('.v2-grid-rows');
+    const box = scroller.getBoundingClientRect();
+    return {
+      top: box.top + (cols ? cols.offsetHeight : 0),
+      left: box.left + (rows ? rows.offsetWidth : 0),
+      bottom: box.top + scroller.clientHeight,
+      right: box.left + scroller.clientWidth,
+    };
+  }
+
+  // Défile du minimum pour que `rect` tienne dans `area` (`margin` px de plus quand il faut le bouger).
+  function scrollRectInto(scroller, area, rect, margin) {
+    if (rect.top < area.top) scroller.scrollTop -= area.top - rect.top + margin;
+    else if (rect.bottom > area.bottom) scroller.scrollTop += rect.bottom - area.bottom + margin;
+    if (rect.left < area.left) scroller.scrollLeft -= area.left - rect.left + margin;
+    else if (rect.right > area.right) scroller.scrollLeft += rect.right - area.right + margin;
+  }
+
+  function revealSelection(view, movedToOtherCell) {
+    const scroller = view.dom.closest('.v2-grid-mode');
+    if (!scroller) return;
+    const sel = view.state.selection;
+    const area = visibleArea(scroller);
+    const cell = currentCellDom(); // pour des cases choisies : celle où le geste se trouve (la dernière touchée)
+    if (cell && movedToOtherCell) scrollRectInto(scroller, area, cell.getBoundingClientRect(), 0);
+    if (isCellSelection(sel)) return; // des cases choisies n'ont pas de curseur
+    scrollRectInto(scroller, area, view.coordsAtPos(movedToOtherCell ? sel.from : sel.head, 1), CARET_MARGIN_PX);
+  }
+
   // --- Entrée : la case du dessous --------------------------------------------------------------------------------------------------------------------------------
   // Comme dans Excel et Google Sheets (Antoine, 02/10) : Entrée descend d'une case et la sélectionne (on tape par-dessus, comme avec Tab) ; Maj+Entrée et Ctrl+Entrée ajoutent une
   // ligne DANS la case (le retour à la ligne forcé de TipTap, que ces deux touches faisaient déjà). Sur la dernière ligne la touche est prise sans rien faire : pas de ligne de
@@ -687,26 +730,6 @@ const GridEditor = (function () {
     return rect.bottom < map.height ? info.pos + 1 + map.map[rect.bottom * map.width + rect.left] : null;
   }
 
-  // Montre TOUTE la case d'arrivée. ProseMirror ne regarde que la ligne du curseur et ne connaît pas les bandeaux collés (colonnes en haut, lignes à gauche) : une case remontée au
-  // bord du panneau (curseur resté hors de vue, puis Entrée) arrivait cachée dessous. Une case plus haute (ou plus large) que le panneau garde son bord haut (gauche) visible.
-  function revealCell(view, cellPos) {
-    const cell = view.nodeDOM(cellPos);
-    const scroller = view.dom.closest('.v2-grid-mode');
-    if (!cell || !cell.getBoundingClientRect || !scroller) return;
-    const cols = scroller.querySelector('.v2-grid-cols');
-    const rows = scroller.querySelector('.v2-grid-rows');
-    const box = scroller.getBoundingClientRect();
-    const r = cell.getBoundingClientRect();
-    const top = box.top + (cols ? cols.offsetHeight : 0);
-    const left = box.left + (rows ? rows.offsetWidth : 0);
-    const bottom = box.top + scroller.clientHeight;
-    const right = box.left + scroller.clientWidth;
-    if (r.top < top) scroller.scrollTop -= top - r.top;
-    else if (r.bottom > bottom) scroller.scrollTop += Math.min(r.bottom - bottom, r.top - top);
-    if (r.left < left) scroller.scrollLeft -= left - r.left;
-    else if (r.right > right) scroller.scrollLeft += Math.min(r.right - right, r.left - left);
-  }
-
   function enterGoesDown(ed) {
     if (!active || !ed.isEditable || ed.view.composing) return false;
     const { state, view } = ed;
@@ -718,8 +741,8 @@ const GridEditor = (function () {
     const below = cellBelowPos(info, here);
     if (below == null) return true;
     const $below = state.doc.resolve(below);
+    // `scrollIntoView` : `revealSelection` (plus haut) montre ensuite la case d'arrivée en entier, sous les bandeaux collés.
     view.dispatch(state.tr.setSelection(libs.TextSelection.between($below, state.doc.resolve(below + $below.nodeAfter.nodeSize))).scrollIntoView());
-    revealCell(view, below);
     return true;
   }
 
@@ -1125,7 +1148,14 @@ const GridEditor = (function () {
 
   function attach(ed) {
     editor = ed;
-    ed.on('transaction', ({ transaction }) => { if (active && (transaction.docChanged || transaction.selectionSet)) scheduleSync(); });
+    ed.on('transaction', ({ transaction }) => {
+      if (!active) { lastCellDom = null; return; }
+      const cell = currentCellDom();
+      const moved = cell !== lastCellDom;
+      lastCellDom = cell;
+      if (transaction.docChanged || transaction.selectionSet) scheduleSync();
+      if (transaction.scrolledIntoView) revealSelection(ed.view, moved);
+    });
     wireLockedClickGuard();
     I18n.onChange(refreshLabels);
     if (active) setActive(true, true);
@@ -1137,6 +1167,7 @@ const GridEditor = (function () {
     on = !!on;
     if (on === active && !force) { if (on) scheduleSync(); return; }
     active = on;
+    lastCellDom = null;
     const container = document.getElementById('editor-container');
     if (container) container.classList.toggle('v2-grid-mode', on);
     document.body.classList.toggle('pp-grid-mode', on);
