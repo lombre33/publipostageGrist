@@ -486,6 +486,25 @@ const FloatingToolbars = (function () {
       updateSelectedImage(patch);
     }
 
+    // « Basculer en ligne / bloc » (Antoine, 02/10, point 10 : « La rendre fidèle ») : « bloc » met l'image seule sur sa ligne, le texte d'avant finit sa ligne et celui d'après repart dessous, pareil dans
+    // l'éditeur, la Lecture, le PDF et le Word ; « en ligne » la pose dans la ligne de texte. Il n'y a rien à basculer pour une image seule dans son paragraphe (aucun texte à séparer), une image alignée
+    // (gauche et droite flottent, le centre est toujours seul sur sa ligne) ni une image en calque : le bouton est grisé, jamais retiré, et son info-bulle dit pourquoi. Autre contenu du paragraphe qui
+    // compte : du texte, un saut de ligne, une autre image dans le flux, une bulle ; une image en calque ou un espace seul ne comptent pas (ils ne remplissent aucune ligne).
+    function wrapUnavailableReason(node) {
+      const attrs = node.attrs;
+      if (attrs.layer && attrs.layer !== 'normal') return 'imgToolbar.wrapNeedsText';
+      if (attrs.align) return 'imgToolbar.wrapNeedsText';
+      const parent = editor.state.selection.$from.parent;
+      let hasOtherContent = false;
+      parent.forEach(child => {
+        if (child === node) return;
+        if (child.type.name === 'editorImage') { if (!child.attrs.layer || child.attrs.layer === 'normal') hasOtherContent = true; return; }
+        if (child.isText) { if (child.text.trim()) hasOtherContent = true; return; }
+        hasOtherContent = true;
+      });
+      return hasOtherContent ? null : 'imgToolbar.wrapNeedsText';
+    }
+
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, (action) => {
       const selNode = selectedImageNode();
       if (!selNode) return;
@@ -503,7 +522,7 @@ const FloatingToolbars = (function () {
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
-        wrap: () => updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }),
+        wrap: () => { if (!wrapUnavailableReason(selNode)) updateSelectedImage({ wrap: attrs.wrap === 'block' ? 'inline' : 'block' }); },
         'layer-normal': () => setLayer('normal'),
         // Verrouillé en mode en-tête/pied (cf. syncState pour le grisage visuel) - garde-fou en plus du CSS pointer-events:none : pdf-export.js ne résout
         // pas encore la position d'une image en calque dans un en-tête/pied (pas de mesure en 2 passes pour cette zone, contrairement au flux principal).
@@ -533,7 +552,15 @@ const FloatingToolbars = (function () {
       setActive('align-left', attrs.align === 'left');
       setActive('align-center', attrs.align === 'center');
       setActive('align-right', attrs.align === 'right');
-      setActive('wrap', attrs.wrap === 'block');
+      // Grisé (jamais retiré) quand la bascule ne change rien ; aria-disabled plutôt que disabled pour que l'info-bulle, qui dit pourquoi, reste affichée au survol.
+      const wrapBtn = panel.el.querySelector('button[data-action="wrap"]');
+      const wrapReason = wrapUnavailableReason(node);
+      setActive('wrap', !wrapReason && attrs.wrap === 'block');
+      if (wrapBtn) {
+        wrapBtn.classList.toggle('is-disabled', !!wrapReason);
+        wrapBtn.setAttribute('aria-disabled', wrapReason ? 'true' : 'false');
+        wrapBtn.title = I18n.t(wrapReason || 'imgToolbar.inlineToggle');
+      }
       setActive('layer-normal', !attrs.layer || attrs.layer === 'normal');
       setActive('layer-front', attrs.layer === 'front');
       setActive('layer-behind', attrs.layer === 'behind');

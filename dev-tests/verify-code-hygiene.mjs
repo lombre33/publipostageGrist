@@ -49,6 +49,7 @@ const LIBRARY_CLASSES = new Set([
   'column-resize-handle', // prosemirror-tables : poignée de largeur de colonne
   'resize-cursor',       // prosemirror-tables : curseur pendant le survol d'une bordure
   'ProseMirror-selectednode', // prosemirror-view : nœud « atome » sélectionné (la bulle choisie d'une variable ou d'un calcul)
+  'ProseMirror-separator', // prosemirror-view : l'<img> posée après une image en fin de paragraphe (css/editor-v2.css retire sa ligne quand l'image est seule sur la sienne)
 ]);
 
 const jsFiles = listFiles('js', /\.js$/);

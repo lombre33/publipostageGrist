@@ -251,10 +251,11 @@
 
   cases.push({
     id: 'img_wrap_toggle_inline_block',
-    description: 'Bascule ligne/bloc (wrap) change l\'attribut data-wrap',
+    description: 'Bascule ligne/bloc (wrap) change l\'attribut data-wrap d\'une image posée dans une phrase (grisée quand l\'image est seule : groupe imageText)',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
+      await h.typeText('Une phrase avec une image ');
       const img = await insertImageViaToolbar(h);
       await h.selectAtomNode(img);
       const before = Editor.getHTML();

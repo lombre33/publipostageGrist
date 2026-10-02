@@ -777,6 +777,7 @@ const I18n = (function () {
     'imgToolbar.originalSize': { fr: 'Taille d’origine', en: 'Original size' },
     'imgToolbar.opacity': { fr: 'Opacité', en: 'Opacity' },
     'imgToolbar.inlineToggle': { fr: 'Basculer en ligne / bloc', en: 'Toggle inline / block' },
+    'imgToolbar.wrapNeedsText': { fr: 'Basculer en ligne / bloc (pour une image non alignée, avec du texte autour)', en: 'Toggle inline / block (for an unaligned image with text around it)' },
     'imgToolbar.inText': { fr: 'Au cœur du texte', en: 'In line with text' },
     'imgToolbar.front': { fr: 'Devant le texte', en: 'In front of text' },
     'imgToolbar.behind': { fr: 'Derrière le texte', en: 'Behind text' },

@@ -112,6 +112,7 @@ const GROUPS = {
   emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
   cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
   readerReads: 'scenarios-reader-reads', // la Lecture lit chaque table une seule fois par rendu (js/grist-api.js:withReadPass) et suit une image qui change de taille après la mesure (js/reader-mode.js:watchGeometry)
+  imageText: 'scenarios-image-text', // image « Au cœur du texte » et texte autour (js/editor-nodes.js, css/editor-v2.css, js/reader-mode.js, js/pdf-export.js, js/docx-export.js) : l'image seule sur sa ligne, l'habillage gauche / droite, l'image dans la ligne, la bascule en ligne / bloc, mesurés dans l'éditeur, la Lecture, le PDF et le Word
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS

@@ -496,6 +496,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le cadre se pose sur l'image (en calque elle sort du flux : la teinte du texte suggéré n'y aurait pas de boîte), mêmes vert et rouge que le texte suggéré (6,4:1 et 6,6:1 sur la page blanche).
   Le paragraphe qui ne porte qu'une image en calque, la ligne où on l'a posée, garde sa ligne vide dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 02/10, « écart entre l'éditeur et le mode
   lecture ») : le texte qui suit descend d'une ligne dans les quatre, les coupures de page tombent aux mêmes lignes, en haut du modèle comme après un saut de page, dans une case ou une colonne.
+- Image « Au cœur du texte » et texte autour (Antoine, 02/10, point 9, et sa carte du point 10, « La rendre fidèle ») : l'éditeur, la Lecture, le PDF et le Word posent l'image et son texte de la même façon.
+  Sans alignement et « en ligne », l'image est dans la ligne de texte, son pied sur la ligne de base (la ligne grandit) ; sans alignement et « bloc », elle est seule sur sa ligne, à gauche, le texte d'avant finit sa
+  ligne et celui d'après repart dessous ; centrée, seule sur sa ligne, au centre ; alignée à gauche ou à droite, elle flotte et le texte l'habille, celui des paragraphes suivants aussi tant qu'elle les dépasse (12 px côté
+  texte, 8 px dessous). Le paragraphe garde son interligne avant et après une image seule sur sa ligne, sans ligne en plus sous elle. Le bouton « Basculer en ligne / bloc » de la barre de l'image est grisé, jamais retiré,
+  quand il ne change rien (image seule dans son paragraphe, alignée ou en calque) : son info-bulle dit pourquoi.
 - Image derrière le texte : « Sur toutes les pages » (choix d'Antoine du 01/10, la Fiche mission : un triangle dans le coin de chaque feuille). Un bouton de la barre flottante de l'image, entre
   les boutons de calque et la corbeille (une icône = une fonction : la feuille de derrière et le coin plein de celle de devant), qui peint l'image à la MÊME place de chaque page, dans l'éditeur,
   la Lecture, le PDF (fond de page) et le Word (ancre derrière le texte dans l'en-tête de chaque page, première page comprise ; un en-tête est créé quand il n'y en a pas). La place est celle de la
