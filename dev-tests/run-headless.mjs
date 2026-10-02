@@ -80,6 +80,7 @@ const GROUPS = {
   varPath: 'scenarios-var-path',
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
+  varColumn: 'scenarios-var-column', // bouton « Colonne… » de la barre d'une bulle : changer ou réparer la colonne d'une variable (js/variable-column.js)
   varZero: 'scenarios-var-zero',
   varNumber: 'scenarios-var-number-default',
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés

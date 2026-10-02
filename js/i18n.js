@@ -1104,6 +1104,11 @@ const I18n = (function () {
     'formula.error.unknownColumn': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} ».', en: 'The column “{column}” can no longer be reached from the table “{table}”.' },
     'varToolbar.calcEdit': { fr: 'Modifier le calcul', en: 'Edit the calculation' },
     'varToolbar.notForCalc': { fr: 'Disponible pour une variable, pas pour un calcul', en: 'Available for a variable, not for a calculation' },
+    // Bouton « Colonne… » (js/variable-column.js) : changer la colonne d'une variable, ou la réparer quand Grist l'a renommée ou supprimée.
+    'varToolbar.column': { fr: 'Changer la colonne de la variable…', en: 'Change the variable’s column…' },
+    'varToolbar.columnBroken': { fr: 'Cette variable ne trouve plus sa colonne : choisir la bonne…', en: 'This variable can no longer find its column: pick the right one…' },
+    'varToolbar.columnBlock': { fr: 'Disponible pour une variable, pas pour un bloc de texte', en: 'Available for a variable, not for a text block' },
+    'varToolbar.columnCheckbox': { fr: 'Disponible pour une variable, pas pour une case conditionnelle', en: 'Available for a variable, not for a conditional checkbox' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

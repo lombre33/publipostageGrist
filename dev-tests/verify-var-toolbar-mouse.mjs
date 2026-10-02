@@ -1058,6 +1058,63 @@ await page.waitForTimeout(500);
 const imageAgain = await visibleBars();
 check('... un clic sur l\'image la rouvre', imageAgain.open === 1, imageAgain);
 
+// « Colonne… » (point 11 d'Antoine du 2026-10-02 : une variable cassée par un renommage dans Grist se répare en choisissant la bonne colonne) : un bouton de la barre d'une variable ouvre la
+// liste avec recherche de toutes les colonnes. À la vraie souris et à 700x400 : le bouton reste atteignable sur la barre la plus longue (celle d'un nombre), la liste s'ouvre entière dans la
+// fenêtre et au-dessus de la barre, la frappe filtre, un vrai clic sur la ligne remplace la colonne de la bulle cassée en gardant sa condition, et sa barre revient.
+const COLUMN_BUTTON = '.v2-varfmt-toolbar.visible button[data-action="var-column"]';
+await openNumberBar();
+const columnOnNumberBar = await hitTest(COLUMN_BUTTON);
+check('700 px : sur la barre la plus longue (une bulle nombre), « Colonne… » reste atteignable, dans la fenêtre et non recouvert', columnOnNumberBar.found && columnOnNumberBar.inViewport && columnOnNumberBar.onTop, columnOnNumberBar);
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  const condition = JSON.stringify({ mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] }).replace(/"/g, '&quot;');
+  Editor.setHTML('<p>Dossier <span class="var-badge" data-table="VcDossiers" data-column="Intitule" data-key="VcDossiers.Intitule" data-condition="' + condition + '"></span> suivi.</p>');
+});
+await page.waitForTimeout(500);
+const BROKEN_BADGE = '.tiptap .var-badge[data-column="Intitule"]';
+const brokenBox = await hitTest(BROKEN_BADGE);
+await page.mouse.click(brokenBox.x, brokenBox.y);
+await page.waitForTimeout(500);
+const brokenButton = await hitTest(COLUMN_BUTTON);
+const brokenTitle = await page.evaluate(sel => { const b = document.querySelector(sel); return b ? b.title : null; }, COLUMN_BUTTON);
+check('bulle cassée à la vraie souris : « Colonne… » est atteignable et son info-bulle propose de choisir la bonne', brokenButton.found && brokenButton.inViewport && brokenButton.onTop && /choisir la bonne/.test(brokenTitle || ''), { brokenButton, brokenTitle });
+if (brokenButton.found) await page.mouse.click(brokenButton.x, brokenButton.y);
+await page.waitForTimeout(400);
+const columnList = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  if (!panel) return null;
+  const r = panel.getBoundingClientRect();
+  const first = panel.querySelector('.ss-option');
+  const fr = first ? first.getBoundingClientRect() : null;
+  const hit = fr ? document.elementFromPoint(fr.left + fr.width / 2, fr.top + fr.height / 2) : null;
+  const names = Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent);
+  return {
+    left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+    firstOnTop: !!first && !!hit && (hit === first || first.contains(hit)), firstNames: names.slice(0, 3), focusInSearch: document.activeElement === panel.querySelector('.ss-input'),
+  };
+});
+check('un vrai clic sur « Colonne… » ouvre la liste : entière dans la fenêtre, au-dessus de la barre, la zone de recherche prend le focus', !!columnList && columnList.left >= 0 && columnList.top >= 0
+  && columnList.right <= columnList.width + 0.5 && columnList.bottom <= columnList.height + 0.5 && columnList.docOverflowX <= 0 && columnList.firstOnTop && columnList.focusInSearch, columnList);
+check('... la table de la page vient en tête', !!columnList && columnList.firstNames.length > 0 && columnList.firstNames.every(n => n.indexOf('VcDossiers.') === 0), columnList && columnList.firstNames);
+await page.keyboard.type('Titre');
+await page.waitForTimeout(200);
+const titleRow = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  const row = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcDossiers.Titre');
+  if (!row) return null;
+  const r = row.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, shown: Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent) };
+});
+check('la frappe filtre la liste : « Titre » ne laisse que les colonnes qui le contiennent', !!titleRow && titleRow.shown.every(n => /titre/i.test(n)), titleRow);
+if (titleRow) await page.mouse.click(titleRow.x, titleRow.y);
+await page.waitForTimeout(500);
+const repairedBadge = await page.evaluate(() => {
+  const el = document.querySelector('.tiptap .var-badge');
+  return { column: el.dataset.column, key: el.dataset.key, broken: el.classList.contains('var-badge-broken'), condition: el.dataset.condition || '', barOpen: !!document.querySelector('.v2-varfmt-toolbar.visible'), listOpen: !!Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden) };
+});
+check('un vrai clic sur la ligne : la bulle prend la colonne, n’est plus rouge, garde sa condition, la liste se ferme et la barre revient', repairedBadge.column === 'Titre' && repairedBadge.key === 'VcDossiers.Titre'
+  && !repairedBadge.broken && /Statut/.test(repairedBadge.condition) && repairedBadge.barOpen && !repairedBadge.listOpen, repairedBadge);
+
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(300);
@@ -1066,6 +1123,8 @@ const barNarrow = await numberBar();
 const zeroNarrow = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-zero"]');
 check('fenêtre de 360 px : la barre nombre reste dans la fenêtre et ne fait pas défiler la page', !!barNarrow && barNarrow.left >= 0 && barNarrow.right <= barNarrow.viewport + 0.5 && barNarrow.docOverflowX <= 0, barNarrow);
 check('... et le bouton du zéro y reste atteignable', zeroNarrow.found && zeroNarrow.inViewport && zeroNarrow.onTop, zeroNarrow);
+const columnNarrow = await hitTest(COLUMN_BUTTON);
+check('... et « Colonne… » aussi', columnNarrow.found && columnNarrow.inViewport && columnNarrow.onTop, columnNarrow);
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 

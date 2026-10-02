@@ -104,6 +104,9 @@ const Icons = (function () {
     varCondition: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
     varLinked: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     varLoop: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+    // Bouton « Colonne… » de la même barre (js/variable-column.js : changer ou réparer la colonne d'une bulle) : une colonne de tableau avec sa case d'en-tête et les deux chevrons, haut
+    // et bas, d'un choix dans une liste.
+    varColumn: '<rect x="3" y="3" width="9" height="18" rx="1.5"/><path d="M3 8h9"/><path d="m16 9 2.5-2.5L21 9"/><path d="m16 15 2.5 2.5L21 15"/>',
     // Un 0 (ovale) barré d'un trait (Ø) : bouton « Ne rien afficher si la valeur vaut zéro » de la barre d'un nombre. Le trait (l'unique <path>) est caché par l'attribut
     // `display` quand la bulle affiche le zéro : on ne remplace pas le SVG, la cible d'un clic en train de se produire doit rester dans la barre (cf. wireVariableFloatingToolbar).
     zeroToggle: '<ellipse cx="12" cy="12" rx="5.5" ry="8"/><path d="M5 21 19 3"/>',

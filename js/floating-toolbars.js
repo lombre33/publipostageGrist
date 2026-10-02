@@ -593,6 +593,7 @@ const FloatingToolbars = (function () {
       `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
       `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
       `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
+      `<button data-action="var-column" title="${I18n.t('varToolbar.column')}" aria-label="${I18n.t('varToolbar.column')}">${Icons.svg('varColumn')}</button>`,
       '</div>',
       '<span class="v2-floating-sep" data-var-sep></span>',
       '<div data-var-panel="number">',
@@ -688,7 +689,7 @@ const FloatingToolbars = (function () {
       // Position capturée AU CLIC : la fenêtre ouverte ensuite retire le focus de l'éditeur, et c'est cette bulle précise qu'elle modifiera.
       if (action === 'calc-edit') { if (isCalc) VariableCalc.openAt(editor, editor.state.selection.from); return; }
       // Condition, autres attributs et boucle n'ont pas d'objet pour un calcul : leurs boutons sont grisés (syncState), un clic dessus ne fait rien.
-      if (isCalc && (action === 'var-condition' || action === 'var-linked' || action === 'var-loop')) return;
+      if (isCalc && (action === 'var-condition' || action === 'var-linked' || action === 'var-loop' || action === 'var-column')) return;
       if (action === 'var-condition') { VariableCondition.open(editor, editor.state.selection.from); return; }
       if (action === 'var-linked') {
         if (!linkedAttrsAvailable(node)) return;
@@ -700,6 +701,8 @@ const FloatingToolbars = (function () {
         VariableLoop.open(editor, editor.state.selection.from);
         return;
       }
+      // Changer (ou réparer) la colonne de la variable : la liste avec recherche de js/variable-column.js, posée à côté de la bulle ; position capturée au clic, comme les fenêtres ci-dessus.
+      if (action === 'var-column') { VariableColumn.open(editor, editor.state.selection.from); return; }
       if (action.indexOf('num-style:') === 0) { updateSelectedBadge({ type: 'number', style: action.slice(10) }); return; }
       // Bascule du zéro : enfoncé (0 barré), le zéro ne s'écrit pas - c'est l'écriture par défaut -, relâché la bulle l'affiche (`zero: 'show'`). SANS `type: 'number'`, pour ne pas
       // poser de style à la place de celui que la barre annonce déjà (FR, ou US en interface anglaise) ; revenir à l'écriture par défaut retire la clé, et une bulle sans autre
@@ -753,6 +756,15 @@ const FloatingToolbars = (function () {
       button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       button.title = title;
     }
+    // « Colonne… » : active pour une variable - son info-bulle dit quand la colonne est introuvable, c'est là qu'on la répare -, grisée (jamais retirée) pour un calcul, un bloc de texte et une
+    // case conditionnelle, avec sa raison en info-bulle. `reasonKey` : le texte de la raison, absent quand le bouton est actif.
+    function syncColumnButton(node, reasonKey) {
+      const columnBtn = panel.el.querySelector('button[data-action="var-column"]');
+      if (!columnBtn) return;
+      const title = I18n.t(reasonKey || (VariableColumn.isBroken(node.attrs) ? 'varToolbar.columnBroken' : 'varToolbar.column'));
+      setButtonDisabled(columnBtn, !!reasonKey, title);
+      columnBtn.setAttribute('aria-label', title);
+    }
     // Le bouton de condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait pas de sens pour elle).
     function setConditionTitle(key) {
       const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
@@ -773,6 +785,7 @@ const FloatingToolbars = (function () {
       const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
       setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopBlock'));
       if (loopBtn) loopBtn.classList.remove('is-active');
+      syncColumnButton(node, 'varToolbar.columnBlock');
     }
 
     // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans réglage ; une case conditionnelle n'a pas ce bouton.
@@ -803,6 +816,7 @@ const FloatingToolbars = (function () {
       const loopBtn = panel.el.querySelector('button[data-action="var-loop"]');
       setButtonDisabled(loopBtn, true, I18n.t('varToolbar.loopCheckbox'));
       if (loopBtn) loopBtn.classList.remove('is-active');
+      syncColumnButton(node, 'varToolbar.columnCheckbox');
       syncBoolButtons(ConditionalCheckbox.styleOf(node.attrs.style));
     }
 
@@ -818,6 +832,7 @@ const FloatingToolbars = (function () {
       const conditionBtn = panel.el.querySelector('button[data-action="var-condition"]');
       setButtonDisabled(conditionBtn, isCalc, I18n.t(isCalc ? 'varToolbar.notForCalc' : 'varToolbar.condition'));
       setActive('var-condition', !isCalc && !!ConditionRules.normalizeCondition(node.attrs.condition));
+      syncColumnButton(node, isCalc ? 'varToolbar.notForCalc' : null);
       if (isCalc) {
         // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.
         setButtonDisabled(panel.el.querySelector('button[data-action="var-linked"]'), true, I18n.t('varToolbar.notForCalc'));
