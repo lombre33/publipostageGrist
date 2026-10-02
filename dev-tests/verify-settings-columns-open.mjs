@@ -89,6 +89,10 @@ const context = await browser.newContext({ viewport: { width: WIDTH, height: HEI
 const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
+// js/access-rights.js attrape l'exception d'un abonné et la dit en console : ce n'est pas une erreur de page, on la guette ici (le verrou de l'onglet Vue est rejoué à chaque changement de droits, y compris
+// au démarrage, Réglages jamais ouverts).
+const subscriberErrors = [];
+page.on('console', msg => { if (msg.type() === 'error' && /un abonné a levé une exception/.test(msg.text())) subscriberErrors.push(msg.text()); });
 if (OFFLINE) {
   await page.route('**://esm.sh/**', async route => {
     const url = route.request().url();
@@ -211,6 +215,15 @@ await settle();
 const first = await state();
 check('réglages sains : le coin d\'état dit « prêt » et rien d\'autre', /prêt|ready/i.test(first.status.text) && warningsOf(first.log).length === 0 && !first.status.error, { status: first.status, log: first.log });
 check('réglages sains : le modèle est affiché, aucune bulle rouge, rien d\'écrit', first.bubbles.length === 2 && first.bubbles.every(b => !b.broken) && first.modelUpdates === 0, { bubbles: first.bubbles, updates: first.modelUpdates });
+// Un droit change AVANT que les Réglages aient jamais été ouverts (la personne passe en lecture seule, la relecture de 10 s le voit) : l'onglet Vue (js/row-template-panel.js:applyLock) est rejoué
+// sans brouillon et ne lève rien (js/access-rights.js attrape l'exception d'un abonné et la dit en console, la page n'en sait rien).
+const beforeOpen = await page.evaluate(async (email) => {
+  window.__gristStub.setRows('Droits', [{ id: 1, Email: email, LectureSeule: true, Export: true }]);
+  await AccessRights.refresh();
+  return { readOnly: AccessRights.get().readOnly, state: AccessRights.getStatus().state };
+}, EMAIL);
+await page.waitForTimeout(300);
+check('droits changés avant toute ouverture des Réglages : la personne passe en lecture seule, et aucun abonné aux droits ne lève d\'exception', beforeOpen.readOnly === true && beforeOpen.state === 'found' && subscriberErrors.length === 0, { beforeOpen, subscriberErrors });
 
 // 3) Trois colonnes renommées : le modèle porte encore l'ancien nom, les deux réglages aussi.
 await page.evaluate(() => localStorage.setItem('e2e_phase', 'renamed'));
@@ -261,7 +274,8 @@ const fixed = await state();
 check('réglages refaits sur les nouvelles colonnes : le coin d\'état redit « prêt », plus aucun avertissement', /prêt|ready/i.test(fixed.status.text) && warningsOf(fixed.log).length === 0 && !fixed.status.error, { status: fixed.status, log: fixed.log });
 
 // 6) La table des droits n'existe plus : « Droits » est devenue « DroitsBis » dans Grist, le réglage Accès cite encore « Droits ». Tout le monde reste en lecture seule par précaution (état « error »),
-// mais l'onglet Accès, lui, reste modifiable : à la vraie souris, choisir une autre table lève le verrou, puis sa colonne « Lecture seule » rend les droits de cette table.
+// mais l'onglet Accès, lui, reste modifiable : à la vraie souris, choisir une autre table lève le verrou, puis sa colonne « Lecture seule » rend les droits de cette table. L'onglet Vue (Modèle selon
+// la ligne, Modèle par défaut de cette vue), dessiné à l'ouverture des Réglages alors que tout était verrouillé, suit le changement de droits sans qu'on rouvre les Réglages (choix d'Antoine du 2026-10-02).
 async function hitTest(selector) {
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
@@ -307,6 +321,16 @@ const rowCenter = text => page.evaluate(wanted => {
   const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && found.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight };
 }, text);
+// L'onglet Vue tel que l'écran le montre : verrou, case, champs et boutons de ses deux sections.
+const vueTab = () => page.evaluate(() => ({
+  shown: !document.querySelector('.settings-panel[data-settings-panel="rowTemplate"]').hidden,
+  rowHint: !document.getElementById('settings-rowtemplate-locked').hidden,
+  rowCheckboxDisabled: document.getElementById('settings-rowtemplate-enabled').disabled,
+  rowBodyInert: document.getElementById('settings-rowtemplate-body').inert,
+  rowChecked: document.getElementById('settings-rowtemplate-enabled').checked,
+  viewHint: !document.getElementById('settings-viewtemplate-locked').hidden,
+  viewSetDisabled: document.getElementById('settings-viewtemplate-set').disabled,
+}));
 const accessTab = () => page.evaluate(() => ({
   triggers: ['table', 'email', 'readonly', 'export', 'comments'].map(name => document.querySelector('#settings-access-' + name + ' + .ss-wrap .ss-trigger').disabled),
   hint: !document.getElementById('settings-access-locked').hidden,
@@ -325,6 +349,10 @@ check('table des droits disparue : tout le monde reste en lecture seule par pré
 await page.mouse.move(WIDTH - 14, HEIGHT - 14);
 await clickCenter('#v2-btn-settings');
 await page.waitForTimeout(300);
+const vueButtonAtOpen = await clickCenter('#settings-modal .settings-tab[data-settings-tab="rowTemplate"]');
+const vueAtOpen = await vueTab();
+check('table des droits disparue : à l\'ouverture l\'onglet Vue est verrouillé comme le reste (lecture seule par précaution) : « ce réglage est verrouillé », case et boutons grisés',
+  vueButtonAtOpen.found && vueAtOpen.shown && vueAtOpen.rowHint === true && vueAtOpen.rowCheckboxDisabled === true && vueAtOpen.rowBodyInert === true && vueAtOpen.viewHint === true && vueAtOpen.viewSetDisabled === true, vueAtOpen);
 const tabButton = await clickCenter('#settings-modal .settings-tab[data-settings-tab="access"]');
 const goneTab = await accessTab();
 check('table des droits disparue : l\'onglet Accès s\'ouvre et reste modifiable (cinq listes actives, aucun « ce réglage est verrouillé »), il dit que la table n\'existe plus',
@@ -347,6 +375,19 @@ await page.waitForTimeout(500);
 const chosenTable = await state();
 check('table des droits disparue : choisir DroitsBis lève le verrou (le réglage n\'est plus complet : tous les droits, l\'édition n\'est plus grisée), l\'option est retirée',
   chosenTable.access.config === null && chosenTable.access.readOnly === false && chosenTable.access.editGreyed === false && chosenTable.options && chosenTable.options.droitsAcces == null, { access: chosenTable.access, options: chosenTable.options });
+// Sans rouvrir les Réglages : l'onglet Vue, dessiné verrouillé à l'ouverture, suit les droits qui viennent de changer. La case répond à un vrai clic, et le réglage s'écrit.
+await clickCenter('#settings-modal .settings-tab[data-settings-tab="rowTemplate"]');
+const vueFree = await vueTab();
+check('table des droits disparue : choisir DroitsBis dégrise l\'onglet Vue tout de suite, sans rouvrir les Réglages (plus de « ce réglage est verrouillé », case, champs et boutons actifs)',
+  vueFree.shown && vueFree.rowHint === false && vueFree.rowCheckboxDisabled === false && vueFree.rowBodyInert === false && vueFree.rowChecked === true && vueFree.viewHint === false && vueFree.viewSetDisabled === false, vueFree);
+const rowBox = await reveal('#settings-rowtemplate-enabled', '#settings-modal .modal-content');
+check('table des droits disparue : la case « Choisir le modèle selon la ligne » est visible et au premier plan à 700x400', rowBox.found && rowBox.inViewport && rowBox.onTop, rowBox);
+await page.mouse.click(rowBox.x, rowBox.y);
+await page.waitForTimeout(600);
+const afterClick = await state();
+check('table des droits disparue : un vrai clic décoche la case et le réglage « Selon la ligne » s\'écrit dans les options (enabled: false), les règles gardées',
+  (await vueTab()).rowChecked === false && !!afterClick.options.modeleSelonLigne && afterClick.options.modeleSelonLigne.enabled === false && afterClick.options.modeleSelonLigne.rules.length === 1, afterClick.options.modeleSelonLigne);
+await clickCenter('#settings-modal .settings-tab[data-settings-tab="access"]');
 const readonlyTrigger = '#settings-modal #settings-access-readonly + .ss-wrap .ss-trigger';
 const readonlyField = await reveal(readonlyTrigger, '#settings-modal .modal-content');
 check('table des droits disparue : le champ « Lecture seule » est visible, actif et au premier plan', readonlyField.found && readonlyField.inViewport && readonlyField.onTop, readonlyField);
@@ -364,11 +405,16 @@ check('table des droits disparue : choisir « Lecture seule » rend les droits d
   chosenColumn.access.status.state === 'found' && chosenColumn.access.readOnly === false && chosenColumn.access.editGreyed === false
   && !!chosenColumn.options.droitsAcces && chosenColumn.options.droitsAcces.table === 'DroitsBis' && chosenColumn.options.droitsAcces.emailColumn === 'Email' && chosenColumn.options.droitsAcces.readOnlyColumn === 'LectureSeule'
   && finalTab.triggers.every(disabled => disabled === false) && finalTab.status.indexOf(EMAIL) !== -1, { access: chosenColumn.access, options: chosenColumn.options.droitsAcces, finalTab });
+await clickCenter('#settings-modal .settings-tab[data-settings-tab="rowTemplate"]');
+const vueFinal = await vueTab();
+check('table des droits disparue : une fois la colonne « Lecture seule » choisie (droits trouvés, pas en lecture seule), l\'onglet Vue reste dégrisé',
+  vueFinal.shown && vueFinal.rowHint === false && vueFinal.rowCheckboxDisabled === false && vueFinal.viewHint === false && vueFinal.viewSetDisabled === false, vueFinal);
 const closeBtn = await reveal('#settings-close', '#settings-modal .modal-content');
 if (closeBtn.found) await page.mouse.click(closeBtn.x, closeBtn.y);
 await page.waitForTimeout(200);
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
+check('aucun abonné aux droits n\'a levé d\'exception (le verrou de l\'onglet Vue est rejoué à chaque changement de droits, même Réglages jamais ouverts)', subscriberErrors.length === 0, subscriberErrors);
 
 await browser.close();
 server.close();

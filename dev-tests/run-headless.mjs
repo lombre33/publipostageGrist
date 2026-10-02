@@ -72,8 +72,8 @@ const GROUPS = {
   templateOrganize: 'scenarios-template-organize',
   templateGallery: 'scenarios-template-gallery',
   pageTree: 'scenarios-page-tree', // rangement des pages que Grist crée avec les tables du widget (js/page-tree.js) : sous celle des modèles, repliées par défaut
-  rowTemplate: 'scenarios-row-template', // modèle selon la ligne (js/row-template.js, Réglages > Selon la ligne) : règles, repli, Lecture et édition, question avant de quitter des modifications, onglet
-  viewTemplate: 'scenarios-view-template', // modèle par défaut de la vue (js/view-template.js, Réglages > Vue) : bouton « Utiliser … pour cette vue », « Retirer », grisés, choix venu d'ailleurs, repli des règles de ligne, lecture seule
+  rowTemplate: 'scenarios-row-template', // modèle selon la ligne (js/row-template.js, Réglages > Selon la ligne) : règles, repli, Lecture et édition, question avant de quitter des modifications, onglet, et l'onglet qui suit les droits changés Réglages ouverts sans redessiner la saisie
+  viewTemplate: 'scenarios-view-template', // modèle par défaut de la vue (js/view-template.js, Réglages > Vue) : bouton « Utiliser … pour cette vue », « Retirer », grisés, choix venu d'ailleurs, repli des règles de ligne, lecture seule, et les boutons qui suivent les droits changés Réglages ouverts
   templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle
   contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',
@@ -145,7 +145,7 @@ const NODE_SCRIPTS = {
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   rowTemplateMouse: 'verify-row-template-mouse.mjs', // modèle selon la ligne (Réglages > Selon la ligne) à la vraie souris dans 700x400 : onglets lisibles (FR, EN), case, colonne / valeur / modèle dans leurs listes avec recherche, option écrite, ouverture à la fermeture, ligne suivante en édition et en Lecture
   schemaRenamesOpen: 'verify-schema-renames-open.mjs', // ouverture réelle du widget après un renommage dans Grist : rien avant l'affichage du modèle, modèle réécrit et redessiné, message dans 700x400, rien d'écrit à l'ouverture suivante
-  settingsColumnsOpen: 'verify-settings-columns-open.mjs', // ouverture réelle du widget quand Accès ou Selon la ligne cite une colonne disparue : rien avant l'affichage du modèle, avertissement devant « Mis à jour après un renommage… », entier au survol dans 700x400, rien d'écrit
+  settingsColumnsOpen: 'verify-settings-columns-open.mjs', // ouverture réelle du widget quand Accès ou Selon la ligne cite une colonne disparue : rien avant l'affichage du modèle, avertissement devant « Mis à jour après un renommage… », entier au survol dans 700x400, rien d'écrit, table des droits renommée (l'onglet Accès reste modifiable, l'onglet Vue se dégrise tout de suite)
   templateStartupMouse: 'verify-template-startup-mouse.mjs', // modèle ouvert au démarrage, faux Grist semé avant l'init : la ligne qui désigne un modèle, puis le modèle de la vue, puis le ★ ; un choix de vue supprimé ou devenu email est ignoré
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
   runnerGroupLoad: 'verify-runner-group-load.mjs', // le lanceur lui-même : un groupe dont le fichier existe mais ne se charge pas (SyntaxError) est un ECHEC avec l'erreur de la page, un fichier absent de la branche reste annoncé et sauté ; lance une copie du lanceur sur deux groupes d'essai, un navigateur

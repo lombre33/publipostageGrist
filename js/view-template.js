@@ -9,7 +9,7 @@
 //   ViewTemplate.init()      -> lit l'option, s'abonne à ses changements ; à appeler une fois les options connues (après GristAPI.init)
 //   ViewTemplate.usableId()  -> id du modèle de la vue s'il existe encore et peut servir de modèle de départ, sinon null
 //   ViewTemplate.set(id)     -> choisit ce modèle pour la vue ; clear() retire le choix
-//   ViewTemplate.wirePanel() -> branche la section de Réglages
+//   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits : en lecture seule, ses boutons sont grisés)
 const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
 
@@ -112,6 +112,9 @@ const ViewTemplate = (function () {
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', renderPanel);
     I18n.onChange(renderPanel);
+    // Et dès que les droits changent Réglages ouverts (choix dans l'onglet Accès, case cochée dans la table des droits, relecture de 10 s) : les boutons se grisent ou se dégrisent sans qu'on
+    // les rouvre (choix d'Antoine du 2026-10-02). Rien à préserver ici : l'écran ne contient aucune saisie, que des boutons et un texte d'état.
+    if (typeof AccessRights !== 'undefined') AccessRights.onChange(renderPanel);
     renderPanel();
   }
 

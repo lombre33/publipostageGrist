@@ -205,6 +205,60 @@
     },
   });
 
+  // Droits qui changent Réglages ouverts (choix d'Antoine du 2026-10-02, « Dégriser tout de suite ») : le vrai calcul des droits (js/access-rights.js) sur une table de droits du faux Grist, la
+  // personne y est repérée par son email ; AccessRights.refresh() fait ce que fait la minuterie de 10 s. Le même email que dev-tests/scenarios-access-rights.js (GristAPI le garde en cache).
+  const RIGHTS_TABLE = 'PpDroitsVues';
+  const RIGHTS_CONFIG = { table: RIGHTS_TABLE, emailColumn: 'Email', readOnlyColumn: 'LectureSeule', exportColumn: 'Export', commentsColumn: 'Commentaires' };
+  const rightsRow = readOnly => [{ id: 1, Email: 'Lecteur@Exemple.fr', LectureSeule: !!readOnly, Export: true, Commentaires: true }];
+  async function changeRights(readOnly) {
+    stub().setRows(RIGHTS_TABLE, rightsRow(readOnly));
+    await AccessRights.refresh();
+    const ok = await waitFor(() => AccessRights.get().readOnly === !!readOnly, 3000);
+    await sleep(150);
+    return ok;
+  }
+
+  cases.push({
+    id: 'view_template_panel_follows_rights_that_change_while_the_settings_are_open',
+    description: "Réglages ouverts, un changement de droits (en lecture seule, puis plus, puis de nouveau) grise ou dégrise « Utiliser » et « Retirer » tout de suite, sans fermer ni rouvrir les Réglages ; le choix de la vue n'est pas touché",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await ViewTemplate.set(f.B);
+      await openByHand(f.A);
+      try {
+        stub().setUserEmail('lecteur@exemple.fr');
+        stub().setVariables(RIGHTS_TABLE, { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+        stub().setRows(RIGHTS_TABLE, rightsRow(true));
+        await GristAPI.refreshSchema();
+        stub().setWidgetOptions({ droitsAcces: RIGHTS_CONFIG, [KEY]: String(f.B) });
+        await sleep(120);
+        await AccessRights.refresh();
+        const started = await waitFor(() => AccessRights.get().readOnly === true, 3000);
+        await sleep(200);
+        await openSettings();
+        const lockedAtOpen = panel();
+        const freeNow = await changeRights(false);
+        const stillOpen = el('settings-modal').style.display === 'flex';
+        const freed = panel();
+        const lockedNow = await changeRights(true);
+        const lockedAgain = panel();
+        const freeAgainNow = await changeRights(false);
+        const freedAgain = panel();
+        const choiceKept = same(ViewTemplate.getId(), f.B) && same(optionNow(), f.B);
+        await closeSettings();
+        const isLocked = p => p.locked && p.setDisabled && p.clearDisabled && p.visible;
+        // Libre : le modèle ouvert (A) n'est pas celui de la vue (B), donc « Utiliser » s'offre ; un choix existe, donc « Retirer » aussi.
+        const isFree = p => !p.locked && !p.setDisabled && !p.clearDisabled && p.visible;
+        const pass = started && freeNow && lockedNow && freeAgainNow && stillOpen && choiceKept && isLocked(lockedAtOpen) && isFree(freed) && isLocked(lockedAgain) && isFree(freedAgain);
+        return { pass, notes: JSON.stringify({ started, lockedAtOpen, freed, lockedAgain, freedAgain, stillOpen, choiceKept }) };
+      } finally {
+        await cleanup();
+        stub().dropTable(RIGHTS_TABLE);
+        await GristAPI.refreshSchema();
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.viewTemplate = cases;
 })();

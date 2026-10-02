@@ -5,7 +5,9 @@
 //
 // Chaque saisie enregistre le réglage (brouillon de la vue, cf. js/row-template.js:save) mais n'ouvre rien : la ligne courante n'est relue qu'à la fermeture des Réglages,
 // pour ne pas voir surgir la question « Enregistrer / Abandonner / Annuler » en pleine saisie d'une règle. Décoché, l'écran reste visible mais grisé (rien ne disparaît) ;
-// en lecture seule il est verrouillé, comme l'onglet Accès.
+// en lecture seule il est verrouillé, comme l'onglet Accès, et suit les droits en direct : dès qu'ils changent Réglages ouverts (choix dans l'onglet Accès, case cochée dans la table
+// des droits, relecture de 10 s), il se grise ou se dégrise sans qu'on les rouvre (choix d'Antoine du 2026-10-02, « Dégriser tout de suite »). Seul le verrou est rejoué
+// (applyLock) : les règles et le brouillon ne sont pas redessinés, la saisie en cours garde son champ, son curseur et sa valeur.
 const RowTemplatePanel = (function () {
   const COLUMN_FIELD_OPTIONS = { allTables: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref) };
   const PERSIST_DELAY_MS = 250;
@@ -129,15 +131,22 @@ const RowTemplatePanel = (function () {
       if (!otherwiseSearch) otherwiseSearch = searchable(otherwise);
       if (otherwiseSearch) otherwiseSearch.sync();
     }
+    applyLock();
+  }
+
+  // Grisé, jamais retiré : décoché, ou verrouillé pour qui est en lecture seule (sans quoi l'onglet suffirait à contourner le verrou de l'onglet Accès). Ne touche ni aux règles ni au
+  // brouillon : rappelé seul quand les droits changent Réglages ouverts, pour ne pas redessiner une saisie en cours (ni son focus, ni son curseur).
+  function applyLock() {
+    if (!draft) return;
     const locked = isReadOnly();
     const body = el('settings-rowtemplate-body');
-    // Grisé, jamais retiré : décoché, ou verrouillé pour qui est en lecture seule (sans quoi l'onglet suffirait à contourner le verrou de l'onglet Accès).
     if (body) {
       const off = !draft.enabled || locked;
       body.classList.toggle('is-off', off);
       body.inert = off;
       if (off) body.setAttribute('aria-disabled', 'true'); else body.removeAttribute('aria-disabled');
     }
+    const enabled = el('settings-rowtemplate-enabled');
     if (enabled) enabled.disabled = locked;
     const lockedHint = el('settings-rowtemplate-locked');
     if (lockedHint) lockedHint.hidden = !locked;
@@ -198,6 +207,8 @@ const RowTemplatePanel = (function () {
       }).observe(modal, { attributes: true, attributeFilter: ['style'] });
     }
     I18n.onChange(() => { if (draft) render(); });
+    // Droits changés pendant que les Réglages sont ouverts : le verrou suit tout de suite. Sans brouillon (Réglages jamais ouverts), rien à faire : l'ouverture dessine l'onglet.
+    if (typeof AccessRights !== 'undefined') AccessRights.onChange(applyLock);
   }
 
   return { wire };

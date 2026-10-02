@@ -456,6 +456,119 @@
     },
   });
 
+  // --- Droits qui changent Réglages ouverts (choix d'Antoine du 2026-10-02, « Dégriser tout de suite ») ---
+  // Le vrai calcul des droits (js/access-rights.js) : une table de droits dans le faux Grist, la personne y est repérée par son email ; AccessRights.refresh() fait ce que fait la minuterie de 10 s.
+  // Le même email que dev-tests/scenarios-access-rights.js : GristAPI le garde en cache après la première identification.
+  const RIGHTS_TABLE = 'PpDroitsLignes';
+  const RIGHTS_EMAIL = 'Lecteur@Exemple.fr';
+  const RIGHTS_CONFIG = { table: RIGHTS_TABLE, emailColumn: 'Email', readOnlyColumn: 'LectureSeule', exportColumn: 'Export', commentsColumn: 'Commentaires' };
+  const rightsRow = flags => [{ id: 1, Email: RIGHTS_EMAIL, LectureSeule: !!flags.readOnly, Export: flags.export !== false, Commentaires: flags.comments !== false }];
+  const rightsAre = flags => { const r = AccessRights.get(); return r.readOnly === !!flags.readOnly && r.canExport === (flags.export !== false) && r.canComment === (flags.comments !== false); };
+  // Réglage Selon la ligne `raw` + réglage Accès sur la table des droits, la personne ayant `flags` ; attend que les droits soient ceux-là.
+  async function applyRights(raw, flags) {
+    stub().setUserEmail('lecteur@exemple.fr');
+    stub().setVariables(RIGHTS_TABLE, { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+    stub().setRows(RIGHTS_TABLE, rightsRow(flags));
+    await GristAPI.refreshSchema();
+    stub().setWidgetOptions({ droitsAcces: RIGHTS_CONFIG, [KEY]: raw });
+    await sleep(120);
+    await AccessRights.refresh();
+    const ok = await waitFor(() => rightsAre(flags), 3000);
+    await sleep(200);
+    return ok;
+  }
+  // Une case de la table des droits change dans Grist : la relecture suivante (ici tout de suite) fait suivre l'interface.
+  async function changeRights(flags) {
+    stub().setRows(RIGHTS_TABLE, rightsRow(flags));
+    await AccessRights.refresh();
+    const ok = await waitFor(() => rightsAre(flags), 3000);
+    await sleep(150);
+    return ok;
+  }
+  async function dropRights() {
+    stub().dropTable(RIGHTS_TABLE);
+    await GristAPI.refreshSchema();
+  }
+  const lockState = () => ({
+    hint: !document.getElementById('settings-rowtemplate-locked').hidden,
+    disabled: document.getElementById('settings-rowtemplate-enabled').disabled,
+    inert: box().inert,
+    grey: box().classList.contains('is-off'),
+  });
+  const isLocked = s => s.hint && s.disabled && s.inert && s.grey;
+  const isFree = s => !s.hint && !s.disabled && !s.inert && !s.grey;
+
+  cases.push({
+    id: 'row_template_panel_follows_rights_that_change_while_the_settings_are_open',
+    description: "Réglages ouverts sur l'onglet Selon la ligne, un changement de droits (en lecture seule, puis plus, puis de nouveau) grise ou dégrise l'onglet tout de suite, sans fermer ni rouvrir les Réglages",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openByHand(f.A);
+      try {
+        const started = await applyRights(config(f), { readOnly: true });
+        await openPanel();
+        const lockedAtOpen = lockState();
+        const freeNow = await changeRights({ readOnly: false });
+        const stillOpen = settingsOpen() && !panel().hidden;
+        const freed = lockState();
+        const lockedNow = await changeRights({ readOnly: true });
+        const lockedAgain = lockState();
+        const freeAgainNow = await changeRights({ readOnly: false });
+        const freedAgain = lockState();
+        await closeSettings();
+        const pass = started && freeNow && lockedNow && freeAgainNow && stillOpen && isLocked(lockedAtOpen) && isFree(freed) && isLocked(lockedAgain) && isFree(freedAgain);
+        return { pass, notes: JSON.stringify({ started, lockedAtOpen, freed, lockedAgain, freedAgain, stillOpen }) };
+      } finally { await cleanup(h); await dropRights(); }
+    },
+  });
+
+  cases.push({
+    id: 'row_template_panel_keeps_what_is_being_typed_when_the_rights_change',
+    description: "Un changement de droits Réglages ouverts ne redessine pas la saisie en cours : même champ, même valeur, même focus et même sélection, rien d'écrit par-dessus ; seul le verrou change",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openByHand(f.A);
+      try {
+        const started = await applyRights({ enabled: true, rules: [rule('Nom', 'abc', f.B)], otherwise: 'default' }, {});
+        await openPanel();
+        const field = document.querySelector('#settings-rowtemplate-rules .macro-rule-value');
+        const isText = !!field && field.tagName === 'INPUT';
+        if (!isText) return { pass: false, notes: 'champ Valeur introuvable ou pas un champ texte : ' + (field ? field.tagName : 'aucun') };
+        field.focus();
+        field.value = 'abc def';
+        field.setSelectionRange(2, 5);
+        fire(field, 'input');
+        await sleep(450); // le brouillon s'enregistre 250 ms après la saisie
+        const written = () => JSON.stringify(((stub().state.options || {})[KEY] || {}).rules);
+        const savedTyped = written();
+        const snap = () => ({ same: document.querySelector('#settings-rowtemplate-rules .macro-rule-value') === field && field.isConnected, value: field.value, focused: document.activeElement === field, from: field.selectionStart, to: field.selectionEnd });
+        // Un droit sans rapport avec le verrou change (l'export est retiré) : l'onglet est rejoué, le champ ne bouge pas.
+        const exportOff = await changeRights({ export: false });
+        const afterExport = Object.assign(snap(), lockState());
+        // La personne passe en lecture seule : mêmes champ et valeur, l'onglet est verrouillé, rien n'est écrit par-dessus.
+        const readOnlyNow = await changeRights({ readOnly: true, export: false });
+        const afterReadOnly = Object.assign(snap(), lockState());
+        await sleep(450);
+        const savedLocked = written();
+        // Plus en lecture seule : dégrisé, toujours le même champ avec la même valeur.
+        const freeNow = await changeRights({});
+        const afterFree = Object.assign(snap(), lockState());
+        // La saisie continue : le même champ écrit encore dans le brouillon, qui s'enregistre (un brouillon relu des options ferait perdre ce qui s'écrit ensuite).
+        field.value = 'abc def!';
+        fire(field, 'input');
+        await sleep(450);
+        const savedAfter = written();
+        await closeSettings();
+        const kept = s => s.same && s.value === 'abc def';
+        const pass = started && exportOff && readOnlyNow && freeNow && /abc def/.test(savedTyped)
+          && kept(afterExport) && afterExport.focused && afterExport.from === 2 && afterExport.to === 5 && isFree(afterExport)
+          && kept(afterReadOnly) && isLocked(afterReadOnly) && savedLocked === savedTyped
+          && kept(afterFree) && isFree(afterFree) && /abc def!/.test(savedAfter);
+        return { pass, notes: JSON.stringify({ started, savedTyped, afterExport, afterReadOnly, savedLocked, afterFree, savedAfter }) };
+      } finally { await cleanup(h); await dropRights(); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.rowTemplate = cases;
 })();
