@@ -2012,6 +2012,8 @@
     openCleanReadingForReadOnly();
     // L'ouverture n'a lu que les métadonnées des tables (colonnes provisoires, GristAPI.init) : une passe lue il y a moins d'une minute - celle de l'affichage du premier modèle - suffit, sinon elle part ici.
     setTimeout(() => { GristAPI.refreshSchema({ maxAgeMs: 60000 }).catch(() => {}); }, EXACT_SCHEMA_CHECK_MS);
+    // Les renommages faits dans Grist depuis la dernière ouverture (js/schema-renames.js) : une fois le modèle affiché, sans l'attendre.
+    SchemaRenames.checkAfterOpen({ isUntouched: () => !hasEditsToConfirmBeforeLeaving(), notify: setStatus }).catch(e => console.warn('[main] suivi des renommages impossible', e));
   }
 
   // .catch() ajouté le 2026-09-28 : init() n'a de filet que sur TemplateTreeSelect.attach() (cf. commentaire

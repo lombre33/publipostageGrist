@@ -84,6 +84,7 @@ const GROUPS = {
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
   varColumn: 'scenarios-var-column', // bouton « Colonne… » de la barre d'une bulle : changer ou réparer la colonne d'une variable (js/variable-column.js)
+  schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
   varZero: 'scenarios-var-zero',
   varNumber: 'scenarios-var-number-default',
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
@@ -138,6 +139,7 @@ const NODE_SCRIPTS = {
   smallPanel: 'verify-small-panel.mjs',
   accessRightsMouse: 'verify-access-rights-mouse.mjs',
   rowTemplateMouse: 'verify-row-template-mouse.mjs', // modèle selon la ligne (Réglages > Selon la ligne) à la vraie souris dans 700x400 : onglets lisibles (FR, EN), case, colonne / valeur / modèle dans leurs listes avec recherche, option écrite, ouverture à la fermeture, ligne suivante en édition et en Lecture
+  schemaRenamesOpen: 'verify-schema-renames-open.mjs', // ouverture réelle du widget après un renommage dans Grist : rien avant l'affichage du modèle, modèle réécrit et redessiné, message dans 700x400, rien d'écrit à l'ouverture suivante
   templateStartupMouse: 'verify-template-startup-mouse.mjs', // modèle ouvert au démarrage, faux Grist semé avant l'init : la ligne qui désigne un modèle, puis le modèle de la vue, puis le ★ ; un choix de vue supprimé ou devenu email est ignoré
   emailMouse: 'verify-email-mouse.mjs', // « Créer l'email » au vrai clic à 700x400 : le lien mailto: ouvert est capté puis décodé - objet et destinataire tapés au vrai clavier, puces de l'éditeur, retraits sous le texte, « > » devant la citation, CRLF, jauge égale à la longueur du lien
   linksBlocksMouse: 'verify-links-blocks-mouse.mjs', // lien, citation, bloc de code sous une icône (js/link-dialog.js) : survol du menu, fenêtre et Ctrl+K au vrai clavier, Ctrl+clic, info-bulle, 700x400 clair, sombre et anglais

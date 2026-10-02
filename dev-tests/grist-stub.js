@@ -56,6 +56,7 @@
     // Email que renverrait la formule déclenchée user.Email de Publipostage_UserProbe (js/grist-api.js:getCurrentUserEmail). null = formule sans
     // valeur, comme avant ce champ : l'identification échoue, ce que tous les scénarios existants supposent.
     userEmail: null,
+    docId: 'stub' + Math.random().toString(36).slice(2, 8),
   };
 
   function columnarEmpty(cols) {
@@ -122,18 +123,28 @@
     if (choicesByCol) state.choices[tableId] = Object.assign({}, state.choices[tableId], choicesByCol);
     state.displayCols[tableId] = Object.assign({}, displayCols);
     state.visibleCols[tableId] = Object.assign({}, visibleCols);
-    // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
-    // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
-    // reconstruit tout à chaque fois à partir de state.tables/columns/choices.
+    rebuildColumnMeta();
+  }
+
+  // Identifiants de ligne de _grist_Tables et de _grist_Tables_column, comme Grist les donne : attribués à la création d'une table ou d'une colonne, jamais décalés ni réutilisés
+  // (un renommage garde le sien - renameColumn / renameTable ci-dessous ; supprimer une colonne ou une table ne change pas ceux des autres ; une colonne recréée sous le même nom en reçoit un neuf).
+  // Les colonnes sont rangées par identifiant de leur table + nom : renommer une table ne les déplace pas.
+  const metaIds = { tableNext: 1, columnNext: 1, tables: {}, columns: {} };
+  function tableRowId(tableId) { return metaIds.tables[tableId] || (metaIds.tables[tableId] = metaIds.tableNext++); }
+  function columnRowId(tableId, colId) { const key = tableRowId(tableId) + '\n' + colId; return metaIds.columns[key] || (metaIds.columns[key] = metaIds.columnNext++); }
+
+  // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
+  // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
+  // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
+  function rebuildColumnMeta() {
     const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol']);
-    let rowId = 1;
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
-    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = rowId++; }));
-    state.tables.forEach((t, tIdx) => {
+    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
+    state.tables.forEach(t => {
       Object.keys(state.columns[t] || {}).forEach(colId => {
         const choices = state.choices[t] && state.choices[t][colId];
         const helper = state.displayCols[t] && state.displayCols[t][colId];
-        gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tIdx + 1); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
+        gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tableRowId(t)); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
         gtc.widgetOptions.push(choices ? JSON.stringify({ choices }) : '');
         gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
         const shown = state.visibleCols[t] && state.visibleCols[t][colId];
@@ -141,16 +152,89 @@
         gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
       });
     });
+    // Ce qui a disparu du schéma perd son identifiant (jamais redonné : les compteurs ne reculent pas).
+    const liveColumns = {};
+    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { liveColumns[tableRowId(t) + '\n' + colId] = true; }));
+    Object.keys(metaIds.columns).forEach(key => { if (!liveColumns[key]) delete metaIds.columns[key]; });
+    const liveTables = state.tables.concat(Object.keys(state.primaryViewOf));
+    Object.keys(metaIds.tables).forEach(t => { if (liveTables.indexOf(t) === -1) delete metaIds.tables[t]; });
     syncTableRows();
     state.rows._grist_Tables_column = gtc;
   }
 
-  // _grist_Tables : une ligne par table de state.tables (id = rang + 1, comme avant), puis celles qui n'ont qu'une page (créées par AddTable sans passer par setVariables).
+  // _grist_Tables : une ligne par table de state.tables, puis celles qui n'ont qu'une page (créées par AddTable sans passer par setVariables).
   function syncTableRows() {
     const gt = columnarEmpty(['tableId', 'primaryViewId']);
     const ids = state.tables.concat(Object.keys(state.primaryViewOf).filter(t => state.tables.indexOf(t) === -1));
-    ids.forEach((t, i) => { gt.id.push(i + 1); gt.tableId.push(t); gt.primaryViewId.push(state.primaryViewOf[t] || 0); });
+    ids.forEach(t => { gt.id.push(tableRowId(t)); gt.tableId.push(t); gt.primaryViewId.push(state.primaryViewOf[t] || 0); });
     state.rows._grist_Tables = gt;
+  }
+
+  // Un objet recopié avec une clé renommée, au même rang (l'ordre des colonnes d'une table est celui des clés).
+  function renameKey(obj, from, to) {
+    const out = {};
+    Object.keys(obj).forEach(k => { out[k === from ? to : k] = obj[k]; });
+    return out;
+  }
+
+  // Renomme une colonne comme Grist (useractions.py:RenameColumn, vérifié à la source le 2026-10-02) : la MÊME ligne de _grist_Tables_column change de colId, son identifiant ne bouge pas.
+  // Les données, les choix, la colonne d'affichage et la « colonne à afficher » des Références qui la montrent suivent ; les formules et les modèles du widget, eux, ne sont jamais réécrits
+  // par Grist. Faux si la colonne n'existe pas ou si le nouveau nom est pris.
+  function renameColumn(tableId, oldId, newId) {
+    const columns = state.columns[tableId];
+    if (!columns || !(oldId in columns) || newId in columns) return false;
+    const prefix = tableRowId(tableId) + '\n';
+    metaIds.columns[prefix + newId] = columnRowId(tableId, oldId);
+    delete metaIds.columns[prefix + oldId];
+    state.columns[tableId] = renameKey(columns, oldId, newId);
+    if (state.rows[tableId] && oldId in state.rows[tableId]) state.rows[tableId] = renameKey(state.rows[tableId], oldId, newId);
+    ['choices', 'displayCols', 'visibleCols'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
+    Object.keys(state.displayCols[tableId] || {}).forEach(k => { if (state.displayCols[tableId][k] === oldId) state.displayCols[tableId][k] = newId; });
+    state.tables.forEach(t => Object.keys(state.visibleCols[t] || {}).forEach(k => {
+      const linked = /^Ref(?:List)?:(.+)$/.exec((state.columns[t] || {})[k] || '');
+      if (linked && linked[1] === tableId && state.visibleCols[t][k] === oldId) state.visibleCols[t][k] = newId;
+    }));
+    rebuildColumnMeta();
+    return true;
+  }
+
+  // Renomme une table comme Grist (useractions.py:RenameTable) : même ligne de _grist_Tables, même identifiant ; les colonnes Référence qui la désignaient changent de type (« Ref:Ancien » -> « Ref:Nouveau »).
+  function renameTable(oldId, newId) {
+    const at = state.tables.indexOf(oldId);
+    if (at === -1 || state.tables.indexOf(newId) !== -1) return false;
+    metaIds.tables[newId] = tableRowId(oldId);
+    delete metaIds.tables[oldId];
+    state.tables[at] = newId;
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
+      if (state[bag] && oldId in state[bag]) { state[bag][newId] = state[bag][oldId]; delete state[bag][oldId]; }
+    });
+    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(k => {
+      const ref = /^(Ref(?:List)?):(.+)$/.exec(state.columns[t][k]);
+      if (ref && ref[2] === oldId) state.columns[t][k] = ref[1] + ':' + newId;
+    }));
+    rebuildColumnMeta();
+    return true;
+  }
+
+  // Supprime une colonne du schéma comme Grist (RemoveColumn) : ses données, ses choix, son affichage s'en vont, les identifiants des autres colonnes ne changent pas, et une colonne recréée
+  // sous le même nom aura un identifiant neuf. Différent de dropColumn plus bas, qui n'ôte que la donnée d'une ligne. Faux si la colonne n'existe pas.
+  function deleteColumn(tableId, colId) {
+    if (!state.columns[tableId] || !(colId in state.columns[tableId])) return false;
+    delete state.columns[tableId][colId];
+    if (state.rows[tableId]) delete state.rows[tableId][colId];
+    ['choices', 'displayCols', 'visibleCols'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
+    rebuildColumnMeta();
+    return true;
+  }
+
+  // Supprime une table du schéma comme Grist (RemoveTable) : ses colonnes et ses données s'en vont, son identifiant n'est jamais redonné.
+  function dropTable(tableId) {
+    const at = state.tables.indexOf(tableId);
+    if (at === -1) return false;
+    state.tables.splice(at, 1);
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
+    rebuildColumnMeta();
+    return true;
   }
 
   // Ce que fait AddTable dans Grist (useractions.py:doAddView) : une vue du nom de la table, et sa page au premier niveau, tout en bas du volet.
@@ -242,6 +326,7 @@
     if (cb) setTimeout(() => cb(state.options, { accessLevel: state.accessLevel, linking: {} }), 0);
   }
   function setUserEmail(email) { state.userEmail = email || null; }
+  function setDocId(id) { state.docId = String(id); }
 
   // Même filtrage que la vraie API (WidgetFrame.ts:_visibleColumns, vérifié à la source) : 'shown' retire les colonnes pas cochées dans CETTE
   // section, 'normal'/'all' garde tout. Partagé entre fireRecord et docApi.fetchSelectedRecord ci-dessous.
@@ -489,7 +574,9 @@
       applyUserActions: function (actions) {
         return state.latency.applyUserActions ? withLatency('applyUserActions', () => applyUserActions(actions)) : applyUserActions(actions);
       },
-      getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/stub' }; },
+      // Le document, par l'adresse de son interface de programmation (…/api/docs/<identifiant>) : js/schema-renames.js y lit l'identifiant du document pour ranger son instantané.
+      // Un identifiant tiré à chaque chargement de la page : deux pages de test ne partagent jamais un instantané (setDocId pour jouer « le même document, rouvert »).
+      getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/' + state.docId }; },
       // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
       // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage que fireRecord (filterRecordForIncludeColumns), même refus d'accès
@@ -507,7 +594,7 @@
     },
   };
 
-  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
+  window.__gristStub = { state, setVariables, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, setUserEmail, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
