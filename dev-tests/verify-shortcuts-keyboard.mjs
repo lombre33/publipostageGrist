@@ -649,8 +649,12 @@ async function macPart() {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  await hover('btn-mode-read');
-  check(`${T} : l'infobulle de Mode lecture montre ⌥L`, (await tipOf('btn-mode-read')).content === 'Mode lecture (⌥L)', await tipOf('btn-mode-read'));
+  // Mode lecture n'a plus d'info-bulle : son menu au survol (« Lecture épurée », js/clean-reading.js) la remplace, et son titre dit la touche, comme celui des menus Nouveau et Exporter.
+  const readPoint = await page.evaluate(() => { const r = document.getElementById('btn-mode-read').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(readPoint.x, readPoint.y);
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('v2-read-flyout')).display !== 'none', null, { timeout: 2500 }).catch(() => {});
+  const readTitle = await page.evaluate(() => { const l = document.querySelector('#v2-read-flyout .v2-hover-flyout-label'); return l.textContent + getComputedStyle(l, '::after').content.replace(/^"|"$/g, ''); });
+  check(`${T} : le titre du menu de Mode lecture montre ⌥L`, readTitle === 'Mode lecture (⌥L)', readTitle);
   await focusEnd();
   await page.keyboard.press('Control+/');
   await page.waitForTimeout(250);

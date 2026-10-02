@@ -56,6 +56,9 @@ const I18n = (function () {
     'toolbar.linkRules.aria': { fr: 'Tables liées (correspondance pour #Variable d’une autre table)', en: 'Linked tables (matching for #Variable from another table)' },
     'toolbar.modeEdit': { fr: 'Mode édition', en: 'Edit mode' },
     'toolbar.modeRead': { fr: 'Mode lecture', en: 'Read mode' },
+    // Lecture épurée (js/clean-reading.js, retours d'Antoine du 2026-10-02, point 19) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
+    'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
+    'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
     // {format} : le format de la page du modèle (A3, A4, A5, A6) - js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
     'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },
     'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },

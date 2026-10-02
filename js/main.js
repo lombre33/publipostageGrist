@@ -1354,6 +1354,8 @@
   async function switchMode(mode) {
     // Lecture seule : le mode Lecture est le seul accessible (demande d'Antoine), y compris depuis la dernière ligne d'init().
     if (isReadOnly()) mode = 'read';
+    // La Lecture épurée (js/clean-reading.js) n'existe que dans le mode Lecture : un autre mode la quitte, la barre du haut revient avec lui.
+    CleanReading.onModeChange(mode);
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
     currentMode = mode;
     applyFormattingBarLock();
@@ -1832,6 +1834,12 @@
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     btnRead.addEventListener('click', () => switchMode('read'));
+    CleanReading.wire({
+      getMode: () => currentMode,
+      switchMode,
+      // Le curseur revient dans l'éditeur à l'endroit où il était, sans faire défiler le document.
+      focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
+    });
     wireA4PreviewToggle();
     OrientationToggle.wire({ isReadOnly });
     wireLinkRulesModal();

@@ -131,6 +131,11 @@ Publipostage+ a un seul composant d'édition et une seule barre d'outils (`#v2-t
 toolbar transposable à plusieurs modes (ex. bouton `#Variable`) est un composant partagé unique, pas une copie
 par mode. Ce principe — pas de duplication de code d'UI entre modes/contextes d'un même widget — est une règle
 explicite d'Antoine, pas seulement une observation.
+**Seule exception, voulue par Antoine (02/10, « un mode Lecture épuré qui enlève la toolbar etc. pour juste avoir la lecture clean d'un document »)** : la **Lecture épurée**
+(`js/clean-reading.js`, `css/clean-reading.css`) cache la barre du haut en entier - barre, champs de l'email, barre de mise en forme, bandeau « Revenir au macro-modèle » - et laisse le document seul dans le panneau. Ce n'est
+pas un troisième mode : c'est la Lecture dans un état de plus (`pp-clean-reading` sur `<body>`), que rien n'allume sans un geste (la ligne « Lecture épurée » du menu au survol du bouton
+Mode lecture : la barre reste gelée, aucune icône de plus) et que rien ne garde d'une ouverture du widget à l'autre. On en sort par le bouton rond du coin haut droit ou par Échap (qui
+attend une fenêtre ou un fil de commentaire ouvert), et le mode d'où l'on venait revient. Elle ne modifie rien : une personne en lecture seule y a droit comme les autres.
 
 ### Non-régression stricte de l'UI existante
 Règle d'Antoine valable sur tous les widgets : **on ajoute des éléments d'UI, on ne modifie ni ne supprime ceux
@@ -138,7 +143,8 @@ qui existent déjà** sans son accord explicite. Une barre d'outils jugée dense
 §3) reste telle quelle tant qu'il n'a pas validé un changement — la réponse à une UI qu'on n'ose pas retoucher
 n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux précisions :
 - Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
-  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours.
+  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. La seule exception est la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
+  y disparaît tout entière, sur un geste, et revient à la sortie.
 - Un défaut qui revient se corrige **une fois pour toutes**, à sa cause commune, pas fenêtre par fenêtre ni menu par
   menu : c'est ce qui a donné la base commune des fenêtres et le pont de survol des menus (§3).
 
@@ -366,7 +372,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (`applyFormattingBarLock`) ; les droits par personne (Réglages > Accès : lecture seule, export, commentaires) grisent
   aussi (`pp-access-locked`), sans jamais masquer. Commenter reste actif en Lecture et agit sur le texte sélectionné dans la
   Lecture, qui surligne alors les passages commentés (choix d'Antoine du 30/09) ; sans le droit de commenter, la Lecture
-  reste sans commentaires, comme l'export.
+  reste sans commentaires, comme l'export. La Lecture épurée (demande d'Antoine du 02/10, §3) cache toute la barre du haut sur un geste : ce n'est ni un mode ni un droit, et elle reste
+  ouverte aux personnes en lecture seule (elle ne modifie rien).
 - Sélecteur de modèle en arbre (dossiers) : le `<select>` natif reste en place, masqué, source de la valeur. Punaise =
   favori personnel, étoile = modèle par défaut (jamais un modèle Email) ; chaque dossier s'ouvre replié ou déplié selon le
   choix de l'utilisateur ; la fenêtre « Organiser mes modèles » range (dossiers, glisser-déposer, « Déplacer vers… »).

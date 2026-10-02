@@ -205,7 +205,7 @@ const Shortcuts = (function () {
     { id: 'exportPdf', group: 'templates', label: 'toolbar.exportPdf', key: 'Alt+p', scope: 'app', hint: '#v2-export-pdf-flyout .v2-hover-flyout-label', aria: tip('btn-export-pdf'), run: click('btn-export-pdf') },
     // Affichage
     { id: 'modeEdit', group: 'view', label: 'toolbar.modeEdit', key: 'Alt+e', scope: 'app', hint: tip('btn-mode-edit'), run: editMode },
-    { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: tip('btn-mode-read'), run: click('btn-mode-read') },
+    { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: '#v2-read-flyout .v2-hover-flyout-label', aria: tip('btn-mode-read'), run: click('btn-mode-read') },
     { id: 'settings', group: 'view', label: 'settings.tooltip', key: '', scope: 'app', hint: tip('v2-btn-settings'), run: click('v2-btn-settings') },
     { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: () => openKeysList() },
     { id: 'find', group: 'view', label: 'shortcuts.action.find', key: 'Mod+f', native: true, scope: 'app', aria: tip('v2-btn-find'), run: findPanel(false) },

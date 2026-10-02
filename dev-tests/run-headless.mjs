@@ -106,6 +106,7 @@ const GROUPS = {
   imageWide: 'scenarios-image-wide', // images trop larges dans le PDF et le Word (js/export-common.js:shownImageWidthPx) : la largeur que l'éditeur montre, dans le corps, une case, une colonne, centrée, flottante, selon le format de page
   varCalc: 'scenarios-var-calc', // bulle « Calcul » (variables calculées) : nœud, fenêtre, barre flottante, Lecture, PDF, Word, zones répétées, total de lignes
   emailExport: 'scenarios-email-export', // texte et lien du mode Email (js/mailto-export.js) : puces et numéros comme l'éditeur, retraits sous le texte de l'item, citations en « > », le vrai chemin éditeur -> Lecture -> texte, l'URL construite et sa jauge
+  cleanReading: 'scenarios-clean-reading', // Lecture épurée (js/clean-reading.js) : ligne « Lecture épurée » sous Mode lecture, barre du haut cachée, bouton de sortie, Échap, retour au mode d'origine, focus, langue
 };
 
 // Scripts Node autonomes (page.mouse réel, pas de page.evaluate) : structurellement à part de GROUPS
@@ -139,6 +140,7 @@ const NODE_SCRIPTS = {
   orientationMouse: 'verify-orientation-mouse.mjs', // bascule Portrait / Paysage d'un modèle classique : feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, clavier ; 700x400 clair et sombre
   pageFormatMouse: 'verify-page-format-mouse.mjs', // formats de page A3 à A6 à la vraie souris et au vrai clavier : menu du bouton Page tout entier dans le panneau, feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, curseur gardé, Tab, email grisé ; 700x400 clair et sombre
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
+  cleanReadingMouse: 'verify-clean-reading-mouse.mjs', // Lecture épurée à la vraie souris et au vrai clavier, 700x400 clair et sombre, lecture seule comprise : menu sous Mode lecture, barre cachée, document dans tout le panneau, bouton de sortie, Échap
   settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : sept onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
