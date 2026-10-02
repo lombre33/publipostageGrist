@@ -1203,7 +1203,13 @@ seule sur sa ligne, à gauche, le texte d'avant finit sa ligne et celui d'après
   chaque ligne, chaque position à 0,6 pt près ; le résultat donne le pire écart d'image et de ligne en pt. Sur l'ancien code 27 des 52 échouent, tous les cas où l'image est alignée à gauche ou à droite (la Lecture en faisait un bloc : le texte
   la contournait par dessus et dessous, 129 pt de retrait en moins à côté, les paragraphes suivants 75 à 225 pt plus bas) ; les 25 autres sont des garde-fous. Correction : `css/style.css` (flottant `.reader-content img.editor-image[data-align]`, 12 px côté
   texte, 8 px dessous, largeur au plus celle de la ligne moins la marge comme dans l'éditeur) et `holdsInFlowContent` de `js/reader-mode.js` (un flottant ne remplit pas la ligne de son paragraphe : celui où il est seul garde sa ligne).
-- Les familles PDF et Word s'ajoutent dans ce fichier, un lot par rendu, avec la même table de cas.
+- Troisième lot, famille « Word » (53 scénarios : 52 `imgtext_docx_<cas>` sur la même table, plus `imgtext_docx_block_in_a_centered_paragraph_stays_on_the_left`) : le fichier .docx se lit sur son XML (`wordParagraphs`) : une seule image,
+  dans la ligne (`wp:inline`) ou ancrée (`wp:anchor`), seule dans son paragraphe aligné (« bloc » = à gauche, centre = au centre, jamais dans la ligne de texte), le texte d'avant dans le paragraphe qui précède et celui d'après dans celui qui suit ;
+  pour un habillage : `wrapSquare` du côté opposé, bord de la marge, marges de 9 pt côté texte et de 6 pt dessous (`distR`/`distL`/`distB`, sur l'ancre et sur `wrapSquare`), texte d'après dans le paragraphe de l'image ; taille égale à celle de
+  l'éditeur (une image de la largeur de la ligne ou plus large rétrécit de la marge, comme le flottant de l'éditeur : `.tiptap img.editor-image[data-align]` de `css/editor-v2.css`, que l'hôte de mesure de l'export lit). 31 des 53 échouent sur
+  l'ancien code (« bloc » restait dans la ligne de texte, l'habillage sans marge, la taille trop large) ; les 22 autres sont des garde-fous. Où Word pose ensuite chaque ligne, il le recalcule : la géométrie se mesure dans un rendu
+  LibreOffice (interligne 17,4 pt contre 14,9 : on compare les x et les images, pas le y des lignes), hors dépôt (`banc/`, `runmatrix.py`).
+- La famille PDF s'ajoute dans ce fichier, avec la même table de cas.
 
 **« Sur toutes les pages »** (01/10, `scenarios-page-layer.js`, groupe `pageLayer`, 15 scénarios, plus le script Node `pageLayerMouse` ; choix d'Antoine à la Fiche mission : un triangle dans le coin de chaque
 feuille) : une image en calque « derrière le texte » dont la case est cochée (`data-repeat="true"`, `js/page-layer.js`) est peinte à la MÊME place de chaque page. La place est sa grille page

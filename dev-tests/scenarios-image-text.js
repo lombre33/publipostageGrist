@@ -211,41 +211,43 @@ window.EditorTestSuites.imageText = (function () {
   const LONG = BEFORE + ' ' + AFTER;
   const im = (align, wrap, w, h) => imgHtml({ w: w || 160, h: h || 120, align: align === 'none' ? null : align, wrap: wrap || 'inline' });
   const MATRIX = [];
-  const add = (id, family, what, html) => MATRIX.push({ id, family, what, html });
+  // `meta` : ce que le cas pose, pour les rendus qui se lisent sur la structure du fichier (Word) : l'alignement et la bascule de l'image, sa place, le texte d'avant et d'après l'image dans son paragraphe HTML
+  // (`pre`, `post`), le paragraphe qui précède (`prev`) et celui qui suit (`next`) le paragraphe de l'image, et `container` (case de tableau, colonne, liste, titre, citation).
+  const add = (id, family, what, html, meta) => MATRIX.push({ id, family, what, html, meta: meta || null });
   const ALIGN_NAME = { none: 'sans alignement', left: 'alignée à gauche', right: 'alignée à droite', center: 'centrée' };
   const WRAP_NAME = { inline: 'en ligne', block: 'en bloc' };
   const PLACE_NAME = { alone: 'seule dans son paragraphe', start: 'en tête de paragraphe', mid: 'au milieu du texte', end: 'en fin de texte' };
   ['none', 'left', 'right', 'center'].forEach(align => ['inline', 'block'].forEach(wrap => {
     const t = align + '_' + wrap, i = im(align, wrap);
     const what = place => 'image ' + ALIGN_NAME[align] + ', ' + WRAP_NAME[wrap] + ', ' + PLACE_NAME[place];
-    add('alone_' + t, 'place', what('alone'), '<p>' + SHORT + '</p><p>' + i + '</p><p>' + LONG + '</p>');
-    add('start_' + t, 'place', what('start'), '<p>' + i + LONG + '</p><p>' + FOLLOW + '</p>');
-    add('mid_' + t, 'place', what('mid'), '<p>' + BEFORE + ' ' + i + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>');
-    add('end_' + t, 'place', what('end'), '<p>' + LONG + ' ' + i + '</p><p>' + FOLLOW + '</p>');
+    add('alone_' + t, 'place', what('alone'), '<p>' + SHORT + '</p><p>' + i + '</p><p>' + LONG + '</p>', { align, wrap, place: 'alone', pre: '', post: '', prev: SHORT, next: LONG });
+    add('start_' + t, 'place', what('start'), '<p>' + i + LONG + '</p><p>' + FOLLOW + '</p>', { align, wrap, place: 'start', pre: '', post: LONG, prev: null, next: FOLLOW });
+    add('mid_' + t, 'place', what('mid'), '<p>' + BEFORE + ' ' + i + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>', { align, wrap, place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: FOLLOW });
+    add('end_' + t, 'place', what('end'), '<p>' + LONG + ' ' + i + '</p><p>' + FOLLOW + '</p>', { align, wrap, place: 'end', pre: LONG, post: '', prev: null, next: FOLLOW });
   }));
-  add('small_mid_none', 'size', 'icône de 20 px dans une phrase', '<p>' + BEFORE + ' ' + im('none', 'inline', 20, 20) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>');
-  add('small_mid_left', 'size', 'icône de 20 px alignée à gauche dans une phrase', '<p>' + BEFORE + ' ' + im('left', 'inline', 20, 20) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>');
-  add('tall_left', 'size', 'image haute (300 px) à gauche, plus haute que son paragraphe : le texte des paragraphes suivants la contourne', '<p>' + im('left', 'inline', 160, 300) + SHORT + '</p><p>' + FOLLOW + '</p><p>' + SHORT + '</p><p>' + FOLLOW + '</p>');
-  add('tall_right', 'size', 'image haute (300 px) à droite, plus haute que son paragraphe', '<p>' + im('right', 'inline', 160, 300) + SHORT + '</p><p>' + FOLLOW + '</p><p>' + SHORT + '</p><p>' + FOLLOW + '</p>');
-  add('full_none_start', 'size', 'image sans alignement de toute la largeur, en tête de paragraphe', '<p>' + im('none', 'inline', 718, 100) + LONG + '</p><p>' + FOLLOW + '</p>');
-  add('full_left_start', 'size', 'image à gauche de toute la largeur, en tête de paragraphe', '<p>' + im('left', 'inline', 718, 100) + LONG + '</p><p>' + FOLLOW + '</p>');
-  add('full_center_alone', 'size', 'image centrée de toute la largeur, seule dans son paragraphe', '<p>' + SHORT + '</p><p>' + im('center', 'inline', 718, 100) + '</p><p>' + LONG + '</p>');
-  add('toowide_none_mid', 'size', 'image sans alignement plus large que la page (900 px), au milieu du texte', '<p>' + BEFORE + ' ' + im('none', 'inline', 900, 200) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>');
-  add('toowide_left_start', 'size', 'image à gauche plus large que la page (900 px), en tête de paragraphe', '<p>' + im('left', 'inline', 900, 200) + LONG + '</p><p>' + FOLLOW + '</p>');
-  add('cell_left', 'context', 'image à gauche dans une case de tableau', '<table><tbody><tr><td><p>' + im('left', 'inline', 100, 80) + LONG + '</p></td><td><p>' + FOLLOW + '</p></td></tr></tbody></table><p>' + SHORT + '</p>');
-  add('cell_none_mid', 'context', 'image en ligne dans une phrase, dans une case de tableau', '<table><tbody><tr><td><p>' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p></td><td><p>' + FOLLOW + '</p></td></tr></tbody></table><p>' + SHORT + '</p>');
+  add('small_mid_none', 'size', 'icône de 20 px dans une phrase', '<p>' + BEFORE + ' ' + im('none', 'inline', 20, 20) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>', { align: 'none', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: FOLLOW });
+  add('small_mid_left', 'size', 'icône de 20 px alignée à gauche dans une phrase', '<p>' + BEFORE + ' ' + im('left', 'inline', 20, 20) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: FOLLOW });
+  add('tall_left', 'size', 'image haute (300 px) à gauche, plus haute que son paragraphe : le texte des paragraphes suivants la contourne', '<p>' + im('left', 'inline', 160, 300) + SHORT + '</p><p>' + FOLLOW + '</p><p>' + SHORT + '</p><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: SHORT, prev: null, next: FOLLOW });
+  add('tall_right', 'size', 'image haute (300 px) à droite, plus haute que son paragraphe', '<p>' + im('right', 'inline', 160, 300) + SHORT + '</p><p>' + FOLLOW + '</p><p>' + SHORT + '</p><p>' + FOLLOW + '</p>', { align: 'right', wrap: 'inline', place: 'start', pre: '', post: SHORT, prev: null, next: FOLLOW });
+  add('full_none_start', 'size', 'image sans alignement de toute la largeur, en tête de paragraphe', '<p>' + im('none', 'inline', 718, 100) + LONG + '</p><p>' + FOLLOW + '</p>', { align: 'none', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: FOLLOW });
+  add('full_left_start', 'size', 'image à gauche de toute la largeur, en tête de paragraphe', '<p>' + im('left', 'inline', 718, 100) + LONG + '</p><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: FOLLOW });
+  add('full_center_alone', 'size', 'image centrée de toute la largeur, seule dans son paragraphe', '<p>' + SHORT + '</p><p>' + im('center', 'inline', 718, 100) + '</p><p>' + LONG + '</p>', { align: 'center', wrap: 'inline', place: 'alone', pre: '', post: '', prev: SHORT, next: LONG });
+  add('toowide_none_mid', 'size', 'image sans alignement plus large que la page (900 px), au milieu du texte', '<p>' + BEFORE + ' ' + im('none', 'inline', 900, 200) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>', { align: 'none', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: FOLLOW });
+  add('toowide_left_start', 'size', 'image à gauche plus large que la page (900 px), en tête de paragraphe', '<p>' + im('left', 'inline', 900, 200) + LONG + '</p><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: FOLLOW });
+  add('cell_left', 'context', 'image à gauche dans une case de tableau', '<table><tbody><tr><td><p>' + im('left', 'inline', 100, 80) + LONG + '</p></td><td><p>' + FOLLOW + '</p></td></tr></tbody></table><p>' + SHORT + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: null, container: 'cell' });
+  add('cell_none_mid', 'context', 'image en ligne dans une phrase, dans une case de tableau', '<table><tbody><tr><td><p>' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p></td><td><p>' + FOLLOW + '</p></td></tr></tbody></table><p>' + SHORT + '</p>', { align: 'none', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: null, container: 'cell' });
   const column = host => '<div class="two-columns-zone" style="--layout-left: 50%;"><div class="two-columns-column">' + host + '</div><div class="two-columns-column"><p>' + FOLLOW + '</p></div></div><p>' + SHORT + '</p>';
-  add('column_left', 'context', 'image à gauche dans une colonne', column('<p>' + im('left', 'inline', 100, 80) + LONG + '</p>'));
-  add('column_none_mid', 'context', 'image en ligne dans une phrase, dans une colonne', column('<p>' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p>'));
-  add('list_left', 'context', 'image à gauche dans une liste', '<ul><li><p>' + im('left', 'inline', 100, 80) + LONG + '</p></li><li><p>' + FOLLOW + '</p></li></ul><p>' + SHORT + '</p>');
-  add('heading_none', 'context', 'image en ligne dans un titre', '<h2>Un titre avec ' + im('none', 'inline', 40, 40) + ' au milieu</h2><p>' + FOLLOW + '</p>');
-  add('heading_left', 'context', 'image à gauche dans un titre', '<h2>' + im('left', 'inline', 100, 80) + 'Un titre suivi de son image</h2><p>' + FOLLOW + '</p>');
-  add('quote_left', 'context', 'image à gauche dans une citation', '<blockquote><p>' + im('left', 'inline', 100, 80) + LONG + '</p></blockquote><p>' + SHORT + '</p>');
+  add('column_left', 'context', 'image à gauche dans une colonne', column('<p>' + im('left', 'inline', 100, 80) + LONG + '</p>'), { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: null, container: 'column' });
+  add('column_none_mid', 'context', 'image en ligne dans une phrase, dans une colonne', column('<p>' + BEFORE + ' ' + im('none', 'inline', 60, 40) + ' ' + AFTER + '</p>'), { align: 'none', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: null, container: 'column' });
+  add('list_left', 'context', 'image à gauche dans une liste', '<ul><li><p>' + im('left', 'inline', 100, 80) + LONG + '</p></li><li><p>' + FOLLOW + '</p></li></ul><p>' + SHORT + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: null, container: 'list' });
+  add('heading_none', 'context', 'image en ligne dans un titre', '<h2>Un titre avec ' + im('none', 'inline', 40, 40) + ' au milieu</h2><p>' + FOLLOW + '</p>', { align: 'none', wrap: 'inline', place: 'mid', pre: 'Un titre avec', post: 'au milieu', prev: null, next: FOLLOW, container: 'heading' });
+  add('heading_left', 'context', 'image à gauche dans un titre', '<h2>' + im('left', 'inline', 100, 80) + 'Un titre suivi de son image</h2><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: 'Un titre suivi de son image', prev: null, next: FOLLOW, container: 'heading' });
+  add('quote_left', 'context', 'image à gauche dans une citation', '<blockquote><p>' + im('left', 'inline', 100, 80) + LONG + '</p></blockquote><p>' + SHORT + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: SHORT, container: 'quote' });
   // Fin de page : 47 lignes de remplissage, puis l'image à cheval sur le saut de page.
   const FILL = Array.from({ length: 47 }, (_, i) => '<p>Ligne de remplissage numéro ' + (i + 1) + '.</p>').join('');
-  add('page_left', 'page', 'image à gauche au bas de la page, à cheval sur le saut de page', FILL + '<p>' + im('left', 'inline', 160, 200) + LONG + '</p><p>' + FOLLOW + '</p>');
-  add('page_none_mid', 'page', 'image en ligne au milieu du texte, au bas de la page', FILL + '<p>' + BEFORE + ' ' + im('none', 'inline', 160, 200) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>');
-  add('page_center', 'page', 'image centrée seule au bas de la page', FILL + '<p>' + SHORT + '</p><p>' + im('center', 'inline', 160, 200) + '</p><p>' + FOLLOW + '</p>');
+  add('page_left', 'page', 'image à gauche au bas de la page, à cheval sur le saut de page', FILL + '<p>' + im('left', 'inline', 160, 200) + LONG + '</p><p>' + FOLLOW + '</p>', { align: 'left', wrap: 'inline', place: 'start', pre: '', post: LONG, prev: null, next: FOLLOW });
+  add('page_none_mid', 'page', 'image en ligne au milieu du texte, au bas de la page', FILL + '<p>' + BEFORE + ' ' + im('none', 'inline', 160, 200) + ' ' + AFTER + '</p><p>' + FOLLOW + '</p>', { align: 'none', wrap: 'inline', place: 'mid', pre: BEFORE, post: AFTER, prev: null, next: FOLLOW });
+  add('page_center', 'page', 'image centrée seule au bas de la page', FILL + '<p>' + SHORT + '</p><p>' + im('center', 'inline', 160, 200) + '</p><p>' + FOLLOW + '</p>', { align: 'center', wrap: 'inline', place: 'alone', pre: '', post: '', prev: SHORT, next: FOLLOW });
 
   // Ce que pose un rendu : le rectangle de chaque image et chaque ligne de texte, en pixels de mise en page (zoom de la feuille retiré), depuis le coin de son conteneur.
   function layoutOf(root) {
@@ -297,6 +299,118 @@ window.EditorTestSuites.imageText = (function () {
     description: 'Lecture : ' + c.what + ' - les images et chaque ligne de texte sont où l\'éditeur les met (mêmes mots par ligne, écart de position ≤ ' + TOLERANCE_PT + ' pt)',
     run: async (h) => readerVersusEditor(h, c.html),
   }));
+
+  // === Famille « Word » (troisième lot) : la structure du fichier .docx, cas par cas ===
+  // Le Word se lit ici sur son XML : où est l'image (dans la ligne ou ancrée), dans quel paragraphe, avec quel alignement, quelle marge d'habillage, quel texte avant et après, quelle taille. Où Word pose
+  // ensuite chaque ligne, il le recalcule : cette géométrie-là se mesure dans un rendu LibreOffice, hors dépôt (banc `banc/`, `runmatrix.py`).
+  const EMU_PER_PT = 12700;
+  const norm = t => String(t || '').replace(/\s+/g, ' ').trim();
+  // Chaque <w:p> du fichier, dans l'ordre : son alignement, son texte, et ses morceaux dans l'ordre (texte, image dans la ligne, image ancrée avec son habillage).
+  function wordParagraphs(doc) {
+    const inCell = el => { for (let n = el.parentNode; n; n = n.parentNode) if (n.nodeName === 'w:tc') return true; return false; };
+    return Array.from(doc.getElementsByTagName('w:p')).map(p => {
+      const jc = p.getElementsByTagName('w:jc')[0];
+      const segs = [];
+      const walker = doc.createTreeWalker(p, NodeFilter.SHOW_ELEMENT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.nodeName === 'w:t') segs.push({ text: n.textContent });
+        else if (n.nodeName === 'w:drawing') {
+          const anchor = n.getElementsByTagName('wp:anchor')[0];
+          const box = anchor || n.getElementsByTagName('wp:inline')[0];
+          const extent = box && box.getElementsByTagName('wp:extent')[0];
+          const square = anchor && anchor.getElementsByTagName('wp:wrapSquare')[0];
+          const posH = anchor && anchor.getElementsByTagName('wp:positionH')[0];
+          const align = posH && posH.getElementsByTagName('wp:align')[0];
+          const dist = name => (anchor ? Number(anchor.getAttribute(name)) : null);
+          segs.push({
+            drawing: anchor ? 'anchor' : 'inline', w: extent ? Number(extent.getAttribute('cx')) / EMU_PER_PT : null, h: extent ? Number(extent.getAttribute('cy')) / EMU_PER_PT : null,
+            wrapSide: square ? square.getAttribute('wrapText') : null, alignH: align ? align.textContent : null, relativeH: posH ? posH.getAttribute('relativeFrom') : null,
+            distL: dist('distL'), distR: dist('distR'), distT: dist('distT'), distB: dist('distB'),
+            squareDistL: square ? Number(square.getAttribute('distL')) : null, squareDistR: square ? Number(square.getAttribute('distR')) : null, squareDistB: square ? Number(square.getAttribute('distB')) : null,
+          });
+        }
+      }
+      return { jc: jc ? jc.getAttribute('w:val') : null, inCell: inCell(p), segs, text: segs.map(sg => sg.text || '').join('') };
+    });
+  }
+  async function wordVersusEditor(h, html) {
+    await setupEditor(h, html);
+    const editor = layoutOf(h.tiptap());
+    const exported = await h.exportDocxParts(Editor.getHTML(), Editor.getHeaderFooterData());
+    return { editor, paragraphs: wordParagraphs(exported.doc).filter(p => p.text.trim() || p.segs.some(sg => sg.drawing)) };
+  }
+  const WRAP_TEXT_SIDE_EMU = 9 * EMU_PER_PT; // 12 px côté texte
+  const WRAP_BELOW_EMU = 6 * EMU_PER_PT;     // 8 px dessous
+  // Ce que le fichier doit dire pour un cas : l'image seule, une seule, au bon endroit, de la taille de l'éditeur.
+  function checkWord(m, found) {
+    const ps = found.paragraphs;
+    const hosts = ps.filter(p => p.segs.some(sg => sg.drawing));
+    if (hosts.length !== 1) return { pass: false, notes: JSON.stringify({ paragraphesAvecImage: hosts.length, attendu: 1 }) };
+    const host = hosts[0], hi = ps.indexOf(host);
+    const k = host.segs.findIndex(sg => sg.drawing);
+    const d = host.segs[k];
+    const before = norm(host.segs.slice(0, k).map(sg => sg.text || '').join(''));
+    const after = norm(host.segs.slice(k + 1).map(sg => sg.text || '').join(''));
+    const own = m.align === 'center' ? 'center' : (m.align === 'none' && m.wrap === 'block') ? 'left' : null;
+    const isFloat = m.align === 'left' || m.align === 'right';
+    const problems = [];
+    const expect = (what, ok, got, wanted) => { if (!ok) problems.push({ [what]: got, attendu: wanted }); };
+    const prevText = hi > 0 ? norm(ps[hi - 1].text) : null, nextText = hi < ps.length - 1 ? norm(ps[hi + 1].text) : null;
+    if (own) {
+      expect('image', d.drawing === 'inline', d.drawing, 'inline (dans son propre paragraphe)');
+      expect('texteAvantDansLeParagrapheDeLImage', before === '', before.slice(0, 30), '');
+      expect('texteApresDansLeParagrapheDeLImage', after === '', after.slice(0, 30), '');
+      // À gauche : l'alignement par défaut du paragraphe suffit (rien à dire) ; le cas d'un paragraphe centré qui porte une image en bloc a son scénario.
+      expect('alignement', host.jc === own || (own === 'left' && host.jc === null), host.jc, own);
+      const wantPrev = m.pre ? norm(m.pre) : (m.prev ? norm(m.prev) : null), wantNext = m.post ? norm(m.post) : (m.next ? norm(m.next) : null);
+      if (wantPrev !== null) expect('paragrapheAvant', prevText === wantPrev, (prevText || '').slice(0, 30), wantPrev.slice(0, 30));
+      if (wantNext !== null) expect('paragrapheApres', nextText === wantNext, (nextText || '').slice(0, 30), wantNext.slice(0, 30));
+    } else if (isFloat) {
+      expect('image', d.drawing === 'anchor', d.drawing, 'anchor (habillage)');
+      expect('cote du texte', d.wrapSide === (m.align === 'left' ? 'right' : 'left'), d.wrapSide, m.align === 'left' ? 'right' : 'left');
+      expect('bordDeLImage', d.alignH === m.align && d.relativeH === 'margin', d.alignH + '/' + d.relativeH, m.align + '/margin');
+      const textSide = m.align === 'left' ? 'distR' : 'distL', otherSide = m.align === 'left' ? 'distL' : 'distR';
+      expect('margeCoteTexte', d[textSide] === WRAP_TEXT_SIDE_EMU && d['squareD' + textSide.slice(1)] === WRAP_TEXT_SIDE_EMU, d[textSide], WRAP_TEXT_SIDE_EMU);
+      expect('margeDessous', d.distB === WRAP_BELOW_EMU && d.squareDistB === WRAP_BELOW_EMU, d.distB, WRAP_BELOW_EMU);
+      expect('margeCoteOppose', d[otherSide] === 0, d[otherSide], 0);
+      expect('texteAvantDansLeParagrapheDeLImage', before === '', before.slice(0, 30), '');
+      expect('texteApresDansLeParagrapheDeLImage', after === norm(m.post), after.slice(0, 30), norm(m.post).slice(0, 30));
+      const wantPrev = m.pre ? norm(m.pre) : (m.prev ? norm(m.prev) : null);
+      if (wantPrev !== null) expect('paragrapheAvant', prevText === wantPrev, (prevText || '').slice(0, 30), wantPrev.slice(0, 30));
+      if (m.next) expect('paragrapheApres', nextText === norm(m.next), (nextText || '').slice(0, 30), norm(m.next).slice(0, 30));
+    } else {
+      expect('image', d.drawing === 'inline', d.drawing, 'inline (dans la ligne)');
+      expect('texteAvant', before === norm(m.pre), before.slice(0, 30), norm(m.pre).slice(0, 30));
+      expect('texteApres', after === norm(m.post), after.slice(0, 30), norm(m.post).slice(0, 30));
+      if (m.place === 'alone') {
+        if (m.prev) expect('paragrapheAvant', prevText === norm(m.prev), (prevText || '').slice(0, 30), norm(m.prev).slice(0, 30));
+        if (m.next) expect('paragrapheApres', nextText === norm(m.next), (nextText || '').slice(0, 30), norm(m.next).slice(0, 30));
+      }
+    }
+    if (m.container === 'cell' || m.container === 'column') expect('dansUneCase', host.inCell === true, host.inCell, true);
+    const ed = found.editor.imgs[0];
+    const dw = Math.abs(d.w - ed.w * PT), dh = Math.abs(d.h - ed.h * PT);
+    expect('tailleDeLImage', dw <= TOLERANCE_PT && dh <= TOLERANCE_PT, { l: r2(d.w), h: r2(d.h) }, { l: r2(ed.w * PT), h: r2(ed.h * PT) });
+    return { pass: problems.length === 0, notes: JSON.stringify({ image: d.drawing, alignement: host.jc, avant: before.slice(0, 24), apres: after.slice(0, 24), paragrapheAvant: (prevText || '').slice(0, 24), paragrapheApres: (nextText || '').slice(0, 24), problemes: problems }) };
+  }
+  MATRIX.forEach(c => cases.push({
+    id: 'imgtext_docx_' + c.id,
+    description: 'Word : ' + c.what + ' - dans le fichier, l\'image est où l\'éditeur la met (dans la ligne, seule dans son paragraphe aligné, ou ancrée avec habillage et marges de 9 pt et 6 pt), avec le texte avant et après, à la taille de l\'éditeur',
+    run: async (h) => checkWord(c.meta, await wordVersusEditor(h, c.html)),
+  }));
+  cases.push({
+    id: 'imgtext_docx_block_in_a_centered_paragraph_stays_on_the_left',
+    description: 'Word : une image en bloc dans un paragraphe centré reste à gauche, seule sur sa ligne (un bloc ne suit pas le text-align de son paragraphe), comme dans l\'éditeur ; le texte autour reste centré',
+    run: async (h) => {
+      const found = await wordVersusEditor(h, '<p style="text-align: center">' + BEFORE + ' ' + imgHtml({ wrap: 'block' }) + ' ' + AFTER + '</p>');
+      const ps = found.paragraphs;
+      const hi = ps.findIndex(p => p.segs.some(sg => sg.drawing));
+      const tip = document.querySelector('#editor-container .tiptap');
+      const editorLeft = Math.abs(found.editor.imgs[0].x - (tip.querySelector('p').getBoundingClientRect().left / zoomOf(tip) - tip.getBoundingClientRect().left / zoomOf(tip))) <= 1;
+      const pass = ps.length === 3 && hi === 1 && ps[1].jc === 'left' && ps[0].jc === 'center' && ps[2].jc === 'center' && editorLeft;
+      return { pass, notes: JSON.stringify({ paragraphes: ps.map(p => ({ jc: p.jc, image: p.segs.some(sg => sg.drawing), texte: p.text.slice(0, 20) })), imageAGaucheDansLEditeur: editorLeft }) };
+    },
+  });
 
   return cases;
 })();
