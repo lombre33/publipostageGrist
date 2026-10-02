@@ -5,9 +5,12 @@
 // une page.evaluate ne déclenche ni le survol d'un menu, ni un geste « trusted », ni un vrai sélecteur de fichier : c'est ici qu'on s'assure que
 //   - « + » ouvre son menu au survol et la ligne « Importer un Excel… » (« Import from Excel… ») y suit « Nouvelle grille », dans le panneau, que rien ne recouvre, lisible (F5) ;
 //   - un vrai clic sur la ligne ouvre le vrai sélecteur, réduit aux .xlsx / .xlsm, pour un seul fichier ; « Annuler » dans le sélecteur ne change rien (ni message, ni fenêtre) ;
-//   - le classeur choisi devient une grille visible : bandeaux atteignables, fond du titre, largeurs en pixels d'Excel, et le message de fin tient dans le coin d'état ;
-//   - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier (un fichier illisible ne demande rien) ; « Annuler » garde le
-//     document, « Abandonner » importe ;
+//   - un classeur à plusieurs feuilles ouvre la liste avec recherche des feuilles (choix d'Antoine du 02/10, « Oui, une liste ») sous le « + », dans le panneau, lisible (F5), la recherche
+//     sous le focus ; « det » ne garde que « Détails » ; Échap, ou un clic dans le texte, la referme sans rien importer (le focus revient dans le texte) ; un vrai clic sur une ligne
+//     (ou Entrée) en fait la grille ;
+//   - la feuille choisie devient une grille visible : bandeaux atteignables, fond du titre, largeurs en pixels d'Excel, et le message de fin tient dans le coin d'état ;
+//   - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier ET de la feuille (un fichier illisible ne demande rien) ; « Annuler »
+//     garde le document, « Abandonner » importe ;
 //   - un fichier qui n'est pas un classeur : un message clair, rien ne change.
 // Lancé par run-headless.mjs (groupe Node « gridImportMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-grid-import-mouse.mjs
 // GRID_IMPORT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -147,6 +150,17 @@ const CONTRAST_FN = `(a, b) => {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }`;
 
+// La couleur de fond que l'œil voit derrière un élément : celle du premier ancêtre qui en a une opaque.
+const BACKGROUND_FN = `(el) => {
+  for (let node = el; node; node = node.parentElement) {
+    const m = /^rgba?\\(([^)]+)\\)$/.exec(getComputedStyle(node).backgroundColor);
+    if (!m) continue;
+    const parts = m[1].split(',').map(Number);
+    if (parts.length < 4 || parts[3] >= 0.99) return 'rgb(' + parts[0] + ', ' + parts[1] + ', ' + parts[2] + ')';
+  }
+  return 'rgb(255, 255, 255)';
+}`;
+
 // Un classeur « de tous les jours » fabriqué dans la page par ExcelJS (la bibliothèque que le widget charge lui-même) : une feuille « Facture » (titre orange fusionné sur quatre colonnes,
 // titres en gras soulignés d'un trait, montants en euros, total sur fond vert pâle dont le résultat d'une formule, une colonne d'observations large : la grille fait ~900 px, plus que le contenu d'une
 // page A4, ce qu'une classe a4-preview restée sur l'éditeur ramènerait à la page) et une seconde feuille visible (le message dit alors laquelle est lue).
@@ -239,6 +253,47 @@ async function newDocument(page, discardLabel) {
   await page.waitForTimeout(300);
 }
 
+// La liste des feuilles (js/grid-xlsx-import.js:chooseSheet) telle que la personne la voit : ouverte ou non, ses lignes (atteignables à la souris, lisibles : F5), la zone de recherche et son
+// focus, la place qu'elle prend par rapport au « + » d'où l'on est parti, le panneau qui la contient.
+const sheetList = page => page.evaluate(([contrastSrc, backgroundSrc]) => {
+  const contrast = eval(contrastSrc);
+  const background = eval(backgroundSrc);
+  const panel = document.querySelector('#v2-xlsx-sheet-search .ss-panel');
+  if (!panel || panel.hidden) return null;
+  const r = panel.getBoundingClientRect();
+  const input = panel.querySelector('.ss-input');
+  const plus = document.getElementById('btn-new').getBoundingClientRect();
+  const rows = Array.from(panel.querySelectorAll('.ss-option')).map((row) => {
+    const rr = row.getBoundingClientRect();
+    const top = document.elementFromPoint(rr.left + rr.width / 2, rr.top + rr.height / 2);
+    const name = row.querySelector('.ss-name');
+    return { text: name.textContent, x: rr.left + rr.width / 2, y: rr.top + rr.height / 2, reachable: !!top && row.contains(top), inPanel: rr.left >= 0 && rr.top >= 0 && rr.right <= innerWidth && rr.bottom <= innerHeight, contrast: contrast(getComputedStyle(name).color, background(row)) };
+  });
+  const empty = panel.querySelector('.ss-empty');
+  return {
+    rows, placeholder: input.placeholder, focused: document.activeElement === input, search: input.value, emptyShown: empty && !empty.hidden ? empty.textContent : '',
+    left: r.left, top: r.top, right: r.right, bottom: r.bottom, inPanel: r.width > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+    belowPlus: r.top >= plus.bottom - 1 && r.top <= plus.bottom + 24 && r.left <= plus.left + plus.width / 2 && r.right >= plus.left + plus.width / 2,
+    hostCount: document.querySelectorAll('#v2-xlsx-sheet-search').length,
+  };
+}, [CONTRAST_FN, BACKGROUND_FN]);
+// Attend que la liste soit ouverte (le classeur est lu : ExcelJS se charge à la demande) ; rend son état, ou null.
+async function waitForSheetList(page) {
+  await page.waitForFunction(() => { const panel = document.querySelector('#v2-xlsx-sheet-search .ss-panel'); return !!panel && !panel.hidden; }, null, { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  return sheetList(page);
+}
+// Un vrai clic sur la ligne d'une feuille de la liste.
+async function clickSheetRow(page, name) {
+  const list = await sheetList(page);
+  const row = list && list.rows.find(r => r.text === name);
+  if (!row) return null;
+  await page.mouse.move(row.x - 6, row.y, { steps: 3 });
+  await page.mouse.click(row.x, row.y);
+  return row;
+}
+const focusInText = page => page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tiptap'));
+
 const docText = page => page.evaluate(() => EditorCore.getEditor().state.doc.textContent);
 const gridActive = page => page.evaluate(() => GridEditor.isActive());
 const statusOf = page => page.evaluate(() => {
@@ -248,9 +303,9 @@ const statusOf = page => page.evaluate(() => {
 });
 
 const TEXTS = {
-  fr: { row: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Abandonner', cancel: 'Annuler',
+  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Abandonner', cancel: 'Annuler',
     imported: /^Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
-  en: { row: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Discard', cancel: 'Cancel',
+  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Discard', cancel: 'Cancel',
     imported: /^Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
 };
 
@@ -269,17 +324,9 @@ async function run(theme, lang) {
   const plus = await boxOf(page, '#btn-new');
   await page.mouse.move(plus.x, plus.y, { steps: 3 });
   await page.waitForTimeout(350);
-  const rows = await page.evaluate((contrastSrc) => {
+  const rows = await page.evaluate(([contrastSrc, backgroundSrc]) => {
     const contrast = eval(contrastSrc);
-    const effectiveBackground = (el) => {
-      for (let node = el; node; node = node.parentElement) {
-        const m = /^rgba?\(([^)]+)\)$/.exec(getComputedStyle(node).backgroundColor);
-        if (!m) continue;
-        const parts = m[1].split(',').map(Number);
-        if (parts.length < 4 || parts[3] >= 0.99) return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;
-      }
-      return 'rgb(255, 255, 255)';
-    };
+    const effectiveBackground = eval(backgroundSrc);
     return Array.from(document.querySelectorAll('#v2-new-template-flyout .v2-hover-row')).map((el) => {
       const r = el.getBoundingClientRect();
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
@@ -287,7 +334,7 @@ async function run(theme, lang) {
         inViewport: r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
         reachable: !!top && el.contains(top), clipped: el.scrollWidth > el.clientWidth + 1, contrast: contrast(getComputedStyle(el).color, effectiveBackground(el)) };
     });
-  }, CONTRAST_FN);
+  }, [CONTRAST_FN, BACKGROUND_FN]);
   const importRow = rows.find(r => r.id === 'v2-btn-import-xlsx');
   const gridRow = rows.find(r => r.id === 'v2-btn-new-grid');
   check(`${label} - le menu « + » montre « ${T.row} » juste après la nouvelle grille, dans le panneau, sans rien par-dessus`,
@@ -309,11 +356,60 @@ async function run(theme, lang) {
     check(`${label} - « Annuler » dans le sélecteur : ni grille, ni message d'erreur, ni fenêtre`, !after.grid && !after.status.error && !after.dialog, after);
   }
 
-  // 3) Le classeur choisi devient une grille, dans le panneau.
+  // 3) Le classeur a deux feuilles visibles : la liste des feuilles s'ouvre sous le « + ». Échap la referme sans rien importer, un clic dans le texte aussi.
+  chooser = await openChooser(page);
+  let list = null;
+  if (!chooser) check(`${label} - le sélecteur s'ouvre pour l'import (liste des feuilles)`, false);
+  else {
+    await chooser.setFiles(invoicePath);
+    list = await waitForSheetList(page);
+  }
+  check(`${label} - le classeur a deux feuilles visibles : la liste des feuilles s'ouvre une fois le classeur lu, « Facture » puis « Détails », et rien n'est encore importé`,
+    !!list && list.rows.map(r => r.text).join('|') === 'Facture|Détails' && !(await gridActive(page)), { list });
+  if (list) {
+    check(`${label} - la liste s'ouvre sous le « + » d'où l'on est parti, entière dans le panneau, une seule dans la page`, list.belowPlus && list.inPanel && list.hostCount === 1, { left: list.left, top: list.top, right: list.right, bottom: list.bottom, belowPlus: list.belowPlus, inPanel: list.inPanel, hosts: list.hostCount });
+    check(`${label} - chaque ligne est atteignable à la souris (rien ne la recouvre), dans le panneau, et lisible (contraste d'au moins 4,5 : 1)`, list.rows.every(r => r.reachable && r.inPanel && r.contrast >= 4.5), list.rows);
+    check(`${label} - la zone de recherche a le focus et dit « ${T.placeholder} »`, list.focused && list.placeholder === T.placeholder, { focused: list.focused, placeholder: list.placeholder });
+    const whileOpen = await statusOf(page);
+    check(`${label} - pendant la liste, le coin d'état n'annonce plus la lecture du classeur (elle est finie)`, !/Lecture|Reading/.test(whileOpen.text), whileOpen);
+    await snap('list');
+    await page.keyboard.type('det');
+    await page.waitForTimeout(250);
+    const typed = await sheetList(page);
+    check(`${label} - « det » tapé au vrai clavier ne garde que « Détails »`, !!typed && typed.rows.map(r => r.text).join('|') === 'Détails' && typed.search === 'det', typed && { rows: typed.rows.map(r => r.text), search: typed.search });
+    await snap('list-search');
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('zzz');
+    await page.waitForTimeout(250);
+    const none = await sheetList(page);
+    check(`${label} - une recherche sans résultat dit « ${T.noMatch} »`, !!none && none.rows.length === 0 && none.emptyShown === T.noMatch, none && { rows: none.rows.length, empty: none.emptyShown });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    const closed = { list: await sheetList(page), grid: await gridActive(page), status: await statusOf(page), dialog: (await dialogState(page)).shown, inText: await focusInText(page), hosts: await page.evaluate(() => document.querySelectorAll('#v2-xlsx-sheet-search').length) };
+    check(`${label} - Échap referme la liste sans rien importer : ni grille ni question, le coin d'état redit l'état du modèle, le focus revient dans le texte, rien ne reste dans la page`,
+      closed.list === null && !closed.grid && !closed.dialog && !/Lecture|Reading|import/i.test(closed.status.text) && closed.inText && closed.hosts === 0, closed);
+  }
+  chooser = await openChooser(page);
+  if (!chooser) check(`${label} - le sélecteur s'ouvre pour l'import (clic ailleurs)`, false);
+  else {
+    await chooser.setFiles(invoicePath);
+    list = await waitForSheetList(page);
+    const text = await boxOf(page, '.tiptap p');
+    await page.mouse.move(text.x, text.y, { steps: 3 });
+    await page.mouse.click(text.x, text.y);
+    await page.waitForTimeout(400);
+    const away = { list: await sheetList(page), grid: await gridActive(page), status: await statusOf(page), dialog: (await dialogState(page)).shown, inText: await focusInText(page), hosts: await page.evaluate(() => document.querySelectorAll('#v2-xlsx-sheet-search').length) };
+    check(`${label} - un clic dans le texte referme la liste sans rien importer, le focus est où l'on a cliqué`, !!list && away.list === null && !away.grid && !away.dialog && !/Lecture|Reading|import/i.test(away.status.text) && away.inText && away.hosts === 0, away);
+  }
+
+  // 3 bis) Le classeur choisi puis la feuille « Facture » au vrai clic : elle devient une grille, dans le panneau.
   chooser = await openChooser(page);
   if (!chooser) check(`${label} - le sélecteur s'ouvre pour l'import`, false);
   else {
     await chooser.setFiles(invoicePath);
+    await waitForSheetList(page);
+    const picked = await clickSheetRow(page, 'Facture');
+    check(`${label} - un vrai clic sur « Facture » dans la liste`, !!picked && picked.reachable && picked.inPanel, picked);
     await page.waitForFunction(() => GridEditor.isActive() && document.querySelectorAll('.v2-grid-colhead').length > 0, null, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(600);
   }
@@ -370,16 +466,20 @@ async function run(theme, lang) {
     await snap('unreadable');
   }
 
-  // 5) Un document modifié : la confirmation vient après le choix du fichier ; « Annuler » garde le document, « Abandonner » importe.
+  // 5) Un document modifié : la liste des feuilles d'abord, la confirmation après le choix de la feuille ; « Annuler » garde le document, « Abandonner » importe.
   chooser = await openChooser(page);
   if (!chooser) check(`${label} - le sélecteur s'ouvre (document modifié)`, false);
   else {
     const before = await dialogState(page);
     await chooser.setFiles(invoicePath);
+    const opened = await waitForSheetList(page);
+    const whileList = await dialogState(page);
+    check(`${label} - document modifié : la liste des feuilles s'ouvre d'abord, la fenêtre « ${T.unsaved} » n'est pas encore posée`, !!opened && !before.shown && !whileList.shown, { opened: !!opened, before, whileList });
+    await clickSheetRow(page, 'Facture');
     await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(300);
     const asked = await dialogState(page);
-    check(`${label} - le classeur choisi puis lu, la fenêtre « ${T.unsaved} » s'ouvre (pas avant le choix du fichier)`, !before.shown && asked.shown && asked.title === T.unsaved && asked.buttons.includes(T.discard) && asked.buttons.includes(T.cancel), { before, asked });
+    check(`${label} - la feuille choisie puis lue, la fenêtre « ${T.unsaved} » s'ouvre (pas avant le choix du fichier ni de la feuille)`, !before.shown && asked.shown && asked.title === T.unsaved && asked.buttons.includes(T.discard) && asked.buttons.includes(T.cancel), { before, asked });
     await snap('unsaved');
     const cancelled = await clickDialogButton(page, T.cancel);
     check(`${label} - « ${T.cancel} » est atteignable à la souris dans le panneau`, !!cancelled && cancelled.reachable && cancelled.inViewport, cancelled);
@@ -390,6 +490,10 @@ async function run(theme, lang) {
   if (!chooser) check(`${label} - le sélecteur s'ouvre (deuxième essai)`, false);
   else {
     await chooser.setFiles(invoicePath);
+    await waitForSheetList(page);
+    await page.keyboard.type('fact'); // au clavier cette fois : la recherche puis Entrée prend la première ligne trouvée
+    await page.waitForTimeout(250);
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(300);
     const discard = await clickDialogButton(page, T.discard);

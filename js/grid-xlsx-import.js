@@ -3,14 +3,17 @@
 // cases fusionnées, largeur des colonnes et hauteur des lignes, gras / italique / souligné / barré, couleur et taille du texte, fond, bordures (couleur), alignements horizontal et vertical, liens,
 // retours à la ligne dans une case. Même modèle de cases que le collage d'un tableau de tableur (js/grid-table.js) : le classeur sort par le même `GridTable.toHtml`, un tableau collé et un tableau
 // importé ne peuvent pas diverger.
-//   GridXlsxImport.importFile(file, { lang })            -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>   (rejette avec une Error dont `code` dit pourquoi)
-//   GridXlsxImport.fromArrayBuffer(buffer, { lang })     -> idem, depuis les octets du fichier
+//   GridXlsxImport.openFile(file)                         -> Promise<{ sheets: [{ index, name }], build(index, { lang }) }>   le classeur lu UNE fois : ses feuilles visibles, dans l'ordre d'Excel, et la grille de celle qu'on choisit
+//   GridXlsxImport.chooseSheet(sheets, { anchor })        -> Promise<index | null>   la liste avec recherche des feuilles (js/search-select.js), sous le rectangle que rend `anchor()` ; null : Échap ou un clic ailleurs
+//   GridXlsxImport.importFile(file, { lang, sheetIndex? }) -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>   (rejette avec une Error dont `code` dit pourquoi)
+//   GridXlsxImport.fromArrayBuffer(buffer, { lang, sheetIndex? })  -> idem, depuis les octets du fichier
 //   GridXlsxImport.buildModel(workbook, { lang, sheetIndex? })  -> idem, depuis un classeur ExcelJS déjà lu (les tests)
 //   GridXlsxImport.chooseFile(onFile)                     -> ouvre le sélecteur de fichier ; `onFile(file)` n'est appelé que si un fichier est choisi
 // Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un classeur), 'empty' (aucune case utile),
 // 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable, rien n'est coupé en silence).
-// Les lignes et colonnes masquées ne sont pas importées. Pas importés : formules (le résultat calculé est écrit), images, graphiques, commentaires, mise en forme conditionnelle, police, retrait,
-// orientation du texte, autres feuilles. Dépend de GridTable (js/grid-table.js), TableBorders (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS).
+// Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille (choix d'Antoine du 02/10, « Oui, une liste ») :
+// une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images, graphiques, commentaires, mise en forme conditionnelle, police, retrait,
+// orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS).
 const GridXlsxImport = (function () {
   const MAX_ROWS = 1000;
   const MAX_COLS = 100;
@@ -315,18 +318,73 @@ const GridXlsxImport = (function () {
 
   // --- Le fichier --------------------------------------------------------------------------------------------------------------------------------------------
 
-  async function fromArrayBuffer(buffer, options) {
+  // Les octets d'un classeur, lus par ExcelJS (chargé à la demande) : le classeur, ou l'erreur d'une personne qui a choisi un mauvais fichier.
+  async function readWorkbook(buffer) {
     const bytes = new Uint8Array(buffer);
     // Un .xls (ou un classeur protégé par un mot de passe) est un conteneur OLE (D0 CF 11 E0), pas un zip (50 4B).
     if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) throw fail('oldFormat', 'Format .xls ou classeur protégé.');
     await XlsxExport.ensureExcelLibLoaded();
     const workbook = new ExcelJS.Workbook();
     try { await workbook.xlsx.load(buffer); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
-    return buildModel(workbook, options);
+    return workbook;
+  }
+
+  async function fromArrayBuffer(buffer, options) {
+    return buildModel(await readWorkbook(buffer), options);
   }
 
   async function importFile(file, options) {
     return fromArrayBuffer(await file.arrayBuffer(), options);
+  }
+
+  // Le classeur lu une seule fois, pour qu'on puisse choisir la feuille avant d'en faire la grille : les feuilles VISIBLES dans l'ordre d'Excel (`index` : leur rang, celui que `build` attend) et
+  // `build(index, { lang })`, qui rend ce que rend importFile pour cette feuille. Un classeur dont toutes les feuilles sont masquées n'en propose qu'une, la première (comme avant).
+  async function openFile(file) {
+    const workbook = await readWorkbook(await file.arrayBuffer());
+    const visible = visibleSheets(workbook);
+    const shown = visible.length ? visible : workbook.worksheets.slice(0, 1);
+    if (!shown.length) throw fail('unreadable', 'Le classeur ne contient aucune feuille.');
+    return {
+      sheets: shown.map((sheet, index) => ({ index, name: sheet.name })),
+      build: (index, options) => buildModel(workbook, Object.assign({}, options, { sheetIndex: index })),
+    };
+  }
+
+  // La feuille à importer quand le classeur en a plusieurs : la liste avec recherche de toutes les listes du widget (js/search-select.js), sous le rectangle que rend `anchor()`.
+  // Rend le rang de la feuille choisie, ou null quand on referme la liste sans choisir (Échap, un clic ailleurs) : rien n'est alors importé. Si la liste ne peut pas s'ouvrir, la première
+  // feuille est prise, comme avant la liste (le message de fin dit laquelle).
+  function chooseSheet(sheets, options) {
+    return new Promise((resolve) => {
+      const host = document.createElement('div');
+      host.id = 'v2-xlsx-sheet-search';
+      const select = document.createElement('select');
+      sheets.forEach(({ index, name }) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = name;
+        select.appendChild(option);
+      });
+      host.appendChild(select);
+      document.body.appendChild(host);
+      select.selectedIndex = -1; // rien de choisi au départ : même la première ligne déclenche `change`
+      let search = null;
+      // Défait après la fin de l'évènement en cours : un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte.
+      const cleanup = () => { try { if (search) search.destroy(); } catch (e) { /* déjà défait */ } host.remove(); };
+      try {
+        search = SearchSelect.attachSheets(select, {
+          popup: true,
+          anchor: options && options.anchor,
+          // Un choix ferme la liste AVANT d'envoyer `change` : la fermeture sans choix attend la fin de l'évènement, pour que le choix passe en premier (une promesse ne se tient qu'une fois).
+          onClose: () => setTimeout(() => { cleanup(); resolve(null); }, 0),
+        });
+        select.addEventListener('change', () => resolve(Number(select.value)));
+        search.open();
+      } catch (e) {
+        console.warn('[GridXlsxImport] liste des feuilles indisponible', e);
+        cleanup();
+        resolve(0);
+      }
+    });
   }
 
   // Le sélecteur de fichier du navigateur, appelé dans le geste de la personne (le clic sur la ligne du menu) : l'élément n'existe que le temps du choix.
@@ -341,5 +399,5 @@ const GridXlsxImport = (function () {
     input.click();
   }
 
-  return { importFile, fromArrayBuffer, buildModel, chooseFile, themePalette, applyTint, colorHex, MAX_ROWS, MAX_COLS, MAX_CELLS };
+  return { openFile, chooseSheet, importFile, fromArrayBuffer, buildModel, chooseFile, themePalette, applyTint, colorHex, MAX_ROWS, MAX_COLS, MAX_CELLS };
 })();

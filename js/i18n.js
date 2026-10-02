@@ -686,6 +686,7 @@ const I18n = (function () {
     'status.xlsxImportOldFormat': { fr: 'Ce classeur est au format .xls ou protégé par un mot de passe : enregistrez-le en .xlsx, sans mot de passe, pour l’importer.', en: 'This workbook is in the .xls format or password-protected: save it as .xlsx without a password to import it.' },
     'status.xlsxImportUnreadable': { fr: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', en: 'This file is not a readable Excel (.xlsx) workbook.' },
     'status.xlsxImportEmpty': { fr: 'Ce classeur ne contient aucune case à importer.', en: 'This workbook has no cells to import.' },
+    'status.xlsxImportEmptySheet': { fr: 'La feuille « {sheet} » ne contient aucune case à importer.', en: 'The sheet “{sheet}” has no cells to import.' },
     'status.xlsxImportTooBig': { fr: 'Cette feuille est trop grande pour une grille : {rows} {rows|ligne|lignes} et {cols} {cols|colonne|colonnes} (au plus {maxRows} lignes, {maxCols} colonnes et {maxCells} cases).', en: 'This sheet is too big for a grid: {rows} {rows|row|rows} and {cols} {cols|column|columns} (at most {maxRows} rows, {maxCols} columns and {maxCells} cells).' },
     'status.batchExportProgressXlsx': { fr: 'Export Excel en lot : {current}/{total}...', en: 'Batch Excel export: {current}/{total}...' },
     'status.exportErrorXlsx': { fr: 'Échec de l’export : aucun classeur Excel généré.', en: 'Export failed: no Excel workbook generated.' },
@@ -789,14 +790,16 @@ const I18n = (function () {
     'searchSelect.count': { fr: '{count} {count|résultat|résultats}', en: '{count} {count|result|results}' },
     // Liste de plus de 500 résultats : seuls les premiers sont posés, cette ligne dit combien d'autres restent.
     'searchSelect.more': { fr: 'Encore {count} {count|résultat|résultats} : précisez la recherche.', en: '{count} more {count|result|results}: refine your search.' },
-    // Même liste avec recherche pour une TABLE (Réglages > Accès), un MODÈLE (macro-modèle) et une VALEUR possible d'une colonne (champ Valeur d'une règle) :
-    // SearchSelect.attachTables / attachTemplates / attachValues.
+    // Même liste avec recherche pour une TABLE (Réglages > Accès), un MODÈLE (macro-modèle), une VALEUR possible d'une colonne (champ Valeur d'une règle) et une FEUILLE
+    // d'un classeur Excel (import d'une grille) : SearchSelect.attachTables / attachTemplates / attachValues / attachSheets.
     'searchSelect.searchTables': { fr: 'Rechercher une table…', en: 'Search for a table…' },
     'searchSelect.noTableMatch': { fr: 'Aucune table ne correspond.', en: 'No table matches.' },
     'searchSelect.searchTemplates': { fr: 'Rechercher un modèle…', en: 'Search for a template…' },
     'searchSelect.noTemplateMatch': { fr: 'Aucun modèle ne correspond.', en: 'No template matches.' },
     'searchSelect.searchValues': { fr: 'Rechercher une valeur…', en: 'Search for a value…' },
     'searchSelect.noValueMatch': { fr: 'Aucune valeur ne correspond.', en: 'No value matches.' },
+    'searchSelect.searchSheets': { fr: 'Rechercher une feuille…', en: 'Search for a sheet…' },
+    'searchSelect.noSheetMatch': { fr: 'Aucune feuille ne correspond.', en: 'No sheet matches.' },
     'linkConfig.describeSingleton': { fr: 'une seule ligne (paramètres)', en: 'a single row (settings)' },
     'linkConfig.describeRowId': { fr: 'identifiant de ligne', en: 'row ID' },
     'linkConfig.previewChooseColumns': { fr: 'Choisissez les deux colonnes pour voir un aperçu.', en: 'Choose both columns to see a preview.' },

@@ -15,7 +15,8 @@
 //    ne la rende pas inatteignable.
 //
 // Réutilisable sans copier-coller pour toute autre liste : SearchSelect.attach(select, opts) (attachColumns pour un choix de COLONNE, attachTables pour une
-// TABLE, attachTemplates pour un MODÈLE, attachValues pour une VALEUR possible d'une colonne : mêmes textes partout pour chaque sorte de liste) puis, à la
+// TABLE, attachTemplates pour un MODÈLE, attachValues pour une VALEUR possible d'une colonne, attachSheets pour une FEUILLE d'un classeur Excel : mêmes textes partout
+// pour chaque sorte de liste) puis, à la
 // fermeture de la fenêtre, .destroy() (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif, inchangé.
 // Options : labelledBy, searchPlaceholder et emptyText (un texte, ou une fonction qui le relit à chaque ouverture : la langue de l'interface peut changer
 // pendant que la liste reste posée), placeholder ; `inline` (champ d'une ligne de règle : même hauteur et même corps que ses voisins, largeur qui suit la
@@ -405,6 +406,8 @@ const SearchSelect = (function () {
   function attachTemplates(select, opts) { return attachKind(select, opts, 'searchSelect.searchTemplates', 'searchSelect.noTemplateMatch'); }
   // Liste de VALEURS possibles d'une colonne (choix d'une colonne Choix, valeurs affichées d'une colonne Référence : champ Valeur d'une règle).
   function attachValues(select, opts) { return attachKind(select, opts, 'searchSelect.searchValues', 'searchSelect.noValueMatch'); }
+  // Liste de FEUILLES d'un classeur Excel (import d'une grille : js/grid-xlsx-import.js).
+  function attachSheets(select, opts) { return attachKind(select, opts, 'searchSelect.searchSheets', 'searchSelect.noSheetMatch'); }
   // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ; sans effet
   // sur un <select> que le composant n'a pas pris (liste native de repli) - pour un code qui ne garde pas le contrôleur, comme le grisage d'un champ Valeur.
   function sync(select) {
@@ -412,5 +415,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, sync, filterItems, readItems, normalize };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, sync, filterItems, readItems, normalize };
 })();

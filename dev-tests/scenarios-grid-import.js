@@ -2,7 +2,8 @@
 // Excel pour le modèle Grille »). Le contraire de l'export (js/xlsx-export.js) : la première feuille visible d'un .xlsx devient une NOUVELLE grille, case par case. Les classeurs ci-dessous sont
 // fabriqués ICI, octet par octet, « comme Excel les écrit » (feuilles, chaînes partagées, styles, thème, fusions, liens : un .xlsx est un zip d'OOXML) : le sandbox n'a pas d'Excel, et ExcelJS
 // n'écrit pas un trait que d'un côté ni un style par case comme le fait Excel. Les cas lisent le résultat dans le VRAI éditeur (une grille chargée), pas seulement le modèle, et le geste complet
-// passe par la vraie ligne du menu « + » : le sélecteur de fichier du navigateur n'existe pas ici, le scénario répond comme lui (fichier choisi + évènement `change`, ou `cancel`).
+// passe par la vraie ligne du menu « + » : le sélecteur de fichier du navigateur n'existe pas ici, le scénario répond comme lui (fichier choisi + évènement `change`, ou `cancel`) ; et, pour un
+// classeur qui a plusieurs feuilles visibles, la VRAIE liste avec recherche des feuilles (js/search-select.js) : le scénario y fait ce que fait la personne (taper, cliquer une ligne, Entrée, Échap).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -211,9 +212,29 @@
     return false;
   }
 
+  // La liste avec recherche des feuilles (js/grid-xlsx-import.js:chooseSheet), telle que la personne la voit : ses lignes dans l'ordre, la zone de recherche, ce qu'elle dit quand rien ne correspond.
+  const sheetPanel = () => { const panel = document.querySelector('#v2-xlsx-sheet-search .ss-panel'); return panel && !panel.hidden ? panel : null; };
+  const sheetList = () => {
+    const panel = sheetPanel();
+    if (!panel) return null;
+    const input = panel.querySelector('.ss-input');
+    const rect = panel.getBoundingClientRect();
+    const empty = panel.querySelector('.ss-empty');
+    return {
+      rows: Array.from(panel.querySelectorAll('.ss-option')).map(row => row.querySelector('.ss-name').textContent),
+      placeholder: input.placeholder, focused: document.activeElement === input, search: input.value, emptyShown: empty && !empty.hidden ? empty.textContent : '',
+      inPanel: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight && rect.width > 0,
+    };
+  };
+  const typeInList = (text) => { const input = sheetPanel().querySelector('.ss-input'); input.value = text; input.dispatchEvent(new Event('input', { bubbles: true })); };
+  const keyInList = (key) => sheetPanel().querySelector('.ss-input').dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  const clickSheet = (name) => { const row = Array.from(sheetPanel().querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === name); row.click(); };
+
   // Le geste complet par la vraie ligne du menu « + » : un clic crée un <input type=file> et le clique ; ici le sélecteur du navigateur n'existe pas, le scénario répond comme lui. `bytes` null :
   // « Annuler ». Rend ce que la personne voit : le sélecteur s'est-il ouvert (et que demandait-il), le texte du coin d'état à la fin, s'il est en erreur.
-  async function importThroughMenu(h, bytes, name) {
+  // `onList(list)` : ce que fait la personne de la liste des feuilles quand le classeur en a plusieurs (rien : la liste n'est pas attendue ; si elle s'ouvre, le geste s'arrête là) ; elle rend
+  // ce qu'elle a vu (`out.seen`), avec `cancel: true` quand elle referme la liste sans choisir.
+  async function importThroughMenu(h, bytes, name, onList) {
     const original = HTMLInputElement.prototype.click;
     let input = null;
     HTMLInputElement.prototype.click = function () { if (this.type === 'file') { input = this; return undefined; } return original.apply(this, arguments); };
@@ -223,19 +244,30 @@
       await h.clickButton('v2-btn-import-xlsx');
       if (!input) return { opened: false, status: statusText() };
       const asked = { accept: input.accept, multiple: input.multiple, attached: input.isConnected };
+      let list = null;
+      let seen = null;
       if (bytes) {
         const dt = new DataTransfer();
         dt.items.add(new File([bytes], name || 'classeur.xlsx', { type: XLSX_MIME }));
         input.files = dt.files;
         input.dispatchEvent(new Event('change'));
-        // « Lecture du classeur Excel… » puis le résultat : un message nouveau qui n'est plus celui de la lecture.
-        await until(() => { const t = statusText(); return t !== '' && !/^(Lecture du classeur|Reading the Excel)/.test(t); }, 30000);
+        // « Lecture du classeur Excel… » puis la liste des feuilles ou le résultat : un message nouveau qui n'est plus celui de la lecture.
+        const readDone = () => { const t = statusText(); return t !== '' && !/^(Lecture du classeur|Reading the Excel)/.test(t); };
+        await until(() => !!sheetPanel() || readDone(), 30000);
+        if (sheetPanel()) {
+          list = sheetList();
+          if (onList) {
+            seen = await onList(list);
+            await until(() => !document.getElementById('v2-xlsx-sheet-search'), 5000); // la liste se défait après la fin de l'évènement en cours
+            if (!(seen && seen.cancel)) await until(readDone, 30000);
+          }
+        }
         await sleep(200);
       } else {
         input.dispatchEvent(new Event('cancel'));
         await sleep(100);
       }
-      return Object.assign(asked, { opened: true, status: statusText(), error: document.getElementById('status-msg').classList.contains('error-msg'), removed: !input.isConnected });
+      return Object.assign(asked, { opened: true, list, seen, status: statusText(), error: document.getElementById('status-msg').classList.contains('error-msg'), removed: !input.isConnected });
     } finally { HTMLInputElement.prototype.click = original; }
   }
   // Remplace la réponse de la fenêtre « Enregistrer / Abandonner / Annuler » le temps de `fn` ; rend les demandes reçues.
@@ -248,15 +280,15 @@
   }
   // Une grille encore active (le cas d'avant) ne se quitte pas par resetEditor() : son garde-fou refuserait le paragraphe ; « Nouveau document » la quitte comme la personne.
   async function settle(h) { if (GridEditor.isActive()) await leaveGrid(h); }
-  // La grille importée par le geste complet : un scénario qui veut seulement lire son résultat (il appelle `settle(h)` en sortant).
-  async function importAndRead(h, spec, lang) {
+  // La grille importée par le geste complet : un scénario qui veut seulement lire son résultat (il appelle `settle(h)` en sortant). `onList` : voir importThroughMenu.
+  async function importAndRead(h, spec, lang, onList) {
     const bytes = await buildXlsx(spec);
     await settle(h);
     await h.resetEditor();
     const before = I18n.getLang();
     if (lang) I18n.setLang(lang);
     try {
-      const out = await importThroughMenu(h, bytes);
+      const out = await importThroughMenu(h, bytes, null, onList);
       return Object.assign(out, { grid: GridEditor.isActive() });
     } finally { if (lang) I18n.setLang(before); }
   }
@@ -364,7 +396,7 @@
 
   cases.push({
     id: 'gridImport_hidden_sheets_rows_and_columns_are_left_out_and_the_status_names_the_sheet',
-    description: 'La première feuille VISIBLE est lue (une feuille masquée au début ne compte pas) ; une ligne et une colonne masquées ne viennent pas, une fusion qui les enjambe se réduit aux cases visibles ; avec plusieurs feuilles le coin d\'état donne le nom de la feuille lue, son rang et dit que les autres ne le sont pas.',
+    description: 'Une feuille masquée n\'est pas proposée (la liste ne montre que « Devis » et « Autre ») ; la feuille choisie est lue : une ligne et une colonne masquées ne viennent pas, une fusion qui les enjambe se réduit aux cases visibles ; avec plusieurs feuilles le coin d\'état donne le nom de la feuille lue, son rang parmi les feuilles proposées et dit que les autres ne le sont pas.',
     run: async (h) => {
       const spec = {
         sheets: [
@@ -374,16 +406,17 @@
         ],
       };
       try {
-        const out = await importAndRead(h, spec);
+        const out = await importAndRead(h, spec, null, async () => { clickSheet('Devis'); return {}; });
         const text = doc().textContent;
         const checks = {
+          offered: out.list && out.list.rows.join('|') === 'Devis|Autre',
           sheet: out.opened && out.grid && !out.error && /Devis/.test(out.status) && /1 sur 2/.test(out.status) && /Les autres ne le sont pas/.test(out.status),
           shape: shape() === '2,3',
           merged: cellAt(0, 0).text === 'a' && cellAt(0, 0).colspan === 2 && cellAt(0, 2).text === 'd',
           row3: [cellAt(1, 0).text, cellAt(1, 1).text, cellAt(1, 2).text].join('') === 'ikl',
           onlyVisible: text.replace(/\s/g, '') === 'adikl',
         };
-        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, status: out.status, text, shape: shape() }) };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, status: out.status, list: out.list, text, shape: shape() }) };
       } finally { await settle(h); }
     },
   });
@@ -666,6 +699,273 @@
       Editor.setHTML('<p></p>');
       const checks = { shape: before.shape === after.shape, widths: before.widths === after.widths, heights: before.heights === after.heights, cells: diffs.length === 0 };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, before, after, diffs }) };
+    },
+  });
+
+  // --- 7) Plusieurs feuilles : la liste des feuilles --------------------------------------------------------------------------------------------------------------------------------
+  // Choix d'Antoine du 02/10 (« Choisir la feuille à importer quand un classeur Excel en a plusieurs ? » - « Oui, une liste ») : un classeur qui a plusieurs feuilles VISIBLES demande laquelle
+  // devient la grille, par la liste avec recherche de toutes les listes du widget ; une seule feuille visible s'importe sans rien demander, comme avant.
+
+  // Trois feuilles visibles (une masquée au milieu), chacune avec son texte : la liste propose les visibles, dans l'ordre d'Excel.
+  const THREE = () => ({
+    sheets: [
+      { name: 'Devis', rows: [['Devis Alpha', 'HT'], ['Vis', 12]] },
+      { name: 'Brouillon', state: 'hidden', rows: [['secret']] },
+      { name: 'Détails des lignes', rows: [['Détails'], ['ligne 1'], ['ligne 2']] },
+      { name: 'Récapitulatif annuel', rows: [['Récap']] },
+    ],
+  });
+
+  cases.push({
+    id: 'gridImport_several_visible_sheets_open_a_searchable_list_and_the_chosen_one_becomes_the_grid',
+    description: 'Un classeur qui a plusieurs feuilles visibles ouvre, une fois lu, la liste avec recherche des feuilles : leurs noms dans l\'ordre d\'Excel, sans la feuille masquée, la zone de recherche prête sous le focus (« Rechercher une feuille… », « Search for a sheet… » en anglais), dans le panneau ; rien n\'est encore importé et le coin d\'état n\'annonce plus une lecture (elle est finie) ; « detail » ne garde que « Détails des lignes » (accents et casse ignorés), « zzz » dit « Aucune feuille ne correspond. » ; un clic sur une ligne (ou la recherche puis Entrée, en anglais) en fait la grille, et le coin d\'état dit laquelle et son rang parmi les feuilles proposées ; la liste ne laisse rien dans la page.',
+    run: async (h) => {
+      const bytes = await buildXlsx(THREE());
+      await settle(h);
+      await h.resetEditor();
+      Editor.setHTML('<p>Mon document</p>');
+      await sleep(150);
+      const seen = {};
+      await withChoose('discard', async () => {
+        seen.fr = await importThroughMenu(h, bytes, null, async (first) => {
+          const out = { first, statusWhileOpen: statusText(), gridWhileOpen: GridEditor.isActive(), textWhileOpen: doc().textContent };
+          typeInList('DETAIL');
+          await sleep(100);
+          out.detail = sheetList();
+          typeInList('zzz');
+          await sleep(100);
+          out.zzz = sheetList();
+          typeInList('');
+          await sleep(100);
+          out.cleared = sheetList();
+          clickSheet('Détails des lignes');
+          return out;
+        });
+      });
+      const frGrid = { active: GridEditor.isActive(), shape: shape(), first: GridEditor.isActive() && cellAt(0, 0).text, last: GridEditor.isActive() && cellAt(2, 0).text };
+      const leftFr = !!document.getElementById('v2-xlsx-sheet-search');
+      await settle(h);
+      await h.resetEditor();
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      try {
+        seen.en = await importThroughMenu(h, bytes, null, async (first) => {
+          const out = { first };
+          typeInList('recap');
+          await sleep(100);
+          out.recap = sheetList();
+          typeInList('zzz');
+          await sleep(100);
+          out.zzz = sheetList();
+          typeInList('recap');
+          await sleep(100);
+          keyInList('Enter');
+          return out;
+        });
+      } finally { I18n.setLang(before); }
+      const enGrid = { active: GridEditor.isActive(), text: GridEditor.isActive() && cellAt(0, 0).text };
+      const leftEn = !!document.getElementById('v2-xlsx-sheet-search');
+      await settle(h);
+      const fr = seen.fr, en = seen.en;
+      const checks = {
+        namesInOrder: fr.list.rows.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel',
+        searchReady: fr.list.focused && fr.list.placeholder === 'Rechercher une feuille…' && fr.list.search === '' && fr.list.inPanel,
+        nothingYet: fr.seen.gridWhileOpen === false && fr.seen.textWhileOpen === 'Mon document',
+        statusWhileOpen: fr.seen.statusWhileOpen === '',
+        accentsAndCaseIgnored: fr.seen.detail.rows.join('|') === 'Détails des lignes' && fr.seen.detail.search === 'DETAIL',
+        noMatch: fr.seen.zzz.rows.length === 0 && fr.seen.zzz.emptyShown === 'Aucune feuille ne correspond.',
+        clearedAgain: fr.seen.cleared.rows.length === 3,
+        chosenBecomesTheGrid: frGrid.active && frGrid.shape === '1,1,1' && frGrid.first === 'Détails' && frGrid.last === 'ligne 2',
+        statusNamesIt: !fr.error && /^Feuille « Détails des lignes » \(2 sur 3\) importée : 3 lignes, 1 colonne\. Les autres ne le sont pas\.$/.test(fr.status),
+        leftNothing: !leftFr && !leftEn,
+        english: en.list.placeholder === 'Search for a sheet…' && en.seen.recap.rows.join('|') === 'Récapitulatif annuel' && en.seen.zzz.emptyShown === 'No sheet matches.',
+        enterPicks: enGrid.active && enGrid.text === 'Récap' && !en.error && /^Sheet “Récapitulatif annuel” \(3 of 3\) imported: 1 row, 1 column\. The others are not\.$/.test(en.status),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: { list: fr.list, seen: fr.seen, status: fr.status }, en: { list: en.list, status: en.status }, frGrid, enGrid }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_closing_the_sheet_list_without_choosing_changes_nothing_and_asks_nothing',
+    description: 'Échap, ou un clic ailleurs, referme la liste des feuilles sans rien importer : le document (même modifié et pas enregistré) reste tel quel, aucune grille, aucune question « Enregistrer / Abandonner / Annuler », le coin d\'état redit l\'état du modèle (ni « Lecture du classeur… » ni une erreur d\'import), la liste ne laisse rien dans la page ; après Échap le focus est dans le texte du document, après un clic ailleurs il reste où la personne a cliqué.',
+    run: async (h) => {
+      const bytes = await buildXlsx(THREE());
+      await settle(h);
+      await h.resetEditor();
+      Editor.setHTML('<p>Mon document</p>');
+      await sleep(150);
+      ed().chain().focus('end').insertContent(' modifié').run(); // une modification attend : fermer la liste ne doit pas poser la question
+      await sleep(300);
+      const baseline = { text: statusText(), error: document.getElementById('status-msg').classList.contains('error-msg') };
+      const htmlBefore = Editor.getHTML();
+      const probe = document.createElement('button'); // « ailleurs » : un champ où la personne vient de cliquer
+      probe.textContent = 'ailleurs';
+      document.body.appendChild(probe);
+      const results = {};
+      let asked;
+      try {
+        asked = await withChoose('discard', async () => {
+          results.escape = await importThroughMenu(h, bytes, null, async () => { keyInList('Escape'); return { cancel: true }; });
+          results.escapeFocus = !!document.activeElement && !!document.activeElement.closest('.tiptap');
+          results.escapeStatus = { text: statusText(), error: document.getElementById('status-msg').classList.contains('error-msg') };
+          results.outside = await importThroughMenu(h, bytes, null, async () => { probe.focus(); return { cancel: true }; });
+          results.outsideFocus = document.activeElement === probe;
+          results.outsideStatus = { text: statusText(), error: document.getElementById('status-msg').classList.contains('error-msg') };
+        });
+      } finally { probe.remove(); }
+      const sameAsBaseline = st => st.text === baseline.text && st.error === baseline.error;
+      const checks = {
+        baselineSaysSomething: baseline.text !== '', // sinon « le coin d'état redit l'état » ne se distinguerait pas du coin vidé pendant la liste
+        listOpened: !!results.escape.list && !!results.outside.list,
+        noQuestion: asked.length === 0,
+        documentKept: Editor.getHTML() === htmlBefore && !GridEditor.isActive(),
+        statusRestored: sameAsBaseline(results.escapeStatus) && sameAsBaseline(results.outsideStatus),
+        leftNothing: !document.getElementById('v2-xlsx-sheet-search') && !sheetPanel(),
+        escapeFocusInText: results.escapeFocus,
+        outsideFocusKept: results.outsideFocus,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, baseline, escapeStatus: results.escapeStatus, outsideStatus: results.outsideStatus, asked: asked.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_one_visible_sheet_imports_straight_away_without_a_list',
+    description: 'Un classeur dont une seule feuille est visible (les autres masquées), ou dont toutes sont masquées (la première est prise), s\'importe tout de suite : aucune liste, le message de fin est celui d\'une feuille unique (« Excel importé… ») ; un classeur d\'une seule feuille aussi.',
+    run: async (h) => {
+      const specs = {
+        oneVisible: { sheets: [{ name: 'Brouillon', state: 'hidden', rows: [['secret']] }, { name: 'Seule', rows: [['visible', 'ici']] }] },
+        allHidden: { sheets: [{ name: 'Premier', state: 'hidden', rows: [['un']] }, { name: 'Second', state: 'hidden', rows: [['deux']] }] },
+        single: { sheets: [{ name: 'Unique', rows: [['solo']] }] },
+      };
+      const out = {};
+      try {
+        for (const key of Object.keys(specs)) {
+          out[key] = await importAndRead(h, specs[key]);
+          out[key].text = doc().textContent;
+        }
+      } finally { await settle(h); }
+      const checks = {
+        oneVisible: out.oneVisible.list === null && out.oneVisible.grid && !out.oneVisible.error && out.oneVisible.text === 'visibleici' && /^Excel importé : 1 ligne, 2 colonnes\./.test(out.oneVisible.status),
+        allHiddenTakesTheFirst: out.allHidden.list === null && out.allHidden.grid && out.allHidden.text === 'un' && /^Excel importé : 1 ligne, 1 colonne\./.test(out.allHidden.status),
+        single: out.single.list === null && out.single.grid && out.single.text === 'solo' && /^Excel importé/.test(out.single.status),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, statuses: Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.status])) }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_the_unsaved_work_question_comes_after_the_sheet_is_chosen',
+    description: 'Un document dont une modification attend d\'être enregistrée et un classeur à plusieurs feuilles : la liste des feuilles s\'ouvre d\'abord, la question « Enregistrer / Abandonner / Annuler » n\'est posée qu\'APRÈS le choix de la feuille ; « Annuler » garde le document, « Abandonner » le remplace par la grille de la feuille choisie.',
+    run: async (h) => {
+      const bytes = await buildXlsx(THREE());
+      await settle(h);
+      await h.resetEditor();
+      Editor.setHTML('<p>Mon document</p>');
+      await sleep(150);
+      ed().chain().focus('end').insertContent(' modifié').run();
+      await sleep(150);
+      let questions = 0;
+      const results = {};
+      const answers = ['cancel', 'discard'];
+      await withChoose(() => { questions++; return answers.shift(); }, async () => {
+        results.cancel = await importThroughMenu(h, bytes, null, async () => { const out = { questionsBefore: questions }; clickSheet('Devis'); return out; });
+        results.textAfterCancel = doc().textContent;
+        results.gridAfterCancel = GridEditor.isActive();
+        results.questionsAfterCancel = questions;
+        results.discard = await importThroughMenu(h, bytes, null, async () => { const out = { questionsBefore: questions }; clickSheet('Détails des lignes'); return out; });
+      });
+      const checks = {
+        listFirst: results.cancel.seen.questionsBefore === 0 && results.discard.seen.questionsBefore === 1,
+        cancelKeeps: results.questionsAfterCancel === 1 && results.textAfterCancel === 'Mon document modifié' && results.gridAfterCancel === false,
+        discardImports: questions === 2 && GridEditor.isActive() && cellAt(0, 0).text === 'Détails' && /^Feuille « Détails des lignes » \(2 sur 3\) importée/.test(results.discard.status),
+      };
+      await settle(h);
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, questions, statuses: [results.cancel.status, results.discard.status] }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_a_chosen_sheet_that_is_empty_or_too_big_says_so_by_its_name_and_changes_nothing',
+    description: 'Dans un classeur à plusieurs feuilles, une feuille vide ou trop grande qu\'on vient de choisir le dit en rouge dans le coin d\'état (« La feuille « Vide » ne contient aucune case à importer. », en anglais aussi) sans rien changer ni rien demander ; un classeur d\'une seule feuille vide garde « Ce classeur ne contient aucune case à importer. ».',
+    run: async (h) => {
+      const rows = (n, cols) => Array.from({ length: n }, (_, r) => Array.from({ length: cols }, (_, c) => 'x' + r + c));
+      const two = await buildXlsx({ sheets: [{ name: 'Devis', rows: [['a']] }, { name: 'Vide', rows: [] }, { name: 'Long', rows: rows(1001, 1) }] });
+      const solo = await buildXlsx({ sheets: [{ name: 'Vide', rows: [] }] });
+      await settle(h);
+      await h.resetEditor();
+      Editor.setHTML('<p>Mon document</p>');
+      await sleep(150);
+      ed().chain().focus('end').insertContent(' modifié').run();
+      await sleep(150);
+      const htmlBefore = Editor.getHTML();
+      const results = {};
+      const asked = await withChoose('discard', async () => {
+        results.empty = await importThroughMenu(h, two, null, async () => { clickSheet('Vide'); return {}; });
+        results.big = await importThroughMenu(h, two, null, async () => { clickSheet('Long'); return {}; });
+        results.solo = await importThroughMenu(h, solo);
+        const before = I18n.getLang();
+        I18n.setLang('en');
+        try { results.emptyEn = await importThroughMenu(h, two, null, async () => { clickSheet('Vide'); return {}; }); } finally { I18n.setLang(before); }
+      });
+      const checks = {
+        emptyNamesTheSheet: results.empty.error && results.empty.status === 'La feuille « Vide » ne contient aucune case à importer.',
+        tooBigKeepsItsNumbers: results.big.error && /^Cette feuille est trop grande pour une grille : 1001 lignes et 1 colonne/.test(results.big.status),
+        singleKeepsTheWorkbookText: results.solo.error && results.solo.status === 'Ce classeur ne contient aucune case à importer.',
+        english: results.emptyEn.error && results.emptyEn.status === 'The sheet “Vide” has no cells to import.',
+        nothingChanged: asked.length === 0 && Editor.getHTML() === htmlBefore && !GridEditor.isActive(),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, statuses: Object.fromEntries(Object.entries(results).map(([k, v]) => [k, v.status])), asked: asked.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_openFile_gives_the_visible_sheets_and_builds_the_one_asked_for',
+    description: 'GridXlsxImport.openFile lit le classeur une fois : `sheets` donne les feuilles visibles dans l\'ordre d\'Excel avec leur rang (la masquée n\'y est pas), `build(rang)` rend la grille de celle-là (nom, rang, nombre de feuilles proposées, lignes, colonnes), la même chaque fois ; un classeur dont toutes les feuilles sont masquées n\'en propose qu\'une, la première.',
+    run: async (h) => {
+      const file = new File([await buildXlsx(THREE())], 'trois.xlsx', { type: XLSX_MIME });
+      const book = await GridXlsxImport.openFile(file);
+      const a = book.build(0, { lang: 'fr' });
+      const b = book.build(1, { lang: 'fr' });
+      const c = book.build(2, { lang: 'fr' });
+      const again = book.build(0, { lang: 'fr' });
+      const hidden = await GridXlsxImport.openFile(new File([await buildXlsx({ sheets: [{ name: 'Premier', state: 'hidden', rows: [['un']] }, { name: 'Second', state: 'hidden', rows: [['deux']] }] })], 'caches.xlsx'));
+      const hiddenBuilt = hidden.build(0, { lang: 'fr' });
+      const viaImport = await GridXlsxImport.importFile(file, { lang: 'fr', sheetIndex: 2 });
+      const checks = {
+        sheets: book.sheets.map(x => x.index + ':' + x.name).join('|') === '0:Devis|1:Détails des lignes|2:Récapitulatif annuel',
+        first: a.sheetName === 'Devis' && a.sheetIndex === 0 && a.sheetCount === 3 && a.rows === 2 && a.cols === 2,
+        second: b.sheetName === 'Détails des lignes' && b.sheetIndex === 1 && b.rows === 3 && b.cols === 1,
+        third: c.sheetName === 'Récapitulatif annuel' && c.sheetIndex === 2 && c.rows === 1,
+        sameEachTime: again.html === a.html && again.html !== b.html,
+        allHidden: hidden.sheets.length === 1 && hidden.sheets[0].name === 'Premier' && hiddenBuilt.sheetName === 'Premier' && hiddenBuilt.sheetCount === 1,
+        importFileStillTakesAnIndex: viaImport.sheetName === 'Récapitulatif annuel',
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, sheets: book.sheets }) };
+    },
+  });
+
+  cases.push({
+    id: 'gridImport_when_the_sheet_list_cannot_open_the_first_sheet_is_imported_and_named',
+    description: 'Si la liste des feuilles ne peut pas s\'ouvrir (composant en panne), la première feuille est importée comme avant la liste et le coin d\'état dit laquelle (« Feuille « Devis » (1 sur 3) importée… ») : la personne n\'est jamais bloquée ; rien ne reste dans la page.',
+    run: async (h) => {
+      const bytes = await buildXlsx(THREE());
+      await settle(h);
+      await h.resetEditor();
+      const real = SearchSelect.attachSheets;
+      const warn = console.warn;
+      console.warn = () => {}; // l'échec est voulu : le message d'avertissement du module n'est pas une erreur du scénario
+      let out;
+      try {
+        SearchSelect.attachSheets = () => { throw new Error('liste en panne'); };
+        out = await importThroughMenu(h, bytes);
+      } finally { SearchSelect.attachSheets = real; console.warn = warn; }
+      const checks = {
+        imported: out.opened && !out.error && GridEditor.isActive() && cellAt(0, 0).text === 'Devis Alpha',
+        named: /^Feuille « Devis » \(1 sur 3\) importée : 2 lignes, 2 colonnes\. Les autres ne le sont pas\.$/.test(out.status),
+        leftNothing: !document.getElementById('v2-xlsx-sheet-search'),
+      };
+      await settle(h);
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, status: out.status }) };
     },
   });
 

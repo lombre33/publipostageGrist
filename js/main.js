@@ -376,11 +376,17 @@
       await onSave();
       return !autosaveDirty;
     }
-    // Annuler : la personne reprend où elle en était. Ouverte depuis une ligne de menu (une étiquette que la souris ne focalise pas), la fenêtre n'avait rien à rendre : le
-    // bouton qu'on vient de cliquer, tout juste caché, garde le focus jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du focus sur <body>.
+    // Annuler : la personne reprend où elle en était.
+    refocusEditorIfLost();
+    return false;
+  }
+
+  // Une fenêtre ou une liste abandonnée (« Annuler », la liste des feuilles d'un Excel) : la personne reprend où elle en était. Ouverte depuis une ligne de menu (une étiquette que la souris ne
+  // focalise pas), elle n'avait rien à rendre : le bouton qu'on vient de cliquer, tout juste caché, garde le focus jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du
+  // focus sur <body>. Un focus qui est ailleurs, sur un champ où l'on vient de cliquer, y reste.
+  function refocusEditorIfLost() {
     const active = document.activeElement;
     if (currentMode === 'edit' && (!active || active === document.body || active.getClientRects().length === 0)) EditorCore.getEditor().commands.focus();
-    return false;
   }
 
   async function onTemplateSelectChange() {
@@ -441,21 +447,34 @@
     loadTemplateIntoEditor(null, GridEditor.TYPE);
   }
 
-  // Import d'un classeur Excel (js/grid-xlsx-import.js, sujet 18 du 02/10 : « Prévoir un Import Excel pour le modèle Grille »). Le sélecteur de fichier doit s'ouvrir DANS le clic ; la première
-  // feuille visible est lue ensuite, et seulement alors on demande de quitter le modèle courant s'il a des modifications non enregistrées : choisir « Annuler » dans le sélecteur, ou un
-  // fichier illisible, ne coûte rien. Le résultat est une NOUVELLE grille, sans nom et pas encore enregistrée (comme « Nouvelle grille »), qui le dit tant qu'elle n'a pas de nom.
+  // Import d'un classeur Excel (js/grid-xlsx-import.js, sujet 18 du 02/10 : « Prévoir un Import Excel pour le modèle Grille »). Le sélecteur de fichier doit s'ouvrir DANS le clic ; le
+  // classeur est lu ensuite et, s'il a plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille (choix d'Antoine du 02/10, « Oui, une liste »). Seulement
+  // après le choix on demande de quitter le modèle courant s'il a des modifications non enregistrées : choisir « Annuler » dans le sélecteur, fermer la liste des feuilles, un fichier
+  // illisible ou une feuille vide ne coûte rien. Le résultat est une NOUVELLE grille, sans nom et pas encore enregistrée (comme « Nouvelle grille »), qui le dit tant qu'elle n'a pas de nom.
   const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig' };
   function onImportXlsx() {
     if (isReadOnly()) return;
     GridXlsxImport.chooseFile(async (file) => {
       setStatus(I18n.t('status.xlsxImporting'));
       let imported;
+      let chosen = null; // la feuille choisie, quand le classeur en a plusieurs : une erreur la nomme
       try {
-        imported = await GridXlsxImport.importFile(file, { lang: I18n.getLang() });
+        const book = await GridXlsxImport.openFile(file);
+        let index = 0;
+        if (book.sheets.length > 1) {
+          // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… » serait faux, la lecture est finie) ;
+          // refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
+          setStatus('');
+          const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
+          if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return; }
+          index = picked;
+          chosen = book.sheets[index].name;
+        }
+        imported = book.build(index, { lang: I18n.getLang() });
       } catch (e) {
         console.warn('[main] import Excel impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
-        const key = XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable;
-        setStatus(I18n.t(key, { rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
+        const key = e && e.code === 'empty' && chosen !== null ? 'status.xlsxImportEmptySheet' : (XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable);
+        setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
         return;
       }
       if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return; }
