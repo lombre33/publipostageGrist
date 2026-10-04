@@ -198,8 +198,8 @@ const Templates = (function () {
     const typeModele = cell('TypeModele', '') || 'document';
     return {
       id: data.id[i],
-      nom: data.Nom[i],
-      contenu: data.Contenu[i],
+      nom: cell('Nom', ''),
+      contenu: cell('Contenu', ''),
       nomFichierPDF: cell('NomFichierPDF', ''),
       headerFooter: safeParseHeaderFooter(cell('HeaderFooter', null)),
       marginsMm: safeParseMargins(cell('Margins', null)),

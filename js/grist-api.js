@@ -408,10 +408,12 @@ const GristAPI = (function () {
     return nextColumnsByTable;
   }
 
-  // Identifiant de chaque table des métadonnées (_grist_Tables), par numéro de ligne : { [rowId]: tableId }.
+  // Identifiant de chaque table des métadonnées (_grist_Tables), par numéro de ligne : { [rowId]: tableId }. Une colonne que la réponse ne porte pas
+  // (règle d'accès qui la cache, lecture partielle) se lit vide : la passe continue, sans colonnes pour ces tables.
   function tableIdsByRowId(tablesMeta) {
+    const tableIds = tablesMeta.tableId || [];
     const byRowId = {};
-    for (let i = 0; i < tablesMeta.id.length; i++) byRowId[tablesMeta.id[i]] = tablesMeta.tableId[i];
+    for (let i = 0; i < tablesMeta.id.length; i++) byRowId[tablesMeta.id[i]] = tableIds[i];
     return byRowId;
   }
 
@@ -421,11 +423,13 @@ const GristAPI = (function () {
   async function provisionalColumnsByTable(metaRead) {
     const [tablesMeta, colsMeta] = await metaRead;
     const tableIdByRowId = tableIdsByRowId(tablesMeta);
+    const parentIds = colsMeta.parentId || [];
+    const colIds = colsMeta.colId || [];
     const found = {};
     for (let i = 0; i < colsMeta.id.length; i++) {
-      const tableId = tableIdByRowId[colsMeta.parentId[i]];
-      const colId = colsMeta.colId[i];
-      if (!tableId || colId === 'manualSort') continue;
+      const tableId = tableIdByRowId[parentIds[i]];
+      const colId = colIds[i];
+      if (!tableId || !colId || colId === 'manualSort') continue;
       const pos = colsMeta.parentPos && colsMeta.parentPos[i] != null ? colsMeta.parentPos[i] : i;
       (found[tableId] = found[tableId] || []).push({ colId, pos });
     }

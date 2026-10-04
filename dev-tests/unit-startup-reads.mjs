@@ -7,6 +7,8 @@
 //  - Templates.loadAll lit la table des modèles UNE fois quand toutes ses colonnes sont là, et n'ajoute que les colonnes qui manquent ;
 //  - GristAPI.init ne lit aucune table du document (colonnes tirées des métadonnées, provisoires) et ne fait que deux rangées d'appels ;
 //  - GristAPI.refreshSchema rend les colonnes exactes (clés de fetchTable), une passe à la fois, et se contente d'une passe récente quand on le lui dit (rappel de js/main.js après l'ouverture) ;
+//  - une lecture partielle (des rangées sans les colonnes attendues : colonne cachée par une règle d'accès, réponse incomplète) n'écrit aucune erreur : init() garde ses tables,
+//    Templates.loadAll garde ses lignes, les colonnes absentes se lisent vides (point D-CONSOLE-01 de l'audit externe du 04/10) ;
 //  - index.html lance Grist et la lecture des modèles avant les derniers scripts, js/main.js reprend ces promesses.
 // Lancer : node dev-tests/unit-startup-reads.mjs
 import { readFileSync } from 'node:fs';
@@ -160,18 +162,19 @@ function fresh(doc, { scripts = ['js/grist-api.js', 'js/templates.js'] } = {}) {
   class FakeDate extends Date { static now() { return clock.now; } }
   const timers = [];
   const warnings = [];
+  const errors = []; // console.error seulement : ce que l'audit compte comme « erreur JavaScript » (les avertissements s'y trouvent aussi, dans `warnings`)
   const ctx = createContext({
     grist: {
       docApi: doc,
       ready() {}, onRecord() {}, onOptions() {},
       async getOptions() { return null; },
     },
-    console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { warnings.push(a.join(' ')); } },
+    console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { errors.push(a.join(' ')); warnings.push(a.join(' ')); } },
     Date: FakeDate,
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
   });
   scripts.forEach((s) => loadScript(ctx, s));
-  return { ctx, clock, timers, warnings, run: (expr) => evalIn(ctx, expr) };
+  return { ctx, clock, timers, warnings, errors, run: (expr) => evalIn(ctx, expr) };
 }
 
 const sameList = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -349,6 +352,35 @@ async function main() {
     broken = false;
     await run('GristAPI.refreshSchema()');
     check('init sans métadonnées : la passe complète rend les colonnes', sameList(await run('GristAPI.getColumns("Missions")'), ['Reference', 'Titre', 'Personne']), await run('GristAPI.getColumns("Missions")'));
+  }
+
+  // 13. Métadonnées lues sans leurs colonnes (des rangées seulement, comme le faux Grist de l'audit externe ; une règle d'accès qui cache une colonne rend la même forme) :
+  // la passe rapide d'init() n'écrit aucune erreur, les tables restent connues, leurs colonnes se lisent vides.
+  {
+    const doc = makeDoc();
+    const realFetch = doc.fetchTable.bind(doc);
+    doc.fetchTable = (table) => (table.startsWith('_grist_') ? Promise.resolve({ id: [1, 2, 3] }) : realFetch(table));
+    const { run, errors } = fresh(doc);
+    await run('GristAPI.init()');
+    check('métadonnées sans leurs colonnes : init() n\'écrit aucune erreur (avant : TypeError dans provisionalColumnsByTable)', errors.length === 0, errors);
+    check('métadonnées sans leurs colonnes : les tables du document restent connues', sameList(await run('GristAPI.getTables()'), USER_TABLES), await run('GristAPI.getTables()'));
+    check('métadonnées sans leurs colonnes : les colonnes se lisent vides', sameList(await run('GristAPI.getColumns("Missions")'), []), await run('GristAPI.getColumns("Missions")'));
+  }
+
+  // 14. Table des modèles lue sans Nom ni Contenu (colonnes cachées par une règle d'accès) : les lignes restent listées, vides, sans erreur - avant, une TypeError dans
+  // loadAll vidait la liste des modèles.
+  {
+    const doc = makeDoc();
+    const realFetch = doc.fetchTable.bind(doc);
+    doc.fetchTable = async (table) => {
+      const data = await realFetch(table);
+      if (table === 'Publipostage_Modeles') { delete data.Nom; delete data.Contenu; }
+      return data;
+    };
+    const { run, errors } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    check('modèles sans Nom ni Contenu : loadAll n\'écrit aucune erreur (avant : TypeError, liste vidée)', errors.length === 0, errors);
+    check('modèles sans Nom ni Contenu : les deux lignes restent listées, nom et contenu vides', templates.length === 2 && templates.every((t) => t.nom === '' && t.contenu === ''), templates.map((t) => [t.nom, t.contenu]));
   }
 
   // === Câblage : index.html lance Grist et les modèles avant les derniers scripts, js/main.js reprend ces promesses ===
