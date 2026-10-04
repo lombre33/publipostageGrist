@@ -10,7 +10,7 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 | `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement, pose les documents de `public/`, lance les contrôles, committe et étiquette. |
 | `controles.mjs` | Les contrôles sur l'arbre à publier : une ERREUR empêche le commit, un AVERTISSEMENT se relit. |
 | `essai.sh` | Les essais de ces deux scripts sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des deux. |
-| `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE`. `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. |
+| `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. |
 
 ## Publier
 
@@ -20,6 +20,8 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 3. Version : `PP_VERSION` dans `js/version.js` (semver, `1.0.0-beta.1` pour la première bêta), et la section
    `## [version] - {{DATE}}` du `public/CHANGELOG.md`, en français et en anglais. Relire `public/README.md`
    (limites connues, roadmap) : il décrit l'état du jour de la publication, pas celui de la précédente.
+   Relire aussi `public/CARTE_DU_CODE.md` : les contrôles voient un fichier cité qui n'existe plus ou un fichier de
+   `js/` qui n'y figure pas, mais pas les nombres de lignes, qui se recomptent (`wc -l`).
 4. Préparer sans committer, pour relire :
    `bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus --sans-commit`
    puis `git -C ../Publipostage-Plus diff --cached --stat`. Le clone public revient à zéro avec
@@ -57,10 +59,12 @@ la GPL v3 ; prénom du développeur, compte personnel, lien ou trace de session,
 secret ; politique de sécurité du contenu absente, après un script, avec `'unsafe-inline'`, ou dont les
 empreintes ne sont pas celles des scripts en ligne de `index.html` ; fichier cité par la page absent ;
 adresse du dépôt de développement ; gabarit `{{…}}` resté en place ; lien ou ancre cassé dans les documents
-publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` absent, non chargé par `index.html` ou qui annonce une autre version.
+publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` absent, non chargé par `index.html` ou qui annonce une autre version ;
+`CARTE_DU_CODE.md` qui cite un fichier absent ; clé du `localStorage` que le code garde et que le paragraphe du README sur le stockage
+du navigateur ne nomme pas, en français ou en anglais (la liste est `STORED` dans `controles.mjs`, à compléter avec le README).
 
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la
-racine ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
+racine ; fichier de `js/` sans ligne dans `CARTE_DU_CODE.md` ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
 
 ## Pourquoi un commit de plus
 

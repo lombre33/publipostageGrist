@@ -22,6 +22,8 @@ solution. Les lignes de la [roadmap](README.md#roadmap) disent ce qui est déjà
 
 ## Envoyer du code
 
+La [carte du code](CARTE_DU_CODE.md) dit quel fichier fait quoi et par où commencer.
+
 1. Pour un changement qui dépasse quelques lignes, ouvrez d'abord une issue : cela évite un travail que
    nous ne pourrions pas accepter.
 2. Faites un fork, créez une branche à partir de `main`, puis ouvrez une pull request vers `main`.
@@ -101,6 +103,8 @@ For an idea, first say the need ("I want to send each customer their invoice wit
 solution. The [roadmap](README.md#roadmap-1) lines say what is already planned.
 
 ## Sending code
+
+The [code map](CARTE_DU_CODE.md#publipostage-code-map) says which file does what and where to start.
 
 1. For a change of more than a few lines, open an issue first: it avoids work we couldn't accept.
 2. Fork, create a branch from `main`, then open a pull request against `main`.

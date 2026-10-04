@@ -49,8 +49,9 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   et une description.
 - **Galerie** : un avertissement rappelle que les modèles sont des exemples à adapter, pas un conseil
   juridique.
-- **Dépôt** : `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` et `NOTICE`, limites
-  connues et roadmap à jour dans le README.
+- **Dépôt** : `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE` et
+  `CARTE_DU_CODE.md` (quel fichier fait quoi, par où commencer), limites connues et roadmap à jour dans le
+  README.
 
 ### Modifié
 
@@ -126,8 +127,9 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
   Settings. The version number is in Settings > Credits, and the tab has a title, an icon and a
   description.
 - **Gallery**: a notice reminds that the templates are examples to adapt, not legal advice.
-- **Repository**: `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` and `NOTICE`,
-  known limitations and an up-to-date roadmap in the README.
+- **Repository**: `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE` and
+  `CARTE_DU_CODE.md` (which file does what, where to start), known limitations and an up-to-date roadmap
+  in the README.
 
 ### Changed
 

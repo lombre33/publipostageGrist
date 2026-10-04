@@ -64,13 +64,13 @@ function report(level, label, hits, show = 4) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // 1. Ce qui doit être là, et ce qui ne doit jamais l'être
 // ---------------------------------------------------------------------------------------------------------------------------------------------
-for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE']) {
+for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md']) {
   if (!has(required)) fail(`fichier absent : ${required}`);
 }
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 
 if (has('LICENSE')) {
@@ -186,7 +186,7 @@ if (version) {
 // 5. Les liens des documents publics : fichiers présents, ancres présentes (ancres calculées comme le fait GitHub)
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 {
-  const DOCS = ['README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md'];
+  const DOCS = ['README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'CARTE_DU_CODE.md'];
   const blank = match => match.replace(/[^\n]/g, ' ');
   const withoutCode = text => text.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, blank).replace(/`[^`\n]*`/g, blank);
   function anchorsOf(text) {
@@ -218,6 +218,75 @@ if (version) {
   }
   if (broken.length) fail(`lien(s) cassé(s) dans les documents publics : ${broken.slice(0, 8).join(' ; ')}${broken.length > 8 ? ` (et ${broken.length - 8} autre(s))` : ''}`);
   if (version && has('README.md') && !read('README.md').includes(version)) warn(`README.md ne cite pas la version ${version}`);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 6. La carte du code : chaque fichier qu'elle cite existe, chaque fichier de js/ y figure
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+if (has('CARTE_DU_CODE.md')) {
+  const cited = new Set([...read('CARTE_DU_CODE.md').matchAll(/`((?:js|css|img|templates-gallery)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+|index\.html)`/g)].map(match => match[1]));
+  const dead = [...cited].filter(path => !has(path));
+  if (dead.length) fail(`CARTE_DU_CODE.md cite des fichiers absents de l'arbre : ${dead.slice(0, 8).join(', ')}${dead.length > 8 ? ` (et ${dead.length - 8} autre(s))` : ''}`);
+  // Les feuilles de style s'y disent en bloc (« les 31 autres vont chacune avec un module ») : seuls les fichiers de js/ y ont chacun leur ligne.
+  const jsFiles = files.filter(file => /^js\/[^/]+\.js$/.test(file.rel));
+  const absent = jsFiles.filter(file => !cited.has(file.rel)).map(file => file.rel);
+  if (absent.length) warn(`fichier(s) de js/ sans ligne dans CARTE_DU_CODE.md : ${absent.slice(0, 8).join(', ')}${absent.length > 8 ? ` (et ${absent.length - 8} autre(s))` : ''}`);
+  // Les nombres du texte : les fichiers de js/ (en tout et par famille) se comptent au juste, les lignes au vingtième près.
+  const text = read('CARTE_DU_CODE.md');
+  const statedFiles = [...new Set([...text.matchAll(/(\d+) (?:fichiers dans|files in) `js\/`/g)].map(match => Number(match[1])))];
+  if (statedFiles.some(n => n !== jsFiles.length)) warn(`CARTE_DU_CODE.md annonce ${statedFiles.join(' et ')} fichiers dans js/, l'arbre en compte ${jsFiles.length}`);
+  for (const block of text.split(/^### /m).slice(1)) {
+    const heading = block.split('\n')[0].trim();
+    const stated = /\((\d+) (?:fichiers|files),/.exec(heading);
+    if (!stated) continue;
+    const real = new Set([...block.split(/^#{1,2} /m)[0].matchAll(/`(js\/[A-Za-z0-9_.-]+\.js)`/g)].map(match => match[1])).size;
+    if (Number(stated[1]) !== real) warn(`CARTE_DU_CODE.md : « ${heading} » annonce ${stated[1]} fichiers, son tableau en cite ${real}`);
+  }
+  const lines = jsFiles.reduce((total, file) => total + readFileSync(file.abs, 'utf8').split('\n').length - 1, 0);
+  for (const match of text.matchAll(/\((\d[\d ,]*) (?:lignes|lines) ?:/g)) {
+    const statedLines = Number(match[1].replace(/[ ,]/g, ''));
+    if (Math.abs(statedLines - lines) > lines / 20) warn(`CARTE_DU_CODE.md annonce ${match[1]} lignes dans js/, l'arbre en compte ${lines}`);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 7. Le README dit ce que le widget garde dans le navigateur : chaque clé du localStorage, nommée en français et en anglais
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+if (has('README.md')) {
+  // Clé du code (ou préfixe, quand elle finit par « _ ») → les mots par lesquels le paragraphe « Aucune donnée n'est stockée hors de Grist » la nomme, en français puis en anglais.
+  const STORED = {
+    pp_lang: ['langue', 'language'],
+    pp_theme: ['thème', 'theme'],
+    pp_trigger_char: ['touches', 'keys'],
+    pp_expansion_char: ['touches', 'keys'],
+    pp_shortcuts: ['raccourcis', 'shortcuts'],
+    pp_shortcuts_view: ['vue de leur panneau', 'view of their panel'],
+    pp_autosave_enabled: ['enregistrement automatique', 'autosave'],
+    pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],
+    pp_page_zoom: ['niveau de zoom', 'zoom level'],
+    pp_schema_: ['renommages', 'renames'],
+  };
+  const entryOf = key => Object.keys(STORED).find(name => key === name || (name.endsWith('_') && key.startsWith(name)));
+  const used = new Map();
+  for (const file of textFiles.filter(file => file.rel.startsWith('js/') || file.rel === 'index.html')) {
+    for (const match of readFileSync(file.abs, 'utf8').matchAll(/['"`](pp_[A-Za-z0-9_]+)/g)) if (!used.has(match[1])) used.set(match[1], file.rel);
+  }
+  const readme = read('README.md');
+  const paragraphs = { fr: /Aucune donnée n'est stockée hors de Grist[\s\S]*?\n\s*\n/, en: /No data is ever stored outside of Grist[\s\S]*?\n\s*\n/ };
+  const said = {};
+  for (const [lang, pattern] of Object.entries(paragraphs)) {
+    const found = readme.match(pattern);
+    said[lang] = found ? found[0].replace(/\s+/g, ' ').toLowerCase() : null;
+    if (!found && used.size) fail(`README.md : le paragraphe sur le stockage du navigateur (${lang === 'fr' ? 'français' : 'anglais'}) est introuvable`);
+  }
+  for (const [key, file] of used) {
+    const name = entryOf(key);
+    if (!name) { fail(`le code garde « ${key} » dans le navigateur (${file}) sans que controles.mjs le connaisse : l'ajouter à STORED et au paragraphe du README sur le stockage (français et anglais)`); continue; }
+    ['fr', 'en'].forEach((lang, index) => {
+      if (said[lang] && !said[lang].includes(STORED[name][index])) fail(`README.md (${lang === 'fr' ? 'français' : 'anglais'}) ne nomme pas ce que garde « ${key} » : « ${STORED[name][index]} » absent du paragraphe sur le stockage du navigateur`);
+    });
+  }
+  if (used.size) for (const name of Object.keys(STORED)) if (![...used.keys()].some(key => entryOf(key) === name)) warn(`STORED (controles.mjs) cite « ${name} », que le code ne garde plus : le README en parle-t-il encore ?`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------

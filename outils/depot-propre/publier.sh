@@ -14,7 +14,7 @@
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent) ;
 #      les entrées que seul le dépôt public porte (screenshots/, .github/…) ne sont pas touchées ;
-#   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE),
+#   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE, CARTE_DU_CODE),
 #      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés ;
 #   6. lance controles.mjs sur l'arbre obtenu : une ERREUR empêche le commit ;
 #   7. committe sous l'identité donnée (jamais d'identité par défaut : sans PP_AUTEUR_NOM et PP_AUTEUR_EMAIL, il s'arrête ; l'adresse doit être l'adresse noreply de GitHub du compte grist-factory), pose l'étiquette vX.Y.Z,

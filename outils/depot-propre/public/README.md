@@ -184,9 +184,10 @@ sont pas limitées par la CSP : le widget lit des images et des pièces jointes 
 demande confirmation avant un export quand des images viennent d'un autre site que le widget ou Grist.
 
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
-(`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis, état de
-l'enregistrement automatique) et, pour suivre les renommages, les noms des tables et des colonnes de
-chaque document ouvert, jamais de donnée de ligne.
+(`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
+panneau, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression), le niveau
+de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
+renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
 
 Pour signaler une vulnérabilité, merci de ne pas ouvrir d'issue publique : suivez
 [SECURITY.md](SECURITY.md).
@@ -286,7 +287,9 @@ prioriser.
 
 Les contributions sont bienvenues : signaler un défaut, proposer une fonction, envoyer une correction.
 Commencez par [CONTRIBUTING.md](CONTRIBUTING.md) ; le [code de conduite](CODE_OF_CONDUCT.md) s'applique à
-tous les échanges. Les changements de chaque version sont dans [CHANGELOG.md](CHANGELOG.md).
+tous les échanges. Pour vous repérer dans le code (quel fichier fait quoi, par où commencer), lisez la
+[carte du code](CARTE_DU_CODE.md). Les changements de chaque version sont dans
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
@@ -479,8 +482,10 @@ images and attachments from any site, and asks for confirmation before an export
 a site other than the widget's or Grist's.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
-interface preferences (language, theme, keys, shortcuts, autosave state) and, to follow renames, the
-names of the tables and columns of each open document, never any row data.
+interface preferences (language, theme, keys, shortcuts and the view of their panel, autosave state, last
+choice in the sheet assembly before printing), the page zoom level of the last templates opened (with
+their number and name) and, to follow renames, the names of the tables and columns of each open
+document, never any row data.
 
 To report a vulnerability, please don't open a public issue: follow [SECURITY.md](SECURITY.md).
 
@@ -577,7 +582,9 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 
 Contributions are welcome: reporting a defect, suggesting a feature, sending a fix. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md); the [code of conduct](CODE_OF_CONDUCT.md) applies to every exchange.
-The changes of each version are in [CHANGELOG.md](CHANGELOG.md).
+To find your way around the code (which file does what, where to start), read the
+[code map](CARTE_DU_CODE.md#publipostage-code-map). The changes of each version are in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
