@@ -1,19 +1,19 @@
-// Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs - paragraphes, titres, listes, tableaux, et d'autres blocs conditionnels à toute
-// profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie. Le nœud de l'éditeur est dans js/editor-nodes.js
-// (createConditionalTextNode), la barre flottante dans js/floating-toolbars.js, la fenêtre de condition (la même que celle d'une bulle) dans js/variable-condition.js.
-// Ce fichier porte les bouts qui restent : la pose du bloc dans l'éditeur (à la place de « #requête », ou autour du texte sélectionné), sa résolution au rendu et son défaire
-// (« Défaire le bloc » de la fenêtre de condition : le cadre et la condition partent, le texte reste).
+// Bloc de texte conditionnel (menu des variables, onglet Chips) : un conteneur de blocs (paragraphes, titres, listes, tableaux, autres blocs
+// conditionnels à toute profondeur) qui n'apparaît en lecture et à l'export que si sa condition est remplie. Le nœud est dans js/editor-nodes.js
+// (createConditionalTextNode), la barre flottante dans js/floating-toolbars.js, la fenêtre de condition (celle d'une bulle) dans
+// js/variable-condition.js. Ce fichier porte le reste : la pose du bloc dans l'éditeur (à la place de « #requête » ou autour du texte sélectionné),
+// sa résolution au rendu et son défaire (le cadre et la condition partent, le texte reste).
 //
-// Résolution : js/reader-mode.js la fait UNE fois, après le déroulé des zones répétées et avant celle des bulles - le HTML qu'elle rend à la Lecture, au PDF, au Word,
-// à l'e-mail et aux en-têtes/pieds est donc déjà sans bloc. Condition remplie : le cadre disparaît et son contenu reste, sans rien ajouter autour. Sinon : le bloc et tout ce
-// qu'il contient disparaissent, sans laisser de ligne vide. Pas de condition : toujours affiché. Condition illisible : masqué, comme une bulle (js/reader-mode.js).
+// Résolution : js/reader-mode.js la fait une fois, après le déroulé des zones répétées et avant celle des bulles : le HTML rendu à la Lecture, au
+// PDF, au Word, à l'e-mail et aux en-têtes/pieds est donc déjà sans bloc. Condition remplie : le cadre disparaît, son contenu reste. Sinon : le bloc
+// et son contenu disparaissent, sans ligne vide. Pas de condition : toujours affiché. Condition illisible : masqué, comme une bulle.
 const ConditionalText = (function () {
   const TYPE = 'conditionalText';
   const SELECTOR = 'div.conditional-text';
 
-  // === Rendu ===
-  // Défait chaque bloc de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se transforme ensuite, dans
-  // l'ordre du document : un bloc extérieur retiré emporte les blocs qu'il contient (ils ne sont plus dans `root`), un bloc extérieur défait laisse les siens à leur verdict.
+  // Défait chaque bloc de `root` dont la condition est remplie, retire les autres. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se
+  // transforme ensuite, dans l'ordre du document : un bloc extérieur retiré emporte les blocs qu'il contient, un bloc extérieur défait laisse les
+  // siens à leur verdict.
   async function resolve(root, tableId, record) {
     if (!root) return;
     const blocks = Array.from(root.querySelectorAll(SELECTOR));
@@ -26,14 +26,15 @@ const ConditionalText = (function () {
     });
   }
 
-  // === Éditeur ===
-  // Plage de texte à entourer, retenue quand le bouton « Insérer une variable » ouvre la liste « # » sur du texte sélectionné (startFromSelection), jusqu'au choix de
-  // « Texte conditionnel » ou à la fermeture de la liste. Suivie à travers les transactions : la requête tapée après « # » décale le texte qui la suit.
+  // Plage de texte à entourer, retenue quand le bouton « Insérer une variable » ouvre la liste « # » sur du texte sélectionné (startFromSelection),
+  // jusqu'au choix de « Texte conditionnel » ou à la fermeture de la liste. Suivie à travers les transactions : la requête tapée après « # » décale
+  // le texte qui la suit.
   let pending = null; // { editor, from, to }
 
   function followTransaction({ transaction }) {
     if (!pending || !transaction.docChanged) return;
-    // `from` passe derrière un texte tapé pile à cet endroit (la requête, quand le texte sélectionné commençait au début du paragraphe) ; `to` reste devant.
+    // `from` passe derrière un texte tapé pile à cet endroit (la requête, quand le texte sélectionné commençait au début du paragraphe) ; `to` reste
+    // devant.
     pending.from = transaction.mapping.map(pending.from, 1);
     pending.to = transaction.mapping.map(pending.to, -1);
   }
@@ -49,10 +50,10 @@ const ConditionalText = (function () {
     return taken;
   }
 
-  // Un texte sélectionné s'entoure ; tout autre cas (curseur seul, bulle ou image sélectionnée, cellules de tableau, bloc de code) garde le déclenchement ordinaire du
-  // bouton. Le « # » se pose au début du paragraphe où commence la sélection, là où le préfixe d'un déclencheur est toujours accepté (devant un mot collé, il ne le serait
-  // pas) ; le texte sélectionné n'est jamais remplacé. La liste s'ouvre sur l'onglet Chips, « Texte conditionnel » en surbrillance (js/variables.js:preferChipsTab).
-  // Vrai quand c'est fait ici.
+  // Un texte sélectionné s'entoure ; tout autre cas (curseur seul, bulle ou image sélectionnée, cellules de tableau, bloc de code) garde le
+  // déclenchement ordinaire du bouton. Le « # » se pose au début du paragraphe où commence la sélection, là où le préfixe d'un déclencheur est
+  // toujours accepté (devant un mot collé, il ne le serait pas) ; le texte sélectionné n'est jamais remplacé. La liste s'ouvre sur l'onglet Chips,
+  // « Texte conditionnel » en surbrillance (js/variables.js:preferChipsTab). Vrai quand c'est fait ici.
   function startFromSelection(editor) {
     const { selection } = editor.state;
     if (selection.empty || selection.toJSON().type !== 'text') return false;
@@ -69,8 +70,9 @@ const ConditionalText = (function () {
     return true;
   }
 
-  // Plage de blocs à entourer pour une sélection de texte [from, to] : les blocs que la sélection touche ; si le bloc conditionnel ne peut pas y aller (les éléments d'une
-  // liste ne l'acceptent pas comme premier enfant, ni une ligne de tableau), la plage remonte au bloc qui les contient - la liste, le tableau entiers. null si rien ne convient.
+  // Plage de blocs à entourer pour une sélection de texte [from, to] : les blocs que la sélection touche ; si le bloc conditionnel ne peut pas y
+  // aller (les éléments d'une liste ne l'acceptent pas comme premier enfant, ni une ligne de tableau), la plage remonte au bloc qui les contient - la
+  // liste, le tableau entiers. null si rien ne convient.
   function wrappableRange(doc, from, to, type) {
     let range = doc.resolve(from).blockRange(doc.resolve(to));
     while (range) {
@@ -93,9 +95,9 @@ const ConditionalText = (function () {
     return range.start;
   }
 
-  // Un bloc vide à la place de « #requête » : à la place du paragraphe s'il n'en reste rien, avant lui si la requête était à son début, après si elle était à sa fin, sinon le
-  // paragraphe est coupé en deux et le bloc se pose entre les deux moitiés. Un bloc qui ne peut pas aller là (premier enfant d'un élément de liste) se pose après, puis après
-  // chaque bloc qui contient le paragraphe. Rend la position du bloc, ou -1.
+  // Un bloc vide à la place de « #requête » : à la place du paragraphe s'il n'en reste rien, avant lui si la requête était à son début, après si elle
+  // était à sa fin, sinon le paragraphe est coupé en deux et le bloc se pose entre les deux moitiés. Un bloc qui ne peut pas aller là (premier enfant
+  // d'un élément de liste) se pose après, puis après chaque bloc qui contient le paragraphe. Rend la position du bloc, ou -1.
   function insertEmptyInTransaction(tr, pos) {
     const { schema } = tr.doc.type;
     const type = schema.nodes[TYPE];
@@ -130,8 +132,9 @@ const ConditionalText = (function () {
     return at;
   }
 
-  // Choix de « Texte conditionnel » dans la liste « # » : `range` est « #requête » (js/variables.js:command). Avec du texte retenu par startFromSelection, le bloc l'entoure
-  // et la sélection reprend son texte ; sinon un bloc vide se pose et le curseur s'y met. Dans les deux cas, « #requête » disparaît.
+  // Choix de « Texte conditionnel » dans la liste « # » : `range` est « #requête » (js/variables.js:command). Avec du texte retenu par
+  // startFromSelection, le bloc l'entoure et la sélection reprend son texte ; sinon un bloc vide se pose et le curseur s'y met. Dans les deux cas,
+  // « #requête » disparaît.
   function insertFromPanel(editor, range) {
     const { state, view } = editor;
     const TextSelection = EditorCore.getTextSelectionClass();
@@ -156,12 +159,13 @@ const ConditionalText = (function () {
     return true;
   }
 
-  // « Défaire le bloc » (fenêtre de condition, js/variable-condition.js) : le bloc qui commence à `pos` disparaît avec sa condition, tout son contenu reste à sa place. Une seule
-  // transaction : un Ctrl+Z rend le bloc et sa condition. Le bloc est REMPLACÉ par son contenu, pas « levé » (tr.lift, comme le fait « Retirer l'encadré » de js/callout.js) :
-  // en mode suivi, la bibliothèque traduit une levée en texte barré dans le cadre et le même texte inséré après lui - le cadre, vide, reste une fois tout accepté -, alors
-  // qu'un remplacement donne le bloc entier barré et son contenu inséré : « Tout accepter » rend exactement le document sans le bloc, « Tout refuser » celui d'avant.
-  // Le curseur se pose au début du texte libéré : la sélection du bloc ne survit pas (mappée à travers le remplacement, elle prendrait le premier paragraphe pour un nœud
-  // sélectionné, que la frappe suivante remplacerait). Faux, sans rien changer, si `pos` ne porte plus un bloc ou si son parent n'accepte pas ses blocs à sa place.
+  // « Défaire le bloc » (fenêtre de condition, js/variable-condition.js) : le bloc qui commence à `pos` disparaît avec sa condition, son contenu
+  // reste à sa place, en une seule transaction (un Ctrl+Z rend le bloc et sa condition). Le bloc est remplacé par son contenu, pas « levé » (tr.lift,
+  // comme « Retirer l'encadré » de js/callout.js) : en mode suivi, la bibliothèque traduit une levée en texte barré dans le cadre et le même texte
+  // inséré après lui, et le cadre, vide, reste une fois tout accepté ; un remplacement donne le bloc entier barré et son contenu inséré, donc « Tout
+  // accepter » rend le document sans le bloc et « Tout refuser » celui d'avant. Le curseur se pose au début du texte libéré : la sélection du bloc ne
+  // survit pas (mappée à travers le remplacement, elle prendrait le premier paragraphe pour un nœud sélectionné, que la frappe suivante
+  // remplacerait). Faux, sans rien changer, si `pos` ne porte plus un bloc ou si son parent n'accepte pas ses blocs à sa place.
   function unwrap(editor, pos) {
     const { state, view } = editor;
     const node = state.doc.nodeAt(pos);
@@ -174,6 +178,7 @@ const ConditionalText = (function () {
     return true;
   }
 
-  // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
+  // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être
+  // entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
   return { resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap };
 })();

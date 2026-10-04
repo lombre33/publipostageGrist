@@ -31,8 +31,8 @@ const ConditionRules = (function () {
   function daysInMonth(year, month1based) { return new Date(Date.UTC(year, month1based, 0)).getUTCDate(); }
   // « 26/09/2026 » (saisie en français) ou « 2026-09-26 » (ISO, format de GristDate.toString()) : Date.parse seul est trop ambigu selon le moteur
   // (JJ/MM ou MM/JJ). Construite en UTC (Date.UTC, jamais `new Date(y, m, d)` qui lit en heure locale) pour que la comparaison ne dépende pas du
-  // fuseau du navigateur : une valeur Grist est un jour calendaire, pas un instant local. Un jour ou un mois hors bornes (« 31/02/2026 », «
-  // 09/26/2026 ») est refusé au lieu de déborder sur un autre mois : une date saisie invalide ne correspond jamais.
+  // fuseau du navigateur : une valeur Grist est un jour calendaire, pas un instant local. Un jour ou un mois hors bornes (« 31/02/2026 »,
+  // « 09/26/2026 ») est refusé au lieu de déborder sur un autre mois : une date saisie invalide ne correspond jamais.
   function parseDateExpected(expected) {
     const s = String(expected == null ? '' : expected).trim();
     const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -48,12 +48,14 @@ const ConditionRules = (function () {
   // getUTC*, jamais getFullYear/getMonth/getDate (heure locale), pour la même raison. Jour calendaire nu (colonne Date, ou date saisie dans la règle,
   // toujours sans fuseau) ; pour une colonne DateTime:<fuseau>, voir dayKeyInZone.
   function dayKey(d) { return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
-  const zoneFormatters = new Map();  // fuseau -> formateur Intl, un par fuseau de colonne du document : en construire un coûte ~60 µs, formater moins d'1 µs
+  // fuseau -> formateur Intl, un par fuseau de colonne du document : en construire un coûte ~60 µs, formater moins d'1 µs
+  const zoneFormatters = new Map();
   function zoneFormatter(tz) {
     if (!zoneFormatters.has(tz)) {
       let formatter;
       try { formatter = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }); }
-      catch (e) { formatter = { format: dayKey }; }  // fuseau que le moteur JS ne reconnaît pas (très rare) : jour UTC plutôt que planter la comparaison
+      // fuseau que le moteur JS ne reconnaît pas (très rare) : jour UTC plutôt que planter la comparaison
+      catch (e) { formatter = { format: dayKey }; }
       zoneFormatters.set(tz, formatter);
     }
     return zoneFormatters.get(tz);
@@ -82,9 +84,9 @@ const ConditionRules = (function () {
   // Opérateurs : '=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide' (planning/feature-conditional-content.md). `columnType` (la chaîne de
   // js/grist-api.js:getColumnType : "Text", "Numeric", "Bool", "Date", "DateTime:UTC", "Choice", "Ref:Table"... ; null ou undefined si inconnue)
   // décide de trois cas avant la comparaison générale :
-  //  - Liste (choix multiples, liste de références : un tableau) : « = » veut dire « contient ce choix » et « ≠ » « ne le contient pas » (« = Projet
-  //    » retient donc une ligne Projet + Urgent), comme le filtre d'une boucle (js/loop-rules.js:ruleHolds) ; les autres opérateurs lisent la forme
-  //    texte « Projet,Urgent ».
+  //  - Liste (choix multiples, liste de références : un tableau) : « = » veut dire « contient ce choix » et « ≠ » « ne le contient pas » (« =
+  //    Projet » retient donc une ligne Projet + Urgent), comme le filtre d'une boucle (js/loop-rules.js:ruleHolds) ; les autres opérateurs lisent la
+  //    forme texte « Projet,Urgent ».
   //  - Bool : Grist renvoie un booléen JS, jamais égal au mot français tapé dans la règle (« Oui », « Non »).
   //  - Date/DateTime : voir toUtcInstant, parseDateExpected et dayKey ci-dessus.
   // Sans `columnType`, les cas Bool et Date sont ignorés et la comparaison générale s'applique. Reference et ReferenceList n'ont pas de cas propre :
@@ -186,10 +188,10 @@ const ConditionRules = (function () {
     return c.mode === 'any' ? results.some(Boolean) : results.every(Boolean);
   }
 
-  // Verdict de la condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels), lue dans son attribut data-condition et évaluée avec la ligne du
-  // tour de la zone répétée qui le contient (js/loop-rules.js:bindingOf) : une règle sur une colonne de la table de la boucle lit alors cette ligne. `whenNone` : le
-  // verdict d'un élément sans condition ou sans règle complète. Une condition illisible, ou dont l'évaluation échoue, ne laisse rien passer : faux, comme une règle
-  // illisible.
+  // Verdict de la condition d'un élément du modèle (bloc, valeur, case ou bulle conditionnels), lue dans son attribut data-condition et évaluée avec
+  // la ligne du tour de la zone répétée qui le contient (js/loop-rules.js:bindingOf) : une règle sur une colonne de la table de la boucle lit alors
+  // cette ligne. `whenNone` : le verdict d'un élément sans condition ou sans règle complète. Une condition illisible, ou dont l'évaluation échoue, ne
+  // laisse rien passer : faux, comme une règle illisible.
   async function elementHolds(el, tableId, record, whenNone) {
     const raw = el.getAttribute('data-condition');
     if (!raw) return whenNone;
