@@ -566,14 +566,10 @@ const ReaderMode = (function () {
     // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
     stopGeometryWatch();
     // État vide : atteignable depuis js/main.js:renderReader(), qui appelle désormais render() avec record=null au lieu de retourner en silence (le mode
-    // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas de .error-msg ici : ce n'est pas une erreur, juste une étape
-    // que l'utilisateur n'a pas encore faite.
+    // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas une erreur, juste une étape que l'utilisateur n'a pas encore
+    // faite : js/reader-guide.js la lui explique (le guide en trois étapes, ou le court message quand le widget est déjà relié à un tableau).
     if (!record) {
-      container.innerHTML = '';
-      const empty = document.createElement('div'); empty.className = 'reader-empty';
-      const title = document.createElement('p'); title.className = 'reader-empty-title'; title.textContent = I18n.t('reader.empty.title');
-      const hint = document.createElement('p'); hint.className = 'reader-empty-hint'; hint.textContent = I18n.t('reader.empty.hint');
-      empty.appendChild(title); empty.appendChild(hint); container.appendChild(empty);
+      ReaderGuide.render(container);
       return;
     }
     return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));

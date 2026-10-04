@@ -85,6 +85,7 @@
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.68">
 <link rel="stylesheet" href="css/style.css?v=0.86">
+<link rel="stylesheet" href="css/reader-guide.css?v=0.1">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.96">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.53">
 <link rel="stylesheet" href="css/grid.css?v=0.6">
@@ -617,7 +618,7 @@
 </div>
 <script src="js/html-sanitize.js?v=0.3"></script>
 <script src="js/page-tree.js?v=0.2"></script>
-<script src="js/grist-api.js?v=0.89"></script>
+<script src="js/grist-api.js?v=0.90"></script>
 <script src="js/templates.js?v=0.83"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
@@ -630,8 +631,9 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.116"></script>
-<script src="js/i18n.js?v=0.98"></script>
+<script src="js/reader-mode.js?v=0.117"></script>
+<script src="js/reader-guide.js?v=0.1"></script>
+<script src="js/i18n.js?v=0.99"></script>
 <script src="js/shortcuts.js?v=0.7"></script>
 <script src="js/page-layout.js?v=0.7"></script>
 <script src="js/page-layer.js?v=0.3"></script>

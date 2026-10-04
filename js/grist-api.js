@@ -89,6 +89,9 @@ const GristAPI = (function () {
   let _tokenCache = null;
   // Abonnés aux options JSON du widget (js/access-rights.js) : grist.onOptions n'est enregistré qu'une fois, ici, et redistribué.
   let _optionsCallbacks = [];
+  // Le lien « Sélectionner par » de CE widget, d'après settings.linking de grist.onOptions (js/reader-guide.js). 'unknown' tant que Grist ne le dit pas.
+  let _linkState = 'unknown';
+  let _linkStateCallbacks = [];
 
   // Corps commun à toutes les souscriptions onRecord ci-dessous (repli 'shown' et souscription enrichie 'normal') - jamais dupliqué entre elles pour
   // ne pas désynchroniser leur traitement (notification des callbacks, detectTableId, logs) au fil des correctifs futurs.
@@ -125,6 +128,15 @@ const GristAPI = (function () {
     }).catch(function (e) {
       console.warn('[GristAPI] onRecord: échec detectTableId —', e);
     });
+  }
+
+  // settings.linking = { asTarget, asSource } (WidgetFrame.ts de grist-core, vérifié à la source le 2026-10-04) : asTarget est le type du lien qui pilote ce widget (« Cursor:Same-Table »...) ou
+  // null quand « Sélectionner par » est vide, et Grist le renvoie à chaque changement de ce réglage. Absent des versions de Grist qui ne le disent pas : rien n'est alors affirmé.
+  function linkStateOf(settings) {
+    const linking = settings && settings.linking;
+    if (!linking || typeof linking !== 'object') return 'unknown';
+    if (linking.asTarget === null) return 'unlinked';
+    return typeof linking.asTarget === 'string' && linking.asTarget ? 'linked' : 'unknown';
   }
 
   // Avertit une seule fois si l'accès accordé n'est pas "full" - appelé depuis onOptions dans init(). Purement informatif : la souscription 'normal'
@@ -194,6 +206,13 @@ const GristAPI = (function () {
         _currentOptions = options || null;
         console.log('[GristAPI] onOptions reçu: optionsJSON=', safeJSONStringify(options), 'settings=', settings);
         warnIfLimitedAccess(settings && settings.accessLevel);
+        const linkState = linkStateOf(settings);
+        if (linkState !== _linkState) {
+          _linkState = linkState;
+          for (const cb of _linkStateCallbacks) {
+            try { cb(linkState); } catch (e) { console.error('[GristAPI] erreur callback onLinkStateChange:', e); }
+          }
+        }
         for (const cb of _optionsCallbacks) {
           try { cb(_currentOptions); } catch (e) { console.error('[GristAPI] erreur callback onOptions:', e); }
         }
@@ -559,6 +578,9 @@ const GristAPI = (function () {
   // Options JSON propres au widget (jamais accessLevel, cf. init()) : lues au démarrage par getOptions puis tenues à jour par onOptions.
   function getWidgetOptions() { return _currentOptions; }
   function onWidgetOptionsChange(cb) { _optionsCallbacks.push(cb); }
+  // 'linked' (relié à une autre vue), 'unlinked' (« Sélectionner par » vide) ou 'unknown' ; le rappel reçoit le nouvel état à chaque changement.
+  function getLinkState() { return _linkState; }
+  function onLinkStateChange(cb) { _linkStateCallbacks.push(cb); }
   // grist.setOption ne pose qu'un BROUILLON des options de la section (ViewSectionRec.activeCustomOptions, vérifié à la source grist-core) : Grist
   // affiche alors un bouton Enregistrer en haut du widget, seul moyen de le rendre durable et visible des autres personnes. Recopié localement tout de
   // suite, sans attendre le retour d'onOptions.
@@ -804,5 +826,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getColumnType, getColumnChoices, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange };
 })();
