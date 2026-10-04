@@ -196,43 +196,49 @@ const MainToolbar = (function () {
     set('v2-font-chip-caret', 'caretDown');
   }
 
+  const byId = id => document.getElementById(id);
+  const setActive = (id, on) => { const el = byId(id); if (el) el.classList.toggle('is-active', !!on); };
+  const setDisabled = (id, off) => { const el = byId(id); if (el) el.disabled = !!off; };
+  const MARK_BUTTONS = { 'v2-btn-bold': 'bold', 'v2-btn-italic': 'italic', 'v2-btn-underline': 'underline', 'v2-btn-strike': 'strike' };
+  const ALIGNMENTS = ['left', 'center', 'right', 'justify'];
+  // Liste -> [attribut qui porte son style, style sans attribut, bouton de chaque style] : dans la liste où est le curseur, le bouton de son style est enfoncé.
+  const LIST_STYLE_BUTTONS = {
+    bulletList: ['bulletStyle', 'disc', { 'v2-btn-bullet-disc': 'disc', 'v2-btn-bullet-circle': 'circle', 'v2-btn-bullet-square': 'square' }],
+    orderedList: ['numberStyle', 'decimal', { 'v2-btn-ordered-numeric': 'decimal', 'v2-btn-ordered-alpha': 'alpha', 'v2-btn-ordered-roman': 'roman' }],
+    taskList: ['taskListStyle', 'accentStrike', { 'v2-btn-checklist-accent-strike': 'accentStrike', 'v2-btn-checklist-classic': 'classic', 'v2-btn-checklist-accent-plain': 'accentPlain' }],
+  };
+
   // Retour visuel d'état actif, recalculé à chaque sélection/transaction (pas seulement au clic) pour rester juste au clavier/à la souris aussi.
   function syncToolbarState() {
-    const setActive = (id, isActive) => { const el = document.getElementById(id); if (el) el.classList.toggle('is-active', !!isActive); };
-    setActive('v2-btn-bold', editor.isActive('bold'));
-    setActive('v2-btn-italic', editor.isActive('italic'));
-    setActive('v2-btn-underline', editor.isActive('underline'));
-    setActive('v2-btn-strike', editor.isActive('strike'));
-    setActive('v2-btn-align-left', editor.isActive({ textAlign: 'left' }));
-    setActive('v2-btn-align-center', editor.isActive({ textAlign: 'center' }));
-    setActive('v2-btn-align-right', editor.isActive({ textAlign: 'right' }));
-    setActive('v2-btn-align-justify', editor.isActive({ textAlign: 'justify' }));
+    syncTextButtons();
+    syncBlockButtons();
+    syncPageBreakButton();
+    syncGridLocks(syncLocks());
+    syncHeadingChip();
+    syncTextStyleChips();
+  }
+
+  function syncTextButtons() {
+    Object.entries(MARK_BUTTONS).forEach(([id, mark]) => setActive(id, editor.isActive(mark)));
+    const aligned = ALIGNMENTS.filter(a => editor.isActive({ textAlign: a }));
+    ALIGNMENTS.forEach(a => setActive('v2-btn-align-' + a, aligned.includes(a)));
     // Bouton principal du groupe survol "Alignement" : montre toujours l'alignement réel du curseur, relu par son propre clic pour le réappliquer.
-    const aligns = ['left', 'center', 'right', 'justify'];
-    currentAlign = aligns.find(a => editor.isActive({ textAlign: a })) || 'left';
-    const alignMain = document.getElementById('v2-btn-align-main');
+    currentAlign = aligned[0] || 'left';
+    const alignMain = byId('v2-btn-align-main');
     if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
     // Bouton "Liste" fusionné : actif dès qu'un des trois types l'est.
-    setActive('v2-btn-bullet', editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList'));
-    const bulletStyle = editor.isActive('bulletList') ? (editor.getAttributes('bulletList').bulletStyle || 'disc') : null;
-    setActive('v2-btn-bullet-disc', bulletStyle === 'disc');
-    setActive('v2-btn-bullet-circle', bulletStyle === 'circle');
-    setActive('v2-btn-bullet-square', bulletStyle === 'square');
-    const orderedStyle = editor.isActive('orderedList') ? (editor.getAttributes('orderedList').numberStyle || 'decimal') : null;
-    setActive('v2-btn-ordered-numeric', orderedStyle === 'decimal');
-    setActive('v2-btn-ordered-alpha', orderedStyle === 'alpha');
-    setActive('v2-btn-ordered-roman', orderedStyle === 'roman');
-    const taskListStyle = editor.isActive('taskList') ? (editor.getAttributes('taskList').taskListStyle || 'accentStrike') : null;
-    setActive('v2-btn-checklist-accent-strike', taskListStyle === 'accentStrike');
-    setActive('v2-btn-checklist-classic', taskListStyle === 'classic');
-    setActive('v2-btn-checklist-accent-plain', taskListStyle === 'accentPlain');
-    const setDisabled = (id, disabled) => { const el = document.getElementById(id); if (el) el.disabled = !!disabled; };
+    setActive('v2-btn-bullet', Object.keys(LIST_STYLE_BUTTONS).some(list => editor.isActive(list)));
+    Object.entries(LIST_STYLE_BUTTONS).forEach(([list, [attr, fallback, buttons]]) => {
+      const style = editor.isActive(list) ? editor.getAttributes(list)[attr] || fallback : null;
+      Object.entries(buttons).forEach(([id, name]) => setActive(id, style === name));
+    });
+  }
+
+  function syncBlockButtons() {
     // Sur une sélection de cases, `can()` est toujours faux (son début est avant la liste, pas dedans) : les boutons se grisent d'après les listes que les cases contiennent.
     const cellsSelected = EditorCore.isCellSelection(editor.state.selection);
     setDisabled('v2-btn-indent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('in') : !editor.can().sinkListItem('listItem'));
     setDisabled('v2-btn-outdent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('out') : !editor.can().liftListItem('listItem'));
-    // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
-    // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
     setActive('v2-btn-citation', EditorCore.isQuoteActive());
     setActive('v2-btn-code-block', editor.isActive('codeBlock'));
     const inLink = editor.isActive('link');
@@ -246,107 +252,101 @@ const MainToolbar = (function () {
     const qrSelected = QrCode.isSelected(editor);
     setActive('v2-btn-qr', qrSelected);
     relabelQr(qrSelected);
+    // Suivi des modifications : le bouton bascule reste toujours actionnable (règle d'Antoine, jamais de bouton masqué) ; accepter/refuser tout se grisent
+    // sans document en attente au lieu de disparaître, recalculé à chaque transaction (accepter/refuser une suggestion, bascule du mode) via ce même hook.
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
-    // En-tête/pied : verrouille tableau/2-colonnes/saut de page/sommaire/numérotation (sans objet ici) ; l'image reste active, seul son calque
-    // devant/derrière est bloqué plus bas.
+  }
+
+  // Boutons grisés (classe v2-hf-locked : jamais retirés, règle d'Antoine) selon le mode et la sélection. Un bouton n'a qu'une condition ; renvoie ceux qui sont grisés.
+  function syncLocks() {
+    const mailOrMacro = inEmailMode || inMacroMode;
     const inHfMode = !!HeaderFooterPreview.getHfMode();
+    const groups = [
+      // Mode email : verrouille tout ce qui n'a aucun sens dans un mailto: (texte brut - cf. en-tête js/mailto-export.js). Titres, listes/retrait, commentaire,
+      // annuler/rétablir et #Variable restent actifs (liste exhaustive des USABLE de ce fichier) - tout le reste de la mise en forme est grisé, jamais retiré
+      // (règle d'Antoine). Les groupes à survol (alignement, image) sont verrouillés dans leur ENTIER (pointer-events hérite aux descendants, cf.
+      // css/toolbar-v2.css:208) pour bloquer aussi leur volet déroulant, pas seulement leur bouton visible. Un macro-modèle n'a aucun corps propre à mettre en forme.
+      [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip', 'v2-text-color-split',
+        'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc']],
+      // Dans une grille le bouton pose (ou retire) le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée sur plusieurs lignes.
+      [mailOrMacro || (inGridMode && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
+      // Un macro-modèle verrouille aussi ce que le mode email laisse actif ; le menu « Lien et blocs de contenu » est grisé en entier.
+      [inMacroMode, ['v2-heading-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
+        'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all']],
+      // Numérotation : un niveau de titre garde un sens dans un en-tête/pied, la numérotation (titres du flux principal seul) non.
+      [inHfMode, ['v2-numbering-seg']],
+      // En édition, deux lignes du menu « Lien et blocs de contenu » se grisent selon la sélection au lieu de disparaître : pas de lien dans un bloc de code ni sur
+      // une image seule, pas de bloc de code qui effacerait une variable ou une image.
+      [!LinkDialog.canLinkHere(editor), ['v2-btn-link', 'v2-row-link']],
+      [!editor.isActive('codeBlock') && codeBlockWouldDropContent(), ['v2-btn-code-block']],
+      // Encadré et signature : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page ; la signature est une zone 2 colonnes. QR code : une
+      // image, donc pas dans un e-mail ; ni dans un en-tête ou un pied de page pour l'instant, la Lecture n'y résout pas les colonnes (ReaderMode.resolveHeaderFooterZone).
+      // Dans une grille, la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
+      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr']],
+    ];
     const lockedNow = new Set();
-    const setLocked = (id, locked) => { const el = document.getElementById(id); if (!el) return; el.classList.toggle('v2-hf-locked', !!locked); if (locked) lockedNow.add(id); };
-    setLocked('v2-btn-table', inHfMode);
-    setLocked('v2-btn-two-columns', inHfMode);
-    setLocked('v2-btn-page-break', inHfMode);
-    setLocked('v2-btn-toc', inHfMode);
-    // Numérotation seule verrouillée : un niveau de titre garde un sens dans un en-tête/pied, la numérotation (titres du flux principal seul) non.
-    setLocked('v2-numbering-seg', inHfMode);
-    // Mode email : verrouille tout ce qui n'a aucun sens dans un mailto: (texte brut - cf. en-tête js/mailto-export.js). Titres, listes/retrait, commentaire,
-    // annuler/rétablir et #Variable restent actifs (liste exhaustive des USABLE de ce fichier) - tout le reste de la mise en forme est grisé, jamais retiré
-    // (règle d'Antoine). Les groupes à survol (alignement, image) sont verrouillés dans leur ENTIER (pointer-events hérite aux descendants, cf.
-    // css/toolbar-v2.css:208) pour bloquer aussi leur volet déroulant, pas seulement leur bouton visible.
-    setLocked('v2-btn-bold', inEmailMode || inMacroMode);
-    setLocked('v2-btn-italic', inEmailMode || inMacroMode);
-    setLocked('v2-btn-underline', inEmailMode || inMacroMode);
-    setLocked('v2-btn-strike', inEmailMode || inMacroMode);
-    setLocked('v2-align-group', inEmailMode || inMacroMode);
-    setLocked('v2-size-stepper', inEmailMode || inMacroMode);
-    setLocked('v2-font-chip', inEmailMode || inMacroMode);
-    setLocked('v2-text-color-split', inEmailMode || inMacroMode);
-    setLocked('v2-highlight-split', inEmailMode || inMacroMode);
-    setLocked('v2-btn-format-painter', inEmailMode || inMacroMode);
-    setLocked('v2-btn-table', inEmailMode || inMacroMode);
-    setLocked('v2-btn-two-columns', inEmailMode || inMacroMode);
-    setLocked('v2-image-group', inEmailMode || inMacroMode);
-    // Dans une grille le bouton pose (ou retire) le saut avant la ligne sélectionnée : grisé sur la première ligne et au milieu d'une case fusionnée sur plusieurs lignes, enfoncé sur une ligne qui
-    // en porte un ; son libellé le dit (un autre texte pour la même icône, dans les deux langues : les clés suivent le mode, I18n.applyTranslations les relit au changement de langue).
-    setLocked('v2-btn-page-break', inEmailMode || inMacroMode || (inGridMode && !GridEditor.canTogglePageBreak(editor)));
-    const pageBreakBtn = document.getElementById('v2-btn-page-break');
-    if (pageBreakBtn) {
-      const keys = inGridMode ? ['insert.pageBreak.gridTip', 'insert.pageBreak.gridAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
-      if (pageBreakBtn.getAttribute('data-i18n-tip') !== keys[0]) {
-        pageBreakBtn.setAttribute('data-i18n-tip', keys[0]); pageBreakBtn.setAttribute('data-i18n-aria', keys[1]);
-        pageBreakBtn.setAttribute('data-tip', I18n.t(keys[0])); pageBreakBtn.setAttribute('aria-label', I18n.t(keys[1]));
-      }
-      const onBreak = inGridMode && GridEditor.hasPageBreak(editor);
-      setActive('v2-btn-page-break', onBreak);
-      if (inGridMode) pageBreakBtn.setAttribute('aria-pressed', onBreak ? 'true' : 'false'); else pageBreakBtn.removeAttribute('aria-pressed');
+    groups.forEach(([locked, ids]) => ids.forEach(id => {
+      const el = byId(id);
+      if (!el) return;
+      el.classList.toggle('v2-hf-locked', !!locked);
+      if (locked) lockedNow.add(id);
+    }));
+    return lockedNow;
+  }
+
+  // Dans une grille le bouton « Saut de page » pose (ou retire) le saut avant la ligne sélectionnée : enfoncé sur une ligne qui en porte un ; son libellé le dit (un autre
+  // texte pour la même icône, dans les deux langues : les clés suivent le mode, I18n.applyTranslations les relit au changement de langue).
+  function syncPageBreakButton() {
+    const button = byId('v2-btn-page-break');
+    if (!button) return;
+    const keys = inGridMode ? ['insert.pageBreak.gridTip', 'insert.pageBreak.gridAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
+    if (button.getAttribute('data-i18n-tip') !== keys[0]) {
+      button.setAttribute('data-i18n-tip', keys[0]); button.setAttribute('data-i18n-aria', keys[1]);
+      button.setAttribute('data-tip', I18n.t(keys[0])); button.setAttribute('aria-label', I18n.t(keys[1]));
     }
-    setLocked('v2-btn-toc', inEmailMode || inMacroMode);
-    // Un macro-modèle n'a aucun corps propre à mettre en forme (contrairement au mode email) : verrouille aussi ce que le mode email laisse actif.
-    setLocked('v2-heading-group', inMacroMode);
-    setLocked('v2-btn-comment', inMacroMode);
-    setLocked('v2-btn-insert-variable', inMacroMode);
-    setLocked('v2-btn-undo', inMacroMode);
-    setLocked('v2-btn-redo', inMacroMode);
-    setLocked('v2-btn-find', inMacroMode);
-    setLocked('v2-btn-track-changes', inMacroMode);
-    // Menu « Lien et blocs de contenu » : grisé en entier pour un macro-modèle (comme le reste de la barre) ; en édition, deux lignes se grisent selon la
-    // sélection au lieu de disparaître - pas de lien dans un bloc de code ni sur une image seule, pas de bloc de code qui effacerait une variable ou une image.
-    setLocked('v2-blocks-group', inMacroMode);
-    const linkImpossible = !LinkDialog.canLinkHere(editor);
-    setLocked('v2-btn-link', linkImpossible);
-    setLocked('v2-row-link', linkImpossible);
-    setLocked('v2-btn-code-block', !editor.isActive('codeBlock') && codeBlockWouldDropContent());
-    // Encadré et signature : sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page ; la signature est une zone 2 colonnes, verrouillée là aussi.
-    setLocked('v2-btn-callout', inEmailMode || inHfMode);
-    setLocked('v2-btn-signature', inEmailMode || inHfMode);
-    // QR code : une image, donc pas dans un e-mail (texte brut, le groupe Image y est grisé aussi) ; ni dans un en-tête ou un pied de page pour l'instant, la Lecture n'y résout pas
-    // les colonnes (ReaderMode.resolveHeaderFooterZone). Dans une grille, la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
-    setLocked('v2-btn-qr', inEmailMode || inHfMode);
-    setLocked('v2-btn-accept-all', inMacroMode);
-    setLocked('v2-btn-reject-all', inMacroMode);
-    // Mode grille : appliqué APRÈS tous les verrouillages ci-dessus (le dernier appel gagne). En quittant la grille, un bouton que l'une des lignes ci-dessus gère
-    // vient d'être recalculé par elle ; seul un bouton qu'aucune ne gère (la citation) est rendu ici ; ceux de l'encadré et de la signature, que la ligne ci-dessus grise pour un e-mail ou un en-tête, le restent.
+    const onBreak = inGridMode && GridEditor.hasPageBreak(editor);
+    setActive('v2-btn-page-break', onBreak);
+    if (inGridMode) button.setAttribute('aria-pressed', onBreak ? 'true' : 'false'); else button.removeAttribute('aria-pressed');
+  }
+
+  // Mode grille : appliqué APRÈS tous les verrouillages de syncLocks (le dernier appel gagne). En quittant la grille, un bouton que syncLocks gère vient d'être
+  // recalculé par elle ; seul un bouton qu'elle ne gère pas (la citation) est rendu ici ; ceux de l'encadré et de la signature, qu'elle grise pour un e-mail ou un en-tête, le restent.
+  function syncGridLocks(lockedNow) {
     GRID_LOCKED_IDS.forEach(id => {
-      const el = document.getElementById(id);
+      const el = byId(id);
       if (!el) return;
       if (inGridMode) { el.classList.add('v2-hf-locked'); gridLockedIds.add(id); }
       else if (gridLockedIds.delete(id) && !lockedNow.has(id)) el.classList.remove('v2-hf-locked');
     });
-    const headerSelect = document.getElementById('v2-header-select');
-    if (headerSelect) {
-      let value = 'p';
-      for (let level = 1; level <= 6; level++) { if (editor.isActive('heading', { level })) value = String(level); }
-      if (headerSelect.value !== value) headerSelect.value = value;
-      const chipVal = document.getElementById('v2-heading-chip-val');
-      if (chipVal) chipVal.textContent = value === 'p' ? 'Normal' : 'Titre ' + value;
-      const headingFlyout = document.getElementById('v2-heading-flyout');
-      if (headingFlyout) {
-        headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => {
-          row.classList.toggle('is-active', row.dataset.level === value);
-        });
-      }
-    }
+  }
+
+  function syncHeadingChip() {
+    const headerSelect = byId('v2-header-select');
+    if (!headerSelect) return;
+    const level = [6, 5, 4, 3, 2, 1].find(l => editor.isActive('heading', { level: l }));
+    const value = level ? String(level) : 'p';
+    if (headerSelect.value !== value) headerSelect.value = value;
+    const chipVal = byId('v2-heading-chip-val');
+    if (chipVal) chipVal.textContent = value === 'p' ? 'Normal' : 'Titre ' + value;
+    const headingFlyout = byId('v2-heading-flyout');
+    if (headingFlyout) headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => row.classList.toggle('is-active', row.dataset.level === value));
+  }
+
+  function syncTextStyleChips() {
     const textStyleAttrs = editor.getAttributes('textStyle');
     EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Repli sur la police/taille réellement rendue (Roboto/10.5pt, cf. .tiptap dans editor-v2.css) en l'absence de marque explicite, plutôt qu'un
     // "Police"/"Taille" vide qui ne montrait jamais rien par défaut.
-    const fontChipVal = document.getElementById('v2-font-chip-val');
-    if (fontChipVal) { const value = textStyleAttrs.fontFamily || 'Roboto'; if (fontChipVal.textContent !== value) fontChipVal.textContent = value; }
-    const sizeChipVal = document.getElementById('v2-size-chip-val');
-    if (sizeChipVal) { const value = textStyleAttrs.fontSize || '10.5pt'; if (sizeChipVal.textContent !== value) sizeChipVal.textContent = value; }
+    setChipText('v2-font-chip-val', textStyleAttrs.fontFamily || 'Roboto');
+    setChipText('v2-size-chip-val', textStyleAttrs.fontSize || '10.5pt');
+  }
+  function setChipText(id, value) {
+    const chip = byId(id);
+    if (chip && chip.textContent !== value) chip.textContent = value;
   }
   // Bloc de code : du texte brut, sans marque ni bulle. Convertir un paragraphe qui porte une variable, une pastille ou une image l'effacerait en silence (ProseMirror
   // retire ce que le nouveau type n'accepte pas) : la ligne se grise dans ce cas (syncToolbarState). Gras, couleur ou lien, eux, sont simplement perdus, comme dans
