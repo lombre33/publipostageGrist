@@ -175,5 +175,5 @@ const Caption = (function () {
     return unitHeight <= TablePageCut.MAX_ROW_RATIO * pageHeight;
   }
 
-  return { SIZE_PX, SIZE_PT, COLOR, createExtension, status, syncButton, run, isCaptionElement, carriesCaption, captionsAfter, fitsWithCaption };
+  return { SIZE_PT, COLOR, createExtension, syncButton, run, isCaptionElement, carriesCaption, captionsAfter, fitsWithCaption };
 })();

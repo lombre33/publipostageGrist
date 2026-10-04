@@ -217,5 +217,5 @@ const WatermarkDialog = (function () {
   function apply() { commit(described()); }
   function removeWatermark() { commit(null); }
 
-  return { COLORS, COLOR_ORDER, OPACITY_MIN, OPACITY_MAX, OPACITY_STEP, open };
+  return { open };
 })();

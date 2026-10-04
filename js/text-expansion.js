@@ -1,27 +1,29 @@
-// Expansion de texte, « phrase expander » (demande d'Antoine du 2026-10-01 : « si le caractère choisi est § , « §ub » devient « université de Bordeaux » ») : un caractère
-// déclencheur (« § » par défaut, réglable dans Réglages > Raccourcis), une abréviation, puis un espace - ou une ponctuation, ou Tab dans la liste - et l'abréviation est
-// remplacée par son texte, avec la mise en forme de ce qu'on vient de taper. Retour arrière juste après l'expansion rend la saisie d'origine (« §ub »). Le déclencheur seul
-// ouvre la liste des abréviations, filtrée à la frappe : même fonctionnement que le panneau # de js/variables.js (@tiptap/suggestion, flèches, Entrée ou Tab, Échap).
+// Expansion de texte : un caractère déclencheur (« § » par défaut, réglable dans Réglages > Raccourcis), une abréviation, puis un espace (ou une
+// ponctuation, ou Tab dans la liste), et l'abréviation est remplacée par son texte, avec la mise en forme de ce qu'on vient de taper (« §ub » devient
+// « université de Bordeaux »). Retour arrière juste après l'expansion rend la saisie d'origine. Le déclencheur seul ouvre la liste des abréviations,
+// filtrée à la frappe, comme le panneau # de js/variables.js (@tiptap/suggestion, flèches, Entrée ou Tab, Échap).
 //
-// Par personne : les abréviations vivent dans la table Publipostage_Abreviations du document (Utilisateur = email Grist, repli '' sans identité - même patron que
-// js/template-preferences.js), créée à la première abréviation ajoutée ; le caractère déclencheur, comme la langue et le thème, est en localStorage (par navigateur).
-// La table est lue au premier focus de l'éditeur ou à l'ouverture de l'onglet Réglages > Raccourcis, jamais au démarrage du widget.
+// Par personne : les abréviations vivent dans la table Publipostage_Abreviations du document (Utilisateur = email Grist, repli '' sans identité, même
+// patron que js/template-preferences.js), créée à la première abréviation ajoutée. Le caractère déclencheur, comme la langue et le thème, est en
+// localStorage (par navigateur). La table est lue au premier focus de l'éditeur ou à l'ouverture de Réglages > Raccourcis, jamais au démarrage du
+// widget.
 //
-// Le caractère déclencheur se relit à chaque frappe (findSuggestion, findTypedAbbreviation) : un changement dans Réglages vaut tout de suite, sans recharger - contrairement
-// au `char` du panneau # (js/variables.js), qui est figé à la construction de l'éditeur.
+// Le caractère déclencheur se relit à chaque frappe (findSuggestion, findTypedAbbreviation) : un changement dans Réglages vaut tout de suite, alors
+// que le `char` du panneau # (js/variables.js) est figé à la construction de l'éditeur.
 const TextExpansion = (function () {
   const TABLE_NAME = 'Publipostage_Abreviations';
   const CHAR_STORAGE = 'pp_expansion_char';
   const DEFAULT_CHAR = '§';
   const MAX_ABBREVIATION_LENGTH = 30;
   const MAX_TEXT_LENGTH = 2000;
-  // Ce qu'on peut taper après le déclencheur : lettres (toutes langues), chiffres, tiret et tiret bas. Tout autre caractère tapé juste après une abréviation entière la
-  // clôt (DELIMITERS) ou n'a aucun rapport avec elle.
+  // Ce qu'on peut taper après le déclencheur : lettres (toutes langues), chiffres, tiret et tiret bas. Tout autre caractère tapé juste après une
+  // abréviation entière la clôt (DELIMITERS) ou n'a aucun rapport avec elle.
   const ABBREVIATION_PATTERN = /^[\p{L}\p{N}_-]+$/u;
-  // Tapés juste après une abréviation entière, ces caractères la remplacent par son texte : l'espace (normale, insécable, fine insécable), la ponctuation et les fermants.
-  // Pas Entrée : la règle de saisie la consommerait sans couper le paragraphe ; Entrée ouvre sa propre voie, la liste.
+  // Tapés juste après une abréviation entière, ces caractères la remplacent par son texte : l'espace (normale, insécable, fine insécable), la
+  // ponctuation et les fermants. Pas Entrée : la règle de saisie la consommerait sans couper le paragraphe ; Entrée ouvre sa propre voie, la liste.
   const DELIMITERS = '   .,;:!?)]}»';
-  // Erreurs de saisie que l'onglet Réglages sait écrire (clés `settings.expansion.error.<code>`) ; toute autre erreur est un échec d'écriture dans Grist.
+  // Erreurs de saisie que l'onglet Réglages sait écrire (clés `settings.expansion.error.<code>`) ; toute autre erreur est un échec d'écriture dans
+  // Grist.
   const VALIDATION_CODES = ['empty', 'tooLong', 'chars', 'duplicate', 'textEmpty', 'textTooLong'];
 
   function lang() { return (typeof I18n !== 'undefined' && I18n.getLang()) || 'fr'; }
@@ -29,7 +31,7 @@ const TextExpansion = (function () {
   function escapeRegExp(text) { return String(text).replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&'); }
   function variablesChar() { return typeof Variables !== 'undefined' ? Variables.triggerChar() : '#'; }
 
-  // === Caractère déclencheur ================================================================================================================================
+  // Caractère déclencheur
 
   function storedChar() {
     try {
@@ -38,8 +40,9 @@ const TextExpansion = (function () {
     } catch (e) { return DEFAULT_CHAR; }
   }
 
-  // Ni lettre, chiffre, espace, tiret ni tiret bas (ce sont les caractères d'une abréviation), ni un délimiteur (il clôt une abréviation), ni une moitié de caractère
-  // sur deux positions (un emoji coupé par maxlength). Retourne '' quand le caractère convient, sinon la fin de la clé `settings.expansion.char.<problème>`.
+  // Ni lettre, chiffre, espace, tiret ni tiret bas (ce sont les caractères d'une abréviation), ni un délimiteur (il clôt une abréviation), ni une
+  // moitié de caractère sur deux positions (un emoji coupé par maxlength). Retourne '' quand le caractère convient, sinon la fin de la clé
+  // `settings.expansion.char.<problème>`.
   function charProblem(value) {
     if (typeof value !== 'string' || value.length !== 1) return 'invalid';
     if (/[\p{L}\p{N}\s_-]/u.test(value) || /[\ud800-\udfff]/.test(value) || DELIMITERS.indexOf(value) !== -1) return 'invalid';
@@ -47,8 +50,8 @@ const TextExpansion = (function () {
     return '';
   }
 
-  // Le caractère réellement écouté : null quand il est celui du panneau # (deux listes sur la même touche : celle des variables, plus ancienne, garde la main et
-  // l'expansion s'efface - l'onglet Réglages > Raccourcis le dit).
+  // Le caractère réellement écouté : null quand il est celui du panneau # (deux listes sur la même touche : celle des variables, plus ancienne, garde
+  // la main et l'expansion s'efface - l'onglet Réglages > Raccourcis le dit).
   function triggerChar() {
     const char = storedChar();
     return char === variablesChar() ? null : char;
@@ -61,16 +64,17 @@ const TextExpansion = (function () {
     return '';
   }
 
-  // === Abréviations de la personne ==========================================================================================================================
+  // Abréviations de la personne
 
-  // [{ rowId, abbreviation, text }] pour la personne courante seulement - jamais celles des autres, ni en cache ni lues dans la liste. null tant que rien n'est lu.
+  // [{ rowId, abbreviation, text }] pour la personne courante seulement - jamais celles des autres, ni en cache ni lues dans la liste. null tant que
+  // rien n'est lu.
   let entries = null;
   let loading = null;
   let tableKnown = false; // la table existe dans le document (vue ou créée)
   let writeQueue = Promise.resolve();
 
-  // Même repli que js/template-preferences.js:currentUserEmail : identification impossible (lecteur Grist, document sans formule déclenchée) = personne anonyme, '' ;
-  // jamais bloquant. undefined = jamais tentée, null = tentée et échouée.
+  // Même repli que js/template-preferences.js:currentUserEmail : identification impossible (lecteur Grist, document sans formule déclenchée) =
+  // personne anonyme, '' ; jamais bloquant. undefined = jamais tentée, null = tentée et échouée.
   let cachedEmail;
   async function currentUserEmail() {
     if (cachedEmail !== undefined) return cachedEmail;
@@ -101,8 +105,8 @@ const TextExpansion = (function () {
     return found;
   }
 
-  // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du navigateur ou à la main dans
-  // Grist y apparaît).
+  // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du
+  // navigateur ou à la main dans Grist y apparaît).
   function load(force) {
     if (!force && entries) return Promise.resolve(entries);
     if (loading) return loading;
@@ -123,8 +127,9 @@ const TextExpansion = (function () {
     return (entries || []).slice().sort((a, b) => a.abbreviation.localeCompare(b.abbreviation, lang()));
   }
 
-  // Ce que la liste « § » propose pour `query` : l'abréviation entière d'abord, puis celles qui commencent par la saisie, celles qui la contiennent, enfin celles dont le
-  // texte a un mot qui commence ainsi (« bordeaux » retrouve « ub »). Un mot, pas un morceau de mot : « u » ne remonterait sinon que du bruit (« rue », « jour »).
+  // Ce que la liste « § » propose pour `query` : l'abréviation entière d'abord, puis celles qui commencent par la saisie, celles qui la contiennent,
+  // enfin celles dont le texte a un mot qui commence ainsi (« bordeaux » retrouve « ub »). Un mot, pas un morceau de mot : « u » ne remonterait sinon
+  // que du bruit (« rue », « jour »).
   function filterEntries(query) {
     const q = normalizeKey(query);
     const wordStart = q && new RegExp('(^|[^\\p{L}\\p{N}])' + escapeRegExp(q), 'iu');
@@ -144,7 +149,8 @@ const TextExpansion = (function () {
     return ranked.slice(0, 50).map(r => r.entry);
   }
 
-  // Ce qu'on enregistre : l'abréviation sans espaces ni déclencheur de tête (« §ub » collé tel quel dans le champ), le texte aux retours à la ligne normalisés.
+  // Ce qu'on enregistre : l'abréviation sans espaces ni déclencheur de tête (« §ub » collé tel quel dans le champ), le texte aux retours à la ligne
+  // normalisés.
   function cleanEntry(abbreviation, text) {
     let key = String(abbreviation || '').trim();
     const char = storedChar();
@@ -152,7 +158,8 @@ const TextExpansion = (function () {
     return { abbreviation: key, text: String(text || '').replace(/\r\n?/g, '\n').trim() };
   }
 
-  // '' quand l'entrée est valable, sinon le code de l'erreur (VALIDATION_CODES). `exceptRowId` : la ligne qu'on modifie, qui ne fait pas doublon avec elle-même.
+  // '' quand l'entrée est valable, sinon le code de l'erreur (VALIDATION_CODES). `exceptRowId` : la ligne qu'on modifie, qui ne fait pas doublon avec
+  // elle-même.
   function checkEntry(abbreviation, text, exceptRowId) {
     if (!abbreviation) return 'empty';
     if (abbreviation.length > MAX_ABBREVIATION_LENGTH) return 'tooLong';
@@ -170,7 +177,8 @@ const TextExpansion = (function () {
     return error;
   }
 
-  // Écritures mises en file : deux « Ajouter » rapprochés ne doivent ni se doubler ni voir un état périmé (le second contrôle les doublons après que le premier a fini).
+  // Écritures mises en file : deux « Ajouter » rapprochés ne doivent ni se doubler ni voir un état périmé (le second contrôle les doublons après que
+  // le premier a fini).
   function enqueue(job) {
     const run = writeQueue.then(job);
     writeQueue = run.catch(() => {});
@@ -232,10 +240,11 @@ const TextExpansion = (function () {
     });
   }
 
-  // === Remplacement dans le document ========================================================================================================================
+  // Remplacement dans le document
 
-  // Remplace [from, to] de `tr` par `text` (un retour à la ligne devient un saut de ligne, comme Maj+Entrée) puis `suffix` (le délimiteur tapé, que la règle de saisie
-  // n'a pas encore inséré). Le texte reprend les marques de ce qu'il remplace - gras, couleur, suivi des modifications -, comme le fait insertText.
+  // Remplace [from, to] de `tr` par `text` (un retour à la ligne devient un saut de ligne, comme Maj+Entrée) puis `suffix` (le délimiteur tapé, que
+  // la règle de saisie n'a pas encore inséré). Le texte reprend les marques de ce qu'il remplace - gras, couleur, suivi des modifications -, comme le
+  // fait insertText.
   function replaceWithExpansion(tr, schema, from, to, text, suffix) {
     const marks = (from === to ? tr.doc.resolve(from).marks() : tr.doc.resolve(from).marksAcross(tr.doc.resolve(to))) || [];
     const nodes = [];
@@ -247,11 +256,12 @@ const TextExpansion = (function () {
     tr.replaceWith(from, to, nodes);
   }
 
-  // === Règle de saisie : « §ub » + espace ===================================================================================================================
+  // Règle de saisie : « §ub » + espace
 
-  // `text` = tout ce qui précède le curseur dans le paragraphe, plus le caractère qu'on vient de taper (@tiptap/core, InputRule). Les bulles et autres atomes y sont écrits
-  // « %leaf% » : ils comptent comme un caractère qui n'est ni lettre ni chiffre, donc « [bulle]§ub » s'étend. Le déclencheur doit suivre le début du paragraphe ou un
-  // caractère qui n'est ni lettre, ni chiffre, ni tiret bas : « a§b » (une adresse, un code) ne s'étend jamais.
+  // `text` = tout ce qui précède le curseur dans le paragraphe, plus le caractère qu'on vient de taper (@tiptap/core, InputRule). Les bulles et
+  // autres atomes y sont écrits « %leaf% » : ils comptent comme un caractère qui n'est ni lettre ni chiffre, donc « [bulle]§ub » s'étend. Le
+  // déclencheur doit suivre le début du paragraphe ou un caractère qui n'est ni lettre, ni chiffre, ni tiret bas : « a§b » (une adresse, un code) ne
+  // s'étend jamais.
   function findTypedAbbreviation(text) {
     if (!entries || !entries.length) return null;
     const char = triggerChar();
@@ -266,10 +276,11 @@ const TextExpansion = (function () {
     return { index: match.index + match[1].length, text: char + match[2] + typed, data: { entry } };
   }
 
-  // === Liste « § » ==========================================================================================================================================
+  // Liste « § »
 
-  // @tiptap/suggestion cherche le déclencheur dans le texte qui précède le curseur, jusqu'au début du paragraphe ou d'un autre nœud (bulle, marque différente) : même
-  // lecture que sa version d'origine, mais le caractère se relit à chaque frappe, et le déclencheur doit suivre le début ou un caractère qui n'est ni lettre ni chiffre.
+  // @tiptap/suggestion cherche le déclencheur dans le texte qui précède le curseur, jusqu'au début du paragraphe ou d'un autre nœud (bulle, marque
+  // différente) : même lecture que sa version d'origine, mais le caractère se relit à chaque frappe, et le déclencheur doit suivre le début ou un
+  // caractère qui n'est ni lettre ni chiffre.
   function findSuggestion(config) {
     const char = triggerChar();
     if (!char) return null;
@@ -372,17 +383,19 @@ const TextExpansion = (function () {
     };
   }
 
-  // Reçoit Extension, Suggestion, InputRule et PluginKey de js/editor.js plutôt que de les importer : même principe que Variables.createExtension (un seul import()
-  // dynamique, déjà fait là-bas). PluginKey : la clé par défaut de Suggestion est celle du panneau # - deux plugins ne peuvent pas la partager.
+  // Reçoit Extension, Suggestion, InputRule et PluginKey de js/editor.js plutôt que de les importer : même principe que Variables.createExtension (un
+  // seul import() dynamique, déjà fait là-bas). PluginKey : la clé par défaut de Suggestion est celle du panneau # - deux plugins ne peuvent pas la
+  // partager.
   function createExtension(Extension, Suggestion, InputRule, PluginKey) {
     const pluginKey = new PluginKey('textExpansionSuggestion');
     return Extension.create({
       name: 'textExpansion',
-      // Avant les autres extensions : le Tab d'un élément de liste ou d'une zone à deux colonnes (js/editor-nodes.js) et l'Entrée d'une liste passeraient sinon avant la liste
-      // ouverte, qui ne verrait jamais la touche. Hors liste ouverte, elle rend la main sans rien consommer.
+      // Avant les autres extensions : le Tab d'un élément de liste ou d'une zone à deux colonnes (js/editor-nodes.js) et l'Entrée d'une liste
+      // passeraient sinon avant la liste ouverte, qui ne verrait jamais la touche. Hors liste ouverte, elle rend la main sans rien consommer.
       priority: 1000,
       onCreate() {
-        // Première prise de focus : les abréviations se lisent maintenant, pas au démarrage du widget - la première frappe de « §ub » n'attend alors plus Grist.
+        // Première prise de focus : les abréviations se lisent maintenant, pas au démarrage du widget - la première frappe de « §ub » n'attend alors
+        // plus Grist.
         const editor = this.editor;
         const preload = () => { editor.off('focus', preload); load().catch(() => {}); };
         editor.on('focus', preload);
@@ -393,7 +406,8 @@ const TextExpansion = (function () {
           handler: ({ state, range, match }) => {
             const entry = match.data && match.data.entry;
             if (!entry) return null;
-            // `range` s'arrête avant le caractère tapé, que la saisie n'a pas encore inséré : il suit le texte, sinon l'espace disparaîtrait avec l'abréviation.
+            // `range` s'arrête avant le caractère tapé, que la saisie n'a pas encore inséré : il suit le texte, sinon l'espace disparaîtrait avec
+            // l'abréviation.
             replaceWithExpansion(state.tr, state.schema, range.from, range.to, entry.text, match[0].slice(-1));
           },
         })];
@@ -422,7 +436,7 @@ const TextExpansion = (function () {
     });
   }
 
-  // === Réglages > Raccourcis : abréviations =================================================================================================================
+  // Réglages > Raccourcis : abréviations
 
   function wireSettingsPanel() {
     const panel = document.querySelector('.settings-panel[data-settings-panel="shortcuts"]');
@@ -578,9 +592,8 @@ const TextExpansion = (function () {
   wireSettingsPanel();
 
   return {
-    TABLE_NAME, DEFAULT_CHAR, DELIMITERS,
     storedChar, triggerChar, charProblem, setTriggerChar,
-    load, reset, list, find: lookup, filterEntries, add, update, remove,
+    load, reset, list, filterEntries, add, update, remove,
     createExtension,
   };
 })();

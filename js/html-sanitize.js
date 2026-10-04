@@ -1,6 +1,6 @@
-// Assainissement du HTML qui ne vient pas de l'éditeur : colonne Grist écrite par un autre collaborateur, modèle importé (AUDIT_CODE.md §3.2/§8.2, contrôle du 04/10).
-// Document inerte (DOMParser : rien ne charge ni ne s'exécute), liste blanche de balises, attributs dangereux retirés, puis relecture jusqu'à un texte stable :
-// ce que le navigateur reconstruit en relisant le résultat est ce qui a été vérifié (famille des XSS « de mutation »).
+// Assainissement du HTML qui ne vient pas de l'éditeur : colonne Grist écrite par un autre collaborateur, modèle importé. Document inerte (DOMParser
+// : rien ne charge ni ne s'exécute), liste blanche de balises, attributs dangereux retirés, puis relecture jusqu'à un texte stable : ce que le
+// navigateur reconstruit en relisant le résultat est ce qui a été vérifié (famille des XSS « de mutation »).
 //
 // Toute page qui charge js/reader-mode.js doit charger ce fichier avant.
 const HtmlSanitize = (function () {
@@ -12,15 +12,16 @@ const HtmlSanitize = (function () {
   const KEPT_TAGS = new Set(('a abbr acronym address article aside b bdi bdo big blockquote br caption center cite code col colgroup dd del dfn div dl dt em figcaption figure font footer ' +
     'h1 h2 h3 h4 h5 h6 header hgroup hr i img input ins kbd label li main mark nav nobr ol p pre q rp rt ruby s samp section small span strike strong sub sup table tbody td tfoot th thead ' +
     'time tr tt u ul var wbr').split(' '));
-  // Retirées AVEC leur contenu : actives, ou lues comme du texte brut (leur contenu, relu après sérialisation, ne redonne pas le même arbre).
+  // Retirées avec leur contenu : actives, ou lues comme du texte brut (leur contenu, relu après sérialisation, ne redonne pas le même arbre).
   const DROPPED_TAGS = new Set(('script style template noscript noembed noframes xmp plaintext textarea title select datalist iframe frame frameset object embed applet math svg head ' +
     'portal fencedframe').split(' '));
   const DROPPED_ATTRS = new Set(['srcdoc', 'formaction', 'action', 'ping', 'background', 'poster', 'srcset', 'imagesrcset', 'xlink:href', 'data', 'codebase', 'manifest', 'name', 'form',
     'is', 'slot', 'autofocus', 'popover', 'popovertarget', 'popovertargetaction']);
 
-  // Un style qui charge une ressource (url(), image-set()...) fait contacter un site au simple affichage, sans qu'aucune <img> ne le signale (js/external-images.js) : la déclaration est retirée.
-  // L'éditeur n'en écrit jamais dans un attribut style (ses images sont des <img>, l'encadré pose son url(data:...) dans une feuille de style de la page). Une propriété personnalisée garde son
-  // texte tel quel : un échappement (u\72l) y est refusé, alors que le navigateur le lirait comme url().
+  // Un style qui charge une ressource (url(), image-set()...) fait contacter un site au simple affichage, sans qu'aucune <img> ne le signale
+  // (js/external-images.js) : la déclaration est retirée. L'éditeur n'en écrit jamais dans un attribut style (ses images sont des <img>, l'encadré
+  // pose son url(data:...) dans une feuille de style de la page). Une propriété personnalisée garde son texte tel quel : un échappement (u\72l) y est
+  // refusé, alors que le navigateur le lirait comme url().
   const CSS_LOADS = /url\s*\(|image-set\s*\(|image\s*\(|src\s*\(|cross-fade\s*\(/i;
   function cleanStyle(el) {
     const style = el.style;
@@ -31,14 +32,15 @@ const HtmlSanitize = (function () {
     if (!el.getAttribute('style')) el.removeAttribute('style');
   }
 
-  // Les liens ne mènent qu'à une page web, une adresse e-mail ou un numéro (ce que la fenêtre « Lien » de l'éditeur sait écrire, js/link-dialog.js) : l'adresse d'un lien, ou null.
-  // Les exports (PDF, Word, e-mail) s'en servent aussi pour savoir quel lien garder.
+  // Les liens ne mènent qu'à une page web, une adresse e-mail ou un numéro (ce que la fenêtre « Lien » de l'éditeur sait écrire, js/link-dialog.js) :
+  // l'adresse d'un lien, ou null. Les exports (PDF, Word, e-mail) s'en servent aussi pour savoir quel lien garder.
   function safeLinkHref(href) {
     const value = String(href || '').trim();
     return /^(?:https?:|mailto:|tel:)/i.test(value) ? value : null;
   }
 
-  // Le navigateur ignore espaces et caractères de contrôle dans un schéma (« java\tscript: ») : seul le début de l'adresse compte, une image peut peser des Mo.
+  // Le navigateur ignore espaces et caractères de contrôle dans un schéma (« java\tscript: ») : seul le début de l'adresse compte, une image peut
+  // peser des Mo.
   function isActiveSource(src) {
     const head = String(src).slice(0, 80).replace(/[\u0000- ]/g, '').toLowerCase();
     return /^(?:javascript|vbscript|livescript):/.test(head) || /^data:(?!image\/)/.test(head);
@@ -100,5 +102,5 @@ const HtmlSanitize = (function () {
     return result;
   }
 
-  return { clean, parseInert, sanitizeTree, safeLinkHref };
+  return { clean, parseInert, safeLinkHref };
 })();

@@ -1,22 +1,20 @@
-// Liens de l'éditeur (demande d'Antoine, 2026-10-01 : « un moyen d'ajouter des liens », sous la même icône que la citation et le bloc de code, et « le raccourci
-// Ctrl+K qui marche pour les liens »). La marque `link` vient de StarterKit (js/editor.js la configure) ; ce module apporte tout ce qui l'entoure :
-//  - la fenêtre « Insérer / Modifier le lien » (ouverte par le bouton de la barre, sa ligne « Lien… » et Ctrl+K / ⌘K) : une adresse, plus le texte à afficher
-//    quand rien n'est sélectionné ; Entrée valide, Échap annule, « Retirer le lien » quand le curseur est dans un lien ;
-//  - la normalisation de l'adresse saisie (normalizeUrl) : web, e-mail ou téléphone, rien d'autre - jamais de `javascript:` ni de `data:` ;
-//  - le raccourci (createExtension) et, dans l'éditeur, Ctrl/⌘+clic pour ouvrir un lien, avec une info-bulle qui montre l'adresse (wireEditor). Un clic simple
-//    place le curseur : dans un éditeur, un clic qui ouvrait un onglet empêchait de corriger le lien.
-// Le rendu (mode Lecture, PDF, Word, email) est dans leurs modules ; les styles de la fenêtre dans css/link-dialog.css, ceux du lien dans css/editor-v2.css.
+// Liens de l'éditeur. La marque `link` vient de StarterKit (js/editor.js la configure) ; ce module apporte le reste :
+//  - la fenêtre « Insérer / Modifier le lien » (bouton de la barre, ligne « Lien… », Ctrl+K / ⌘K) : une adresse, plus le texte à afficher quand rien
+//    n'est sélectionné ; Entrée valide, Échap annule, « Retirer le lien » quand le curseur est dans un lien ;
+//  - la normalisation de l'adresse (normalizeUrl) : web, e-mail ou téléphone, rien d'autre (jamais `javascript:` ni `data:`) ;
+//  - le raccourci (createExtension) et, dans l'éditeur, Ctrl/⌘+clic pour ouvrir un lien avec une info-bulle qui montre l'adresse (wireEditor) : un
+//    clic simple place le curseur, sinon on ne pourrait plus corriger le lien.
+// Le rendu (Lecture, PDF, Word, email) est dans leurs modules ; styles de la fenêtre : css/link-dialog.css, du lien : css/editor-v2.css.
 const LinkDialog = (function () {
   const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
   const modKey = () => (isMac() ? '⌘' : 'Ctrl');
-  // Même écriture que l'infobulle de Enregistrer (decorateSaveButtonShortcut dans js/main.js) : ⌘K sur macOS, Ctrl+K ailleurs, ou la touche choisie dans Réglages > Raccourcis
-  // (js/shortcuts.js ; '' quand elle a été retirée).
+  // Même écriture que l'infobulle de Enregistrer (decorateSaveButtonShortcut dans js/main.js) : ⌘K sur macOS, Ctrl+K ailleurs, ou la touche choisie
+  // dans Réglages > Raccourcis (js/shortcuts.js ; '' quand elle a été retirée).
   const shortcutLabel = () => (typeof Shortcuts !== 'undefined' ? Shortcuts.label('link') : (isMac() ? '⌘K' : 'Ctrl+K'));
 
-  // === Normalisation de l'adresse =========================================================================================================================
-  // Trois familles seulement (https/http, mailto, tel) : l'adresse saisie finit dans un href qui s'ouvre d'un clic en Lecture et dans les exports, un autre schéma
-  // (javascript:, data:, file:…) n'a aucune raison d'y être. La personne n'a pas à écrire le schéma : « exemple.fr » devient https://exemple.fr, « nom@exemple.fr »
-  // devient mailto:, « 01 23 45 67 89 » devient tel:. Retourne { href, text } (`text` : ce qui s'affiche quand aucun texte n'est donné) ou { error: 'empty' | 'invalid' }.
+  // Normalisation de l'adresse : trois familles seulement (https/http, mailto, tel), car l'adresse finit dans un href qui s'ouvre d'un clic en
+  // Lecture et dans les exports. La personne n'écrit pas le schéma : « exemple.fr » devient https://exemple.fr, « nom@exemple.fr » mailto:, « 01 23
+  // 45 67 89 » tel:. Retourne { href, text } (`text` : l'affichage quand aucun texte n'est donné) ou { error: 'empty' | 'invalid' }.
   const HOST = /^(?:localhost|(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
   const EMAIL = /^[^\s@/:?#]+@[^\s@/:?#]+\.[^\s@/:?#]{2,}$/;
   const PHONE = /^\+?\(?\d[\d\s().-]{4,}$/;
@@ -30,7 +28,8 @@ const LinkDialog = (function () {
     let url;
     try { url = new URL(candidate); } catch (e) { return null; }
     if (!/^https?:$/.test(url.protocol) || !url.hostname) return null;
-    // Une adresse sans caractère à encoder reste telle que saisie (le navigateur ajouterait une barre finale à « https://exemple.fr ») ; sinon la forme encodée.
+    // Une adresse sans caractère à encoder reste telle que saisie (le navigateur ajouterait une barre finale à « https://exemple.fr ») ; sinon la
+    // forme encodée.
     return /[\s"<>]/.test(candidate) ? url.href : candidate;
   }
 
@@ -61,8 +60,8 @@ const LinkDialog = (function () {
     return { error: 'invalid' };
   }
 
-  // Ouvre une adresse déjà normalisée : un <a> synthétique cliqué, comme partout dans le widget (window.open se comporte moins bien dans l'iframe d'un widget
-  // Grist). Un lien web s'ouvre dans un nouvel onglet ; mailto: et tel: passent la main à l'application du système.
+  // Ouvre une adresse déjà normalisée par un <a> synthétique cliqué, comme partout dans le widget (window.open se comporte moins bien dans l'iframe
+  // d'un widget Grist). Un lien web s'ouvre dans un nouvel onglet ; mailto: et tel: passent la main à l'application du système.
   function openExternal(href) {
     if (!/^(?:https?|mailto|tel):/i.test(href || '')) return false;
     const a = document.createElement('a');
@@ -75,9 +74,9 @@ const LinkDialog = (function () {
     return true;
   }
 
-  // === Ce que la sélection permet =========================================================================================================================
-  // Un bloc de code n'accepte aucune marque (donc aucun lien) ; ailleurs, `can().setLink` dit si la marque passe sur la sélection (une image seule, un saut de
-  // page, une sélection sans texte : non). Sans sélection, le texte du lien s'insère : il suffit que le curseur soit dans un bloc de texte.
+  // Ce que la sélection permet : un bloc de code n'accepte aucune marque (donc aucun lien) ; ailleurs, `can().setLink` dit si la marque passe sur la
+  // sélection (une image seule, un saut de page, une sélection sans texte : non). Sans sélection, le texte du lien s'insère : il suffit que le
+  // curseur soit dans un bloc de texte.
   function canLinkHere(ed) {
     if (!ed || !ed.isEditable || ed.isActive('codeBlock')) return false;
     const { selection } = ed.state;
@@ -85,7 +84,7 @@ const LinkDialog = (function () {
     return ed.can().setLink({ href: 'https://exemple.fr' });
   }
 
-  // === La fenêtre =========================================================================================================================================
+  // La fenêtre
   let win = null;
   let refs = null;
   let ctx = null; // { from, to, empty, href, withText } : la sélection à l'ouverture
@@ -99,7 +98,7 @@ const LinkDialog = (function () {
 
   function ensure() {
     if (win) return;
-    // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas au bouton de la barre - la sélection y est restée.
+    // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas au bouton de la barre : la sélection y est restée.
     win = ModalBase.create({ id: 'pp-link-modal', titleId: 'pp-link-title', size: 'sm', boxClass: 'pp-link-box', actionsClass: 'var-modal-actions', onEscape: () => closeWindow(), restoreFocus: false });
     const urlLabel = el('label', 'pp-dialog-label');
     urlLabel.htmlFor = 'pp-link-url';
@@ -110,7 +109,7 @@ const LinkDialog = (function () {
     url.autocomplete = 'off';
     url.spellcheck = false;
     url.setAttribute('aria-describedby', 'pp-link-hint pp-link-error');
-    // L'indication et l'erreur commencent sous le champ, pas sous son libellé (règle d'Antoine, cf. condition et macro-modèle).
+    // L'indication et l'erreur commencent sous le champ, pas sous son libellé.
     const hint = el('p', 'pp-link-note');
     hint.id = 'pp-link-hint';
     const error = el('p', 'pp-link-note pp-link-error');
@@ -156,15 +155,16 @@ const LinkDialog = (function () {
     if (ed) ed.commands.focus();
   }
 
-  // Ouvre la fenêtre sur la sélection de l'éditeur ; faux (sans rien ouvrir) quand un lien n'a pas de sens ici - le raccourci avale alors quand même la frappe, pour
-  // que Ctrl+K ne tombe pas sur le navigateur.
+  // Ouvre la fenêtre sur la sélection de l'éditeur ; faux (sans rien ouvrir) quand un lien n'a pas de sens ici : le raccourci avale alors quand même
+  // la frappe, pour que Ctrl+K ne tombe pas sur le navigateur.
   function open() {
     const ed = EditorCore.getEditor();
     if (!canLinkHere(ed)) return false;
     ensure();
     const { from, to, empty } = ed.state.selection;
     const href = (ed.getAttributes('link') || {}).href || '';
-    // Texte à afficher : seulement quand il n'y a rien de sélectionné ni de lien sous le curseur - sinon c'est le texte qui est déjà là, qu'on garde tel quel.
+    // Texte à afficher : seulement quand il n'y a rien de sélectionné ni de lien sous le curseur - sinon c'est le texte qui est déjà là, qu'on garde
+    // tel quel.
     ctx = { from, to, empty, href, withText: empty && !href };
     const { urlLabel, url, hint, error, textField, textLabel, text, remove, cancel, ok } = refs;
     win.title.textContent = I18n.t(href ? 'hyperlink.title.edit' : 'hyperlink.title.new');
@@ -201,10 +201,12 @@ const LinkDialog = (function () {
     if (result.error) { showError(result.error); return; }
     const ed = EditorCore.getEditor();
     const { href } = result;
-    // La sélection de l'éditeur n'a pas bougé pendant que la fenêtre était ouverte (le focus est parti, pas la sélection) : les commandes s'y appliquent.
+    // La sélection de l'éditeur n'a pas bougé pendant que la fenêtre était ouverte (le focus est parti, pas la sélection) : les commandes s'y
+    // appliquent.
     if (ctx.withText) {
       const label = refs.text.value.trim() || result.text;
-      // Le curseur sort du lien après l'insertion : ce qui se tape ensuite ne s'ajoute pas à son texte (la marque de TipTap s'étend sinon, autolink actif).
+      // Le curseur sort du lien après l'insertion : ce qui se tape ensuite ne s'ajoute pas à son texte (la marque de TipTap s'étend sinon, autolink
+      // actif).
       ed.chain().focus().insertContentAt(ctx.from, { type: 'text', text: label, marks: [{ type: 'link', attrs: { href } }] }).unsetMark('link').run();
     } else if (ctx.empty) {
       // Curseur dans un lien : l'adresse change pour tout le lien, le curseur reste où il était (extendMarkRange sélectionne le lien entier).
@@ -220,7 +222,7 @@ const LinkDialog = (function () {
     closeWindow();
   }
 
-  // === Raccourci, ouverture au Ctrl/⌘+clic, info-bulle =====================================================================================================
+  // Raccourci, ouverture au Ctrl/⌘+clic, info-bulle
   function createExtension(Extension) {
     return Extension.create({
       name: 'linkShortcut',
@@ -283,5 +285,5 @@ const LinkDialog = (function () {
     document.addEventListener('scroll', hideTip, true);
   }
 
-  return { normalizeUrl, openExternal, canLinkHere, open, createExtension, wireEditor, shortcutLabel };
+  return { normalizeUrl, canLinkHere, open, createExtension, wireEditor, shortcutLabel };
 })();

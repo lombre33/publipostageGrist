@@ -85,5 +85,5 @@ const ViewportFit = (function () {
     Layers.raise(box, options && options.over);
   }
 
-  return { placePopup, fitTooltip };
+  return { placePopup };
 })();

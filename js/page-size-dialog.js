@@ -338,5 +338,5 @@ const PageSizeDialog = (function () {
     win.hide();
   }
 
-  return { open, parseCm };
+  return { open };
 })();

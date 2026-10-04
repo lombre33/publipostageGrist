@@ -15,15 +15,10 @@ const ConditionalCheckbox = (function () {
   const DEFAULT_STYLE = 'accentPlain';
   function styleOf(value) { return VariableFormat.isCheckboxStyle(value) ? value : DEFAULT_STYLE; }
 
-  // Remplace chaque case conditionnelle de `root` par sa case dessinée. Les conditions se lisent toutes d'abord, en parallèle ; le HTML se transforme
-  // ensuite.
-  async function resolve(root, tableId, record) {
-    if (!root) return;
-    const chips = Array.from(root.querySelectorAll(SELECTOR));
-    if (!chips.length) return;
-    const verdicts = await Promise.all(chips.map(chip => ConditionRules.elementHolds(chip, tableId, record, false))); // sans condition : décochée
-    chips.forEach((chip, i) => {
-      const box = ReaderMode.checkboxNode(verdicts[i], styleOf(chip.getAttribute('data-checkbox-style')));
+  // Remplace chaque case conditionnelle de `root` par sa case dessinée. Sans condition : décochée.
+  function resolve(root, tableId, record) {
+    return ConditionRules.resolveElements(root, SELECTOR, tableId, record, false, (chip, holds) => {
+      const box = ReaderMode.checkboxNode(holds, styleOf(chip.getAttribute('data-checkbox-style')));
       // Repère de position posé par js/comments.js:buildReaderHtml (commentaires en mode Lecture) : reporté sur la case qui remplace la puce.
       if (chip.hasAttribute('data-pp-atom')) box.setAttribute('data-pp-atom', chip.getAttribute('data-pp-atom'));
       chip.replaceWith(box);
@@ -50,5 +45,5 @@ const ConditionalCheckbox = (function () {
     return true;
   }
 
-  return { TYPE, SELECTOR, DEFAULT_STYLE, styleOf, resolve, insertFromPanel };
+  return { DEFAULT_STYLE, styleOf, resolve, insertFromPanel };
 })();

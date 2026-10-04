@@ -203,5 +203,16 @@ const ConditionRules = (function () {
     catch (e) { console.error('[ConditionRules] échec de l\'évaluation de la condition', e); return false; }
   }
 
-  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds, elementHolds };
+  // Transforme, dans l'ordre du document, chaque élément `selector` de `root` selon le verdict de sa condition. Les verdicts se lisent tous d'abord, en
+  // parallèle ; `apply(element, holds)` modifie ensuite le HTML. Un élément sorti de `root` par l'application précédente (le bloc extérieur retiré emporte
+  // ceux qu'il contient) n'est plus traité.
+  async function resolveElements(root, selector, tableId, record, whenNone, apply) {
+    if (!root) return;
+    const elements = Array.from(root.querySelectorAll(selector));
+    if (!elements.length) return;
+    const verdicts = await Promise.all(elements.map(el => elementHolds(el, tableId, record, whenNone)));
+    elements.forEach((el, i) => { if (root.contains(el)) apply(el, verdicts[i]); });
+  }
+
+  return { OPERATORS, compareValues, parseBoolExpected, parseColumnRef, matches, normalizeCondition, conditionHolds, elementHolds, resolveElements };
 })();

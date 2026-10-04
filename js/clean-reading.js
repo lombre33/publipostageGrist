@@ -139,5 +139,5 @@ const CleanReading = (function () {
     I18n.onChange(applyTexts);
   }
 
-  return { BODY_CLASS, ROW_ID, EXIT_ID, wire, enter, exit, isActive, onModeChange, isAnswered, wouldOpenForReadOnly, openForReadOnly };
+  return { wire, exit, isActive, onModeChange, isAnswered, wouldOpenForReadOnly, openForReadOnly };
 })();

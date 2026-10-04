@@ -1,14 +1,17 @@
-// Formats de page enregistrés (demande d'Antoine du 04/10, suite du format libre : « donner un nom à un format, par exemple « Étiquette 70 × 37 », et le reprendre sur d'autres modèles ») :
-// la liste des tailles nommées du document, proposée par la fenêtre « Format libre… » (js/page-size-dialog.js). Une ligne = un nom, une largeur et une hauteur en millimètres, telles qu'on voit la
-// page (sens compris : « Étiquette 70 × 37 » est en paysage). Choisir un format enregistré remplit la fenêtre ; « Valider » pose alors la taille sur le modèle comme une taille saisie, et le modèle
-// la garde dans la clé `format` de sa colonne Margins (js/page-layout.js) : une COPIE, pas un lien. Supprimer ou refaire un format enregistré ne change donc aucun modèle.
+// Formats de page enregistrés (suite du format libre) : la liste des tailles nommées du document, proposée par la fenêtre « Format libre… »
+// (js/page-size-dialog.js), pour donner un nom à un format (« Étiquette 70 × 37 ») et le reprendre sur d'autres modèles. Une ligne = un nom, une
+// largeur et une hauteur en millimètres, telles qu'on voit la page (sens compris : « Étiquette 70 × 37 » est en paysage). Choisir un format
+// enregistré remplit la fenêtre ; « Valider » pose alors la taille sur le modèle comme une taille saisie, et le modèle la garde dans la clé `format`
+// de sa colonne Margins (js/page-layout.js) : une copie, pas un lien. Supprimer ou refaire un format enregistré ne change donc aucun modèle.
 //
-// Pour tout le document, pas par personne : un format nommé sert à toute l'équipe (la table Publipostage_FormatsPage, colonnes Nom, Largeur, Hauteur ; même patron que
-// js/text-expansion.js, sans la colonne Utilisateur). Elle n'est lue qu'à l'ouverture de la fenêtre (jamais au démarrage du widget, jamais créée pour lire) et créée à la première
-// écriture, juste avant l'AddRecord ; une table qui existe déjà n'est jamais recréée. Les lignes illisibles (nom vide, taille hors bornes de PageLayout, valeur non numérique) sont
-// ignorées plutôt que corrigées : elles restent telles quelles dans Grist.
+// Pour tout le document, pas par personne : un format nommé sert à toute l'équipe (la table Publipostage_FormatsPage, colonnes Nom, Largeur, Hauteur
+// ; même patron que js/text-expansion.js, sans la colonne Utilisateur). Elle n'est lue qu'à l'ouverture de la fenêtre (jamais au démarrage du widget,
+// jamais créée pour lire) et créée à la première écriture, juste avant l'AddRecord ; une table qui existe déjà n'est jamais recréée. Les lignes
+// illisibles (nom vide, taille hors bornes de PageLayout, valeur non numérique) sont ignorées plutôt que corrigées : elles restent telles quelles
+// dans Grist.
 //
-// Un nom déjà pris (casse et espaces ignorés) devient « nom (2) », « nom (3) »... comme celui d'un modèle (Templates.uniqueName) ; la valeur est retenue à l'enregistrement, jamais refusée.
+// Un nom déjà pris (casse et espaces ignorés) devient « nom (2) », « nom (3) »... comme celui d'un modèle (Templates.uniqueName) ; la valeur est
+// retenue à l'enregistrement, jamais refusée.
 const SavedPageFormats = (function () {
   const TABLE_NAME = 'Publipostage_FormatsPage';
   const MAX_NAME_LENGTH = 120; // large : une coupe silencieuse n'a de sens que pour un collage absurde
@@ -32,7 +35,7 @@ const SavedPageFormats = (function () {
   // Le nom tel qu'on l'enregistre : espaces de tête et de queue ôtés, espaces internes réduits à un seul.
   function cleanName(name) { return String(name == null ? '' : name).replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH); }
 
-  // === Lecture ==============================================================================================================================================
+  // Lecture
 
   async function readEntries() {
     const found = [];
@@ -53,7 +56,8 @@ const SavedPageFormats = (function () {
     return found;
   }
 
-  // Une seule lecture à la fois, mémorisée ; `force` relit (une ouverture de la fenêtre voit ainsi un format ajouté depuis un autre onglet ou à la main dans Grist).
+  // Une seule lecture à la fois, mémorisée ; `force` relit (une ouverture de la fenêtre voit ainsi un format ajouté depuis un autre onglet ou à la
+  // main dans Grist).
   function load(force) {
     if (!force && entries) return Promise.resolve(entries);
     if (loading) return loading;
@@ -78,8 +82,8 @@ const SavedPageFormats = (function () {
   // Un autre format porte-t-il déjà ce nom ?
   function isNameTaken(name) { return (entries || []).some(e => sameName(e.name, name)); }
 
-  // Nom libre le plus proche de `name` : lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue sa série au numéro suivant (même règle que
-  // Templates.uniqueName : enregistrer « Étiquette (2) » donne « Étiquette (3) », pas « Étiquette (2) (2) »).
+  // Nom libre le plus proche de `name` : lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue sa
+  // série au numéro suivant (même règle que Templates.uniqueName : enregistrer « Étiquette (2) » donne « Étiquette (3) », pas « Étiquette (2) (2) »).
   function uniqueName(name) {
     const base = cleanName(name);
     if (!base || !isNameTaken(base)) return base;
@@ -90,9 +94,10 @@ const SavedPageFormats = (function () {
     return root + ' (' + n + ')';
   }
 
-  // === Écriture =============================================================================================================================================
+  // Écriture
 
-  // Écritures mises en file : deux « Enregistrer » rapprochés ne doivent ni se doubler ni voir un état périmé (le second cherche son nom libre après que le premier a fini).
+  // Écritures mises en file : deux « Enregistrer » rapprochés ne doivent ni se doubler ni voir un état périmé (le second cherche son nom libre après
+  // que le premier a fini).
   function enqueue(job) {
     const run = writeQueue.then(job);
     writeQueue = run.catch(() => {});
@@ -119,8 +124,9 @@ const SavedPageFormats = (function () {
     return error;
   }
 
-  // Enregistre la taille sous `rawName` (un nom vide ou déjà pris : voir uniqueName ; le nom retenu est dans la réponse). La taille est celle qu'on voit, sens compris. Refuse une taille hors
-  // bornes ('range') ou un nom vide ('name') : la fenêtre ne l'appelle qu'avec une taille bonne et un nom proposé par défaut, ces gardes protègent le document.
+  // Enregistre la taille sous `rawName` (un nom vide ou déjà pris : voir uniqueName ; le nom retenu est dans la réponse). La taille est celle qu'on
+  // voit, sens compris. Refuse une taille hors bornes ('range') ou un nom vide ('name') : la fenêtre ne l'appelle qu'avec une taille bonne et un nom
+  // proposé par défaut, ces gardes protègent le document.
   function add(rawName, widthMm, heightMm) {
     return enqueue(async () => {
       await load();
@@ -148,5 +154,5 @@ const SavedPageFormats = (function () {
     });
   }
 
-  return { TABLE_NAME, MAX_NAME_LENGTH, load, reset, list, find, uniqueName, add, remove };
+  return { MAX_NAME_LENGTH, load, reset, list, find, uniqueName, add, remove };
 })();

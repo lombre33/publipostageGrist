@@ -130,5 +130,5 @@ const Settings = (function () {
     }
   }
 
-  return { getTriggerChar, getTheme, setTheme, wireSettingsModal };
+  return { setTheme, wireSettingsModal };
 })();
