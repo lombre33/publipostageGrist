@@ -1,19 +1,19 @@
-// Suivi des modifications (mode suggestion façon Word/Google Docs) - pont entre Tiptap et
-// @handlewithcare/prosemirror-suggest-changes@0.1.8. Intégration réelle du prototype
-// prototypes/suivi-modifications.html (27 scénarios de tests verts avant intégration) - voir
-// planning/feature-track-changes.md pour le cadrage complet, le diagnostic des bugs ci-dessous et
-// les mesures de perf. Script classique (pas type="module"), même patron que js/editor-nodes.js :
-// createExtensions() fait son propre import() dynamique, appelé depuis Editor.init() une fois
-// Node/Mark/Extension/mergeAttributes disponibles (import de @tiptap/core).
+// Suivi des modifications (mode suggestion façon Word et Google Docs) : pont entre Tiptap et @handlewithcare/prosemirror-suggest-changes@0.1.8.
+// Cadrage, diagnostics et mesures : planning/feature-track-changes.md.
+// Script classique, même patron que js/editor-nodes.js : createExtensions() fait son propre import() dynamique, appelé par Editor.init() une fois
+// Node, Mark, Extension et mergeAttributes disponibles (import de @tiptap/core).
 const TrackChanges = (function () {
   const MARK_NAMES = ['insertion', 'deletion', 'modification'];
+  const isSuggestionMark = mark => MARK_NAMES.includes(mark.type.name);
+  const suggestionMarksOf = node => node.marks.filter(isSuggestionMark);
 
-  // Une marque de suivi posée sur une CASE de tableau (« Colonne avant / après », « Supprimer la colonne ») ou sur une LIGNE (« Ligne avant / après », « Supprimer la ligne ») :
-  // ProseMirror l'écrit en <ins>/<del> autour du <td> (donc directement dans le <tr>) ou autour du <tr> (donc directement dans le <tbody>). Le HTML enregistré ne peut pas
-  // garder cette forme : l'analyseur HTML du navigateur sort de la ligne ou du corps du tableau tout élément étranger (« foster parenting »), la marque disparaissait à la
-  // réouverture et la colonne ou la ligne supprimée revenait comme si de rien n'était. Elle s'écrit donc en attribut de la case ou de la ligne elle-même
-  // (data-tc-insertion="3"), relu par les règles parseHTML des marques plus bas. La marque `modification` (changement d'attribut : la largeur d'une case fusionnée qui
-  // gagne une colonne, la hauteur d'une case fusionnée qui gagne une ligne) y garde ses cinq valeurs, en JSON.
+  // Une marque de suivi posée sur une case de tableau (« Colonne avant / après », « Supprimer la colonne ») ou sur une ligne (« Ligne avant /
+  // après », « Supprimer la ligne ») : ProseMirror l'écrit en <ins>/<del> autour du <td> (dans le <tr>) ou autour du <tr> (dans le <tbody>). Le HTML
+  // enregistré ne peut pas garder cette forme : l'analyseur HTML du navigateur sort d'une ligne ou d'un corps de tableau tout élément étranger
+  // (« foster parenting »), et la colonne ou la ligne supprimée revenait à la réouverture comme si de rien n'était. La marque s'écrit donc en
+  // attribut de la case ou de la ligne (data-tc-insertion="3"), relu par les règles parseHTML des marques plus bas. La marque `modification`
+  // (changement d'attribut : largeur d'une case fusionnée qui gagne une colonne, hauteur d'une case fusionnée qui gagne une ligne) y garde ses cinq
+  // valeurs, en JSON.
   const CELL_NODE_TYPES = ['tableCell', 'tableHeader', 'tableRow'];
   const cellMarkAttribute = markName => 'data-tc-' + markName;
   const cellMarkValue = mark => JSON.stringify(mark.type.name === 'modification' ? mark.attrs : mark.attrs.id);
@@ -24,27 +24,26 @@ const TrackChanges = (function () {
   // tant que createExtensions() n'a pas tourné.
   let TableMapClass = null;
 
-  // Un conteneur de bloc (doc, table, twoColumnsColumn, twoColumnsZone, cellule de tableau...) doit
-  // explicitement autoriser ces 3 marques sur ses enfants directs pour qu'une suppression/insertion
-  // de BLOC ENTIER (pas seulement de texte inline) puisse être posée comme marque de nœud
-  // (tr.addNodeMark) sans que ProseMirror ne lève "Invalid content for node X" - cf.
-  // planning/feature-track-changes.md, bug n°1. Chaque nœud Tiptap est immutable : `.extend(...)`
-  // renvoie une NOUVELLE définition, à utiliser à la place de l'originale dans `extensions: [...]`.
+  // Un conteneur de bloc (doc, table, twoColumnsColumn, twoColumnsZone, cellule de tableau...) doit autoriser explicitement ces 3 marques sur ses
+  // enfants directs pour qu'une suppression ou une insertion de bloc entier (pas seulement de texte) puisse se poser en marque de nœud
+  // (tr.addNodeMark) sans que ProseMirror lève « Invalid content for node X » (cf. planning/feature-track-changes.md). Un nœud Tiptap est immutable :
+  // `.extend(...)` renvoie une nouvelle définition, à utiliser à la place de l'originale dans `extensions: [...]`.
   function extendForTracking(nodeOrMarkExtension) {
     return nodeOrMarkExtension.extend({ marks: MARK_NAMES.join(' ') });
   }
 
-  // Marque `tr` « déjà le résultat » : dispatchTransaction (plus bas) la laisse passer au lieu de la transformer en suggestion. Pour une transaction qui n'est
-  // pas une modification de la personne mais le widget qui relit ce qu'il a lui-même écrit (grille page des images en calque après un changement d'orientation,
-  // HeaderFooterPreview.recaptureLayeredImageGrids) : suivie, elle ressortait en une suppression + une insertion de l'image, à accepter ou refuser, que
-  // personne n'avait faite. Rend `tr` (pour chaîner) ; sans suivi actif, la marque est sans effet.
+  // Marque `tr` comme « déjà le résultat » : dispatchTransaction (plus bas) la laisse passer au lieu de la transformer en suggestion. Pour ce que le
+  // widget écrit lui-même sans que la personne l'ait demandé (grille page des images en calque après un changement d'orientation,
+  // HeaderFooterPreview.recaptureLayeredImageGrids) : suivie, l'écriture ressortait en suppression et insertion de l'image, à accepter ou refuser.
+  // Rend `tr` (pour chaîner) ; sans suivi actif, la marque est sans effet.
   function skipTracking(tr) {
     return suggestKey ? tr.setMeta(suggestKey, { skip: true }) : tr;
   }
 
-  // Vrai pour une transaction qui n'est PAS une modification de la personne mais le résultat de ce qu'elle décrit : « Tout accepter » et « Tout refuser » (et leurs variantes par suggestion
-  // ou par sélection), le chargement d'un document, une écriture marquée par skipTracking(). dispatchTransaction (plus bas) les laisse passer sans les suivre ; un plugin qui doit
-  // réagir à la RÉSOLUTION des suggestions (la valeur conditionnelle vidée, js/editor-nodes.js) s'appuie sur la même marque.
+  // Vrai pour une transaction qui n'est pas une modification de la personne mais le résultat de ce qu'elle décrit : « Tout accepter » et « Tout
+  // refuser » (et leurs variantes par suggestion ou par sélection), le chargement d'un document, une écriture marquée par skipTracking().
+  // dispatchTransaction (plus bas) les laisse passer sans les suivre ; un plugin qui doit réagir à la résolution des suggestions (la valeur
+  // conditionnelle vidée, js/editor-nodes.js) s'appuie sur la même marque.
   function isSkipped(tr) {
     const meta = suggestKey ? tr.getMeta(suggestKey) : null;
     return !!meta && 'skip' in meta;
@@ -52,38 +51,39 @@ const TrackChanges = (function () {
 
   function lastNodeCarriesSuggestionMark(state) {
     const last = state.doc.lastChild;
-    return !!last && last.marks.some(m => MARK_NAMES.includes(m.type.name));
+    return !!last && last.marks.some(isSuggestionMark);
   }
 
-  function hasPendingSuggestions(state) {
+  // Vrai tant qu'un nœud du document porte une marque que `test` retient.
+  function docHasMark(doc, test) {
     let found = false;
-    state.doc.descendants(node => {
+    doc.descendants(node => {
       if (found) return false;
-      if (node.marks.some(m => MARK_NAMES.includes(m.type.name))) found = true;
+      if (node.marks.some(test)) found = true;
       return !found;
     });
     return found;
   }
+  const hasPendingSuggestions = state => docHasMark(state.doc, isSuggestionMark);
+  // Vrai tant qu'une insertion ou une suppression (un texte, un objet, une case, une colonne, une ligne) attend : les modifications seules ne
+  // comptent pas.
+  const hasInsertionOrDeletion = doc => docHasMark(doc, mark => isSuggestionMark(mark) && mark.type.name !== 'modification');
 
-  // Collecte l'ensemble des ids de suggestion actuellement présents dans le document (dédupliqués -
-  // un remplacement adjacent peut réutiliser le même id sur plusieurs marques, cf.
-  // planning/feature-track-changes.md sur suggestReplaceStep). Ids convertis en chaîne : ce sont des
-  // clés d'objet JS, et generateNextNumberId (dans la lib) produit des nombres.
+  // L'ensemble des ids de suggestion présents dans le document, dédupliqués (un remplacement adjacent peut réutiliser le même id sur plusieurs
+  // marques, cf. suggestReplaceStep dans planning/feature-track-changes.md). Convertis en chaîne : ce sont des clés d'objet JS, et
+  // generateNextNumberId (dans la lib) produit des nombres.
   function collectPendingIds(state) {
     const ids = new Set();
     state.doc.descendants(node => {
-      node.marks.forEach(m => { if (MARK_NAMES.includes(m.type.name) && m.attrs.id != null) ids.add(String(m.attrs.id)); });
+      suggestionMarksOf(node).forEach(m => { if (m.attrs.id != null) ids.add(String(m.attrs.id)); });
     });
     return ids;
   }
 
-  // Fusionne les ids actuellement présents dans le document avec les métadonnées déjà connues
-  // (auteur/horodatage) : un id déjà vu garde SON auteur/date d'origine, un id nouveau reçoit
-  // authorEmail/maintenant. Les ids qui ont disparu du document (suggestion acceptée ou refusée)
-  // disparaissent naturellement du résultat - pas de purge explicite à écrire, c'est une conséquence
-  // du fait qu'on ne recopie que ce qui est encore présent. Voir planning/feature-track-changes.md,
-  // "Rétention de l'historique" : purge dès résolution retenue comme comportement par défaut le plus
-  // prudent (comme un commentaire supprimé aujourd'hui), pas encore validé par Antoine.
+  // Fusionne les ids présents dans le document avec les métadonnées déjà connues (auteur, horodatage) : un id déjà vu garde son auteur et sa date
+  // d'origine, un nouveau reçoit authorEmail et maintenant. Les ids disparus (suggestion acceptée ou refusée) disparaissent du résultat sans purge
+  // explicite, puisqu'on ne recopie que ce qui est encore présent : purge dès la résolution, le défaut le plus prudent, comme un commentaire supprimé
+  // (cf. « Rétention de l'historique » dans planning/feature-track-changes.md).
   function computeMetadata(state, previousMetadata, authorEmail) {
     const previous = previousMetadata || {};
     const now = new Date().toISOString();
@@ -94,17 +94,17 @@ const TrackChanges = (function () {
     return next;
   }
 
-  // --- Accepter ou refuser UNE modification (barre flottante, js/floating-toolbars.js) -----------------------------------------------------------
-  const suggestionMarksOf = node => node.marks.filter(m => MARK_NAMES.includes(m.type.name));
+  // Accepter ou refuser une modification (barre flottante, js/floating-toolbars.js)
   const sameId = (a, b) => String(a) === String(b);
-  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne, le fond d'une cellule, la largeur d'une
-  // colonne) ne se voit pas dans l'éditeur : elle ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la ligne dont
-  // elle fait partie (expandSuggestionIds) ; « Tout refuser » rend celles qui ne suivent rien (pendingAttributeIds), « Tout accepter » toutes.
+  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne, le fond d'une cellule, la largeur
+  // d'une colonne) ne se voit pas dans l'éditeur : elle ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la
+  // ligne dont elle fait partie (expandSuggestionIds). « Tout refuser » rend celles qui ne suivent rien (pendingAttributeIds), « Tout accepter »
+  // toutes.
   const isTableMod = (node, mark) => mark.type.name === 'modification' && CELL_NODE_TYPES.includes(node.type.name);
 
-  // Les ids des suggestions que la sélection touche. Un curseur seul : le texte ou l'objet tout contre lui, celui d'AVANT d'abord (ce que le curseur
+  // Les ids des suggestions que la sélection touche. Curseur seul : le texte ou l'objet tout contre lui, celui d'avant d'abord (ce que le curseur
   // vient de franchir) ; à défaut, le bloc le plus profond qui porte une marque en remontant (la case d'une colonne suivie, la ligne, le paragraphe
-  // supprimé en entier) - la suggestion la plus proche, jamais celle d'un bloc plus large qui ne fait que contenir le curseur. Une sélection : toutes
+  // supprimé en entier) : la suggestion la plus proche, jamais celle d'un bloc plus large qui ne fait que contenir le curseur. Sélection : toutes
   // celles qu'elle recouvre. Vide quand il n'y en a aucune.
   function selectionSuggestionIds(state) {
     const { from, to, empty, $from } = state.selection;
@@ -125,8 +125,8 @@ const TrackChanges = (function () {
   }
 
   // Tout ce qui se résout avec les suggestions `seedIds` : leurs propres ids, plus, pour une colonne ou une ligne de tableau ajoutée ou supprimée
-  // avec le suivi, ceux des autres cases de la colonne (une marque PAR CASE, chacune avec son id : n'en résoudre qu'une laisserait un tableau percé,
-  // ou une colonne qui revient à la réouverture) et ceux des cases fusionnées dont la largeur (ou la hauteur) a changé avec elle - « Refuser » une
+  // avec le suivi, ceux des autres cases de la colonne (une marque par case, chacune avec son id : en résoudre une seule laisserait un tableau percé,
+  // ou une colonne qui revient à la réouverture) et ceux des cases fusionnées dont la largeur (ou la hauteur) a changé avec elle : « Refuser » une
   // colonne ajoutée à travers une case fusionnée doit aussi lui rendre sa largeur, sans quoi prosemirror-tables « répare » le tableau en ajoutant des
   // cases vides. Rend une table id en texte -> id tel que le document l'écrit (la lib compare avec `===`).
   function expandSuggestionIds(doc, seedIds) {
@@ -195,15 +195,14 @@ const TrackChanges = (function () {
     });
   }
 
-  // --- Lecture et exports : le document comme si tout était accepté ----------------------------------------------------------------------------
+  // Lecture et exports : le document comme si tout était accepté
   // Le mode Lecture (js/reader-mode.js:renderRecord) montre le document tel qu'il serait après « Tout accepter », avec une légère teinte
   // (.pp-tc-changed, css/track-changes.css) là où quelque chose a changé ; le PDF, le Word et l'Excel (ReaderMode.preview) sortent le même document
-  // sans teinte (choix d'Antoine, 04/10). Le document n'est pas touché : c'est le HTML qui est retouché au niveau du DOM (celui d'editor.getHTML() ou
-  // de js/comments.js:buildReaderHtml, qui garde ses repères data-pp-pos), sans éditeur ni schéma - un macro-modèle assemble d'ailleurs le HTML
-  // d'autres modèles. Mêmes règles que la lib (commands.js:applySuggestionsToTransform, relue dans sa source) : le texte supprimé s'en va, et une
-  // seule espace des deux quand celle d'avant et celle d'après en sont ; une suppression à cheval sur plusieurs blocs les réunit ; une insertion ne
-  // garde que son texte (le U+200B posé pour un saut de paragraphe disparaît) ; une case, une colonne ou une ligne supprimée s'en va aussi, avec son
-  // <col>.
+  // sans teinte. Le document n'est pas touché : c'est le HTML qui est retouché au niveau du DOM (celui d'editor.getHTML() ou de
+  // js/comments.js:buildReaderHtml, qui garde ses repères data-pp-pos), sans éditeur ni schéma - un macro-modèle assemble d'ailleurs le HTML d'autres
+  // modèles. Mêmes règles que la lib (commands.js:applySuggestionsToTransform) : le texte supprimé s'en va, et une seule espace des deux quand celle
+  // d'avant et celle d'après en sont ; une suppression à cheval sur plusieurs blocs les réunit ; une insertion ne garde que son texte (le U+200B posé
+  // pour un saut de paragraphe disparaît) ; une case, une colonne ou une ligne supprimée s'en va aussi, avec son <col>.
   const CHANGED_CLASS = 'pp-tc-changed';
   const ZERO_WIDTH_SPACE = '​';
   const SUGGESTION_MARKERS = 'ins[data-id], del[data-id], span[data-type="modification"], [data-tc-insertion], [data-tc-deletion], [data-tc-modification]';
@@ -221,28 +220,22 @@ const TrackChanges = (function () {
   // ce sont des espaces du texte).
   const isStructural = el => BLOCK_TAGS.has(el.tagName) && !TEXT_BLOCK_TAGS.has(el.tagName);
   const isFiller = (node, parent) => node.nodeType === 8 || (node.nodeType === 3 && (!node.data || (!node.data.trim() && isStructural(parent))));
-  // Le contenu qui suit `node` dans `block` (un texte, ou un élément sans enfant : image, saut de ligne, bulle), hors des enfants de `node` ; null en
-  // fin de bloc.
-  function leafAfter(node, block) {
+  // Le contenu qui suit (`dir` 1) ou précède (-1) `node` dans `block` (un texte, ou un élément sans enfant : image, saut de ligne, bulle), hors des
+  // enfants de `node` ; null au bout du bloc.
+  function leafNear(node, block, dir) {
+    const sibling = dir > 0 ? 'nextSibling' : 'previousSibling';
+    const innermost = dir > 0 ? 'firstChild' : 'lastChild';
     let current = node;
     for (;;) {
-      while (current !== block && !current.nextSibling) current = current.parentNode;
+      while (current !== block && !current[sibling]) current = current.parentNode;
       if (current === block) return null;
-      current = current.nextSibling;
-      while (current.firstChild) current = current.firstChild;
+      current = current[sibling];
+      while (current[innermost]) current = current[innermost];
       if (!isFiller(current, current.parentNode)) return current;
     }
   }
-  function leafBefore(node, block) {
-    let current = node;
-    for (;;) {
-      while (current !== block && !current.previousSibling) current = current.parentNode;
-      if (current === block) return null;
-      current = current.previousSibling;
-      while (current.lastChild) current = current.lastChild;
-      if (!isFiller(current, current.parentNode)) return current;
-    }
-  }
+  const leafAfter = (node, block) => leafNear(node, block, 1);
+  const leafBefore = (node, block) => leafNear(node, block, -1);
   const contentChildren = el => Array.from(el.childNodes).filter(child => !isFiller(child, el));
   // La suppression qui prolonge `del` (même id) : celle qui suit dans le bloc, ou, en fin de bloc, celle qui ouvre le bloc suivant - le tout premier
   // contenu de ce bloc, comme le fait findSuggestionMarkEnd de la lib : un bloc vide ou qui commence par autre chose l'arrête.
@@ -351,7 +344,7 @@ const TrackChanges = (function () {
     if (!ins.parentNode) return;
     if (ins.firstChild) tintAndUnwrap(ins, tint); else refillContainer(pruneEmpty(ins));
   }
-  // Tiptap écrit un <col> par colonne de la PREMIÈRE ligne et la largeur du tableau d'après eux (createColGroup, @tiptap/extension-table) : refaits
+  // Tiptap écrit un <col> par colonne de la première ligne et la largeur du tableau d'après eux (createColGroup, @tiptap/extension-table) : refaits
   // une fois les cases et les lignes supprimées retirées, sinon une colonne vide resterait à droite. Largeur minimale d'une colonne : celle que les
   // <col> portaient.
   function rebuildColumns(table) {
@@ -417,47 +410,33 @@ const TrackChanges = (function () {
     const { DOMParser: PMDOMParser, DOMSerializer: PMDOMSerializer, Fragment: PMFragment } = await import('prosemirror-model');
     const { EditorState } = await import('prosemirror-state');
     TableMapClass = (await import('prosemirror-tables')).TableMap;
-    // Note vérifiée le 2026-09-20 (cf. prototype) : applySuggestionsInRange/revertSuggestionsInRange
-    // existent dans le paquet npm source mais PAS dans le bundle ESM esm.sh réellement chargé ici -
-    // les importer casserait le chargement du module ENTIER, silencieusement. applySuggestion/
-    // revertSuggestion(undefined, from, to) (utilisés partout ci-dessous) font le même travail en
-    // interne, avec un id undefined (= toutes les suggestions de la plage, pas une seule).
+    // applySuggestionsInRange et revertSuggestionsInRange existent dans le paquet npm source mais pas dans le bundle ESM esm.sh réellement chargé
+    // ici : les importer casserait le chargement du module entier, sans erreur visible. applySuggestion et revertSuggestion appelés avec un id
+    // `undefined` (utilisés partout ci-dessous) font le même travail : toutes les suggestions de la plage.
 
-    // `priority: 200` sur insertion/deletion : @tiptap/starter-kit embarque sa propre extension
-    // Strike, dont parseHTML reconnaît AUSSI <del> sans priorité de règle explicite (50, le défaut
-    // ProseMirror) - à priorité de règle égale, l'ordre d'insertion dans schema.marks tranche, lui-
-    // même dérivé de l'ordre de priorité D'EXTENSION Tiptap (défaut 100). Sans ce relèvement, StarterKit
-    // (déclaré en premier dans extensions: [...]) gagnerait la course au parsing de <del> et absorberait
-    // silencieusement la marque de suivi - bug trouvé et corrigé dans le prototype (round-trip HTML).
-    const InsertionMark = Mark.create({
-      name: 'insertion',
+    // Une marque de suggestion : `<ins>` ou `<del>` portant l'id en data-id, ou l'attribut data-tc-* d'une case ou d'une ligne (cf.
+    // CELL_NODE_TYPES) ; `consuming: false` laisse ensuite s'appliquer la règle de la case ou de la ligne (td, th, tr), la marque se posant sur le
+    // nœud. `priority: 200` : le Strike de StarterKit reconnaît aussi <del>, sans priorité de règle explicite (50, le défaut ProseMirror) ; à
+    // priorité de règle égale, l'ordre des marques dans le schéma tranche, dérivé de la priorité d'extension Tiptap (défaut 100). Sans ce relèvement,
+    // StarterKit (déclaré en premier dans `extensions: [...]`) gagnerait la course au parsing de <del> et absorberait la marque de suivi, sans erreur
+    // visible (aller-retour HTML).
+    const suggestionMark = (name, tag, excludes) => Mark.create({
+      name,
       priority: 200,
       inclusive: false,
-      excludes: 'deletion modification insertion',
+      excludes,
       addAttributes() { return { id: { default: null } }; },
       parseHTML() {
+        const cell = ['td', 'th', 'tr'].map(cellTag => `${cellTag}[${cellMarkAttribute(name)}]`).join(', ');
         return [
-          { tag: 'ins', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
-          // `consuming: false` : la règle de la case ou de la ligne (td/th/tr) s'applique ensuite, la marque se posant sur le nœud (cf. CELL_NODE_TYPES).
-          { tag: 'td[data-tc-insertion], th[data-tc-insertion], tr[data-tc-insertion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-insertion')) }) },
+          { tag, getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
+          { tag: cell, consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute(cellMarkAttribute(name))) }) },
         ];
       },
-      renderHTML({ HTMLAttributes }) { return ['ins', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
+      renderHTML({ HTMLAttributes }) { return [tag, { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
     });
-    const DeletionMark = Mark.create({
-      name: 'deletion',
-      priority: 200,
-      inclusive: false,
-      excludes: 'insertion modification deletion',
-      addAttributes() { return { id: { default: null } }; },
-      parseHTML() {
-        return [
-          { tag: 'del', getAttrs: el => (el.dataset.id ? { id: JSON.parse(el.dataset.id) } : false) },
-          { tag: 'td[data-tc-deletion], th[data-tc-deletion], tr[data-tc-deletion]', consuming: false, getAttrs: el => ({ id: JSON.parse(el.getAttribute('data-tc-deletion')) }) },
-        ];
-      },
-      renderHTML({ HTMLAttributes }) { return ['del', { 'data-id': JSON.stringify(HTMLAttributes.id) }, 0]; },
-    });
+    const InsertionMark = suggestionMark('insertion', 'ins', 'deletion modification insertion');
+    const DeletionMark = suggestionMark('deletion', 'del', 'insertion modification deletion');
     const ModificationMark = Mark.create({
       name: 'modification',
       inclusive: false,
@@ -477,24 +456,26 @@ const TrackChanges = (function () {
       renderHTML({ HTMLAttributes }) { return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'modification', 'data-id': JSON.stringify(HTMLAttributes.id) }), 0]; },
     });
 
-    // Sérialiseur du schéma (celui de editor.getHTML(), du presse-papiers, des brouillons d'en-tête) : une case ou une ligne qui porte une marque de suivi s'écrit avec la
-    // marque en attribut de l'élément au lieu d'un <ins>/<del> autour de lui (cf. CELL_NODE_TYPES). Tout autre fragment passe tel quel par le sérialiseur d'origine.
+    // Sérialiseur du schéma (celui de editor.getHTML(), du presse-papiers, des brouillons d'en-tête) : une case ou une ligne qui porte une marque de
+    // suivi s'écrit avec la marque en attribut de l'élément au lieu d'un <ins>/<del> autour de lui (cf. CELL_NODE_TYPES). Tout autre fragment passe
+    // tel quel par le sérialiseur d'origine.
     class TrackingDOMSerializer extends PMDOMSerializer {
       serializeFragment(fragment, options, target) {
-        const isTrackedCell = node => CELL_NODE_TYPES.includes(node.type.name) && node.marks.some(m => MARK_NAMES.includes(m.type.name));
+        const isTrackedCell = node => CELL_NODE_TYPES.includes(node.type.name) && node.marks.some(isSuggestionMark);
         let anyTrackedCell = false;
         fragment.forEach(node => { if (isTrackedCell(node)) anyTrackedCell = true; });
         if (!anyTrackedCell) return super.serializeFragment(fragment, options, target);
         const bare = [];
-        fragment.forEach(node => bare.push(isTrackedCell(node) ? node.mark(node.marks.filter(m => !MARK_NAMES.includes(m.type.name))) : node));
+        fragment.forEach(node => bare.push(isTrackedCell(node) ? node.mark(node.marks.filter(m => !isSuggestionMark(m))) : node));
         const out = super.serializeFragment(PMFragment.fromArray(bare), options);
-        // Une case ou une ligne sérialisée = un élément : repli sur la forme d'origine si le compte n'y est pas, plutôt que d'écrire la marque sur le mauvais élément.
+        // Une case ou une ligne sérialisée = un élément : repli sur la forme d'origine si le compte n'y est pas, plutôt que d'écrire la marque sur le
+        // mauvais élément.
         if (out.childNodes.length !== fragment.childCount) return super.serializeFragment(fragment, options, target);
         let index = 0;
         fragment.forEach(node => {
           const el = out.childNodes[index++];
           if (el.nodeType !== 1) return;
-          node.marks.forEach(m => { if (MARK_NAMES.includes(m.type.name)) el.setAttribute(cellMarkAttribute(m.type.name), cellMarkValue(m)); });
+          suggestionMarksOf(node).forEach(m => el.setAttribute(cellMarkAttribute(m.type.name), cellMarkValue(m)));
         });
         if (!target) return out;
         target.appendChild(out);
@@ -502,27 +483,22 @@ const TrackChanges = (function () {
       }
     }
 
-    // Contournement d'un piège Tiptap 3.x (constaté en écrivant le prototype) : pour un appel DIRECT
-    // (editor.commands.xxx(), pas une chaîne .chain()), Tiptap fournit un `dispatch` no-op et un
-    // `state.tr` chaînable TOUJOURS PARTAGÉ pendant tout l'appel - lui passer `editor.state` (l'état
-    // déjà figé) crée un tr orphelin à chaque lecture, jeté silencieusement par le dispatch no-op.
-    // `editor.view.dispatch` est le vrai dispatch ProseMirror (synchrone, jamais no-op) ; `tr.setMeta
-    // ('preventDispatch', true)` empêche Tiptap de dispatcher EN PLUS son propre tr partagé resté vide.
-    // Nécessaire dès qu'une commande doit appliquer PLUSIEURS transactions dans l'ordre (bourrage,
-    // opération, nettoyage), pas une seule mutation isolée.
+    // Contournement d'un piège de Tiptap 3.x : pour un appel direct (editor.commands.xxx(), pas une chaîne .chain()), Tiptap fournit un `dispatch`
+    // sans effet et un `state.tr` chaînable toujours partagé pendant tout l'appel ; lui passer `editor.state` (l'état déjà figé) crée un tr orphelin
+    // à chaque lecture, jeté en silence par ce dispatch. `editor.view.dispatch` est le vrai dispatch ProseMirror (synchrone) ;
+    // `tr.setMeta('preventDispatch', true)` empêche Tiptap de dispatcher en plus son propre tr partagé resté vide. Nécessaire dès qu'une commande
+    // doit appliquer plusieurs transactions dans l'ordre (bourrage, opération, nettoyage) et pas une seule mutation.
     function runGuardedLibCommand(libFn, editor, dispatch, tr) {
       if (!dispatch) return libFn(editor.state, undefined); // vérif de capacité (editor.can()) : pas de mutation
       if (tr) tr.setMeta('preventDispatch', true);
       return withEndGuard(editor, () => libFn(editor.state, editor.view.dispatch));
     }
 
-    // Exécute `run()` avec, au besoin, le garde-fou du dernier nœud du document.
-    // Bug DANS LA LIB (pas notre code, cf. planning/feature-track-changes.md bug n°3) :
-    // applySuggestions/revertSuggestions/applySuggestion/revertSuggestion plantent avec "Cannot read
-    // properties of undefined (reading 'nodeSize')" quand le nœud traité est le tout DERNIER du
-    // document (test de fusion avec le caractère suivant hors limites, `<=` au lieu de `<`).
-    // Contournement : un paragraphe-tampon temporaire est inséré juste après, retiré ensuite s'il
-    // est resté vide - les deux transactions de bord sont hors historique (invisibles pour Annuler).
+    // Exécute `run()` avec, au besoin, le garde-fou du dernier nœud du document. Bug de la lib (cf. planning/feature-track-changes.md) :
+    // applySuggestions, revertSuggestions, applySuggestion et revertSuggestion plantent avec « Cannot read properties of undefined (reading
+    // 'nodeSize') » quand le nœud traité est le tout dernier du document (test de fusion avec le caractère suivant hors limites, `<=` au lieu de
+    // `<`). Contournement : un paragraphe-tampon temporaire est inséré juste après, retiré ensuite s'il est resté vide ; les deux transactions de
+    // bord sont hors historique (invisibles pour Annuler).
     function withEndGuard(editor, run) {
       if (!lastNodeCarriesSuggestionMark(editor.state)) return run();
       const guardMeta = t => t.setMeta(suggestChangesKey, { skip: true }).setMeta('addToHistory', false);
@@ -539,7 +515,7 @@ const TrackChanges = (function () {
       }
     }
 
-    // Le document SANS ses marques « modification » : la seconde passe de applySuggestion/revertSuggestion (lib) résout toutes celles de la plage, de
+    // Le document sans ses marques « modification » : la seconde passe de applySuggestion/revertSuggestion (lib) résout toutes celles de la plage, de
     // n'importe quelle suggestion, sur des positions que la première passe a déjà décalées. Sur ce document-là elle n'a plus rien à toucher ; celles
     // de la suggestion visée se résolvent à part (resolveModifications). Les positions ne changent pas : une marque ne prend pas de place.
     function withoutModifications(doc, schema) {
@@ -553,11 +529,11 @@ const TrackChanges = (function () {
       return strip.doc;
     }
 
-    // Accepte ou refuse les suggestions `seedIds` et tout ce qui se résout avec elles (expandSuggestionIds), en UNE transaction : un seul Annuler, et
-    // prosemirror-tables ne voit jamais un tableau à moitié résolu (il « répare » un tableau non rectangulaire en ajoutant des cases vides). Une
-    // suggestion après l'autre par applySuggestion / revertSuggestion de la lib - que « Tout accepter » et « Tout refuser » appellent aussi, sans id et
-    // par tranches -, sur une plage serrée et sur un état sans plugin (ses étapes sont rejouées sur la transaction finale, le document restant celui
-    // d'origine). Rend faux, sans rien changer, quand rien n'est à résoudre ou quand une étape ne s'applique pas.
+    // Accepte ou refuse les suggestions `seedIds` et tout ce qui se résout avec elles (expandSuggestionIds) en une seule transaction : un seul
+    // Annuler, et prosemirror-tables ne voit jamais un tableau à moitié résolu (il « répare » un tableau non rectangulaire en ajoutant des cases
+    // vides). Une suggestion après l'autre par applySuggestion / revertSuggestion de la lib - que « Tout accepter » et « Tout refuser » appellent
+    // aussi, sans id et par tranches -, sur une plage serrée et sur un état sans plugin (ses étapes sont rejouées sur la transaction finale, le
+    // document restant celui d'origine). Rend faux, sans rien changer, quand rien n'est à résoudre ou quand une étape ne s'applique pas.
     function resolveSuggestionIds(editor, seedIds, accept) {
       const ids = expandSuggestionIds(editor.state.doc, seedIds);
       return withEndGuard(editor, () => {
@@ -592,25 +568,24 @@ const TrackChanges = (function () {
       return resolveSuggestionIds(editor, ids, accept);
     }
 
-    // Mitigation du bug de perf O(N²) confirmé dans la lib (applySuggestions/revertSuggestions sans
-    // plage traitent tout le document en un seul Transform partagé - coût cumulatif). Découpe "tout
-    // accepter/refuser" en plusieurs transactions bornées à chunkSize marques à la fois, toujours
-    // depuis la position 0 du document COURANT (jamais des positions mises en cache, la taille du
-    // document change à chaque tranche traitée). Mesuré dans le prototype : ratio ~5x au lieu de ~10x
-    // pour 4x de marques. Contrepartie assumée : chaque tranche est SA PROPRE transaction/pas
-    // d'historique (Ctrl+Z doit être pressé une fois par tranche pour tout défaire).
+    // Atténue un coût quadratique confirmé dans la lib : applySuggestions et revertSuggestions sans plage traitent tout le document dans un seul
+    // Transform partagé, au coût cumulatif. « Tout accepter » et « Tout refuser » sont donc découpés en transactions bornées à chunkSize marques,
+    // toujours depuis la position 0 du document courant (jamais des positions mises en cache : sa taille change à chaque tranche). Mesuré : le coût
+    // est multiplié par ~5 au lieu de ~10 pour 4 fois plus de marques. Contrepartie assumée : chaque tranche est sa propre transaction et son propre
+    // pas d'historique (Ctrl+Z une fois par tranche pour tout défaire).
     function findFirstPendingMarks(state, chunkSize) {
       const found = [];
       state.doc.descendants((node, pos) => {
         if (found.length >= chunkSize) return false;
-        const mark = node.marks.find(m => MARK_NAMES.includes(m.type.name));
+        const mark = node.marks.find(isSuggestionMark);
         if (mark) found.push({ from: pos, to: pos + node.nodeSize });
         return true;
       });
       return found;
     }
-    // Les réglages en attente (un alignement, « Garder avec le suivant », le fond d'une cellule, la largeur d'une colonne) : les marques `modification`, avec leurs ids tels que le document les écrit. Celles
-    // d'une case ou d'une ligne de tableau (isTableMod) suivent leur colonne ou leur ligne tant que l'une d'elles attend : `withTableMods` les prend aussi, pour quand il n'en reste plus.
+    // Les réglages en attente (un alignement, « Garder avec le suivant », le fond d'une cellule, la largeur d'une colonne) : les marques
+    // `modification`, avec leurs ids tels que le document les écrit. Celles d'une case ou d'une ligne de tableau (isTableMod) suivent leur colonne ou
+    // leur ligne tant que l'une d'elles attend : `withTableMods` les prend aussi, pour quand il n'en reste plus.
     function pendingAttributeIds(doc, withTableMods) {
       const ids = [];
       doc.descendants(node => {
@@ -620,19 +595,11 @@ const TrackChanges = (function () {
       });
       return ids;
     }
-    // Vrai tant qu'une insertion ou une suppression (un texte, un objet, une case, une colonne, une ligne) attend.
-    function hasInsertionOrDeletion(doc) {
-      let found = false;
-      doc.descendants(node => {
-        if (!found && node.marks.some(mark => mark.type.name !== 'modification' && MARK_NAMES.includes(mark.type.name))) found = true;
-        return !found;
-      });
-      return found;
-    }
-    // Reprend une tranche après l'autre jusqu'à ce qu'il ne reste plus de marque. Une tranche qui ne change rien ne mènerait nulle part : revertSuggestion de la lib rend « rien à faire » AVANT de résoudre
-    // les modifications dès qu'elle n'a aucun texte à défaire, et la boucle retrouvait la même marque à chaque tour - avec un seul réglage de paragraphe suivi, « Tout refuser » ne finissait jamais (la page
-    // se figeait). `onStall` résout alors ce que la lib laisse et rend vrai s'il a changé le document : la boucle reprend pour le reste. Sans `onStall`, ou s'il ne change rien non plus, elle s'arrête :
-    // des marques peuvent rester, la page ne se fige jamais.
+    // Reprend une tranche après l'autre jusqu'à ce qu'il ne reste plus de marque. Une tranche qui ne change rien ne mènerait nulle part :
+    // revertSuggestion de la lib rend « rien à faire » avant de résoudre les modifications dès qu'elle n'a aucun texte à défaire, et la boucle
+    // retrouverait la même marque à chaque tour (avec un seul réglage de paragraphe suivi, « Tout refuser » ne finirait jamais). `onStall` résout
+    // alors ce que la lib laisse et rend vrai s'il a changé le document : la boucle reprend pour le reste. Sans `onStall`, ou s'il ne change rien non
+    // plus, elle s'arrête : des marques peuvent rester, mais la page ne se fige jamais.
     function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize, onStall) {
       while (true) {
         const marks = findFirstPendingMarks(editor.state, chunkSize);
@@ -644,6 +611,23 @@ const TrackChanges = (function () {
       }
     }
 
+    // Les réglages seuls (la lib n'a rien à défaire : un alignement, le fond d'une cellule, la largeur d'une colonne) se refusent comme « Refuser »
+    // une modification : resolveSuggestionIds, une transaction, un seul Annuler. Ceux d'une case ou d'une ligne ne passent là que quand plus aucune
+    // insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle. Rend vrai si le document a changé.
+    const refuseAttributes = editor => {
+      const ids = pendingAttributeIds(editor.state.doc, !hasInsertionOrDeletion(editor.state.doc));
+      return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
+    };
+
+    // « Tout accepter » / « Tout refuser » par tranches de `chunkSize` marques : `resolveOne` est applySuggestion ou revertSuggestion, sans id
+    // (toutes les suggestions de la plage). `onStall(editor)` : cf. runChunkedLibCommand.
+    const chunkedCommand = (resolveOne, chunkSize, onStall) => ({ editor, dispatch, tr }) => {
+      if (!dispatch) return true;
+      tr.setMeta('preventDispatch', true);
+      runChunkedLibCommand((from, to) => resolveOne(undefined, from, to), editor, chunkSize, onStall && (() => onStall(editor)));
+      return true;
+    };
+
     const SuggestChangesBridge = Extension.create({
       name: 'suggestChangesBridge',
       addProseMirrorPlugins() { return [suggestChanges()]; },
@@ -652,44 +636,26 @@ const TrackChanges = (function () {
           toggleSuggestMode: () => ({ state, dispatch }) => toggleSuggestChanges(state, dispatch),
           acceptAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(applySuggestions, editor, dispatch, tr),
           rejectAllSuggestions: () => ({ editor, dispatch, tr }) => runGuardedLibCommand(revertSuggestions, editor, dispatch, tr),
-          // chunkSize par défaut choisi empiriquement (cf. mesure de perf du prototype) - assez petit
-          // pour rester loin du coût quadratique, assez grand pour ne pas multiplier le nombre de pas
-          // d'historique pour rien sur un document de taille normale.
-          acceptAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
-            if (!dispatch) return true;
-            tr.setMeta('preventDispatch', true);
-            runChunkedLibCommand((from, to) => applySuggestion(undefined, from, to), editor, chunkSize);
-            return true;
-          },
-          rejectAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
-            if (!dispatch) return true;
-            tr.setMeta('preventDispatch', true);
-            // Les réglages seuls (la lib n'a rien à défaire : un alignement, le fond d'une cellule, la largeur d'une colonne) se refusent comme « Refuser » une modification : resolveSuggestionIds, une transaction,
-            // un seul Annuler. Ceux d'une case ou d'une ligne ne passent là que quand plus aucune insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle.
-            runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize, () => {
-              const ids = pendingAttributeIds(editor.state.doc, !hasInsertionOrDeletion(editor.state.doc));
-              return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
-            });
-            return true;
-          },
+          // chunkSize par défaut, choisi par mesure : assez petit pour rester loin du coût quadratique, assez grand pour ne pas multiplier les pas
+          // d'historique sur un document de taille normale.
+          acceptAllSuggestionsChunked: (chunkSize = 200) => chunkedCommand(applySuggestion, chunkSize),
+          rejectAllSuggestionsChunked: (chunkSize = 200) => chunkedCommand(revertSuggestion, chunkSize, refuseAttributes),
           // Une modification à la fois (barre flottante) : celle que la sélection touche, avec tout ce qui s'y résout (resolveSuggestionIds). Faux
           // sans rien changer quand la sélection n'en touche aucune.
           acceptSuggestionsAtSelection: () => ({ editor, dispatch, tr, state }) => resolveAtSelection(editor, state, dispatch, tr, true),
           rejectSuggestionsAtSelection: () => ({ editor, dispatch, tr, state }) => resolveAtSelection(editor, state, dispatch, tr, false),
-          // Remplace TOUT le document sans jamais passer par transformToSuggestionTransaction, quel
-          // que soit l'état du suivi au moment de l'appel - cf. bug n°5 (planning/feature-track-
-          // changes.md) : un setContent() normal pendant que le suivi est actif empile ancien ET
-          // nouveau contenu dans des <del>/<ins> englobants au lieu de remplacer proprement. C'est le
-          // remplacement utilisé par Editor.setHTML() (chargement de modèle, rechargement après
-          // conflit d'auto-save). `preventUpdate: true` (en plus de `skip`/`addToHistory: false`) :
-          // vérifié dans le code source réel de @tiptap/core (Editor#dispatchTransaction lit ce meta
-          // AVANT d'émettre 'update') - reproduit exactement ce que fait
-          // `editor.commands.setContent(html, {emitUpdate:false})`, jamais déclenché par un dispatch
-          // direct comme celui-ci sans ce meta explicite.
+          // Remplace tout le document sans jamais passer par transformToSuggestionTransaction, quel que soit l'état du suivi au moment de l'appel :
+          // un setContent() normal pendant que le suivi est actif empile l'ancien et le nouveau contenu dans des <del>/<ins> englobants au lieu de
+          // remplacer proprement (cf. planning/feature-track-changes.md). C'est le remplacement qu'utilise Editor.setHTML() (chargement d'un modèle,
+          // rechargement après un conflit d'enregistrement automatique).
+          // `preventUpdate: true` (en plus de `skip` et `addToHistory: false`) : Editor#dispatchTransaction de @tiptap/core lit ce meta avant
+          // d'émettre 'update'. Il reproduit `editor.commands.setContent(html, { emitUpdate: false })` ; un dispatch direct comme celui-ci n'étouffe
+          // pas l'événement sans ce meta.
           loadTrackedDocument: html => ({ editor, dispatch, tr }) => {
             if (!dispatch) return true;
             tr.setMeta('preventDispatch', true);
-            // Document inerte, nettoyé, jamais sérialisé : un <div> du widget, même détaché, ferait charger ses images (et courir leurs onerror) au premier innerHTML.
+            // Document inerte, nettoyé, jamais sérialisé : un <div> du widget, même détaché, ferait charger ses images (et courir leurs onerror) au
+            // premier innerHTML.
             const docNode = PMDOMParser.fromSchema(editor.schema).parse(HtmlSanitize.parseInert(html));
             editor.view.dispatch(
               editor.state.tr
@@ -704,9 +670,9 @@ const TrackChanges = (function () {
       },
       dispatchTransaction({ transaction, next }) {
         const editor = this.editor;
-        // Garde alignée sur withSuggestChanges() (code source de la lib) : sans le test `'skip' in
-        // ...`, "tout accepter/refuser" (qui posent ce meta pour dire "ceci EST déjà le résultat, ne
-        // le re-transforme pas") seraient réinterceptées et transformées en NOUVELLES suggestions.
+        // Garde alignée sur withSuggestChanges() (code source de la lib) : sans le test `'skip' in ...`, « Tout accepter » et « Tout refuser » (qui
+        // posent ce meta pour dire « ceci est déjà le résultat, ne le re-transforme pas ») seraient réinterceptées et transformées en nouvelles
+        // suggestions.
         const skipMeta = transaction.getMeta(suggestChangesKey);
         const enabled = isSuggestChangesEnabled(editor.state)
           && !transaction.getMeta('history$')
@@ -720,14 +686,13 @@ const TrackChanges = (function () {
       },
     });
 
-    // Contournement d'un piège DÉCOUVERT en intégrant ce fichier (absent du prototype, qui ne rechargeait jamais un document par-dessus un mode suivi déjà
-    // actif) : EditorNodes.createClearHistoryExtension (js/editor-nodes.js), appelée par Editor.setHTML() après CHAQUE chargement de modèle, reconstruit
-    // l'état ProseMirror via `EditorState.create({..., plugins: view.state.plugins})`. `EditorState.create` appelle TOUJOURS `init()` sur CHAQUE plugin de
-    // la liste, y compris ceux dont la référence ne change pas - contrairement à `state.reconfigure(...)`, qui préserve l'état des plugins inchangés. Le
-    // suivi (un booléen de plugin, pas une donnée du document) se retrouvait donc silencieusement remis à OFF à chaque changement de modèle, y compris en
-    // rechargeant le MÊME modèle. Dispatch RÉEL (comme runGuardedLibCommand/loadTrackedDocument ci-dessus) plutôt que la commande `toggleSuggestMode` :
-    // celle-ci passerait par `editor.commands.toggleSuggestMode()` en appel DIRECT (jamais chaîné ici), avec le même piège dispatch-no-op documenté plus
-    // haut - appeler la fonction de la lib directement avec `editor.view.dispatch` l'évite entièrement.
+    // Rétablit le suivi après un rechargement de modèle : EditorNodes.createClearHistoryExtension (js/editor-nodes.js), appelée par Editor.setHTML()
+    // après chaque chargement, reconstruit l'état ProseMirror par `EditorState.create({..., plugins: view.state.plugins})`, et `EditorState.create`
+    // appelle toujours `init()` sur chaque plugin, même inchangé (contrairement à `state.reconfigure(...)`, qui préserve l'état des plugins
+    // inchangés). Le suivi est un booléen de plugin, pas une donnée du document : il retombait à « désactivé » à chaque changement de modèle, y
+    // compris en rechargeant le même.
+    // Dispatch réel (comme runGuardedLibCommand et loadTrackedDocument ci-dessus) plutôt que la commande `toggleSuggestMode` : appelée en direct,
+    // elle retomberait sur le piège du dispatch sans effet décrit plus haut.
     function restoreSuggestModeIfNeeded(editor, wasOn) {
       if (wasOn && !isSuggestChangesEnabled(editor.state)) toggleSuggestChanges(editor.state, editor.view.dispatch);
     }
@@ -736,9 +701,11 @@ const TrackChanges = (function () {
       InsertionMark, DeletionMark, ModificationMark, SuggestChangesBridge,
       isSuggestModeOn: state => isSuggestChangesEnabled(state),
       restoreSuggestModeIfNeeded,
-      // Bascule du suivi hors de la barre (une grille l'éteint à l'ouverture) : même appel direct de la lib que restoreSuggestModeIfNeeded, jamais la commande.
+      // Bascule du suivi hors de la barre (une grille l'éteint à l'ouverture) : même appel direct de la lib que restoreSuggestModeIfNeeded, jamais la
+      // commande.
       toggleSuggestMode: editor => toggleSuggestChanges(editor.state, editor.view.dispatch),
-      // À appeler une fois l'éditeur créé : DOMSerializer.fromSchema() relit schema.cached.domSerializer, tous les sérialiseurs du schéma passent donc par celui-ci.
+      // À appeler une fois l'éditeur créé : DOMSerializer.fromSchema() relit schema.cached.domSerializer, tous les sérialiseurs du schéma passent
+      // donc par celui-ci.
       installSerializer(schema) {
         schema.cached.domSerializer = new TrackingDOMSerializer(PMDOMSerializer.nodesFromSchema(schema), PMDOMSerializer.marksFromSchema(schema));
       },
