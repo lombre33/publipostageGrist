@@ -293,6 +293,8 @@
             <button id="v2-btn-align-right" data-tip="Aligner à droite" aria-label="Aligner à droite" data-i18n-tip="align.right" data-i18n-aria="align.right"></button>
             <button id="v2-btn-align-justify" data-tip="Justifier" aria-label="Justifier" data-i18n-tip="align.justify" data-i18n-aria="align.justify"></button>
           </span>
+          <span class="v2-hover-hsep"></span>
+          <span class="v2-hover-row v2-hover-row-check" id="v2-btn-keep-next" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit" data-i18n="keepNext.row" data-i18n-aria="keepNext.aria">Garder avec le suivant</span>
         </span>
       </span>
       <span class="v2-sep"></span>
@@ -647,9 +649,9 @@
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
-<script src="js/reader-mode.js?v=0.122"></script>
+<script src="js/reader-mode.js?v=0.123"></script>
 <script src="js/reader-guide.js?v=0.4"></script>
-<script src="js/i18n.js?v=0.111"></script>
+<script src="js/i18n.js?v=0.112"></script>
 <script src="js/shortcuts.js?v=0.9"></script>
 <script src="js/page-layout.js?v=0.9"></script>
 <script src="js/page-layer.js?v=0.4"></script>
@@ -663,10 +665,10 @@
 <script src="js/variables.js?v=0.53"></script>
 <script src="js/icons.js?v=0.40"></script>
 <script src="js/editor-core.js?v=0.15"></script>
-<script src="js/header-footer-preview.js?v=1.18"></script>
+<script src="js/header-footer-preview.js?v=1.19"></script>
 <script src="js/editor-nodes.js?v=1.13"></script>
 <script src="js/floating-toolbars.js?v=0.35"></script>
-<script src="js/main-toolbar.js?v=1.10"></script>
+<script src="js/main-toolbar.js?v=1.11"></script>
 <script src="js/format-painter.js?v=0.2"></script>
 <script src="js/comments.js?v=0.10"></script>
 <script src="js/track-changes.js?v=0.11"></script>
@@ -674,13 +676,13 @@
 <script src="js/grid-table.js?v=0.4"></script>
 <script src="js/grid-editor.js?v=0.12"></script>
 <script src="js/table-select.js?v=0.3"></script>
-<script src="js/editor.js?v=2.18"></script>
+<script src="js/editor.js?v=2.19"></script>
 <script src="js/export-common.js?v=0.10"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.1"></script>
-<script src="js/pdf-export.js?v=1.29"></script>
+<script src="js/pdf-export.js?v=1.30"></script>
 <script src="js/sheet-layout.js?v=0.2"></script>
 <script src="js/pdf-merge.js?v=0.4"></script>
-<script src="js/docx-export.js?v=0.36"></script>
+<script src="js/docx-export.js?v=0.37"></script>
 <script src="js/xlsx-export.js?v=0.11"></script>
 <script src="js/xlsx-number-format.js?v=0.2"></script>
 <script src="js/grid-xlsx-import.js?v=0.3"></script>
@@ -696,6 +698,7 @@
 <script src="js/find-replace.js?v=0.3"></script>
 <script src="js/callout.js?v=0.4"></script>
 <script src="js/caption.js?v=0.4"></script>
+<script src="js/keep-with-next.js?v=0.1"></script>
 <script src="js/qr-code.js?v=0.3"></script>
 <script src="js/text-expansion.js?v=0.3"></script>
 <script src="js/shortcuts-panel.js?v=0.2"></script>

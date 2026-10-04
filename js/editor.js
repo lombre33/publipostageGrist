@@ -339,6 +339,8 @@ const Editor = (function () {
     const TrackedConditionalText = TrackChanges.extendForTracking(ConditionalText);
     // Légende (js/caption.js) : un attribut du paragraphe, plus le texte d'attente de la légende vide où se trouve le curseur.
     const CaptionExtension = Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet });
+    // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
+    const KeepNextExtension = KeepWithNext.createExtension(Extension);
 
     editor = new TiptapEditor({
       element: document.getElementById('editor-container'),
@@ -417,6 +419,7 @@ const Editor = (function () {
         ConditionalCheckboxNode,
         ConditionalValueNode,
         CaptionExtension,
+        KeepNextExtension,
         EditorImage,
         PageBreak,
         HeadingNumberingConfig,

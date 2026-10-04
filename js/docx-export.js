@@ -651,7 +651,8 @@ const DocxExport = (function () {
   // futur sommaire réel si l'utilisateur en construit un dans Word).
   // `pageBreakBefore` DOIT passer par le constructeur (option native, cf. IParagraphPropertiesOptionsBase) - un Paragraph déjà construit n'est pas
   // mutable de l'extérieur.
-  // `keepNext` : « Conserver avec le suivant » (w:keepNext), pour le bloc que sa légende doit suivre sur la même page (cf. keepsWithCaption).
+  // `keepNext` : « Conserver avec le suivant » (w:keepNext), pour le bloc que sa légende doit suivre sur la même page (cf. keepsWithCaption) et pour un paragraphe que le réglage « Garder avec le
+  // suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx);
     const align = paragraphAlignment(node);
@@ -772,7 +773,7 @@ const DocxExport = (function () {
         continue;
       }
       if (/^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName)) {
-        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak, keepNext || (isTopLevel && keepsWithCaption(node)));
+        const items = await paragraphBlockFrom(node, ctx, headingMarkers, pendingPageBreak, keepNext || (isTopLevel && (keepsWithCaption(node) || KeepWithNext.isKeptElement(node))));
         blocks.push(...items);
         pendingPageBreak = false;
         continue;

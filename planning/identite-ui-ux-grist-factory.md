@@ -607,6 +607,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   reste se coupe comme avant) ; un tableau qu'on ne coupe pas passe entier. Rien ne bouge quand le bloc et sa légende tiennent dans la page, pour une légende qui suit un simple paragraphe, au-delà de 90 % d'une
   page (le PDF ne saurait pas les garder) ni pour une légende vide en fin de document ; le document enregistré ne change pas. Dans le Word : « Conserver avec le suivant » sur le paragraphe de l'image, sur la
   dernière ligne du tableau (sur toutes si on ne le coupe pas) et sur chaque légende qu'une autre légende suit.
+- Garder avec le suivant (demande d'Antoine du 04/10, défaut « les totaux d'une facture se coupent entre deux pages » ; son choix : « Réglage au choix », comme dans Word) : une ligne à cocher « Garder avec le suivant »
+  (« Keep with next ») dans le menu Alignement, sous les quatre alignements après un trait fin, jamais une icône de plus dans la barre du haut. Elle vaut pour les paragraphes sélectionnés (ou celui du curseur) : cochée quand
+  tous le portent, un clic le retire à tous, sinon le pose à tous, en un seul Annuler. Elle est grisée (`aria-disabled`, sa raison en info-bulle : « Seulement pour les paragraphes du texte… »), jamais retirée, dans un tableau,
+  une liste, un titre, une citation, un encadré, une colonne, une légende (qui reste déjà avec son bloc), une grille, un en-tête ou un pied de page ; elle sert dans un bloc de texte conditionnel, où sont les lignes de totaux
+  d'une facture. Rien ne se voit dans le document : le réglage est un attribut du paragraphe (`data-keep-next`), Entrée à la fin d'un paragraphe réglé ouvre un paragraphe ordinaire, et un document qui ne s'en sert pas ne change pas.
+  Au saut de page, la suite de paragraphes réglés passe d'un seul tenant à la page suivante avec le bloc qui la suit (un paragraphe, la première ligne d'un tableau, une image avec sa légende), même rendu dans l'éditeur, la
+  Lecture, le PDF et le Word (« Conserver avec le suivant » natif) ; rien ne bouge quand tout tient dans la page, ni quand la suite et la tête du bloc suivant dépassent 90 % d'une page (le PDF ne saurait pas les garder).
+  En suivi des modifications, poser le réglage est une modification suivie du paragraphe, comme l'alignement.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

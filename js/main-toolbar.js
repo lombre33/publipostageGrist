@@ -280,6 +280,8 @@ const MainToolbar = (function () {
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
+    // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
+    KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
   }
 
   // Boutons grisés (classe v2-hf-locked, jamais retirés) selon le mode et la sélection, une seule condition par bouton. Renvoie les ids grisés.
@@ -466,6 +468,20 @@ const MainToolbar = (function () {
     // Le bouton principal réapplique l'alignement qu'il montre (currentAlign, tenu à jour par syncToolbarState) ; les quatre boutons ci-dessus sont
     // dans le panneau révélé au survol (.v2-hover-flyout, index.html).
     bind('v2-btn-align-main', () => editor.chain().focus().setTextAlign(currentAlign).run());
+    // « Garder avec le suivant » (js/keep-with-next.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace). Sans effet quand le groupe est grisé (e-mail,
+    // macro-modèle, lecture seule, Lecture) : son `tabindex` laisse y arriver au clavier.
+    const keepNextRow = byId('v2-btn-keep-next');
+    if (keepNextRow) {
+      const toggleKeepNext = () => { if (!keepNextRow.closest('.v2-hf-locked, .pp-access-locked')) KeepWithNext.run(editor); };
+      keepNextRow.addEventListener('mousedown', event => event.preventDefault());
+      keepNextRow.addEventListener('click', toggleKeepNext);
+      keepNextRow.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggleKeepNext();
+      });
+      I18n.onChange(() => KeepWithNext.syncRow(keepNextRow, editor));
+    }
     // Une liste se pose dans toutes les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et
     // Ctrl+Maj+7, js/shortcuts.js).
     bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));
