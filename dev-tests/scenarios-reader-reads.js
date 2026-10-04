@@ -1,10 +1,9 @@
-// Suite "readerReads" - la Lecture (js/reader-mode.js) lit chaque table UNE fois par rendu et suit ce qui bouge après lui (retour d'Antoine du 2026-10-02,
-// point 3 : « vue lecture lente et parfois affichage mauvais, coupure entre les pages, un décalage chelou apparaît et pousse tout vers le bas, mais pas si on part
-// et revient de la ligne »). fetchTable est un aller-retour jusqu'au serveur de Grist qui renvoie la table ENTIÈRE ; une variable d'une autre table en demandait cinq
-// à elle seule (la table liée, la table de la page, deux tables de métadonnées...) : un macro-modèle de trois pages en faisait 304. Le temps d'un rendu, chaque table
-// n'est plus lue qu'une fois (GristAPI.withReadPass), sans mémoire ensuite. Côté mise en page, les coupures de page étaient mesurées une fois : une image qui finit de charger
-// après la mesure (pièce jointe, adresse externe) laissait des bandes périmées - ligne coupée en deux, contenu poussé vers le bas ; la Lecture surveille maintenant sa feuille.
-// L'image réellement lente (réseau) et la vraie souris : dev-tests/verify-reader-late-images-mouse.mjs.
+// Suite "readerReads" - la Lecture (js/reader-mode.js) lit chaque table une fois par rendu, un export (PDF, Word, Excel) une fois par ligne exportée, et la
+// pagination suit ce qui bouge après la mesure. fetchTable est un aller-retour jusqu'au serveur de Grist qui renvoie la table entière : une variable d'une autre
+// table en demandait cinq à elle seule (la table liée, la table de la page, deux tables de métadonnées...), un macro-modèle de trois pages 304. Le temps d'un
+// rendu (GristAPI.withReadPass), chaque table n'est lue qu'une fois, sans mémoire ensuite ; un export en fait autant (ExportCommon.resolveRecord). Côté mise en
+// page, les coupures de page sont mesurées une fois : une image qui finit de charger après la mesure (pièce jointe, adresse externe) laisserait des bandes
+// périmées, la Lecture surveille donc sa feuille. L'image réellement lente (réseau) et la vraie souris : dev-tests/verify-reader-late-images-mouse.mjs.
 (function () {
   const cases = [];
 
@@ -127,6 +126,39 @@
       if (first.Nom !== 'Client 17 renommé' || second.Nom !== 'Client autre 17') problems.push('fetchRowById hors rendu : ' + first.Nom + ' / ' + second.Nom);
       if (rowsFirst[16].Nom !== 'Client autre 17' || rowsSecond[16].Nom !== 'Client dernier 17') problems.push('fetchTableRows hors rendu : ' + rowsFirst[16].Nom + ' / ' + rowsSecond[16].Nom);
       return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  // En-tête et pied de page avec une variable de chacune des deux autres tables, et un nom de fichier qui en lit aussi : tout ce qu'un export résout pour une ligne.
+  const EXPORT_HF = { enabled: true, differentFirstPage: false,
+    header: { default: '<p>' + badge('RdClients', 'Ville') + '</p>', first: '' }, footer: { default: '<p>' + badge('RdEmployes', 'Service') + '</p>', first: '' } };
+  const EXPORT_FILENAME = 'Fiche_#RdClients.Nom_#RdEmployes.Nom';
+
+  cases.push({
+    id: 'export_reads_each_table_once_per_record',
+    description: 'Un export d’une ligne (PDF, Word, Excel) lit chaque table une seule fois, corps, nom du fichier, en-tête et pied réunis (avant : une série de lectures par variable), et le nom du fichier est le bon',
+    run: async (h) => {
+      await seed(h);
+      await PdfExport.ensurePdfLibsLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const html = manyBadges();
+      const exporters = {
+        pdf: () => PdfExport.getNativePdfBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME, EXPORT_HF, undefined),
+        docx: () => DocxExport.getDocxBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME, EXPORT_HF, undefined),
+        xlsx: () => XlsxExport.getXlsxBlobForRecord(html, PAGE, delivered(), EXPORT_FILENAME),
+      };
+      const problems = [];
+      const counted = {};
+      for (const [name, run] of Object.entries(exporters)) {
+        let result = null;
+        const read = await tablesRead(async () => { result = await run(); });
+        const counts = countOf(read);
+        counted[name] = counts;
+        if (!read.length || Math.max(...Object.values(counts)) !== 1) problems.push(name + ' : lectures ' + JSON.stringify(counts));
+        if (!result || result.filename !== 'Fiche_Client 17_Employé 1') problems.push(name + ' : nom du fichier ' + (result && result.filename));
+        if (!result || !result.blob || !result.blob.size) problems.push(name + ' : fichier vide');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, counted }) };
     },
   });
 

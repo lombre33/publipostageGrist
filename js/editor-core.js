@@ -35,8 +35,8 @@ const EditorCore = (function () {
   // Facteur de réduction de la feuille A4 (`zoom: var(--pp-fit-zoom)` sur .v2-page-sheet et .reader-content, posé par applyPageFitZoom de js/main.js)
   // : à ~700 px de panneau il vaut ~0,85. Les rectangles de getBoundingClientRect et les déplacements de la souris sont en pixels écran, alors que
   // `left`, `top` et `width` d'une image s'écrivent en pixels de mise en page : tout geste qui passe de l'un à l'autre divise par ce facteur
-  // (redimensionner, déplacer, aligner, passer en calque). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché). js/reader-mode.js
-  // garde sa propre copie : il se charge avant ce fichier.
+  // (redimensionner, déplacer, aligner, passer en calque). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché). La Lecture
+  // (js/reader-mode.js) mesure de même sa feuille `.reader-content`.
   function layoutZoom(el) {
     const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
     const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;

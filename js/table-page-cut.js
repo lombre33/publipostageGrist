@@ -1,19 +1,21 @@
 // Coupure d'un tableau entre deux lignes, au saut de page. Une ligne de tableau ne se coupe jamais en deux : le PDF (dontBreakRows de pdfmake) et le
 // Word (cantSplit) la passent en entier à la page suivante quand elle ne tient pas, et l'aperçu de l'éditeur (js/header-footer-preview.js) comme la
 // Lecture (js/reader-mode.js) posent la couture à cet endroit, entre deux lignes, au lieu de la laisser recouvrir une ligne ou de laisser le tableau
-// déborder en bas de sa page. Une case fusionnée sur plusieurs lignes lie les siennes (Antoine, 04/10, « Complète ») : elles forment un groupe (`unitsOf`) que
-// la page ne sépare jamais, et c'est entre deux groupes que le tableau se coupe. Ce module ne contient que ce que les quatre ont en commun : retrouver les lignes d'un tableau
-// qu'on sait couper et leurs groupes, décider lesquels ouvrent une page (`plan`), écrire la règle CSS qui descend une ligne sous la couture (`padRule`) et celle qui rogne
-// le tableau sur la place libre de la page qui finit et sur les marges de la couture (`clipRule`). Les aperçus ne touchent jamais au DOM de ProseMirror : la
-// ligne est descendue par une feuille de style (comme les marges de coupure des autres blocs), le document enregistré n'en sait rien.
+// déborder en bas de sa page. Une case fusionnée sur plusieurs lignes lie les siennes : elles forment un groupe (`unitsOf`) que la page ne sépare
+// jamais, et c'est entre deux groupes que le tableau se coupe. Ce module ne contient que ce que les quatre ont en commun : retrouver les lignes d'un
+// tableau qu'on sait couper et leurs groupes, décider lesquels ouvrent une page (`plan`), écrire la règle CSS qui descend une ligne sous la couture
+// (`padRule`) et celle qui rogne le tableau sur la place libre de la page qui finit et sur les marges de la couture (`clipRule`). Les aperçus ne
+// touchent jamais au DOM de ProseMirror : la ligne est descendue par une feuille de style (comme les marges de coupure des autres blocs), le document
+// enregistré n'en sait rien.
 const TablePageCut = (function () {
-  // Une ligne (ou un groupe de lignes) plus haute que cette part de la page ne se range plus : avec dontBreakRows, pdfmake fait disparaître la ligne du PDF (mesuré : ligne de
-  // 80 lignes de texte sur une page de 60, ni sur la page 1 ni sur la page 2). Le tableau n'est alors pas coupé entre ses lignes : un bloc d'une
-  // pièce dans l'aperçu, des lignes coupées entre deux lignes de texte dans le PDF. 90 % et non 100 : la ligne se mesure dans le navigateur, pdfmake
-  // l'écrit un peu plus haute ou plus basse.
+  // Une ligne (ou un groupe de lignes) plus haute que cette part de la page ne se range plus : avec dontBreakRows, pdfmake fait disparaître la ligne
+  // du PDF (mesuré : ligne de 80 lignes de texte sur une page de 60, ni sur la page 1 ni sur la page 2). Le tableau n'est alors pas coupé entre ses
+  // lignes : un bloc d'une pièce dans l'aperçu, des lignes coupées entre deux lignes de texte dans le PDF. 90 % et non 100 : la ligne se mesure dans
+  // le navigateur, pdfmake l'écrit un peu plus haute ou plus basse.
   const MAX_ROW_RATIO = 0.9;
 
-  // Les lignes d'un tableau qu'on sait couper entre deux lignes (ou deux groupes de lignes, cf. unitsOf), dans l'ordre ; null sinon (le tableau reste alors un bloc d'une pièce) :
+  // Les lignes d'un tableau qu'on sait couper entre deux lignes (ou deux groupes de lignes, cf. unitsOf), dans l'ordre ; null sinon (le tableau reste
+  // alors un bloc d'une pièce) :
   //  - un seul <tbody>, sans <thead> ni <tfoot> : ce que l'éditeur et getHTML() produisent ;
   //  - toutes ses lignes sont des <tr> (une ligne proposée en suivi des modifications est enveloppée dans un <ins> ou un <del>) ;
   //  - pas une grille (js/grid-editor.js) : ses lignes portent leur hauteur et la grille n'a pas de feuille A4 ;
@@ -27,9 +29,10 @@ const TablePageCut = (function () {
     return rows;
   }
 
-  // Les groupes de lignes qu'une page ne sépare pas : une case fusionnée sur plusieurs lignes (rowspan) lie les lignes qu'elle recouvre, la page ne change qu'entre deux groupes
-  // (une coupure au milieu couperait la case, et dontBreakRows de pdfmake s'y emmêle). [{ from, to }] : la première ligne du groupe et celle qui suit sa dernière, dans l'ordre ;
-  // sans case fusionnée, un groupe par ligne. `rows` : celles de rowsOf. Même règle que ExportCommon.gridRowSegments, sur les cases lues à travers les enveloppes du suivi.
+  // Les groupes de lignes qu'une page ne sépare pas : une case fusionnée sur plusieurs lignes (rowspan) lie les lignes qu'elle recouvre, la page ne
+  // change qu'entre deux groupes (une coupure au milieu couperait la case, et dontBreakRows de pdfmake s'y emmêle). [{ from, to }] : la première
+  // ligne du groupe et celle qui suit sa dernière, dans l'ordre ; sans case fusionnée, un groupe par ligne. `rows` : celles de rowsOf. Même règle que
+  // ExportCommon.gridRowSegments, sur les cases lues à travers les enveloppes du suivi.
   function unitsOf(rows) {
     const units = [];
     let reach = 0; // la première ligne que les cases des lignes déjà vues ne recouvrent plus
@@ -51,13 +54,15 @@ const TablePageCut = (function () {
   // Mesure un tableau pour `plan`. `blockEl` est le bloc de premier niveau qui le porte (l'enveloppe .tableWrapper de l'éditeur, le <table> lui-même
   // en Lecture), `zoom` le facteur de la feuille (les rectangles sont en pixels écran, la page en pixels de mise en page), `pageHeightPx` la hauteur
   // utile d'une page, `padOf(ligne)` le rembourrage que l'aperçu a déjà ajouté à une ligne pour la descendre sous une couture (0 s'il n'y en a pas) :
-  // une mesure faite après la pose des coupures ne doit pas le compter. Rend { rows, units, starts, segs, heights, keepsTail } ou null si le tableau ne se coupe pas
-  // entre deux lignes, ni entre deux groupes de lignes (un groupe plus haut que la page). Les tranches sont celles des groupes (unitsOf : une ligne chacun sans case fusionnée,
-  // un seul groupe quand une case fusionnée lie tout le tableau : c'est lui qui passe alors en entier à la page suivante) ; `starts[i]` : le rang de la première ligne du groupe i. `segs` découpe la hauteur du bloc : la tranche de chaque groupe, du haut de sa
-  // première ligne au haut du groupe suivant (la première reprend ce qui est au-dessus d'elle, la dernière ce qui est au-dessous), donc leur somme est la hauteur du bloc.
-  // `captionPx` : la hauteur des légendes qui suivent le tableau (js/caption.js, « Rester ensemble »). Si le dernier groupe et elles tiennent
-  // ensemble dans une page, elles s'ajoutent à la dernière tranche (`keepsTail`) : la dernière ligne ne quitte jamais sa légende, c'est le groupe et
-  // sa légende que `plan` passe à la page suivante. Sinon (`keepsTail` faux), les légendes restent des paragraphes à part.
+  // une mesure faite après la pose des coupures ne doit pas le compter. Rend { rows, units, starts, segs, heights, keepsTail } ou null si le tableau
+  // ne se coupe pas entre deux lignes, ni entre deux groupes de lignes (un groupe plus haut que la page). Les tranches sont celles des groupes
+  // (unitsOf : une ligne chacun sans case fusionnée, un seul groupe quand une case fusionnée lie tout le tableau : c'est lui qui passe alors en
+  // entier à la page suivante) ; `starts[i]` : le rang de la première ligne du groupe i. `segs` découpe la hauteur du bloc : la tranche de chaque
+  // groupe, du haut de sa première ligne au haut du groupe suivant (la première reprend ce qui est au-dessus d'elle, la dernière ce qui est
+  // au-dessous), donc leur somme est la hauteur du bloc. `captionPx` : la hauteur des légendes qui suivent le tableau (js/caption.js, « Rester
+  // ensemble »). Si le dernier groupe et elles tiennent ensemble dans une page, elles s'ajoutent à la dernière tranche (`keepsTail`) : la dernière
+  // ligne ne quitte jamais sa légende, c'est le groupe et sa légende que `plan` passe à la page suivante. Sinon (`keepsTail` faux), les légendes
+  // restent des paragraphes à part.
   function measure(blockEl, table, zoom, pageHeightPx, padOf, captionPx) {
     const rows = rowsOf(table);
     if (!rows) return null;
@@ -78,8 +83,8 @@ const TablePageCut = (function () {
   }
 
   // Où le tableau change de page. `consumedBefore` : ce que la page en cours porte déjà avant lui (0 : il est en haut de page) ; `segs` : les
-  // tranches de `measure` ; `capacity` : la hauteur utile d'une page ; `starts` : les rangs de lignes que `measure` rend (omis, une tranche est une ligne). Une ligne (un groupe
-  // de lignes) qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce qui la suit. Rend
+  // tranches de `measure` ; `capacity` : la hauteur utile d'une page ; `starts` : les rangs de lignes que `measure` rend (omis, une tranche est une
+  // ligne). Une ligne (un groupe de lignes) qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce qui la suit. Rend
   //  - blockBreakBefore : même la première ligne ne tient pas, le tableau entier passe à la page suivante (coupure avant le tableau, comme pour tout
   //    autre bloc) ;
   //  - cuts : les rangs de lignes (à partir de 1) qui ouvrent une page ;

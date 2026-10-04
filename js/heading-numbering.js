@@ -1,9 +1,6 @@
-// Numérotation des titres — cascade de compteurs reproduite en JS, partagée entre js/editor.js (aperçu du sommaire) et js/pdf-export.js (marqueurs +
-// sommaire du PDF). Doit produire le même texte que les compteurs CSS de editor-v2.css - jamais via `getComputedStyle(h,'::before').content`
-// (déclaré, pas peint).
-//
-// js/reader-mode.js a besoin de la même logique mais garde sa propre copie (pas de mécanisme de module entre scripts classiques) — compromis
-// délibéré.
+// Numérotation des titres : la cascade de compteurs CSS reproduite en JS, pour le sommaire de l'éditeur (js/editor-nodes.js), celui de la Lecture
+// (js/reader-mode.js) et les marqueurs et sommaires du PDF et du Word. Elle doit produire le même texte que les compteurs de css/editor-v2.css, que
+// `getComputedStyle(h, '::before').content` ne donnerait pas : il rend la déclaration, pas ce qui est peint.
 const HeadingNumbering = (function () {
   const SCHEMES = {
     numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],

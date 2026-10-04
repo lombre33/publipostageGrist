@@ -784,14 +784,13 @@ const Variables = (function () {
     return { column: path, end };
   }
 
-  // Les variables d'un texte brut remplacées par leur valeur (findTextVariables, sans la sanitisation propre aux noms de fichier de
-  // ReaderMode.resolveFilename, qui corromprait un objet d'email ou une adresse) : champs Objet, À, Cc, Cci du mode email, à « Créer l'email »
-  // (js/main.js, cf. planning/feature-email-mode.md).
-  async function resolveTextVariables(text, currentTableId, record) {
-    if (!text) return '';
+  // Les variables d'un texte brut remplacées par ce que rend `valueOf(variable)` (asynchrone, toutes lues ensemble, `variable` : un élément de
+  // findTextVariables) : le balayage et le recollage que partagent les champs de l'email (resolveTextVariables) et le nom d'un fichier
+  // (ReaderMode.resolveFilename).
+  async function replaceTextVariables(text, valueOf) {
     const matches = findTextVariables(text);
     if (!matches.length) return text;
-    const values = await Promise.all(matches.map(m => resolveVariable(m.table, m.column, currentTableId, record, null, { rawNumbers: true })));
+    const values = await Promise.all(matches.map(valueOf));
     let last = 0;
     const parts = matches.map((m, idx) => {
       const part = text.slice(last, m.start) + values[idx];
@@ -799,6 +798,14 @@ const Variables = (function () {
       return part;
     });
     return parts.join('') + text.slice(last);
+  }
+
+  // Les variables des champs Objet, À, Cc, Cci du mode email remplacées par leur valeur, à « Créer l'email » (js/main.js, cf.
+  // planning/feature-email-mode.md). Sans la sanitisation propre aux noms de fichier (ReaderMode.resolveFilename), qui corromprait un objet d'email
+  // ou une adresse.
+  async function resolveTextVariables(text, currentTableId, record) {
+    if (!text) return '';
+    return replaceTextVariables(text, m => resolveVariable(m.table, m.column, currentTableId, record, null, { rawNumbers: true }));
   }
 
   // Une cellule Attachments encode sa liste façon Grist (['L', id1, id2]) : aplatie récursivement pour n'en garder que les nombres, le marqueur 'L'
@@ -1056,7 +1063,7 @@ const Variables = (function () {
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
   // classe ses colonnes comme la liste « # »).
   return {
-    createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, cellValue, currentTables, prioritizeTables,
     resolveCalcResult, resolveCalc, calcProblem, formulaErrorText,
   };

@@ -28,8 +28,9 @@ const HeaderFooterPreview = (function () {
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
-  // Taille max d'une image en en-tête/pied (convention, pas une limite technique).
-  const HF_MAX_IMAGE_HEIGHT_PX = 60;
+  // Une image d'en-tête ou de pied tient dans la bande que la page lui réserve (PageLayout.HEADER_FOOTER_ZONE_PX) : une convention, pas une limite
+  // technique.
+  const HF_MAX_IMAGE_HEIGHT_PX = PageLayout.HEADER_FOOTER_ZONE_PX;
   const HF_MAX_IMAGE_WIDTH_PX = 300;
   function clampWidthForHfMaxSize(widthPx, naturalWidth, naturalHeight) {
     if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
@@ -82,11 +83,8 @@ const HeaderFooterPreview = (function () {
     renderPaginationOverlay();
   }
 
-  // Un fragment d'en-tête ou de pied montre quelque chose s'il a du texte (un numéro de page, une variable ou une puce en portent un) ou une image.
-  // Même règle que pdf-export.js:resolveZone : ce que l'export ignore, l'écran l'ignore aussi.
-  function hasZoneContent(html) {
-    return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
-  }
+  // Même règle que les exports : ce qu'ils ignorent, l'écran l'ignore aussi.
+  const hasZoneContent = PageLayout.hasZoneContent;
   // Un en-tête ou un pied sans contenu n'existe pas : cliquer dans la marge puis « Terminer » sans rien écrire ne doit rien laisser « activé ». Un
   // fragment vide (le « <p></p> » que l'éditeur rend d'un fragment sans texte) devient une chaîne vide, sinon la Lecture ouvre une bande blanche de
   // 26 px. Sans contenu dans les variantes utilisées, ni en-tête, ni pied, ni première page différente ne reste activé. Un fragment qui a du contenu
@@ -196,14 +194,7 @@ const HeaderFooterPreview = (function () {
     pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
   }
 
-  // 1 pt = 96/72 px, comme dans pdf-export.js (pas de module partagé). La hauteur de page vient de PageLayout à chaque appel : elle change avec
-  // l'orientation du modèle.
   const PT_TO_PX = 96 / 72;
-  // Marges de page du modèle courant (js/page-layout.js), lues à chaque appel : elles changent à chaud depuis l'onglet Réglages, et la pagination
-  // affichée comme la grille de page des images en calque en dépendent, comme l'export PDF et Word.
-  function marginsPx() { return PageLayout.getMarginsPx(); }
-  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, pdf-export.js
-
   // Facteur `zoom` effectif de la feuille (EditorCore.layoutZoom, js/main.js:applyPageFitZoom). Les rectangles de getBoundingClientRect() sont en
   // pixels écran, donc déjà multipliés par ce facteur, alors que pageContentHeightPx, offsetTop/offsetLeft et les styles des bandes sont en pixels de
   // mise en page : toute mesure se divise par lui, sinon les coupures tombent au mauvais endroit sur une feuille réduite.
@@ -226,19 +217,21 @@ const HeaderFooterPreview = (function () {
   function trailingBlankStart(children) {
     let start = children.length;
     while (start > 0 && isBlankParagraph(children[start - 1])) start--;
-    // Les lignes de fin qui ne portent que des images en calque de la page 1 en font partie, avec les lignes vides qui les séparent, quand un paragraphe de texte les précède : la
-    // Lecture et les exports lui font reprendre les images (js/reader-mode.js:trimTrailingBlankBlocks). Sans lui, la ligne reste une ligne comme une autre.
+    // Les lignes de fin qui ne portent que des images en calque de la page 1 en font partie, avec les lignes vides qui les séparent, quand un
+    // paragraphe de texte les précède : la Lecture et les exports lui font reprendre les images (js/reader-mode.js:trimTrailingBlankBlocks). Sans
+    // lui, la ligne reste une ligne comme une autre.
     let anchorStart = start;
     while (anchorStart > 0 && (isBlankParagraph(children[anchorStart - 1]) || isTailAnchorParagraph(children[anchorStart - 1]))) anchorStart--;
     const host = children[anchorStart - 1];
     return anchorStart < start && host && host.tagName === 'P' && !host.hasAttribute('data-caption') && !isBlankParagraph(host) && !isTailAnchorParagraph(host) ? anchorStart : start;
   }
-  // Une ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (demande du 2026-10-04 : dans un petit format, une image flottante sur la première page « crée une deuxième
-  // page ») : l'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux ; ouvrir une page pour elle seule serait ouvrir une page
-  // blanche. La page 1 existe toujours : seules ces images-là sont dispensées, celle d'une page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la grille entière (page et deux
-  // décalages, ce que lisent le PDF et le Word) ; elle se lit sur le nœud ProseMirror, la vue de l'image ne la porte pas (le séparateur et le <br> que ProseMirror pose derrière une image ne
-  // comptent pas). Le texte se lit lui aussi sur le nœud : la vue d'une image liée à une colonne PJ porte son libellé « #Table.Colonne », que `textContent` prendrait pour du texte. Même
-  // règle, sur le HTML, dans js/reader-mode.js:isTailAnchor.
+  // Une ligne de fin qui ne porte que des images en calque posées sur la page 1 : dans un petit format, une image flottante sur la première page «
+  // crée une deuxième page ». L'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux
+  // ; ouvrir une page pour elle seule serait ouvrir une page blanche. La page 1 existe toujours : seules ces images-là sont dispensées, celle d'une
+  // page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la grille entière (page et deux décalages, ce que lisent le PDF et le Word) ;
+  // elle se lit sur le nœud ProseMirror, la vue de l'image ne la porte pas (le séparateur et le <br> que ProseMirror pose derrière une image ne
+  // comptent pas). Le texte se lit lui aussi sur le nœud : la vue d'une image liée à une colonne PJ porte son libellé « #Table.Colonne », que
+  // `textContent` prendrait pour du texte. Même règle, sur le HTML, dans js/reader-mode.js:isTailAnchor.
   function isTailAnchorParagraph(el) {
     if (el.tagName !== 'P' || !el.querySelector(':scope > .editor-image-layered') || el.querySelector(':scope > :not(br):not(.ProseMirror-separator):not(.editor-image-layered)')) return false;
     try {
@@ -266,14 +259,14 @@ const HeaderFooterPreview = (function () {
   //    en entier se tromperait de tout ce qui tenait dans la page au lieu de ce qui déborde ;
   //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules.
   // Un tableau de premier niveau se coupe entre deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) : la coupure
-  // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur plusieurs
-  // lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
+  // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur
+  // plusieurs lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
   // ainsi (ligne ou groupe de lignes plus haut que la page, grille...) suit la règle des blocs que l'export coupe. Une légende d'image ou de tableau
   // (js/caption.js) reste avec son bloc, jamais seule en haut de la page suivante : le bloc et ses légendes comptent pour un seul bloc. Pour un
   // tableau coupé entre deux lignes, la dernière ligne et la légende font ce bloc. Un bloc et sa légende qui ne tiennent pas ensemble dans une page
-  // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc qui la suit passent à la page
-  // suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf
-  // au-delà de 90 % d'une page.
+  // (Caption.fitsWithCaption) ne sont pas gardés ensemble. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
+  // bloc qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa
+  // tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf au-delà de 90 % d'une page.
   function computePageBreaks(tiptapEl, pageContentHeightPx) {
     const breaks = [];
     const zoom = layoutZoom(tiptapEl);
@@ -293,8 +286,8 @@ const HeaderFooterPreview = (function () {
         return;
       }
       if (index >= blankTailStart) return;
-      // « Garder avec le suivant » (js/keep-with-next.js) : les blocs gardés qui se suivent et le bloc qui les suit ne se coupent pas entre deux pages. S'ils ne tiennent pas dans la
-      // place restante, c'est toute la suite qui ouvre la page suivante, au lieu du seul bloc qui ne tient plus.
+      // « Garder avec le suivant » (js/keep-with-next.js) : les blocs gardés qui se suivent et le bloc qui les suit ne se coupent pas entre deux
+      // pages. S'ils ne tiennent pas dans la place restante, c'est toute la suite qui ouvre la page suivante, au lieu du seul bloc qui ne tient plus.
       const run = KeepWithNext.runFrom(children, index, blankTailStart);
       if (consumed > 0 && run) {
         const heightOf = el => el.getBoundingClientRect().height / zoom;
@@ -432,7 +425,7 @@ const HeaderFooterPreview = (function () {
   // `.tiptap` de ce côté reste : il porte les positions des images en calque. L'en-tête commence à la moitié de la marge du haut, le pied juste sous
   // le texte, là où le PDF les peint.
   function sizeHfZone(el, zone, hasContent, bandPx) {
-    const mPx = marginsPx();
+    const mPx = PageLayout.getMarginsPx();
     const marginPx = zone === 'header' ? mPx.top : mPx.bottom;
     const band = bandPx || 0;
     let height;
@@ -539,10 +532,10 @@ const HeaderFooterPreview = (function () {
     };
   }
 
-  // Géométrie de page courante : en-tête et pied activés, avec la bande réservée toujours à pleine hauteur (HF_MAX_IMAGE_HEIGHT_PX, le plafond de
-  // pdf-export.js:HF_MAX_ZONE_HEIGHT_PT) et jamais à la hauteur rendue du contenu : le PDF réserve cette bande fixe dès qu'une zone a du contenu, et
-  // la mesurer ici décalerait tout le corps, donc chaque image en calque, par rapport à l'export. Partagée par renderPaginationOverlay et
-  // computePageGridPosition : les deux doivent voir la même page pour qu'une position capturée dans l'un vaille pour l'autre.
+  // Géométrie de page courante : en-tête et pied activés, avec la bande réservée toujours à pleine hauteur (PageLayout.HEADER_FOOTER_ZONE_PX) et
+  // jamais à la hauteur rendue du contenu : le PDF réserve cette bande fixe dès qu'une zone a du contenu, et la mesurer ici décalerait tout le corps,
+  // donc chaque image en calque, par rapport à l'export. Partagée par renderPaginationOverlay et computePageGridPosition : les deux doivent voir la
+  // même page pour qu'une position capturée dans l'un vaille pour l'autre.
   function currentPageGeometry() {
     const enabled = !!headerFooterDraft.enabled;
     const differentFirstPage = enabled && !!headerFooterDraft.differentFirstPage;
@@ -558,9 +551,9 @@ const HeaderFooterPreview = (function () {
     const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
     // Les bandes que le PDF réserve sous la marge du haut et au-dessus de la marge du bas : sur toutes les pages dès qu'une variante a du contenu,
     // rien sinon.
-    const topExtraPx = headerHeightPx ? headerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const bottomExtraPx = footerHeightPx ? footerHeightPx + HEADER_FOOTER_GAP_PX : 0;
-    const mPx = marginsPx();
+    const topExtraPx = headerHeightPx ? headerHeightPx + PageLayout.HEADER_FOOTER_GAP_PX : 0;
+    const bottomExtraPx = footerHeightPx ? footerHeightPx + PageLayout.HEADER_FOOTER_GAP_PX : 0;
+    const mPx = PageLayout.getMarginsPx();
     const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
     return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx, topBandPx: topExtraPx, bottomBandPx: bottomExtraPx };
   }
@@ -905,7 +898,7 @@ const HeaderFooterPreview = (function () {
     // utile, sans marges ni bandes) : une réserve de plus sur le dernier bloc, avant la couture. Elle se lit sur le DOM déjà mis en page (repère de
     // saut de page et écart entre blocs compris), jamais sur la somme des hauteurs de computePageBreaks : la page vaut alors exactement la hauteur
     // utile.
-    const mPx = marginsPx();
+    const mPx = PageLayout.getMarginsPx();
     const footAreaPx = mPx.bottom + bottomBandPx;
     const headAreaPx = mPx.top + topBandPx;
     const pages = [];

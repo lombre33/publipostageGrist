@@ -38,12 +38,23 @@ const PageLayout = (function () {
   const MM_TO_TWIP = 1440 / 25.4; // ~56.6929
   const PT_TO_PX = 96 / 72;
   const MM_TO_PX = MM_TO_PT * PT_TO_PX;
-  // Convertit exactement vers 28 pt (PAGE_MARGIN_PT, encore le repli de js/pdf-export.js et js/docx-export.js) : un modèle sans réglage de marges
-  // propre rend le même résultat que ces replis.
-  const DEFAULT_MARGIN_MM = 28 / MM_TO_PT;
+  // La marge par défaut : celle d'un modèle sans réglage de marges, et le repli de js/pdf-export.js et js/docx-export.js quand on les appelle sans
+  // marges. 28 pt, que DEFAULT_MARGIN_MM convertit exactement.
+  const DEFAULT_MARGIN_PT = 28;
+  const DEFAULT_MARGIN_MM = DEFAULT_MARGIN_PT / MM_TO_PT;
   // Gouttière entre les deux colonnes d'une zone twoColumnsZone : `gap: 16px` dans css/editor-v2.css (éditeur et mode Lecture). Exposée ici pour que
   // js/editor-nodes.js (popover mm), js/pdf-export.js et js/docx-export.js partent du même nombre.
   const COLUMN_GAP_PX = 16;
+  // La bande qu'un en-tête (sous la marge du haut) ou un pied (au-dessus de la marge du bas) réserve sur chaque page dès que l'une de ses variantes a
+  // du contenu : un plafond fixe de 60 px plus un écart de 10 pt, jamais la hauteur rendue du texte. L'éditeur, la Lecture, le PDF et le Word la
+  // réservent à l'identique : mesurée sur le texte, elle décalerait tout le corps, images en calque comprises, d'un rendu à l'autre.
+  const HEADER_FOOTER_ZONE_PX = 60;
+  const HEADER_FOOTER_GAP_PT = 10;
+  const HEADER_FOOTER_GAP_PX = HEADER_FOOTER_GAP_PT * PT_TO_PX;
+  const HEADER_FOOTER_BAND_PX = HEADER_FOOTER_ZONE_PX + HEADER_FOOTER_GAP_PX;
+  // Un fragment d'en-tête ou de pied montre quelque chose s'il a du texte (un numéro de page, une variable ou une puce en portent un) ou une image ;
+  // une zone vide ne réserve rien.
+  function hasZoneContent(html) { return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html)); }
   // Plancher de surface imprimable. Sans lui, deux marges opposées un peu généreuses (150 + 80 par exemple) donnent une largeur de contenu négative :
   // la zone de saisie s'effondre, les colonnes en mm deviennent absurdes et pdfmake reçoit une largeur de page négative. 20 mm, à peu près la largeur
   // d'une étiquette, ne gêne aucun usage réel et laisse le document manipulable.
@@ -359,7 +370,8 @@ const PageLayout = (function () {
   }
 
   return {
-    A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
+    A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
+    HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent,
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,

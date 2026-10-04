@@ -1,7 +1,9 @@
-// Publipostage Grist — reader mode v1.1.2 — 2026-09-04
+// Mode Lecture : le document tel qu'il se lit et s'exporte (zones répétées déroulées, conditions évaluées, variables résolues pour la ligne
+// affichée), paginé en feuilles comme l'Aperçu A4 de l'éditeur. Les exports passent par preview(), qui fait la même résolution sans la mise en page.
 const ReaderMode = (function () {
   let lastCurrentTableId = null;
-  // Format nombre/date choisi via la barre flottante d'une bulle #Variable, sérialisé en JSON dans data-format ; transmis à Variables.resolveVariable.
+  // Format nombre/date choisi via la barre flottante d'une bulle #Variable, sérialisé en JSON dans data-format ; transmis à
+  // Variables.resolveVariable.
   function parseBadgeFormat(badge) {
     const raw = badge.getAttribute('data-format');
     if (!raw) return null;
@@ -12,9 +14,10 @@ const ReaderMode = (function () {
   // Les bulles à résoudre : celles d'une variable et celles d'un calcul (js/variable-calc.js).
   const BADGE_SELECTOR = '.var-badge, .calc-badge';
   const isCalcBadge = badge => badge.classList.contains('calc-badge');
-  // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de l'export, le
-  // texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle (js/condition-rules.js:matches).
-  // `binding` : ligne du tour d'une zone répétée (js/loop-rules.js:bindingOf) - une règle sur une colonne de la table de la boucle lit alors cette ligne.
+  // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de l'export,
+  // le texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle (js/condition-rules.js:matches).
+  // `binding` : ligne du tour d'une zone répétée (js/loop-rules.js:bindingOf) - une règle sur une colonne de la table de la boucle lit alors cette
+  // ligne.
   async function badgeConditionHolds(badge, tableId, record, binding) {
     const raw = badge.getAttribute('data-condition');
     if (!raw) return true;
@@ -23,48 +26,36 @@ const ReaderMode = (function () {
     try { return await ConditionRules.conditionHolds(condition, tableId, record, loopOpts(binding)); }
     catch (e) { console.error('[ReaderMode] échec de l\'évaluation d\'une condition de variable', e); return false; }
   }
-  // === Aperçu paginé réel - mode Lecture === Même principe que js/editor.js:renderPaginationOverlay, dupliqué plutôt qu'importé (pas de mécanisme de module
-  // entre scripts classiques). Plus simple ici : contenu statique déjà résolu, pas de débounce nécessaire.
-  const PT_TO_PX = 96 / 72;
-  // Mêmes valeurs que le padding de .reader-content en Aperçu A4 (css/editor-v2.css), mais lues à chaud depuis js/page-layout.js : codées en dur
-  // (37.33px / 719.04px), elles ignoraient les marges propres au modèle et paginaient le mode Lecture comme un modèle à 28pt de marge.
-  function marginsPx() { return PageLayout.getMarginsPx(); }
-  const HEADER_FOOTER_GAP_PX = 10 * PT_TO_PX; // même écart que HEADER_FOOTER_GAP_PT, js/pdf-export.js
+  // === Aperçu paginé réel - mode Lecture ===
+  // Parallèle à l'aperçu de l'éditeur (js/header-footer-preview.js:computePageBreaks, renderPaginationOverlay), sur du contenu statique déjà résolu :
+  // pas de débounce nécessaire. Les deux sont à tenir d'accord, mais lisent un DOM différent : l'éditeur mesure les enfants de `.tiptap` (avec les
+  // enveloppes de tableau, de zone à deux colonnes et de texte conditionnel), la Lecture ceux du HTML sérialisé de `.reader-content`.
 
-  // Même rôle que layoutZoom() dans js/header-footer-preview.js (copie volontairement locale, comme tout ce module) : les rectangles mesurés DANS la
-  // feuille sont en pixels écran, déjà multipliés par le zoom d'ajustement, alors que pageContentHeightPx et offsetTop sont en pixels de mise en page.
-  function layoutZoom(el) {
-    const sheet = el && el.closest ? el.closest('.reader-content') : null;
-    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
-    return (isFinite(z) && z > 0) ? z : 1;
-  }
-
-  // La bande que le PDF réserve à un en-tête (sous la marge du haut) ou à un pied (au-dessus de la marge du bas) dès que l'une de ses variantes a du contenu : un plafond
-  // fixe (60 px, HF_MAX_ZONE_HEIGHT_PT de js/pdf-export.js) plus l'écart de 10 pt, jamais la hauteur rendue du texte. Mesurée à la hauteur du texte, la Lecture réservait
-  // moins que le PDF pour un en-tête d'une ligne et coupait ses pages plus bas que lui. Du texte ou une image : même test que pdf-export.js:resolveZone.
-  const HF_MAX_ZONE_HEIGHT_PX = 60;
-  const HEADER_FOOTER_BAND_PX = HF_MAX_ZONE_HEIGHT_PX + HEADER_FOOTER_GAP_PX;
-  function hasZoneContent(html) {
-    return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html));
-  }
-  // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une liste) mais que
-  // cet aperçu, qui ne coupe pas le DOM, traite d'une pièce. Même règle que js/header-footer-preview.js:isSplittableByExport, sur le HTML sérialisé de la
-  // Lecture (zone `two-columns-zone` et tableau sans l'enveloppe de l'éditeur).
+  // Blocs que l'export coupe en cours de route (pdfmake, au pixel : entre deux lignes d'une colonne, deux lignes d'un tableau, deux éléments d'une
+  // liste) mais que cet aperçu, qui ne coupe pas le DOM, traite d'une pièce. Même règle que js/header-footer-preview.js:isSplittableByExport, sur le
+  // HTML sérialisé de la Lecture (zone `two-columns-zone` et tableau sans l'enveloppe de l'éditeur).
   function isSplittableByExport(el) {
     return el.classList.contains('two-columns-zone') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
   }
-  // Un bloc qui ne tient pas passe entier à la page suivante, sauf s'il est de ceux que l'export coupe et que sa plus grande partie tient dans la place restante :
-  // il reste alors sur sa page et le repère tombe derrière lui. Le déplacer en entier revient à se tromper de tout ce qui tenait dans la page (un tableau ou une
-  // zone 2 colonnes qui déborde de ~30 px envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde, alors que l'export coupe au pixel.
-  // Un tableau de premier niveau fait exception à la première phrase : il se coupe ENTRE deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les lignes qui ne
-  // tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et `afterIndex` est celui du tableau. Les lignes
-  // qu'une case fusionnée sur plusieurs lignes lie passent ensemble. Un tableau qu'on ne sait pas couper ainsi (ligne ou groupe de lignes plus haut que la page...) garde la règle ci-dessus.
-  // La légende d'une image ou d'un tableau reste avec son bloc, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks, « Rester ensemble ») : le bloc et ses légendes comptent pour
-  // UN bloc d'une pièce ; pour un tableau coupé entre deux lignes, la dernière ligne et la légende. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc
-  // qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante, sauf au-delà de 90 % d'une page.
+  // Les coupures de page de la Lecture : accumule la hauteur des blocs de premier niveau de `.reader-content`, un `.page-break-marker` étant une
+  // coupure forcée. Rend, pour chaque coupure, le décalage `{ top, afterIndex, remainingPx }` (`afterIndex` : le rang du bloc après lequel elle
+  // tombe). Le grain est le bloc, jamais coupé en deux (le PDF coupe au pixel). Un bloc qui ne tient pas passe entier à la page suivante, sauf s'il
+  // est de ceux que l'export coupe (isSplittableByExport) et que sa plus grande partie tient dans la place restante : il reste alors sur sa page et
+  // le repère tombe derrière lui. Le déplacer en entier reviendrait à se tromper de tout ce qui tenait dans la page (un tableau ou une zone à deux
+  // colonnes qui déborde de ~30 px, envoyé en page 2, page 1 presque vide) au lieu de se tromper de ce qui déborde.
+  //
+  // Un tableau de premier niveau fait exception : il se coupe entre deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les
+  // lignes qui ne tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et
+  // `afterIndex` est celui du tableau. Les lignes qu'une case fusionnée sur plusieurs lignes lie passent ensemble. Un tableau qu'on ne sait pas
+  // couper ainsi (ligne ou groupe de lignes plus haut que la page...) suit la règle des autres blocs.
+  //
+  // La légende d'une image ou d'un tableau reste avec son bloc (js/caption.js, « Rester ensemble », comme dans
+  // js/header-footer-preview.js:computePageBreaks) : le bloc et ses légendes comptent pour un seul bloc ; pour un tableau coupé entre deux lignes, la
+  // dernière ligne et la légende. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le bloc qui la suit passent
+  // à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante, sauf au-delà de 90 % d'une page.
   function computePageBreakOffsets(rootEl, pageContentHeightPx) {
     const rootRect = rootEl.getBoundingClientRect();
-    const zoom = layoutZoom(rootEl);
+    const zoom = EditorCore.layoutZoom(rootEl);
     const offsets = [];
     let consumed = 0;
     let counted = 0;
@@ -79,8 +70,8 @@ const ReaderMode = (function () {
         consumed = 0;
         return;
       }
-      // « Garder avec le suivant » (js/keep-with-next.js), comme dans l'éditeur : les paragraphes gardés qui se suivent et le bloc qui les suit passent ensemble à la page suivante quand
-      // ils ne tiennent pas dans la place restante.
+      // « Garder avec le suivant » : les paragraphes gardés qui se suivent et le bloc qui les suit passent ensemble à la page suivante s'ils ne
+      // tiennent pas dans la place restante.
       const run = KeepWithNext.runFrom(children, index, children.length);
       if (consumed > 0 && run) {
         const heightOf = el => el.getBoundingClientRect().height / zoom;
@@ -117,18 +108,19 @@ const ReaderMode = (function () {
     });
     return offsets;
   }
-  // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un
-  // <br class="ProseMirror-trailingBreak"> absent de ce HTML, et les paragraphes n'ont ici aucune marge (margin:0) : sans hauteur propre, l'espacement entre
-  // deux blocs disparaissait en Lecture alors que l'éditeur et l'export PDF/DOCX le gardent (Antoine, 2026-09-29). Appelée APRÈS la résolution des bulles :
-  // un paragraphe qui ne contenait qu'une bulle vide ou masquée par sa condition garde lui aussi sa ligne, comme dans l'export. Un <br> saisi (Maj+Entrée)
-  // compte comme du contenu et n'est jamais doublé : le PDF n'ajoute pas non plus de ligne après un retour à la ligne placé en fin de paragraphe.
+  // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un <br
+  // class="ProseMirror-trailingBreak"> absent de ce HTML, et les paragraphes n'ont ici aucune marge (margin: 0) : sans hauteur propre, l'espacement
+  // entre deux blocs disparaîtrait en Lecture alors que l'éditeur et les exports le gardent. Appelée après la résolution des bulles : un paragraphe
+  // qui ne contenait qu'une bulle vide ou masquée par sa condition garde lui aussi sa ligne, comme dans l'export. Un <br> saisi (Maj+Entrée) compte
+  // comme du contenu et n'est jamais doublé : le PDF n'ajoute pas non plus de ligne après un retour à la ligne placé en fin de paragraphe.
   const BLANK_LINE_BLOCKS = 'p, h1, h2, h3, h4, h5, h6';
   // Ce qui occupe une ligne sans porter de texte : le marqueur de note de bas de page n'a que le numéro de son compteur CSS.
   const NON_TEXT_CONTENT = 'img, br, svg, canvas, video, audio, iframe, object, embed, input, .footnote-ref-marker';
-  // Une image en calque (devant ou derrière le texte) est hors du flux : elle ne remplit pas la ligne de son paragraphe. Celui qui n'en porte que garde donc sa ligne, comme
-  // dans l'éditeur où ProseMirror la lui laisse (Antoine, 2026-10-02 : la Lecture était d'une ligne plus haut que l'éditeur, le calque « Sur toutes les pages » posé dans une ligne
-  // vide en haut du modèle) - et comme le PDF et le Word. Il en va de même d'une image alignée à gauche ou à droite : elle flotte (css/style.css, comme dans l'éditeur), le texte l'habille,
-  // et le paragraphe où elle est seule garde sa ligne (Antoine, 2026-10-02, point 9).
+  // Une image en calque (devant ou derrière le texte) est hors du flux : elle ne remplit pas la ligne de son paragraphe. Celui qui n'en porte que
+  // garde donc sa ligne, comme dans l'éditeur, où ProseMirror la lui laisse (sans cela, la Lecture était d'une ligne plus haute que l'éditeur quand
+  // le calque « Sur toutes les pages » est posé dans une ligne vide en haut du modèle), et comme le PDF et le Word. Il en va de même d'une image
+  // alignée à gauche ou à droite : elle flotte (css/style.css, comme dans l'éditeur), le texte l'habille, et le paragraphe où elle est seule garde sa
+  // ligne.
   const FLOAT_IMAGE_SELECTOR = 'img.editor-image[data-align="left"], img.editor-image[data-align="right"]';
   function holdsInFlowContent(block) {
     return Array.from(block.querySelectorAll(NON_TEXT_CONTENT)).some(el => !el.matches(LAYER_IMAGE_SELECTOR) && !el.matches(FLOAT_IMAGE_SELECTOR));
@@ -141,13 +133,16 @@ const ReaderMode = (function () {
       block.appendChild(filler);
     });
   }
-  // Fin de document sans rien à montrer (Antoine, 2026-10-01 : « s'il n'y a pas de contenu, peu importe les marges, on ne crée pas de nouvelle page »). Une
-  // dernière ligne vide - Entrée de trop, ou le paragraphe que l'éditeur laisse toujours derrière un tableau ou une zone deux colonnes - ne s'imprime pas, mais
-  // quand le texte arrive à la marge du bas elle n'y tient plus et ouvre une page blanche : en Lecture, dans le PDF et dans le Word. Ces blocs sont donc retirés
-  // de la FIN du document (ceux du milieu gardent leur ligne, cf. keepBlankLines), ainsi que les lignes vides au bas des colonnes d'une dernière zone deux
-  // colonnes : sans cadre ni fond à l'impression, elles ne font que la rallonger. Appelée sur le HTML déjà résolu (une bulle vide ou masquée ne laisse que
-  // son paragraphe). « Rien à montrer » = un paragraphe, une zone deux colonnes ou un saut de page sans texte, image, tableau, liste, citation, encadré, note
-  // ni numéro de page ; un titre n'en est jamais un (sa numérotation s'écrit même sans texte). Le premier bloc reste toujours : un modèle vide garde sa ligne.
+  // Fin de document sans rien à montrer : quand il n'y a pas de contenu, les marges ne créent pas de nouvelle page. Une dernière ligne vide (Entrée
+  // de trop, ou le paragraphe que l'éditeur laisse toujours derrière un tableau ou une zone à deux colonnes) ne s'imprime pas, mais quand le texte
+  // arrive à la marge du bas elle n'y tient plus et ouvre une page blanche : en Lecture, dans le PDF et dans le Word. Ces blocs sont donc retirés de
+  // la fin du document (ceux du milieu gardent leur ligne, cf. keepBlankLines), ainsi que les lignes vides au bas des colonnes d'une dernière zone à
+  // deux colonnes : sans cadre ni fond à l'impression, elles ne font que la rallonger. Appelée sur le HTML déjà résolu (une bulle vide ou masquée ne
+  // laisse que son paragraphe).
+  //
+  // « Rien à montrer » : un paragraphe, une zone à deux colonnes ou un saut de page sans texte, image, tableau, liste, citation, encadré, note ni
+  // numéro de page ; un titre n'en est jamais un (sa numérotation s'écrit même sans texte). Le premier bloc reste toujours : un modèle vide garde sa
+  // ligne.
   const VISIBLE_CONTENT = 'img, svg, canvas, video, audio, iframe, object, embed, input, table, hr, ul, ol, pre, blockquote, .callout, .toc-marker, .footnote-ref-marker, .page-number-badge';
   function hasNothingToShow(el) {
     if (el.classList.contains('page-break-marker')) return true;
@@ -159,11 +154,12 @@ const ReaderMode = (function () {
     if (node.nodeType === Node.ELEMENT_NODE) return node.tagName === 'STYLE' || node.classList.contains('heading-numbering-config');
     return node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim());
   }
-  // Une ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (demande du 2026-10-04 : dans un petit format, une image flottante sur la première page « crée une deuxième page »).
-  // L'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux : quand le texte arrive à la marge du bas elle n'y tient plus et ouvre
-  // une page blanche, comme une ligne vide. La page 1 existe toujours : seules ces images-là sont dispensées, une image d'une page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la
-  // grille entière (`data-page-index` et les deux décalages, ce que lit pdf-export.js:pdfImageFromNode) : sans elle l'image n'est placée que par son paragraphe, et la ligne reste. Même règle,
-  // sur le DOM de l'éditeur, dans js/header-footer-preview.js:isTailAnchorParagraph.
+  // Une ligne de fin qui ne porte que des images en calque posées sur la page 1 : dans un petit format, une image flottante sur la première page «
+  // crée une deuxième page ». L'image est placée par sa grille de page, pas par la ligne qui la porte, et cette ligne n'a rien à montrer dans le flux
+  // : quand le texte arrive à la marge du bas elle n'y tient plus et ouvre une page blanche, comme une ligne vide. La page 1 existe toujours : seules
+  // ces images-là sont dispensées, une image d'une page 2 ou plus a pu demander la page que sa ligne ouvre. Il faut la grille entière
+  // (`data-page-index` et les deux décalages, ce que lit pdf-export.js:pdfImageFromNode) : sans elle l'image n'est placée que par son paragraphe, et
+  // la ligne reste. Même règle, sur le DOM de l'éditeur, dans js/header-footer-preview.js:isTailAnchorParagraph.
   function isFirstPageLayerImage(el) {
     return el.matches(LAYER_IMAGE_SELECTOR) && parseInt(el.getAttribute('data-page-index'), 10) === 0
       && Number.isFinite(parseFloat(el.getAttribute('data-page-left-pt'))) && Number.isFinite(parseFloat(el.getAttribute('data-page-top-pt')));
@@ -173,9 +169,10 @@ const ReaderMode = (function () {
     const children = Array.from(el.children);
     return children.length > 0 && children.every(isFirstPageLayerImage);
   }
-  // Ces lignes de fin (et les lignes vides qui les séparent) quittent le flux : le dernier paragraphe de texte qui les précède reprend leurs images, posées par leur grille quel que soit
-  // le paragraphe qui les porte, et elles sont retirées. Sans paragraphe de texte avant elles (un tableau, une liste, un titre, un saut de page, ou le début du document) la ligne reste :
-  // l'image n'aurait pas d'hôte, et c'est la même condition dans l'éditeur (js/header-footer-preview.js:trailingBlankStart).
+  // Ces lignes de fin (et les lignes vides qui les séparent) quittent le flux : le dernier paragraphe de texte qui les précède reprend leurs images,
+  // posées par leur grille quel que soit le paragraphe qui les porte, et elles sont retirées. Sans paragraphe de texte avant elles (un tableau, une
+  // liste, un titre, un saut de page, ou le début du document) la ligne reste : l'image n'aurait pas d'hôte, et c'est la même condition dans
+  // l'éditeur (js/header-footer-preview.js:trailingBlankStart).
   function carryTailAnchors(root, blocks) {
     let from = blocks.length;
     while (from > 1 && blocks[from - 1].nodeType === Node.ELEMENT_NODE && blocks[from - 1].tagName === 'P' && (isTailAnchor(blocks[from - 1]) || hasNothingToShow(blocks[from - 1]))) from--;
@@ -207,8 +204,8 @@ const ReaderMode = (function () {
       wrapper.innerHTML = source;
     }
   }
-  // #Variable d'un fragment d'en-tête/pied - même résolution que le corps (badges .var-badge remplacés par leur valeur réelle), avec le VRAI enregistrement
-  // Grist affiché en mode Lecture.
+  // Les #Variable d'un fragment d'en-tête ou de pied, résolues comme celles du corps (bulles remplacées par leur valeur) avec l'enregistrement Grist
+  // affiché en Lecture.
   async function resolveHeaderFooterZone(html, tableId, record) {
     if (!html) return html;
     const wrapper = document.createElement('div'); wrapper.innerHTML = html;
@@ -216,7 +213,8 @@ const ReaderMode = (function () {
     applyAcceptedView(wrapper, html);
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
-    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
+    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
+    // résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalValue.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
@@ -232,16 +230,17 @@ const ReaderMode = (function () {
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(valueNode(value, format, '')); } catch (e) {}
     }));
     LoopRules.removeHiddenBlocks(wrapper);
-    // La note de bas de page n'est volontairement pas insérable en en-tête/ pied (aucun repère de page dans une zone répétée sur chaque page), donc
-    // resolveSmartChips ne trouve jamais de .footnote-ref-marker ici.
+    // La note de bas de page n'est volontairement pas insérable en en-tête ni en pied (aucun repère de page dans une zone répétée sur chaque page) :
+    // resolveSmartChips ne trouve donc jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
     keepBlankLines(wrapper);
     return wrapper.innerHTML;
   }
-  // Une couture rejoue ce qui sépare deux feuilles PHYSIQUES, à leur vraie taille : le bas de la page qui finit (sa marge du bas, la bande de son pied : `foot`, avec le
-  // pied tout en haut, juste sous le texte), la gouttière du plan de travail, puis le haut de la page qui commence (la bande de son en-tête, sa marge du haut : `head`,
-  // avec l'en-tête à la moitié de la marge, comme dans le PDF). Même structure que l'éditeur (js/header-footer-preview.js:buildSeam), sans zones cliquables : la Lecture
-  // n'ouvre rien. Bas et haut de page transparents, la feuille blanche est derrière (`.v2-reader-paper`).
+  // Une couture rejoue ce qui sépare deux feuilles physiques, à leur vraie taille : le bas de la page qui finit (sa marge du bas, la bande de son
+  // pied : `foot`, avec le pied tout en haut, juste sous le texte), la gouttière du plan de travail, puis le haut de la page qui commence (la bande
+  // de son en-tête, sa marge du haut : `head`, avec l'en-tête à la moitié de la marge, comme dans le PDF). Même structure que l'éditeur
+  // (js/header-footer-preview.js:buildSeam), sans zones cliquables : la Lecture n'ouvre rien. Bas et haut de page transparents, la feuille blanche
+  // est derrière (`.v2-reader-paper`).
   function buildSeam(opts) {
     const { footerText, headerText, pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx, topMarginPx } = opts;
     const seam = document.createElement('div');
@@ -277,11 +276,12 @@ const ReaderMode = (function () {
     seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);
     return { seam, divider };
   }
-  // Les quatre fragments d'en-tête et de pied, résolus : leurs #Variable relisent des tables, d'où une résolution par rendu et non à chaque mise en page (renderPaginationPreview
-  // se refait quand une image finit de charger, cf. watchGeometry).
-  // `hfEnabled` remplace l'ancien `return` sec quand aucun en-tête/pied n'est configuré : le mode Lecture ne montrait alors AUCUNE frontière de page,
-  // alors que l'éditeur y affiche son repère « Page N ». Un document sans en-tête/pied garde donc maintenant ses gouttières, mais pas d'espaceur de bord
-  // (rien à y afficher - une bande blanche vide flotterait au-dessus et en dessous de la feuille).
+  // Les quatre fragments d'en-tête et de pied, résolus : leurs #Variable relisent des tables, d'où une résolution par rendu et non à chaque mise en
+  // page (renderPaginationPreview se refait quand une image finit de charger, cf. watchGeometry).
+  //
+  // Sans en-tête ni pied configuré, les quatre restent null : la Lecture montre quand même chaque frontière de page, comme l'éditeur avec son repère
+  // « Page N » ; le document garde ses gouttières, mais pas d'espaceur de bord (rien à y afficher : une bande blanche vide flotterait au-dessus et
+  // en dessous de la feuille).
   async function resolvePaginationZones(headerFooterData, tableId, record) {
     const hfEnabled = !!(headerFooterData && headerFooterData.enabled);
     const differentFirstPage = hfEnabled && !!headerFooterData.differentFirstPage;
@@ -289,18 +289,21 @@ const ReaderMode = (function () {
     const headerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.header && headerFooterData.header.first, tableId, record) : null;
     const footerDefault = hfEnabled ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.default, tableId, record) : null;
     const footerFirst = differentFirstPage ? await resolveHeaderFooterZone(headerFooterData.footer && headerFooterData.footer.first, tableId, record) : null;
-    return { hfEnabled, differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
+    return { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst };
   }
-  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires (position:absolute,
-  // peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout ce qu'elle pose.
+  // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
+  // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout ce
+  // qu'elle pose.
   function renderPaginationPreview(container, wrapper, zones) {
-    const { hfEnabled, differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst } = zones;
+    const { differentFirstPage, headerDefault, headerFirst, footerDefault, footerFirst } = zones;
     const headerForPage = n => (n === 1 && differentFirstPage) ? headerFirst : headerDefault;
     const footerForPage = n => (n === 1 && differentFirstPage) ? footerFirst : footerDefault;
 
+    const { hasZoneContent, HEADER_FOOTER_BAND_PX } = PageLayout;
     const topBandPx = (hasZoneContent(headerDefault) || hasZoneContent(headerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
     const bottomBandPx = (hasZoneContent(footerDefault) || hasZoneContent(footerFirst)) ? HEADER_FOOTER_BAND_PX : 0;
-    const mPx = marginsPx();
+    // Les marges du modèle, lues à chaud (js/page-layout.js) : le padding de `.reader-content` en Aperçu A4 (css/editor-v2.css) en prend les valeurs.
+    const mPx = PageLayout.getMarginsPx();
     const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topBandPx - bottomBandPx);
     const offsets = computePageBreakOffsets(wrapper, pageContentHeightPx);
     const totalPages = offsets.length + 1;
@@ -310,9 +313,10 @@ const ReaderMode = (function () {
     // Un rendu plus récent peut avoir déjà repeint `container` : `wrapper` ne serait alors plus attaché et insertBefore lèverait une exception.
     if (!wrapper.isConnected) return null;
 
-    // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de CETTE page n'a rien (page 1 sans en-tête
-    // alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur, le contenu de l'en-tête à la
-    // moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste sous le texte, là où le PDF le peint.
+    // Les bandes du PDF, sur la première et la dernière page : un espaceur par bande réservée, vide quand la variante de cette page n'a rien (page 1
+    // sans en-tête alors que les autres en ont un). Collés à la feuille, dont ils prolongent la page : le haut de la page est le haut de l'espaceur,
+    // le contenu de l'en-tête à la moitié de la marge du haut comme dans le PDF ; le pied recouvre la marge du bas de la feuille et commence juste
+    // sous le texte, là où le PDF le peint.
     let edgeTopEl = null; let edgeBottomEl = null;
     if (topBandPx) {
       edgeTopEl = document.createElement('div');
@@ -334,26 +338,27 @@ const ReaderMode = (function () {
     const overlay = document.createElement('div');
     overlay.className = 'v2-pagination-overlay';
     container.appendChild(overlay);
-    // <style> en display:none, donc sans effet de mise en page propre, et dernier enfant de .reader-content : il ne décale aucun `nth-child` déjà calculé.
+    // <style> en display:none, donc sans effet de mise en page propre, et dernier enfant de .reader-content : il ne décale aucun `nth-child` déjà
+    // calculé.
     const styleEl = document.createElement('style');
     styleEl.className = 'v2-pagination-style';
     wrapper.appendChild(styleEl);
     const marginRules = [];
-    const zoom = layoutZoom(wrapper);
-    // Positions lues sur les rectangles, jamais sur offsetTop/offsetLeft/offsetWidth (arrondis à l'entier : une page posée à 0,4 px près n'est plus au même endroit que
-    // le PDF à quelques dixièmes de point). Les rectangles sont en pixels écran, déjà multipliés par le zoom d'ajustement ; la bande, enfant du conteneur et zoomée
-    // comme la feuille, se place en pixels de mise en page depuis le coin du contenu défilant du conteneur.
+    const zoom = EditorCore.layoutZoom(wrapper);
+    // Positions lues sur les rectangles, jamais sur offsetTop/offsetLeft/offsetWidth (arrondis à l'entier : une page posée à 0,4 px près n'est plus
+    // au même endroit que le PDF à quelques dixièmes de point). Les rectangles sont en pixels écran, déjà multipliés par le zoom d'ajustement ; la
+    // bande, enfant du conteneur et zoomée comme la feuille, se place en pixels de mise en page depuis le coin du contenu défilant du conteneur.
     const containerRect = container.getBoundingClientRect();
     const toLayoutX = x => (x - containerRect.left - container.clientLeft + container.scrollLeft) / zoom;
     const toLayoutY = y => (y - containerRect.top - container.clientTop + container.scrollTop) / zoom;
     const wrapperRect = wrapper.getBoundingClientRect();
     const wrapperLeft = toLayoutX(wrapperRect.left);
     const wrapperWidth = wrapperRect.width / zoom;
-    // Feuilles entières (choix d'Antoine, 01/10), même modèle que l'aperçu éditeur (js/header-footer-preview.js:renderPaginationOverlay) : chaque page a sa hauteur
-    // réelle. Une bande est créée pour CHAQUE frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied) ; elle rejoue le bas de la page qui finit, la
-    // gouttière, le haut de la page qui commence. L'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier bloc de la page, avec, en plus, la
-    // place qui reste sous ce bloc jusqu'au bas du corps de la page (`remaining`, lu sur le DOM déjà mis en page : la page vaut alors exactement la hauteur utile).
-    // Sans cette réserve, la gouttière recouvrirait les dernières lignes de la page qui finit.
+    // Feuilles entières, même modèle que l'aperçu de l'éditeur (js/header-footer-preview.js:renderPaginationOverlay) : chaque page a sa hauteur
+    // réelle. Une bande est créée pour chaque frontière de page (repère « Page N » quand il n'y a ni en-tête ni pied) ; elle rejoue le bas de la page
+    // qui finit, la gouttière, le haut de la page qui commence. L'espace qu'elle occupe est réellement réservé par un margin-bottom sur le dernier
+    // bloc de la page, avec, en plus, la place qui reste sous ce bloc jusqu'au bas du corps de la page (`remaining`, lu sur le DOM déjà mis en page :
+    // la page vaut alors exactement la hauteur utile). Sans cette réserve, la gouttière recouvrirait les dernières lignes de la page qui finit.
     const footAreaPx = mPx.bottom + bottomBandPx;
     const headAreaPx = mPx.top + topBandPx;
     const wrapperPaddingTop = parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
@@ -372,10 +377,11 @@ const ReaderMode = (function () {
       seam.style.width = wrapperWidth + 'px';
       const seamHeight = seam.getBoundingClientRect().height / zoom;
       const el = wrapperChildren[offset.afterIndex];
-      // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa propre position.
-      // getBoundingClientRect() ne compte jamais la marge PROPRE de l'élément (margin-bottom pousse le FRÈRE suivant, pas sa propre boîte) : `remaining` se rajoute
-      // à la main pour retrouver la vraie frontière. Coupure ENTRE DEUX LIGNES d'un tableau (même principe que l'éditeur, js/header-footer-preview.js) : le bas de la page qui
-      // finit est celui de la ligne qui précède celle qui ouvre la page, non celui du tableau entier.
+      // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la frontière suivante doit voir leur effet avant de mesurer sa
+      // propre position. getBoundingClientRect() ne compte jamais la marge propre de l'élément (margin-bottom pousse le frère suivant, pas sa propre
+      // boîte) : `remaining` se rajoute à la main pour retrouver la vraie frontière. Coupure entre deux lignes d'un tableau (même principe que
+      // l'éditeur, js/header-footer-preview.js) : le bas de la page qui finit est celui de la ligne qui précède celle qui ouvre la page, non celui du
+      // tableau entier.
       const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
       const rowAbove = tableRows[offset.rowIndex - 1] || null;
       const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
@@ -383,9 +389,10 @@ const ReaderMode = (function () {
       const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       if (rowOpening) {
-        // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est rogné sur cette hauteur
-        // (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond ni les traits verticaux des cases. Le trait du haut
-        // de la ligne, rogné avec le reste, est redessiné au bord bas de la bande (css/editor-v2.css).
+        // La ligne qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (rembourrage haut de ses cases) ; le tableau est
+        // rogné sur cette hauteur (TablePageCut.clipRule, plus bas) : la réserve et les marges de la couture, transparentes, ne montrent ni le fond
+        // ni les traits verticaux des cases. Le trait du haut de la ligne, rogné avec le reste, est redessiné au bord bas de la bande
+        // (css/editor-v2.css).
         const restingPad = TablePageCut.restingPadTop(rowOpening);
         marginRules.push(TablePageCut.padRule('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ')', offset.rowIndex, restingPad + seamHeight + remaining));
         const stripTop = (afterBottomScreen - el.getBoundingClientRect().top) / zoom;
@@ -399,9 +406,9 @@ const ReaderMode = (function () {
         seam.appendChild(cap);
       } else if (el) {
         // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
-        // `.reader-content > *:nth-child(N)` et écrasait silencieusement la réserve dès que le dernier bloc d'une page était un paragraphe - la
-        // gouttière recouvrait alors une ligne de texte. Invisible avant, la règle n'étant posée que pour les sauts de page forcés, dont le bloc est
-        // un <div class="page-break-marker">, jamais un <p>.
+        // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
+        // recouvrirait alors une ligne de texte. Les sauts de page forcés, seuls à poser cette règle jusque-là, ont pour bloc un <div
+        // class="page-break-marker">, jamais un <p>.
         marginRules.push('#reader-container .reader-content > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
       }
       // Écrit la feuille à chaque itération : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
@@ -411,16 +418,16 @@ const ReaderMode = (function () {
       bodyTopRel = afterBottomRel + remaining + seamHeight;
       pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
     });
-    // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le plancher ne gêne pas un
-    // contenu plus long).
+    // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
+    // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
     marginRules.push('#reader-container .reader-content { min-height: ' + (bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
     tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule('#reader-container .reader-content > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
 
-    // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, DERRIÈRE le corps (z-index -1 dans le conteneur, qui est
-    // un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière le texte » posée dans la bande de
-    // l'en-tête - le triangle d'un coin de la Fiche mission - n'est plus cachée par le fond blanc de l'espaceur, ce qu'elle était dès qu'un en-tête réservait sa
-    // bande. C'est aussi là que se peignent les copies de « Sur toutes les pages » (page-layer.js).
+    // Le fond de la feuille : une seule page blanche pour toute la pile, bandes d'en-tête et de pied comprises, derrière le corps (z-index -1 dans le
+    // conteneur, qui est un contexte d'empilement). Le corps, les espaceurs de bord et la feuille elle-même sont transparents : une image « derrière
+    // le texte » posée dans la bande de l'en-tête n'est ainsi pas cachée par le fond blanc de l'espaceur. C'est aussi là que se peignent les copies
+    // de « Sur toutes les pages » (js/page-layer.js).
     const backdrop = document.createElement('div');
     backdrop.className = 'v2-reader-backdrop';
     const paper = document.createElement('div');
@@ -432,7 +439,8 @@ const ReaderMode = (function () {
     paper.style.top = toLayoutY(paperTopScreen) + 'px';
     paper.style.height = ((paperBottomScreen - paperTopScreen) / zoom) + 'px';
     backdrop.appendChild(paper);
-    // Les copies de « Sur toutes les pages » : la même couche que l'éditeur, posée sur la feuille (paintRepeatedCopies la remplit, une fois les images décalées par slot).
+    // Les copies de « Sur toutes les pages » : la même couche que l'éditeur, posée sur la feuille (paintRepeatedCopies la remplit, une fois les
+    // images décalées par slot).
     const layer = document.createElement('div');
     layer.className = 'v2-page-layer';
     layer.setAttribute('aria-hidden', 'true');
@@ -442,22 +450,22 @@ const ReaderMode = (function () {
     return { offsets, pages, layer, zoom, toLayoutY, sheetLeft: wrapperLeft, sheetWidth: wrapperWidth, contentLeftPx: mPx.left };
   }
 
-  // `top` d'une image en calque avant que la Lecture le décale (par slot, par page), gardé à la première écriture : la mise en page refaite (clearPagination) repart du `top`
-  // d'origine, jamais d'un décalage déjà appliqué.
+  // `top` d'une image en calque avant que la Lecture le décale (par slot, par page), gardé à la première écriture : la mise en page refaite
+  // (clearPagination) repart du `top` d'origine, jamais d'un décalage déjà appliqué.
   function setLayerTop(img, px) {
     if (img.dataset.ppTop0 === undefined) img.dataset.ppTop0 = img.style.top;
     img.style.top = px + 'px';
   }
-  // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, fond de la feuille, réserves de bas de page, `top` des images en
-  // calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau.
+  // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, fond de la feuille, réserves de bas
+  // de page, `top` des images en calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau.
   function clearPagination(container, wrapper) {
     container.querySelectorAll(':scope > .v2-page-edge-spacer, :scope > .v2-pagination-overlay, :scope > .v2-reader-backdrop').forEach(el => el.remove());
     wrapper.querySelectorAll(':scope > style.v2-pagination-style').forEach(el => el.remove());
     wrapper.classList.remove('v2-paper-backed');
     wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
   }
-  // Mise en page complète de la Lecture, dans l'ordre : feuilles et coutures, images en calque décalées par slot puis posées sur leur page (grille), copies de « Sur toutes
-  // les pages ». `zones` nul : pas d'Aperçu A4, donc pas de pagination, seuls les `top` par slot s'appliquent.
+  // Mise en page complète de la Lecture, dans l'ordre : feuilles et coutures, images en calque décalées par slot puis posées sur leur page (grille),
+  // copies de « Sur toutes les pages ». `zones` nul : pas d'Aperçu A4, donc pas de pagination, seuls les `top` par slot s'appliquent.
   function paginate(container, wrapper, zones) {
     const paged = zones ? renderPaginationPreview(container, wrapper, zones) : null;
     rebaseLayerImagesBySlot(wrapper);
@@ -468,10 +476,11 @@ const ReaderMode = (function () {
   // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
   function pageOfChildIndex(offsets, index) { return offsets.filter(o => o.afterIndex < index).length; }
 
-  // Les feuilles ont leur taille réelle (« Pages entières ») : le haut du corps d'une page 2, 3... n'est plus là où l'ancienne mise en page compacte le posait. Une image en calque
-  // d'un modèle enregistré avant ce changement et posée sur l'une de ces pages garde son `top` d'alors, alors que sa grille page (le PDF et le Word la lisent) dit « tant de
-  // points depuis le haut du corps de SA page » : la Lecture se cale sur la grille, comme l'export. Rien ne change pour un modèle enregistré depuis (les deux s'accordent) ni pour
-  // la première page de chaque courrier (même géométrie qu'avant) ; dans un macro-modèle, la page se compte depuis la première page du courrier de l'image.
+  // Les feuilles ont leur taille réelle (« Pages entières ») : le haut du corps d'une page 2, 3... n'est donc plus là où l'ancienne mise en page
+  // compacte le posait. Une image en calque d'un ancien modèle, posée sur l'une de ces pages, garde son `top` d'alors, alors que sa grille de page
+  // (lue par le PDF et le Word) dit « tant de points depuis le haut du corps de sa page » : la Lecture se cale sur la grille, comme l'export. Rien ne
+  // change pour un modèle enregistré depuis (les deux s'accordent) ni pour la première page de chaque courrier ; dans un macro-modèle, la page se
+  // compte depuis la première page du courrier de l'image.
   function placeGridImagesOnPages(wrapper, paged) {
     const children = Array.from(wrapper.children);
     const wrapperTop = paged.toLayoutY(wrapper.getBoundingClientRect().top);
@@ -488,9 +497,10 @@ const ReaderMode = (function () {
     });
   }
 
-  // « Sur toutes les pages » en Lecture : l'image d'origine reste à sa place (dans le corps), ses copies se peignent sur les autres feuilles à la même place de page. Un
-  // macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de SON courrier (js/pdf-export.js:slotPageRange), du saut de
-  // page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
+  // « Sur toutes les pages » en Lecture : l'image d'origine reste à sa place (dans le corps), ses copies se peignent sur les autres feuilles à la
+  // même place de page. Un macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de son
+  // courrier (js/pdf-export.js:slotPageRange), du saut de page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot
+  // (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
   function paintRepeatedCopies(wrapper, paged) {
     const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src'));
     // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
@@ -526,15 +536,17 @@ const ReaderMode = (function () {
     });
   }
 
-  // Image en calque (flottante) : celles que l'éditeur pose en position:absolute, à `left`/`top` du bloc de contenu (js/pdf-export.js:pdfImageFromNode, même définition).
+  // Image en calque (flottante) : celles que l'éditeur pose en position:absolute, à `left`/`top` du bloc de contenu
+  // (js/pdf-export.js:pdfImageFromNode, même définition).
   const LAYER_IMAGE_SELECTOR = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
-  // Macro-modèle (js/macro-templates.js:buildConcatenatedHtml) : chaque slot garde les `top` de SON modèle, comptés depuis le haut de SA première page, alors que les
-  // slots suivants commencent plus bas, après le saut de page qui les ouvre (data-macro-slot) : sans ce décalage toutes les images en calque s'empilaient en haut du
-  // premier slot. Le décalage est la distance entre le haut de la première page (le padding de la feuille) et l'endroit où le slot commence, saut de page et réserve de
-  // pagination compris : à calculer une fois la pagination posée. Une image dans un conteneur positionné (cellule...) suit ce conteneur, elle n'est pas touchée.
+  // Macro-modèle (js/macro-templates.js:buildConcatenatedHtml) : chaque slot garde les `top` de son modèle, comptés depuis le haut de sa première
+  // page, alors que les slots suivants commencent plus bas, après le saut de page qui les ouvre (data-macro-slot) : sans ce décalage, toutes les
+  // images en calque s'empileraient en haut du premier slot. Le décalage est la distance entre le haut de la première page (le padding de la feuille)
+  // et l'endroit où le slot commence, saut de page et réserve de pagination compris : à calculer une fois la pagination posée. Une image dans un
+  // conteneur positionné (cellule...) suit ce conteneur, elle n'est pas touchée.
   function rebaseLayerImagesBySlot(wrapper) {
     if (!wrapper.isConnected || !wrapper.querySelector(':scope > .page-break-marker[data-macro-slot]')) return;
-    const zoom = layoutZoom(wrapper);
+    const zoom = EditorCore.layoutZoom(wrapper);
     const wrapperTop = wrapper.getBoundingClientRect().top;
     const firstPageTopPx = parseFloat(getComputedStyle(wrapper).paddingTop) || 0;
     let shiftPx = 0;
@@ -554,10 +566,10 @@ const ReaderMode = (function () {
   }
 
   // === La mise en page de la Lecture suit ce qui bouge après le rendu ===
-  // La pagination se mesure une fois, mais l'écran continue de changer : une image finit de charger (pièce jointe, adresse externe, image d'une variable), une police web
-  // arrive, la feuille change de largeur. Chaque coupure posée sur une mesure périmée coupait alors une ligne en deux et laissait un décalage vers le bas que seul un nouveau
-  // rendu (quitter la ligne et y revenir, l'image étant alors en cache) corrigeait. Comme l'éditeur (js/header-footer-preview.js:watchPaginationGeometry), la Lecture surveille
-  // donc sa feuille et chaque image, et refait la mise en page seule - les variables ne sont pas relues, les en-têtes et pieds restent ceux du rendu.
+  // La pagination se mesure une fois, mais l'écran continue de changer : une image finit de charger (pièce jointe, adresse externe, image d'une
+  // variable), une police web arrive, la feuille change de largeur. Une coupure posée sur une mesure périmée couperait une ligne en deux et
+  // laisserait un décalage vers le bas. Comme l'éditeur (js/header-footer-preview.js:watchPaginationGeometry), la Lecture surveille donc sa feuille
+  // et chaque image, et refait la mise en page seule : les variables ne sont pas relues, les en-têtes et pieds restent ceux du rendu.
   let geometryWatch = null;
   const GEOMETRY_RECOMPUTES_MAX = 8; // par fenêtre de 3 s, comme l'éditeur : une mise en page qui ne se stabilise pas ne tourne pas en boucle
   const GEOMETRY_DEBOUNCE_MS = 40;
@@ -585,7 +597,8 @@ const ReaderMode = (function () {
       w.recomputes++;
       clearTimeout(w.windowTimer);
       w.windowTimer = setTimeout(() => { w.recomputes = 0; if (geometryWatch === w && changed()) schedule(); }, 3000);
-      // Sans la mise en page, la feuille est plus courte : le navigateur ramènerait le défilement en arrière, et le lecteur ne retrouverait pas sa page.
+      // Sans la mise en page, la feuille est plus courte : le navigateur ramènerait le défilement en arrière, et le lecteur ne retrouverait pas sa
+      // page.
       const { scrollTop, scrollLeft } = container;
       clearPagination(container, wrapper);
       paginate(container, wrapper, zones);
@@ -604,8 +617,8 @@ const ReaderMode = (function () {
     // Une police qui arrive refait les lignes sans forcément changer la taille de la feuille : la mise en page est toujours refaite.
     if (document.fonts && document.fonts.addEventListener) { w.onFonts = schedule; document.fonts.addEventListener('loadingdone', w.onFonts); }
   }
-  // Attend que les images du rendu aient fini de charger (ou d'échouer), au plus `maxMs` : leur hauteur décide des coupures de page, la première mise en page se mesure donc
-  // une fois qu'elles l'ont. Celles qui arrivent plus tard sont reprises par watchGeometry.
+  // Attend que les images du rendu aient fini de charger (ou d'échouer), au plus `maxMs` : leur hauteur décide des coupures de page, la première mise
+  // en page se mesure donc une fois qu'elles l'ont. Celles qui arrivent plus tard sont reprises par watchGeometry.
   const IMAGE_SETTLE_MS = 1500;
   function settleImages(root, maxMs) {
     const pending = Array.from(root.querySelectorAll('img')).filter(img => !img.complete);
@@ -619,16 +632,16 @@ const ReaderMode = (function () {
   }
 
   let renderGeneration = 0;
-  // `htmlContent` : le HTML du document, ou une fonction qui le donne (js/main.js : un macro-modèle assemble ses modèles contre la ligne courante, ce qui relit des tables -
-  // l'appel se fait donc dans les lectures partagées de CE rendu, cf. GristAPI.withReadPass).
+  // `htmlContent` : le HTML du document, ou une fonction qui le donne (js/main.js : un macro-modèle assemble ses modèles contre la ligne courante, ce
+  // qui relit des tables : l'appel se fait donc dans les lectures partagées de ce rendu, cf. GristAPI.withReadPass).
   async function render(htmlContent, tableId, record, headerFooterData) {
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
     // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
     stopGeometryWatch();
-    // État vide : atteignable depuis js/main.js:renderReader(), qui appelle désormais render() avec record=null au lieu de retourner en silence (le mode
-    // Lecture affichait alors un conteneur totalement vide, sans la moindre explication). Pas une erreur, juste une étape que l'utilisateur n'a pas encore
-    // faite : js/reader-guide.js la lui explique (le guide en quatre étapes, ou le court message quand le widget est déjà relié à un tableau).
+    // État vide : js/main.js:renderReader() appelle render() avec record=null quand aucune ligne n'est choisie. Pas une erreur, juste une étape que
+    // la personne n'a pas encore faite : js/reader-guide.js la lui explique (le guide en quatre étapes, ou le court message quand le widget est déjà
+    // relié à un tableau).
     if (!record) {
       ReaderGuide.render(container);
       return;
@@ -640,27 +653,31 @@ const ReaderMode = (function () {
     const stale = () => renderId !== renderGeneration;
     if (typeof htmlContent === 'function') htmlContent = await htmlContent();
     if (stale()) return;
-    // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce rôle, ce
-    // <div> s'intercale toujours entre les deux).
+    // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce
+    // rôle, ce <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
     const cleanHtml = HtmlSanitize.clean(htmlContent);
     wrapper.innerHTML = cleanHtml;
     // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
     // chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles ne voient plus ni <ins> ni <del>.
     applyAcceptedView(wrapper, cleanHtml);
-    // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y être affichés).
+    // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y
+    // être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
-    // Rafraîchit les types de colonnes avant de résoudre les badges : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une colonne Attachments
-    // récemment ajoutée. Pas refreshSchema : il relisait chaque table du document en entier, à chaque rendu, pour une liste de colonnes que la Lecture n'utilise pas.
+    // Rafraîchit les types de colonnes avant de résoudre les bulles : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une
+    // colonne Attachments récemment ajoutée. Pas refreshSchema : il relirait chaque table du document en entier, à chaque rendu, pour une liste de
+    // colonnes que la Lecture n'utilise pas.
     await GristAPI.refreshColumnTypes().catch(() => {});
     if (stale()) return;
-    // Zones répétées d'une boucle (js/loop-rules.js) déroulées AVANT la résolution : chaque copie porte la ligne de son tour, lue par resolveBadgeNode.
+    // Zones répétées d'une boucle (js/loop-rules.js) déroulées avant la résolution : chaque copie porte la ligne de son tour, lue par
+    // resolveBadgeNode.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
     if (stale()) return;
-    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à résoudre.
+    // Blocs de texte conditionnels (js/conditional-text.js) : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
+    // résoudre.
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalValue.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
@@ -694,14 +711,14 @@ const ReaderMode = (function () {
     paginate(container, wrapper, zones);
     if (!stale()) watchGeometry(container, wrapper, zones);
   }
-  // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Marqueur recalculé en JS, jamais lu via
-  // getComputedStyle('::before').content (ne renvoie que "counter(h1c)", pas le texte peint - counter() n'est résolu qu'à la peinture).
+  // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Numérotation de HeadingNumbering, jamais lue par
+  // getComputedStyle('::before').content (qui ne rend que « counter(h1c) », counter() n'étant résolu qu'à la peinture).
   function resolveTocMarkers(wrapper) {
     const tocMarkers = wrapper.querySelectorAll(':scope > .toc-marker');
     if (!tocMarkers.length) return;
     const headings = Array.from(wrapper.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
     const numberingStyle = wrapper.dataset.headingStyle || 'none';
-    const entries = headingCounterEntries(headings, numberingStyle);
+    const entries = HeadingNumbering.entriesFor(headings, numberingStyle);
     tocMarkers.forEach(marker => {
       marker.innerHTML = '';
       marker.classList.add('toc-resolved');
@@ -713,30 +730,8 @@ const ReaderMode = (function () {
       });
     });
   }
-  // Reproduit en JS la cascade de compteurs CSS de style.css : chaque titre incrémente le compteur de son niveau et réinitialise ceux des niveaux plus
-  // profonds, même ordre de style par niveau que les règles CSS ::before.
-  const HEADING_COUNTER_SCHEMES = {
-    numeric: ['decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman'],
-    alpha: ['lower-alpha', 'upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal'],
-    roman: ['upper-roman', 'decimal', 'lower-alpha', 'upper-roman', 'decimal', 'lower-alpha'],
-  };
-  function formatCounterValue(n, counterStyle) {
-    if (counterStyle === 'lower-alpha') { let s = ''; let v = n; while (v > 0) { const rem = (v - 1) % 26; s = String.fromCharCode(97 + rem) + s; v = Math.floor((v - 1) / 26); } return s; }
-    if (counterStyle === 'upper-roman') { const table = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let s = ''; let v = n; table.forEach(([val, sym]) => { while (v >= val) { s += sym; v -= val; } }); return s; }
-    return String(n);
-  }
-  function headingCounterEntries(headingEls, numberingStyle) {
-    const scheme = HEADING_COUNTER_SCHEMES[numberingStyle];
-    const counters = [0, 0, 0, 0, 0, 0];
-    return headingEls.map(h => {
-      const level = parseInt(h.tagName.slice(1), 10) || 1;
-      counters[level - 1] += 1;
-      for (let i = level; i < 6; i += 1) counters[i] = 0;
-      const marker = scheme ? formatCounterValue(counters[level - 1], scheme[level - 1]) + ') ' : '';
-      return { level, text: (marker + (h.textContent || '')).replace(/\s+/g, ' ').trim() };
-    });
-  }
-  // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour que hydrateAttachmentImages lui pose un vrai src ; le retire si aucune PJ.
+  // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour que hydrateAttachmentImages lui pose un vrai src ; le retire s'il n'y en
+  // a aucune.
   async function resolveVariableImages(wrapper, tableId, record) {
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]'));
     await Promise.all(nodes.map(async img => {
@@ -746,21 +741,22 @@ const ReaderMode = (function () {
       try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(LoopRules.bindingOf(img))); }
       catch (e) { ids = []; }
       if (!ids.length) { img.remove(); return; }
-      // data-var-table/-column/-key restent posés : c'est le marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe, image mise à
-      // l'échelle sans déformation) plutôt que `width` seul.
+      // data-var-table/-column/-key restent posés : c'est le marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe, image
+      // mise à l'échelle sans déformation) plutôt que `width` seul.
       img.dataset.source = 'attachment';
       img.dataset.attachmentId = String(ids[0]);
       img.style.objectFit = 'contain';
     }));
   }
-  // QR codes dont le texte contient une colonne (js/qr-code.js) : dessinés ici pour la ligne affichée, avec la ligne du tour dans une zone répétée ; sans valeur, le QR code
-  // disparaît comme une image sans pièce jointe. Celui d'un texte seul est déjà une image du modèle.
+  // QR codes dont le texte contient une colonne (js/qr-code.js) : dessinés ici pour la ligne affichée, avec la ligne du tour dans une zone répétée ;
+  // sans valeur, le QR code disparaît comme une image sans pièce jointe. Celui d'un texte seul est déjà une image du modèle.
   async function resolveQrCodes(wrapper, tableId, record) {
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-qr-text]')).filter(QrCode.needsImage);
     await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
   }
-  // Chips intelligents - date du jour/heure actuelle/email et nom de l'utilisateur, valeurs calculées (jamais liées à une colonne Grist) donc résolues à chaque rendu
-  // sans recherche de ligne/table liée. `.footnote-ref-marker` n'a pas besoin d'être résolu ici : son numéro vient du compteur CSS, déjà correct à l'écran.
+  // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne
+  // Grist : résolues à chaque rendu, sans recherche de ligne ni de table liée. `.footnote-ref-marker` n'a pas besoin de l'être ici : son numéro vient
+  // du compteur CSS, déjà juste à l'écran.
   function formatTodayDate() {
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
@@ -769,8 +765,8 @@ const ReaderMode = (function () {
     const d = new Date();
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   }
-  // Le texte d'un chip qui lit la personne connectée (email, nom) : la valeur lue ou, si elle ne se lit pas (réseau, portée du jeton insuffisante, lecteur Grist) ou que Grist n'en
-  // donne aucune, le repli visuel d'une #Variable cassée - jamais un blocage du reste du rendu.
+  // Le texte d'un chip qui lit la personne connectée (email, nom) : la valeur lue ou, si elle ne se lit pas (réseau, portée du jeton insuffisante,
+  // lecteur Grist) ou que Grist n'en donne aucune, le repli visuel d'une #Variable cassée - jamais un blocage du reste du rendu.
   async function userChipText(read, unavailableKey) {
     try {
       const text = await read();
@@ -799,9 +795,10 @@ const ReaderMode = (function () {
   function carryReaderAtom(from, to) {
     if (to && to.nodeType === 1 && from.hasAttribute('data-pp-atom')) to.setAttribute('data-pp-atom', from.getAttribute('data-pp-atom'));
   }
-  // Case à cocher d'une variable Oui / Non (format { type: 'bool', style } d'un style de case, VariableFormat) : un <span class="resolved-checkbox"> qui garde le caractère ☑ / ☐ comme texte
-  // (copier-coller, lecteur d'écran, et le Word ou l'Excel qui n'ont rien d'autre à lire), dessiné par css/editor-v2.css dans la couleur de la case. Cette couleur est posée EN LIGNE, comme celle
-  // d'un texte coloré : c'est elle que lisent le PDF (js/pdf-export.js:inlineRuns), le Word et l'Excel, jamais la feuille de style. L'e-mail écrit « [x] » / « [ ] » (js/mailto-export.js).
+  // Case à cocher d'une variable Oui / Non (format { type: 'bool', style } d'un style de case, VariableFormat) : un <span class="resolved-checkbox">
+  // qui garde le caractère ☑ / ☐ comme texte (copier-coller, lecteur d'écran, et le Word ou l'Excel qui n'ont rien d'autre à lire), dessiné par
+  // css/editor-v2.css dans la couleur de la case. Cette couleur est posée en ligne, comme celle d'un texte coloré : c'est elle que lisent le PDF
+  // (js/pdf-export.js:inlineRuns), le Word et l'Excel, jamais la feuille de style. L'e-mail écrit « [x] » / « [ ] » (js/mailto-export.js).
   function checkboxNode(checked, style) {
     const box = document.createElement('span');
     box.className = 'resolved-checkbox';
@@ -813,8 +810,9 @@ const ReaderMode = (function () {
     box.textContent = checked ? VariableFormat.CHECKED_BOX : VariableFormat.UNCHECKED_BOX;
     return box;
   }
-  // Le nœud d'une valeur résolue : un <span> de texte ; pour une bulle réglée sur un style de case, chaque ☑ / ☐ du texte (une liste de valeurs en a plusieurs : « ☑, ☐ ») devient une vraie case.
-  // `className` : celle du <span> (« resolved-var », avec « error-msg » pour une erreur) ; les en-têtes et pieds n'en portaient aucune et n'en prennent pas.
+  // Le nœud d'une valeur résolue : un <span> de texte ; pour une bulle réglée sur un style de case, chaque ☑ / ☐ du texte (une liste de valeurs en a
+  // plusieurs : « ☑, ☐ ») devient une vraie case. `className` : celle du <span> (« resolved-var », avec « error-msg » pour une erreur) ; les en-têtes
+  // et pieds n'en portaient aucune et n'en prennent pas.
   function valueNode(text, format, className) {
     const span = document.createElement('span');
     if (className) span.className = className;
@@ -833,8 +831,8 @@ const ReaderMode = (function () {
     span.textContent = text;
     return span;
   }
-  // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs déjà lus
-  // par GristAPI.hydrateAttachmentImages, appelé juste après.
+  // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs
+  // déjà lus par GristAPI.hydrateAttachmentImages, appelé juste après.
   function attachmentImages(ids) {
     const frag = document.createDocumentFragment();
     ids.forEach(id => {
@@ -849,8 +847,8 @@ const ReaderMode = (function () {
     });
     return frag;
   }
-  // Bulle en boucle « dans la phrase » (js/loop-rules.js) : ses valeurs pour chaque ligne retenue, jointes par les séparateurs de la boucle (les images
-  // d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire.
+  // Bulle en boucle « dans la phrase » (js/loop-rules.js) : ses valeurs pour chaque ligne retenue, jointes par les séparateurs de la boucle (les
+  // images d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire.
   async function resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx) {
     const loop = LoopRules.inlineLoopOf(badge);
     if (!loop) return null;
@@ -877,7 +875,8 @@ const ReaderMode = (function () {
   }
   async function resolveBadgeNode(badge, tableId, record, format, loopCtx) {
     const binding = LoopRules.bindingOf(badge);
-    // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une bulle de variable de cette table.
+    // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une
+    // bulle de variable de cette table.
     if (isCalcBadge(badge)) {
       const { text, isError } = await Variables.resolveCalcResult(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding));
       const span = document.createElement('span'); span.textContent = text; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
@@ -905,12 +904,13 @@ const ReaderMode = (function () {
       return { node: span, isError: true };
     }
   }
-  // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc, de valeur et de case résolues. Partagé avec splitBadges.
+  // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
+  // de valeur et de case résolues. Partagé avec splitBadges.
   async function expandedWrapper(htmlContent, tableId, record) {
     const cleanHtml = HtmlSanitize.clean(htmlContent);
     const wrapper = document.createElement('div'); wrapper.innerHTML = cleanHtml;
-    // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte (choix d'Antoine, 04/10) :
-    // le texte supprimé n'y est plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.
+    // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte : le texte supprimé n'y est
+    // plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.
     applyAcceptedView(wrapper, cleanHtml, { tint: false });
     // Cf. commentaire équivalent dans render() : schéma à jour nécessaire pour que resolveBadgeNode détecte correctement une colonne Attachments.
     await GristAPI.refreshSchema().catch(() => {});
@@ -922,9 +922,10 @@ const ReaderMode = (function () {
     await ConditionalCheckbox.resolve(wrapper, tableId || lastCurrentTableId, record);
     return { wrapper, loopCtx };
   }
-  // Les bulles réglées « Un document par valeur » (format.list.perValue, js/variable-list.js) que l'export de cette ligne trouvera dans ces morceaux de HTML (le corps, les quatre zones d'en-tête et de pied) :
-  // celles qui restent après les zones répétées et les conditions de bloc, de valeur et de case, que leur propre condition laisse écrire, et qui ne sont ni dans une zone répétée ni en boucle « dans la phrase »
-  // (le tour y donne déjà la valeur). Un morceau sans le mot « perValue » n'est même pas lu. Retourne [{ table, column, format }], dans l'ordre du document.
+  // Les bulles réglées « Un document par valeur » (format.list.perValue, js/variable-list.js) que l'export de cette ligne trouvera dans ces morceaux
+  // de HTML (le corps, les quatre zones d'en-tête et de pied) : celles qui restent après les zones répétées et les conditions de bloc, de valeur et
+  // de case, que leur propre condition laisse écrire, et qui ne sont ni dans une zone répétée ni en boucle « dans la phrase » (le tour y donne déjà
+  // la valeur). Un morceau sans le mot « perValue » n'est même pas lu. Retourne [{ table, column, format }], dans l'ordre du document.
   async function splitBadges(parts, tableId, record) {
     const found = [];
     for (const part of parts) {
@@ -941,9 +942,10 @@ const ReaderMode = (function () {
     }
     return found;
   }
-  // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle APRÈS le déroulé des zones répétées et AVANT qu'elle soit remplacée par sa
-  // valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un nombre ou qu'une date. Il s'exécute
-  // d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors encore en place.
+  // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle après le déroulé des zones répétées et avant qu'elle soit
+  // remplacée par sa valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un
+  // nombre ou qu'une date. Il s'exécute d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors encore
+  // en place.
   async function preview(htmlContent, tableId, record, onBadge) {
     const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record);
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
@@ -960,19 +962,15 @@ const ReaderMode = (function () {
     await GristAPI.hydrateAttachmentImages(wrapper);
     return wrapper.innerHTML;
   }
-  // Variables d'un nom de fichier : le scan des champs Objet/À/Cc/Cci (Variables.findTextVariables - plus longue clé connue après chaque déclencheur, chemins
-  // « #Projet.Accompagnateur.Email » compris), les caractères interdits d'un nom de fichier remplacés par « _ » dans chaque valeur.
+  // Le nom d'un fichier : les variables de son modèle remplacées par leur valeur (Variables.replaceTextVariables, comme les champs de l'email), les
+  // caractères interdits d'un nom de fichier remplacés par « _ » dans chaque valeur. Une valeur illisible donne un texte vide, jamais un export en
+  // échec.
   async function resolveFilename(filenameTemplate, tableId, record) {
     if (!filenameTemplate) return 'publipostage';
-    const matches = Variables.findTextVariables(filenameTemplate);
-    const resolved = await Promise.all(matches.map(async m => {
-      try { const val = await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true }); return String(val || '').replace(/[\\/:*?"<>|]/g, '_'); }
+    return Variables.replaceTextVariables(filenameTemplate, async m => {
+      try { return String(await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true }) || '').replace(/[\\/:*?"<>|]/g, '_'); }
       catch (e) { return ''; }
-    }));
-    let result = ''; let lastEnd = 0;
-    matches.forEach((m, idx) => { result += filenameTemplate.slice(lastEnd, m.start) + resolved[idx]; lastEnd = m.end; });
-    result += filenameTemplate.slice(lastEnd);
-    return result;
+    });
   }
   return { render, preview, resolveFilename, splitBadges, trimTrailingBlankBlocks, checkboxNode };
 })();
