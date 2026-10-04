@@ -1019,5 +1019,72 @@ const FloatingToolbars = (function () {
     editor.on('transaction', check);
   }
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar };
+  // Barre flottante d'une modification suivie : « Accepter » et « Refuser » ne traitent que celle sur laquelle on a cliqué (ou celles que la
+  // sélection recouvre), « Tout accepter » et « Tout refuser » restant dans la barre du haut. Elle s'ouvre SOUS le curseur - au-dessus, elle
+  // recouvrirait la barre du tableau, de l'image ou de la bulle que le même clic peut ouvrir - et jamais pendant la frappe : taper au bout d'une
+  // suggestion ne doit pas la rouvrir à chaque lettre, elle attend un vrai déplacement de la sélection (ou un clic). Pendant un glisser à la souris
+  // elle attend le relâchement.
+  function wireSuggestionFloatingToolbar() {
+    const html = ['accept', 'reject'].map((name) => {
+      const key = 'trackChanges.' + name + '.label';
+      return `<button data-action="${name}" data-i18n="${key}">${I18n.t(key)}</button>`;
+    }).join('');
+    const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-suggest-toolbar', html, (action) => {
+      const chain = editor.chain().focus();
+      (action === 'accept' ? chain.acceptSuggestionsAtSelection() : chain.rejectSuggestionsAtSelection()).run();
+      panel.hide();
+    });
+    EditorCore.registerFloatingPanel(panel);
+    // Fermée après une modification du document (frappe, résolution, Annuler) jusqu'au prochain déplacement de la sélection ou clic ; fermée aussi
+    // tant qu'un bouton de la souris est appuyé dans le texte.
+    let suppressed = false;
+    let pointerDown = false;
+    // Le point d'ancrage : un nœud sélectionné (image, tableau supprimé en entier) porte la barre sous lui, sinon le curseur (le bout de la
+    // sélection, là où l'on a cliqué), relu à chaque calcul de floating-ui.
+    let lastRect = null;
+    const caretAnchor = {
+      get contextElement() { return editor.view.dom; },
+      getBoundingClientRect() {
+        try {
+          const c = editor.view.coordsAtPos(editor.state.selection.head);
+          lastRect = { x: c.left, y: c.top, width: 0, height: c.bottom - c.top, top: c.top, bottom: c.bottom, left: c.left, right: c.left };
+        } catch (e) { /* position hors du document le temps d'une transaction : le dernier rectangle connu */ }
+        return lastRect || { x: 0, y: 0, width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 };
+      },
+    };
+    const options = () => Object.assign({ placement: 'bottom-start' }, GridEditor.floatingOptions());
+    const check = ({ transaction } = {}) => {
+      // Le blur de l'éditeur ne passe pas ici : cf. wireImageFloatingToolbar (il rouvrait la barre que le clic hors de l'éditeur venait de fermer).
+      if (transaction && transaction.getMeta('blur')) return;
+      if (transaction && transaction.docChanged) suppressed = true;
+      else if (transaction && transaction.selectionSet) suppressed = false;
+      // Pas de focus dans l'éditeur (la recherche, une fenêtre) : la sélection peut bouger sans que la personne regarde le texte. Aucun champ de
+      // formulaire dans cette barre, ses boutons gardent le focus de l'éditeur (mousedown + preventDefault, js/editor-core.js) : la garde est sûre.
+      if (suppressed || pointerDown || !editor.isEditable || !editor.view.hasFocus()) { panel.hide(); return; }
+      // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. wireVariableFloatingToolbar.
+      if (!editor.view.dom.getClientRects().length) { panel.hide(); return; }
+      const ids = TrackChanges.selectionSuggestionIds(editor.state);
+      if (!ids.length) { panel.hide(); return; }
+      panel.el.querySelectorAll('button[data-action]').forEach((btn) => {
+        btn.title = I18n.t('trackChanges.' + btn.dataset.action + '.tip', { n: ids.length });
+      });
+      const dom = editor.state.selection.node ? editor.view.nodeDOM(editor.state.selection.from) : null;
+      panel.show(dom && dom.getClientRects && dom.getClientRects().length ? dom : caretAnchor, options);
+    };
+    editor.on('transaction', check);
+    // Un clic est un geste voulu même quand il ne change pas la sélection (rester au bout du texte qu'on vient de taper) : il lève la fermeture due à
+    // la frappe, et la barre s'ouvre au relâchement, une fois la sélection posée.
+    editor.view.dom.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return;
+      pointerDown = true;
+      suppressed = false;
+    }, true);
+    document.addEventListener('mouseup', () => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      setTimeout(check, 0);
+    }, true);
+  }
+
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, wireSuggestionFloatingToolbar };
 })();

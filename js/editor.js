@@ -449,6 +449,7 @@ const Editor = (function () {
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
+    FloatingToolbars.wireSuggestionFloatingToolbar();
     Comments.setEditor(editor);
     Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);

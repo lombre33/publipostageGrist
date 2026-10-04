@@ -665,6 +665,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Texte inséré et texte supprimé du suivi des modifications (choix « Aligner » d'Antoine, 01/10) : le texte suggéré prend les teintes des cases d'une colonne suivie, constantes dans les deux thèmes. Inséré :
   `#146c48` sur `#e5f6ee` (5,7:1), avec son filet vert au bas. Supprimé : barré, `#b42318` sur `#fbe9e9` (5,6:1). Jamais les jetons du thème (`--danger`, `--danger-soft`) : en sombre ils posaient
   une pastille foncée sur la page, qui reste blanche, et le rouge d'avant n'avait que 3,7:1 en clair.
+- Accepter ou refuser UNE modification du suivi (demande d'Antoine du 04/10) : un clic sur un texte inséré, un texte supprimé, une colonne ou une ligne suivie ouvre une petite barre flottante « Accepter » /
+  « Refuser » SOUS le curseur ; la barre du haut reste figée (« Tout accepter » et « Tout refuser » n'y changent pas). Elle ne traite que cette modification, avec tout ce qui en fait partie (l'ancien et le nouveau texte
+  d'un remplacement, les deux bouts d'une suppression sur deux paragraphes, toutes les cases d'une colonne ou d'une ligne), ou toutes celles qu'une sélection recouvre (info-bulles au pluriel), et un seul Ctrl+Z la
+  défait. Elle ne s'ouvre jamais pendant la frappe, ni tant qu'un bouton de la souris est appuyé dans le texte (elle s'ouvre au relâchement), ni sans le focus dans le texte ; elle se ferme en Lecture, devant les
+  fenêtres de variable et d'un clic ailleurs, reste entière dans le panneau (retournée au-dessus du texte tout en bas) et passe au-dessus de la barre du tableau. Monochrome comme les autres barres flottantes : le vert
+  et le rouge restent ceux du texte suivi.
 - Export Excel d'une grille (demande d'Antoine du 01/10) : le menu « Qualité PDF » a trois lignes Excel, sous les deux lignes Word : « Exporter en Excel… », « Exporter toutes les
   valeurs de la table en Excel (ZIP)… » et « Exporter toutes les valeurs de la table dans un seul classeur… ». Elles sont actives dans une grille et grisées ailleurs ; à l'inverse
   les deux lignes Word sont grisées dans une grille — jamais retirées, `aria-disabled` posé, un clic dessus ne lance rien et n'ouvre aucune confirmation. « Exporter en Excel… »

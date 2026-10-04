@@ -78,3 +78,14 @@
   background-color: #fbe9e9 !important;
   text-decoration: line-through;
 }
+
+/* Barre « Accepter / Refuser » d'une modification suivie (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : deux boutons à libellé, de la largeur de leur texte (comme ceux de la barre nombre/date d'une
+   bulle, css/toolbar-v2.css), aux couleurs de la barre flottante : monochrome, le vert et le rouge restent ceux du texte suivi. Le chrome (fond, bordure, ombre, niveau) vient de .v2-floating-toolbar. */
+.v2-suggest-toolbar button {
+  width: auto;
+  padding: 0 10px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

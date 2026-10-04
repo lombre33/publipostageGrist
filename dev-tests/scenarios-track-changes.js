@@ -863,6 +863,350 @@
     },
   });
 
+  // === Accepter ou refuser UNE modification (demande d'Antoine du 04/10 : « cliquer sur la zone modifiée et n'accepter que celle-là ») ===
+  // La barre du haut ne savait que « Tout accepter » et « Tout refuser ». Un clic sur une modification ouvre maintenant une petite barre « Accepter / Refuser » sous le curseur
+  // (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : elle ne traite que cette suggestion - avec tout ce qui en fait partie : l'ancien texte ET le nouveau d'un remplacement, les
+  // deux bouts d'une suppression à cheval sur deux paragraphes, toutes les cases d'une colonne - en UNE transaction (un seul Annuler). Les parcours à la vraie souris sont dans le script
+  // Node suggestionBarMouse ; ici, la barre est pressée comme le fait la souris (mousedown, js/editor-core.js:createFloatingPanel).
+  const suggestBar = () => document.querySelector('.v2-suggest-toolbar');
+  const barVisible = () => !!suggestBar() && suggestBar().classList.contains('visible');
+  async function pressBarButton(h, action) {
+    const btn = suggestBar() && suggestBar().querySelector('button[data-action="' + action + '"]');
+    if (btn) btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(250);
+    return btn;
+  }
+  // Position du `offset`-ième caractère du premier texte qui contient `text`.
+  function textPos(text, offset) {
+    let pos = -1;
+    EditorCore.getEditor().state.doc.descendants((node, p) => { if (pos < 0 && node.isText && node.text.includes(text)) pos = p + node.text.indexOf(text) + offset; });
+    if (pos < 0) throw new Error('texte « ' + text + ' » introuvable');
+    return pos;
+  }
+  // Le curseur (ou la sélection de `from` à `to`) posé comme le fait un clic : le focus d'abord - la barre se met à jour sur la transaction de sélection, et seulement si l'éditeur a le focus.
+  async function selectDoc(h, from, to) {
+    const ed = EditorCore.getEditor();
+    ed.view.focus();
+    ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, from, to == null ? from : to)));
+    await h.sleep(150);
+  }
+  const caretIn = (h, text, offset) => selectDoc(h, textPos(text, offset));
+  // Un document, suivi allumé, avec un ajout tapé au bout de chaque paragraphe donné : [texte du paragraphe, ajout].
+  async function documentWithInsertions(h, html, additions) {
+    await h.resetEditor();
+    await disableTrackChangesIfOn(h);
+    Editor.setHTML(html);
+    await h.sleep(200);
+    Editor.setTrackChanges(true);
+    for (const [text, add] of additions) { await caretIn(h, text, text.length); await h.typeText(add); }
+  }
+  const insCount = html => (html.match(/<ins /g) || []).length;
+  // La position de la première case (ou ligne) portant une marque `markName`, `n` fois ignorée, et celle de son premier paragraphe.
+  function markedNodePos(typeName, markName, skip) {
+    let pos = -1;
+    let seen = 0;
+    EditorCore.getEditor().state.doc.descendants((node, p) => { if (node.type.name === typeName && node.marks.some(m => m.type.name === markName) && seen++ === (skip || 0) && pos < 0) pos = p; });
+    if (pos < 0) throw new Error(typeName + ' marqué ' + markName + ' introuvable');
+    return pos;
+  }
+
+  cases.push({
+    id: 'trackchanges_bar_accepts_or_rejects_only_the_touched_suggestion',
+    description: "Trois ajouts en attente : le curseur dans le premier ouvre la barre « Accepter / Refuser », « Accepter » ne résout que celui-là (texte gardé, marque retirée, barre fermée) et les deux autres restent en attente, suivi coupé ou non ; « Refuser » sur le deuxième retire son texte et laisse le troisième ; Annuler rend le deuxième d'un seul coup",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Alpha beta</p><p>Gamma delta</p><p>Epsilon zeta</p>', [['Alpha beta', ' XX'], ['Gamma delta', ' YY'], ['Epsilon zeta', ' ZZ']]);
+        const three = insCount(Editor.getHTML()) === 3;
+        await caretIn(h, ' XX', 2);
+        const opened = barVisible();
+        await pressBarButton(h, 'accept');
+        const html1 = Editor.getHTML();
+        const first = html1.indexOf('<p>Alpha beta XX</p>') !== -1 && insCount(html1) === 2;
+        const closed = !barVisible();
+        // Suivi coupé : des suggestions restent à résoudre, la barre fonctionne de même.
+        Editor.setTrackChanges(false);
+        await h.sleep(100);
+        await caretIn(h, ' YY', 2);
+        const openedUntracked = barVisible();
+        await pressBarButton(h, 'reject');
+        const html2 = Editor.getHTML();
+        const second = html2.indexOf('<p>Gamma delta</p>') !== -1 && html2.indexOf('YY') === -1 && insCount(html2) === 1 && html2.indexOf('ZZ') !== -1;
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(200);
+        const html3 = Editor.getHTML();
+        const undone = /<ins [^>]*> YY<\/ins>/.test(html3) && insCount(html3) === 2 && html3.indexOf('<p>Alpha beta XX</p>') !== -1;
+        return { pass: three && opened && first && closed && openedUntracked && second && undone, notes: JSON.stringify({ three, opened, first, closed, openedUntracked, second, undone, html3 }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_opens_on_a_suggestion_below_the_caret_and_stays_closed_while_typing',
+    description: "La barre s'ouvre quand le curseur touche une suggestion (ajout ou suppression), SOUS le curseur et dans la fenêtre ; elle se ferme sur un texte sans suggestion, reste fermée pendant la frappe (même collée au bout de l'ajout) et se rouvre au déplacement suivant ; sans focus dans l'éditeur elle reste fermée ; libellés et info-bulles suivent la langue, au pluriel pour une sélection de plusieurs modifications",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Garder ceci, retirer cela, fin.</p><p>Autre paragraphe.</p>', [['Autre paragraphe.', ' Ajout.']]);
+        const from = textPos('retirer cela', 0);
+        await selectDoc(h, from, from + 'retirer cela'.length);
+        document.execCommand('delete');
+        await h.sleep(150);
+        const closedAfterDelete = !barVisible();
+        const none = !(await (async () => { await caretIn(h, 'Garder', 2); return barVisible(); })());
+        await caretIn(h, 'retirer cela', 3);
+        const onDeletion = barVisible();
+        const ed = EditorCore.getEditor();
+        const caret = ed.view.coordsAtPos(ed.state.selection.head);
+        const rect = suggestBar().getBoundingClientRect();
+        const below = rect.top >= caret.bottom - 1 && rect.left >= 0 && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
+        await caretIn(h, ' Ajout.', 7);
+        const atEnd = barVisible();
+        await h.typeText('abc');
+        const closedWhileTyping = !barVisible();
+        await caretIn(h, 'Garder', 2);
+        await caretIn(h, ' Ajout.', 3);
+        const reopened = barVisible();
+        const titleOne = suggestBar().querySelector('button[data-action="accept"]').title;
+        // Une sélection qui recouvre les deux suggestions : l'info-bulle passe au pluriel.
+        await selectDoc(h, textPos('retirer cela', 2), textPos(' Ajout.', 3));
+        const titleMany = suggestBar().querySelector('button[data-action="reject"]').title;
+        // Hors du texte (le focus ailleurs) : la sélection peut bouger, la barre ne s'ouvre pas.
+        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+        ed.view.dispatch(ed.state.tr.setSelection(EditorCore.getTextSelectionClass().create(ed.state.doc, textPos('retirer cela', 3))));
+        await h.sleep(150);
+        const noFocusClosed = !barVisible();
+        await caretIn(h, ' Ajout.', 3);
+        I18n.setLang('en');
+        await h.sleep(100);
+        const english = suggestBar().textContent === 'AcceptReject';
+        await caretIn(h, 'retirer cela', 2);
+        const titleEn = suggestBar().querySelector('button[data-action="accept"]').title;
+        I18n.setLang('fr');
+        await h.sleep(100);
+        const french = suggestBar().textContent === 'AccepterRefuser';
+        const checks = { closedAfterDelete, none, onDeletion, below, atEnd, closedWhileTyping, reopened, titleOne: titleOne === 'Accepter cette modification', titleMany: titleMany === 'Refuser ces modifications', noFocusClosed, english, titleEn: titleEn === 'Accept this change', french };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) + ' titres=' + titleOne + ' / ' + titleMany + ' / ' + titleEn + ' barre=' + JSON.stringify(rect) };
+      } finally { I18n.setLang('fr'); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_replacement_and_a_deletion_across_paragraphs_as_one',
+    description: "Un remplacement (l'ancien texte barré ET le nouveau) se résout d'un seul clic depuis l'un ou l'autre ; une suppression à cheval sur deux paragraphes aussi - accepter fusionne les deux paragraphes, refuser les rend tels quels ; un gras posé sur un mot (supprimé + inséré) de même",
+    run: async (h) => {
+      try {
+        const out = {};
+        // Le texte neuf ne partage ni début ni fin avec l'ancien : sur une sélection, execCommand('insertText') laisse au navigateur le calcul de ce qui a changé (« changer » -> « modifier » donne
+        // « chang » barré, « modifi » ajouté, « er » intact), ce qui n'est plus un remplacement de mot.
+        const replace = async (button, caretText) => {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML('<p>Un mot à changer ici</p>');
+          await h.sleep(200);
+          Editor.setTrackChanges(true);
+          const from = textPos('changer', 0);
+          await selectDoc(h, from, from + 'changer'.length);
+          await h.typeText('nouveau');
+          await caretIn(h, caretText, 3);
+          await pressBarButton(h, button);
+          return Editor.getHTML();
+        };
+        out.replaceAccept = (await replace('accept', 'nouveau')) === '<p>Un mot à nouveau ici</p>';
+        out.replaceReject = (await replace('reject', 'nouveau')) === '<p>Un mot à changer ici</p>';
+        out.replaceFromOld = (await replace('accept', 'changer')) === '<p>Un mot à nouveau ici</p>';
+        const crossing = async (button) => {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML('<p>Alpha beta</p><p>Gamma delta</p><p>Epsilon</p>');
+          await h.sleep(200);
+          Editor.setTrackChanges(true);
+          await selectDoc(h, textPos('beta', 0), textPos('Gamma', 5));
+          document.execCommand('delete');
+          await h.sleep(150);
+          await caretIn(h, 'beta', 2);
+          await pressBarButton(h, button);
+          return Editor.getHTML();
+        };
+        out.crossAccept = (await crossing('accept')) === '<p>Alpha delta</p><p>Epsilon</p>';
+        out.crossReject = (await crossing('reject')) === '<p>Alpha beta</p><p>Gamma delta</p><p>Epsilon</p>';
+        const bold = async (button) => {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML('<p>Un mot important ici</p>');
+          await h.sleep(200);
+          Editor.setTrackChanges(true);
+          const from = textPos('important', 0);
+          await selectDoc(h, from, from + 'important'.length);
+          EditorCore.getEditor().chain().focus().toggleBold().run();
+          await h.sleep(150);
+          await caretIn(h, 'important', 3);
+          await pressBarButton(h, button);
+          return Editor.getHTML();
+        };
+        out.boldAccept = (await bold('accept')) === '<p>Un mot <strong>important</strong> ici</p>';
+        out.boldReject = (await bold('reject')) === '<p>Un mot important ici</p>';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_whole_column_or_row_from_one_cell',
+    description: "Depuis UNE case d'une colonne ou d'une ligne ajoutée ou supprimée avec le suivi, la barre résout la colonne ou la ligne entière (une marque par case, un id chacune) : plus aucune marque, tableau rectangulaire, d'un seul Annuler ; à travers une case fusionnée, refuser rend aussi sa largeur ou sa hauteur à la case, accepter garde la nouvelle",
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const [name, table, caretText, action, button, columns, rows] of [
+          ['colAddAccept', TABLE_3X2, 'b1', 'col-after', 'accept', 4, 2], ['colAddReject', TABLE_3X2, 'b1', 'col-after', 'reject', 3, 2],
+          ['colDelAccept', TABLE_3X2, 'b1', 'col-del', 'accept', 2, 2], ['colDelReject', TABLE_3X2, 'b1', 'col-del', 'reject', 3, 2],
+        ]) {
+          await loadTable(h, table, caretText, true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          await h.sleep(600);
+          // Une case de la colonne : la nouvelle (2e ligne) pour un ajout, la case supprimée pour une suppression.
+          const cellPos = markedNodePos('tableCell', action === 'col-after' ? 'insertion' : 'deletion', 1);
+          await selectDoc(h, cellPos + 2);
+          const opened = barVisible();
+          await pressBarButton(h, button);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1;
+          const rectangular = cellRows().length === rows && cellRows().every(cells => cells.length === columns);
+          out[name] = opened && clean && rectangular && (columns === 3 ? plainHtml(html) === before : true);
+        }
+        // Un seul Annuler pour toute la colonne.
+        await loadTable(h, TABLE_3X2, 'b1', true);
+        await pressTableButton(h, 'col-after');
+        await h.sleep(600);
+        const pendingHtml = plainHtml(Editor.getHTML());
+        await selectDoc(h, markedNodePos('tableCell', 'insertion', 0) + 2);
+        await pressBarButton(h, 'accept');
+        await h.sleep(600);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(200);
+        out.colUndoOnce = plainHtml(Editor.getHTML()) === pendingHtml && Editor.hasPendingTrackedChanges();
+        for (const [name, table, caretText, action, button, rowCount] of [
+          ['rowAddAccept', TABLE_ROWS, 'a2', 'row-after', 'accept', 4], ['rowAddReject', TABLE_ROWS, 'a2', 'row-after', 'reject', 3],
+          ['rowDelAccept', TABLE_ROWS, 'a2', 'row-del', 'accept', 2], ['rowDelReject', TABLE_ROWS, 'a2', 'row-del', 'reject', 3],
+        ]) {
+          await loadTable(h, table, caretText, true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          await h.sleep(600);
+          await selectDoc(h, markedNodePos('tableRow', action === 'row-after' ? 'insertion' : 'deletion', 0) + 3);
+          const opened = barVisible();
+          await pressBarButton(h, button);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1;
+          out[name] = opened && clean && tableRowEls().length === rowCount && cellRows().every(cells => cells.length === 2) && (rowCount === 3 ? plainHtml(html) === before : true);
+        }
+        for (const [name, table, caretText, action, button] of [
+          ['mergedColReject', TABLE_MERGED, 'b2', 'col-before', 'reject'], ['mergedColAccept', TABLE_MERGED, 'b2', 'col-before', 'accept'],
+          ['mergedRowReject', TABLE_ROWSPAN, 'c1', 'row-after', 'reject'], ['mergedRowAccept', TABLE_ROWSPAN, 'c1', 'row-after', 'accept'],
+        ]) {
+          await loadTable(h, table, caretText, true);
+          const before = plainHtml(Editor.getHTML());
+          await pressTableButton(h, action);
+          await h.sleep(600);
+          const isCol = action === 'col-before';
+          await selectDoc(h, markedNodePos(isCol ? 'tableCell' : 'tableRow', 'insertion', 0) + (isCol ? 2 : 3));
+          await pressBarButton(h, button);
+          const html = Editor.getHTML();
+          const clean = !Editor.hasPendingTrackedChanges() && html.indexOf('data-tc-') === -1;
+          const shape = button === 'reject' ? plainHtml(html) === before
+            : isCol ? cellRows().map(c => c.length).join() === '2,4' && /colspan="3"/.test(html) : tableRowEls().length === 4 && /rowspan="3"/.test(html);
+          out[name] = clean && shape;
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_leaves_other_suggestions_and_attribute_changes_alone',
+    description: "Une suppression suivie d'un paragraphe dont l'ALIGNEMENT a changé (marque de modification d'un autre id) : accepter ou refuser la suppression ne touche pas à la modification voisine, que la barre refuse à son tour en rendant l'alignement d'avant - la lib résout sinon toutes les modifications de la plage, de n'importe quelle suggestion",
+    run: async (h) => {
+      try {
+        const build = async () => {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML('<p>Garder retirer fin</p><p>Aligné</p><p>Fin</p>');
+          await h.sleep(200);
+          Editor.setTrackChanges(true);
+          const from = textPos('retirer', 0);
+          await selectDoc(h, from, from + 'retirer'.length);
+          document.execCommand('delete');
+          await h.sleep(150);
+          await caretIn(h, 'Aligné', 2);
+          EditorCore.getEditor().chain().focus().setTextAlign('right').run();
+          await h.sleep(150);
+        };
+        const modificationsLeft = () => (Editor.getHTML().match(/data-type="modification"/g) || []).length;
+        const out = {};
+        await build();
+        out.pending = insCount(Editor.getHTML()) === 0 && /<del /.test(Editor.getHTML()) && modificationsLeft() === 1;
+        await caretIn(h, 'retirer', 3);
+        await pressBarButton(h, 'accept');
+        out.acceptKeepsModification = Editor.getHTML().indexOf('<p>Garder fin</p>') !== -1 && modificationsLeft() === 1 && /text-align: right/.test(Editor.getHTML());
+        await build();
+        await caretIn(h, 'retirer', 3);
+        await pressBarButton(h, 'reject');
+        out.rejectKeepsModification = Editor.getHTML().indexOf('<p>Garder retirer fin</p>') !== -1 && modificationsLeft() === 1 && /text-align: right/.test(Editor.getHTML());
+        await caretIn(h, 'Aligné', 2);
+        out.barOnModification = barVisible();
+        await pressBarButton(h, 'reject');
+        out.modificationRejected = modificationsLeft() === 0 && !/text-align: right/.test(Editor.getHTML()) && !Editor.hasPendingTrackedChanges();
+        await build();
+        await caretIn(h, 'Aligné', 2);
+        await pressBarButton(h, 'accept');
+        out.modificationAccepted = modificationsLeft() === 0 && /<p style="text-align: right;">Aligné<\/p>/.test(Editor.getHTML()) && /<del /.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_every_suggestion_a_selection_covers',
+    description: "Une sélection qui recouvre deux des trois ajouts en attente : « Accepter » les résout tous deux d'un coup et laisse le troisième ; le curseur ou la sélection sans aucune suggestion n'ouvre pas la barre et les commandes ne changent rien (document identique)",
+    run: async (h) => {
+      try {
+        await documentWithInsertions(h, '<p>Alpha beta</p><p>Gamma delta</p><p>Epsilon zeta</p>', [['Alpha beta', ' XX'], ['Gamma delta', ' YY'], ['Epsilon zeta', ' ZZ']]);
+        const ed = EditorCore.getEditor();
+        await caretIn(h, 'Gamma', 2);
+        const docBefore = ed.state.doc;
+        const noneOpen = !barVisible();
+        const noneChange = ed.commands.acceptSuggestionsAtSelection() === false && ed.commands.rejectSuggestionsAtSelection() === false && ed.state.doc === docBefore;
+        await selectDoc(h, textPos(' XX', 1), textPos(' YY', 2));
+        const open = barVisible();
+        await pressBarButton(h, 'accept');
+        const html = Editor.getHTML();
+        const both = html.indexOf('<p>Alpha beta XX</p>') !== -1 && html.indexOf('<p>Gamma delta YY</p>') !== -1 && insCount(html) === 1 && html.indexOf('ZZ') !== -1;
+        return { pass: noneOpen && noneChange && open && both, notes: JSON.stringify({ noneOpen, noneChange, open, both, html }) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_bar_resolves_a_last_block_marked_as_a_suggestion',
+    description: "Dernier bloc du document suggéré en suppression : « Refuser » le rend et « Accepter » le retire, sans erreur de la lib (contournement du dernier nœud) et sans paragraphe-tampon laissé derrière",
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const [name, button, expected] of [['reject', 'reject', '<p>Un</p><p>Dernier</p>'], ['accept', 'accept', '<p>Un</p>']]) {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML('<p>Un</p><del data-id="5"><p>Dernier</p></del>');
+          await h.sleep(250);
+          const lastMarked = EditorCore.getEditor().state.doc.lastChild.marks.some(m => m.type.name === 'deletion');
+          await caretIn(h, 'Dernier', 3);
+          await pressBarButton(h, button);
+          out[name] = lastMarked && Editor.getHTML() === expected && !Editor.hasPendingTrackedChanges();
+        }
+        return { pass: out.reject && out.accept, notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",

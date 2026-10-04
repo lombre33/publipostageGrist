@@ -20,6 +20,9 @@ const TrackChanges = (function () {
 
   // Clé du plugin de la lib, gardée pour skipTracking() : createExtensions() est le seul endroit qui importe la lib. Null tant qu'il n'a pas tourné.
   let suggestKey = null;
+  // Classe TableMap de prosemirror-tables, gardée de la même façon : elle sert à retrouver les cases d'une même colonne (expandSuggestionIds). Null
+  // tant que createExtensions() n'a pas tourné.
+  let TableMapClass = null;
 
   // Un conteneur de bloc (doc, table, twoColumnsColumn, twoColumnsZone, cellule de tableau...) doit
   // explicitement autoriser ces 3 marques sur ses enfants directs pour qu'une suppression/insertion
@@ -91,6 +94,106 @@ const TrackChanges = (function () {
     return next;
   }
 
+  // --- Accepter ou refuser UNE modification (barre flottante, js/floating-toolbars.js) -----------------------------------------------------------
+  const suggestionMarksOf = node => node.marks.filter(m => MARK_NAMES.includes(m.type.name));
+  const sameId = (a, b) => String(a) === String(b);
+  // Une marque `modification` d'une case ou d'une ligne (la largeur d'une case fusionnée qui gagne une colonne) ne se voit pas dans l'éditeur : elle
+  // ne déclenche jamais la barre « Accepter / Refuser », elle suit seulement la colonne ou la ligne dont elle fait partie (expandSuggestionIds).
+  const isTableMod = (node, mark) => mark.type.name === 'modification' && CELL_NODE_TYPES.includes(node.type.name);
+
+  // Les ids des suggestions que la sélection touche. Un curseur seul : le texte ou l'objet tout contre lui, celui d'AVANT d'abord (ce que le curseur
+  // vient de franchir) ; à défaut, le bloc le plus profond qui porte une marque en remontant (la case d'une colonne suivie, la ligne, le paragraphe
+  // supprimé en entier) - la suggestion la plus proche, jamais celle d'un bloc plus large qui ne fait que contenir le curseur. Une sélection : toutes
+  // celles qu'elle recouvre. Vide quand il n'y en a aucune.
+  function selectionSuggestionIds(state) {
+    const { from, to, empty, $from } = state.selection;
+    const ids = [];
+    const take = node => suggestionMarksOf(node).forEach(mark => {
+      if (mark.attrs.id == null || isTableMod(node, mark) || ids.some(id => sameId(id, mark.attrs.id))) return;
+      ids.push(mark.attrs.id);
+    });
+    if (empty) {
+      const near = [$from.nodeBefore, $from.nodeAfter].find(node => node && suggestionMarksOf(node).some(m => !isTableMod(node, m)));
+      if (near) take(near);
+    } else {
+      // Un bloc qui contient toute la sélection (la case, la ligne, le tableau où elle se trouve) ne compte pas : il ne fait que l'entourer.
+      state.doc.nodesBetween(from, to, (node, pos) => { if (node.isLeaf || pos >= from || pos + node.nodeSize <= to) take(node); });
+    }
+    for (let depth = $from.depth; depth > 0 && !ids.length; depth--) take($from.node(depth));
+    return ids;
+  }
+
+  // Tout ce qui se résout avec les suggestions `seedIds` : leurs propres ids, plus, pour une colonne ou une ligne de tableau ajoutée ou supprimée
+  // avec le suivi, ceux des autres cases de la colonne (une marque PAR CASE, chacune avec son id : n'en résoudre qu'une laisserait un tableau percé,
+  // ou une colonne qui revient à la réouverture) et ceux des cases fusionnées dont la largeur (ou la hauteur) a changé avec elle - « Refuser » une
+  // colonne ajoutée à travers une case fusionnée doit aussi lui rendre sa largeur, sans quoi prosemirror-tables « répare » le tableau en ajoutant des
+  // cases vides. Rend une table id en texte -> id tel que le document l'écrit (la lib compare avec `===`).
+  function expandSuggestionIds(doc, seedIds) {
+    const ids = new Map();
+    seedIds.forEach(id => ids.set(String(id), id));
+    if (!TableMapClass) return ids;
+    const seeds = [];
+    doc.descendants((node, pos) => {
+      if (!CELL_NODE_TYPES.includes(node.type.name)) return true;
+      const own = suggestionMarksOf(node).find(m => m.type.name !== 'modification' && ids.has(String(m.attrs.id)));
+      if (own) seeds.push({ pos, kind: own.type.name, isRow: node.type.name === 'tableRow' });
+      return true;
+    });
+    seeds.forEach(({ pos, kind, isRow }) => {
+      const $pos = doc.resolve(pos);
+      let depth = $pos.depth;
+      while (depth > 0 && $pos.node(depth).type.name !== 'table') depth--;
+      if (!depth) return;
+      const table = $pos.node(depth);
+      const map = TableMapClass.get(table);
+      const take = (cell, attrName) => cell && suggestionMarksOf(cell).forEach(m => {
+        const sameKind = m.type.name === kind && !isRow;
+        const sameSize = m.type.name === 'modification' && m.attrs.attrName === attrName;
+        if (m.attrs.id != null && (sameKind || sameSize)) ids.set(String(m.attrs.id), m.attrs.id);
+      });
+      if (isRow) {
+        const row = $pos.index(depth);
+        for (let col = 0; col < map.width; col++) take(table.nodeAt(map.map[row * map.width + col]), 'rowspan');
+      } else {
+        const { left } = map.findCell(pos - $pos.start(depth));
+        for (let row = 0; row < map.height; row++) take(table.nodeAt(map.map[row * map.width + left]), 'colspan');
+      }
+    });
+    return ids;
+  }
+
+  // L'étendue, dans `doc`, de tout ce qui porte une insertion ou une suppression d'id `id` : une suggestion s'étend sur des nœuds voisins (la fin
+  // d'un paragraphe et le début du suivant pour une suppression à cheval sur les deux, par exemple). Les marques `modification` n'y comptent pas,
+  // elles se résolvent à part (resolveModifications). Null quand rien ne la porte.
+  function suggestionRegion(doc, id) {
+    let from = null;
+    let to = null;
+    doc.descendants((node, pos) => {
+      if (!node.marks.some(m => m.type.name !== 'modification' && MARK_NAMES.includes(m.type.name) && sameId(m.attrs.id, id))) return true;
+      if (from == null) from = pos;
+      to = Math.max(to == null ? 0 : to, pos + node.nodeSize);
+      return true;
+    });
+    return from == null ? null : { from, to };
+  }
+
+  // Résout les marques `modification` (un attribut de nœud qui a changé : alignement, taille d'une image, largeur d'une case fusionnée...) des
+  // suggestions `ids` : « accepter » retire la marque, « refuser » la retire et rend l'ancienne valeur - la même règle que revertModifications de la
+  // lib, qui ne sait pas la restreindre à une suggestion. Du dernier au premier : les positions lues restent vraies.
+  function resolveModifications(tr, ids, accept) {
+    const found = [];
+    tr.doc.descendants((node, pos) => {
+      node.marks.forEach(mark => { if (mark.type.name === 'modification' && ids.has(String(mark.attrs.id))) found.push({ node, pos, mark }); });
+    });
+    found.reverse().forEach(({ node, pos, mark }) => {
+      if (node.isText) tr.removeMark(pos, pos + node.nodeSize, mark); else tr.removeNodeMark(pos, mark);
+      if (accept) return;
+      const { type, attrName, previousValue } = mark.attrs;
+      if (type === 'attr' && typeof attrName === 'string') tr.setNodeAttribute(pos, attrName, previousValue);
+      else if (type === 'nodeType' && tr.doc.type.schema.nodes[previousValue]) tr.setNodeMarkup(pos, tr.doc.type.schema.nodes[previousValue], null);
+    });
+  }
+
   async function createExtensions(Node, Mark, Extension, mergeAttributes) {
     const {
       suggestChanges, suggestChangesKey, toggleSuggestChanges, isSuggestChangesEnabled,
@@ -99,6 +202,8 @@ const TrackChanges = (function () {
     } = await import('@handlewithcare/prosemirror-suggest-changes');
     suggestKey = suggestChangesKey;
     const { DOMParser: PMDOMParser, DOMSerializer: PMDOMSerializer, Fragment: PMFragment } = await import('prosemirror-model');
+    const { EditorState } = await import('prosemirror-state');
+    TableMapClass = (await import('prosemirror-tables')).TableMap;
     // Note vérifiée le 2026-09-20 (cf. prototype) : applySuggestionsInRange/revertSuggestionsInRange
     // existent dans le paquet npm source mais PAS dans le bundle ESM esm.sh réellement chargé ici -
     // les importer casserait le chargement du module ENTIER, silencieusement. applySuggestion/
@@ -195,23 +300,83 @@ const TrackChanges = (function () {
     function runGuardedLibCommand(libFn, editor, dispatch, tr) {
       if (!dispatch) return libFn(editor.state, undefined); // vérif de capacité (editor.can()) : pas de mutation
       if (tr) tr.setMeta('preventDispatch', true);
-      if (!lastNodeCarriesSuggestionMark(editor.state)) return libFn(editor.state, editor.view.dispatch);
-      // Bug DANS LA LIB (pas notre code, cf. planning/feature-track-changes.md bug n°3) :
-      // applySuggestions/revertSuggestions/applySuggestion/revertSuggestion plantent avec "Cannot read
-      // properties of undefined (reading 'nodeSize')" quand le nœud traité est le tout DERNIER du
-      // document (test de fusion avec le caractère suivant hors limites, `<=` au lieu de `<`).
-      // Contournement : un paragraphe-tampon temporaire est inséré juste après, retiré ensuite s'il
-      // est resté vide - les deux transactions de bord sont hors historique (invisibles pour Annuler).
+      return withEndGuard(editor, () => libFn(editor.state, editor.view.dispatch));
+    }
+
+    // Exécute `run()` avec, au besoin, le garde-fou du dernier nœud du document.
+    // Bug DANS LA LIB (pas notre code, cf. planning/feature-track-changes.md bug n°3) :
+    // applySuggestions/revertSuggestions/applySuggestion/revertSuggestion plantent avec "Cannot read
+    // properties of undefined (reading 'nodeSize')" quand le nœud traité est le tout DERNIER du
+    // document (test de fusion avec le caractère suivant hors limites, `<=` au lieu de `<`).
+    // Contournement : un paragraphe-tampon temporaire est inséré juste après, retiré ensuite s'il
+    // est resté vide - les deux transactions de bord sont hors historique (invisibles pour Annuler).
+    function withEndGuard(editor, run) {
+      if (!lastNodeCarriesSuggestionMark(editor.state)) return run();
       const guardMeta = t => t.setMeta(suggestChangesKey, { skip: true }).setMeta('addToHistory', false);
       editor.view.dispatch(guardMeta(editor.state.tr
         .insert(editor.state.doc.content.size, editor.state.schema.nodes.paragraph.create())));
-      const result = libFn(editor.state, editor.view.dispatch);
-      const guard = editor.state.doc.lastChild;
-      if (guard && guard.type.name === 'paragraph' && guard.content.size === 0 && guard.marks.length === 0) {
-        editor.view.dispatch(guardMeta(editor.state.tr
-          .delete(editor.state.doc.content.size - guard.nodeSize, editor.state.doc.content.size)));
+      try {
+        return run();
+      } finally {
+        const guard = editor.state.doc.lastChild;
+        if (guard && guard.type.name === 'paragraph' && guard.content.size === 0 && guard.marks.length === 0) {
+          editor.view.dispatch(guardMeta(editor.state.tr
+            .delete(editor.state.doc.content.size - guard.nodeSize, editor.state.doc.content.size)));
+        }
       }
-      return result;
+    }
+
+    // Le document SANS ses marques « modification » : la seconde passe de applySuggestion/revertSuggestion (lib) résout toutes celles de la plage, de
+    // n'importe quelle suggestion, sur des positions que la première passe a déjà décalées. Sur ce document-là elle n'a plus rien à toucher ; celles
+    // de la suggestion visée se résolvent à part (resolveModifications). Les positions ne changent pas : une marque ne prend pas de place.
+    function withoutModifications(doc, schema) {
+      const strip = EditorState.create({ doc, schema }).tr;
+      doc.descendants((node, pos) => {
+        node.marks.forEach(mark => {
+          if (mark.type.name !== 'modification') return;
+          if (node.isText) strip.removeMark(pos, pos + node.nodeSize, mark); else strip.removeNodeMark(pos, mark);
+        });
+      });
+      return strip.doc;
+    }
+
+    // Accepte ou refuse les suggestions `seedIds` et tout ce qui se résout avec elles (expandSuggestionIds), en UNE transaction : un seul Annuler, et
+    // prosemirror-tables ne voit jamais un tableau à moitié résolu (il « répare » un tableau non rectangulaire en ajoutant des cases vides). Une
+    // suggestion après l'autre par applySuggestion / revertSuggestion de la lib - que « Tout accepter » et « Tout refuser » appellent aussi, sans id et
+    // par tranches -, sur une plage serrée et sur un état sans plugin (ses étapes sont rejouées sur la transaction finale, le document restant celui
+    // d'origine). Rend faux, sans rien changer, quand rien n'est à résoudre ou quand une étape ne s'applique pas.
+    function resolveSuggestionIds(editor, seedIds, accept) {
+      const ids = expandSuggestionIds(editor.state.doc, seedIds);
+      return withEndGuard(editor, () => {
+        const { schema } = editor.state;
+        const tr = editor.state.tr;
+        const resolveOne = accept ? applySuggestion : revertSuggestion;
+        try {
+          ids.forEach(id => {
+            const region = suggestionRegion(tr.doc, id);
+            if (!region) return;
+            let captured = null;
+            resolveOne(id, region.from, region.to)(EditorState.create({ doc: withoutModifications(tr.doc, schema), schema }), t => { captured = t; });
+            if (captured) captured.steps.forEach(step => tr.step(step));
+          });
+          resolveModifications(tr, ids, accept);
+        } catch (e) {
+          console.warn('[TrackChanges] suggestion non résolue :', e);
+          return false;
+        }
+        if (!tr.docChanged) return false;
+        editor.view.dispatch(tr.setMeta(suggestChangesKey, { skip: true }));
+        return true;
+      });
+    }
+
+    // Accepter / Refuser de la barre flottante : la ou les suggestions que la sélection touche (selectionSuggestionIds).
+    function resolveAtSelection(editor, state, dispatch, tr, accept) {
+      const ids = selectionSuggestionIds(state);
+      if (!ids.length) return false;
+      if (!dispatch) return true; // vérif de capacité (editor.can())
+      if (tr) tr.setMeta('preventDispatch', true);
+      return resolveSuggestionIds(editor, ids, accept);
     }
 
     // Mitigation du bug de perf O(N²) confirmé dans la lib (applySuggestions/revertSuggestions sans
@@ -263,18 +428,10 @@ const TrackChanges = (function () {
             runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize);
             return true;
           },
-          acceptSuggestionsInSelection: () => ({ editor, dispatch, tr, state }) => {
-            const { from, to } = state.selection;
-            return runGuardedLibCommand((s, d) => applySuggestion(undefined, from, to)(s, d), editor, dispatch, tr);
-          },
-          rejectSuggestionsInSelection: () => ({ editor, dispatch, tr, state }) => {
-            const { from, to } = state.selection;
-            return runGuardedLibCommand((s, d) => revertSuggestion(undefined, from, to)(s, d), editor, dispatch, tr);
-          },
-          acceptSuggestionById: id => ({ editor, dispatch, tr }) =>
-            runGuardedLibCommand((s, d) => applySuggestion(id)(s, d), editor, dispatch, tr),
-          rejectSuggestionById: id => ({ editor, dispatch, tr }) =>
-            runGuardedLibCommand((s, d) => revertSuggestion(id)(s, d), editor, dispatch, tr),
+          // Une modification à la fois (barre flottante) : celle que la sélection touche, avec tout ce qui s'y résout (resolveSuggestionIds). Faux
+          // sans rien changer quand la sélection n'en touche aucune.
+          acceptSuggestionsAtSelection: () => ({ editor, dispatch, tr, state }) => resolveAtSelection(editor, state, dispatch, tr, true),
+          rejectSuggestionsAtSelection: () => ({ editor, dispatch, tr, state }) => resolveAtSelection(editor, state, dispatch, tr, false),
           // Remplace TOUT le document sans jamais passer par transformToSuggestionTransaction, quel
           // que soit l'état du suivi au moment de l'appel - cf. bug n°5 (planning/feature-track-
           // changes.md) : un setContent() normal pendant que le suivi est actif empile ancien ET
@@ -346,6 +503,6 @@ const TrackChanges = (function () {
   }
 
   return {
-    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking, isSkipped,
+    extendForTracking, hasPendingSuggestions, computeMetadata, createExtensions, skipTracking, isSkipped, selectionSuggestionIds,
   };
 })();

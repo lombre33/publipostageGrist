@@ -355,6 +355,11 @@ const I18n = (function () {
     'trackChanges.acceptAll.aria': { fr: 'Accepter toutes les suggestions du document', en: 'Accept all suggestions in the document' },
     'trackChanges.rejectAll.tip': { fr: 'Tout refuser', en: 'Reject all' },
     'trackChanges.rejectAll.aria': { fr: 'Refuser toutes les suggestions du document', en: 'Reject all suggestions in the document' },
+    // Barre flottante d'une modification (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : le libellé du bouton, et son info-bulle, qui dit combien de modifications il traite ({n} : celles de la sélection).
+    'trackChanges.accept.label': { fr: 'Accepter', en: 'Accept' },
+    'trackChanges.reject.label': { fr: 'Refuser', en: 'Reject' },
+    'trackChanges.accept.tip': { fr: 'Accepter {n|cette modification|ces modifications}', en: 'Accept {n|this change|these changes}' },
+    'trackChanges.reject.tip': { fr: 'Refuser {n|cette modification|ces modifications}', en: 'Reject {n|this change|these changes}' },
 
     // --- Actions communes (boutons de modale réutilisés à plusieurs endroits) ---
     'common.close': { fr: 'Fermer', en: 'Close' },

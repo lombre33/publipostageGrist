@@ -736,6 +736,32 @@ Le texte supprimé prenait `--danger` sur `--danger-soft` (3,7:1 en clair) et, e
 texte inséré `#146c48` sur `#e5f6ee` (5,7:1, filet vert au bas), texte supprimé barré `#b42318` sur `#fbe9e9` (5,6:1). La marque « modification » (soulignement pointillé
 `--accent`) n'a pas changé. Test : `contrast_track_changes_text_reaches_4_5_with_the_column_tints_in_light_and_dark` (groupe `contrast`).
 
+## Accepter ou refuser UNE modification (2026-10-04, demande d'Antoine)
+
+Antoine, en testant l'édition collaborative : « on n'a juste le bouton pour tout accepter et tout refuser ? on n'a pas la possibilité de cliquer sur la zone modifiée et d'accepter que cela là ? ».
+Un clic sur une modification (texte inséré, texte supprimé, case d'une colonne ou d'une ligne suivie) ouvre maintenant une petite barre flottante « Accepter » / « Refuser » SOUS le curseur ;
+la barre du haut ne bouge pas (« Tout accepter », « Tout refuser »). La barre ne traite que cette modification, ou celles qu'une sélection recouvre, d'un seul Annuler.
+
+- **Quelles modifications** (`selectionSuggestionIds`, `js/track-changes.js`) : pour un curseur seul, le texte ou l'objet contre lui, celui d'AVANT d'abord ; à défaut le bloc marqué le plus profond en
+  remontant (la case d'une colonne suivie, la ligne, le paragraphe supprimé en entier) ; pour une sélection, toutes celles qu'elle recouvre. Rien : la barre ne s'ouvre pas et les commandes ne font rien.
+- **Tout ce qui fait partie d'une suggestion** : un remplacement est une suppression ET une insertion de même id ; une suppression à cheval sur deux paragraphes laisse deux bouts de même id (la fin
+  du premier, le début du second) ; une colonne ou une ligne ajoutée ou supprimée porte une marque PAR CASE, chacune avec son id. `suggestionRegion` rend l'étendue de tout ce qui porte un id,
+  `expandSuggestionIds` y ajoute, pour un tableau (`TableMap` de prosemirror-tables), les autres cases de la colonne ou de la ligne et les cases fusionnées dont `colspan` / `rowspan` a changé avec elle :
+  refuser une colonne ajoutée à travers une case fusionnée doit aussi lui rendre sa largeur, sans quoi `fixTables` « répare » le tableau avec des cases vides.
+- **Pourquoi pas `applySuggestion(id, from, to)` tel quel** : la lib résout, sur la plage, TOUTES les marques `modification` (alignement, taille d'une image, largeur d'une case fusionnée), de n'importe
+  quelle suggestion ; et `revertSuggestion` s'arrête quand sa première passe ne produit aucun pas. `resolveSuggestionIds` appelle donc la lib sur un état simple dont le document n'a plus de marque
+  `modification` (la passe est neutralisée), rejoue ses pas sur UNE transaction finale (un seul Annuler, `fixTables` ne voit jamais un tableau à moitié résolu), puis `resolveModifications` résout les
+  marques `modification` des seuls ids de la suggestion (accepter : la marque part ; refuser : la marque part et l'ancienne valeur revient). Une modification d'alignement voisine reste en attente.
+- **Dernier nœud du document** : le contournement de la lib (un paragraphe-tampon posé puis retiré) est `withEndGuard`, partagé avec « Tout accepter » / « Tout refuser » (`runGuardedLibCommand`).
+- **Commandes** : `acceptSuggestionsAtSelection` et `rejectSuggestionsAtSelection` remplacent `acceptSuggestionsInSelection`, `rejectSuggestionsInSelection`, `acceptSuggestionById` et
+  `rejectSuggestionById`, que rien n'appelait (le prototype `prototypes/suivi-modifications.html` garde les siennes).
+- **La barre** (`wireSuggestionFloatingToolbar`, `js/floating-toolbars.js`) : panneau flottant comme celui des bulles et des images (`EditorCore.createFloatingPanel`, `Layers.raise`, sous le curseur ; le
+  texte tout en bas de la fenêtre la retourne au-dessus). Jamais pendant la frappe (une transaction qui change le document la ferme jusqu'au prochain déplacement de la sélection ou clic), ni tant qu'un
+  bouton de la souris est appuyé dans le texte (elle s'ouvre au relâchement, une fois la sélection posée), ni sans le focus dans l'éditeur ; fermée en Lecture et devant les fenêtres de variable
+  (`hideFloatingContextToolbars`), d'un clic ailleurs. Deux boutons à libellé (« Accepter » / « Refuser »), info-bulle au singulier ou au pluriel selon le nombre de modifications touchées
+  (`trackChanges.accept.tip`, `{n|cette modification|ces modifications}`). Au clavier, une flèche qui amène le curseur contre une modification l'ouvre aussi.
+- Tests : groupe `trackChanges` (`trackchanges_bar_*`, 7 cas) et script Node `suggestionBarMouse` (`dev-tests/verify-suggestion-bar-mouse.mjs`, 51 vérifications, 700×400 clair et sombre).
+
 ## Sources externes consultées (recherche du 2026-09-18)
 
 Accès direct à `tiptap.dev`, `prosemirror.net`, `support.getgrist.com` et `community.getgrist.com`
