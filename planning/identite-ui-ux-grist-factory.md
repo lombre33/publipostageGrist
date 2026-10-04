@@ -749,6 +749,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   20 mm au moins (elles ne reviennent pas au retour en A4) et ramène pour de bon un tableau trop large dans la page. Un email garde le menu visible et grisé, titre
   « Page (pas disponible pour ce modèle) » ; une grille a le même menu, actif (le format règle la page du PDF et le papier de l'Excel). À 700 px de panneau, A5 tient sans réduction, A3 portrait passe à 0,60 et A3 paysage tombe au plancher de 0,5 (la zone d'édition défile à
   l'horizontale). La galerie et l'arbre des modèles montrent encore une feuille A4 portrait. D'autres formats (Lettre US...) ne s'ajoutent qu'après le choix d'Antoine.
+- Format libre (demande d'Antoine du 04/10, « donner la longueur / largeur en cm d'un modèle, l'enregistrer, et que ça fonctionne sur l'assemblage » ; carte « Format libre et formats nommés ») :
+  « Format libre… » est la ligne qui suit A6 dans le menu Page, la barre ne gagne aucune icône. Elle est cochée, avec la taille en gris discret à sa droite (« 7 × 3,7 cm »), quand la page n'est pas un
+  format de la liste, et ouvre la fenêtre « Format de page libre » : Largeur et Hauteur en centimètres (virgule ou point, « cm » toléré), l'indication « De 2 à 55,88 cm, la limite de Word » SOUS les
+  champs, une feuille d'aperçu à l'échelle avec sa taille et son sens, « Valider » grisé tant qu'un champ est vide ou mauvais. Une valeur illisible ou hors de 2 à 55,88 cm est refusée sous le champ (filet
+  rouge, message en toutes lettres), jamais corrigée en silence. La fenêtre ne demande pas le sens : plus large que haute, la page est en paysage et la ligne Paysage se coche d'elle-même. Elle tient dans
+  700×400 sans défiler, message affiché compris, et suit le reste du menu (grisée pour un email ou pendant un export). La taille s'enregistre avec le modèle dans la clé `format` de la colonne `Margins`
+  (« LARGEURxHAUTEUR » en millimètres, côté court d'abord ; une taille égale à celle d'un format de la liste redevient ce format ; aucune colonne de plus). Les textes de l'interface disent la page libre
+  en centimètres (« Aperçu 7 × 3,7 cm », « Page 7 × 3,7 cm en paysage », le filigrane), virgule en français et point en anglais. Une page de moins de 6 cm de côté court reçoit des marges de 3 mm à la saisie
+  (si elles étaient encore celles d'origine) ; sur une page de moins de 8 cm de haut, les zones d'en-tête et de pied encore vides sont grisées, jamais retirées (une zone qui a un contenu reste ouvrable pour le
+  retirer). Dans l'assemblage avant impression, une page libre se place comme un format de la liste (7 × 3,7 cm : 24 par A4) ; une page qui ne tient ni sur A4 ni sur A3 le dit (« Une page 40 × 50 cm ne
+  tient ni sur A4 ni sur A3 : l'assemblage n'est pas possible. »), la feuille d'aperçu reste vide et « Générer » grisé.
 - Page d'un macro-modèle (carte d'Antoine du 01/10, « Autoriser le paysage pour les macro-modèles ? » : Oui) : le bouton Page et son menu sont actifs sur un macro-modèle comme sur un modèle classique,
   au même endroit et du même aspect ; la coche dit le sens et le format de ce macro-modèle (« Page A3 en paysage (passer en portrait) »). Sa page est dans sa propre ligne (colonne `Margins`, avec ses marges)
   et il l'impose aux modèles qu'il assemble : la Lecture, le PDF (unique, en lot, en un seul fichier) et le Word suivent la page du macro-modèle, jamais celle de sa page de garde ou d'une annexe, qui gardent la

@@ -60,7 +60,7 @@ const I18n = (function () {
     // Lecture épurée (js/clean-reading.js, retours d'Antoine du 2026-10-02, point 19) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
     'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
     'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
-    // {format} : le format de la page du modèle (A3, A4, A5, A6) - js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
+    // {format} : le format de la page du modèle (A3, A4, A5, A6, ou « 7 × 3,7 cm » pour un format libre : PageLayout.getFormatLabel) - js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
     'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },
     'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },
     'toolbar.orientation.portrait': { fr: 'Page {format} en portrait (passer en paysage)', en: '{format} page in portrait (switch to landscape)' },
@@ -71,12 +71,13 @@ const I18n = (function () {
     'toolbar.page.unavailable': { fr: 'Page (pas disponible pour ce modèle)', en: 'Page (not available for this template)' },
     'toolbar.page.portrait': { fr: 'Portrait', en: 'Portrait' },
     'toolbar.page.landscape': { fr: 'Paysage', en: 'Landscape' },
+    'toolbar.page.custom': { fr: 'Format libre…', en: 'Custom size…' },
     'toolbar.page.watermark': { fr: 'Filigrane…', en: 'Watermark…' },
     // Fenêtre « Filigrane… » du menu Page (js/watermark-dialog.js) : le texte écrit en grand, en travers de chaque page du modèle.
     'watermark.title': { fr: 'Filigrane de la page', en: 'Page watermark' },
     'watermark.text.label': { fr: 'Texte', en: 'Text' },
     'watermark.text.placeholder': { fr: 'CONFIDENTIEL, BROUILLON…', en: 'CONFIDENTIAL, DRAFT…' },
-    // {format} : le format de la page du modèle (A3, A4, A5, A6), comme dans « Aperçu {format} » de la barre.
+    // {format} : le format de la page du modèle (A3, A4, A5, A6, ou « 7 × 3,7 cm »), comme dans « Aperçu {format} » de la barre.
     'watermark.text.hint': { fr: 'Écrit en grand derrière chaque page de l’aperçu {format}, de la Lecture, du PDF et du Word.', en: 'Written large behind every page of the {format} preview, the reader, the PDF and the Word file.' },
     'watermark.direction.label': { fr: 'Sens', en: 'Direction' },
     'watermark.direction.diagonal': { fr: 'En diagonale', en: 'Diagonal' },
@@ -91,6 +92,15 @@ const I18n = (function () {
     'watermark.opacity.label': { fr: 'Opacité', en: 'Opacity' },
     'watermark.opacity.value': { fr: '{n} %', en: '{n}%' },
     'watermark.remove': { fr: 'Retirer le filigrane', en: 'Remove watermark' },
+    // Fenêtre « Format libre… » du menu Page (js/page-size-dialog.js) : la taille de la page en centimètres. {min} et {max} : les bornes (2 et 55,88), écrites avec la virgule en français, le point en anglais.
+    'pageSize.title': { fr: 'Format de page libre', en: 'Custom page size' },
+    'pageSize.width.label': { fr: 'Largeur', en: 'Width' },
+    'pageSize.height.label': { fr: 'Hauteur', en: 'Height' },
+    'pageSize.width.aria': { fr: 'Largeur de la page, en centimètres', en: 'Page width, in centimeters' },
+    'pageSize.height.aria': { fr: 'Hauteur de la page, en centimètres', en: 'Page height, in centimeters' },
+    'pageSize.hint': { fr: 'De {min} à {max} cm, la limite de Word. Plus large que haute, la page est en paysage.', en: 'From {min} to {max} cm, the Word limit. Wider than tall, the page is in landscape.' },
+    'pageSize.error.number': { fr: 'Saisissez un nombre en centimètres, par exemple 10,5.', en: 'Enter a number in centimeters, for example 10.5.' },
+    'pageSize.error.range': { fr: 'La taille doit être comprise entre {min} et {max} cm.', en: 'The size must be between {min} and {max} cm.' },
     // Fenêtre « Assemblage avant impression… » du menu Exporter en PDF (js/sheet-assembly-dialog.js) : les pages de chaque ligne posées sur des feuilles A4 ou A3, une par emplacement, avec ou sans traits de coupe.
     'sheetAssembly.title': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
     'sheetAssembly.sheet.label': { fr: 'Feuille', en: 'Sheet' },
@@ -99,6 +109,7 @@ const I18n = (function () {
     'sheetAssembly.orientation.portrait': { fr: 'Portrait', en: 'Portrait' },
     'sheetAssembly.orientation.landscape': { fr: 'Paysage', en: 'Landscape' },
     'sheetAssembly.orientation.tooSmall': { fr: 'Une page {format} n’y tient pas.', en: 'A {format} page does not fit.' },
+    'sheetAssembly.noFit': { fr: 'Une page {format} ne tient ni sur A4 ni sur A3 : l’assemblage n’est pas possible.', en: 'A {format} page fits on neither A4 nor A3: assembly is not possible.' },
     'sheetAssembly.slots.label': { fr: 'Emplacements', en: 'Slots' },
     'sheetAssembly.slots.across': { fr: 'en largeur', en: 'across' },
     'sheetAssembly.slots.down': { fr: 'en hauteur', en: 'down' },

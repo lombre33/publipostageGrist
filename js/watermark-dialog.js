@@ -192,7 +192,7 @@ const WatermarkDialog = (function () {
     text.placeholder = I18n.t('watermark.text.placeholder');
     text.maxLength = PageLayout.WATERMARK_MAX_CHARS;
     text.value = state.text;
-    hint.textContent = I18n.t('watermark.text.hint', { format: PageLayout.getFormat() });
+    hint.textContent = I18n.t('watermark.text.hint', { format: PageLayout.getFormatLabel() });
     angleLabel.textContent = I18n.t('watermark.direction.label');
     angles.buttons.forEach(b => { b.textContent = I18n.t('watermark.direction.' + b.dataset.value); });
     colorLabel.textContent = I18n.t('watermark.color.label');

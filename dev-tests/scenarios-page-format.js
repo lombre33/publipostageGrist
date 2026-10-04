@@ -195,7 +195,7 @@ window.EditorTestSuites.pageFormat = (function () {
     },
     {
       id: 'fmt_real_menu_rows_marks_events_and_keyboard',
-      description: 'Le menu du bouton Portrait / Paysage a un titre, deux lignes de sens et quatre lignes de format avec leurs dimensions ; cocher une ligne change la page (feuille, pagination, libellés, un seul événement de chaque sorte), recliquer la ligne cochée ne fait rien, Entrée et Espace font comme le clic, le clic sur le bouton tourne toujours la page',
+      description: 'Le menu du bouton Portrait / Paysage a un titre, deux lignes de sens, quatre lignes de format avec leurs dimensions et la ligne « Format libre… » (dev-tests/scenarios-page-size.js) ; cocher une ligne change la page (feuille, pagination, libellés, un seul événement de chaque sorte), recliquer la ligne cochée ne fait rien, Entrée et Espace font comme le clic, le clic sur le bouton tourne toujours la page',
       async run(h) {
         const problems = [];
         let layoutEvents = 0; let marginsEvents = 0;
@@ -220,9 +220,9 @@ window.EditorTestSuites.pageFormat = (function () {
           if (!title || title.textContent !== 'Page') problems.push('titre du menu : ' + (title && title.textContent));
           const rows = menuRows();
           const keys = rows.map(r => r.key);
-          if (JSON.stringify(keys) !== JSON.stringify(['portrait', 'landscape', 'A3', 'A4', 'A5', 'A6'])) problems.push('lignes : ' + JSON.stringify(keys));
+          if (JSON.stringify(keys) !== JSON.stringify(['portrait', 'landscape', 'A3', 'A4', 'A5', 'A6', 'custom'])) problems.push('lignes : ' + JSON.stringify(keys));
           const names = rows.map(r => r.name);
-          if (JSON.stringify(names) !== JSON.stringify(['Portrait', 'Paysage', 'A3', 'A4', 'A5', 'A6'])) problems.push('noms : ' + JSON.stringify(names));
+          if (JSON.stringify(names) !== JSON.stringify(['Portrait', 'Paysage', 'A3', 'A4', 'A5', 'A6', 'Format libre…'])) problems.push('noms : ' + JSON.stringify(names));
           const sizes = rows.filter(r => /^A\d$/.test(r.key)).map(r => r.size);
           if (JSON.stringify(sizes) !== JSON.stringify(['297 × 420 mm', '210 × 297 mm', '148 × 210 mm', '105 × 148 mm'])) problems.push('dimensions : ' + JSON.stringify(sizes));
           if (rows.filter(r => r.checked === 'true').map(r => r.key).join() !== 'portrait,A4') problems.push('lignes cochées au départ : ' + rows.filter(r => r.checked === 'true').map(r => r.key));
@@ -291,7 +291,7 @@ window.EditorTestSuites.pageFormat = (function () {
           await h.sleep(100);
           const title = document.getElementById('v2-page-flyout-label');
           const emailRows = menuRows();
-          if (emailRows.length !== 6 || emailRows.some(r => r.disabled !== 'true' || !r.greyed || r.tab !== -1)) problems.push('email : lignes ' + JSON.stringify(emailRows.map(r => [r.key, r.disabled, r.greyed, r.tab])));
+          if (emailRows.length !== 7 || emailRows.some(r => r.disabled !== 'true' || !r.greyed || r.tab !== -1)) problems.push('email : lignes ' + JSON.stringify(emailRows.map(r => [r.key, r.disabled, r.greyed, r.tab])));
           if (!title || title.textContent !== I18n.t('toolbar.page.unavailable')) problems.push('email : titre ' + (title && title.textContent));
           menuRow('A5').click();
           menuRow('landscape').click();

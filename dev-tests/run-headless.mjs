@@ -59,6 +59,7 @@ const GROUPS = {
   pageLayout: 'scenarios-pagelayout',
   orientation: 'scenarios-orientation',
   pageFormat: 'scenarios-page-format', // formats de page A3, A4, A5, A6 (suite de l'orientation) : menu de la barre, feuille, pagination, Lecture, enregistrement, PDF, Word, images en calque
+  pageSize: 'scenarios-page-size', // format de page libre (largeur x hauteur en cm, ligne « Format libre… » du menu Page) : lecture et bornes de l'identifiant, dimensions dans chaque unité, fenêtre, éditeur, Lecture, enregistrement, PDF, Word, zones d'en-tête et de pied sur une page basse
   watermark: 'scenarios-watermark', // filigrane de la page (roadmap n° 14) : réglage borné, géométrie commune, éditeur, Lecture, PDF (texte derrière le contenu), Word (image de l'en-tête), enregistrement, fenêtre, ligne du menu Page
   docx: 'scenarios-docx',
   docxImages: 'scenarios-docx-images',
@@ -170,6 +171,7 @@ const NODE_SCRIPTS = {
   gridPageBreakMouse: 'verify-grid-pagebreak-mouse.mjs', // saut de page d'une grille : bouton « Saut de page » grisé (première ligne, case fusionnée) jamais retiré, un vrai clic le pose avant la ligne, trait en tirets mesuré sur les pixels, pastille dans le numéro sans cacher la poignée, « Fusionner » grisé quand la sélection l'enjambe, bouton portrait / paysage actif dans une grille ; 700x400 clair et sombre
   orientationMouse: 'verify-orientation-mouse.mjs', // bascule Portrait / Paysage d'un modèle classique : feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, clavier ; 700x400 clair et sombre
   pageFormatMouse: 'verify-page-format-mouse.mjs', // formats de page A3 à A6 à la vraie souris et au vrai clavier : menu du bouton Page tout entier dans le panneau, feuille mesurée aux pixels, pagination, Lecture, enregistrement automatique, curseur gardé, Tab, email grisé ; 700x400 clair et sombre
+  pageSizeMouse: 'verify-page-size-mouse.mjs', // format de page libre à la vraie souris et au vrai clavier : ligne « Format libre… » du menu Page, fenêtre en cm sans défilement (saisie, erreur, aperçu), Valider (feuille mesurée aux pixels, enregistrement automatique, Lecture), en-tête grisé sur une page basse, Tab et Échap, assemblage d'étiquettes ou « ne tient pas », anglais ; 700x400 clair et sombre
   readModeMouse: 'verify-read-mode-mouse.mjs', // barre de mise en forme grisée en mode Lecture (audit 29/09, F1), clair et sombre à 700x400
   cleanReadingMouse: 'verify-clean-reading-mouse.mjs', // Lecture épurée à la vraie souris et au vrai clavier, 700x400 clair et sombre, lecture seule comprise : menu sous Mode lecture, barre cachée, document dans tout le panneau, bouton de sortie, Échap
   settingsWindowMouse: 'verify-settings-window-mouse.mjs', // fenêtre Réglages : sept onglets sur une ligne, contenu qui défile, « Fermer » fixe (audit 29/09, F2), 700x400 clair et sombre

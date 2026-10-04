@@ -4,14 +4,18 @@
 // PDF, Word, Excel) relit le sens et le format à PageLayout, et PageLayout annonce le changement (pp:pageLayoutChanged), que js/main.js écoute pour
 // réajuster l'éditeur, la pagination, la grille des images en calque et la Lecture : rien n'est rafraîchi d'ici.
 // Une icône = une fonction : l'icône montre la page telle qu'elle est (haute en portrait, large en paysage), le bouton est allumé en paysage. Le menu
-// répète le sens en toutes lettres (ligne cochée) et porte le format, qu'aucune icône ne dit ; il n'ajoute rien à la barre, qui reste gelée. Sa
-// dernière ligne, « Filigrane… », ouvre la fenêtre du filigrane de la page (js/watermark-dialog.js), un réglage de la page qui suit les mêmes règles
-// (types suivis, lecture seule, export en cours).
+// répète le sens en toutes lettres (ligne cochée) et porte le format, qu'aucune icône ne dit ; il n'ajoute rien à la barre, qui reste gelée. Après
+// les formats, « Format libre… » (cochée, avec la taille en centimètres, quand la page n'est pas un format de la liste) ouvre la fenêtre de la taille
+// saisie (js/page-size-dialog.js), qui pose PageLayout.setPageSize par selectPageSize d'ici. Sa dernière ligne, « Filigrane… », ouvre la fenêtre du
+// filigrane de la page (js/watermark-dialog.js), un réglage de la page qui suit les mêmes règles (types suivis, lecture seule, export en cours).
 const OrientationToggle = (function () {
   const BUTTON_ID = 'btn-page-orientation';
   const FLYOUT_ID = 'v2-page-flyout';
   const A4_TOGGLE_ID = 'v2-a4-toggle';
   const WATERMARK_ROW_ID = 'v2-btn-watermark';
+  const CUSTOM_ROW_ID = 'v2-btn-page-custom';
+  // La clé (data-page-format) de la ligne « Format libre… » : pas un format de la liste, la ligne se coche quand la page n'en est aucun.
+  const CUSTOM_KEY = 'custom';
   // Types de modèle (colonne TypeModele) dont les moteurs suivent le sens et le format de PageLayout. Le bouton et son menu sont grisés pour tous les
   // autres : un réglage qui ne change rien à ce qu'on voit ni à ce qu'on exporte ne doit pas se laisser tourner. Un type s'ajoute ici quand ses
   // moteurs suivent, sans toucher js/main.js.
@@ -53,8 +57,21 @@ const OrientationToggle = (function () {
     afterChange();
   }
 
+  // La page saisie dans la fenêtre « Format libre… » (largeur et hauteur en mm, dans le sens où on la voit). Même garde que les autres gestes : un type non suivi, un export
+  // en cours ou la lecture seule la refusent, même si la fenêtre était déjà ouverte. Rend vrai si la page a changé.
+  function selectPageSize(widthMm, heightMm) {
+    if (!canChange() || !PageLayout.setPageSize(widthMm, heightMm)) return false;
+    afterChange();
+    return true;
+  }
+
   function toggle() {
     selectOrientation(PageLayout.isLandscape() ? PageLayout.PORTRAIT : PageLayout.LANDSCAPE);
+  }
+
+  function openPageSize() {
+    if (!canChange() || typeof PageSizeDialog === 'undefined') return;
+    PageSizeDialog.open();
   }
 
   function openWatermark() {
@@ -119,6 +136,14 @@ const OrientationToggle = (function () {
       row.appendChild(size);
       host.appendChild(row);
     });
+    // Le format libre : une ligne cochée quand la page n'est pas un des formats ci-dessus, qui ouvre la fenêtre de la taille en cm ; la taille en cours reste discrète à droite.
+    const custom = makeRow('data-page-format', CUSTOM_KEY, openPageSize);
+    custom.id = CUSTOM_ROW_ID;
+    custom.classList.add('v2-page-custom-row');
+    const customSize = document.createElement('span');
+    customSize.className = 'v2-page-row-size';
+    custom.appendChild(customSize);
+    host.appendChild(custom);
     // Le filigrane : une action (une fenêtre), pas un choix à cocher - une ligne de menu comme « Enregistrer sous… », avec le texte en cours à
     // droite.
     const separatorBeforeWatermark = document.createElement('span');
@@ -148,8 +173,13 @@ const OrientationToggle = (function () {
     const enabled = supported && !busy;
     host.querySelectorAll('.v2-hover-row-check').forEach(row => {
       const orientation = row.getAttribute('data-page-orientation');
-      const checked = orientation ? (orientation === PageLayout.LANDSCAPE) === landscape : row.getAttribute('data-page-format') === format;
+      const custom = row.getAttribute('data-page-format') === CUSTOM_KEY;
+      const checked = orientation ? (orientation === PageLayout.LANDSCAPE) === landscape : custom ? PageLayout.isCustomFormat(format) : row.getAttribute('data-page-format') === format;
       if (orientation) row.querySelector('.v2-page-row-name').textContent = I18n.t(orientation === PageLayout.LANDSCAPE ? 'toolbar.page.landscape' : 'toolbar.page.portrait');
+      if (custom) {
+        row.querySelector('.v2-page-row-name').textContent = I18n.t('toolbar.page.custom');
+        row.querySelector('.v2-page-row-size').textContent = checked ? PageLayout.getFormatLabel() : '';
+      }
       row.setAttribute('aria-checked', checked ? 'true' : 'false');
       row.setAttribute('aria-disabled', enabled ? 'false' : 'true');
       row.classList.toggle('v2-hover-row-disabled', !enabled);
@@ -166,7 +196,8 @@ const OrientationToggle = (function () {
     }
   }
 
-  // « Aperçu A4 » devient « Aperçu A5 » : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4.
+  // « Aperçu A4 » devient « Aperçu A5 » (ou « Aperçu 7 × 3,7 cm ») : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4. `format` : le nom du format
+  // dans la phrase (PageLayout.getFormatLabel).
   function syncPreviewToggle(format) {
     const label = document.getElementById(A4_TOGGLE_ID);
     if (!label) return;
@@ -183,14 +214,15 @@ const OrientationToggle = (function () {
     const supported = isEnabledForType(currentType);
     const landscape = PageLayout.isLandscape();
     const format = PageLayout.getFormat();
+    const formatName = PageLayout.getFormatLabel();
     const label = !supported ? I18n.t('toolbar.orientation.unavailable')
-      : I18n.t(landscape ? 'toolbar.orientation.landscape' : 'toolbar.orientation.portrait', { format });
+      : I18n.t(landscape ? 'toolbar.orientation.landscape' : 'toolbar.orientation.portrait', { format: formatName });
     btn.dataset.orientation = landscape ? 'landscape' : 'portrait';
     btn.setAttribute('aria-pressed', landscape ? 'true' : 'false');
     btn.setAttribute('aria-label', label);
     btn.classList.toggle('active', supported && landscape);
     btn.disabled = !supported || busy;
-    syncPreviewToggle(format);
+    syncPreviewToggle(formatName);
     syncMenu(supported, landscape, format);
   }
 
@@ -207,8 +239,10 @@ const OrientationToggle = (function () {
     I18n.onChange(() => sync());
     // Le filigrane change depuis sa fenêtre : la ligne du menu en montre le texte.
     document.addEventListener('pp:watermarkChanged', () => sync());
+    // La page change de taille depuis la fenêtre « Format libre… » (ou d'un autre module) : le bouton, la case Aperçu et le menu la relisent.
+    document.addEventListener('pp:pageLayoutChanged', () => sync());
     sync();
   }
 
-  return { BUTTON_ID, TYPES, wire, sync, toggle, selectOrientation, selectFormat, setBusy };
+  return { BUTTON_ID, TYPES, wire, sync, toggle, selectOrientation, selectFormat, selectPageSize, setBusy };
 })();

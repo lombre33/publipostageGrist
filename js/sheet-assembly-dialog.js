@@ -218,7 +218,7 @@ const SheetAssemblyDialog = (function () {
   function render() {
     const { sheets, orientations, across, down, marks, summary, scaled, ok } = refs;
     const page = pageSize();
-    const format = PageLayout.getFormat();
+    const format = PageLayout.getFormatLabel();
     sheets.items.forEach(item => {
       const fits = SheetLayout.bestOrientation(item.value, page) !== null;
       item.input.checked = item.value === state.sheet;
@@ -238,15 +238,18 @@ const SheetAssemblyDialog = (function () {
     fillSelect(down.select, grid.rows, state.rows);
     marks.items.forEach(item => { item.input.checked = (item.value === 'on') === state.marks; });
     const layout = described();
-    renderPreview(layout);
+    // Aucune page ne tient (un format libre plus grand que les deux feuilles) : ni « 1 emplacement par feuille » ni « Pages réduites à 59 % » ne seraient vrais, rien n'est
+    // posé - la feuille d'aperçu reste vide -, la fenêtre le dit, et « Générer » reste grisé.
+    const fits = SheetLayout.slotCount(grid) > 0;
+    renderPreview(fits ? layout : Object.assign({}, layout, { slots: [], cutMarks: [] }));
     const sheetCount = SheetLayout.sheetCount(ctx.count, layout.count);
-    summary.textContent = I18n.t(ctx.grid ? 'sheetAssembly.summaryGrid' : 'sheetAssembly.summary', {
+    summary.textContent = fits ? I18n.t(ctx.grid ? 'sheetAssembly.summaryGrid' : 'sheetAssembly.summary', {
       slots: layout.count, cols: layout.cols, rows: layout.rows, count: ctx.count, sheets: sheetCount, sheet: state.sheet,
-    });
+    }) : I18n.t('sheetAssembly.noFit', { format });
     const percent = Math.round(layout.scale * 100);
-    scaled.textContent = layout.scale < 1 && percent < 100 ? I18n.t('sheetAssembly.scaled', { n: percent }) : '';
+    scaled.textContent = fits && layout.scale < 1 && percent < 100 ? I18n.t('sheetAssembly.scaled', { n: percent }) : '';
     scaled.hidden = !scaled.textContent;
-    ok.disabled = !SheetLayout.slotCount(grid);
+    ok.disabled = !fits;
   }
 
   function apply() {

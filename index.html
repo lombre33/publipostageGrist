@@ -124,6 +124,7 @@
 <link rel="stylesheet" href="css/text-expansion.css?v=0.1">
 <link rel="stylesheet" href="css/shortcuts.css?v=0.2">
 <link rel="stylesheet" href="css/watermark.css?v=0.2">
+<link rel="stylesheet" href="css/page-size.css?v=0.1">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.2">
 <link rel="stylesheet" href="css/format-painter.css?v=0.2">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.2">
@@ -181,7 +182,7 @@
       <label class="a4-toggle" id="v2-a4-toggle" data-tip="Aperçu A4" aria-label="Aperçu A4 — limite la largeur de l'éditeur à celle du contenu d'une page A4, pour que le texte se répartisse comme dans le PDF.">
         <input type="checkbox" id="v2-toggle-a4-preview" checked><span class="a4-toggle-icon" aria-hidden="true"></span>
       </label>
-      <!-- Page : un clic sur le bouton tourne la page (portrait / paysage) ; son menu au survol donne le sens et le format (A3 à A6). Les lignes du menu sont écrites par js/orientation-toggle.js. Comme Qualité PDF et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu (css/toolbar-v2.css), la page est dite par le menu et par l'aria-label. -->
+      <!-- Page : un clic sur le bouton tourne la page (portrait / paysage) ; son menu au survol donne le sens et le format (A3 à A6, ou « Format libre… » qui ouvre la fenêtre en centimètres). Les lignes du menu sont écrites par js/orientation-toggle.js. Comme Qualité PDF et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu (css/toolbar-v2.css), la page est dite par le menu et par l'aria-label. -->
       <span class="v2-hover-group" id="v2-page-group">
         <button type="button" id="btn-page-orientation" aria-label="Orientation de la page (pas disponible pour ce modèle)" data-orientation="portrait" aria-pressed="false" disabled></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-page-flyout" role="menu" aria-label="Page" data-i18n-aria="toolbar.page.label"></span>
@@ -648,9 +649,9 @@
 </script>
 <script src="js/reader-mode.js?v=0.122"></script>
 <script src="js/reader-guide.js?v=0.3"></script>
-<script src="js/i18n.js?v=0.107"></script>
+<script src="js/i18n.js?v=0.108"></script>
 <script src="js/shortcuts.js?v=0.8"></script>
-<script src="js/page-layout.js?v=0.7"></script>
+<script src="js/page-layout.js?v=0.8"></script>
 <script src="js/page-layer.js?v=0.3"></script>
 <script src="js/table-page-cut.js?v=0.2"></script>
 <script src="js/heading-numbering.js?v=0.3"></script>
@@ -662,7 +663,7 @@
 <script src="js/variables.js?v=0.51"></script>
 <script src="js/icons.js?v=0.39"></script>
 <script src="js/editor-core.js?v=0.14"></script>
-<script src="js/header-footer-preview.js?v=1.16"></script>
+<script src="js/header-footer-preview.js?v=1.17"></script>
 <script src="js/editor-nodes.js?v=1.13"></script>
 <script src="js/floating-toolbars.js?v=0.35"></script>
 <script src="js/main-toolbar.js?v=1.8"></script>
@@ -720,9 +721,10 @@
 <script src="js/access-rights.js?v=0.5"></script>
 <script src="js/schema-renames.js?v=0.2"></script>
 <script src="js/settings-columns.js?v=0.2"></script>
-<script src="js/watermark-dialog.js?v=0.2"></script>
-<script src="js/sheet-assembly-dialog.js?v=0.2"></script>
-<script src="js/orientation-toggle.js?v=0.7"></script>
+<script src="js/watermark-dialog.js?v=0.3"></script>
+<script src="js/page-size-dialog.js?v=0.1"></script>
+<script src="js/sheet-assembly-dialog.js?v=0.3"></script>
+<script src="js/orientation-toggle.js?v=0.8"></script>
 <script src="js/clean-reading.js?v=0.3"></script>
 <script src="js/main.js?v=0.109"></script>
 </body>

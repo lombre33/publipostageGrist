@@ -7,6 +7,11 @@
 // Format de la page (A3, A4, A5, A6) : même brouillon, même colonne, clé `format` du JSON (absente = A4, comme un modèle enregistré avant ce réglage). FORMATS
 // est la SEULE table des formats : millimètres (l'écran), points (pdfmake) et twips (Word) y sont écrits côte à côte, dans le sens portrait, avec le nom que
 // pdfmake et jsPDF donnent au format - un format de plus est une ligne de cette table, sans autre fichier à toucher.
+// Format libre (largeur x hauteur saisies en cm, fenêtre « Format libre… » du menu Page) : la clé `format` du même JSON porte alors la DIMENSION elle-même,
+// « LARGEURxHAUTEUR » en millimètres, côté court d'abord (le sens portrait, comme FORMATS) et au dixième de millimètre : « 37x70 » est une page de 3,7 x 7 cm, que
+// `orientation` tourne en paysage. Aucune colonne de plus, aucune migration, et chaque moteur qui lit déjà le format par formatOf / pageSize*For (aperçu,
+// Lecture, PDF, Word, assemblage avant impression) suit sans autre changement. Une dimension égale à celle d'un format de FORMATS (21 x 29,7 cm) redevient ce
+// format (A4) : le menu le coche, rien n'est enregistré en double.
 // Filigrane (roadmap n° 14) : un texte en travers de chaque page, propre au modèle - même brouillon, même colonne, clé `watermark` du JSON (absente = pas de filigrane, un
 // modèle enregistré avant ce réglage se recharge à l'identique). Ce module le garde et le borne (normalizeWatermark) ; sa géométrie et son dessin sont à js/page-layer.js.
 const PageLayout = (function () {
@@ -40,6 +45,18 @@ const PageLayout = (function () {
   // de saisie s'effondre à 0, les colonnes en mm deviennent absurdes et pdfmake reçoit une largeur de page négative. 20mm = à peu près la largeur d'une
   // étiquette, assez petit pour ne gêner aucun usage réel et assez grand pour que le document reste manipulable.
   const MIN_CONTENT_MM = 20;
+  // Format libre : chaque côté est borné à [CUSTOM_MIN_MM, CUSTOM_MAX_MM]. Le plancher est celui de la surface imprimable (une page plus petite n'aurait plus de zone de
+  // saisie) ; le plafond, 22 pouces = 558,8 mm, est la plus grande page que Word accepte (31680 twips) : au-delà, le .docx serait refusé à l'ouverture.
+  const CUSTOM_MIN_MM = MIN_CONTENT_MM;
+  const CUSTOM_MAX_MM = 558.8;
+  const CUSTOM_ID = /^(\d{1,3}(?:\.\d)?)x(\d{1,3}(?:\.\d)?)$/;
+  // Les marges d'un modèle neuf (9,9 mm) ne tiennent pas dans une étiquette : 70 x 37 mm n'y garde que 50 x 20 mm de texte, et l'éditeur coupe en 7 pages ce que le
+  // PDF fait tenir en 5. Quand la saisie d'une page de moins de SMALL_PAGE_MM de côté court trouve les quatre marges encore à leur valeur d'origine, elles passent à
+  // SMALL_PAGE_MARGIN_MM ; des marges déjà réglées par la personne ne sont jamais touchées. Une page de moins de HEADER_FOOTER_MIN_HEIGHT_MM de haut ne reçoit plus de
+  // nouvel en-tête ni de nouveau pied : leurs bandes réservées (60 px et leur air, chacune) la mangeraient.
+  const SMALL_PAGE_MM = 60;
+  const SMALL_PAGE_MARGIN_MM = 3;
+  const HEADER_FOOTER_MIN_HEIGHT_MM = 80;
 
   function emptyMargins() {
     return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM, orientation: PORTRAIT, format: DEFAULT_FORMAT };
@@ -54,15 +71,52 @@ const PageLayout = (function () {
   // Toute valeur autre que 'landscape' (clé absente, JSON abîmé, ancienne version) est le portrait.
   function normalizeOrientation(value) { return value === LANDSCAPE ? LANDSCAPE : PORTRAIT; }
 
-  // Tout format inconnu (clé absente, JSON abîmé, format d'une version plus récente) est l'A4. Casse ignorée : 'a5' est A5.
+  // Un côté de format libre : au dixième de millimètre, borné. `dimText` l'écrit sans zéro inutile (« 37 », « 70.5 ») : c'est ce texte, et lui seul, qui entre dans l'identifiant.
+  function clampDim(mm) { return Math.min(CUSTOM_MAX_MM, Math.max(CUSTOM_MIN_MM, Math.round(mm * 10) / 10)); }
+  function dimText(mm) { return String(Math.round(mm * 10) / 10); }
+
+  // Tout format inconnu (clé absente, JSON abîmé, format d'une version plus récente) est l'A4. Casse ignorée : 'a5' est A5. Un identifiant « LxH » (format libre) est lu, ses
+  // côtés bornés et remis côté court d'abord ; s'il égale un format de FORMATS, c'est ce format. Le format libre n'a pas de nom pour pdfmake (`pdfName` nul : les
+  // dimensions en points sont passées telles quelles, cf. pdfPageNameFor).
   function formatOf(value) {
-    const id = typeof value === 'string' ? value.toUpperCase() : '';
-    return FORMATS.find(f => f.id === id) || FORMATS.find(f => f.id === DEFAULT_FORMAT);
+    const raw = typeof value === 'string' ? value.trim() : '';
+    const preset = FORMATS.find(f => f.id === raw.toUpperCase());
+    if (preset) return preset;
+    const match = CUSTOM_ID.exec(raw.toLowerCase());
+    if (match) {
+      const a = clampDim(Number(match[1]));
+      const b = clampDim(Number(match[2]));
+      const widthMm = Math.min(a, b);
+      const heightMm = Math.max(a, b);
+      const same = FORMATS.find(f => f.widthMm === widthMm && f.heightMm === heightMm);
+      if (same) return same;
+      return {
+        id: dimText(widthMm) + 'x' + dimText(heightMm), pdfName: null, custom: true, widthMm, heightMm,
+        widthPt: widthMm * MM_TO_PT, heightPt: heightMm * MM_TO_PT, widthTwip: Math.round(widthMm * MM_TO_TWIP), heightTwip: Math.round(heightMm * MM_TO_TWIP),
+      };
+    }
+    return FORMATS.find(f => f.id === DEFAULT_FORMAT);
   }
   function normalizeFormat(value) { return formatOf(value).id; }
+  function isCustomFormat(value) { return !!formatOf(value).custom; }
 
-  // Les formats proposés (copie : le menu de la barre les lit ici, il n'en écrit aucun). Dimensions du portrait.
+  // Les formats proposés (copie : le menu de la barre les lit ici, il n'en écrit aucun). Dimensions du portrait. Seuls ceux de FORMATS : le format libre n'est pas une
+  // ligne de la table, il a sa propre ligne du menu (« Format libre… ») et sa fenêtre.
   function getFormats() { return FORMATS.map(f => ({ id: f.id, widthMm: f.widthMm, heightMm: f.heightMm })); }
+
+  // Un côté en centimètres, au centième au plus (« 7 », « 3,7 », « 7,05 ») : la virgule en français, le point en anglais - la langue de la page, que js/i18n.js pose sur <html>.
+  function cmText(mm) {
+    const text = String(Math.round(mm * 10) / 100);
+    return document.documentElement.lang === 'en' ? text : text.replace('.', ',');
+  }
+  // Le format dans les phrases de l'interface (« Aperçu {format} », « Page {format} en portrait ») : « A4 » pour un format de FORMATS, « 7 × 3,7 cm » pour un format libre,
+  // dans le sens demandé (la page telle qu'on la voit : largeur d'abord).
+  function formatLabel(value, orientation) {
+    const f = formatOf(value);
+    if (!f.custom) return f.id;
+    const landscape = orientation === LANDSCAPE;
+    return cmText(landscape ? f.heightMm : f.widthMm) + ' × ' + cmText(landscape ? f.widthMm : f.heightMm) + ' cm';
+  }
 
   // Filigrane : { text, angle: 'diagonal' | 'horizontal', color: '#rrggbb', opacity: 0.05 à 1 } ou null. Un texte vide (ou qui n'est pas un texte) n'est pas un filigrane ; les
   // blancs se réduisent à une espace et le texte tient sur une ligne de WATERMARK_MAX_CHARS caractères au plus ; tout autre réglage inconnu (JSON abîmé, version plus
@@ -131,12 +185,18 @@ const PageLayout = (function () {
     const f = formatOf(format);
     return orientation === LANDSCAPE ? { width: f.heightTwip, height: f.widthTwip } : { width: f.widthTwip, height: f.heightTwip };
   }
-  // Nom du format pour pdfmake (`pageSize`, tel quel) et jsPDF (`format`, en minuscules).
-  function pdfPageNameFor(format) { return formatOf(format).pdfName; }
+  // Nom du format pour pdfmake (`pageSize`, tel quel) et jsPDF (`format`, en minuscules). Un format libre n'a pas de nom : pdfmake reçoit ses dimensions en points, dans le sens
+  // portrait (`pageOrientation` les tourne lui-même, comme pour un nom).
+  function pdfPageNameFor(format) {
+    const f = formatOf(format);
+    return f.pdfName || { width: f.widthPt, height: f.heightPt };
+  }
 
   function getOrientation() { return marginsDraft.orientation; }
   function isLandscape() { return marginsDraft.orientation === LANDSCAPE; }
   function getFormat() { return marginsDraft.format; }
+  // Le format de la page courante dans les phrases de l'interface (cf. formatLabel) : « A4 », ou « 7 × 3,7 cm » pour un format libre, dans le sens de la page.
+  function getFormatLabel() { return formatLabel(marginsDraft.format, marginsDraft.orientation); }
   // Largeur de la feuille à l'écran (px CSS) : celle que `--pp-page-width` donne à la feuille de l'éditeur, à celle de la Lecture et aux espaceurs d'en-tête et de
   // pied (css/editor-v2.css), et que js/main.js lit pour le facteur d'ajustement. L'A4 portrait garde la valeur d'avant l'orientation (793.71), PAS
   // getPageSizePx().width (793.7008) : il garde sa feuille et son facteur d'ajustement exactement tels qu'ils étaient. Tout autre couple (sens, format) : la
@@ -171,6 +231,33 @@ const PageLayout = (function () {
     setMarginsMm(Object.assign({}, marginsDraft, { format: next }));
     announcePageLayoutChanged();
   }
+
+  // Pose la page telle qu'on la saisit : largeur et hauteur en millimètres, dans le sens où on la voit (la fenêtre « Format libre… » ne connaît ni portrait ni paysage). Le
+  // plus petit côté devient le format (côté court d'abord, borné, au dixième de mm : cf. formatOf), la page est en paysage quand elle est plus large que haute et garde son
+  // sens quand elle est carrée. 21 x 29,7 cm redevient l'A4 : le menu le coche. Les quatre marges sont re-bornées pour la nouvelle page (setMarginsMm) ; sur une petite page
+  // (SMALL_PAGE_MM) dont les marges sont encore celles d'origine, elles passent à SMALL_PAGE_MARGIN_MM d'abord. Même contrat que setFormat : ne rafraîchit rien, annonce
+  // `pp:pageLayoutChanged` si la page change, l'appelant marque le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé ; faux, sans rien changer,
+  // pour une valeur qui n'est pas un nombre.
+  function setPageSize(widthMm, heightMm) {
+    const a = Number(widthMm);
+    const b = Number(heightMm);
+    if (widthMm === null || heightMm === null || widthMm === '' || heightMm === '' || !Number.isFinite(a) || !Number.isFinite(b)) return false;
+    const next = formatOf(dimText(clampDim(Math.min(a, b))) + 'x' + dimText(clampDim(Math.max(a, b))));
+    const orientation = a > b ? LANDSCAPE : a < b ? PORTRAIT : marginsDraft.orientation;
+    if (next.id === marginsDraft.format && orientation === marginsDraft.orientation) return false;
+    const margins = Object.assign({}, marginsDraft, { format: next.id, orientation });
+    const untouched = ['top', 'right', 'bottom', 'left'].every(side => Math.abs(marginsDraft[side] - DEFAULT_MARGIN_MM) < 0.05);
+    if (next.custom && next.widthMm < SMALL_PAGE_MM && untouched) {
+      margins.top = margins.right = margins.bottom = margins.left = SMALL_PAGE_MARGIN_MM;
+    }
+    setMarginsMm(margins);
+    announcePageLayoutChanged();
+    return true;
+  }
+
+  // La page est-elle assez haute pour recevoir un en-tête ou un pied de page ? Faux sous HEADER_FOOTER_MIN_HEIGHT_MM de haut (un format libre de la taille d'une étiquette) :
+  // js/header-footer-preview.js grise alors les zones encore vides, sans toucher à celles qui ont déjà un contenu (on doit pouvoir le retirer).
+  function fitsHeaderFooter() { return getPageSizeMm().height >= HEADER_FOOTER_MIN_HEIGHT_MM; }
 
   function getWatermark() { return marginsDraft.watermark || null; }
   // Pose (ou retire, avec null ou un texte vide) le filigrane en gardant tout le reste. Même contrat que setOrientation : ne rafraîchit rien, annonce `pp:watermarkChanged` si le
@@ -262,6 +349,7 @@ const PageLayout = (function () {
     getMarginsMm, setMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, setOrientation, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
+    CUSTOM_MIN_MM, CUSTOM_MAX_MM, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     pageNumberText, resolvePageNumberBadges,
   };

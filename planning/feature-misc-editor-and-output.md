@@ -110,6 +110,12 @@ de la galerie, toujours en portrait. Le bouton de la barre agit sur les modèles
 format s'enregistre avec le sens et les marges (clé `format` de la colonne `Margins`, absente ou inconnue = A4) et se choisit dans le menu au survol du bouton Portrait / Paysage
 (`js/orientation-toggle.js`, aucune icône de plus dans la barre). Les trois fonctions de dimensions prennent le format comme le sens, les consommateurs (éditeur, Lecture, facteur
 d'ajustement, PDF, PDF en lot, Word, impression navigateur, qualités raster, plafonds de Réglages) n'ont rien d'autre appris. Un format de plus est une ligne de `FORMATS`.
+**Format libre livré le 04/10** (demande d'Antoine : « donner la longueur / largeur en cm d'un modèle, l'enregistrer, et que ça fonctionne sur l'assemblage » ; carte « Format libre et formats nommés ») : la ligne « Format libre… »
+du menu Page ouvre une fenêtre en centimètres (`js/page-size-dialog.js`). La taille s'enregistre dans la clé `format` de la colonne `Margins` sous la forme « LARGEURxHAUTEUR » en millimètres, côté court d'abord (« 37x70 » : une
+étiquette de 7 × 3,7 cm que `orientation` tourne en paysage), sans colonne de plus ; `PageLayout.formatOf` la lit comme un format de la liste (une taille de A3 à A6 redevient ce format, une valeur abîmée tombe sur l'A4 ; bornes de
+20 à 558,8 mm, les 22 pouces de Word). L'éditeur, la Lecture, le PDF, le Word et l'assemblage avant impression la lisent par `PageLayout` sans rien apprendre de plus. `setPageSize` pose des marges de 3 mm pour une page de moins de
+6 cm de côté court (marges encore d'origine seulement), et les zones d'en-tête et de pied encore vides sont grisées sur une page de moins de 8 cm de haut. L'assemblage dit « ne tient ni sur A4 ni sur A3 » pour une page qui ne tient
+sur aucune feuille. Étude : `etudes/formats-personnalises/etude.md` (dossier du projet).
 **Reste ouvert** : d'autres formats (Lettre US, Légal US, A2, A1, ISO B...) sur carte à Antoine, rien de codé avant son choix ; l'aperçu de la galerie et de l'arbre des modèles
 (toujours une feuille A4 portrait) ; (l'orientation et le format d'un macro-modèle sont livrés : voir ci-dessous).
 

@@ -3,7 +3,7 @@
 // d'Antoine (~700x400), en thème clair puis sombre : le survol du bouton Portrait / Paysage ouvre son menu (deux sens, quatre formats avec leurs dimensions) tout entier dans le
 // panneau et sous la souris, un vrai clic sur une ligne change la page (feuille de la largeur du format, mesurée aux PIXELS d'une vraie capture, ramenée dans le panneau par le facteur
 // d'ajustement, pagination et Lecture qui suivent, enregistrement automatique en une seule écriture avec la clé `format`), le menu se referme souris partie sans garder le focus ni
-// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les six lignes, sur un email le menu est grisé et dit pourquoi, et sur un macro-modèle (résumé affiché, éditeur masqué)
+// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les sept lignes, sur un email le menu est grisé et dit pourquoi, et sur un macro-modèle (résumé affiché, éditeur masqué)
 // il est actif : un vrai clic y pose A5 paysage, la Lecture suit et l'enregistrement automatique l'écrit dans la ligne du macro-modèle, composition intacte.
 // dev-tests/scenarios-page-format.js vérifie le reste DANS la page (PDF, Word, enregistrement, images en calque...) ; ici, chaque geste est un vrai geste.
 // Lancé par run-headless.mjs (groupe Node "pageFormatMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-page-format-mouse.mjs
@@ -293,8 +293,8 @@ async function runTheme(theme) {
   const open = await pageMenu(page);
   check(`${label} - le survol du bouton ouvre le menu Page sous la souris (aria-expanded « true »)`, open.display === 'flex' && open.expanded === 'true', { display: open.display, expanded: open.expanded });
   check(`${label} - le menu tient tout entier dans le panneau de ${WIDTH}x${HEIGHT} (${Math.round(open.left)}-${Math.round(open.right)} x ${Math.round(open.top)}-${Math.round(open.bottom)})`, open.inside, open);
-  check(`${label} - titre « Page », puis Portrait et Paysage, puis A3 A4 A5 A6 avec leurs dimensions ; Portrait et A4 cochés`,
-    open.title === 'Page' && open.rows.map(r => r.name).join('|') === 'Portrait|Paysage|A3|A4|A5|A6'
+  check(`${label} - titre « Page », puis Portrait et Paysage, puis A3 A4 A5 A6 avec leurs dimensions, puis « Format libre… » ; Portrait et A4 cochés`,
+    open.title === 'Page' && open.rows.map(r => r.name).join('|') === 'Portrait|Paysage|A3|A4|A5|A6|Format libre…'
       && open.rows.filter(r => r.size).map(r => r.size).join('|') === '297 × 420 mm|210 × 297 mm|148 × 210 mm|105 × 148 mm'
       && open.rows.filter(r => r.checked === 'true').map(r => r.key).join() === 'portrait,A4', open);
   check(`${label} - chaque ligne est atteignable à la souris (rien ne la recouvre) et assez haute pour la viser (${Math.min.apply(null, open.rows.map(r => r.h)).toFixed(1)}px au moins)`,
@@ -404,7 +404,7 @@ async function runTheme(theme) {
   const turnedBack = await formatNow(page);
   check(`${label} - second vrai clic : retour au portrait, format inchangé`, !turnedBack.landscape && turnedBack.format === 'A4', turnedBack);
 
-  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse ses six lignes puis « Filigrane… », puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
+  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse ses six lignes de choix puis « Format libre… » et « Filigrane… », puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
   await page.focus('#v2-toggle-a4-preview');
   const stops = [];
   for (let i = 0; i < 8; i++) {
@@ -418,11 +418,14 @@ async function runTheme(theme) {
     if (stops[stops.length - 1] === 'A6') break;
   }
   check(`${label} - clavier : Tab passe du bouton Page à Portrait, Paysage, A3, A4, A5 puis A6 (${stops.join(' > ')})`, stops.join() === 'btn-page-orientation,portrait,landscape,A3,A4,A5,A6', stops);
-  // Après A6 vient la ligne « Filigrane… » (menu Page, js/orientation-toggle.js), le menu reste ouvert ; Maj+Tab revient sur A6.
+  // Après A6 viennent la ligne « Format libre… » puis « Filigrane… » (menu Page, js/orientation-toggle.js), le menu reste ouvert ; deux Maj+Tab reviennent sur A6.
+  await page.keyboard.press('Tab');
+  const afterA6 = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
+  check(`${label} - clavier : après A6, Tab arrive sur « Format libre… » et le menu reste ouvert`, afterA6.active === 'v2-btn-page-custom' && afterA6.menu === 'flex', afterA6);
   await page.keyboard.press('Tab');
   const afterLast = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
-  check(`${label} - clavier : après A6, Tab arrive sur « Filigrane… » et le menu reste ouvert`, afterLast.active === 'v2-btn-watermark' && afterLast.menu === 'flex', afterLast);
-  await page.keyboard.press('Shift+Tab');
+  check(`${label} - clavier : après « Format libre… », Tab arrive sur « Filigrane… » et le menu reste ouvert`, afterLast.active === 'v2-btn-watermark' && afterLast.menu === 'flex', afterLast);
+  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(900);
   const viaEnter = await formatNow(page);
@@ -432,7 +435,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(900);
   const viaSpace = await formatNow(page);
   check(`${label} - clavier, Espace deux lignes plus haut (A4) : format A4`, viaSpace.format === 'A4' && !viaSpace.landscape, viaSpace);
-  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
   const outside = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));
   check(`${label} - clavier : Tab hors du menu le referme (focus sur ${outside.active})`, outside.menu === 'none' && outside.active === 'v2-btn-quality', outside);
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
@@ -465,8 +468,8 @@ async function runTheme(theme) {
   const btn2 = await boxOf(page, '#btn-page-orientation');
   await page.mouse.move(btn2.x - 8, btn2.y - 4, { steps: 2 }); await page.mouse.move(btn2.x, btn2.y, { steps: 3 }); await page.waitForTimeout(300);
   const emailMenu = await pageMenu(page);
-  check(`${label} - sur un email : le bouton est grisé, le menu s'ouvre au survol, dit « ${emailMenu.title} », ses six lignes sont grisées et tiennent dans le panneau`,
-    onEmail.disabled && emailMenu.display === 'flex' && /pas disponible/.test(emailMenu.title) && emailMenu.rows.length === 6 && emailMenu.rows.every(r => r.disabled === 'true' && r.tab === -1) && emailMenu.inside, emailMenu);
+  check(`${label} - sur un email : le bouton est grisé, le menu s'ouvre au survol, dit « ${emailMenu.title} », ses sept lignes sont grisées et tiennent dans le panneau`,
+    onEmail.disabled && emailMenu.display === 'flex' && /pas disponible/.test(emailMenu.title) && emailMenu.rows.length === 7 && emailMenu.rows.every(r => r.disabled === 'true' && r.tab === -1) && emailMenu.inside, emailMenu);
   const a5Email = emailMenu.rows.find(r => r.key === 'A5');
   await page.mouse.move(btn2.x, a5Email.y, { steps: 8 });
   await page.mouse.move(a5Email.x, a5Email.y, { steps: 3 });
@@ -503,8 +506,8 @@ async function runTheme(theme) {
   const macroBtn = await boxOf(page, '#btn-page-orientation');
   await page.mouse.move(macroBtn.x - 8, macroBtn.y - 4, { steps: 2 }); await page.mouse.move(macroBtn.x, macroBtn.y, { steps: 3 }); await page.waitForTimeout(300);
   const macroMenu = await pageMenu(page);
-  check(`${label} - sur un macro-modèle (résumé affiché, éditeur masqué) : le bouton est actif, le menu s'ouvre au survol, dit « ${macroMenu.title} », ses six lignes sont actives, atteignables et tiennent dans le panneau ; Portrait et A4 cochés`,
-    !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 6
+  check(`${label} - sur un macro-modèle (résumé affiché, éditeur masqué) : le bouton est actif, le menu s'ouvre au survol, dit « ${macroMenu.title} », ses sept lignes sont actives, atteignables et tiennent dans le panneau ; Portrait et A4 cochés`,
+    !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 7
       && macroMenu.rows.every(r => r.disabled === 'false' && r.tab === 0 && r.hit && r.h >= 24) && macroMenu.inside && macroMenu.rows.filter(r => r.checked === 'true').map(r => r.key).join() === 'portrait,A4', { onMacro, macroMenu });
   await away(page);
   const macroWrites0 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));

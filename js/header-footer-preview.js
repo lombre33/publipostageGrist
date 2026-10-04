@@ -61,6 +61,9 @@ const HeaderFooterPreview = (function () {
   // première entrée.
   function enterHeaderFooterMode(zone, variant) {
     if (!editor || inEmailMode) return;
+    // Une page trop basse pour la bande d'un en-tête ou d'un pied (un format libre de la taille d'une étiquette : PageLayout.fitsHeaderFooter) n'en reçoit plus de nouveau, mais
+    // une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à l'autre reste permis.
+    if (!hfMode && !PageLayout.fitsHeaderFooter() && !hasZoneContent(headerFooterDraft[zone][variant])) return;
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
     headerFooterDraft.enabled = true;
@@ -422,7 +425,8 @@ const HeaderFooterPreview = (function () {
     const hasContent = hasZoneContent(resolved);
     el.classList.toggle('v2-hf-zone-empty', !hasContent);
     el.classList.toggle('v2-hf-zone-filled', hasContent);
-    el.classList.toggle('v2-hf-locked', inEmailMode);
+    // Grisée (jamais retirée) : en mode e-mail, et, sur une page trop basse, tant que la zone est vide (cf. enterHeaderFooterMode).
+    el.classList.toggle('v2-hf-locked', inEmailMode || (!hasContent && !PageLayout.fitsHeaderFooter()));
     el.innerHTML = hasContent
       ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
       : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
@@ -442,7 +446,7 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor.view.dom;
     if (event.target !== tiptapEl && event.target !== tiptapEl.parentElement) return null;
     for (const el of [edgeZones.top, edgeZones.bottom]) {
-      if (!el || !el.isConnected) continue;
+      if (!el || !el.isConnected || el.classList.contains('v2-hf-locked')) continue;
       const r = el.getBoundingClientRect();
       if (event.clientX >= r.left && event.clientX < r.right && event.clientY >= r.top && event.clientY < r.bottom) return el;
     }
