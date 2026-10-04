@@ -17,60 +17,55 @@ const TextExpansion = (function () {
     { id: 'Abreviation', type: 'Text' },
     { id: 'Texte', type: 'Text' },
   ];
-  const CHAR_STORAGE = 'pp_expansion_char';
   const DEFAULT_CHAR = '§';
-  const MAX_ABBREVIATION_LENGTH = 30;
-  const MAX_TEXT_LENGTH = 2000;
-  // Lignes de la liste « § » : au-delà, une dernière ligne dit combien d'abréviations de plus répondent à la saisie (taper plus de lettres les
-  // resserre).
-  const MAX_SUGGESTIONS = 50;
-  // Ce qu'on peut taper après le déclencheur : lettres (toutes langues), chiffres, tiret et tiret bas. Tout autre caractère tapé juste après une
-  // abréviation entière la clôt (DELIMITERS) ou n'a aucun rapport avec elle.
-  const ABBREVIATION_PATTERN = /^[\p{L}\p{N}_-]+$/u;
   // Tapés juste après une abréviation entière, ces caractères la remplacent par son texte : l'espace (normale, insécable, fine insécable), la
   // ponctuation et les fermants. Pas Entrée : la règle de saisie la consommerait sans couper le paragraphe ; Entrée ouvre sa propre voie, la liste.
   const DELIMITERS = '   .,;:!?)]}»';
-  // Erreurs de saisie que l'onglet Réglages sait écrire (clés `settings.expansion.error.<code>`) ; toute autre erreur est un échec d'écriture dans
-  // Grist.
-  const VALIDATION_CODES = ['empty', 'tooLong', 'chars', 'duplicate', 'textEmpty', 'textTooLong'];
 
   function lang() { return (typeof I18n !== 'undefined' && I18n.getLang()) || 'fr'; }
   // Échappe ce qui a un sens dans une expression régulière (mode `u` : seuls les caractères de syntaxe et « / » peuvent l'être).
   function escapeRegExp(text) { return String(text).replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&'); }
-  function variablesChar() { return typeof Variables !== 'undefined' ? Variables.triggerChar() : '#'; }
 
   // Caractère déclencheur
 
-  function storedChar() {
-    try {
-      const v = localStorage.getItem(CHAR_STORAGE);
-      return (v && v.length === 1) ? v : DEFAULT_CHAR;
-    } catch (e) { return DEFAULT_CHAR; }
-  }
+  const { storedChar, charProblem, triggerChar, setTriggerChar } = (function () {
+    const CHAR_STORAGE = 'pp_expansion_char';
 
-  // Ni lettre, chiffre, espace, tiret ni tiret bas (ce sont les caractères d'une abréviation), ni un délimiteur (il clôt une abréviation), ni une
-  // moitié de caractère sur deux positions (un emoji coupé par maxlength). Retourne '' quand le caractère convient, sinon la fin de la clé
-  // `settings.expansion.char.<problème>`.
-  function charProblem(value) {
-    if (typeof value !== 'string' || value.length !== 1) return 'invalid';
-    if (/[\p{L}\p{N}\s_-]/u.test(value) || /[\ud800-\udfff]/.test(value) || DELIMITERS.indexOf(value) !== -1) return 'invalid';
-    if (value === variablesChar()) return 'sameAsVariables';
-    return '';
-  }
+    function variablesChar() { return typeof Variables !== 'undefined' ? Variables.triggerChar() : '#'; }
 
-  // Le caractère réellement écouté : null quand il est celui du panneau # (deux listes sur la même touche : celle des variables, plus ancienne, garde
-  // la main et l'expansion s'efface - l'onglet Réglages > Raccourcis le dit).
-  function triggerChar() {
-    const char = storedChar();
-    return char === variablesChar() ? null : char;
-  }
+    function storedChar() {
+      try {
+        const v = localStorage.getItem(CHAR_STORAGE);
+        return (v && v.length === 1) ? v : DEFAULT_CHAR;
+      } catch (e) { return DEFAULT_CHAR; }
+    }
 
-  function setTriggerChar(value) {
-    const problem = charProblem(value);
-    if (problem) return problem;
-    try { localStorage.setItem(CHAR_STORAGE, value); } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
-    return '';
-  }
+    function charProblem(value) {
+      // Ni lettre, chiffre, espace, tiret ni tiret bas (ce sont les caractères d'une abréviation), ni un délimiteur (il clôt une abréviation), ni une
+      // moitié de caractère sur deux positions (un emoji coupé par maxlength). Retourne '' quand le caractère convient, sinon la fin de la clé
+      // `settings.expansion.char.<problème>`.
+      if (typeof value !== 'string' || value.length !== 1) return 'invalid';
+      if (/[\p{L}\p{N}\s_-]/u.test(value) || /[\ud800-\udfff]/.test(value) || DELIMITERS.indexOf(value) !== -1) return 'invalid';
+      if (value === variablesChar()) return 'sameAsVariables';
+      return '';
+    }
+
+    function triggerChar() {
+      // Le caractère réellement écouté : null quand il est celui du panneau # (deux listes sur la même touche : celle des variables, plus ancienne, garde
+      // la main et l'expansion s'efface - l'onglet Réglages > Raccourcis le dit).
+      const char = storedChar();
+      return char === variablesChar() ? null : char;
+    }
+
+    function setTriggerChar(value) {
+      const problem = charProblem(value);
+      if (problem) return problem;
+      try { localStorage.setItem(CHAR_STORAGE, value); } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
+      return '';
+    }
+
+    return { storedChar, charProblem, triggerChar, setTriggerChar };
+  })();
 
   // Abréviations de la personne
 
@@ -115,9 +110,9 @@ const TextExpansion = (function () {
     return found;
   }
 
-  // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du
-  // navigateur ou à la main dans Grist y apparaît).
   function load(force) {
+    // Une seule lecture à la fois, mémorisée ; `force` relit (ouverture de l'onglet Réglages : une abréviation ajoutée depuis un autre onglet du
+    // navigateur ou à la main dans Grist y apparaît).
     if (!force && entries) return Promise.resolve(entries);
     if (loading) return loading;
     loading = readEntries().then(found => { entries = found; return entries; }).finally(() => { loading = null; });
@@ -137,10 +132,10 @@ const TextExpansion = (function () {
     return (entries || []).slice().sort((a, b) => a.abbreviation.localeCompare(b.abbreviation, lang()));
   }
 
-  // Ce que la liste « § » propose pour `query` : l'abréviation entière d'abord, puis celles qui commencent par la saisie, celles qui la contiennent,
-  // enfin celles dont le texte a un mot qui commence ainsi (« bordeaux » retrouve « ub »). Un mot, pas un morceau de mot : « u » ne remonterait sinon
-  // que du bruit (« rue », « jour »).
   function rankEntries(query) {
+    // Ce que la liste « § » propose pour `query` : l'abréviation entière d'abord, puis celles qui commencent par la saisie, celles qui la contiennent,
+    // enfin celles dont le texte a un mot qui commence ainsi (« bordeaux » retrouve « ub »). Un mot, pas un morceau de mot : « u » ne remonterait sinon
+    // que du bruit (« rue », « jour »).
     const q = normalizeKey(query);
     const wordStart = q && new RegExp('(^|[^\\p{L}\\p{N}])' + escapeRegExp(q), 'iu');
     const ranked = [];
@@ -159,26 +154,34 @@ const TextExpansion = (function () {
     return ranked.map(r => r.entry);
   }
 
-  // Les MAX_SUGGESTIONS premières ; `more` : combien d'autres répondent encore à la saisie (la liste le dit : « Encore N résultats »).
   function filterEntries(query) {
+    // Lignes de la liste « § » : au-delà, une dernière ligne dit combien d'abréviations de plus répondent à la saisie (taper plus de lettres les
+    // resserre).
+    const MAX_SUGGESTIONS = 50;
+    // Les MAX_SUGGESTIONS premières ; `more` : combien d'autres répondent encore à la saisie (la liste le dit : « Encore N résultats »).
     const ranked = rankEntries(query);
     const shown = ranked.slice(0, MAX_SUGGESTIONS);
     shown.more = ranked.length - shown.length;
     return shown;
   }
 
-  // Ce qu'on enregistre : l'abréviation sans espaces ni déclencheur de tête (« §ub » collé tel quel dans le champ), le texte aux retours à la ligne
-  // normalisés.
   function cleanEntry(abbreviation, text) {
+    // Ce qu'on enregistre : l'abréviation sans espaces ni déclencheur de tête (« §ub » collé tel quel dans le champ), le texte aux retours à la ligne
+    // normalisés.
     let key = String(abbreviation || '').trim();
     const char = storedChar();
     if (key.indexOf(char) === 0) key = key.slice(1).trim();
     return { abbreviation: key, text: String(text || '').replace(/\r\n?/g, '\n').trim() };
   }
 
-  // '' quand l'entrée est valable, sinon le code de l'erreur (VALIDATION_CODES). `exceptRowId` : la ligne qu'on modifie, qui ne fait pas doublon avec
-  // elle-même.
   function checkEntry(abbreviation, text, exceptRowId) {
+    // '' quand l'entrée est valable, sinon le code de l'erreur (js/text-expansion-settings.js l'écrit en toutes lettres). `exceptRowId` : la ligne
+    // qu'on modifie, qui ne fait pas doublon avec elle-même.
+    const MAX_ABBREVIATION_LENGTH = 30;
+    const MAX_TEXT_LENGTH = 2000;
+    // Ce qu'on peut taper après le déclencheur : lettres (toutes langues), chiffres, tiret et tiret bas. Tout autre caractère tapé juste après une
+    // abréviation entière la clôt (DELIMITERS) ou n'a aucun rapport avec elle.
+    const ABBREVIATION_PATTERN = /^[\p{L}\p{N}_-]+$/u;
     if (!abbreviation) return 'empty';
     if (abbreviation.length > MAX_ABBREVIATION_LENGTH) return 'tooLong';
     if (!ABBREVIATION_PATTERN.test(abbreviation)) return 'chars';
@@ -244,10 +247,10 @@ const TextExpansion = (function () {
 
   // Remplacement dans le document
 
-  // Remplace [from, to] de `tr` par `text` (un retour à la ligne devient un saut de ligne, comme Maj+Entrée) puis `suffix` (le délimiteur tapé, que
-  // la règle de saisie n'a pas encore inséré). Le texte reprend les marques de ce qu'il remplace - gras, couleur, suivi des modifications -, comme le
-  // fait insertText.
   function replaceWithExpansion(tr, schema, from, to, text, suffix) {
+    // Remplace [from, to] de `tr` par `text` (un retour à la ligne devient un saut de ligne, comme Maj+Entrée) puis `suffix` (le délimiteur tapé, que
+    // la règle de saisie n'a pas encore inséré). Le texte reprend les marques de ce qu'il remplace - gras, couleur, suivi des modifications -, comme le
+    // fait insertText.
     const marks = (from === to ? tr.doc.resolve(from).marks() : tr.doc.resolve(from).marksAcross(tr.doc.resolve(to))) || [];
     const nodes = [];
     String(text).split('\n').forEach((line, index) => {
@@ -260,11 +263,11 @@ const TextExpansion = (function () {
 
   // Règle de saisie : « §ub » + espace
 
-  // `text` = tout ce qui précède le curseur dans le paragraphe, plus le caractère qu'on vient de taper (@tiptap/core, InputRule). Les bulles et
-  // autres atomes y sont écrits « %leaf% » : ils comptent comme un caractère qui n'est ni lettre ni chiffre, donc « [bulle]§ub » s'étend. Le
-  // déclencheur doit suivre le début du paragraphe ou un caractère qui n'est ni lettre, ni chiffre, ni tiret bas : « a§b » (une adresse, un code) ne
-  // s'étend jamais.
   function findTypedAbbreviation(text) {
+    // `text` = tout ce qui précède le curseur dans le paragraphe, plus le caractère qu'on vient de taper (@tiptap/core, InputRule). Les bulles et
+    // autres atomes y sont écrits « %leaf% » : ils comptent comme un caractère qui n'est ni lettre ni chiffre, donc « [bulle]§ub » s'étend. Le
+    // déclencheur doit suivre le début du paragraphe ou un caractère qui n'est ni lettre, ni chiffre, ni tiret bas : « a§b » (une adresse, un code) ne
+    // s'étend jamais.
     if (!entries || !entries.length) return null;
     const char = triggerChar();
     if (!char || text.length < 3) return null;
@@ -280,10 +283,10 @@ const TextExpansion = (function () {
 
   // Liste « § »
 
-  // @tiptap/suggestion cherche le déclencheur dans le texte qui précède le curseur, jusqu'au début du paragraphe ou d'un autre nœud (bulle, marque
-  // différente) : même lecture que sa version d'origine, mais le caractère se relit à chaque frappe, et le déclencheur doit suivre le début ou un
-  // caractère qui n'est ni lettre ni chiffre.
   function findSuggestion(config) {
+    // @tiptap/suggestion cherche le déclencheur dans le texte qui précède le curseur, jusqu'au début du paragraphe ou d'un autre nœud (bulle, marque
+    // différente) : même lecture que sa version d'origine, mais le caractère se relit à chaque frappe, et le déclencheur doit suivre le début ou un
+    // caractère qui n'est ni lettre ni chiffre.
     const char = triggerChar();
     if (!char) return null;
     const node = config.$position.nodeBefore;
@@ -313,8 +316,8 @@ const TextExpansion = (function () {
     return box;
   }
 
-  // La ligne choisie suit les flèches comme le survol ; elle reste visible quand la liste défile.
   function paintSelection() {
+    // La ligne choisie suit les flèches comme le survol ; elle reste visible quand la liste défile.
     rowEls.forEach((row, index) => {
       const on = index === selected;
       row.classList.toggle('selected', on);
@@ -399,10 +402,10 @@ const TextExpansion = (function () {
     };
   }
 
-  // Reçoit Extension, Suggestion, InputRule et PluginKey de js/editor.js plutôt que de les importer : même principe que Variables.createExtension (un
-  // seul import() dynamique, déjà fait là-bas). PluginKey : la clé par défaut de Suggestion est celle du panneau # - deux plugins ne peuvent pas la
-  // partager.
   function createExtension(Extension, Suggestion, InputRule, PluginKey) {
+    // Reçoit Extension, Suggestion, InputRule et PluginKey de js/editor.js plutôt que de les importer : même principe que Variables.createExtension (un
+    // seul import() dynamique, déjà fait là-bas). PluginKey : la clé par défaut de Suggestion est celle du panneau # - deux plugins ne peuvent pas la
+    // partager.
     const pluginKey = new PluginKey('textExpansionSuggestion');
     return Extension.create({
       name: 'textExpansion',
@@ -451,161 +454,6 @@ const TextExpansion = (function () {
       },
     });
   }
-
-  // Réglages > Raccourcis : abréviations
-
-  function wireSettingsPanel() {
-    const panel = document.querySelector('.settings-panel[data-settings-panel="shortcuts"]');
-    if (!panel) return;
-    const byId = id => document.getElementById(id);
-    const intro = byId('settings-expansion-intro');
-    const charInput = byId('settings-expansion-char');
-    const charStatus = byId('settings-expansion-char-status');
-    const form = byId('settings-expansion-form');
-    const abbreviationInput = byId('settings-expansion-abbr');
-    const textInput = byId('settings-expansion-text');
-    const submitButton = byId('settings-expansion-submit');
-    const cancelButton = byId('settings-expansion-cancel');
-    const status = byId('settings-expansion-status');
-    const listEl = byId('settings-expansion-list');
-    const emptyEl = byId('settings-expansion-empty');
-    if (!charInput || !form || !listEl) return;
-    let editingRowId = null;
-
-    function showMessage(el, message) {
-      el.hidden = !message;
-      el.textContent = message || '';
-    }
-    function showCharProblem(problem) { showMessage(charStatus, problem ? I18n.t('settings.expansion.char.' + problem) : ''); }
-    function setFormStatus(code) {
-      if (!code) { showMessage(status, ''); return; }
-      showMessage(status, I18n.t('settings.expansion.error.' + (VALIDATION_CODES.indexOf(code) !== -1 ? code : 'saveFailed')));
-    }
-
-    // Le texte d'explication cite le caractère réglé (« §ub ») : il se recompose, aucun data-i18n ne peut le porter.
-    function renderIntro() { intro.textContent = I18n.t('settings.expansion.intro', { example: storedChar() + 'ub' }); }
-
-    function resetForm() {
-      editingRowId = null;
-      abbreviationInput.value = '';
-      textInput.value = '';
-      submitButton.textContent = I18n.t('settings.expansion.add');
-      cancelButton.hidden = true;
-    }
-
-    function startEditing(entry) {
-      editingRowId = entry.rowId;
-      abbreviationInput.value = entry.abbreviation;
-      textInput.value = entry.text;
-      submitButton.textContent = I18n.t('common.save');
-      cancelButton.hidden = false;
-      setFormStatus('');
-      abbreviationInput.focus();
-      abbreviationInput.select();
-    }
-
-    function renderList() {
-      const items = list();
-      const char = storedChar();
-      listEl.textContent = '';
-      emptyEl.hidden = items.length > 0;
-      items.forEach(entry => {
-        const row = document.createElement('li');
-        row.className = 'settings-expansion-row';
-        const abbreviation = document.createElement('span');
-        abbreviation.className = 'settings-expansion-abbr';
-        abbreviation.textContent = char + entry.abbreviation;
-        const text = document.createElement('span');
-        text.className = 'settings-expansion-text';
-        text.textContent = entry.text;
-        text.title = entry.text;
-        const edit = document.createElement('button');
-        edit.type = 'button';
-        edit.textContent = I18n.t('settings.expansion.edit');
-        edit.setAttribute('aria-label', I18n.t('settings.expansion.editAria', { abbreviation: char + entry.abbreviation }));
-        edit.addEventListener('click', () => startEditing(entry));
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'settings-expansion-delete';
-        del.textContent = I18n.t('common.delete');
-        del.setAttribute('aria-label', I18n.t('settings.expansion.deleteAria', { abbreviation: char + entry.abbreviation }));
-        del.addEventListener('click', async () => {
-          if (!(await Dialogs.confirm({ title: I18n.t('settings.expansion.confirmDelete', { abbreviation: char + entry.abbreviation }), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
-          try {
-            await remove(entry.rowId);
-            if (editingRowId === entry.rowId) resetForm();
-            setFormStatus('');
-          } catch (error) {
-            console.warn('[text-expansion] suppression impossible', error);
-            setFormStatus('saveFailed');
-          }
-          renderList();
-          abbreviationInput.focus();
-        });
-        row.append(abbreviation, text, edit, del);
-        listEl.appendChild(row);
-      });
-    }
-
-    function syncChar() {
-      charInput.value = storedChar();
-      showCharProblem(charProblem(storedChar()) === 'sameAsVariables' ? 'sameAsVariables' : '');
-      renderIntro();
-    }
-
-    function refresh() {
-      syncChar();
-      setFormStatus('');
-      renderList(); // ce qui est déjà lu s'affiche tout de suite, la relecture complète ensuite
-      load(true).then(renderList, () => renderList());
-    }
-
-    charInput.addEventListener('input', () => {
-      const problem = charInput.value ? setTriggerChar(charInput.value) : 'invalid';
-      showCharProblem(problem);
-      if (!problem) { renderIntro(); renderList(); }
-    });
-    // Un caractère refusé ne reste pas affiché comme s'il était retenu : à la sortie du champ, il retrouve celui qui est réellement en vigueur.
-    charInput.addEventListener('blur', () => {
-      if (charInput.value !== storedChar()) syncChar();
-    });
-
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      setFormStatus('');
-      submitButton.disabled = true;
-      try {
-        if (editingRowId != null) await update(editingRowId, abbreviationInput.value, textInput.value);
-        else await add(abbreviationInput.value, textInput.value);
-        resetForm();
-        renderList();
-        abbreviationInput.focus();
-      } catch (error) {
-        const code = error && error.code;
-        if (VALIDATION_CODES.indexOf(code) === -1) console.warn('[text-expansion] enregistrement impossible', error);
-        setFormStatus(code);
-        (code === 'textEmpty' || code === 'textTooLong' ? textInput : abbreviationInput).focus();
-      } finally {
-        submitButton.disabled = false;
-      }
-    });
-    cancelButton.addEventListener('click', () => { resetForm(); setFormStatus(''); abbreviationInput.focus(); });
-    // Ctrl/Cmd+Entrée enregistre depuis le champ de texte, où Entrée seule passe à la ligne (un texte peut en compter plusieurs).
-    textInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); form.requestSubmit(); }
-    });
-
-    const tab = document.querySelector('.settings-tab[data-settings-tab="shortcuts"]');
-    if (tab) tab.addEventListener('click', refresh);
-    const openButton = document.getElementById('v2-btn-settings');
-    // L'onglet reste celui qu'on avait laissé à la fermeture : rouvrir Réglages dessus doit aussi relire.
-    if (openButton) openButton.addEventListener('click', () => { if (!panel.hidden) refresh(); });
-    I18n.onChange(() => { renderIntro(); renderList(); resetForm(); setFormStatus(''); });
-    resetForm();
-    syncChar();
-  }
-
-  wireSettingsPanel();
 
   return {
     storedChar, triggerChar, charProblem, setTriggerChar,

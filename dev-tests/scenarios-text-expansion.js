@@ -288,6 +288,33 @@
   });
 
   cases.push({
+    id: 'te_every_delimiter_closes_a_typed_abbreviation',
+    description: 'Chacun des treize délimiteurs - espace, espace insécable, espace fine insécable, . , ; : ! ? ) ] } » - clôt « §ub » et reste derrière le texte ; un « - », un « _ » ou un chiffre font partie de l\'abréviation et n\'étendent rien',
+    run: async (h) => {
+      wipe();
+      await TextExpansion.add('ub', 'université de Bordeaux');
+      const delimiters = [' ', '\u00a0', '\u202f', '.', ',', ';', ':', '!', '?', ')', ']', '}', '\u00bb'];
+      const attempt = async typed => {
+        await h.resetEditor();
+        await h.focusAtEnd();
+        for (const part of typed) await h.typeText(part);
+        await h.sleep(60);
+        return document.querySelector('.tiptap').textContent;
+      };
+      const wrong = [];
+      for (const d of delimiters) {
+        const got = await attempt(['§ub', d]);
+        if (got !== 'université de Bordeaux' + d) wrong.push({ delimiter: 'U+' + d.charCodeAt(0).toString(16).padStart(4, '0'), got });
+      }
+      for (const part of ['-', '_', '1']) {
+        const got = await attempt(['§ub', part]);
+        if (got !== '§ub' + part) wrong.push({ part, got });
+      }
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong }) };
+    },
+  });
+
+  cases.push({
     id: 'te_expansion_right_after_a_variable_badge',
     description: 'Une bulle de variable juste avant « §ub » n\'empêche pas l\'expansion (la bulle compte pour un caractère qui n\'est ni lettre ni chiffre), et la bulle reste en place',
     run: async (h) => {
@@ -446,6 +473,359 @@
           && fr.add === 'Ajouter' && fr.intro.indexOf('§ub') !== -1 && en.intro.indexOf('§ub') !== -1 && same.length === 0 && JSON.stringify(back) === JSON.stringify(fr),
         notes: JSON.stringify({ tabs, hiddenAtStart, same, fr, en }),
       };
+    },
+  });
+
+  // L'onglet piloté comme le fait la personne, par ses boutons : relecture à l'ouverture, Modifier, Supprimer, échecs d'écriture, changement de langue.
+  // La frappe et la souris réelles de ce même onglet sont dans dev-tests/verify-text-expansion-keyboard.mjs.
+  const ALICE = 'alice@example.fr';
+  const byId = id => document.getElementById(id);
+  const paneRows = () => Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row')).map(row => row.querySelector('.settings-expansion-abbr').textContent);
+  // Le bouton « Modifier » (0) ou « Supprimer » (1) de la ligne dont l'abréviation, déclencheur compris, est `abbr`.
+  const rowButton = (abbr, index) => {
+    const row = Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row')).find(r => r.querySelector('.settings-expansion-abbr').textContent === abbr);
+    return row && row.querySelectorAll('button')[index];
+  };
+  // Le formulaire : ses deux champs, le bouton d'envoi, la présence d'« Annuler » et le message d'erreur (vide s'il est masqué).
+  const paneForm = () => ({
+    abbr: byId('settings-expansion-abbr').value,
+    text: byId('settings-expansion-text').value,
+    submit: byId('settings-expansion-submit').textContent,
+    cancelShown: !byId('settings-expansion-cancel').hidden,
+    status: byId('settings-expansion-status').hidden ? '' : byId('settings-expansion-status').textContent,
+  });
+  const paneTitles = () => Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-text')).map(span => span.title);
+  const emptyShown = () => !byId('settings-expansion-empty').hidden;
+  const focusedId = () => (document.activeElement && document.activeElement.id) || '';
+  // Réglages ouvert sur Raccourcis, vue Abréviations (l'onglet s'ouvre sur les touches du clavier depuis js/shortcuts-panel.js ; `ShortcutsPanel` est une `const` de
+  // script, donc absent de `window`).
+  async function openExpansionPane() {
+    byId('v2-btn-settings').click();
+    document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').click();
+    ShortcutsPanel.showView('expansion');
+    await sleep(250);
+  }
+
+  cases.push({
+    id: 'te_settings_pane_reads_the_table_again_whenever_settings_opens_on_it',
+    description: 'L\'onglet Abréviations relit la table à chaque ouverture - clic sur Raccourcis, ou réouverture de Réglages quand l\'onglet est resté affiché - et seulement alors : une ligne écrite entre-temps par un autre onglet apparaît, un message d\'erreur resté affiché disparaît, la saisie en cours reste',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      const realFetch = grist.docApi.fetchTable;
+      let reads = 0;
+      grist.docApi.fetchTable = function (tableId) { if (tableId === TABLE) reads += 1; return realFetch.apply(this, arguments); };
+      try {
+        await openExpansionPane();
+        results.first = paneRows();
+        results.readsFirst = reads;
+        // Une erreur de saisie à l'écran, puis Réglages fermé et rouvert sur Raccourcis.
+        byId('settings-expansion-text').value = 'texte sans abréviation';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(150);
+        results.errorShown = paneForm().status;
+        closeSettings();
+        await stub().applyUserActions([['AddRecord', TABLE, null, { Utilisateur: ALICE, Abreviation: 'adr', Texte: '12 rue des Lilas' }]]);
+        await openExpansionPane();
+        results.second = paneRows();
+        results.reopened = paneForm();
+        results.readsSecond = reads;
+        // Fermé sans changer d'onglet, Réglages se rouvre sur Raccourcis : seule l'ouverture de Réglages peut alors déclencher la relecture.
+        byId('settings-close').click();
+        await stub().applyUserActions([['AddRecord', TABLE, null, { Utilisateur: ALICE, Abreviation: 'tel', Texte: '05 56 00 00 00' }]]);
+        byId('v2-btn-settings').click();
+        await sleep(250);
+        results.third = paneRows();
+        results.readsThird = reads;
+        // Rouvert sur l'onglet Langue : rien à relire.
+        closeSettings();
+        byId('v2-btn-settings').click();
+        await sleep(250);
+        results.readsLanguage = reads;
+      } finally {
+        grist.docApi.fetchTable = realFetch;
+        closeSettings();
+      }
+      const pass = JSON.stringify(results) === JSON.stringify({
+        first: ['§ub'],
+        readsFirst: 1,
+        errorShown: I18n.t('settings.expansion.error.empty'),
+        second: ['§adr', '§ub'],
+        reopened: { abbr: '', text: 'texte sans abréviation', submit: 'Ajouter', cancelShown: false, status: '' },
+        readsSecond: 2,
+        third: ['§adr', '§tel', '§ub'],
+        readsThird: 3,
+        readsLanguage: 3,
+      }) && results.errorShown === 'Saisissez une abréviation.';
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'te_settings_pane_edit_and_delete_keep_the_form_in_step_with_the_list',
+    description: 'Modifier charge la ligne (texte de l\'abréviation sélectionné), Supprimer une autre ligne laisse la modification en cours, annuler la confirmation ne touche à rien, supprimer la ligne en cours de modification vide le formulaire ; le focus revient à l\'abréviation',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux'], [ALICE, 'adr', '12 rue des Lilas'], [ALICE, 'tel', '05 56 00 00 00']]);
+      const results = {};
+      const asked = [];
+      let answer = true;
+      const realConfirm = Dialogs.confirm;
+      Dialogs.confirm = async opts => { asked.push([opts.title, opts.confirmLabel, !!opts.danger]); return answer; };
+      try {
+        await openExpansionPane();
+        results.opened = { rows: paneRows(), titles: paneTitles(), emptyShown: emptyShown() };
+        // Une erreur de saisie à l'écran : choisir Modifier la fait disparaître.
+        byId('settings-expansion-text').value = 'texte sans abréviation';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(150);
+        results.errorBeforeEdit = paneForm().status;
+        rowButton('§ub', 0).click();
+        await sleep(30);
+        const abbr = byId('settings-expansion-abbr');
+        results.editing = { form: paneForm(), focus: focusedId(), selection: [abbr.selectionStart, abbr.selectionEnd] };
+        // Une autre ligne supprimée pendant la modification : la modification reste, le focus revient à l'abréviation.
+        byId('settings-expansion-text').focus();
+        rowButton('§tel', 1).click();
+        await sleep(150);
+        results.otherDeleted = { rows: paneRows(), form: paneForm(), focus: focusedId(), table: rowsOf().map(r => r.abbr) };
+        // Confirmation refusée : ni la liste ni le formulaire ne bougent.
+        answer = false;
+        rowButton('§adr', 1).click();
+        await sleep(100);
+        results.refused = { rows: paneRows(), form: paneForm(), table: rowsOf().map(r => r.abbr) };
+        // La ligne en cours de modification supprimée : elle part avec son formulaire, qui redevient un ajout.
+        answer = true;
+        byId('settings-expansion-text').focus();
+        rowButton('§ub', 1).click();
+        await sleep(150);
+        results.editedDeleted = { rows: paneRows(), form: paneForm(), focus: focusedId(), table: rowsOf().map(r => r.abbr) };
+        // La dernière ligne supprimée : la liste vide le dit.
+        rowButton('§adr', 1).click();
+        await sleep(150);
+        results.emptied = { rows: paneRows(), emptyShown: emptyShown(), table: rowsOf().map(r => r.abbr) };
+      } finally {
+        Dialogs.confirm = realConfirm;
+        closeSettings();
+      }
+      results.asked = asked;
+      const editing = { abbr: 'ub', text: 'université de Bordeaux', submit: 'Enregistrer', cancelShown: true, status: '' };
+      const adding = { abbr: '', text: '', submit: 'Ajouter', cancelShown: false, status: '' };
+      const ask = abbr => ['Supprimer l’abréviation §' + abbr + ' ?', 'Supprimer', true];
+      const pass = JSON.stringify(results) === JSON.stringify({
+        opened: { rows: ['§adr', '§tel', '§ub'], titles: ['12 rue des Lilas', '05 56 00 00 00', 'université de Bordeaux'], emptyShown: false },
+        errorBeforeEdit: I18n.t('settings.expansion.error.empty'),
+        editing: { form: editing, focus: 'settings-expansion-abbr', selection: [0, 2] },
+        otherDeleted: { rows: ['§adr', '§ub'], form: editing, focus: 'settings-expansion-abbr', table: ['ub', 'adr'] },
+        refused: { rows: ['§adr', '§ub'], form: editing, table: ['ub', 'adr'] },
+        editedDeleted: { rows: ['§adr'], form: adding, focus: 'settings-expansion-abbr', table: ['adr'] },
+        emptied: { rows: [], emptyShown: true, table: [] },
+        asked: [ask('tel'), ask('adr'), ask('ub'), ask('adr')],
+      });
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'te_settings_pane_says_when_a_save_or_a_delete_fails_and_keeps_what_was_typed',
+    description: 'Une écriture que Grist refuse (réseau coupé) affiche le message d\'échec d\'enregistrement et laisse la saisie en place avec le bouton rendu ; une suppression refusée laisse la ligne et affiche le même message',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      const api = grist.docApi;
+      const realApply = api.applyUserActions;
+      const realConfirm = Dialogs.confirm;
+      const realWarn = console.warn;
+      const warned = [];
+      console.warn = (...args) => { warned.push(String(args[0])); };
+      Dialogs.confirm = async () => true;
+      try {
+        await openExpansionPane();
+        api.applyUserActions = async () => { throw Object.assign(new Error('réseau coupé (simulé)'), { code: 'ECONNRESET' }); };
+        byId('settings-expansion-abbr').value = 'nouv';
+        byId('settings-expansion-text').value = 'nouvelle abréviation';
+        byId('settings-expansion-form').requestSubmit();
+        await sleep(250);
+        results.addFailed = { form: paneForm(), rows: paneRows(), focus: focusedId(), submitDisabled: byId('settings-expansion-submit').disabled, table: rowsOf().map(r => r.abbr) };
+        // « Annuler » vide le formulaire et son message : celui d'après vient de la suppression seule.
+        byId('settings-expansion-cancel').click();
+        results.cancelled = paneForm();
+        rowButton('§ub', 1).click();
+        await sleep(250);
+        results.deleteFailed = { form: paneForm(), rows: paneRows(), table: rowsOf().map(r => r.abbr) };
+      } finally {
+        api.applyUserActions = realApply;
+        Dialogs.confirm = realConfirm;
+        console.warn = realWarn;
+        closeSettings();
+      }
+      results.warned = warned;
+      results.failedText = I18n.t('settings.expansion.error.saveFailed');
+      const failed = results.failedText;
+      const adding = status => ({ abbr: '', text: '', submit: 'Ajouter', cancelShown: false, status });
+      const pass = failed === 'L’enregistrement dans le document a échoué.' && JSON.stringify(results) === JSON.stringify({
+        addFailed: { form: { abbr: 'nouv', text: 'nouvelle abréviation', submit: 'Ajouter', cancelShown: false, status: failed }, rows: ['§ub'], focus: 'settings-expansion-abbr', submitDisabled: false, table: ['ub'] },
+        cancelled: adding(''),
+        deleteFailed: { form: adding(failed), rows: ['§ub'], table: ['ub'] },
+        warned: ['[text-expansion] enregistrement impossible', '[text-expansion] suppression impossible'],
+        failedText: failed,
+      });
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'te_settings_pane_follows_a_language_change_even_while_a_line_is_being_edited',
+    description: 'Un changement de langue en pleine modification refait le texte d\'explication, les boutons des lignes et le bouton d\'envoi, et ramène le formulaire à un ajout vide',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      try {
+        await openExpansionPane();
+        rowButton('§ub', 0).click();
+        await sleep(30);
+        results.editingFr = paneForm();
+        I18n.setLang('en');
+        await sleep(120);
+        results.en = {
+          form: paneForm(),
+          intro: byId('settings-expansion-intro').textContent,
+          buttons: Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row button')).map(b => b.textContent + '|' + b.getAttribute('aria-label')),
+        };
+      } finally {
+        I18n.setLang('fr');
+        await sleep(120);
+        closeSettings();
+      }
+      results.back = { form: paneForm(), intro: byId('settings-expansion-intro').textContent };
+      const adding = (submit) => ({ abbr: '', text: '', submit, cancelShown: false, status: '' });
+      const pass = JSON.stringify(results) === JSON.stringify({
+        editingFr: { abbr: 'ub', text: 'université de Bordeaux', submit: 'Enregistrer', cancelShown: true, status: '' },
+        en: {
+          form: adding('Add'),
+          intro: 'Type the trigger character and an abbreviation, for example “§ub”, then a space: it is replaced by its text.',
+          buttons: ['Edit|Edit abbreviation §ub', 'Delete|Delete abbreviation §ub'],
+        },
+        back: { form: adding('Ajouter'), intro: 'Tapez le caractère déclencheur puis une abréviation, par exemple « §ub », et un espace : elle est remplacée par son texte.' },
+      });
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'te_settings_pane_char_field_shows_the_stored_character_and_refuses_what_cannot_trigger',
+    description: 'Le champ du caractère montre celui en vigueur et prévient quand c\'est aussi celui des variables ; un caractère valable est retenu à la frappe (explication et liste le reprennent), un autre est refusé avec son message et, en quittant le champ, celui en vigueur revient',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      const charField = byId('settings-expansion-char');
+      const charStatus = () => (byId('settings-expansion-char-status').hidden ? '' : byId('settings-expansion-char-status').textContent);
+      const typeChar = value => { charField.value = value; charField.dispatchEvent(new Event('input', { bubbles: true })); };
+      const intro = () => byId('settings-expansion-intro').textContent;
+      try {
+        // Le caractère des abréviations est devenu aussi celui des variables (réglé après coup dans Réglages) : l'onglet le dit à l'ouverture.
+        TextExpansion.setTriggerChar('@');
+        localStorage.setItem('pp_trigger_char', '@');
+        await openExpansionPane();
+        results.sameAsVariables = { value: charField.value, status: charStatus(), intro: intro(), rows: paneRows() };
+        localStorage.removeItem('pp_trigger_char');
+        typeChar('$');
+        results.accepted = { stored: TextExpansion.storedChar(), status: charStatus(), intro: intro(), rows: paneRows() };
+        typeChar('a');
+        results.refused = { stored: TextExpansion.storedChar(), value: charField.value, status: charStatus(), intro: intro(), rows: paneRows() };
+        charField.dispatchEvent(new Event('blur'));
+        results.afterBlur = { value: charField.value, status: charStatus() };
+        typeChar('');
+        results.emptied = { stored: TextExpansion.storedChar(), value: charField.value, status: charStatus() };
+        charField.dispatchEvent(new Event('blur'));
+        results.emptiedBlur = { value: charField.value, status: charStatus() };
+      } finally {
+        localStorage.removeItem('pp_trigger_char');
+        closeSettings();
+      }
+      const invalid = I18n.t('settings.expansion.char.invalid');
+      const same = I18n.t('settings.expansion.char.sameAsVariables');
+      const introWith = char => 'Tapez le caractère déclencheur puis une abréviation, par exemple « ' + char + 'ub », et un espace : elle est remplacée par son texte.';
+      const pass = invalid !== same && !!invalid && !!same && JSON.stringify(results) === JSON.stringify({
+        sameAsVariables: { value: '@', status: same, intro: introWith('@'), rows: ['@ub'] },
+        accepted: { stored: '$', status: '', intro: introWith('$'), rows: ['$ub'] },
+        refused: { stored: '$', value: 'a', status: invalid, intro: introWith('$'), rows: ['$ub'] },
+        afterBlur: { value: '$', status: '' },
+        emptied: { stored: '$', value: '', status: invalid },
+        emptiedBlur: { value: '$', status: '' },
+      });
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'te_settings_pane_adds_modifies_and_refuses_through_the_form',
+    description: 'Le formulaire ajoute une ligne (formulaire vidé, focus à l\'abréviation), enregistre une modification sans doublon, refuse un doublon (casse ignorée) et un texte vide en gardant la saisie et en plaçant le focus sur le champ fautif, enregistre au Ctrl+Entrée et « Annuler » rend un formulaire vide',
+    run: async () => {
+      wipe();
+      stub().setUserEmail(ALICE);
+      await seed([[ALICE, 'ub', 'université de Bordeaux']]);
+      const results = {};
+      const fill = (abbr, text) => { byId('settings-expansion-abbr').value = abbr; byId('settings-expansion-text').value = text; };
+      const submit = async () => { byId('settings-expansion-form').requestSubmit(); await sleep(250); };
+      const state = () => ({ rows: paneRows(), form: paneForm(), focus: focusedId(), table: rowsOf().map(r => [r.abbr, r.text, r.user]) });
+      try {
+        await openExpansionPane();
+        fill('nouv', 'nouveau texte');
+        await submit();
+        results.added = state();
+        rowButton('§nouv', 0).click();
+        await sleep(30);
+        byId('settings-expansion-text').value = 'texte modifié';
+        await submit();
+        results.modified = state();
+        fill('UB', 'autre texte');
+        await submit();
+        results.duplicate = state();
+        fill('zz', '   ');
+        await submit();
+        results.textEmpty = state();
+        fill('ce', 'envoyé au clavier');
+        byId('settings-expansion-text').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+        await sleep(250);
+        results.ctrlEnter = state();
+        rowButton('§ub', 0).click();
+        await sleep(30);
+        byId('settings-expansion-text').focus();
+        byId('settings-expansion-cancel').click();
+        await sleep(30);
+        results.cancelled = state();
+      } finally {
+        closeSettings();
+      }
+      const adding = { abbr: '', text: '', submit: 'Ajouter', cancelShown: false, status: '' };
+      const ub = ['ub', 'université de Bordeaux', ALICE];
+      const nouv = text => ['nouv', text, ALICE];
+      const ce = ['ce', 'envoyé au clavier', ALICE];
+      const pass = JSON.stringify(results) === JSON.stringify({
+        added: { rows: ['§nouv', '§ub'], form: adding, focus: 'settings-expansion-abbr', table: [ub, nouv('nouveau texte')] },
+        modified: { rows: ['§nouv', '§ub'], form: adding, focus: 'settings-expansion-abbr', table: [ub, nouv('texte modifié')] },
+        duplicate: {
+          rows: ['§nouv', '§ub'], form: { abbr: 'UB', text: 'autre texte', submit: 'Ajouter', cancelShown: false, status: I18n.t('settings.expansion.error.duplicate') },
+          focus: 'settings-expansion-abbr', table: [ub, nouv('texte modifié')],
+        },
+        textEmpty: {
+          rows: ['§nouv', '§ub'], form: { abbr: 'zz', text: '   ', submit: 'Ajouter', cancelShown: false, status: I18n.t('settings.expansion.error.textEmpty') },
+          focus: 'settings-expansion-text', table: [ub, nouv('texte modifié')],
+        },
+        ctrlEnter: { rows: ['§ce', '§nouv', '§ub'], form: adding, focus: 'settings-expansion-abbr', table: [ub, nouv('texte modifié'), ce] },
+        cancelled: { rows: ['§ce', '§nouv', '§ub'], form: adding, focus: 'settings-expansion-abbr', table: [ub, nouv('texte modifié'), ce] },
+      });
+      return { pass, notes: JSON.stringify(results) };
     },
   });
 
