@@ -74,6 +74,19 @@ const Variables = (function () {
     acBox.appendChild(tabs);
     acItemsBox = document.createElement('div');
     acItemsBox.className = 'ac-items';
+    // Un survol à la souris choisit aussi la ligne (pas seulement les flèches du clavier), pour qu'Entrée suive réellement la ligne survolée ; un clic l'insère. Posés une fois
+    // sur la liste, pas sur chacune de ses lignes (une liste n'a plus de limite : des milliers de lignes ne portent pas deux écouteurs chacune).
+    acItemsBox.addEventListener('mouseover', e => {
+      const row = e.target.closest('.ac-item');
+      if (row) select(Number(row.dataset.idx));
+    });
+    // mousedown+preventDefault (pas click) : le focus reste dans l'éditeur ou le champ.
+    acItemsBox.addEventListener('mousedown', e => {
+      const row = e.target.closest('.ac-item');
+      if (!row) return;
+      e.preventDefault();
+      latestCommand(currentItems[Number(row.dataset.idx)]);
+    });
     acBox.appendChild(acItemsBox);
     document.body.appendChild(acBox);
     return acBox;
@@ -95,24 +108,32 @@ const Variables = (function () {
     return [].concat(...groups, others);
   }
 
+  // Une colonne d'aide « gristHelper_… » : le texte affiché d'une Référence, que Grist range dans la même table. Elle ne se tape ni ne se choisit jamais.
+  const isHelperColumn = column => column.indexOf('gristHelper_') === 0;
+  // Ce que la saisie `query` retient : les variables dont la clé « Table.Colonne » la contient, sans les colonnes d'aide. Sans accents ni casse, comme toutes les listes à
+  // recherche (js/search-select.js:normalize) : « télé » retrouve Telephone, les identifiants de Grist n'ayant jamais d'accent. Aucune limite de longueur : la personne cherche
+  // par le nom, elle ne fait pas défiler la liste.
+  function matchingVariables(query) {
+    const wanted = SearchSelect.normalize(query);
+    return GristAPI.getAllVariables().filter(v => !isHelperColumn(v.column) && SearchSelect.normalize(v.key).includes(wanted));
+  }
+
   // Source des items selon l'onglet actif - centralisé pour être appelé à la fois par l'`items()` de @tiptap/suggestion (à chaque frappe) et par le clic sur
   // un onglet.
   // `editor` (facultatif) : les colonnes de la table de la page viennent en tête ; dans une zone répétée par une boucle (js/variable-loop.js:loopTableAt), celles de la
   // table parcourue passent avant elles.
   function computeItems(query, editor) {
-    const q = (query || '').toLowerCase();
     if (activeTab === 'chips') {
       // Note de bas de page exclue en édition d'en-tête/pied : cette zone est répétée sur chaque page, sans repère de page physique auquel ancrer une note.
       const items = Editor.isEditingHeaderFooter() ? SMART_CHIP_ITEMS.filter(v => v.chipKind !== 'footnote') : SMART_CHIP_ITEMS;
-      return items.filter(v => displayKey(v).toLowerCase().includes(q));
+      const wanted = SearchSelect.normalize(query);
+      return items.filter(v => SearchSelect.normalize(displayKey(v)).includes(wanted));
     }
     if (!schemaRefreshedForSession) {
       schemaRefreshedForSession = true;
       GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
     }
-    const all = GristAPI.getAllVariables();
-    const found = all.filter(v => v.key.toLowerCase().includes(q));
-    return prioritizeTables(found, currentTables(editor)).slice(0, 50);
+    return prioritizeTables(matchingVariables(query), currentTables(editor));
   }
 
   function currentTabEl(tabName) {
@@ -124,19 +145,30 @@ const Variables = (function () {
     if (tabs) tabs.style.display = visible ? '' : 'none';
   }
 
-  // Un survol à la souris met aussi à jour la sélection (pas seulement les flèches du clavier), pour qu'Entrée suive réellement l'item survolé.
-  function render(items, onPick) {
+  // Une ligne par entrée de `currentItems`, toutes : la liste n'a pas de limite de longueur. `data-idx` dit à quelle entrée répond la ligne (évènements de ensureBox).
+  function render() {
     ensureBox();
     ['variables', 'chips'].forEach(t => { const el = currentTabEl(t); if (el) el.classList.toggle('active', t === activeTab); });
-    acItemsBox.innerHTML = '';
-    items.forEach((item, idx) => {
+    const rows = document.createDocumentFragment();
+    currentItems.forEach((item, idx) => {
       const div = document.createElement('div');
       div.className = 'ac-item' + (idx === selectedIndex ? ' selected' : '');
+      div.dataset.idx = idx;
       div.textContent = displayKey(item);
-      div.addEventListener('mouseenter', () => { if (selectedIndex !== idx) { selectedIndex = idx; render(items, onPick); } });
-      div.addEventListener('mousedown', (e) => { e.preventDefault(); onPick(item); });
-      acItemsBox.appendChild(div);
+      rows.appendChild(div);
     });
+    acItemsBox.innerHTML = '';
+    acItemsBox.appendChild(rows);
+    // Une liste neuve commence en haut, sur sa ligne choisie : refaite sans changer de longueur (« # » retapé), elle gardait sinon le défilement de la précédente.
+    acItemsBox.scrollTop = 0;
+  }
+  // Change la ligne choisie par sa classe, sans reconstruire la liste : un survol ou une flèche qui reconstruisait des milliers de lignes la figeait.
+  function select(idx) {
+    if (idx === selectedIndex) return;
+    const rows = acItemsBox.children;
+    if (rows[selectedIndex]) rows[selectedIndex].classList.remove('selected');
+    selectedIndex = idx;
+    if (rows[idx]) rows[idx].classList.add('selected');
   }
 
   // La liste défile seule (sa hauteur suit la place libre autour du curseur) : la ligne choisie aux flèches y est ramenée, entière. Pas de scrollIntoView, qui ferait
@@ -151,8 +183,7 @@ const Variables = (function () {
   }
   // Flèches ↑ et ↓, dans l'éditeur comme dans un champ texte : la ligne voisine (de la dernière à la première et inversement), la liste suit.
   function moveSelection(step) {
-    selectedIndex = (selectedIndex + step + currentItems.length) % currentItems.length;
-    render(currentItems, item => latestCommand(item));
+    select((selectedIndex + step + currentItems.length) % currentItems.length);
     keepSelectedVisible();
   }
 
@@ -182,7 +213,7 @@ const Variables = (function () {
     selectedIndex = wrapIndex > 0 ? wrapIndex : 0;
     latestCommand = props.command;
     setTabsVisible(true);
-    render(currentItems, item => latestCommand(item));
+    render();
     listWindow = null; // la liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger)
     ensureBox().style.display = currentItems.length ? 'flex' : 'none';
     position(props.clientRect);
@@ -306,9 +337,8 @@ const Variables = (function () {
       if (!reached) return null;
       hops.push(column);
     }
-    const partial = raw.slice(cut + 1).toLowerCase();
-    // Sans les colonnes d'aide « gristHelper_… » (le texte affiché d'une Référence, que Grist range dans la même table) : elles ne se tapent jamais.
-    return GristAPI.getColumns(reached).filter(c => c.indexOf('gristHelper_') !== 0 && c.toLowerCase().includes(partial)).map(c => {
+    const partial = SearchSelect.normalize(raw.slice(cut + 1));
+    return GristAPI.getColumns(reached).filter(c => !isHelperColumn(c) && SearchSelect.normalize(c).includes(partial)).map(c => {
       const path = hops.concat(c).join('.');
       return { key: table + '.' + path, table, column: path };
     });
@@ -318,7 +348,8 @@ const Variables = (function () {
     const caret = el.selectionStart;
     if (caret == null) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     const text = el.value.slice(0, caret);
-    const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([A-Za-z0-9_.]*)$'));
+    // Lettres accentuées comprises : « #télé » retrouve Telephone comme dans l'éditeur.
+    const match = text.match(new RegExp(triggerChar().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([\\p{L}\\p{N}_.]*)$', 'u'));
     if (!match) { hide(); filenameInputState = null; schemaRefreshedForSession = false; return; }
     // Même rafraîchissement "une fois par session" que le déclencheur de l'éditeur, déclenché dès le 1er caractère tapé après # - sans ça, chercher une
     // colonne toute juste ajoutée ne trouverait jamais rien, la branche !items.length ci-dessous fermant le popup avant d'avoir pu rafraîchir.
@@ -326,20 +357,19 @@ const Variables = (function () {
       schemaRefreshedForSession = true;
       GristAPI.refreshSchema().catch(e => console.warn('[variables] rafraîchissement du schéma #Variable échoué', e));
     }
-    const query = match[1].toLowerCase();
-    const all = GristAPI.getAllVariables();
+    const query = SearchSelect.normalize(match[1]);
     // Après « Projet.Accompagnateur. » : les colonnes de la ligne que désigne cette Référence ; sinon la saisie filtre les clés « Table.Colonne », celles de la
     // table de la page d'abord.
-    const items = (pathItems(match[1]) || prioritizeTables(all.filter(v => v.key.toLowerCase().includes(query)), currentTables())).slice(0, 50);
+    const items = pathItems(match[1]) || prioritizeTables(matchingVariables(match[1]), currentTables());
     // Une clé tapée en entier, seule proposition : rien à compléter (clé tapée à la main, curseur qui revient derrière une variable posée) - la liste restait fermée
     // là tant que le point la fermait.
-    if (!items.length || (items.length === 1 && items[0].key.toLowerCase() === query)) { hide(); filenameInputState = null; return; }
+    if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === query)) { hide(); filenameInputState = null; return; }
     filenameInputState = { el, start: caret - match[0].length, end: caret };
     currentItems = items;
     selectedIndex = 0;
     latestCommand = item => insertFilenameVariable(item);
     setTabsVisible(false);
-    render(currentItems, latestCommand);
+    render();
     // Un champ d'une fenêtre (le calcul d'une bulle, js/variable-calc.js) : la liste s'ouvre devant elle, pas dessous - les fenêtres sont au-dessus des menus (listWindow, Layers.raise).
     listWindow = el.closest('.pp-modal');
     ensureBox().style.display = 'flex';
@@ -379,7 +409,7 @@ const Variables = (function () {
       else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); latestCommand(currentItems[selectedIndex]); }
       else if (e.key === 'Escape') { e.preventDefault(); hide(); filenameInputState = null; }
     });
-    // Un clic sur un item de la popup (mousedown, déjà en preventDefault() dans render() ci-dessus) s'exécute avant le blur du champ - ce filet de sécurité
+    // Un clic sur un item de la popup (mousedown, déjà en preventDefault() dans ensureBox()) s'exécute avant le blur du champ - ce filet de sécurité
     // (délai court) couvre les cas où le focus partirait quand même (ex. Échap ailleurs).
     el.addEventListener('blur', () => { setTimeout(() => { if (filenameInputState && filenameInputState.el === el) { hide(); filenameInputState = null; } }, 150); });
   }

@@ -265,6 +265,34 @@ const sameLine = (...boxes) => boxes.every(b => Math.abs(b.cy - boxes[0].cy) <= 
 const insidePanel = boxes => Object.values(boxes).every(b => b.l >= 0 && b.t >= 0 && b.r <= WIDTH + 0.5 && b.b <= HEIGHT + 0.5);
 const cond = '#var-condition-modal';
 
+// La liste « # » (js/variables.js) : ses lignes et la ligne choisie, `inside` = le panneau entier tient dans la fenêtre ; null quand elle est fermée.
+const HASH_BOX = '#autocomplete-box';
+const hashListed = () => page.evaluate(sel => {
+  const el = document.querySelector(sel);
+  if (!el || el.style.display === 'none') return null;
+  const r = el.getBoundingClientRect();
+  return {
+    rows: Array.from(el.querySelectorAll('.ac-item')).map(i => i.textContent), selected: (el.querySelector('.ac-item.selected') || {}).textContent || null,
+    inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+  };
+}, HASH_BOX);
+// La ligne choisie, mesurée dans la partie VISIBLE de la liste (celle de `.ac-items`, qui défile) : entière et au premier plan, pas seulement « choisie ».
+const hashSelectedRow = () => page.evaluate(sel => {
+  const list = document.querySelector(sel + ' .ac-items');
+  const row = list && list.querySelector('.ac-item.selected');
+  if (!row) return null;
+  const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { text: row.textContent, entire: r.top >= l.top - 0.5 && r.bottom <= l.bottom + 0.5 && !!hit && (hit === row || row.contains(hit)), scrollTop: list.scrollTop };
+}, HASH_BOX);
+// Ce que la liste doit rendre pour `query`, par la règle écrite à part : les clés de la table de la page, puis celles des autres tables dans l'ordre du schéma, sans les colonnes
+// d'aide « gristHelper_… » et SANS limite de longueur (les sections d'avant laissent leurs tables dans le document factice).
+const hashExpectedKeys = query => page.evaluate(q => {
+  const current = GristAPI.getCurrentTableId();
+  const keys = GristAPI.getAllVariables().filter(v => v.column.indexOf('gristHelper_') !== 0 && v.key.toLowerCase().includes(q));
+  return keys.filter(v => v.table === current).concat(keys.filter(v => v.table !== current)).map(v => v.key);
+}, query);
+
 const SECTIONS = {
   // Fenêtre « Condition d'affichage » : la capture d'Antoine du 2026-09-29, avec les colonnes de toutes les tables en UNE seule liste à plat, sans intitulé de groupe
   // (choix « À plat » d'Antoine, 2026-10-01 : la même liste que le macro-modèle).
@@ -946,19 +974,13 @@ const SECTIONS = {
 
   // Liste « # » du corps (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la table en cours ») : à la vraie frappe à 700×400, les colonnes
   // de la table de la page (CsDossiers, deuxième du schéma derrière CsAnnuaire) ouvrent la liste, avec ce qui est tapé comme sans ; au vrai clavier, les flèches et Entrée suivent
-  // l'ordre affiché, et la liste, qui défile (50 clés pour une dizaine de lignes visibles), garde la ligne choisie entière (demande d'Antoine du 2026-10-04 : « Oui, la liste suit »).
-  // La limite de 50 clés (appliquée après le classement) et la zone répétée par une boucle sont dans les scénarios de la page (colsearch_hash_list_*).
+  // l'ordre affiché, et la liste, qui défile (toutes les clés pour une dizaine de lignes visibles), garde la ligne choisie entière (demande d'Antoine du 2026-10-04 : « Oui, la liste
+  // suit »). Aucune limite de longueur (Antoine, 2026-10-04 : « autant que l'on souhaite ») ; la zone répétée par une boucle est dans les scénarios de la page (colsearch_hash_list_*).
   async hashList() {
-    const box = '#autocomplete-box';
-    const listed = () => page.evaluate(sel => {
-      const el = document.querySelector(sel);
-      if (!el || el.style.display === 'none') return null;
-      const r = el.getBoundingClientRect();
-      return {
-        rows: Array.from(el.querySelectorAll('.ac-item')).map(i => i.textContent), selected: (el.querySelector('.ac-item.selected') || {}).textContent || null,
-        inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
-      };
-    }, box);
+    const box = HASH_BOX;
+    const listed = hashListed;
+    const selectedRow = hashSelectedRow;
+    const expectedKeys = hashExpectedKeys;
     const badgeKeys = () => page.evaluate(() => {
       const out = [];
       EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.key); });
@@ -975,19 +997,12 @@ const SECTIONS = {
     const opened = await listed();
     const firstRow = await hitTest(box + ' .ac-item');
     const dossiers = ['Titre', 'Statut', 'Responsable', 'Montant', 'Echeance', 'Actif'].map(c => 'CsDossiers.' + c);
-    check('« # » : la liste s’ouvre sur les colonnes de la table de la page (CsDossiers), avant celles de CsAnnuaire, première dans le schéma, puis des autres tables',
-      !!opened && JSON.stringify(opened.rows.slice(0, 6)) === JSON.stringify(dossiers) && opened.rows[6] === 'CsAnnuaire.NomPrenom' && opened.rows.length === 50, opened);
+    const expectedAll = await expectedKeys('');
+    check('« # » : la liste s’ouvre sur les colonnes de la table de la page (CsDossiers), avant celles de CsAnnuaire, première dans le schéma, puis des autres tables, TOUTES (aucune limite)',
+      !!opened && JSON.stringify(opened.rows.slice(0, 6)) === JSON.stringify(dossiers) && opened.rows[6] === 'CsAnnuaire.NomPrenom' && JSON.stringify(opened.rows) === JSON.stringify(expectedAll) && opened.rows.length > 50,
+      { rows: opened && opened.rows.length, expected: expectedAll.length });
     check('« # » : la liste est entière dans le panneau et sa première ligne (CsDossiers.Titre) est visible et au premier plan',
       !!opened && opened.inside && firstRow.found && firstRow.inViewport && firstRow.onTop && opened.selected === 'CsDossiers.Titre', { opened: opened && { inside: opened.inside, selected: opened.selected }, firstRow });
-    // La ligne choisie, mesurée dans la partie VISIBLE de la liste (celle de `.ac-items`, qui défile) : entière et au premier plan, pas seulement « choisie ».
-    const selectedRow = () => page.evaluate(sel => {
-      const list = document.querySelector(sel + ' .ac-items');
-      const row = list && list.querySelector('.ac-item.selected');
-      if (!row) return null;
-      const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
-      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return { text: row.textContent, entire: r.top >= l.top - 0.5 && r.bottom <= l.bottom + 0.5 && !!hit && (hit === row || row.contains(hit)), scrollTop: list.scrollTop };
-    }, box);
     const stepsDown = [];
     for (let i = 0; i < 20; i++) {
       await page.keyboard.press('ArrowDown');
@@ -1008,12 +1023,8 @@ const SECTIONS = {
     const afterTyping = await selectedRow();
     check('« # » : un filtre tapé après avoir fait défiler la liste la remet en haut : la première ligne (CsDossiers.Titre) est choisie, entière et au premier plan',
       !!afterTyping && afterTyping.text === 'CsDossiers.Titre' && afterTyping.entire && afterTyping.scrollTop === 0, afterTyping);
-    // Ce que la règle donne pour « re » : les clés de la table de la page, puis celles des autres tables dans l'ordre du schéma (les sections d'avant laissent leurs tables).
-    const expectedTyped = await page.evaluate(() => {
-      const current = GristAPI.getCurrentTableId();
-      const keys = GristAPI.getAllVariables().filter(v => v.key.toLowerCase().includes('re'));
-      return keys.filter(v => v.table === current).concat(keys.filter(v => v.table !== current)).map(v => v.key).slice(0, 50);
-    });
+    // Ce que la règle donne pour « re » : les clés de la table de la page, puis celles des autres tables dans l'ordre du schéma.
+    const expectedTyped = await expectedKeys('re');
     check('« # » : « re » tapé garde la table de la page en tête (CsDossiers.Titre, CsDossiers.Responsable), puis CsAnnuaire et les autres tables dans l’ordre du schéma',
       !!typed && JSON.stringify(typed.rows.slice(0, 3)) === JSON.stringify(['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && JSON.stringify(typed.rows) === JSON.stringify(expectedTyped), { typed, expectedTyped });
     await page.keyboard.press('ArrowDown');
@@ -1079,6 +1090,161 @@ const SECTIONS = {
       const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
       Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
     });
+    await page.waitForTimeout(250);
+  },
+
+  // Gros document (Antoine, 2026-10-04 : le retour d'une personne pour qui tout ne s'affiche pas en variable sur un document de beaucoup de tables et de colonnes ; « on ne peut pas faire autant
+  // que l'on souhaite ? », « il faut surtout prévoir le champ de recherche par nom, pas le défilement ») : 40 tables de 15 colonnes avec deux colonnes d'aide « gristHelper_… » chacune, et une
+  // table de 120 colonnes, à la vraie frappe à 700×400. La liste « # » les montre TOUTES, sans les colonnes d'aide ; la recherche par nom retrouve chaque colonne - sans accents ni casse - dans le
+  // corps et dans le champ Nom du PDF ; la souris et les flèches changent la ligne choisie sans reconstruire la liste. Les tables sont retirées à la fin (les sections suivantes ne les connaissent pas).
+  async bigDocument() {
+    const box = HASH_BOX;
+    const NAMES = ['Clients', 'Contacts', 'Factures', 'Lignes', 'Produits', 'Fournisseurs', 'Commandes', 'Livraisons', 'Stocks', 'Projets', 'Taches', 'Equipes', 'Salaries', 'Conges', 'Absences', 'Formations',
+      'Sessions', 'Stagiaires', 'Contrats', 'Avenants', 'Devis', 'Paiements', 'Banques', 'Agences', 'Regions', 'Pays', 'Villes', 'Documents', 'Modeles', 'Courriers', 'Rappels', 'Litiges', 'Garanties',
+      'Incidents', 'Sites', 'Batiments', 'Salles', 'Reservations', 'Vehicules', 'Trajets'];
+    const seeded = await page.evaluate(async names => {
+      const stub = window.__gristStub;
+      const tables = names.map((name, i) => 'Gd' + String(i + 1).padStart(2, '0') + '_' + name);
+      const generic = ['Nom', 'Prenom', 'Telephone', 'Email', 'Adresse', 'Code_postal', 'Ville', 'Date_creation', 'Date_modification', 'Montant_HT', 'Montant_TTC', 'Statut', 'Commentaire'];
+      tables.forEach((table, i) => {
+        const columns = {}, display = {};
+        generic.forEach(c => { columns[c] = /^Date/.test(c) ? 'Date' : /^Montant/.test(c) ? 'Numeric' : 'Text'; });
+        const first = 'Ref_' + names[(i + 1) % names.length], second = 'Ref_' + names[(i + 2) % names.length];
+        columns[first] = 'Ref:' + tables[(i + 1) % tables.length]; columns.gristHelper_Display = 'Any'; display[first] = 'gristHelper_Display';
+        columns[second] = 'Ref:' + tables[(i + 2) % tables.length]; columns.gristHelper_Display2 = 'Any'; display[second] = 'gristHelper_Display2';
+        stub.setVariables(table, columns, undefined, display);
+      });
+      const wide = {};
+      for (let i = 1; i <= 120; i++) wide['Champ_' + String(i).padStart(3, '0')] = 'Text';
+      stub.setVariables('GdGros', wide);
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Nom: 'Dupont' }, tables[2]);
+      const all = GristAPI.getAllVariables();
+      return { tables: tables.concat('GdGros'), pageTable: tables[2], variables: all.filter(v => v.column.indexOf('gristHelper_') !== 0).length, helpers: all.filter(v => v.column.indexOf('gristHelper_') === 0).length };
+    }, NAMES);
+    // Efface ce qui suit le « # » (une frappe arrière par caractère) puis tape la recherche ; la liste lue ensuite.
+    const search = async (erase, typed) => {
+      for (let i = 0; i < erase; i++) await page.keyboard.press('Backspace');
+      if (typed) await page.keyboard.type(typed);
+      await page.waitForTimeout(300);
+      return hashListed();
+    };
+    const sameRows = (got, expected) => !!got && JSON.stringify(got.rows) === JSON.stringify(expected);
+    check('gros document : le banc est posé (40 tables de 15 colonnes, 2 colonnes d’aide chacune, une table de 120 colonnes)', seeded.variables === 40 * 15 + 120 + await page.evaluate(() => GristAPI.getAllVariables().filter(v => v.table.indexOf('Gd') !== 0 && v.column.indexOf('gristHelper_') !== 0).length) && seeded.helpers === 80, seeded);
+    await page.evaluate(() => Editor.setHTML('<p></p>'));
+    await parkMouse();
+    const paragraph = await hitTest('.tiptap p');
+    await page.mouse.click(paragraph.x, paragraph.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.type('#');
+    await page.waitForTimeout(400);
+    const all = await hashListed();
+    const expectedAll = await hashExpectedKeys('');
+    check('gros document : « # » seul liste TOUTES les clés (plus de 700, la limite de 50 n’existe plus), table de la page d’abord, puis les autres dans l’ordre du schéma',
+      sameRows(all, expectedAll) && all.rows.length > 700 && all.rows.slice(0, 15).every(row => row.indexOf(seeded.pageTable + '.') === 0), { rows: all && all.rows.length, expected: expectedAll.length, first: all && all.rows.slice(0, 3) });
+    check('gros document : aucune colonne d’aide « gristHelper_… » dans la liste « # »', !!all && all.rows.every(row => row.indexOf('gristHelper_') === -1) && seeded.helpers === 80, { helpers: all && all.rows.filter(row => row.indexOf('gristHelper_') !== -1).slice(0, 5) });
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(120);
+    const lastRow = await hashSelectedRow();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(120);
+    const firstAgain = await hashSelectedRow();
+    check('gros document : depuis la première ligne, la flèche haut va à la toute dernière des clés et la montre entière ; la flèche bas revient à la première, liste en haut',
+      !!lastRow && lastRow.text === expectedAll[expectedAll.length - 1] && lastRow.entire && !!firstAgain && firstAgain.text === expectedAll[0] && firstAgain.entire && firstAgain.scrollTop === 0, { lastRow, firstAgain });
+    // La molette, la souris sur la liste, mène aussi à la dernière ligne (le défilement n’est pas le chemin ordinaire, il doit seulement marcher).
+    const wheelOver = await hitTest(box + ' .ac-items');
+    await page.mouse.move(wheelOver.x, wheelOver.y);
+    await page.mouse.wheel(0, 200000);
+    await page.waitForTimeout(200);
+    const atEnd = await page.evaluate(sel => {
+      const list = document.querySelector(sel + ' .ac-items'), rows = list.querySelectorAll('.ac-item'), last = rows[rows.length - 1];
+      const l = list.getBoundingClientRect(), r = last.getBoundingClientRect();
+      return { text: last.textContent, entire: r.top >= l.top - 0.5 && r.bottom <= l.bottom + 0.5 };
+    }, box);
+    check('gros document : la molette sur la liste mène à sa dernière ligne, entière', atEnd.text === expectedAll[expectedAll.length - 1] && atEnd.entire, atEnd);
+    await parkMouse();
+    const montant = await search(0, 'montant');
+    const expectedMontant = await hashExpectedKeys('montant');
+    check('gros document : « montant » retrouve toutes les colonnes de ce nom dans toutes les tables (80 et plus, pas 50), jusqu’à Gd40_Trajets.Montant_TTC',
+      sameRows(montant, expectedMontant) && montant.rows.length >= 80 && montant.rows.indexOf('Gd40_Trajets.Montant_TTC') !== -1, { rows: montant && montant.rows.length, expected: expectedMontant.length });
+    const expectedTele = await hashExpectedKeys('tele');
+    const accented = await search(7, 'télé');
+    check('gros document : « télé », avec ses accents, retrouve Telephone dans chaque table (une colonne par table, 40 et plus)',
+      sameRows(accented, expectedTele) && accented.rows.length >= 40 && accented.rows.indexOf('Gd40_Trajets.Telephone') !== -1 && accented.rows.indexOf('Gd01_Clients.Telephone') !== -1, { rows: accented && accented.rows.length, expected: expectedTele.length, first: accented && accented.rows.slice(0, 3) });
+    const upper = await search(4, 'TÉLÉ');
+    check('gros document : « TÉLÉ » en majuscules accentuées trouve les mêmes colonnes que « télé »', sameRows(upper, expectedTele), { rows: upper && upper.rows.length, expected: expectedTele.length });
+    const helperOnly = await search(4, 'gristhelper');
+    check('gros document : « gristhelper » ne propose rien (la liste se ferme : ces colonnes ne se choisissent jamais)', helperOnly === null, helperOnly && helperOnly.rows.slice(0, 3));
+    const wide = await search(11, 'GdGros');
+    const expectedWide = await hashExpectedKeys('gdgros');
+    check('gros document : la table de 120 colonnes est entière dans la liste (« GdGros » : 120 lignes, de Champ_001 à Champ_120)',
+      sameRows(wide, expectedWide) && wide.rows.length === 120 && wide.rows[119] === 'GdGros.Champ_120', { rows: wide && wide.rows.length, last: wide && wide.rows[wide.rows.length - 1] });
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(120);
+    const wideLast = await hashSelectedRow();
+    check('gros document : dans cette table, la flèche haut depuis la première ligne mène à Champ_120 et la montre entière', !!wideLast && wideLast.text === 'GdGros.Champ_120' && wideLast.entire, wideLast);
+    // La souris et les flèches ne reconstruisent pas la liste : les lignes sont les mêmes éléments avant et après (reconstruire des milliers de lignes à chaque ligne survolée figeait la liste).
+    await search(6, '');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('#');
+    await page.waitForTimeout(300);
+    const reopened = await hashSelectedRow();
+    check('gros document : « # » retapé après avoir mené la liste à sa fin la rouvre en haut, sur sa première ligne entière (elle ne garde pas le défilement de la précédente)',
+      !!reopened && reopened.text === expectedAll[0] && reopened.entire && reopened.scrollTop === 0, reopened);
+    await page.evaluate(sel => {
+      document.querySelectorAll(sel + ' .ac-item')[2].__kept = true;
+      window.__hoverEvents = [];
+      document.addEventListener('mouseover', e => window.__hoverEvents.push(e.target.className + ':' + e.target.textContent.slice(0, 24)), true);
+    }, box);
+    const target = await page.evaluate(sel => {
+      const r = document.querySelectorAll(sel + ' .ac-item')[4].getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
+      return { x, y, hit: hit && hit.className + ':' + hit.textContent.slice(0, 24), list: document.querySelector(sel + ' .ac-items').scrollTop };
+    }, box);
+    await page.mouse.move(target.x, target.y);
+    await page.waitForTimeout(200);
+    const hovered = await page.evaluate(sel => {
+      const rows = Array.from(document.querySelectorAll(sel + ' .ac-item'));
+      return { kept: rows[2].__kept === true, selected: rows.filter(row => row.classList.contains('selected')).map(row => row.textContent), fifth: rows[4].textContent, events: window.__hoverEvents };
+    }, box);
+    hovered.target = target;
+    check('gros document : survoler une ligne la choisit (une seule ligne choisie) sans reconstruire la liste (les lignes sont les mêmes éléments)', hovered.kept && hovered.selected.length === 1 && hovered.selected[0] === hovered.fifth, hovered);
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(150);
+    const afterArrow = await page.evaluate(sel => {
+      const rows = Array.from(document.querySelectorAll(sel + ' .ac-item'));
+      return { kept: rows[2].__kept === true, selected: rows.filter(row => row.classList.contains('selected')).map(row => row.textContent), sixth: rows[5].textContent };
+    }, box);
+    check('gros document : la souris posée sur la liste, la flèche bas change quand même la ligne choisie (la 6e), toujours sans reconstruire la liste', afterArrow.kept && afterArrow.selected.length === 1 && afterArrow.selected[0] === afterArrow.sixth, afterArrow);
+    await page.keyboard.press('Escape');
+    await parkMouse();
+    // Le champ Nom du PDF : la même liste, les mêmes recherches.
+    const pdfToggle = await hitTest('#btn-toggle-pdf-filename');
+    await page.mouse.click(pdfToggle.x, pdfToggle.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.type('#');
+    await page.waitForTimeout(400);
+    const pdfAll = await hashListed();
+    check('gros document, champ Nom du PDF : « # » seul liste TOUTES les clés, sans colonne d’aide, table de la page d’abord',
+      sameRows(pdfAll, expectedAll) && pdfAll.rows.length > 700 && pdfAll.rows.every(row => row.indexOf('gristHelper_') === -1), { rows: pdfAll && pdfAll.rows.length, expected: expectedAll.length });
+    const pdfTele = await search(0, 'télé');
+    check('gros document, champ Nom du PDF : « télé », avec ses accents, retrouve Telephone dans chaque table', sameRows(pdfTele, expectedTele), { rows: pdfTele && pdfTele.rows.length, expected: expectedTele.length });
+    const pdfHelper = await search(4, 'gristhelper');
+    check('gros document, champ Nom du PDF : « gristhelper » ne propose rien', pdfHelper === null, pdfHelper && pdfHelper.rows.slice(0, 3));
+    await page.evaluate(() => {
+      const field = document.getElementById('pdf-filename-template');
+      field.value = '';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.blur();
+    });
+    await parkMouse();
+    await page.evaluate(async tables => {
+      const stub = window.__gristStub;
+      tables.forEach(table => stub.dropTable(table));
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+      const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
+      Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
+    }, seeded.tables);
     await page.waitForTimeout(250);
   },
 

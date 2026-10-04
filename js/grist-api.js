@@ -391,8 +391,10 @@ const GristAPI = (function () {
         const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
         nextColumnsByTable[t] = cols;
       } catch (e) {
+        // Une table qu'on ne parvient pas à lire garde les colonnes déjà connues (celles des métadonnées, ou d'une passe réussie) : sans elles, toutes ses variables disparaissaient de
+        // la liste « # » et des choix de colonne, avec ce seul avertissement dans la console.
         console.warn('[GristAPI] refreshSchema: échec fetchTable(' + t + ') —', e);
-        nextColumnsByTable[t] = [];
+        nextColumnsByTable[t] = _columnsByTable[t] || [];
       }
     }));
     return nextColumnsByTable;

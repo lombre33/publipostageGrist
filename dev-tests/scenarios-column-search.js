@@ -2525,12 +2525,12 @@
   const LIGNES_KEYS = keysOf('CsLignes', ['Facture', 'Designation', 'Qte', 'Montant', 'Presence']);
   const sameKeys = (got, expected) => JSON.stringify(got) === JSON.stringify(expected);
   // Ce que doit rendre la liste « # » pour `query`, par la règle écrite à part : les clés des tables de `firstTables` (dans cet ordre), puis celles de toutes les autres
-  // tables dans l'ordre du schéma, chaque table gardant l'ordre de ses colonnes. Les cas précédents du groupe laissent leurs tables dans le document factice : les
+  // tables dans l'ordre du schéma, chaque table gardant l'ordre de ses colonnes, sans les colonnes d'aide « gristHelper_… » et SANS limite de longueur. Les cas précédents du groupe laissent leurs tables dans le document factice : les
   // attentes littérales portent sur le début de la liste, cette règle sur tout le reste.
   function rankedKeys(query, firstTables) {
     const wanted = query.toLowerCase();
     const rank = variable => { const at = firstTables.indexOf(variable.table); return at === -1 ? firstTables.length : at; };
-    return GristAPI.getAllVariables().filter(variable => variable.key.toLowerCase().includes(wanted))
+    return GristAPI.getAllVariables().filter(variable => variable.column.indexOf('gristHelper_') !== 0 && variable.key.toLowerCase().includes(wanted))
       .map((variable, index) => ({ key: variable.key, index, rank: rank(variable) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(entry => entry.key);
   }
   const startsWith = (got, expected) => !!got && sameKeys(got.slice(0, expected.length), expected);
@@ -2556,9 +2556,33 @@
     try { return await run(); } finally { await dropTables(h, ['CsGrande', 'CsFin']); }
   }
 
+  // Les champs texte qui ont la liste « # » : comme le navigateur à chaque frappe, la valeur posée, le curseur à la fin, l'évènement input ; la liste lue puis refermée.
+  async function textFieldList(h, id, value) {
+    const input = document.getElementById(id);
+    input.value = value;
+    input.setSelectionRange(value.length, value.length);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await h.sleep(40);
+    const items = acListed();
+    press(input, 'Escape');
+    input.value = '';
+    await h.sleep(20);
+    return items;
+  }
+  // CsAssist : une Référence affichée par une colonne d'aide « gristHelper_DisplayParent », que Grist range dans la même table que la Référence ; retirée ensuite.
+  async function withHelperTable(h, run) {
+    const stub = window.__gristStub;
+    stub.setVariables('CsAssist', { Nom: 'Text', Parent: 'Ref:CsAnnuaire', gristHelper_DisplayParent: 'Any' }, undefined, { Parent: 'gristHelper_DisplayParent' });
+    stub.setRows('CsAssist', [{ id: 1, Nom: 'Aide A', Parent: 7, gristHelper_DisplayParent: 'Dupont Jean' }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    await h.sleep(50);
+    try { return await run(); } finally { await dropTables(h, ['CsAssist']); }
+  }
+
   cases.push({
-    id: 'colsearch_hash_list_puts_the_columns_of_the_page_table_first_and_cuts_the_list_after_that',
-    description: 'Liste « # » du corps : les colonnes de la table de la page viennent en tête (sa table n’est pourtant pas la première du schéma), puis celles des autres tables dans l’ordre du schéma, avec ce qui est tapé comme sans ; la limite de 50 clés s’applique APRÈS ce classement (la table de la page, dernière du schéma derrière 60 colonnes d’une autre table, n’est plus écartée)',
+    id: 'colsearch_hash_list_puts_the_columns_of_the_page_table_first_and_never_cuts_the_list',
+    description: 'Liste « # » du corps : les colonnes de la table de la page viennent en tête (sa table n’est pourtant pas la première du schéma), puis celles des autres tables dans l’ordre du schéma, avec ce qui est tapé comme sans ; la liste n’a aucune limite (la table de la page, dernière du schéma derrière 60 colonnes d’une autre table, ouvre la liste et les 63 clés y sont toutes : un document de beaucoup de tables et de colonnes se retrouve en tapant le nom)',
     run: async (h) => {
       await seed(h);
       const schema = GristAPI.getTables().slice();
@@ -2567,10 +2591,10 @@
       const typed = await hashList(h, await emptyParagraph(h), '#re');
       const capped = await withPageAtTheEnd(h, async () => hashList(h, await emptyParagraph(h), '#zz'));
       const pass = page === 'CsDossiers' && schema.indexOf(page) > 0
-        && startsWith(all, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(all, rankedKeys('', [page]).slice(0, 50))
-        && startsWith(typed, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(typed, rankedKeys('re', [page]).slice(0, 50))
-        && !!capped && capped.length === 50 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[49] === 'CsGrande.Zz47';
-      return { pass, notes: JSON.stringify({ page, schema, all, typed, expectedAll: rankedKeys('', [page]).slice(0, 50), expectedTyped: rankedKeys('re', [page]).slice(0, 50), capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
+        && startsWith(all, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(all, rankedKeys('', [page]))
+        && startsWith(typed, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(typed, rankedKeys('re', [page]))
+        && !!capped && capped.length === 63 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[62] === 'CsGrande.Zz60';
+      return { pass, notes: JSON.stringify({ page, schema, all: all && all.length, typed, expectedAll: rankedKeys('', [page]).length, expectedTyped: rankedKeys('re', [page]), capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
     },
   });
 
@@ -2592,40 +2616,98 @@
       // Espace avant # : @tiptap/suggestion n'ouvre la liste qu'en début de ligne ou après une espace.
       await zone();
       const outside = await hashList(h, document.querySelector('.tiptap > p:last-child'), ' #');
-      const pass = startsWith(inRow, LIGNES_KEYS.concat(DOSSIERS_KEYS, 'CsAnnuaire.NomPrenom')) && sameKeys(inRow, rankedKeys('', ['CsLignes', 'CsDossiers']).slice(0, 50))
-        && startsWith(inRowTyped, ['CsLignes.Facture', 'CsLignes.Presence', 'CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(inRowTyped, rankedKeys('re', ['CsLignes', 'CsDossiers']).slice(0, 50))
-        && startsWith(outside, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(outside, rankedKeys('', ['CsDossiers']).slice(0, 50));
+      const pass = startsWith(inRow, LIGNES_KEYS.concat(DOSSIERS_KEYS, 'CsAnnuaire.NomPrenom')) && sameKeys(inRow, rankedKeys('', ['CsLignes', 'CsDossiers']))
+        && startsWith(inRowTyped, ['CsLignes.Facture', 'CsLignes.Presence', 'CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(inRowTyped, rankedKeys('re', ['CsLignes', 'CsDossiers']))
+        && startsWith(outside, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(outside, rankedKeys('', ['CsDossiers']));
       return { pass, notes: JSON.stringify({ inRow, inRowTyped, outside, expected: rankedKeys('re', ['CsLignes', 'CsDossiers']) }) };
     },
   });
 
   cases.push({
-    id: 'colsearch_text_fields_hash_list_puts_the_columns_of_the_page_table_first_and_cuts_the_list_after_that',
-    description: 'Les champs texte qui ont la liste « # » (Nom de fichier PDF, À du mode email) : même classement que le corps — la table de la page d’abord, les autres dans l’ordre du schéma, la limite de 50 clés après ; une saisie « Table.Colonne. » (colonnes de la ligne qu’une Référence désigne) reste la liste de cette seule table',
+    id: 'colsearch_text_fields_hash_list_puts_the_columns_of_the_page_table_first_and_never_cuts_the_list',
+    description: 'Les champs texte qui ont la liste « # » (Nom de fichier PDF, À du mode email) : même classement que le corps — la table de la page d’abord, les autres dans l’ordre du schéma, et aucune limite de longueur ; une saisie « Table.Colonne. » (colonnes de la ligne qu’une Référence désigne) reste la liste de cette seule table',
     run: async (h) => {
       await seed(h);
-      // Comme le navigateur à chaque frappe : la valeur posée, le curseur à la fin, l'évènement input ; la liste lue puis refermée.
-      const textList = async (id, value) => {
-        const input = document.getElementById(id);
-        input.value = value;
-        input.setSelectionRange(value.length, value.length);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        await h.sleep(40);
-        const items = acListed();
-        press(input, 'Escape');
-        input.value = '';
-        await h.sleep(20);
-        return items;
-      };
+      const textList = (id, value) => textFieldList(h, id, value);
       const pdf = await textList('pdf-filename-template', 'Suivi_#');
       const to = await textList('v2-email-to', '#re');
       const path = await textList('pdf-filename-template', '#CsDossiers.Responsable.');
       const capped = await withPageAtTheEnd(h, () => textList('pdf-filename-template', '#zz'));
-      const pass = startsWith(pdf, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(pdf, rankedKeys('', ['CsDossiers']).slice(0, 50))
-        && startsWith(to, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(to, rankedKeys('re', ['CsDossiers']).slice(0, 50))
+      const pass = startsWith(pdf, DOSSIERS_KEYS.concat('CsAnnuaire.NomPrenom')) && sameKeys(pdf, rankedKeys('', ['CsDossiers']))
+        && startsWith(to, ['CsDossiers.Titre', 'CsDossiers.Responsable', 'CsAnnuaire.NomPrenom']) && sameKeys(to, rankedKeys('re', ['CsDossiers']))
         && sameKeys(path, keysOf('CsDossiers', ['Responsable.NomPrenom', 'Responsable.Telephone', 'Responsable.Naissance']))
-        && !!capped && capped.length === 50 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[49] === 'CsGrande.Zz47';
-      return { pass, notes: JSON.stringify({ pdf, to, path, capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
+        && !!capped && capped.length === 63 && startsWith(capped, ['CsFin.Zz1', 'CsFin.Zz2', 'CsFin.Zz3', 'CsGrande.Zz01']) && capped[62] === 'CsGrande.Zz60';
+      return { pass, notes: JSON.stringify({ pdf: pdf && pdf.length, to, path, capped: capped && capped.slice(0, 5).concat(['…', capped[capped.length - 1], capped.length]) }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_leaves_out_the_helper_columns',
+    description: 'Liste « # » du corps et des champs texte : les colonnes d’aide « gristHelper_… » que Grist crée derrière chaque Référence (le texte affiché, rangé dans la même table) ne sont jamais proposées, quelle que soit la saisie - comme dans tous les autres choix de colonne - alors que les autres colonnes de leur table le sont ; une clé tapée à la main se résout encore',
+    run: async (h) => {
+      await seed(h);
+      const found = await withHelperTable(h, async () => ({
+        inSchema: GristAPI.getColumns('CsAssist').slice(),
+        all: await hashList(h, await emptyParagraph(h), '#'),
+        typed: await hashList(h, await emptyParagraph(h), '#assist'),
+        helperOnly: await hashList(h, await emptyParagraph(h), '#gristhelper'),
+        pdf: await textFieldList(h, 'pdf-filename-template', '#assist'),
+        pdfHelper: await textFieldList(h, 'pdf-filename-template', '#DisplayParent'),
+        resolved: Variables.findTextVariables('Nom : #CsAssist.gristHelper_DisplayParent').length,
+      }));
+      const helpers = list => (list || []).filter(key => key.indexOf('gristHelper_') !== -1);
+      const pass = found.inSchema.indexOf('gristHelper_DisplayParent') !== -1
+        && !!found.all && helpers(found.all).length === 0 && found.all.indexOf('CsAssist.Nom') !== -1 && found.all.indexOf('CsAssist.Parent') !== -1
+        && sameKeys(found.typed, ['CsAssist.Nom', 'CsAssist.Parent']) && found.helperOnly === null
+        && sameKeys(found.pdf, ['CsAssist.Nom', 'CsAssist.Parent']) && found.pdfHelper === null && found.resolved === 1;
+      return { pass, notes: JSON.stringify({ inSchema: found.inSchema, helpersInAll: helpers(found.all), typed: found.typed, helperOnly: found.helperOnly, pdf: found.pdf, pdfHelper: found.pdfHelper, resolved: found.resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_search_ignores_accents_and_case',
+    description: 'Liste « # » du corps et des champs texte : la recherche par nom ne tient compte ni des accents ni de la casse (« télé », « TÉLÉ » et « tele » retrouvent Telephone ; « échéance » retrouve Echeance - les identifiants de Grist n’ont jamais d’accent), après le point d’une Référence comme avant',
+    run: async (h) => {
+      await seed(h);
+      const page = GristAPI.getCurrentTableId();
+      const plain = await hashList(h, await emptyParagraph(h), '#tele');
+      const accented = await hashList(h, await emptyParagraph(h), '#télé');
+      const upper = await hashList(h, await emptyParagraph(h), '#TÉLÉ');
+      const echeance = await hashList(h, await emptyParagraph(h), '#échéance');
+      const field = await textFieldList(h, 'pdf-filename-template', '#télé');
+      const path = await textFieldList(h, 'pdf-filename-template', '#CsDossiers.Responsable.télé');
+      const pass = !!plain && plain.indexOf('CsAnnuaire.Telephone') !== -1 && sameKeys(plain, rankedKeys('tele', [page]))
+        && sameKeys(accented, plain) && sameKeys(upper, plain)
+        && sameKeys(echeance, rankedKeys('echeance', [page])) && echeance.indexOf('CsDossiers.Echeance') !== -1
+        && sameKeys(field, rankedKeys('tele', ['CsDossiers'])) && sameKeys(path, ['CsDossiers.Responsable.Telephone']);
+      return { pass, notes: JSON.stringify({ plain, accented, upper, echeance, field, path }) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_a_table_that_cannot_be_read_keeps_its_columns_in_every_list',
+    description: 'Les colonnes exactes viennent d’un fetchTable par table (js/grist-api.js:exactColumnsByTable) : quand la lecture d’UNE table échoue (accès, délai, très gros document), elle garde les colonnes déjà connues au lieu de disparaître de la liste « # » et de tous les choix de colonne - seul un avertissement part dans la console',
+    run: async (h) => {
+      await seed(h);
+      const before = GristAPI.getColumns('CsAnnuaire').slice();
+      const tablesBefore = GristAPI.getAllVariables().length;
+      const original = grist.docApi.fetchTable;
+      let after, tablesAfter, listed;
+      grist.docApi.fetchTable = async tableId => {
+        if (tableId === 'CsAnnuaire') throw new Error('lecture impossible (simulée)');
+        return original.call(grist.docApi, tableId);
+      };
+      try {
+        await GristAPI.refreshSchema();
+        after = GristAPI.getColumns('CsAnnuaire').slice();
+        tablesAfter = GristAPI.getAllVariables().length;
+        listed = await hashList(h, await emptyParagraph(h), '#annuaire');
+      } finally {
+        grist.docApi.fetchTable = original;
+        await GristAPI.refreshSchema();
+      }
+      const pass = before.length === 3 && sameKeys(after, before) && tablesAfter === tablesBefore && sameKeys(listed, keysOf('CsAnnuaire', before));
+      return { pass, notes: JSON.stringify({ before, after, tablesBefore, tablesAfter, listed }) };
     },
   });
 
