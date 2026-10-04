@@ -5,6 +5,9 @@
 //  2) les vrais exports (PDF et Word d'une ligne) : la fenêtre s'ouvre AVANT tout téléchargement, « Annuler » ne télécharge rien et ne produit rien ;
 //  3) les vraies lignes du menu Exporter (un PDF, un Word, tout en un seul PDF) : un lot ne pose la question qu'une fois, « Annuler » arrête le lot entier et
 //     écrit « Export annulé. » (pas une erreur).
+// Puis, en dernier (contrôle de sécurité du 04/10, « Tout corriger ») : l'AFFICHAGE. Toute image qui charge depuis un autre site que le widget et Grist est signalée en permanence - hôte,
+// infobulle, contour en tirets - dans l'éditeur, la Lecture, ses en-têtes et ses pieds, y compris une image brute que l'éditeur n'écrit pas ; le signalement ne prend aucune place et
+// n'entre jamais dans le HTML enregistré.
 // Les adresses sont en « .test » (jamais résolues) et `fetch` est remplacé le temps d'un cas : rien ne part sur le réseau.
 (function () {
   const cases = [];
@@ -545,6 +548,195 @@
           bad.push('une valeur acceptée : ' + JSON.stringify({ windows: one.imageWindows.length, downloads: one.downloads.map(d => d.name), status: one.finalStatus }));
       } finally { await leaveGrid(h); }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+  // 5) L'affichage : toute image qui charge depuis un autre site est signalée en permanence (contour en tirets, infobulle), sans rien changer à la mise en page
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  const SHOWN = [['https://affiche.test/logo.png', 'affiche.test'], ['https://autre.test:8443/c.png', 'autre.test:8443'], ['//cdn3.test/d.png', 'cdn3.test'], ['http://clair.test/e.png', 'clair.test']];
+  const QUIET = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme-origine.png', 'ftp://fichiers.test/e.png'];
+  const tipOf = site => I18n.t('image.externalSite', { site });
+  const dashedRed = img => { const css = getComputedStyle(img); return css.outlineStyle === 'dashed' && css.outlineWidth === '3px' && css.outlineColor === 'rgb(197, 48, 48)'; };
+  const stateOf = img => ({ src: (img.getAttribute('src') || '').slice(0, 40), site: img.getAttribute('data-external-site'), tip: img.title, dashed: dashedRed(img) });
+  // Ce que l'affichage doit montrer : les adresses de SHOWN signalées (hôte, infobulle, contour), les autres ni signalées ni cernées.
+  function displayProblems(images) {
+    const problems = [];
+    const byUrl = new Map(images.map(img => [img.getAttribute('src'), img]));
+    SHOWN.forEach(([src, site]) => {
+      const img = byUrl.get(src);
+      if (!img) { problems.push('absente : ' + src); return; }
+      const state = stateOf(img);
+      if (state.site !== site || state.tip !== tipOf(site) || !state.dashed) problems.push('non signalée : ' + JSON.stringify(state));
+    });
+    QUIET.forEach(src => {
+      const img = byUrl.get(src);
+      if (!img) { problems.push('absente : ' + src.slice(0, 30)); return; }
+      const state = stateOf(img);
+      if (state.site !== null || state.tip || state.dashed) problems.push('signalée à tort : ' + JSON.stringify(state));
+    });
+    return problems;
+  }
+  const showAllHtml = () => '<p>Affichage</p>' + SHOWN.concat(QUIET.map(src => [src])).map(([src]) => img(src)).join('');
+  function restoreContainers() {
+    document.getElementById('reader-container').style.display = '';
+    document.getElementById('editor-container').style.display = '';
+  }
+
+  cases.push({
+    id: 'extimg_display_editor_flags_external_images_only',
+    description: 'Éditeur : une image d’un autre site (http(s) hors du widget, « // » compris) porte son hôte et une infobulle et est cernée de tirets rouges ; data:, blob:, adresse relative, même origine et ftp: ne sont pas signalées ; rien de cela n’entre dans le HTML enregistré',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(showAllHtml());
+      await h.sleep(250);
+      const images = Array.from(document.querySelectorAll('.tiptap img.editor-image'));
+      const problems = displayProblems(images);
+      const saved = Editor.getHTML();
+      if (/data-external-site|Image hébergée sur un site externe|Image hosted on an external site/.test(saved)) problems.push('le signalement est entré dans le HTML enregistré');
+      await h.resetEditor();
+      return { pass: images.length === SHOWN.length + QUIET.length && problems.length === 0, notes: JSON.stringify({ images: images.length, problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_display_reader_flags_every_image_even_without_the_editor_class',
+    description: 'Lecture : même signalement, y compris pour une image brute écrite à la main dans le modèle (sans la classe de l’éditeur), la seule que l’éditeur ne montrerait pas',
+    run: async (h) => {
+      await h.resetEditor();
+      const raw = '<p><img src="https://brut.test/pixel.png" alt=""></p>';
+      let content = null; let problems = [];
+      try {
+        content = await h.renderReaderMode(showAllHtml() + raw, NO_HF);
+        await h.sleep(250);
+        const images = Array.from(content.querySelectorAll('img'));
+        problems = displayProblems(images);
+        const rawImg = images.find(i => i.getAttribute('src') === 'https://brut.test/pixel.png');
+        if (!rawImg || rawImg.getAttribute('data-external-site') !== 'brut.test' || !dashedRed(rawImg)) problems.push('image brute non signalée : ' + JSON.stringify(rawImg && stateOf(rawImg)));
+      } finally { restoreContainers(); }
+      return { pass: !!content && problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_display_reader_flags_header_and_footer_images',
+    description: 'Lecture en pages (Aperçu A4) : l’image d’un autre site posée dans l’en-tête ou dans le pied de page l’est aussi - toute la page est surveillée, pas seulement le corps',
+    run: async (h) => {
+      await h.resetEditor();
+      const hf = { enabled: true, differentFirstPage: false, header: { default: img('https://entete.test/h.png'), first: '' }, footer: { default: img('https://pied.test/f.png'), first: '' } };
+      const seen = {};
+      try {
+        h.setA4Preview(true);
+        await h.renderReaderMode('<p>Corps</p>', hf);
+        await h.sleep(300);
+        const top = document.querySelector('#reader-container .v2-page-edge-top img');
+        const bottom = document.querySelector('#reader-container .v2-page-edge-bottom img');
+        seen.header = top && stateOf(top); seen.footer = bottom && stateOf(bottom);
+      } finally { h.setA4Preview(false); restoreContainers(); }
+      const pass = !!seen.header && seen.header.site === 'entete.test' && seen.header.dashed && !!seen.footer && seen.footer.site === 'pied.test' && seen.footer.dashed;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_display_attachment_images_are_trusted_only_from_the_grist_server',
+    description: 'Une image de pièce jointe servie par le serveur de Grist (hôte du jeton) n’est pas signalée ; la même marque posée sur une autre adresse l’est, et une image sans la marque servie par Grist l’est aussi',
+    run: async (h) => {
+      const original = GristAPI.getAttachmentDownloadUrl;
+      GristAPI.getAttachmentDownloadUrl = async id => 'https://grist.fictif.test/api/docs/stub/attachments/' + id + '/download?auth=jeton';
+      const host = document.createElement('div');
+      try {
+        host.innerHTML = '<img id="pj-grist" class="editor-image" data-source="attachment" data-attachment-id="7" src="https://grist.fictif.test/api/docs/stub/attachments/7/download?auth=jeton">'
+          + '<img id="pj-ailleurs" class="editor-image" data-source="attachment" data-attachment-id="7" src="https://tiers.test/x.png">'
+          + '<img id="sans-marque" class="editor-image" src="https://grist.fictif.test/api/docs/stub/attachments/7/download?auth=jeton">';
+        document.body.appendChild(host);
+        await h.sleep(300);
+        const state = id => stateOf(host.querySelector('#' + id));
+        const seen = { grist: state('pj-grist'), ailleurs: state('pj-ailleurs'), sansMarque: state('sans-marque') };
+        const pass = seen.grist.site === null && !seen.grist.dashed && seen.ailleurs.site === 'tiers.test' && seen.ailleurs.dashed && seen.sansMarque.site === 'grist.fictif.test' && seen.sansMarque.dashed;
+        return { pass, notes: JSON.stringify(seen) };
+      } finally { GristAPI.getAttachmentDownloadUrl = original; host.remove(); }
+    },
+  });
+
+  cases.push({
+    id: 'extimg_display_follows_src_changes_and_language',
+    description: 'Une image qui change d’adresse suit : signalée quand elle part vers un autre site, plus signalée (hôte, infobulle, contour retirés) quand elle revient à une image intégrée, nouvel hôte quand elle change de site ; l’infobulle change de langue avec l’interface',
+    run: async (h) => {
+      const host = document.createElement('div');
+      const lang = I18n.getLang();
+      const seen = {};
+      try {
+        const image = document.createElement('img');
+        image.src = DATA_PNG;
+        image.style.width = '90px';
+        host.appendChild(image);
+        document.body.appendChild(host);
+        await h.sleep(60);
+        seen.first = stateOf(image);
+        image.src = 'https://un.test/a.png';
+        await h.sleep(60);
+        seen.second = stateOf(image);
+        image.src = 'https://deux.test:81/b.png';
+        await h.sleep(60);
+        seen.third = stateOf(image);
+        I18n.setLang('en');
+        seen.english = image.title;
+        I18n.setLang('fr');
+        seen.french = image.title;
+        image.src = DATA_PNG;
+        await h.sleep(60);
+        seen.last = stateOf(image);
+        seen.hadTitleAfter = image.hasAttribute('title');
+        const pass = seen.first.site === null && !seen.first.dashed
+          && seen.second.site === 'un.test' && seen.second.tip === tipOf('un.test') && seen.second.dashed
+          && seen.third.site === 'deux.test:81' && seen.third.tip === tipOf('deux.test:81')
+          && seen.english === 'Image hosted on an external site (deux.test:81): every display downloads it from that site.'
+          && seen.french === 'Image hébergée sur un site externe (deux.test:81) : chaque affichage la télécharge depuis ce site.'
+          && seen.last.site === null && !seen.last.dashed && !seen.hadTitleAfter;
+        return { pass, notes: JSON.stringify(seen) };
+      } finally { I18n.setLang(lang); host.remove(); }
+    },
+  });
+
+  cases.push({
+    id: 'extimg_display_marker_changes_no_layout',
+    description: 'Le signalement ne prend aucune place : une image signalée garde exactement la boîte (position et taille) qu’elle avait sans le signalement, donc ni l’éditeur, ni la Lecture, ni la pagination, ni le PDF ne bougent',
+    run: async (h) => {
+      const host = document.createElement('div');
+      host.style.cssText = 'position:absolute;left:20px;top:20px;width:400px';
+      host.innerHTML = '<p>avant</p><img id="mesure" src="' + DATA_PNG + '" style="width:120px;height:80px"><p>après</p>';
+      document.body.appendChild(host);
+      try {
+        await h.sleep(60);
+        const image = host.querySelector('#mesure');
+        const box = () => { const r = image.getBoundingClientRect(); const p = host.getBoundingClientRect(); return [r.left, r.top, r.width, r.height, p.height].map(n => Math.round(n * 100) / 100); };
+        image.src = 'https://mesure.test/x.png';
+        await h.sleep(60);
+        const flagged = image.hasAttribute('data-external-site');
+        const during = box();
+        // Le même élément, le signalement retiré à la main (l'observateur ne le remet que si l'adresse change) : seule la feuille de style change entre les deux mesures.
+        image.removeAttribute('data-external-site');
+        const without = box();
+        return { pass: flagged && JSON.stringify(without) === JSON.stringify(during) && during[2] === 120 && during[3] === 80, notes: JSON.stringify({ during, without, flagged }) };
+      } finally { host.remove(); }
+    },
+  });
+
+  cases.push({
+    id: 'extimg_site_of_matches_the_export_window',
+    description: 'ExternalImages.siteOf donne l’hôte (port compris) des seules adresses que la fenêtre d’export liste : mêmes sites, mêmes exclusions',
+    run: async () => {
+      const urls = SHOWN.map(pair => pair[0]).concat(QUIET, ['', '   ', 'https://exotique.test/ a.png', 'https://[invalide']);
+      const fromDisplay = urls.map(src => ExternalImages.siteOf(src)).filter(Boolean);
+      const dialogs = { asked: [] };
+      const original = Dialogs.confirm;
+      Dialogs.confirm = async opts => { dialogs.asked.push(opts); return true; };
+      try { await ExternalImages.confirmExport(urls.map(img).join(''), null); } finally { Dialogs.confirm = original; }
+      const fromExport = dialogs.asked.length ? sitesOf(dialogs.asked[0].message) : [];
+      const pass = JSON.stringify(fromDisplay) === JSON.stringify(fromExport) && fromDisplay.length >= SHOWN.length;
+      return { pass, notes: JSON.stringify({ fromDisplay, fromExport }) };
     },
   });
 

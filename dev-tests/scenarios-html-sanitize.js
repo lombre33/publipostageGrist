@@ -1,5 +1,5 @@
 // Suite "htmlSanitize" - le HTML qui ne vient pas de l'éditeur (une ligne de la table des modèles écrite par un autre collaborateur) : rien ne s'exécute, rien d'actif ne survit,
-// tout ce que l'éditeur écrit reste (contrôle de sécurité du 04/10, rapport « controle-cyber-2026-10-04 », corrections 1 à 3). Les charges n'ont qu'un effet : poser un témoin
+// tout ce que l'éditeur écrit reste (contrôle de sécurité du 04/10, rapport « controle-cyber-2026-10-04 », corrections 1 à 3, puis le style qui charge une ressource d'un autre site, avec la correction 4). Les charges n'ont qu'un effet : poser un témoin
 // dans window.__hsHits ; le témoin posé, c'est que du code du document a couru.
 (function () {
   const cases = [];
@@ -172,6 +172,83 @@
       document.getElementById('reader-container').style.display = '';
       document.getElementById('editor-container').style.display = '';
       return { pass: result.ran.length === 0 && result.text && !result.baseChanged && result.clutter === 0, notes: JSON.stringify(result) };
+    },
+  });
+
+  // Un style qui charge une ressource (contrôle du 04/10, « Tout corriger » : « le filtre ne borne à aucun domaine les sources d'image/CSS ») : le navigateur contacte le site au simple affichage,
+  // sans qu'aucune <img> ne le signale. [nom, style écrit, déclaration qui doit rester]. `u\72l(` est un url() écrit avec un échappement CSS.
+  const STYLE_LOADS = [
+    ['background', 'background: url(https://pixel.test/a.png) no-repeat; text-align: center', 'text-align: center'],
+    ['list-style-image', 'list-style-image: url(\'//pixel.test/b.gif\'); color: rgb(1, 2, 3)', 'color: rgb(1, 2, 3)'],
+    ['border-image', 'border-image: url(https://pixel.test/c.png) 30 round; width: 10px', 'width: 10px'],
+    ['cursor', 'cursor: url(https://pixel.test/d.cur), auto; opacity: 0.5', 'opacity: 0.5'],
+    ['filter', 'filter: url(https://pixel.test/e.svg#f); margin-top: 3px', 'margin-top: 3px'],
+    ['image-set', 'background-image: image-set("https://pixel.test/f.png" 1x); height: 5px', 'height: 5px'],
+    ['webkit-image-set', 'background-image: -webkit-image-set(url(https://pixel.test/g.png) 1x); height: 6px', 'height: 6px'],
+    ['webkit-cross-fade', 'background-image: -webkit-cross-fade(url(https://pixel.test/h.png), url(https://pixel.test/i.png), 50%); height: 7px', 'height: 7px'],
+    ['escaped', 'background-image: u\\72l(https://pixel.test/j.png); width: 7px', 'width: 7px'],
+    ['custom-property', '--pixel: url(https://pixel.test/k.png); background-image: var(--pixel); width: 8px', 'width: 8px'],
+    ['custom-property-escaped', '--pixel: u\\72l(https://pixel.test/l.png); background-image: var(--pixel); width: 9px', 'width: 9px'],
+  ];
+  const styleOf = html => { const p = new DOMParser().parseFromString(html, 'text/html').body.firstElementChild; return p.getAttribute('style') || ''; };
+
+  cases.push({
+    id: 'hs_clean_drops_style_declarations_that_load_a_resource',
+    description: 'HtmlSanitize.clean : une déclaration de style qui charge une ressource (url(), image-set(), cross-fade(), un échappement u\\72l, une propriété personnalisée) est retirée, les autres déclarations du même style restent, et le résultat est stable',
+    run: async () => {
+      const bad = [];
+      STYLE_LOADS.forEach(([name, style, keeps]) => {
+        const raw = '<p style="' + attr(style) + '">texte</p>';
+        const cleaned = HtmlSanitize.clean(raw);
+        const left = styleOf(cleaned);
+        if (/pixel\.test|url\s*\(|image-set|cross-fade|--pixel\s*:/i.test(left)) bad.push(name + ' : reste « ' + left + ' »');
+        if (keeps && left.replace(/\s+/g, '').indexOf(keeps.replace(/\s+/g, '')) === -1) bad.push(name + ' : « ' + keeps + ' » a disparu (reste « ' + left + ' »)');
+        if (HtmlSanitize.clean(cleaned) !== cleaned) bad.push(name + ' : résultat instable');
+        if (cleaned.indexOf('texte') === -1) bad.push(name + ' : le texte a disparu');
+      });
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_clean_style_loading_a_resource_never_reaches_the_computed_style',
+    description: 'Le navigateur ne voit plus rien à charger : posée dans la page, la version filtrée n\'a plus ni image de fond, ni image de puce, ni image de bordure, ni curseur ou filtre venus d\'un autre site (témoin : la version brute, elle, en a)',
+    run: async () => {
+      const properties = ['backgroundImage', 'listStyleImage', 'borderImageSource', 'cursor', 'filter'];
+      const probe = html => {
+        const host = document.createElement('div');
+        host.style.cssText = 'position:absolute;left:-9999px;top:0';
+        host.innerHTML = html;
+        document.body.appendChild(host);
+        const computed = Array.from(host.children).map(el => { const css = getComputedStyle(el); return properties.map(key => css[key]).join(' | '); }).join(' || ');
+        host.remove();
+        return computed;
+      };
+      const raw = STYLE_LOADS.map(([, style]) => '<p style="' + attr(style) + '">x</p>').join('');
+      const cleaned = HtmlSanitize.clean(raw);
+      const seenRaw = probe(raw);
+      const seenCleaned = probe(cleaned);
+      return { pass: /pixel\.test/.test(seenRaw) && !/pixel\.test/.test(seenCleaned), notes: JSON.stringify({ raw: seenRaw.slice(0, 200), cleaned: seenCleaned.slice(0, 200) }) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_reader_mode_drops_style_resources',
+    description: 'Mode Lecture : le style d\'un modèle qui charge une ressource d\'un autre site n\'y arrive pas (image de fond non posée), le reste du style et le texte restent',
+    run: async (h) => {
+      await h.resetEditor();
+      let seen = null;
+      try {
+        const content = await h.renderReaderMode('<p id="fond" style="background-image: url(https://pixel.test/z.png); text-align: center">Lecture</p>', NO_HF);
+        await sleep(200);
+        const p = content.querySelector('p');
+        const css = getComputedStyle(p);
+        seen = { backgroundImage: css.backgroundImage, textAlign: css.textAlign, text: p.textContent };
+      } finally {
+        document.getElementById('reader-container').style.display = '';
+        document.getElementById('editor-container').style.display = '';
+      }
+      return { pass: !!seen && seen.backgroundImage === 'none' && seen.textAlign === 'center' && seen.text === 'Lecture', notes: JSON.stringify(seen) };
     },
   });
 

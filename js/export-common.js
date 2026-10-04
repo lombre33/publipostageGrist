@@ -182,5 +182,22 @@ const ExportCommon = (function () {
     return starts.map((from, i) => [from, i + 1 < starts.length ? starts[i + 1] : rows.length]);
   }
 
-  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx };
+  // Les images qu'un export laisse de côté faute de pouvoir les lire (pièce jointe supprimée du document, adresse qui ne répond plus, format illisible) : le reste du fichier s'écrit, mais
+  // la personne doit le savoir (js/main.js : l'état sous les boutons). Comptées sans doublon sur la durée d'un clic, un lot entier compris - la même image dans l'en-tête de chaque ligne n'est
+  // qu'une image. Une pièce jointe se reconnaît à son numéro (le jeton de son adresse change d'un appel à l'autre), toute autre image à son adresse.
+  const unreadImages = new Set();
+  function unreadImageKey(img) {
+    const src = (img.getAttribute('src') || '').trim();
+    const attachmentId = img.getAttribute('data-attachment-id') || (src.match(/\/attachments\/(\d+)\/download/) || [])[1];
+    if (attachmentId) return 'attachment:' + attachmentId;
+    return src.length > 200 ? src.slice(0, 200) + '#' + src.length : src;
+  }
+  function noteUnreadImage(img) { unreadImages.add(unreadImageKey(img)); }
+  // Une image sans adresse n'a rien d'illisible, sauf une pièce jointe dont l'adresse n'a pas pu être posée : seule celle-là compte.
+  function noteImageWithoutSource(img) { if (img.getAttribute('data-attachment-id')) noteUnreadImage(img); }
+  function unreadImageCount() { return unreadImages.size; }
+  function resetUnreadImages() { unreadImages.clear(); }
+
+  return { loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, measuredColumnWidthsPx, shownImageWidthPx, cellBorderSides, gridRowSegments, resolveHeaderFooterVariables, codeLinesOf, calloutMetricsPx,
+    noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages };
 })();

@@ -369,13 +369,13 @@ const XlsxExport = (function () {
   }
   async function imageForWorkbook(img) {
     const src = img.getAttribute('src') || '';
-    if (!src) return null;
+    if (!src) { ExportCommon.noteImageWithoutSource(img); return null; }
     let blob;
     try {
       const resp = await fetch(src);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       blob = await resp.blob();
-    } catch (e) { console.warn('[XlsxExport] image ignorée (téléchargement impossible) :', src.slice(0, 80), e); return null; }
+    } catch (e) { console.warn('[XlsxExport] image ignorée (téléchargement impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
     try {
       let extension = IMAGE_EXTENSIONS[blob.type];
       const url = URL.createObjectURL(blob);
@@ -390,7 +390,7 @@ const XlsxExport = (function () {
         }
         return { base64: await blobToBase64(blob), extension, naturalWidth: decoded.naturalWidth, naturalHeight: decoded.naturalHeight };
       } finally { URL.revokeObjectURL(url); }
-    } catch (e) { console.warn('[XlsxExport] image ignorée (décodage impossible) :', src.slice(0, 80), e); return null; }
+    } catch (e) { console.warn('[XlsxExport] image ignorée (décodage impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
   }
   // La taille de l'image dans la case : largeur et hauteur posées par l'éditeur (px), l'une déduite de l'autre par le rapport de l'image quand il en manque une ; 320 px de large
   // sans rien d'autre, comme l'export Word.

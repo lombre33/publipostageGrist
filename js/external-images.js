@@ -3,12 +3,16 @@
 // conversion impossible) était téléchargée à chaque export, sans rien demander (js/pdf-export.js:inlineEditorImagesAsDataUri, js/docx-export.js:docxImageDataFrom, js/xlsx-export.js:imageForWorkbook).
 // Avant tout export, une fenêtre (Dialogs.confirm) liste les sites : « Continuer » exporte, « Annuler » arrête l'export - rien n'est téléchargé ni écrit.
 // Ne comptent PAS comme externes : les data: et blob:, l'origine du widget, et le serveur de Grist (les images de pièces jointes, dont « Image depuis une
-// variable » qui ne lit que des colonnes Pièces jointes : aucune cellule ne peut envoyer l'export vers un autre site). L'affichage dans l'éditeur et la Lecture ne
-// change pas : ils chargent ces images comme toute page.
+// variable » qui ne lit que des colonnes Pièces jointes : aucune cellule ne peut envoyer l'export vers un autre site).
+// À l'affichage (contrôle de sécurité du 04/10, « Tout corriger », AUDIT_CODE.md §3.2) : une image d'un autre site se charge dès que le modèle s'ouvre, dans l'éditeur comme dans la
+// Lecture, et révèle à ce site l'ouverture du document (adresse IP, heure). Rien ne l'empêche - le modèle s'affiche comme avant -, mais elle est signalée en permanence : toute <img> de
+// la page qui charge depuis un autre site porte data-external-site="hôte" et une infobulle, et css/external-images.css lui trace un contour en tirets. Un observateur de la page le fait
+// pour TOUTES les images, éditeur, Lecture, en-têtes et pieds compris : aucune surface d'affichage n'a à y penser. Le widget n'a aucune image d'un autre site dans sa propre interface.
 //   ExternalImages.confirmExport(html, headerFooterData)  -> Promise<void> ; rejette (isCancel) quand la fenêtre est refusée
 //   ExternalImages.beginRun() / endRun()                   -> un lancement d'export (un clic, un lot entier : js/main.js:withExportLock) : un site déjà accepté n'est pas
 //                                                              redemandé, un refus arrête tout le lot ; sans lancement ouvert, chaque appel demande pour lui seul
 //   ExternalImages.isCancel(error)
+//   ExternalImages.siteOf(src)                             -> l'hôte d'une adresse d'image qui sort du widget (http(s) vers un autre site), sinon ''
 // Le HTML est lu dans un document inerte (DOMParser) : un innerHTML sur un nœud de la page, même détaché, fait déjà charger ses images au navigateur.
 const ExternalImages = (function () {
   const CANCEL_NAME = 'ExternalImagesCancelled';
@@ -97,5 +101,50 @@ const ExternalImages = (function () {
     if (sites.length) await approve(sites);
   }
 
-  return { beginRun, endRun, confirmExport, isCancel };
+  // --- Affichage : toute image de la page qui charge depuis un autre site est signalée -------------------------------------------------------------------------
+
+  const SITE_ATTR = 'data-external-site';
+
+  // L'hôte d'une adresse d'image qui part vers un autre site que le widget, sinon '' : data:, blob:, adresse vide, relative ou de la même origine, et tout protocole autre que http(s) ne comptent pas.
+  function siteOf(src) {
+    const value = String(src || '').trim();
+    if (!value || /^(data|blob):/i.test(value)) return '';
+    let url;
+    try { url = new URL(value, document.baseURI); } catch (e) { return ''; }
+    return ((url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== location.origin) ? url.host : '';
+  }
+
+  const siteTip = site => I18n.t('image.externalSite', { site });
+
+  async function markImage(img) {
+    const src = img.getAttribute('src');
+    let site = siteOf(src);
+    // Une image de pièce jointe (posée par js/grist-api.js:hydrateAttachmentImages) vient du serveur de Grist : son hôte est celui du jeton, jamais deviné d'après l'adresse.
+    if (site && img.dataset.source === 'attachment' && img.dataset.attachmentId) {
+      try {
+        if (site === new URL(await GristAPI.getAttachmentDownloadUrl(img.dataset.attachmentId)).host) site = '';
+      } catch (e) { /* sans le serveur de Grist, une image de pièce jointe est signalée comme les autres : plus d'avertissements, jamais moins */ }
+      if (img.getAttribute('src') !== src) return; // l'adresse a changé pendant l'attente : la mutation qui l'a changée juge la nouvelle
+    }
+    if (site) { img.setAttribute(SITE_ATTR, site); img.title = siteTip(site); }
+    else if (img.hasAttribute(SITE_ATTR)) { img.removeAttribute(SITE_ATTR); img.removeAttribute('title'); }
+  }
+
+  function watchDisplay() {
+    if (typeof MutationObserver === 'undefined') return;
+    const visit = node => {
+      if (node.nodeType !== 1) return;
+      if (node.localName === 'img') markImage(node);
+      else if (node.firstElementChild) node.querySelectorAll('img').forEach(markImage);
+    };
+    new MutationObserver(records => records.forEach(record => {
+      if (record.type === 'attributes') visit(record.target); else record.addedNodes.forEach(visit);
+    })).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+    document.querySelectorAll('img').forEach(markImage);
+    // L'infobulle est écrite dans la langue du moment : un changement de langue la réécrit.
+    I18n.onChange(() => document.querySelectorAll('img[' + SITE_ATTR + ']').forEach(img => { img.title = siteTip(img.getAttribute(SITE_ATTR)); }));
+  }
+  watchDisplay();
+
+  return { beginRun, endRun, confirmExport, isCancel, siteOf };
 })();

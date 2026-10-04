@@ -815,6 +815,8 @@ const I18n = (function () {
     // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on l'annule.
     'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
     'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
+    // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et Grist (contour en tirets, css/external-images.css).
+    'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },
     'status.exportCancelled': { fr: 'Export annulé.', en: 'Export cancelled.' },
     'prompt.newTemplateName': { fr: 'Nom du nouveau modèle :', en: 'Name of the new template:' },
     'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist :', en: 'Name of the new Grist table:' },
@@ -1313,6 +1315,8 @@ const I18n = (function () {
     'status.splitSheetsDoneWithFailures': { fr: '{ok} {ok|document placé|documents placés} sur {sheets} {sheets|feuille|feuilles}, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} placed on {sheets} {sheets|sheet|sheets}, {failed} {failed|failure|failures} (see console) — file downloaded.' },
     'status.splitSingleWorkbookDone': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook — file downloaded.' },
     'status.splitSingleWorkbookDoneWithFailures': { fr: '{ok} {ok|document réuni|documents réunis} dans un seul classeur Excel, {failed} {failed|échec|échecs} (voir la console) — fichier téléchargé.', en: '{ok} {ok|document|documents} combined into a single Excel workbook, {failed} {failed|failure|failures} (see console) — file downloaded.' },
+    // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
+    'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
   };
 
   let lang = (typeof localStorage !== 'undefined' && localStorage.getItem('pp_lang') === 'en') ? 'en' : 'fr';

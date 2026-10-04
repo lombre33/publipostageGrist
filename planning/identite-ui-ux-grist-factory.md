@@ -113,6 +113,9 @@ Mécanique : 3 choix utilisateur (système / clair / sombre), mémorisés en `lo
 choisi explicitement. Le voile derrière les fenêtres suit lui aussi le thème (`--pp-scrim`, plus foncé en sombre) : il
 n'y a plus de voile clair fixe.
 
+Ce qui se pose SUR la page prend donc des couleurs qui ne suivent pas le thème : le rouge d'un contour tracé sur la page est celui du thème clair dans les deux (`--paper-danger`,
+`#c53030`, 4,67:1 sur blanc, déclaré dans `css/external-images.css`), jamais `--danger` ni `--danger-ink` du thème sombre (`#f08a8a`, 2,3:1 sur blanc).
+
 ### Icônes : traits monochromes, jamais de police d'icônes ni d'emoji
 Toutes les icônes de Publipostage+ sont des SVG en **contour** (`stroke`, pas de remplissage), intégrées en
 `mask-image` CSS plutôt qu'en `<img>` : l'icône hérite alors de la couleur du bouton (texte/accent selon l'état),
@@ -268,6 +271,16 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
 Arbitré le 29/09 (en ligne `87a2a63`). Ce que le widget écrit lui-même dans le document — le message d'une variable qui ne
 se résout pas (« [ERREUR : … ] »), le titre du sommaire — suit la **langue de l'interface** de qui lit ou exporte, en
 Lecture comme en PDF et en Word (clés `variables.error.*` et `pdf.tocTitle` de `js/i18n.js`).
+
+### Une image d'un autre site est signalée à l'affichage, jamais retirée
+Arbitré le 04/10 (contrôle de sécurité du code, « Tout corriger », correction 4). Une image qui charge depuis un autre site que le widget et Grist révèle à ce site l'ouverture du document
+(adresse IP, heure). Rien ne la retire (non-régression : rien ne disparaît), mais elle est signalée en permanence, dans l'éditeur comme dans la Lecture, en-têtes et pieds compris :
+- un **contour en tirets rouges de 3 px** à l'intérieur de l'image (`--paper-danger`, `css/external-images.css` ; ~1,8 px à l'écran du panneau, la feuille y étant mise à l'échelle) et une **infobulle** qui nomme le site (`image.externalSite`, français et anglais) ;
+- le signalement ne prend aucune place (`outline`, jamais une bordure ni un cadre : la mise en page, la pagination et le PDF ne bougent pas), n'entre jamais dans le HTML enregistré, et tient
+  aussi pour une image habillée, derrière le texte ou posée dans une case ;
+- aucun écran n'a à y penser : l'observateur de `js/external-images.js` signale toute `<img>` de la page (`data-external-site`) ; le widget n'a aucune image d'un autre site dans sa propre interface ;
+- avant l'export, la fenêtre « Images d'un site externe » liste les sites (choix du 01/10, `Dialogs.confirm`). Limite connue : le signalement n'empêche pas la requête, et une image invisible
+  (un pixel) l'échappe ; seul un blocage jusqu'à acceptation l'arrêterait.
 
 ### Pas de framework, pas d'étape de build, dépendances tierces encadrées
 Les deux widgets sont des pages statiques (HTML/CSS/JS vanilla, pas de React/Vue, pas de bundler) servies telles
