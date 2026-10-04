@@ -1,9 +1,11 @@
-// Export « toutes les lignes en un seul PDF » (cf. js/main.js:onExportBatch) : chaque ligne est rendue exactement comme pour le ZIP
-// (PdfExport.getNativePdfBlobForRecord), puis pdf-lib recopie ses pages à la suite dans un seul document. En-tête/pied de page, numéros de page ("1/2") et
-// notes restent donc ceux de CHAQUE ligne, et chaque ligne commence sur une nouvelle page par construction. Chargé à la demande, hors du lot de
-// PdfExport.ensurePdfLibsLoaded : aucun autre export n'en a besoin. `createSheets` sert l'« Assemblage avant impression » (js/sheet-layout.js) : les mêmes PDF par ligne, posés sur des feuilles.
+// Export « toutes les lignes en un seul PDF » (js/main.js:onExportBatch) : chaque ligne est rendue exactement comme pour le ZIP
+// (PdfExport.getNativePdfBlobForRecord), puis pdf-lib recopie ses pages à la suite dans un seul document. L'en-tête, le pied, les numéros de page
+// (« 1/2 ») et les notes restent donc ceux de chaque ligne, et chaque ligne commence sur une nouvelle page. Chargé à la demande, hors du lot de
+// PdfExport.ensurePdfLibsLoaded : aucun autre export n'en a besoin. `createSheets` sert l'« Assemblage avant impression » (js/sheet-layout.js) : les
+// mêmes PDF par ligne, posés sur des feuilles.
 const PdfMerge = (function () {
-  // `integrity` (SRI sha384) : même recette que js/pdf-export.js. Fichier identique octet pour octet à dist/pdf-lib.min.js du paquet npm pdf-lib@1.17.1.
+  // `integrity` (SRI sha384) : même recette que js/pdf-export.js ; fichier identique octet pour octet à dist/pdf-lib.min.js du paquet npm
+  // pdf-lib@1.17.1.
   const PDF_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' };
   let libPromise = null;
   function ensureLibLoaded() {
@@ -13,8 +15,8 @@ const PdfMerge = (function () {
     return libPromise;
   }
 
-  // Document vide auquel `append(blob)` ajoute toutes les pages d'un PDF, dans l'ordre des appels. Une ligne à la fois plutôt qu'une liste de blobs fusionnée
-  // à la fin : seul le document en construction reste en mémoire, pas les PDF de toute la table en même temps.
+  // Document vide auquel `append(blob)` ajoute toutes les pages d'un PDF, dans l'ordre des appels. Une ligne à la fois plutôt qu'une liste de blobs
+  // fusionnée à la fin : seul le document en construction reste en mémoire, pas les PDF de toute la table en même temps.
   async function create(title) {
     await ensureLibLoaded();
     const merged = await window.PDFLib.PDFDocument.create();
@@ -31,11 +33,14 @@ const PdfMerge = (function () {
     };
   }
 
-  // Planches (« Assemblage avant impression », js/sheet-layout.js) : même principe que `create`, mais chaque page reçue est POSÉE dans l'emplacement suivant d'une feuille au lieu d'être recopiée à
-  // la suite - les pages d'une ligne, puis celles de la ligne d'après, une par emplacement ; une feuille neuve s'ouvre dès que la précédente est pleine, avec ses traits de coupe (peints avant les
-  // pages : ils sont hors de la grille). `layout` est le résultat de SheetLayout.compute : la feuille, l'échelle et les emplacements en points, origine en haut à gauche (pdf-lib a la sienne en bas :
-  // y est retourné ici). Les pages sont intégrées telles quelles (embedPdf : le texte reste du texte vectoriel, la page est rognée à son cadre), seulement mises à l'échelle de leur emplacement.
-  // Les liens cliquables d'une page n'y survivent pas (une annotation n'est pas dans le contenu de la page) : une planche est faite pour être imprimée.
+  // Planches (« Assemblage avant impression », js/sheet-layout.js) : même principe que `create`, mais chaque page reçue est posée dans l'emplacement
+  // suivant d'une feuille au lieu d'être recopiée à la suite : les pages d'une ligne, puis celles de la ligne d'après, une par emplacement ; une
+  // feuille neuve s'ouvre dès que la précédente est pleine, avec ses traits de coupe (peints avant les pages : ils sont hors de la grille). `layout`
+  // est le résultat de SheetLayout.compute : la feuille, l'échelle et les emplacements en points, origine en haut à gauche (pdf-lib a la sienne en
+  // bas : y est retourné ici). Les pages sont intégrées telles quelles (embedPdf : le texte reste du texte vectoriel, la page est rognée à son
+  // cadre), seulement mises à l'échelle de leur emplacement.
+  // Les liens cliquables d'une page n'y survivent pas (une annotation n'est pas dans le contenu de la page) : une planche est faite pour être
+  // imprimée.
   async function createSheets(title, layout) {
     await ensureLibLoaded();
     const { PDFDocument, cmyk } = window.PDFLib;
@@ -62,7 +67,8 @@ const PdfMerge = (function () {
         embedded.forEach(page => {
           if (!sheet || used >= layout.count) openSheet();
           const slot = layout.slots[used++];
-          // La page tient dans son emplacement à l'échelle de la planche ; une page d'une autre taille que celle du modèle (aucune aujourd'hui) y est ajustée et centrée plutôt que rognée.
+          // La page tient dans son emplacement à l'échelle de la planche ; une page d'une autre taille que celle du modèle (aucune aujourd'hui) y est
+          // ajustée et centrée plutôt que rognée.
           const fit = Math.min(slot.width / page.width, slot.height / page.height);
           const width = page.width * fit;
           const height = page.height * fit;

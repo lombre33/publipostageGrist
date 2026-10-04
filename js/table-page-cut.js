@@ -1,17 +1,18 @@
-// Coupure d'un tableau entre deux lignes, au saut de page (Antoine, 01/10 : « un tableau ne se coupe pas au moment du saut de page »).
-// Une ligne de tableau ne se coupe jamais en deux : le PDF (dontBreakRows de pdfmake) et le Word (cantSplit) la passent en entier à la page suivante quand elle ne tient pas,
-// et l'aperçu de l'éditeur (js/header-footer-preview.js) comme la Lecture (js/reader-mode.js) posent la couture à cet endroit, entre deux lignes, au lieu de la laisser
-// recouvrir une ligne ou de laisser le tableau déborder en bas de sa page. Ce module ne contient que ce que les quatre ont en commun : retrouver les lignes d'un tableau
-// qu'on sait couper, décider lesquelles ouvrent une page (`plan`), écrire la règle CSS qui descend une ligne sous la couture (`padRule`) et celle qui rogne le tableau sur la place
-// libre de la page qui finit et sur les marges de la couture (`clipRule`). Les aperçus ne touchent jamais au DOM de ProseMirror : la ligne est descendue par une feuille de style
-// (comme les marges de coupure des autres blocs), le document enregistré n'en sait rien.
+// Coupure d'un tableau entre deux lignes, au saut de page. Une ligne de tableau ne se coupe jamais en deux : le PDF (dontBreakRows de pdfmake) et le
+// Word (cantSplit) la passent en entier à la page suivante quand elle ne tient pas, et l'aperçu de l'éditeur (js/header-footer-preview.js) comme la
+// Lecture (js/reader-mode.js) posent la couture à cet endroit, entre deux lignes, au lieu de la laisser recouvrir une ligne ou de laisser le tableau
+// déborder en bas de sa page. Ce module ne contient que ce que les quatre ont en commun : retrouver les lignes d'un tableau qu'on sait couper,
+// décider lesquelles ouvrent une page (`plan`), écrire la règle CSS qui descend une ligne sous la couture (`padRule`) et celle qui rogne le tableau
+// sur la place libre de la page qui finit et sur les marges de la couture (`clipRule`). Les aperçus ne touchent jamais au DOM de ProseMirror : la
+// ligne est descendue par une feuille de style (comme les marges de coupure des autres blocs), le document enregistré n'en sait rien.
 const TablePageCut = (function () {
-  // Une ligne plus haute que cette part de la page ne se range plus : pdfmake, avec dontBreakRows, fait alors DISPARAÎTRE la ligne du PDF (mesuré : ligne de 80 lignes de
-  // texte sur une page de 60, ni sur la page 1 ni sur la page 2). Le tableau garde alors son ancien comportement partout (aperçu : un bloc d'une pièce ; PDF : lignes
-  // coupées entre deux lignes de texte). 90 % et non 100 : la ligne se mesure dans le navigateur, pdfmake l'écrit un peu plus haute ou plus basse.
+  // Une ligne plus haute que cette part de la page ne se range plus : avec dontBreakRows, pdfmake fait disparaître la ligne du PDF (mesuré : ligne de
+  // 80 lignes de texte sur une page de 60, ni sur la page 1 ni sur la page 2). Le tableau n'est alors pas coupé entre ses lignes : un bloc d'une
+  // pièce dans l'aperçu, des lignes coupées entre deux lignes de texte dans le PDF. 90 % et non 100 : la ligne se mesure dans le navigateur, pdfmake
+  // l'écrit un peu plus haute ou plus basse.
   const MAX_ROW_RATIO = 0.9;
 
-  // Les lignes d'un tableau qu'on sait couper entre deux lignes, dans l'ordre ; null sinon (le tableau reste alors un bloc d'une pièce, comme avant) :
+  // Les lignes d'un tableau qu'on sait couper entre deux lignes, dans l'ordre ; null sinon (le tableau reste alors un bloc d'une pièce) :
   //  - un seul <tbody>, sans <thead> ni <tfoot> : ce que l'éditeur et getHTML() produisent ;
   //  - toutes ses lignes sont des <tr> (une ligne proposée en suivi des modifications est enveloppée dans un <ins> ou un <del>) ;
   //  - aucune case fusionnée sur plusieurs lignes (rowspan) : une coupure y couperait la case, et dontBreakRows de pdfmake s'y emmêle ;
@@ -32,14 +33,15 @@ const TablePageCut = (function () {
     return heights.every(h => h <= MAX_ROW_RATIO * pageHeight);
   }
 
-  // Mesure un tableau pour `plan`. `blockEl` est le bloc de premier niveau qui le porte (l'enveloppe .tableWrapper de l'éditeur, le <table> lui-même en Lecture),
-  // `zoom` le facteur de la feuille (les rectangles sont en pixels écran, la page en pixels de mise en page), `pageHeightPx` la hauteur utile d'une page, `padOf(ligne)` le
-  // rembourrage que l'aperçu a déjà ajouté à une ligne pour la descendre sous une couture (0 s'il n'y en a pas) : une mesure faite après la pose des coupures ne doit pas le
-  // compter. Rend { rows, segs, heights, keepsTail } ou null si le tableau ne se coupe pas entre deux lignes. `segs` découpe la hauteur du bloc : la tranche de chaque ligne, du haut
-  // de la ligne au haut de la suivante (la première reprend ce qui est au-dessus d'elle, la dernière ce qui est au-dessous), donc leur somme est la hauteur du bloc.
-  // `captionPx` : la hauteur des légendes qui suivent le tableau (js/caption.js, « Rester ensemble »). Si la dernière ligne et elles tiennent ensemble dans une page, elles
-  // s'ajoutent à la dernière tranche (`keepsTail`) : la dernière ligne ne quitte jamais sa légende, c'est la ligne et sa légende que `plan` passe à la page suivante. Sinon
-  // (`keepsTail` faux) les légendes restent des paragraphes à part, comme avant.
+  // Mesure un tableau pour `plan`. `blockEl` est le bloc de premier niveau qui le porte (l'enveloppe .tableWrapper de l'éditeur, le <table> lui-même
+  // en Lecture), `zoom` le facteur de la feuille (les rectangles sont en pixels écran, la page en pixels de mise en page), `pageHeightPx` la hauteur
+  // utile d'une page, `padOf(ligne)` le rembourrage que l'aperçu a déjà ajouté à une ligne pour la descendre sous une couture (0 s'il n'y en a pas) :
+  // une mesure faite après la pose des coupures ne doit pas le compter. Rend { rows, segs, heights, keepsTail } ou null si le tableau ne se coupe pas
+  // entre deux lignes. `segs` découpe la hauteur du bloc : la tranche de chaque ligne, du haut de la ligne au haut de la suivante (la première
+  // reprend ce qui est au-dessus d'elle, la dernière ce qui est au-dessous), donc leur somme est la hauteur du bloc.
+  // `captionPx` : la hauteur des légendes qui suivent le tableau (js/caption.js, « Rester ensemble »). Si la dernière ligne et elles tiennent
+  // ensemble dans une page, elles s'ajoutent à la dernière tranche (`keepsTail`) : la dernière ligne ne quitte jamais sa légende, c'est la ligne et
+  // sa légende que `plan` passe à la page suivante. Sinon (`keepsTail` faux), les légendes restent des paragraphes à part.
   function measure(blockEl, table, zoom, pageHeightPx, padOf, captionPx) {
     const rows = rowsOf(table);
     if (!rows) return null;
@@ -57,9 +59,11 @@ const TablePageCut = (function () {
     return { rows, segs, heights, keepsTail };
   }
 
-  // Où le tableau change de page. `consumedBefore` : ce que la page en cours porte déjà avant lui (0 : il est en haut de page) ; `segs` : les tranches de `measure` ;
-  // `capacity` : la hauteur utile d'une page. Une ligne qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce qui la suit. Rend
-  //  - blockBreakBefore : même la première ligne ne tient pas, le tableau entier passe à la page suivante (coupure avant le tableau, comme pour tout autre bloc) ;
+  // Où le tableau change de page. `consumedBefore` : ce que la page en cours porte déjà avant lui (0 : il est en haut de page) ; `segs` : les
+  // tranches de `measure` ; `capacity` : la hauteur utile d'une page. Une ligne qui ne tient pas dans la place restante ouvre la page suivante, avec
+  // tout ce qui la suit. Rend
+  //  - blockBreakBefore : même la première ligne ne tient pas, le tableau entier passe à la page suivante (coupure avant le tableau, comme pour tout
+  //    autre bloc) ;
   //  - cuts : les rangs (à partir de 1) des lignes qui ouvrent une page ;
   //  - consumedAfter : ce que la dernière page du tableau porte, pour le bloc suivant.
   // Une ligne seule en haut de page qui dépasse la page reste là et déborde : il n'y a rien de mieux à faire (rowsFit l'écarte déjà du plan).
@@ -78,18 +82,20 @@ const TablePageCut = (function () {
     return { blockBreakBefore, cuts, consumedAfter: acc };
   }
 
-  // Règle CSS qui descend la ligne `rowIndex` (0 = la première) de `padPx` en rembourrant le haut de ses cases ; la bande de couture, posée sur le haut de la ligne, recouvre
-  // exactement ce rembourrage. `tableSelector` désigne le <table> (il est à une profondeur connue de chaque aperçu). Les cases d'une colonne proposée en suivi sont
-  // enveloppées dans un <ins>/<del>/<span> (css/track-changes.css) : elles sont visées aussi. `!important` : un style en ligne sur une case ne doit pas l'annuler.
+  // Règle CSS qui descend la ligne `rowIndex` (0 = la première) de `padPx` en rembourrant le haut de ses cases ; la bande de couture, posée sur le
+  // haut de la ligne, recouvre exactement ce rembourrage. `tableSelector` désigne le <table> (il est à une profondeur connue de chaque aperçu). Les
+  // cases d'une colonne proposée en suivi sont enveloppées dans un <ins>/<del>/<span> (css/track-changes.css) : elles sont visées aussi.
+  // `!important` : un style en ligne sur une case ne doit pas l'annuler.
   function padRule(tableSelector, rowIndex, padPx) {
     const row = tableSelector + ' > tbody > tr:nth-child(' + (rowIndex + 1) + ')';
     return row + ' > :is(td, th), ' + row + ' > :is(ins, del, span) > :is(td, th) { padding-top: ' + padPx + 'px !important; }';
   }
 
-  // Règle CSS qui rogne un tableau sur les bandes `strips` ([{ top, bottom }], pixels de mise en page depuis le haut du bloc que vise `blockSelector`) : tout ce qu'il peint
-  // dans une bande disparaît, fond et traits des cases compris (aucun trait ne se pose depuis le DOM, ProseMirror le défait). Une ligne descendue par `padRule` laisse sous
-  // la couture une réserve et deux marges de page transparentes (c'est la feuille qui est blanche, et l'image d'un coin répétée sur chaque page y passe) : sans le rognage,
-  // les traits verticaux des cases la traverseraient. Un `path()` à deux sous-tracés et la règle `evenodd` : le grand rectangle, moins les bandes.
+  // Règle CSS qui rogne un tableau sur les bandes `strips` ([{ top, bottom }], pixels de mise en page depuis le haut du bloc que vise
+  // `blockSelector`) : tout ce qu'il peint dans une bande disparaît, fond et traits des cases compris (aucun trait ne se pose depuis le DOM,
+  // ProseMirror le défait). Une ligne descendue par `padRule` laisse sous la couture une réserve et deux marges de page transparentes (c'est la
+  // feuille qui est blanche, et l'image d'un coin répétée sur chaque page y passe) : sans le rognage, les traits verticaux des cases la
+  // traverseraient. Un `path()` à deux sous-tracés et la règle `evenodd` : le grand rectangle, moins les bandes.
   function clipRule(blockSelector, strips) {
     const far = 100000;
     let path = 'M' + (-far) + ' ' + (-far) + 'H' + far + 'V' + far + 'H' + (-far) + 'Z';

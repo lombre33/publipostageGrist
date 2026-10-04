@@ -1,16 +1,19 @@
-// Export Excel (.xlsx) d'une grille (js/grid-editor.js) : le tableau du modèle, enregistrement résolu, est écrit case par case dans un classeur ExcelJS - largeur des
-// colonnes et hauteur des lignes de la grille, cases fusionnées, texte riche, alignement, fond, bordures, images. Même architecture que js/docx-export.js : le HTML du
-// modèle passe par ReaderMode.preview (les bulles prennent leur valeur), puis un parcours du DOM résolu fabrique le fichier.
+// Export Excel (.xlsx) d'une grille (js/grid-editor.js) : le tableau du modèle, enregistrement résolu, est écrit case par case dans un classeur
+// ExcelJS (largeur des colonnes et hauteur des lignes de la grille, cases fusionnées, texte riche, alignement, fond, bordures, images). Même
+// architecture que js/docx-export.js : le HTML du modèle passe par ReaderMode.preview (les bulles prennent leur valeur), puis un parcours du DOM
+// résolu fabrique le fichier.
 //
-// L'Excel n'est qu'un AFFICHAGE : aucune formule, aucun calcul. Une case n'est écrite comme VRAI nombre ou VRAIE date que si elle ne contient QUE cela (une seule bulle
-// nombre ou date - ou un seul « Calcul », écrit en nombre -, sans autre texte), avec le format d'affichage de la bulle ; toute autre case est du texte (choix d'Antoine, 01/10 ;
-// le calcul seul, 02/10).
+// L'Excel n'est qu'un affichage : ni formule ni calcul. Une case n'est écrite en vrai nombre ou en vraie date que si elle ne contient que cela (une
+// seule bulle nombre ou date, ou un seul « Calcul » écrit en nombre, sans autre texte), avec le format d'affichage de la bulle ; toute autre case est
+// du texte.
 //
-// Portée : seul un tableau de grille a un sens ici (le menu grise l'export Excel hors grille) ; un modèle sans tableau donne une feuille d'une case avec son texte.
-// Les listes s'écrivent « • », « 1. » et « ☐ » devant leurs lignes (Excel n'a pas de liste dans une case) ; une image se pose sur sa case, à sa taille.
+// Portée : seul un tableau de grille a un sens ici (le menu grise l'export Excel hors grille) ; un modèle sans tableau donne une feuille d'une case
+// avec son texte. Les listes s'écrivent « • », « 1. » et « ☐ » devant leurs lignes (Excel n'a pas de liste dans une case) ; une image se pose sur sa
+// case, à sa taille.
 const XlsxExport = (function () {
   // Chargement paresseux (comme DocxExport) : ExcelJS pèse ~0,9 Mo, inutile au premier chargement du widget. cdnjs le sert tel que publié sur npm
-  // (dist/exceljs.min.js) : SRI stable. Recalculer l'integrity si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
+  // (dist/exceljs.min.js), d'où un SRI stable. Recalculer l'integrity si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl
+  // base64 -A`.
   const EXCEL_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', integrity: 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' };
   let excelLibPromise = null;
   async function ensureExcelLibLoaded() {
@@ -25,20 +28,21 @@ const XlsxExport = (function () {
   const MAX_CELL_CHARS = 32767; // plafond d'Excel pour le texte d'une case
   const MAX_EXACT_NUMBER = 1e15; // au-delà, Excel n'a plus tous les chiffres
   const MIN_EXCEL_DATE_MS = Date.UTC(1900, 2, 1);
-  // Police de départ d'une case : Arial 10,5 pt, la taille de DEFAULT_FONT_SIZE (js/pdf-export.js) dans une police que tout Excel a (le Roboto de l'éditeur n'est installé
-  // nulle part ; Excel le remplacerait par la police du classeur et changerait la largeur des lignes).
+  // Police de départ d'une case : Arial 10,5 pt, la taille de DEFAULT_FONT_SIZE (js/pdf-export.js) dans une police que tout Excel a (le Roboto de
+  // l'éditeur n'est installé nulle part ; Excel le remplacerait par la police du classeur et changerait la largeur des lignes).
   const BASE_FONT = { name: 'Arial', size: 10.5 };
   const HEADING_PT = { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 }; // mêmes tailles que HEADING_HALF_PT / 2, js/docx-export.js
   const LINK_COLOR = 'FF0563C1';
   const CODE_FONT = 'Courier New';
   const GENERIC_FONTS = /^(sans-serif|serif|system-ui|ui-sans-serif|ui-serif|-apple-system|blinkmacsystemfont)$/i;
 
-  // --- Unités ------------------------------------------------------------------------------------------------------------------------------------------------
+  // Unités
   // Une largeur de colonne d'Excel se compte en caractères de la police par défaut du classeur (Calibri 11 : 7 px par caractère + 5 px de marge).
   function columnWidthFromPx(px) { return Math.min(MAX_COLUMN_WIDTH, Math.max(0.5, (px - 5) / 7)); }
   function rowHeightFromPx(px) { return Math.min(MAX_ROW_PT, Math.max(1, Math.round(px * PX_TO_PT * 4) / 4)); }
 
-  // « rgb(12, 34, 56) », « rgba(12, 34, 56, 0.5) » ou « #123456 » (en minuscules) -> « FF123456 » (ARGB d'ExcelJS) ; null si transparent ou illisible.
+  // « rgb(12, 34, 56) », « rgba(12, 34, 56, 0.5) » ou « #123456 » (en minuscules) -> « FF123456 » (ARGB d'ExcelJS) ; null si transparent ou
+  // illisible.
   function argbOfRgbOrHex(v) {
     const rgb = v.match(/^rgba?\(\s*(\d+)\s*[, ]\s*(\d+)\s*[, ]\s*(\d+)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/);
     if (rgb) {
@@ -52,8 +56,9 @@ const XlsxExport = (function () {
     const long = v.match(/^#([0-9a-f]{6})$/);
     return long ? ('FF' + long[1]).toUpperCase() : null;
   }
-  // La couleur telle que le NAVIGATEUR la lit : « #rrggbb », ou « rgba(r, g, b, a) » sous 100 % d'opacité (le fillStyle d'un canevas, jamais un style calculé : celui-ci suit le thème sombre). Le canevas ignore sans rien
-  // dire une valeur qui n'est pas une couleur : deux amorces distinctes séparent « illisible » (l'amorce revient telle quelle) d'une couleur qui vaut l'amorce. Même lecture que cssColorHex de js/docx-export.js.
+  // La couleur telle que le navigateur la lit : « #rrggbb », ou « rgba(r, g, b, a) » sous 100 % d'opacité (le fillStyle d'un canevas, jamais un style
+  // calculé : celui-ci suit le thème sombre). Le canevas ignore sans rien dire une valeur qui n'est pas une couleur : deux amorces distinctes
+  // séparent « illisible » (l'amorce revient telle quelle) d'une couleur qui vaut l'amorce. Même lecture que cssColorHex de js/docx-export.js.
   const browserColorCache = new Map();
   let colorProbe;
   function browserColor(v) {
@@ -68,8 +73,9 @@ const XlsxExport = (function () {
     browserColorCache.set(v, resolved);
     return resolved;
   }
-  // Une couleur CSS -> « FF123456 » (ARGB d'ExcelJS) ; null si vide, transparente ou illisible. Un texte collé de Word ou d'une page web garde ses couleurs NOMMÉES (« red », « black » : le navigateur ne les réécrit pas en
-  // rgb()), et « hsl(...) » ou « rgb(100%, ...) » sont aussi des couleurs valides : ce que argbOfRgbOrHex ne lit pas passe par le navigateur.
+  // Une couleur CSS -> « FF123456 » (ARGB d'ExcelJS) ; null si vide, transparente ou illisible. Un texte collé de Word ou du web garde ses couleurs
+  // nommées (« red », « black » : le navigateur ne les réécrit pas en rgb()), et « hsl(...) » ou « rgb(100%, ...) » sont valides aussi : ce que
+  // argbOfRgbOrHex ne lit pas passe par le navigateur.
   function cssColorArgb(value) {
     if (!value) return null;
     const v = String(value).trim().toLowerCase();
@@ -91,15 +97,15 @@ const XlsxExport = (function () {
     return GENERIC_FONTS.test(first) ? BASE_FONT.name : first;
   }
 
-  // --- Format d'affichage des vrais nombres et des vraies dates ------------------------------------------------------------------------------------------------
+  // Format d'affichage des vrais nombres et des vraies dates
   // Même choix de langue que VariableFormat.numberLang : « us » ou « fr » imposés par la bulle, sinon la langue de l'interface.
   function numberLangOf(style) {
     if (style === 'us') return 'en';
     if (style === 'fr') return 'fr';
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
   }
-  // Code de format d'Excel : écrit dans la convention d'Excel (virgule des milliers, point des décimales) - c'est Excel qui l'affiche selon la langue de la personne
-  // qui l'ouvre ; seuls le groupement, le nombre de décimales et la devise viennent de la bulle.
+  // Code de format d'Excel, écrit dans sa convention (virgule des milliers, point des décimales) : Excel l'affiche selon la langue de la personne qui
+  // ouvre le fichier ; seuls le groupement, le nombre de décimales et la devise viennent de la bulle.
   function numberFormatCode(format, value) {
     const f = format || {};
     const decimals = f.decimals == null ? (Number.isInteger(value) ? 0 : null) : f.decimals;
@@ -128,33 +134,39 @@ const XlsxExport = (function () {
     return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? codes.en : codes.fr;
   }
 
-  // Les bulles qui prennent une valeur : celles d'une variable et celles d'un calcul (js/variable-calc.js), comme BADGE_SELECTOR de js/reader-mode.js.
+  // Les bulles qui prennent une valeur : celles d'une variable et celles d'un calcul (js/variable-calc.js), comme BADGE_SELECTOR de
+  // js/reader-mode.js.
   const BUBBLES = '.var-badge, .calc-badge';
-  // Vrai si `badge` est tout le contenu de sa case : une seule bulle, pas d'autre texte ni d'image, pas de boucle « dans la phrase » ou de zone répétée.
+  // Vrai si `badge` est tout le contenu de sa case : une seule bulle, pas d'autre texte ni d'image, pas de boucle « dans la phrase » ou de zone
+  // répétée.
   function isSoleBadge(cell, badge) {
     if (cell.querySelectorAll(BUBBLES).length !== 1 || cell.querySelector('img') || badge.hasAttribute('data-loop')) return false;
     const rest = cell.cloneNode(true);
     rest.querySelector(BUBBLES).remove();
     return rest.textContent.replace(/[\s\u00a0]+/g, '') === '';
   }
-  // Un nombre que la bulle écrit : { kind: 'number', value, numFmt } ; null = du texte (nombre en toutes lettres, zéro que la bulle masque - la case est vide, comme dans la Lecture et
-  // le PDF -, plus de 15 chiffres : Excel les arrondirait en silence, un n° de série ou un IBAN saisi en nombre reste un texte).
+  // Le réglage de format d'une bulle (data-format) ; null s'il manque ou n'est pas lisible.
+  function badgeFormat(badge) {
+    try { return JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { return null; }
+  }
+  // Un nombre que la bulle écrit : { kind: 'number', value, numFmt } ; null = du texte (nombre en toutes lettres, zéro que la bulle masque - la case
+  // est vide, comme en Lecture et dans le PDF -, plus de 15 chiffres : Excel les arrondirait en silence, donc un n° de série ou un IBAN saisi en
+  // nombre reste du texte).
   function typedNumber(value, format, colType) {
     if (format && ((format.type && format.type !== 'number') || format.words)) return null;
     if (value === 0 && Variables.zeroHidden(format, colType)) return null;
     if (Math.abs(value) >= MAX_EXACT_NUMBER) return null;
     return { kind: 'number', value: String(value), numFmt: numberFormatCode(format, value) };
   }
-  // { kind: 'number' | 'date', value, numFmt } si la bulle vaut un vrai nombre ou une vraie date qu'Excel peut afficher comme la bulle l'écrit ; null = du texte (nombre écrit
-  // en toutes lettres, date dont on a retiré le jour, le mois ou l'année, valeur absente ou en erreur, liste, colonne d'un autre type). Un zéro que la bulle masque
-  // (réglage par défaut des colonnes nombre) reste du texte : la case est vide, comme dans la Lecture et le PDF.
+  // { kind: 'number' | 'date', value, numFmt } si la bulle vaut un vrai nombre ou une vraie date qu'Excel peut afficher comme la bulle l'écrit ; null
+  // = du texte (nombre en toutes lettres, date dont on a retiré le jour, le mois ou l'année, valeur absente ou en erreur, liste, colonne d'un autre
+  // type).
   async function typedValueOf(badge, tableId, record, binding) {
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
     if (!table || !column) return null;
     const loopOpts = binding ? { loop: binding } : undefined;
-    let format = null;
-    try { format = JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
+    const format = badgeFormat(badge);
     const rawCondition = badge.getAttribute('data-condition');
     if (rawCondition) {
       try { if (!(await ConditionRules.conditionHolds(JSON.parse(rawCondition), tableId, record, loopOpts))) return null; } catch (e) { return null; }
@@ -170,7 +182,8 @@ const XlsxExport = (function () {
     if (isDateColumn && (!format || !format.type || format.type === 'date')) {
       if (format && (format.words || format.day === false || format.month === false || format.year === false)) return null;
       const instant = new Date(value * 1000);
-      // Une date avant le 1er mars 1900 n'a pas de numéro de série fiable dans Excel (jour fantôme du 29 février 1900, numéros négatifs) : elle reste un texte.
+      // Une date avant le 1er mars 1900 n'a pas de numéro de série fiable dans Excel (jour fantôme du 29 février 1900, numéros négatifs) : elle reste
+      // un texte.
       if (Number.isNaN(instant.getTime()) || instant.getTime() < MIN_EXCEL_DATE_MS || instant.getUTCFullYear() > 9999) return null;
       const iso = instant.toISOString().slice(0, 10);
       return { kind: 'date', value: iso, numFmt: dateFormatCode(format) };
@@ -178,19 +191,19 @@ const XlsxExport = (function () {
     if (!isDateColumn && (colType === 'Numeric' || colType === 'Int' || (format && format.type === 'number'))) return typedNumber(value, format, colType);
     return null;
   }
-  // Le même verdict pour une bulle « Calcul » : son résultat est un nombre, écrit comme celui d'une colonne Numérique (Variables.resolveCalcResult), avec la ligne du tour dans une zone
-  // répétée. Une erreur de calcul (« [ERREUR : …] »), un calcul qui ne montre rien (cellule vide, moyenne de rien) et une liste restent du texte.
+  // Le même verdict pour une bulle « Calcul » : son résultat est un nombre, écrit comme celui d'une colonne Numérique (Variables.resolveCalcResult),
+  // avec la ligne du tour dans une zone répétée. Une erreur de calcul (« [ERREUR : …] »), un calcul qui ne montre rien (cellule vide, moyenne de
+  // rien) et une liste restent du texte.
   async function typedCalcValueOf(badge, tableId, record, binding) {
-    let format = null;
-    try { format = JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
+    const format = badgeFormat(badge);
     let result;
     try { result = await Variables.resolveCalcResult(badge.getAttribute('data-formula') || '', tableId, record, format, binding ? { loop: binding } : undefined); } catch (e) { return null; }
     if (!result || result.isError || typeof result.value !== 'number' || !Number.isFinite(result.value)) return null;
     return typedNumber(result.value, format, 'Numeric');
   }
-  // Crochet de ReaderMode.preview : une case dont la seule bulle vaut un vrai nombre ou une vraie date en garde la trace (data-xl-*) ; ReaderMode.preview remplace ensuite
-  // la bulle par son texte, et le parcours de la feuille (addTableSheet) lit ces marques. Le contrôle « seule bulle de la case » est fait d'un trait, avant tout await :
-  // à cet instant toutes les bulles du document sont encore en place.
+  // Crochet de ReaderMode.preview : une case dont la seule bulle vaut un vrai nombre ou une vraie date en garde la trace (data-xl-*) ;
+  // ReaderMode.preview remplace ensuite la bulle par son texte, et fillTableSheet lit ces marques. Le contrôle « seule bulle de la case » se fait
+  // d'un trait, avant tout await : toutes les bulles du document sont alors encore en place.
   function typedCellHook(tableId, record) {
     return (badge, binding) => {
       const cell = badge.closest('td, th');
@@ -214,9 +227,9 @@ const XlsxExport = (function () {
     return { value, numFmt: td.getAttribute('data-xl-fmt') || undefined };
   }
 
-  // --- Texte d'une case ----------------------------------------------------------------------------------------------------------------------------------------
-  // Même sous-ensemble de formats que DocxExport.inheritedRunStyle : seuls les balises et les styles EN LIGNE comptent (jamais le style calculé : la couleur de texte
-  // d'un thème sombre ferait du blanc sur blanc dans le fichier).
+  // Texte d'une case
+  // Même sous-ensemble de formats que DocxExport.inheritedRunStyle : seuls les balises et les styles en ligne comptent, jamais le style calculé (la
+  // couleur de texte d'un thème sombre ferait du blanc sur blanc dans le fichier).
   function inheritedRun(node, parent) {
     const out = Object.assign({}, parent);
     if (node.nodeType !== 1) return out;
@@ -247,8 +260,9 @@ const XlsxExport = (function () {
   const sameRunStyle = (a, b) => ['bold', 'italic', 'underline', 'strike', 'name', 'size', 'color', 'background'].every(k => a[k] === b[k]);
 
   const BLOCK_TAGS = /^(P|H[1-6]|DIV|BLOCKQUOTE|PRE|LI|UL|OL|TABLE)$/;
-  // Le contenu d'une case : des lignes de segments { text, style }, la première image de chaque ligne, l'alignement horizontal du premier paragraphe et le lien s'il
-  // couvre toute la case. Un bloc (paragraphe, titre, élément de liste) commence une ligne ; une ligne vide est gardée (Entrée deux fois), celles de la fin non.
+  // Le contenu d'une case : des lignes de segments { text, style }, ses images, l'alignement horizontal du premier paragraphe et le lien s'il couvre
+  // toute la case. Un bloc (paragraphe, titre, élément de liste) commence une ligne ; une ligne vide est gardée (Entrée deux fois), celles de la fin
+  // non.
   function readCellContent(cell) {
     const lines = [[]];
     const images = [];
@@ -274,11 +288,12 @@ const XlsxExport = (function () {
       if (node.nodeType !== 1) return;
       const tag = node.tagName;
       if (tag === 'BR') { if (!node.classList.contains('ProseMirror-trailingBreak')) lines.push([]); return; }
-      if (tag === 'IMG') { images.push({ img: node, line: lines.length - 1 }); return; }
+      if (tag === 'IMG') { images.push(node); return; }
       if (tag === 'STYLE' || tag === 'SCRIPT') return;
       const own = inheritedRun(node, style);
-      // Case d'une variable Oui / Non (ReaderMode.checkboxNode) : son texte est le caractère ☑ / ☐, sa couleur vient du style en ligne de la case (lue par inheritedRun) ; Arial n'a pas ces
-      // caractères, la police des symboles de Windows les dessine à la même taille que Word (DocxExport) sans attendre le remplacement de police d'Excel.
+      // Case d'une variable Oui / Non (ReaderMode.checkboxNode) : son texte est le caractère ☑ / ☐, sa couleur vient du style en ligne de la case
+      // (lue par inheritedRun) ; Arial n'a pas ces caractères, la police des symboles de Windows les dessine à la même taille que Word (DocxExport)
+      // sans attendre le remplacement de police d'Excel.
       if (node.classList.contains('resolved-checkbox')) own.name = 'Segoe UI Symbol';
       if (tag === 'UL' || tag === 'OL') {
         const ordered = tag === 'OL';
@@ -315,8 +330,9 @@ const XlsxExport = (function () {
     return { lines, images, horizontal, wholeLink };
   }
 
-  // Les segments d'une case, sur une seule suite avec un retour à la ligne entre deux lignes, regroupés quand deux segments voisins ont le même style. Un retour à la
-  // ligne prend le style du texte qui le précède (ou, en tête de case, de celui qui le suit) : il ne coupe pas à lui seul une suite de même style en texte riche.
+  // Les segments d'une case, sur une seule suite avec un retour à la ligne entre deux lignes, regroupés quand deux segments voisins ont le même
+  // style. Un retour à la ligne prend le style du texte qui le précède (ou, en tête de case, de celui qui le suit) : il ne coupe pas à lui seul une
+  // suite de même style en texte riche.
   function flattenRuns(lines) {
     const parts = [];
     lines.forEach((line, i) => {
@@ -344,12 +360,13 @@ const XlsxExport = (function () {
     return font;
   }
 
-  // --- Bordures d'une case --------------------------------------------------------------------------------------------------------------------------------------
-  // Un filet fin gris sur les quatre côtés de chaque case, comme le PDF (hLineColor/vLineColor #777777, 0,5 pt, js/pdf-export.js:tableFrom) : jamais le style calculé,
-  // dont la couleur suit le thème sombre de l'éditeur.
+  // Bordures d'une case
+  // Un filet fin gris sur les quatre côtés de chaque case, comme le PDF (hLineColor/vLineColor #777777, 0,5 pt, js/pdf-export.js:tableFrom) ; jamais
+  // le style calculé, dont la couleur suit le thème sombre de l'éditeur.
   const BORDER_EDGE = { style: 'thin', color: { argb: 'FF777777' } };
   const CELL_BORDER = { top: BORDER_EDGE, left: BORDER_EDGE, bottom: BORDER_EDGE, right: BORDER_EDGE };
-  // Les bords réglés d'une case de grille (barre de la case, js/table-borders.js) : le trait de départ, une couleur, ou rien (un côté sans trait n'est pas écrit).
+  // Les bords réglés d'une case de grille (barre de la case, js/table-borders.js) : le trait de départ, une couleur, ou rien (un côté sans trait
+  // n'est pas écrit).
   function borderOfSides(sides) {
     const edge = value => (value === TableBorders.NONE ? null : value ? { style: 'thin', color: { argb: 'FF' + value.slice(1).toUpperCase() } } : BORDER_EDGE);
     const border = {};
@@ -357,16 +374,16 @@ const XlsxExport = (function () {
     return border;
   }
 
-  // --- Images -----------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Images
   const IMAGE_EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpeg', 'image/gif': 'gif' };
-  // Même lecture que DocxExport.docxImageDataFrom : le contenu de `src` (data:, blob:, adresse de pièce jointe) par fetch ; PNG, JPEG et GIF tels quels, tout le reste (WEBP,
-  // SVG, BMP) redessiné en PNG. Une image illisible est laissée de côté : le reste de la feuille s'écrit.
   function loadImage(url) {
     return new Promise((resolve, reject) => { const probe = new Image(); probe.onload = () => resolve(probe); probe.onerror = () => reject(new Error('image illisible')); probe.src = url; });
   }
   function blobToBase64(blob) {
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] || ''); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
   }
+  // Même lecture que DocxExport.docxImageDataFrom : le contenu de `src` (data:, blob:, adresse de pièce jointe) par fetch ; PNG, JPEG et GIF tels
+  // quels, tout le reste (WEBP, SVG, BMP) redessiné en PNG. Une image illisible est laissée de côté : le reste de la feuille s'écrit.
   async function imageForWorkbook(img) {
     const src = img.getAttribute('src') || '';
     if (!src) { ExportCommon.noteImageWithoutSource(img); return null; }
@@ -392,8 +409,8 @@ const XlsxExport = (function () {
       } finally { URL.revokeObjectURL(url); }
     } catch (e) { console.warn('[XlsxExport] image ignorée (décodage impossible) :', src.slice(0, 80), e); ExportCommon.noteUnreadImage(img); return null; }
   }
-  // La taille de l'image dans la case : largeur et hauteur posées par l'éditeur (px), l'une déduite de l'autre par le rapport de l'image quand il en manque une ; 320 px de large
-  // sans rien d'autre, comme l'export Word.
+  // La taille de l'image dans la case : largeur et hauteur posées par l'éditeur (px), l'une déduite de l'autre par le rapport de l'image quand il en
+  // manque une ; 320 px de large sans rien d'autre, comme l'export Word.
   function imageSizePx(img, data) {
     const style = img.getAttribute('style') || '';
     const pick = name => { const m = style.match(new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([\\d.]+)px', 'i')); return m ? parseFloat(m[1]) : null; };
@@ -405,8 +422,9 @@ const XlsxExport = (function () {
     return { width: 320, height: 320 * ratio };
   }
 
-  // --- Feuille ----------------------------------------------------------------------------------------------------------------------------------------------------------
-  // Nom de feuille valable pour Excel : 31 caractères au plus, sans \ / ? * [ ] :, ni apostrophe au début ou à la fin ; unique dans le classeur (« nom (2) »).
+  // Feuille
+  // Nom de feuille valable pour Excel : 31 caractères au plus, sans \ / ? * [ ] :, ni apostrophe au début ou à la fin ; unique dans le classeur
+  // (« nom (2) »).
   function sheetNameFrom(name, used) {
     let base = String(name || '').replace(/[\\/?*[\]:]/g, '_').replace(/^'+|'+$/g, '').trim() || 'Feuille';
     base = base.slice(0, 31);
@@ -417,7 +435,8 @@ const XlsxExport = (function () {
     return candidate;
   }
 
-  // Largeurs des colonnes en px : le <colgroup> du modèle d'abord (c'est la largeur réglée par la personne), sinon les cases de la première ligne telles que rendues.
+  // Largeurs des colonnes en px : le <colgroup> du modèle d'abord (c'est la largeur réglée par la personne), sinon les cases de la première ligne
+  // telles que rendues.
   function columnWidthsPx(table, columnCount) {
     const fromCols = Array.from(table.querySelectorAll(':scope > colgroup > col')).map(col => parseFloat(col.style.width) || 0);
     const widths = fromCols.slice(0, columnCount);
@@ -431,31 +450,12 @@ const XlsxExport = (function () {
     return widths;
   }
 
-  // Place chaque case sur la grille de la feuille (les cellules fusionnées en recouvrent plusieurs) : { td, row, col, rowSpan, colSpan }, numérotés depuis 0.
-  function placeCells(rows) {
-    const taken = [];
-    const placed = [];
-    let columnCount = 0;
-    rows.forEach((tr, r) => {
-      let c = 0;
-      Array.from(tr.cells).forEach(td => {
-        while (taken[r] && taken[r][c]) c++;
-        const colSpan = Math.max(1, parseInt(td.getAttribute('colspan') || '1', 10) || 1);
-        const rowSpan = Math.max(1, Math.min(rows.length - r, parseInt(td.getAttribute('rowspan') || '1', 10) || 1));
-        for (let dr = 0; dr < rowSpan; dr++) for (let dc = 0; dc < colSpan; dc++) (taken[r + dr] = taken[r + dr] || [])[c + dc] = true;
-        placed.push({ td, row: r, col: c, rowSpan, colSpan });
-        c += colSpan;
-        columnCount = Math.max(columnCount, c);
-      });
-    });
-    return { placed, columnCount };
-  }
-
-  // Les feuilles d'un enregistrement : une seule, ou une par tranche de lignes que les sauts de page de la grille délimitent (« nom », « nom (2) »... : le nom de la suivante est pris comme
-  // celui d'un enregistrement de même nom). Elles ont toutes les mêmes colonnes et chacune recompte ses lignes depuis 1 ; la première est rendue.
+  // Les feuilles d'un enregistrement : une seule, ou une par tranche de lignes que les sauts de page de la grille délimitent (« nom », « nom
+  // (2) »... : le nom de la suivante se prend comme celui d'un enregistrement de même nom). Elles ont toutes les mêmes colonnes et chacune recompte
+  // ses lignes depuis 1 ; la première est rendue.
   async function addTableSheet(workbook, name, root, options) {
     const table = root.querySelector('table');
-    // Un objet de réglages neuf pour chaque feuille, par prudence : ExcelJS peut garder une référence à ceux qu'on lui donne (aucun test ne voit la différence aujourd'hui).
+    // Un objet de réglages neuf par feuille : ExcelJS peut garder une référence à celui qu'on lui donne.
     const sheetOptions = () => ({
       views: [{ showGridLines: false }],
       pageSetup: {
@@ -473,8 +473,8 @@ const XlsxExport = (function () {
       cell.font = fontOf({}); cell.alignment = { vertical: 'top', wrapText: true };
       return sheet;
     }
-    const allRows = Array.from(table.rows);
-    const widthsPx = columnWidthsPx(table, placeCells(allRows).columnCount);
+    const allRows = ExportCommon.tableRows(table);
+    const widthsPx = columnWidthsPx(table, ExportCommon.placeCells(allRows).width);
     const borderSides = ExportCommon.cellBorderSides(table);
     let first = null;
     for (const [from, to] of ExportCommon.gridRowSegments(allRows)) {
@@ -487,16 +487,17 @@ const XlsxExport = (function () {
 
   // Une feuille pour `rows` (les lignes de sa tranche) : largeur des colonnes, hauteur des lignes, fusions, puis chaque case.
   async function fillTableSheet(workbook, sheet, rows, widthsPx, borderSides) {
-    const { placed } = placeCells(rows);
+    const { placed } = ExportCommon.placeCells(rows);
     widthsPx.forEach((px, i) => { sheet.getColumn(i + 1).width = columnWidthFromPx(px); });
     rows.forEach((tr, r) => { sheet.getRow(r + 1).height = rowHeightFromPx(tr.getBoundingClientRect().height); });
 
-    // Les fusions d'abord : ExcelJS copie le style de la case maîtresse sur les autres au moment de fusionner, on style ensuite chaque case une à une.
-    placed.forEach(p => { if (p.rowSpan > 1 || p.colSpan > 1) sheet.mergeCells(p.row + 1, p.col + 1, p.row + p.rowSpan, p.col + p.colSpan); });
+    // Les fusions d'abord : ExcelJS copie le style de la case maîtresse sur les autres au moment de fusionner, on style ensuite chaque case une à
+    // une.
+    placed.forEach(p => { if (p.rowspan > 1 || p.colspan > 1) sheet.mergeCells(p.row + 1, p.col + 1, p.row + p.rowspan, p.col + p.colspan); });
 
     const pendingImages = [];
     for (const p of placed) {
-      const { td } = p;
+      const td = p.el;
       const content = readCellContent(td);
       const typedInfo = typedValueOfCell(td);
       const master = sheet.getCell(p.row + 1, p.col + 1);
@@ -531,8 +532,8 @@ const XlsxExport = (function () {
       else if (typedInfo) alignment.horizontal = 'left'; // comme dans la grille et le PDF : un nombre s'y lit à gauche, comme tout le texte
       // Chaque case d'une fusion porte les quatre bords de la case fusionnée : Excel ne dessine que ceux de son pourtour.
       const border = borderSides && borderSides.get(td) ? borderOfSides(borderSides.get(td)) : CELL_BORDER;
-      for (let rr = p.row; rr < p.row + p.rowSpan; rr++) {
-        for (let cc = p.col; cc < p.col + p.colSpan; cc++) {
+      for (let rr = p.row; rr < p.row + p.rowspan; rr++) {
+        for (let cc = p.col; cc < p.col + p.colspan; cc++) {
           const cell = sheet.getCell(rr + 1, cc + 1);
           cell.alignment = alignment;
           if (cellFill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cellFill } };
@@ -540,7 +541,7 @@ const XlsxExport = (function () {
           if (cell !== master && !cell.font) cell.font = master.font;
         }
       }
-      content.images.forEach(entry => pendingImages.push({ img: entry.img, row: p.row, col: p.col }));
+      content.images.forEach(img => pendingImages.push({ img, row: p.row, col: p.col }));
     }
 
     for (const entry of pendingImages) {
@@ -552,9 +553,9 @@ const XlsxExport = (function () {
     }
   }
 
-  // Ajoute au classeur la feuille d'un enregistrement (une de plus à chaque saut de page de la grille) : `resolvedHtml` est le HTML du modèle dont les bulles ont déjà pris leur valeur (ReaderMode.preview avec
-  // typedCellHook, qui laisse sur les cases à nombre ou date leurs marques data-xl-*). Le tableau est rendu hors écran le temps de la mesure (largeur des colonnes et
-  // hauteur des lignes telles que l'éditeur les affiche).
+  // Ajoute au classeur la feuille d'un enregistrement (une de plus à chaque saut de page de la grille) : `resolvedHtml` est le HTML du modèle dont
+  // les bulles ont déjà pris leur valeur (ReaderMode.preview avec typedCellHook, qui laisse leurs marques data-xl-* sur les cases à nombre ou date).
+  // Le tableau est rendu hors écran le temps de la mesure (largeur des colonnes et hauteur des lignes telles que l'éditeur les affiche).
   async function addRecordSheet(workbook, name, resolvedHtml, options) {
     const root = document.createElement('div');
     root.innerHTML = HtmlSanitize.clean(resolvedHtml || '');
@@ -574,8 +575,8 @@ const XlsxExport = (function () {
     workbook.modified = workbook.created;
     return workbook;
   }
-  // Le code du papier d'Excel (`paperSize` de la mise en page) de chacun des formats de js/page-layout.js : ceux d'Excel pour A3, A4 et A5, celui du pilote d'impression Windows pour A6
-  // (DMPAPER_A6) ; tout autre format est l'A4.
+  // Le code du papier d'Excel (`paperSize` de la mise en page) de chacun des formats de js/page-layout.js : ceux d'Excel pour A3, A4 et A5, celui du
+  // pilote d'impression Windows pour A6 (DMPAPER_A6) ; tout autre format est l'A4.
   const PAPER_SIZES = { A3: 8, A4: 9, A5: 11, A6: 70 };
   // Les réglages de page d'un modèle (js/page-layout.js) pour la feuille : orientation, format du papier et marges en pouces.
   function pageOptionsFromLayout() {
@@ -597,7 +598,8 @@ const XlsxExport = (function () {
 
   // Un classeur d'une feuille pour un enregistrement : un export seul, ou un fichier de l'archive ZIP d'un lot.
   async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
-    // Une image d'un site externe est téléchargée à l'écriture du classeur : la fenêtre passe avant tout, comme pour le PDF et le Word (js/external-images.js).
+    // Une image d'un site externe est téléchargée à l'écriture du classeur : la fenêtre passe avant tout, comme pour le PDF et le Word
+    // (js/external-images.js).
     await ExternalImages.confirmExport(htmlContent, null);
     await ensureExcelLibLoaded();
     const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
@@ -611,17 +613,20 @@ const XlsxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.xlsx');
   }
 
-  // Le nom d'une feuille « un document par valeur » (js/list-split.js) : celui du fichier, raccourci pour que la valeur tienne dans les 31 caractères d'Excel.
+  // Le nom d'une feuille « un document par valeur » (js/list-split.js) : celui du fichier, raccourci pour que la valeur tienne dans les 31 caractères
+  // d'Excel.
   function nameWithValue(name, value) {
     if (!value) return name;
     const tail = ' - ' + value;
     return String(name || '').slice(0, Math.max(0, 31 - tail.length)).trim() + tail;
   }
 
-  // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le fichier qu'il aurait eu dans l'archive ZIP
-  // (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
-  // `valueName` (facultatif) : la valeur de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de la feuille.
-  // `pageOptions` (facultatif, de la forme de pageOptionsFromLayout) : la page de CETTE feuille quand son modèle n'est pas celui de l'écran (« Modèle selon la ligne », js/main.js:onExportBatch).
+  // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le
+  // fichier qu'il aurait eu dans l'archive ZIP (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui
+  // échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant.
+  // `valueName` (facultatif) : la valeur de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de
+  // la feuille. `pageOptions` (facultatif, de la forme de pageOptionsFromLayout) : la page de cette feuille quand son modèle n'est pas celui de
+  // l'écran (« Modèle selon la ligne », js/main.js:onExportBatch).
   async function createSingleWorkbook(options) {
     await ensureExcelLibLoaded();
     const workbook = newWorkbook();
@@ -643,5 +648,5 @@ const XlsxExport = (function () {
     };
   }
 
-  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, typedCellHook, addRecordSheet, newWorkbook, sheetNameFrom, pageOptionsFromLayout, XLSX_MIME };
+  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, sheetNameFrom, pageOptionsFromLayout, XLSX_MIME };
 })();
