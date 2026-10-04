@@ -608,12 +608,29 @@ const TrackChanges = (function () {
       });
       return found;
     }
-    function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize) {
+    // Les réglages de paragraphe en attente (un alignement, « Garder avec le suivant ») : les marques `modification` hors cases et lignes de tableau, qui suivent leur colonne ou leur ligne (isTableMod).
+    // Leurs ids tels que le document les écrit.
+    function pendingAttributeIds(doc) {
+      const ids = [];
+      doc.descendants(node => {
+        node.marks.forEach(mark => {
+          if (mark.type.name === 'modification' && !isTableMod(node, mark) && mark.attrs.id != null && !ids.some(id => sameId(id, mark.attrs.id))) ids.push(mark.attrs.id);
+        });
+      });
+      return ids;
+    }
+    // Reprend une tranche après l'autre jusqu'à ce qu'il ne reste plus de marque. Une tranche qui ne change rien ne mènerait nulle part : revertSuggestion de la lib rend « rien à faire » AVANT de résoudre
+    // les modifications dès qu'elle n'a aucun texte à défaire, et la boucle retrouvait la même marque à chaque tour - avec un seul réglage de paragraphe suivi, « Tout refuser » ne finissait jamais (la page
+    // se figeait). `onStall` résout alors ce que la lib laisse et rend vrai s'il a changé le document : la boucle reprend pour le reste. Sans `onStall`, ou s'il ne change rien non plus, elle s'arrête :
+    // des marques peuvent rester, la page ne se fige jamais.
+    function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize, onStall) {
       while (true) {
         const marks = findFirstPendingMarks(editor.state, chunkSize);
         if (marks.length === 0) break;
+        const before = editor.state.doc;
         const to = marks[marks.length - 1].to;
         runGuardedLibCommand((s, d) => rangeCommandFactory(0, to)(s, d), editor, editor.view.dispatch, undefined);
+        if (editor.state.doc.eq(before) && !(onStall && onStall())) break;
       }
     }
 
@@ -637,7 +654,11 @@ const TrackChanges = (function () {
           rejectAllSuggestionsChunked: (chunkSize = 200) => ({ editor, dispatch, tr }) => {
             if (!dispatch) return true;
             tr.setMeta('preventDispatch', true);
-            runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize);
+            // Les réglages de paragraphe seuls (la lib n'a rien à défaire) se refusent comme « Refuser » une modification : resolveSuggestionIds, une transaction, un seul Annuler.
+            runChunkedLibCommand((from, to) => revertSuggestion(undefined, from, to), editor, chunkSize, () => {
+              const ids = pendingAttributeIds(editor.state.doc);
+              return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
+            });
             return true;
           },
           // Une modification à la fois (barre flottante) : celle que la sélection touche, avec tout ce qui s'y résout (resolveSuggestionIds). Faux

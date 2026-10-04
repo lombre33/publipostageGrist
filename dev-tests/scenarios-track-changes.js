@@ -1207,6 +1207,183 @@
     },
   });
 
+  // === « Tout refuser » et « Tout accepter » quand il ne reste que des réglages de paragraphe en attente (demande d'Antoine du 04/10, carte « Corriger ») ===
+  // Un réglage de paragraphe suivi (l'alignement, « Garder avec le suivant ») n'est ni un texte ajouté ni un texte supprimé : c'est une marque `modification` posée sur le paragraphe. La commande de la lib
+  // qui refuse (revertSuggestion) rend « rien à faire » sans y toucher quand elle n'a aucun texte à défaire, et js/track-changes.js:runChunkedLibCommand, qui recommençait tant qu'une marque restait, tournait sans
+  // fin : la page se figeait et le rendu montait à plusieurs Go. Chaque cas lance la commande du bouton de la barre (editor.chain().focus().…AllSuggestionsChunked().run()) sous un garde-fou : chaque lecture de
+  // `editor.state` est comptée et, passé `limit`, la lecture lève une erreur - une seule fois - au lieu de laisser tourner la boucle d'avant la correction.
+  async function runAllChunked(h, kind, limit) {
+    const ed = EditorCore.getEditor();
+    let proto = ed;
+    let original = null;
+    while (proto && !original) {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, 'state');
+      if (descriptor && descriptor.get) original = descriptor.get; else proto = Object.getPrototypeOf(proto);
+    }
+    let reads = 0;
+    let tripped = false;
+    Object.defineProperty(ed, 'state', { configurable: true, get() { if (!tripped && ++reads > (limit || 20000)) { tripped = true; throw new Error('boucle sans fin'); } return original.call(ed); } });
+    try {
+      ed.chain().focus()[kind + 'AllSuggestionsChunked']().run();
+    } catch (e) {
+      if (!tripped) throw e;
+    } finally {
+      delete ed.state;
+    }
+    await h.sleep(250);
+    return { looped: tripped, reads };
+  }
+  const modificationCount = () => (Editor.getHTML().match(/data-type="modification"/g) || []).length;
+  const alignRight = ed => ed.chain().focus().setTextAlign('right').run();
+  // Un document, suivi allumé, où le paragraphe de chaque texte de `texts` reçoit le réglage `setting` : une marque de modification par paragraphe.
+  async function documentWithSettings(h, html, texts, setting) {
+    await h.resetEditor();
+    await disableTrackChangesIfOn(h);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.setTrackChanges(true);
+    for (const text of texts) {
+      await caretIn(h, text, 2);
+      setting(EditorCore.getEditor());
+      await h.sleep(120);
+    }
+  }
+
+  cases.push({
+    id: 'trackchanges_reject_all_with_only_a_paragraph_setting_pending_gives_back_the_original',
+    description: "Suivi allumé, un seul paragraphe aligné à droite (une marque de modification, ni texte ajouté ni supprimé) : « Tout refuser » rend la main et le document d'origine - alignement d'avant, aucune marque, boutons regrisés - d'un seul Annuler ; avec en plus un texte supprimé, il rend l'un et l'autre",
+    run: async (h) => {
+      try {
+        const ORIGINAL = '<p>Garder</p><p>Aligné</p><p>Fin</p>';
+        const out = {};
+        await documentWithSettings(h, ORIGINAL, ['Aligné'], alignRight);
+        out.pending = modificationCount() === 1 && /text-align: right/.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !rejectBtn().disabled;
+        const run = await runAllChunked(h, 'reject');
+        out.noLoop = !run.looped;
+        out.original = Editor.getHTML() === ORIGINAL;
+        out.clean = !Editor.hasPendingTrackedChanges() && acceptBtn().disabled && rejectBtn().disabled;
+        await h.sleep(700);
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(250);
+        out.undone = modificationCount() === 1 && /text-align: right/.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges();
+        // Un texte supprimé ET un alignement : la lib défait le texte et résout la modification de la plage, comme avant la correction.
+        const MIXED = '<p>Garder retirer fin</p><p>Aligné</p><p>Fin</p>';
+        await documentWithSettings(h, MIXED, [], alignRight);
+        const from = textPos('retirer', 0);
+        await selectDoc(h, from, from + 'retirer'.length);
+        document.execCommand('delete');
+        await h.sleep(150);
+        await caretIn(h, 'Aligné', 2);
+        alignRight(EditorCore.getEditor());
+        await h.sleep(150);
+        out.mixedPending = /<del /.test(Editor.getHTML()) && modificationCount() === 1;
+        const mixed = await runAllChunked(h, 'reject');
+        out.mixedNoLoop = !mixed.looped;
+        out.mixedOriginal = Editor.getHTML() === MIXED && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_with_paragraph_settings_left_after_a_full_batch_of_text_changes',
+    description: "Deux cents textes ajoutés (la première tranche de « Tout refuser » est pleine), 2 500 caractères de texte, puis deux paragraphes alignés (hors de portée de la première tranche, même une fois les ajouts retirés) : la seconde tranche ne trouve que des réglages de paragraphe, la lib n'y change rien - « Tout refuser » rend la main, retire les deux cents ajouts et rend l'alignement d'avant aux deux paragraphes",
+    run: async (h) => {
+      try {
+        const head = n => Array.from({ length: n }, (_, i) => '<p>L' + i + '</p>').join('');
+        const tail = '<p>Un</p>' + Array.from({ length: 25 }, () => '<p>' + 'x'.repeat(100) + '</p>').join('') + '<p>Deux</p>';
+        const withAdds = Array.from({ length: 200 }, (_, i) => '<p>L' + i + '<ins data-id="' + (i + 1) + '">+</ins></p>').join('');
+        const out = {};
+        await documentWithSettings(h, withAdds + tail, ['Un', 'Deux'], alignRight);
+        out.pending = insCount(Editor.getHTML()) === 200 && modificationCount() === 2;
+        const run = await runAllChunked(h, 'reject');
+        out.noLoop = !run.looped;
+        out.original = Editor.getHTML() === head(200) + tail;
+        out.clean = !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_with_a_paragraph_setting_on_the_last_block',
+    description: "Le réglage suivi est sur le DERNIER paragraphe du document (la lib plante sur le dernier nœud : withEndGuard pose alors un paragraphe-tampon) : « Tout refuser » rend la main et le document d'origine, sans paragraphe-tampon laissé derrière",
+    run: async (h) => {
+      try {
+        const ORIGINAL = '<p>Un</p><p>Dernier</p>';
+        const out = {};
+        await documentWithSettings(h, ORIGINAL, ['Dernier'], alignRight);
+        out.lastMarked = EditorCore.getEditor().state.doc.lastChild.marks.some(m => m.type.name === 'modification');
+        const run = await runAllChunked(h, 'reject');
+        out.noLoop = !run.looped;
+        out.original = Editor.getHTML() === ORIGINAL && !Editor.hasPendingTrackedChanges() && EditorCore.getEditor().state.doc.childCount === 2;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_with_paragraph_settings_on_more_paragraphs_than_a_batch',
+    description: "Tout le texte sélectionné puis centré avec le suivi allumé (250 paragraphes, plus que la tranche de 200) : « Tout refuser » rend la main et les 250 paragraphes d'origine en une seule fois, sans marque",
+    run: async (h) => {
+      try {
+        const ORIGINAL = Array.from({ length: 250 }, (_, i) => '<p>P' + i + '</p>').join('');
+        const out = {};
+        await documentWithSettings(h, ORIGINAL, [], alignRight);
+        EditorCore.getEditor().chain().focus().selectAll().setTextAlign('center').run();
+        await h.sleep(300);
+        out.pending = modificationCount() === 250 && Editor.hasPendingTrackedChanges();
+        const run = await runAllChunked(h, 'reject');
+        out.noLoop = !run.looped;
+        out.original = Editor.getHTML() === ORIGINAL && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_reject_all_gives_back_a_keep_with_next_setting_and_accept_all_keeps_it',
+    description: "« Garder avec le suivant » posé avec le suivi allumé sur deux paragraphes (une marque de modification chacun) : « Tout refuser » rend les deux d'avant, sans data-keep-next ; refait, « Tout accepter » les garde, sans marque",
+    run: async (h) => {
+      try {
+        const ORIGINAL = '<p>Bonjour</p><p>Total HT</p><p>Total TTC</p><p>Arrêté</p>';
+        const setKeep = async () => {
+          await documentWithSettings(h, ORIGINAL, [], alignRight);
+          await selectDoc(h, textPos('Total HT', 2), textPos('Total TTC', 4));
+          KeepWithNext.run(EditorCore.getEditor());
+          await h.sleep(200);
+        };
+        const out = {};
+        await setKeep();
+        out.pending = (Editor.getHTML().match(/data-keep-next="true"/g) || []).length === 2 && modificationCount() === 2;
+        const rejected = await runAllChunked(h, 'reject');
+        out.rejectNoLoop = !rejected.looped;
+        out.rejectOriginal = Editor.getHTML() === ORIGINAL && !Editor.hasPendingTrackedChanges();
+        await setKeep();
+        const accepted = await runAllChunked(h, 'accept');
+        out.acceptNoLoop = !accepted.looped;
+        out.acceptKept = Editor.getHTML() === '<p>Bonjour</p><p data-keep-next="true">Total HT</p><p data-keep-next="true">Total TTC</p><p>Arrêté</p>' && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_accept_all_with_only_a_paragraph_setting_pending_keeps_it',
+    description: "« Tout accepter » avec un seul réglage de paragraphe en attente : il le garde, sans marque, et rend la main (ce que la lib faisait déjà : le cas garde ce chemin)",
+    run: async (h) => {
+      try {
+        const out = {};
+        await documentWithSettings(h, '<p>Garder</p><p>Aligné</p><p>Fin</p>', ['Aligné'], alignRight);
+        out.pending = modificationCount() === 1;
+        const run = await runAllChunked(h, 'accept');
+        out.noLoop = !run.looped;
+        out.kept = Editor.getHTML() === '<p>Garder</p><p style="text-align: right;">Aligné</p><p>Fin</p>' && !Editor.hasPendingTrackedChanges();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
   // === Lecture : le document comme si toutes les suggestions étaient acceptées (demande d'Antoine du 04/10) ===
   // « En mode lecture afficher comme si toutes les modifications étaient acceptées, avec juste un léger changement de couleur là où des modifs sont présentes. » La Lecture retouche le HTML qu'elle
   // reçoit (js/track-changes.js:acceptedView, appelée par js/reader-mode.js:renderRecord) : le résultat doit être EXACTEMENT celui de « Tout accepter » (comparé ici, cas par cas, au vrai

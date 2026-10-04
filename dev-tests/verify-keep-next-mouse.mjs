@@ -6,7 +6,9 @@
 //  - une sélection faite à la souris et au clavier (clic, Maj+flèche) sur plusieurs paragraphes : UN clic les règle tous, UN Ctrl+Z les défait tous ;
 //  - Entrée, au vrai clavier, à la fin d'un paragraphe réglé ouvre un paragraphe ordinaire ;
 //  - dans un tableau, la ligne est là, grisée (teinte de texte atténuée, curseur interdit) avec sa raison pour info-bulle, et son clic ne change rien ;
-//  - en Lecture, tout le groupe Alignement est grisé comme le reste de la barre et ne reçoit plus de clic.
+//  - en Lecture, tout le groupe Alignement est grisé comme le reste de la barre et ne reçoit plus de clic ;
+//  - avec le suivi des modifications allumé, le réglage posé est une modification en attente et « Tout refuser » (vraie souris) rend le document d'avant, sans tourner sans fin (le défaut d'avant
+//    B7, corrigé le 04/10 sur la carte « Corriger » d'Antoine : la page se figeait) ; un seul Ctrl+Z le remet en attente.
 // Lancé par run-headless.mjs (groupe Node "keepNextMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-keep-next-mouse.mjs
 // KEEP_NEXT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -325,6 +327,46 @@ async function run(theme) {
   await page.mouse.click(editBtn.x, editBtn.y);
   await page.waitForTimeout(500);
   check(`${T}, retour à l'édition : le groupe Alignement est de nouveau libre`, await page.evaluate(() => !document.getElementById('v2-align-group').classList.contains('pp-access-locked')));
+
+  // 8) Avec le suivi des modifications : le réglage posé est une modification en attente, « Tout refuser » (vraie souris) rend le document d'avant et rend la main. Avant la correction du 04/10
+  // (carte « Corriger »), le bouton tournait sans fin quand seuls des réglages de paragraphe étaient suivis : la page se figeait. Garde-fou : chaque lecture de `editor.state` est comptée ; passé
+  // 20 000 lectures, elle lève une erreur (une seule fois, window.__loopTripped) au lieu de laisser tourner la boucle d'avant la correction.
+  await setDoc(DOC);
+  await page.click('#v2-btn-track-changes');
+  await page.waitForTimeout(250);
+  await clickText('Total HT');
+  await pressRow();
+  await closeMenu();
+  const tracked = await page.evaluate(() => ({ html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges(), on: Editor.isTrackChangesOn(), rejectDisabled: document.getElementById('v2-btn-reject-all').disabled }));
+  check(`${T}, suivi : le réglage posé avec le suivi allumé est une modification en attente, « Tout refuser » est libre`,
+    tracked.on && tracked.pending && !tracked.rejectDisabled && /data-keep-next="true"/.test(tracked.html) && /data-type="modification"/.test(tracked.html), tracked);
+  const rejectBox = await hit('#v2-btn-reject-all');
+  check(`${T}, suivi : « Tout refuser » est dans le panneau ${WIDTH}x${HEIGHT}, au premier plan`, seen(rejectBox), rejectBox);
+  await page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    let proto = ed, original = null;
+    while (proto && !original) { const d = Object.getOwnPropertyDescriptor(proto, 'state'); if (d && d.get) original = d.get; else proto = Object.getPrototypeOf(proto); }
+    let reads = 0;
+    window.__loopTripped = false;
+    Object.defineProperty(ed, 'state', { configurable: true, get() { if (!window.__loopTripped && ++reads > 20000) { window.__loopTripped = true; throw new Error('boucle sans fin'); } return original.call(ed); } });
+  });
+  const rb = await centerOf('#v2-btn-reject-all');
+  await page.mouse.move(rb.x, rb.y, { steps: 4 });
+  await page.mouse.click(rb.x, rb.y);
+  await page.waitForTimeout(500);
+  const rejectedAll = await page.evaluate(() => {
+    delete EditorCore.getEditor().state;
+    return { html: Editor.getHTML(), looped: window.__loopTripped, pending: Editor.hasPendingTrackedChanges(), rejectDisabled: document.getElementById('v2-btn-reject-all').disabled, acceptDisabled: document.getElementById('v2-btn-accept-all').disabled };
+  });
+  check(`${T}, suivi : « Tout refuser » (vraie souris) rend la main au lieu de tourner sans fin`, rejectedAll.looped === false, rejectedAll);
+  check(`${T}, suivi : « Tout refuser » rend le document d'avant (aucun réglage, aucune marque) et regrise « Tout accepter » et « Tout refuser »`,
+    rejectedAll.html === DOC && !rejectedAll.pending && rejectedAll.rejectDisabled && rejectedAll.acceptDisabled, rejectedAll);
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  const undoneTracked = await page.evaluate(() => ({ html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges() }));
+  check(`${T}, suivi : un seul Ctrl+Z remet le réglage en attente`, /data-keep-next="true"/.test(undoneTracked.html) && /data-type="modification"/.test(undoneTracked.html) && undoneTracked.pending, undoneTracked);
+  await page.evaluate(() => { Editor.setTrackChanges(false); });
 }
 
 await run('light');

@@ -201,7 +201,7 @@
 
   cases.push({
     id: 'keepnext_in_track_changes_the_setting_is_a_tracked_modification_accept_all_keeps_it_refusing_it_removes_it',
-    description: 'Suivi des modifications actif : poser le réglage est une modification suivie du paragraphe (comme l\'alignement) ; « Tout accepter » la garde, « Refuser » de la barre flottante (la modification que la sélection touche) rend le document d\'origine, sans erreur. (« Tout refuser » sur des modifications de réglage seules, sans aucun texte ajouté ou supprimé, ne se termine pas dans le code existant : l\'alignement en est atteint comme ce réglage ; il n\'est donc pas lancé ici.)',
+    description: 'Suivi des modifications actif : poser le réglage est une modification suivie du paragraphe (comme l\'alignement) ; « Tout accepter » la garde, « Refuser » de la barre flottante (la modification que la sélection touche) rend le document d\'origine, sans erreur. (« Tout refuser » sur ces réglages seuls est dans le groupe trackChanges, cas trackchanges_reject_all_*, sous un garde-fou : il ne se termine pas sur l\'ancien code.)',
     run: async (h) => {
       const errors = [];
       const onError = e => errors.push(String(e.message || e));
