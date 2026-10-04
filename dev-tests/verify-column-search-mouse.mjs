@@ -946,7 +946,8 @@ const SECTIONS = {
 
   // Liste « # » du corps (Antoine, 2026-10-01 : « prioriser dans la recherche dynamique les noms qui sont dans la table en cours ») : à la vraie frappe à 700×400, les colonnes
   // de la table de la page (CsDossiers, deuxième du schéma derrière CsAnnuaire) ouvrent la liste, avec ce qui est tapé comme sans ; au vrai clavier, les flèches et Entrée suivent
-  // l'ordre affiché. La limite de 50 clés (appliquée après le classement) et la zone répétée par une boucle sont dans les scénarios de la page (colsearch_hash_list_*).
+  // l'ordre affiché, et la liste, qui défile (50 clés pour une dizaine de lignes visibles), garde la ligne choisie entière (demande d'Antoine du 2026-10-04 : « Oui, la liste suit »).
+  // La limite de 50 clés (appliquée après le classement) et la zone répétée par une boucle sont dans les scénarios de la page (colsearch_hash_list_*).
   async hashList() {
     const box = '#autocomplete-box';
     const listed = () => page.evaluate(sel => {
@@ -978,9 +979,35 @@ const SECTIONS = {
       !!opened && JSON.stringify(opened.rows.slice(0, 6)) === JSON.stringify(dossiers) && opened.rows[6] === 'CsAnnuaire.NomPrenom' && opened.rows.length === 50, opened);
     check('« # » : la liste est entière dans le panneau et sa première ligne (CsDossiers.Titre) est visible et au premier plan',
       !!opened && opened.inside && firstRow.found && firstRow.inViewport && firstRow.onTop && opened.selected === 'CsDossiers.Titre', { opened: opened && { inside: opened.inside, selected: opened.selected }, firstRow });
+    // La ligne choisie, mesurée dans la partie VISIBLE de la liste (celle de `.ac-items`, qui défile) : entière et au premier plan, pas seulement « choisie ».
+    const selectedRow = () => page.evaluate(sel => {
+      const list = document.querySelector(sel + ' .ac-items');
+      const row = list && list.querySelector('.ac-item.selected');
+      if (!row) return null;
+      const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { text: row.textContent, entire: r.top >= l.top - 0.5 && r.bottom <= l.bottom + 0.5 && !!hit && (hit === row || row.contains(hit)), scrollTop: list.scrollTop };
+    }, box);
+    const stepsDown = [];
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(40);
+      stepsDown.push(await selectedRow());
+    }
+    check('« # » : vingt flèches bas de suite, la ligne choisie reste entière et au premier plan dans la liste, qui défile pour la suivre',
+      stepsDown.every(step => !!step && step.entire) && stepsDown[19].text === opened.rows[20] && stepsDown[19].scrollTop > 0, { hiddenAt: stepsDown.findIndex(step => !step || !step.entire) + 1, last: stepsDown[19] });
+    // La molette sur la liste, puis la souris rangée : un filtre tapé ensuite remet la liste en haut, sur sa première ligne (sinon la ligne choisie resterait cachée au-dessus).
+    const wheelOver = await hitTest(box + ' .ac-items');
+    await page.mouse.move(wheelOver.x, wheelOver.y);
+    await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(150);
+    await parkMouse();
     await page.keyboard.type('re');
     await page.waitForTimeout(150);
     const typed = await listed();
+    const afterTyping = await selectedRow();
+    check('« # » : un filtre tapé après avoir fait défiler la liste la remet en haut : la première ligne (CsDossiers.Titre) est choisie, entière et au premier plan',
+      !!afterTyping && afterTyping.text === 'CsDossiers.Titre' && afterTyping.entire && afterTyping.scrollTop === 0, afterTyping);
     // Ce que la règle donne pour « re » : les clés de la table de la page, puis celles des autres tables dans l'ordre du schéma (les sections d'avant laissent leurs tables).
     const expectedTyped = await page.evaluate(() => {
       const current = GristAPI.getCurrentTableId();
@@ -999,11 +1026,55 @@ const SECTIONS = {
     const back = await listed();
     check('« # » : la flèche bas descend d’une ligne dans l’ordre affiché (CsDossiers.Responsable), la flèche haut revient à la première',
       !!down && down.selected === 'CsDossiers.Responsable' && !!back && back.selected === 'CsDossiers.Titre', { down: down && down.selected, back: back && back.selected });
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(80);
+    const wrappedUp = await selectedRow();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(80);
+    const wrappedDown = await selectedRow();
+    check('« # » : depuis la première ligne, la flèche haut passe à la dernière et la montre entière ; la flèche bas revient à la première, entière aussi, liste en haut',
+      !!wrappedUp && wrappedUp.entire && wrappedUp.text === typed.rows[typed.rows.length - 1] && !!wrappedDown && wrappedDown.entire && wrappedDown.text === 'CsDossiers.Titre' && wrappedDown.scrollTop === 0,
+      { wrappedUp, wrappedDown });
     await page.keyboard.press('Enter');
     await page.waitForTimeout(250);
     const keys = await badgeKeys();
     const closed = await listed();
     check('« # » : Entrée insère la colonne de la table de la page en première ligne (CsDossiers.Titre) et ferme la liste', JSON.stringify(keys) === JSON.stringify(['CsDossiers.Titre']) && closed === null, { keys, closed });
+    // Le champ « Nom du PDF » est un <input> : sa liste est la même, ses flèches passent par un autre gestionnaire du clavier. La liste y suit aussi, et un vrai clic sur une ligne
+    // (la ligne remontée par ↑ jusqu'à la 6e) l'écrit dans le champ.
+    const pdfToggle = await hitTest('#btn-toggle-pdf-filename');
+    await page.mouse.click(pdfToggle.x, pdfToggle.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.type('#');
+    await page.waitForTimeout(250);
+    const pdfDown = [];
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(40);
+      pdfDown.push(await selectedRow());
+    }
+    check('« # » du champ Nom du PDF : vingt flèches bas de suite, la ligne choisie reste entière et au premier plan dans la liste, qui défile pour la suivre',
+      pdfDown.every(step => !!step && step.entire) && pdfDown[19].scrollTop > 0, { hiddenAt: pdfDown.findIndex(step => !step || !step.entire) + 1, last: pdfDown[19] });
+    for (let i = 0; i < 15; i++) await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(80);
+    const pdfRow = await page.evaluate(sel => {
+      const row = Array.from(document.querySelectorAll(sel + ' .ac-item')).find(i => i.textContent === 'CsDossiers.Actif');
+      if (!row) return null;
+      const r = row.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
+      return { x, y, onTop: !!hit && (hit === row || row.contains(hit)), selected: row.classList.contains('selected') };
+    }, box);
+    if (pdfRow) await page.mouse.click(pdfRow.x, pdfRow.y);
+    await page.waitForTimeout(250);
+    const pdfValue = await page.evaluate(() => document.getElementById('pdf-filename-template').value);
+    check('« # » du champ Nom du PDF : après les flèches, un vrai clic sur la ligne CsDossiers.Actif (choisie et au premier plan) écrit « #CsDossiers.Actif » dans le champ et ferme la liste',
+      !!pdfRow && pdfRow.onTop && pdfRow.selected && pdfValue === '#CsDossiers.Actif' && (await listed()) === null, { pdfRow, pdfValue });
+    await page.evaluate(() => {
+      const field = document.getElementById('pdf-filename-template');
+      field.value = '';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.blur();
+    });
+    await parkMouse();
     await page.evaluate(() => {
       const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
       Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);

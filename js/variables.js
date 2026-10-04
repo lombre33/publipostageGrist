@@ -139,6 +139,23 @@ const Variables = (function () {
     });
   }
 
+  // La liste défile seule (sa hauteur suit la place libre autour du curseur) : la ligne choisie aux flèches y est ramenée, entière. Pas de scrollIntoView, qui ferait
+  // aussi défiler la fenêtre Grist ; les rectangles, `.ac-items` n'étant pas le parent de position de ses lignes.
+  function keepSelectedVisible() {
+    const row = acItemsBox.querySelector('.ac-item.selected');
+    if (!row) return;
+    const list = acItemsBox.getBoundingClientRect();
+    const rect = row.getBoundingClientRect();
+    if (rect.top < list.top) acItemsBox.scrollTop -= Math.ceil(list.top - rect.top);
+    else if (rect.bottom > list.bottom) acItemsBox.scrollTop += Math.ceil(rect.bottom - list.bottom);
+  }
+  // Flèches ↑ et ↓, dans l'éditeur comme dans un champ texte : la ligne voisine (de la dernière à la première et inversement), la liste suit.
+  function moveSelection(step) {
+    selectedIndex = (selectedIndex + step + currentItems.length) % currentItems.length;
+    render(currentItems, item => latestCommand(item));
+    keepSelectedVisible();
+  }
+
   // Appelée popup déjà affiché : ViewportFit.placePopup mesure sa vraie hauteur pour le garder dans la fenêtre - sous le curseur, ou au-dessus quand il est
   // en bas d'un panneau bas (il s'ouvrait jusque-là entièrement sous le bord, invisible).
   function position(clientRect) {
@@ -181,8 +198,8 @@ const Variables = (function () {
       onUpdate(props) { updateItems(props); },
       onKeyDown(props) {
         if (!currentItems.length) return false;
-        if (props.event.key === 'ArrowDown') { selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, item => latestCommand(item)); return true; }
-        if (props.event.key === 'ArrowUp') { selectedIndex = (selectedIndex - 1 + currentItems.length) % currentItems.length; render(currentItems, item => latestCommand(item)); return true; }
+        if (props.event.key === 'ArrowDown') { moveSelection(1); return true; }
+        if (props.event.key === 'ArrowUp') { moveSelection(-1); return true; }
         if (props.event.key === 'Enter' || props.event.key === 'Tab') { latestCommand(currentItems[selectedIndex]); return true; }
         if (props.event.key === 'Escape') { hide(); return true; }
         return false;
@@ -357,8 +374,8 @@ const Variables = (function () {
     // Un <input> ne passe jamais par @tiptap/suggestion - navigation clavier gérée ici à la main, même logique que suggestionRender() ci-dessus.
     el.addEventListener('keydown', e => {
       if (!filenameInputState || !acBox || acBox.style.display !== 'flex') return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = (selectedIndex + 1) % currentItems.length; render(currentItems, latestCommand); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = (selectedIndex - 1 + currentItems.length) % currentItems.length; render(currentItems, latestCommand); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
       else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); latestCommand(currentItems[selectedIndex]); }
       else if (e.key === 'Escape') { e.preventDefault(); hide(); filenameInputState = null; }
     });
