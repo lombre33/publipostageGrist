@@ -55,7 +55,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Mise en forme complète : gras, italique, souligné, barré, couleurs et surlignage, six polices en
   tailles réelles de 8 à 72 points, alignement et retraits, titres numérotés, pinceau de mise en forme
 - Listes à puces, numérotées et de tâches à cocher
-- Tableaux (fond de case, légende), zones 2 colonnes
+- Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist
 - En-têtes et pieds de page (première page différente, numéro de page), notes de bas de page, sommaire
@@ -246,8 +246,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en
   vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
 - **Pas encore faits** : remplissage d'un modèle avec des données d'exemple, variantes multilingues
-  d'un modèle, fusion de cellules dans les tableaux d'un document (elle existe dans les grilles),
-  codes-barres (le QR code est livré), export et import Markdown.
+  d'un modèle, codes-barres (le QR code est livré), export et import Markdown.
 
 ## Note sur l'IA
 
@@ -267,7 +266,6 @@ prioriser.
 - Suivi des modifications : version complète (V1)
 
 **Édition augmentée**
-- Fusion de cellules dans les tableaux d'un document (Bêta)
 - Codes-barres, en plus du QR code (V1)
 - Remplissage d'un modèle avec des données d'exemple, pour le prévisualiser sans ligne réelle
 - Modèles multilingues : variantes d'un même modèle (V1)
@@ -358,7 +356,7 @@ GitHub Pages, with no backend and no build step.
 - Full formatting: bold, italic, underline, strikethrough, colors and highlighting, six fonts in real
   point sizes from 8 to 72, alignment and indents, numbered headings, format painter
 - Bullet lists, numbered lists and checkable task lists
-- Tables (cell background, caption), two-column zones
+- Tables (merging and splitting cells, cell background, caption), two-column zones
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
   added by address or taken from a Grist Attachments column
 - Headers and footers (different first page, page number), footnotes, generated table of contents,
@@ -539,9 +537,8 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Gallery templates**: these are layout examples, written for French law. They are neither legal
   advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties,
   clauses…): have them reviewed before any real use.
-- **Not done yet**: filling a template with sample data, multilingual variants of a template, cell
-  merging in document tables (it exists in grids), barcodes (the QR code is delivered), Markdown export
-  and import.
+- **Not done yet**: filling a template with sample data, multilingual variants of a template,
+  barcodes (the QR code is delivered), Markdown export and import.
 
 ## A note on AI
 
@@ -560,7 +557,6 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 - Track changes: complete version (V1)
 
 **Enhanced editing**
-- Cell merging in document tables (Beta)
 - Barcodes, in addition to the QR code (V1)
 - Filling a template with sample data, to preview it without a real row
 - Multilingual templates: variants of the same template (V1)

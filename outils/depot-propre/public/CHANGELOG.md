@@ -30,7 +30,8 @@ Première bêta publique. Elle reprend l'alpha du 14 septembre 2026 et ajoute l'
   par modèle, titres numérotés, sommaire, notes de bas de page, listes numérotées et de tâches, première
   page différente, filigrane, images en calque (déplacées aux flèches du clavier, opacité, légende),
   citation, bloc de code, encadré, bloc de signature, QR code, pinceau de mise en forme, abréviations,
-  rechercher / remplacer.
+  rechercher / remplacer, fusion et scission de cases dans les tableaux d'un document (Word et PDF les
+  suivent ; au saut de page, les lignes liées par une case fusionnée restent ensemble).
 - **Lecture** : lecture épurée, guide quand le widget n'est lié à aucune ligne, commentaires depuis la
   Lecture.
 - **Exports** : Word (`.docx`, bêta), un seul PDF pour toutes les lignes, assemblage avant impression
@@ -107,7 +108,9 @@ except those postponed to V1 (see the [README](README.md#roadmap-1)).
 - **Layout**: A3 to A6 page formats in portrait or landscape, free and named formats, per-template
   margins, numbered headings, table of contents, footnotes, numbered and task lists, different first
   page, watermark, layered images (moved with the arrow keys, opacity, caption), quote, code block,
-  callout, signature block, QR code, format painter, abbreviations, find / replace.
+  callout, signature block, QR code, format painter, abbreviations, find / replace, merging and splitting
+  cells in document tables (Word and PDF follow; at a page break, rows tied by a merged cell stay
+  together).
 - **Reading**: clean reading, a guide when the widget is not linked to any row, comments from Reading
   mode.
 - **Exports**: Word (`.docx`, beta), a single PDF for all rows, sheet assembly before printing (A4 or A3
